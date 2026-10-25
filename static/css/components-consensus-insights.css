@@ -276,6 +276,23 @@
   margin-top: 12px;
 }
 
+/* Agent audit (agent_audit.py): a reviewer's note names its kind beside
+   the reviewer and its source as a quiet link below. */
+.cx-card-source {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: var(--font-size-ui);
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 0.2em;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cx-card-source:hover { color: var(--ink); }
+}
+.cx-card-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
 .cx-card-aside {
   display: flex;
   flex-wrap: wrap;

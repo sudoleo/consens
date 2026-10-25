@@ -177,6 +177,9 @@
             // A provisional mark carries no verdict a filter could pick by:
             // it shows under every setting except "No highlights".
             if (highlightMode === "all" || mark.classList.contains("is-provisional")) return true;
+            // A reviewer's mark (Agent audit) is a concern; only "wrong" is a
+            // contradiction, and the critical one (red).
+            if (mark.classList.contains("is-audit")) return highlightMode === "concerns" || mark.classList.contains("is-major");
             if (highlightMode === "contradictions") return !!mark.cxGroup?.hasContradiction;
             // Every contradiction the footer counts, minor ones included.
             if (highlightMode === "concerns" && mark.cxGroup?.hasContradiction) return true;
@@ -2479,6 +2482,139 @@
             return claims.length > 0;
           }
 
+          // --- Audit statt Vergleich (Agent, Admins, seit 2026-10-25) ----------
+          // Die Vergleichsmodelle pruefen die fertige Antwort wie Reviewer
+          // (agent_audit.py): je markiertem Satz ein Claim mit `kind` (wrong,
+          // doubtful, incomplete) und ihren Anmerkungen in `dissent` (model,
+          // kind, note, source, target). Dieselben Marken wie sonst, falsch rot,
+          // zweifelhaft gelb, unvollstaendig grau, die zitierten Worte tragen
+          // die Farbe (wrapSpots). Kein Gruen, keine Quote, kein Score:
+          // unmarkierter Text heisst "kein Einwand", nicht "bestaetigt".
+          const AUDIT_CLASSES = { wrong: "is-major", doubtful: "is-split", incomplete: "is-minor" };
+          const AUDIT_KINDS = { wrong: "Wrong", doubtful: "Doubtful", incomplete: "Incomplete" };
+
+          function auditModels(items) {
+            return Array.from(new Set(items.map(function (item) { return cardModel(item.model); })));
+          }
+
+          // Whole sentences per count (docs/i18n.md); the kind first.
+          function auditSummary(claim) {
+            const t = window.App.t;
+            const count = auditModels(claim.dissent).length;
+            return t(AUDIT_KINDS[claim.kind] || "Doubtful") + ": "
+              + (count === 1 ? t("1 model objects") : t("{count} models object", { count }));
+          }
+
+          function auditLabel(claim) {
+            return auditSummary(claim) + " " + window.App.t("— open details");
+          }
+
+          function auditSource(value) {
+            let url;
+            try { url = new URL(String(value || "")); } catch (e) { return null; }
+            if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+            const link = cardNode("a", "cx-card-source", url.hostname.replace(/^www\./, ""));
+            link.href = url.href;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.setAttribute("data-i18n-skip", "");
+            return link;
+          }
+
+          // Die Karte einer Marke: die markierten Worte der Antwort, darunter
+          // jede Anmerkung mit ihrem Pruefer, ihrer Art und ihrer Quelle.
+          function auditCard(claim, ctx) {
+            const card = cardNode("div", "cx-card cx-card-audit");
+            card.appendChild(cardHeading(auditSummary(claim)));
+            card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), [], ctx, { label: "In the answer" }));
+            claim.dissent.forEach(function (item) {
+              const side = cardSide({ text: item.note }, [item.model], ctx, { label: AUDIT_KINDS[item.kind] || "Doubtful" });
+              side.dataset.kind = item.kind;
+              const source = auditSource(item.source);
+              if (source) side.appendChild(source);
+              card.appendChild(side);
+            });
+            const actions = cardActions(ctx, { differenceLabel: "Notes", answers: [] });
+            if (actions) card.appendChild(actions);
+            return card;
+          }
+
+          // Marks a reviewed Agent answer (agent-review.js). `audit` is the
+          // review's audit part: claims (one per marked sentence) and unplaced
+          // notes (their quote is not in the answer's sentences), which join
+          // the list below the answer like unanchored claims.
+          function renderStoredAuditMarks(body, audit, fallbackBox, sources, options = {}) {
+            if (!body || !audit || typeof audit !== "object") return false;
+            hidePreviewWithin(body);
+            const navigation = options.navigation || { canOpen: function () { return false; }, open: function () {} };
+            const openNotes = typeof options.openNotes === "function" ? options.openNotes : null;
+            const valid = function (item) { return item && typeof item.note === "string" && item.note.trim(); };
+            const claims = (Array.isArray(audit.claims) ? audit.claims : []).filter(function (claim) {
+              return claim && claim.anchor && Array.isArray(claim.dissent) && claim.dissent.some(valid);
+            });
+            const unplaced = (Array.isArray(audit.unplaced) ? audit.unplaced : []).filter(valid);
+            const markedByBlock = new Map();
+            const spots = [];
+            claims.forEach(function (claim) {
+              const shown = { anchor: claim.anchor, kind: AUDIT_CLASSES[claim.kind] ? claim.kind : "doubtful",
+                dissent: claim.dissent.filter(valid) };
+              const probe = locateAnchor(body, claim.anchor, claim.anchor_occurrence);
+              if (probe && !markedByBlock.has(probe.block)) markedByBlock.set(probe.block, []);
+              const result = probe && markSentence(body, claim.anchor, AUDIT_CLASSES[shown.kind],
+                markedByBlock.get(probe.block), claim.anchor_occurrence);
+              if (!result) {
+                shown.dissent.forEach(function (item) { unplaced.push(Object.assign({ quote: item.target || claim.anchor }, item)); });
+                return;
+              }
+              result.spans.forEach(function (span) { span.classList.add("is-audit"); });
+              const context = { spans: result.spans, navigation: navigation, openInDrawer: openNotes };
+              attachPassageControl(result, auditLabel(shown), function () {
+                openCard(result.spans[0], result.spans, function (ctx) {
+                  return auditCard(shown, Object.assign(ctx, context));
+                }, "audit");
+              }, function (ctx) {
+                return auditCard(shown, Object.assign({}, context, ctx));
+              });
+              // A sentence a reviewer calls wrong is a contradiction for the
+              // highlight filters (matchesHighlightFilter).
+              if (shown.kind === "wrong" && result.spans[0]?.cxGroup) result.spans[0].cxGroup.hasContradiction = true;
+              const targets = shown.dissent.map(function (item) {
+                return typeof item.target === "string" ? item.target.trim() : "";
+              }).filter(Boolean);
+              if (targets.length) spots.push({ spans: result.spans, targets: targets });
+            });
+            spots.forEach(function (entry) { wrapSpots(entry.spans, entry.targets); });
+            if (fallbackBox) {
+              fallbackBox.replaceChildren();
+              fallbackBox.hidden = !unplaced.length;
+              if (unplaced.length) {
+                fallbackBox.appendChild(cardNode("div", "claims-fallback-title", "Other notes"));
+                unplaced.forEach(function (item) {
+                  const row = cardNode("div", "claims-fallback-row");
+                  // Shown under "Disagreements & issues" like a split claim.
+                  row.dataset.coverage = "split";
+                  const text = cardNode("span", "claims-fallback-text");
+                  text.textContent = String(item.quote || "");
+                  text.setAttribute("data-i18n-skip", "");
+                  const kind = AUDIT_CLASSES[item.kind] ? item.kind : "doubtful";
+                  const note = { anchor: String(item.quote || ""), kind: kind, dissent: [item] };
+                  const button = cardNode("button", "claim-badge has-dissent cx-audit-note", AUDIT_KINDS[kind]);
+                  button.type = "button";
+                  button.setAttribute("aria-label", auditLabel(note));
+                  button.addEventListener("click", function () {
+                    openCard(button, null, function (ctx) {
+                      return auditCard(note, Object.assign(ctx, { spans: [text], navigation: navigation, openInDrawer: openNotes }));
+                    }, "audit");
+                  });
+                  row.append(text, button);
+                  fallbackBox.appendChild(row);
+                });
+              }
+            }
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
+            return claims.length > 0;
+          }
+
           // --- Resolve-Runde ---------------------------------------------------
           // Konfrontiert die dissentierenden Modelle eines Widerspruchs gezielt
           // mit der Gegenposition (POST /resolve). Pro-Feature: Free-Nutzer
@@ -3683,6 +3819,7 @@
 
           window.renderConsensusInsights = renderConsensusInsights;
           window.renderStoredConsensusClaims = renderStoredConsensusClaims;
+          window.renderStoredAuditMarks = renderStoredAuditMarks;
           window.renderStoredDifferenceCards = renderStoredDifferenceCards;
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;

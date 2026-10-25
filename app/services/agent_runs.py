@@ -427,6 +427,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])
+                    if review and review.get("mode") == "audit" and review.get("status") in {"required", "running"}:
+                        # Audit mode (agent_audit.py) whose last review saves
+                        # failed: a finished answer never keeps "reviewing".
+                        patch["agent_review"] = {**review, "status": "failed"}
                 else:
                     patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
                     patch["agent_failure"] = getattr(completion, "failure", None) or {

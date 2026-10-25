@@ -5085,8 +5085,10 @@ Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
 `agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum,
-Agent freedom (`autonomy`: `guided`/`free`) und Answer check (`judges`:
-`on`/`off`, `#agentJudgesSelect`; Details in `docs/agent-mode.md`) als
+Agent freedom (`autonomy`: `guided`/`free`), Answer check (`judges`:
+`on`/`off`, `#agentJudgesSelect`) und für Admins Audit instead of comparison
+(`audit`: `off`/`on`, `#agentAuditSelect` in einer `.admin-only`-Zeile; Details
+in `docs/agent-mode.md`) als
 Kontoeinstellung `agent_preferences` (nur gewählte Felder), gibt den Reiter `agentSettingsSection` über
 `App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
 `agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
@@ -5371,7 +5373,23 @@ Darstellung mit ihrer eigenen Quellenliste. agent_runs.py persistiert Provider-/
 auf `turn.sources`; alte Turns nutzen weiterhin `agent_activity`. Ohne Vergleich
 öffnet der Sources-Footer einen Leser mit ausschließlich dem Quellen-Tab.
 Pro Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
-renderStoredDifferenceCards. Ein kompakter Footer öffnet Widersprüche, formatierte
+renderStoredDifferenceCards. Eine Review mit `mode: "audit"` (Audit statt
+Vergleich, seit 2026-10-25) rendert `renderAudit`: erst wenn alle Prüfer fertig
+sind und nur auf genau dieser Version markiert
+`window.renderStoredAuditMarks(body, review.audit, fallback, sources,
+{openNotes})` (consensus-insights.js) die Sätze mit `.is-audit` und
+`is-major`/`is-split`/`is-minor` je Art, die Karte (`auditCard`) zeigt je Prüfer
+Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
+Fallback-Liste („Other notes“). Die Leiste bietet Notes und Sources; der
+Leser-Kontext (`agent-audit:<answer_hash>`) hat `sections: ['differences',
+'sources']` und `labels: {differences: 'Notes'}`: `model-answer-reader.js`
+benennt Abschnittsknopf und Titel nach `labels` (sonst Answers/Differences/
+Sources). Kein Score, keine Unterschiedskarten. `auditMarks` zählt und listet
+eine Markierung über mehrere Sätze einmal (`dissent[].mark`). `renderActivity`
+zeigt eine Karte „Review · n models“, die auch bei `cancelled`/`missing`
+endet, die Seitenleiste Prüfer (`kind: "audit"`) als „Reviewer“ ohne ihren
+Auftrag. `failureNote` sieht eine fixierte Audit-Antwort als vollständig an
+(`reviewedAnswer`). Ein kompakter Footer öffnet Widersprüche, formatierte
 Einzelantworten und Quellen im gemeinsamen model-answer-reader.js. Dessen
 openContext/refreshContext verwenden explizite Vergleichs-Snapshots mit eigenem
 renderPanel/contextGroup; globale Consensus-Ziele werden nicht ausgeliehen.
@@ -5529,6 +5547,35 @@ mit deterministischen Providern, mehrere Grundlagen, Versionen, Teilausfälle,
 fehlende Calls, Abbruch, UTC-Wechsel und atomare Kontingente. Ergänzend bestehende
 Agent-/Consensus-Tests, agent-review.test.mjs sowie die gebaute Desktop-/Mobil-
 Ansicht in test_agent_comparison_frontend.py; siehe [testing.md](testing.md).
+
+### Audit statt Vergleich (Agent, Admins, seit 2026-10-25)
+
+Einstellung `agent_preferences.audit` (`off`/`on`), nur für Admin-Konten
+wirksam (`routers/agent.py::effective_preferences` setzt sie sonst vor der
+Request-Identität auf `off`). Mit `on` schickt die Route
+`AGENT_AUDIT_SYSTEM_PROMPT` (`DEFAULT_PROMPTS["agent_audit"]`) statt des
+Agent-Prompts, `ComparisonTools.audit_mode` bietet keine Vergleichstools an,
+und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
+streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
+Nach der Antwort fixiert `capture` die Version, `_finish_review` ruft das
+App-Tool `audit_answer`, und `AnswerAudit.run` lässt jedes Vergleichsmodell
+als Prüfer (`ComparisonTools.call`, Art `audit`, `SEARCHING_KINDS`) die ganze
+Antwort mit eigener Websuche prüfen; `place_marks` legt ihre Zitate je Satz
+als Claims ab (`review.mode = "audit"`, `review.audit.reviewers/claims/
+unplaced/issues`, `dissent[].mark` je Markierung; mehrdeutige oder zu lange
+Zitate bleiben `unplaced`). Die Judges laufen nicht. Ein Fehler kostet nur
+Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
+`REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
+(`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
+trotzdem `completed`, auch nach einem Stop während der Prüfung
+(`_finish_review` fängt ihn ab, außer bei `watch_error`). Gescheiterte
+Speicherungen holt `AnswerAudit.close` nach; `agent_runs.finish_run` setzt
+eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
+`failed`. Eigene Suchtreffer sperren Memory für die Nachricht
+(`memory_locked`). Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
+Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
+`window.renderStoredAuditMarks`. Details: `docs/agent-mode.md`, „Audit statt
+Vergleich“.
 
 ### Eingefügten Text prüfen (Agent, seit 2026-10-09)
 „Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist
@@ -7347,7 +7394,8 @@ verlässt, macht den Datensatz nicht unlesbar; gespeicherte Altwerte, die nicht
 mehr validieren, fallen je Einstellung weg.
 
 Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
-`agent_preferences` (`depth`/`quorum`/`autonomy`/`judges`, nur gewählte),
+`agent_preferences` (`depth`/`quorum`/`autonomy`/`judges`/`audit`, nur gewählte; `audit` wirkt nur für
+Admins, `routers/agent.py::effective_preferences`),
 `compare_models` (`{Familienlabel: {enabled, model}}`),
 `consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
 / 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die
@@ -8034,6 +8082,7 @@ app/services/
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
+  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle die fertige Antwort mit eigener Websuche prüfen (review_system_prompt, review_input, parse_review: quote/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text) und legt sie je Satz als Claims zusammen; Fehler kosten nur Marken (Frist, Stop, Speicherbudget)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
   chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
@@ -9900,7 +9949,11 @@ zählen nicht):
   `window.currentBookmarkShareResultError`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
-  `window.App.reportCriticalError`.
+  `window.App.reportCriticalError`, `window.renderStoredAuditMarks` (Marken
+  eines Agent-Audits, consensus-insights.js → agent-review.js; seit 2026-10-25).
+  Ein Leser-Kontext von `App.answerReader.openContext` darf seine Abschnitte
+  über `labels` umbenennen (`{differences: 'Notes'}`), sonst Answers,
+  Differences, Sources.
 - **`window.App.runRegistry`** ist der einzige Owner paralleler Browser-Runs
   (`create/get/update/setStatus/show/showSavedView/clearVisible/cancel/clearAll`).
   Jeder Netzwerk-Callback erhält oder schließt über eine konkrete `runId`; ein

@@ -808,15 +808,51 @@ comparison: memory is unavailable right now, so nothing was saved; they can try
 again in a moment or add it in Settings > Memory."""
 
 
-def orchestrator_prompt(snapshot: MemorySnapshot) -> str:
-    """Memory data plus the rules that fit the user's switches."""
+# Without comparison tools (audit mode, agent_audit.py) these sentences of the
+# memory prompts change: no compare_models carries a memory decision, and the
+# agent decides before it searches or reads anything.
+NO_COMPARISON_REPLACEMENTS = (
+    (" Comparison models do not see\nmemory: put a memory into the compare_models context only when it passes the\n"
+     "relevance test for this task, as the user's stated background or preference\n(\"The user is vegetarian.\"); "
+     "leave out all others.", ""),
+    ("Decide on EVERY message. compare_models and check_text carry a required\n`memory` field: pass [] when the "
+     "message reveals nothing new, which is the\nusual case, and on further comparisons of the same message once one "
+     "was\naccepted (its decision stands; after a refused call, decide again). When you\nanswer without a comparison "
+     "and the message reveals something to remember,\ncall update_memory before you answer.",
+     "Decide on EVERY message. When the message reveals something to remember,\ncall update_memory first, before "
+     "you search, read or answer; usually it\nreveals nothing new, and then you call nothing."),
+    ("A message that only asks you to remember, change or forget something needs no\ncomparison: call "
+     "update_memory, then confirm briefly.",
+     "A message that only asks you to remember, change or forget something needs no\nsearch: call update_memory, "
+     "then confirm briefly."),
+    ("every memory\nchange is refused, so decide on the first comparison.",
+     "every memory\nchange is refused, so decide first."),
+    ("answer directly without a\ncomparison:", "answer directly:"),
+    ("answer directly\nwithout a comparison:", "answer directly:"),
+)
+
+
+def without_comparisons(text: str) -> str:
+    """``text`` (a memory prompt) for a turn without comparison tools."""
+    for old, new in NO_COMPARISON_REPLACEMENTS:
+        text = text.replace(old, new)
+    return text
+
+
+def orchestrator_prompt(snapshot: MemorySnapshot, *, comparisons: bool = True) -> str:
+    """Memory data plus the rules that fit the user's switches.
+
+    ``comparisons=False``: the turn has no comparison tools (audit mode); the
+    rules say to decide with update_memory first (NO_COMPARISON_REPLACEMENTS)."""
+    adapt = (lambda text: text) if comparisons else without_comparisons
     if not snapshot.available:
-        return MEMORY_UNAVAILABLE_PROMPT
+        return adapt(MEMORY_UNAVAILABLE_PROMPT)
     if not snapshot.enabled:
-        return MEMORY_PAUSED_PROMPT
+        return adapt(MEMORY_PAUSED_PROMPT)
+    # The user's memories themselves (block) stay as they are.
     block = render_memory_block(snapshot)
-    rules = MEMORY_WRITE_PROMPT if snapshot.writable else MEMORY_READ_ONLY_PROMPT
-    return "\n\n".join(part for part in (block, MEMORY_USE_PROMPT if block else "", rules) if part)
+    rules = adapt(MEMORY_WRITE_PROMPT if snapshot.writable else MEMORY_READ_ONLY_PROMPT)
+    return "\n\n".join(part for part in (block, adapt(MEMORY_USE_PROMPT) if block else "", rules) if part)
 
 
 # --- Agent tools ------------------------------------------------------------
@@ -883,11 +919,14 @@ class MemoryTools:
         from app.services.agent_tools import ReadOnlyTool
         if not self.writable:
             return []
+        # Without comparison tools (audit mode) this is the only way to remember.
+        comparisons = not getattr(getattr(self.loop, "comparison", None), "audit_mode", False)
         return [ReadOnlyTool(
             "update_memory",
             "Save, update or delete the user's persistent memories. Each change needs an exact quote of "
-            "the user's own words as evidence. Use it when you answer without a comparison; compare_models "
-            "and check_text carry the decision in their memory field.",
+            "the user's own words as evidence. " + (
+                "Use it when you answer without a comparison; compare_models and check_text carry the decision "
+                "in their memory field." if comparisons else "Call it first, before you search or read anything."),
             UpdateMemoryArgs, self.update_memory)]
 
     def _user_messages(self) -> list[str]:

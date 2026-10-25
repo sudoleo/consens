@@ -417,6 +417,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-evidence-context > summary { cursor: pointer; color: var(--ink-3); min-height: 32px; }
 .agent-evidence-context p { white-space: pre-wrap; }
 .agent-review-note { color: var(--ink-3); line-height: 1.6; margin: 6px 0 12px; }
+/* Agent audit: each reviewer's notes in the reader (agent-review.js auditPanel). */
+.agent-audit-reviewer + .agent-audit-reviewer { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+.agent-audit-reviewer-name { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--font-size-ui); font-weight: 550; }
+.agent-audit-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.agent-audit-note { display: grid; gap: 2px; }
+.agent-audit-kind { font-weight: 550; color: var(--ink-2); }
+.agent-audit-quote { color: var(--ink-2); }
+.agent-audit-text { margin: 0; color: var(--ink); }
+.agent-audit-source { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.2em; justify-self: start; }
+.agent-audit-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-review :is(select, button):focus-visible, .agent-evidence-context > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 @media (max-width: 400px) {
   .agent-model-picker .model-picker-display-text::before { content: ''; }

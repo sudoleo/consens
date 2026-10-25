@@ -29,6 +29,7 @@ from app.services.agent_provider_limits import (
     provider_cooldowns,
 )
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
+from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.llm.agent_client import (
     AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, reasoning_active, resolve_agent_model,
     routing_output_limit,
@@ -107,8 +108,8 @@ def _transient_store_error(error):
 
 
 def smaller_search(searches):
-    """Next search tier down: several rounds -> one -> none."""
-    return 1 if searches > 1 else 0
+    """Next search tier down: many rounds (audit mode) -> three -> one -> none."""
+    return 3 if searches > 3 else 1 if searches > 1 else 0
 
 
 def with_step_note(messages, note):
@@ -126,6 +127,12 @@ def _thought_only(value):
     reasoning model that stopped without writing anything)."""
     return bool(getattr(value, "output_limited", False)) or (
         value.finish_reason in {"length", "max_tokens"} and not value.text.strip() and not value.tool_calls)
+
+
+def _searched(value):
+    """The step's own web search returned pages into its context."""
+    count = (value.usage or {}).get("web_search_requests")
+    return bool(value.sources) or (type(count) is int and count > 0)
 
 
 def _free_rate_limit(error, value):
@@ -269,11 +276,15 @@ class DelegationLoop(AgentLoop):
                     "output_usd_per_million": m.output_usd_per_million, "context_length": m.context_length}
                    for m in self.models.values()]
         self.messages[0] = dict(self.messages[0])
+        # Audit instead of comparison (AgentPreferences.audit, agent_audit.py):
+        # the route sends AGENT_AUDIT_SYSTEM_PROMPT and no comparison tools exist.
+        audit = bool(self.merged and agent_preferences is not None and agent_preferences.audit == "on")
         if self.merged:
-            from app.services.prompt_defaults import AGENT_ANSWER_SECTION
-            if AGENT_ANSWER_SECTION not in self.messages[0]["content"]:
+            from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_AUDIT_ANSWER_SECTION
+            section = AGENT_AUDIT_ANSWER_SECTION if audit else AGENT_ANSWER_SECTION
+            if section not in self.messages[0]["content"]:
                 # Not the code prompt (tests, probes): the writing rules still apply.
-                self.messages[0]["content"] += "\n\n" + AGENT_ANSWER_SECTION
+                self.messages[0]["content"] += "\n\n" + section
         if self.config["enabled"] or comparison_models is None:
             self.messages[0]["content"] += ("\n\n" + self.config["orchestrator_prompt"]
                 + "\nAvailable worker models (server registry): " + json.dumps(catalog))
@@ -300,9 +311,10 @@ class DelegationLoop(AgentLoop):
             # The steering prompt (messages[0]) carries the workflow. The agent
             # writes the answer; the app runs every check itself (_finish_review).
             self.messages[0]["content"] += preference_prompt(self.comparison.preferences, limit)
-            if not self.policy.account_budget_only:
+            # A comparison limit only where there are comparisons (not in audit mode).
+            if not audit and not self.policy.account_budget_only:
                 self.messages[0]["content"] += "\nAt most three comparisons before the single checked answer per message."
-            elif limit:
+            elif not audit and limit:
                 self.messages[0]["content"] += (f"\nAt most {limit} comparisons per message. "
                     "Plan them: put related subquestions into one comparison instead of repeating similar ones.")
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
@@ -314,12 +326,15 @@ class DelegationLoop(AgentLoop):
                 # Reading cited sources after a comparison (docs/agent-mode.md,
                 # "Quellen nachlesen"). Registered for the whole turn: a tool
                 # list that changes between steps would rewrite the prompt cache.
-                from app.services.prompt_defaults import AGENT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_REPLACEMENTS
+                from app.services.prompt_defaults import (AGENT_AUDIT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_PROMPT,
+                                                          AGENT_READ_SOURCE_REPLACEMENTS)
                 self.comparison.reader = agent_read_source.SourceReader(self, self.comparison)
                 content = self.messages[0]["content"]
-                for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
-                    content = content.replace(old, new)
-                self.messages[0]["content"] = content + "\n\n" + AGENT_READ_SOURCE_PROMPT.format(
+                if not audit:
+                    for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
+                        content = content.replace(old, new)
+                self.messages[0]["content"] = content + "\n\n" + (
+                    AGENT_AUDIT_READ_SOURCE_PROMPT if audit else AGENT_READ_SOURCE_PROMPT).format(
                     limit=agent_read_source.READS_PER_MESSAGE)
                 self.registry = ToolRegistry([*self.registry.tools.values(), self.comparison.reader.tool],
                                              argument_limit=24_000)
@@ -395,7 +410,7 @@ class DelegationLoop(AgentLoop):
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
         if self.comparison is not None:
-            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot)
+            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot, comparisons=not audit)
             memory_tools = self.memory.tools()
             if memory_tools:
                 self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
@@ -449,9 +464,15 @@ class DelegationLoop(AgentLoop):
 
     def answer_time_left(self):
         """Seconds before the answer must start to finish ahead of the
-        hard stop, or None for runs without one (bounded runs)."""
+        hard stop, or None for runs without one (bounded runs). In audit mode
+        the reviewers of the answer need their time after it as well."""
         left = self._hard_stop_left()
-        return None if left is None else left - self._answer_reserve()
+        if left is None:
+            return None
+        if self.comparison is not None and self.comparison.auditor is not None:
+            from app.services.agent_audit import REVIEW_RESERVE_SECONDS
+            left -= REVIEW_RESERVE_SECONDS
+        return left - self._answer_reserve()
 
     def _turn_limit(self):
         """Soft per-turn limit before the next orchestrator step, if reached."""
@@ -848,7 +869,7 @@ class DelegationLoop(AgentLoop):
         not cut short near the daily limit and research is not lost earlier.
         """
         from app.services.agent_tokens import input_estimate, minimum_output
-        soft = bool(worker and getattr(worker, "kind", None) == "comparison")
+        soft = bool(worker and getattr(worker, "kind", None) in SEARCHING_KINDS)
         # Only once a comparison of this message holds paid answers: a started
         # comparison whose answers found no allowance has nothing to finish
         # (review 2026-10-14: near the daily limit a long first step left the
@@ -1034,7 +1055,7 @@ class DelegationLoop(AgentLoop):
         # instead of freezing after the first few sentences.
         worker_progress = (None if not worker else
                            ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)
-                           if getattr(worker, "kind", None) == "comparison" else ReasoningProgress())
+                           if getattr(worker, "kind", None) in SEARCHING_KINDS else ReasoningProgress())
         thinking = (ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)
                     if answer_candidate and not worker else None)
         stream_progress = StreamProgress(worker.stream_chars) if worker else None
@@ -1045,7 +1066,7 @@ class DelegationLoop(AgentLoop):
             try:
                 if self.policy.account_budget_only:
                     answering = answer_candidate and bool(self.comparison and self.comparison.comparisons)
-                    clamp_floor = (cfg.MAX_TOKENS if answering or getattr(worker, "kind", None) == "comparison"
+                    clamp_floor = (cfg.MAX_TOKENS if answering or getattr(worker, "kind", None) in SEARCHING_KINDS
                                    else None)
                     model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
                         model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor,
@@ -1416,8 +1437,9 @@ class DelegationLoop(AgentLoop):
         sharpens the question; it never becomes the answer models' sources.
         """
         if (not self.policy.account_budget_only or not self.comparison or self.comparison.comparisons
-                or self.search_handoff or value.tool_calls
+                or self.comparison.audit_mode or self.search_handoff or value.tool_calls
                 or not (value.sources or (value.usage or {}).get("web_search_requests"))):
+            # In audit mode the research is the answer (agent_audit.py).
             return False
         self.search_handoff = True
         self.messages.append({"role": "user", "content":
@@ -1505,6 +1527,21 @@ class DelegationLoop(AgentLoop):
 
     def _finish_review(self, value):
         """A completed answer needs its check, not another routing generation."""
+        if self.comparison.auditor is not None:
+            # Audit mode: the comparison models review the fixed answer. A
+            # failed review costs marks, never the answer (AnswerAudit.run).
+            # The user's Stop stops the reviewers, not the complete answer:
+            # the turn ends with it. A review that never started (a Stop or
+            # an error just before) ends at the run's end (AnswerAudit.close).
+            if not self.comparison.finalized:
+                call = {"id": "server_audit_answer", "type": "function",
+                        "function": {"name": "audit_answer", "arguments": "{}"}}
+                try:
+                    yield from self._execute_stream(value, call, self.app_registry)
+                except ProviderCancelled:
+                    if self.watch_error:
+                        raise
+            return
         if not self.comparison.finalized and self.comparison.preferences.judges == "off":
             # The user switched the answer check off: final without judges.
             try:
@@ -1644,7 +1681,8 @@ class DelegationLoop(AgentLoop):
         """The agent searched the web for this message and has neither
         compared nor read a page. Such a question goes through a comparison."""
         comparison = self.comparison
-        if comparison is None or comparison.comparisons:
+        # Audit mode has no comparison: the agent's own research is the way.
+        if comparison is None or comparison.comparisons or comparison.audit_mode:
             return False
         if comparison.reader is not None and any(r.get("status") == "completed" for r in comparison.reader.reads):
             return False
@@ -1686,7 +1724,9 @@ class DelegationLoop(AgentLoop):
         comparisons, with the answer check on and nothing left that would
         take the text back (_workers_ready, mailbox)."""
         comparison = self.comparison
-        return bool(comparison is not None and comparison.comparisons and not comparison.text
+        # The reviewers of audit mode check the text like the judges do.
+        return bool(comparison is not None and (comparison.comparisons or comparison.auditor is not None)
+                    and not comparison.text
                     and not comparison.finalized and comparison.preferences.judges != "off"
                     and value.text.strip() and getattr(value, "published", "") == value.text
                     and not value._tool_parts and not value.tool_calls
@@ -1706,6 +1746,12 @@ class DelegationLoop(AgentLoop):
         self.completion.text = value.text
         if comparison.comparisons:
             comparison.freeze_for_synthesis()
+            comparison.capture(value.text)
+            if not comparison.finalized:
+                yield from self._finish_review(value)
+            self.completion.text = comparison.text
+        elif comparison.auditor is not None:
+            # Audit mode: the answer is fixed as a version, then reviewed.
             comparison.capture(value.text)
             if not comparison.finalized:
                 yield from self._finish_review(value)
@@ -1747,13 +1793,17 @@ class DelegationLoop(AgentLoop):
         tools listed but not callable (tool_choice none, prompt cache kept),
         writes the answer from the comparisons it has."""
         comparison = self.comparison
-        usable = comparison.text or any(len(c["answers"]) >= 2 for c in comparison.comparisons)
+        # In audit mode the agent's own research carries the answer.
+        usable = (comparison.text or comparison.audit_mode
+                  or any(len(c["answers"]) >= 2 for c in comparison.comparisons))
         if not usable or not self._workers_ready():
             raise AnalysisBudgetExceeded(reason)
         logging.info("Agent turn limit reached; the agent writes the answer from existing comparisons")
         if not comparison.text:
             self._close_open_calls()
             self.messages.append({"role": "user", "content":
+                "App rule: this message has reached its limit. Write the answer now from what you have, without "
+                "tool calls." if comparison.audit_mode else
                 "App rule: this message has reached its limit. Write the answer now from the comparisons you have, "
                 "without tool calls; the app checks it."})
             index = next(steps, None)
@@ -1826,10 +1876,17 @@ class DelegationLoop(AgentLoop):
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
                     # Before a comparison the orchestrator may research to
-                    # understand the question: several rounds, once.
-                    research = bool(self.comparison and not self.comparison.comparisons)
-                    search = {"searches_enabled": not (self.search_handoff and research),
-                              "search_rounds": ORCHESTRATOR_SEARCH_ROUNDS if research else 1}
+                    # understand the question: several rounds, once. In audit
+                    # mode it researches the answer itself, in every step, and
+                    # its text streams like any answer (agent_audit.py).
+                    if self.comparison is not None and self.comparison.audit_mode:
+                        from app.services.agent_audit import AGENT_SEARCH_ROUNDS
+                        research = False
+                        search = {"searches_enabled": True, "search_rounds": AGENT_SEARCH_ROUNDS}
+                    else:
+                        research = bool(self.comparison and not self.comparison.comparisons)
+                        search = {"searches_enabled": not (self.search_handoff and research),
+                                  "search_rounds": ORCHESTRATOR_SEARCH_ROUNDS if research else 1}
                     routing = self._routing_model()
                     value = yield from self._orchestrate(routing, index, steps, search, research)
                     if _thought_only(value):
@@ -1855,6 +1912,11 @@ class DelegationLoop(AgentLoop):
                         if _thought_only(value):
                             raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
                     self.messages.append(value.assistant_message())
+                    if self.comparison is not None and self.comparison.audit_mode and _searched(value):
+                        # Audit mode searches in every step: web pages are in
+                        # view from here on, also for this step's own calls,
+                        # so memory locks as after read_source.
+                        self.memory_locked = True
                     # A step that wrote its answer and then only saved a
                     # memory or prepared a Watch: the text stands as the answer.
                     answered_with_tools = False

@@ -67,6 +67,7 @@ AgentDepth = Literal["auto", "quick", "full"]
 AgentQuorum = Literal["balanced", "fast", "all"]
 AgentAutonomy = Literal["guided", "free"]
 AgentJudges = Literal["on", "off"]
+AgentAudit = Literal["off", "on"]
 
 
 class AgentPreferences(BaseModel):
@@ -80,8 +81,15 @@ class AgentPreferences(BaseModel):
     # Answer check (user setting since 2026-10-17): "off" skips the
     # Differences and Coverage judges of the agent's own answer
     # (ComparisonTools.skip_review). A pasted text the user asks to check
-    # (check_text) is still checked: that check is the answer.
+    # (check_text) is still checked: that check is the answer. In audit mode
+    # "off" skips the reviewers too: the agent answers alone.
     judges: AgentJudges = "on"
+    # Audit instead of comparison (since 2026-10-25, admin accounts only;
+    # the route turns it off for everyone else): no comparison tools, the
+    # agent answers itself with its own search, and the comparison models
+    # review the finished answer (agent_audit.py). Depth, answer start and
+    # Agent freedom only steer comparisons, so they do nothing in this mode.
+    audit: AgentAudit = "off"
 
 
 def stored_preferences(value):
@@ -173,8 +181,17 @@ JUDGES_OFF_PROMPT = ("\nThe user switched the answer check off in Settings: in t
                      "(check_text) is still checked.")
 
 
+# Audit mode with the answer check off: nobody reviews the answer.
+AUDIT_OFF_PROMPT = ("\nThe user switched the answer check off in Settings: in this message no model reviews your "
+                    "answer, whatever the instructions above say.")
+
+
 def preference_prompt(preferences, max_comparisons=BOUNDED_COMPARISONS):
     """Tell the orchestrator about what the user fixed in Settings."""
+    if preferences.audit == "on":
+        # Depth, answer start and Agent freedom steer comparisons, and there
+        # are none in audit mode (agent_audit.py).
+        return AUDIT_OFF_PROMPT if preferences.judges == "off" else ""
     text = ""
     if preferences.depth != "auto":
         text += (f"\nThe user fixed the comparison depth to \"{preferences.depth}\" in Settings; "
@@ -251,6 +268,12 @@ COMPARISON_FAILURES = {
     "late_cutoff": "It was still writing when the answer was finished.",
     "stopped": "The run was stopped.",
 }
+
+# Helper calls that research the web themselves: comparison answers and, in
+# audit mode, the reviewers of the finished answer (agent_audit.py). Judges
+# only read. Searching calls retry an answer that ended without a word, do
+# not reserve their search up front and show their reasoning as a live line.
+SEARCHING_KINDS = frozenset({"comparison", "audit"})
 
 
 PASSAGE_ANSWER_TO_CHARS = 300
@@ -599,6 +622,19 @@ class ComparisonTools:
         self.reader = None
         # Coverage windows of the answer while it streams (answer_progress).
         self.prefetch = None
+        # Audit instead of comparison (AgentPreferences.audit): no comparison
+        # tools; with the answer check on, the comparison models review the
+        # finished answer (agent_audit.AnswerAudit), which the app runs itself.
+        self.audit_mode = self.preferences.audit == "on"
+        self.auditor = None
+        if self.audit_mode:
+            self.tools = []
+            if self.preferences.judges == "on":
+                from app.services.agent_audit import AnswerAudit
+                self.auditor = AnswerAudit(self)
+            self.app_tools = [ReadOnlyTool("audit_answer", "Have the user's comparison models review the fixed answer.",
+                                           JudgeArgs, self.audit)]
+            return
         arguments = free_compare_args(models) if self.free else CompareArgs
         if memory_changes:
             # The required memory decision rides on the calls that start the
@@ -633,11 +669,16 @@ class ComparisonTools:
 
     def snapshot(self, status=None):
         # A direct answer is saved only with pages it read; "direct" is never
-        # a review result (no comparison, nothing checked).
-        default = "direct" if not self.comparisons else (self.review or {}).get("status", "required")
+        # a review result (no comparison, nothing checked). An answer the
+        # reviewers check (audit mode) is never direct.
+        reviewed = bool(self.comparisons) or self.auditor is not None
+        default = (self.review or {}).get("status", "required") if reviewed else "direct"
         data = {"version": 1, "status": status or default,
                 "answer_hash": answer_hash(self.text), "answer_version": len(self.versions),
                 "comparisons": self.comparisons, "versions": self.versions}
+        if self.auditor is not None:
+            data["mode"] = "audit"
+            data["audit"] = self.auditor.snapshot()
         if self.review:
             data["checks"] = self.review["checks"]
         if self.passage:
@@ -821,6 +862,12 @@ class ComparisonTools:
                     if len(read.get("text") or "") > READ_TRIM_CHARS:
                         read.update(text=read["text"][:READ_TRIM_CHARS], text_trimmed=True)
                 encoded = json.dumps(data, ensure_ascii=False)
+            if len(encoded.encode("utf-8")) > 600_000 and data.get("audit"):
+                # Then the reviewers' quoted words and long notes (audit
+                # mode): every mark stays on its sentences.
+                from app.services.agent_audit import trim_marks
+                trim_marks(data["audit"])
+                encoded = json.dumps(data, ensure_ascii=False)
             if len(encoded.encode("utf-8")) > 600_000:
                 raise ValueError("Comparison review storage budget reached")
         return data
@@ -873,7 +920,7 @@ class ComparisonTools:
         # text can accompany required tool calls but cannot invalidate its review.
         if not text.strip() or self.text:
             return
-        if not self.comparisons:
+        if not self.comparisons and self.auditor is None:
             if self.direct:
                 # A direct answer: nothing to check. Saved with the review only
                 # when pages were read (the review holds read_sources).
@@ -892,15 +939,24 @@ class ComparisonTools:
             self.checkpoint()
 
     def call(self, model, messages, *, title, kind, comparison_id=None, budget=None, file_ids=None, cancellation=None,
-             slots=None, partial=None, search_rounds=1):
+             slots=None, partial=None, search_rounds=1, accept=None, context=None):
+        """One helper call (a comparison answer, a judge, a reviewer).
+
+        ``accept(value)``: whether the finished text is usable, before the
+        call counts as completed. It returns the text the agent panel shows
+        and raises ValueError for an unusable one, which ends the call as
+        failed (a reviewer's unreadable review, agent_audit).
+        ``context``: the session's saved assignment context instead of the
+        whole last message (a reviewer's would repeat the conversation and
+        the answer in every session)."""
         from app.services.agent_delegation import Worker
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = kind
         worker.file_ids = file_ids or []
         loop = self.loop
         loop._publish(worker, patch={"title": title, "kind": kind, "comparison_id": comparison_id,
-            "assignment": {"goal": title, "context": messages[-1]["content"]}, "model": model.settings(),
-            "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
+            "assignment": {"goal": title, "context": messages[-1]["content"] if context is None else context},
+            "model": model.settings(), "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
         cancellation = cancellation or loop.cancellation
         slots = slots or self.judge_slots
         try:
@@ -915,10 +971,11 @@ class ComparisonTools:
                     # is chance, not a limit: it gets one more paid attempt.
                     # No later request continues an answer or a judge; the
                     # retry re-sends the same prompt on the worker's session.
-                    for attempt in range(2 if kind == "comparison" else 1):
+                    searching = kind in SEARCHING_KINDS
+                    for attempt in range(2 if searching else 1):
                         generator = loop._step(model, messages, f"agent:{worker.id}:{attempt}", ToolRegistry(),
-                                               cancellation, worker=worker, searches_enabled=kind == "comparison",
-                                               search_rounds=search_rounds, retry_empty=attempt == 0 and kind == "comparison",
+                                               cancellation, worker=worker, searches_enabled=searching,
+                                               search_rounds=search_rounds, retry_empty=attempt == 0 and searching,
                                                completion=loop.worker_completion(worker, one_off=True))
                         try:
                             while True:
@@ -938,10 +995,11 @@ class ComparisonTools:
                 raise ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
                     else ValueError("Model response did not complete")
             value.truncated = truncated
+            shown = accept(value) if accept is not None else value.text
             # Both go to the journal as one write; the answer is used at once.
             loop._state(worker, "completed", sources=value.sources, finish_reason=value.finish_reason)
-            loop._publish(worker, text=value.text[:loop.policy.result_chars], kind="result", sender=worker.id,
-                          recipient="orchestrator", patch={"result_truncated": len(value.text) > loop.policy.result_chars},
+            loop._publish(worker, text=shown[:loop.policy.result_chars], kind="result", sender=worker.id,
+                          recipient="orchestrator", patch={"result_truncated": len(shown) > loop.policy.result_chars},
                           wait=False)
             return value
         except BaseException as exc:
@@ -957,7 +1015,12 @@ class ComparisonTools:
                                   patch={"partial": True, "result_truncated": len(text) > limit}, wait=False)
                 except Exception:
                     logging.warning("Agent comparison could not publish a partial answer")
-            if getattr(cancellation, "cutoff", False):
+            if kind == "audit":
+                # A reviewer: why its marks are missing (agent_audit.review_failure).
+                from app.services.agent_audit import review_failure
+                failure = review_failure(exc, cancellation)
+                message = failure["error"]
+            elif getattr(cancellation, "cutoff", False):
                 message = COMPARISON_FAILURES["late_cutoff"] + (
                     " The answer and its check use the other answers." if self.preferences.judges == "on"
                     else " The answer uses the other answers.")
@@ -1384,7 +1447,9 @@ class ComparisonTools:
             # Early Coverage windows of an answer whose check never ran (check
             # off, failure, stop): end them before the run settles its steps.
             self.prefetch.close(wait=True)
-        pending = False
+        # Reviewers still at work stop with the run; a saved review never
+        # keeps saying "reviewing".
+        pending = self.auditor is not None and self.auditor.close()
         for comparison in self.comparisons:
             cid = comparison["id"]
             if cid not in self._running:
@@ -1547,6 +1612,16 @@ class ComparisonTools:
             self.versions[-1].update(status="off", checks=self.review["checks"])
             self.checkpoint()
             self.finalized = True
+
+    def audit(self, args, *, cancellation):
+        """audit_answer: the app's own call once the answer is fixed in audit
+        mode (DelegationLoop._finish_review). Never offered to the model; a
+        failed review costs marks, never the answer (AnswerAudit.run)."""
+        if self.auditor is None or not self.text:
+            raise ValueError("No answer to review.")
+        if not self.finalized:
+            self.auditor.run(cancellation)
+        return {"status": self.review["status"], "answer_hash": answer_hash(self.text), "finalized": True}
 
     def record_stats(self):
         """Anonymous Differences telemetry like a Consensus run's

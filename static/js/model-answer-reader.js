@@ -313,6 +313,10 @@
       }
     });
   }
+  const SECTION_LABELS = { answers: 'Answers', differences: 'Differences', sources: 'Sources' };
+  function sectionLabel(kind) {
+    return selected?.labels?.[kind] || SECTION_LABELS[kind] || 'Sources';
+  }
   function openPanel(kind, trigger, turn = null, index = null, options = {}) {
     if (inspector?.kind === kind && inspector.turn === turn && trigger && index === null && !options.reveal
         && (!options.snapshot || selected?.key === options.snapshot.key)) { close(); return true; }
@@ -634,10 +638,13 @@
     get('Sections').querySelectorAll('button').forEach(button => {
       button.hidden = !!selected.sections && !selected.sections.includes(button.dataset.section);
       button.setAttribute('aria-pressed', String(button.dataset.section === (inspector?.kind || 'answers')));
+      // A context may name a section its own way (an Agent audit: "Notes").
+      const label = sectionLabel(button.dataset.section);
+      if (button.textContent !== window.App.t(label)) button.textContent = label;
     });
     root.classList.toggle('is-inspecting', !!inspector);
     get('Inspector').hidden = !inspector; get('Columns').hidden = !!inspector;
-    get('Title').textContent = inspector ? (inspector.kind === 'differences' ? 'Differences' : 'Sources') : (direct ? 'Direct comparison' : 'Model answers');
+    get('Title').textContent = inspector ? sectionLabel(inspector.kind) : (direct ? 'Direct comparison' : 'Model answers');
     get('Mode').hidden = true;
     root.querySelector('.answer-reader-header').hidden = direct;
     if (inspector) {

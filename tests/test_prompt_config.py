@@ -170,7 +170,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "comparison", "answers", "consensus", "delegation_orchestrator", "delegation_worker"]
+        "agent", "comparison", "agent_audit", "audit_reviewer", "answers", "consensus", "delegation_orchestrator",
+        "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
@@ -189,6 +190,14 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     assert prompt_catalog.DATE_PLACEHOLDER in comparison and "Current date:" not in comparison
     assert "up to 3 search rounds" in comparison
     assert comparison.endswith(agent_comparison.DEPTH_GUIDANCE["full"])
+    # Audit instead of comparison: its own agent prompt and the reviewers'.
+    from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT
+    assert texts["agent_audit"] == AGENT_AUDIT_SYSTEM_PROMPT and texts["agent_audit"].endswith(AGENT_AUDIT_ANSWER_SECTION)
+    assert "compare_models and check_text do not exist here" in texts["agent_audit"]
+    reviewer = texts["audit_reviewer"]
+    assert reviewer.startswith("You are an independent reviewer")
+    assert prompt_catalog.DATE_PLACEHOLDER in reviewer and "Current date:" not in reviewer
+    assert "up to 3 search rounds" in reviewer and '"marks"' in reviewer
 
 
 def test_code_prompts_fit_the_prepare_round_trip():

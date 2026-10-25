@@ -150,6 +150,23 @@ describe("model answer reader", () => {
     expect(ctx.document.getElementById('answerReaderColumns').textContent).toContain('Independent answer');
     expect(ctx.document.querySelector('#answerReaderSections [data-section="differences"]').hidden).toBe(true);
   });
+  it("names a section the way its context does and goes back to the usual names after it (Agent audit)", () => {
+    const ctx = boot(); ctx.project(run());
+    const notes = { key: 'agent-audit:h', question: 'Reviewed answer', answers: [], sections: ['differences', 'sources'],
+      labels: { differences: 'Notes' }, contextGroup: () => [notes],
+      renderPanel: kind => Object.assign(ctx.document.createElement('div'), { textContent: `${kind} panel` }) };
+    ctx.reader.openContext(notes, { section: 'differences' });
+    const button = section => ctx.document.querySelector(`#answerReaderSections [data-section="${section}"]`);
+    expect(ctx.document.getElementById('answerReaderTitle').textContent).toBe('Notes');
+    expect(button('differences').textContent).toBe('Notes');
+    expect(button('answers').hidden).toBe(true);
+    expect(ctx.document.getElementById('answerReaderInspector').textContent).toContain('differences panel');
+    const other = { key: 'tool:plain', question: 'Compared answer', answers: [], contextGroup: () => [other],
+      renderPanel: () => ctx.document.createElement('div') };
+    ctx.reader.openContext(other, { section: 'differences' });
+    expect(ctx.document.getElementById('answerReaderTitle').textContent).toBe('Differences');
+    expect(button('differences').textContent).toBe('Differences');
+  });
   it("keeps every finding folded when no marker picks one", () => {
     const ctx = boot(); ctx.project(run());
     const snapshot = { key: 'tool:first', question: 'Which plan?', answers: [], contextGroup: () => [snapshot],

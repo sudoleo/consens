@@ -63,6 +63,8 @@
     // Ended mid-answer: its text is kept and shown, marked incomplete.
     if (agent.kind === "comparison" && agent.partial && ended.has(agent.status)) return "Incomplete";
     if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
+    // A reviewer of the finished answer (Agent audit).
+    if (agent.kind === "audit" && agent.status === "failed") return "No review";
     return labels[agent.status] || "Waiting";
   }
   const activeStates = new Set(["waiting", "working", "question", "rework"]);
@@ -482,6 +484,8 @@
       // A comparison answer's goal only repeats its row title.
       if (agent.kind === "comparison" && key === "goal") continue;
       if (agent.kind === "judge" && key === "context") continue;
+      // A reviewer's saved assignment only names its task, as its row title does.
+      if (agent.kind === "audit") continue;
       if (agent.kind === "comparison" && key === "context") {
         let context = detail.assignment[key];
         try { const task = JSON.parse(context); context = [task.question, task.context].filter(Boolean).join("\n\n"); } catch (_) {}
@@ -500,6 +504,10 @@
         if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
         if (message.kind === "result") item.append(node("h3", "", "Answer"));
         if (message.kind === "partial") item.append(node("h3", "", "Incomplete answer · not used"));
+      } else if (agent.kind === "audit") {
+        // A reviewer has one reply too: its notes, or why none arrived.
+        if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
+        item.append(node("h3", "", "Notes"));
       } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);
@@ -708,7 +716,8 @@
       // The check row belongs at the end; answer rows that arrive later go above it.
       if (agent.kind === "check" && row.root.nextElementSibling) row.root.parentElement.append(row.root);
       setText(row.title, agent.model?.label || agent.title);
-      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
+      setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'audit' ? 'Reviewer'
+        : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
       setText(row.state, `${stateLabel(agent)} · ${agent.duration_incomplete ? '≥ ' : ''}${App.format.duration(elapsed(view, agent))}`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');

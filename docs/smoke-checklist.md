@@ -77,6 +77,20 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `test_agent_settings.py`, `agent-settings.test.mjs`, `agent-chat.test.mjs`
       (applyPick, Aktivitätszeile), `tests/e2e/test_agent_settings_frontend.py`
       (ohne echtes Modell).
+- [ ] Audit statt Vergleich (2026-10-25, Admin-Konto, echter Provider):
+      Settings › Agent · Beta › Audit instead of comparison auf On (die Zeile
+      fehlt für Nicht-Admins). Eine Frage mit Fakten zum Nachprüfen: kein
+      „Compared perspectives“, die Antwort streamt sofort nach der eigenen
+      Suche, danach „Reviewing the answer…“ und der Schimmer. Erst wenn alle
+      Prüfer fertig sind, erscheinen Marken (falsch rot, zweifelhaft gelb,
+      unvollständig grau, nur die zitierten Worte gefärbt), kein Grün, kein
+      Score; die Karte zeigt je Prüfer Art, Anmerkung und Quelle. Notes öffnet
+      die Anmerkungen je Modell samt „No objections.“ und Ausfällen. Reload und
+      archivierter Chat sehen gleich aus. Stop während „Reviewing the
+      answer…“: die Antwort bleibt ohne „may be incomplete“, nach Reload steht
+      „Review stopped“. Answer check zusätzlich Off → keine Prüfer.
+      Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
+      `agent-review.test.mjs`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,

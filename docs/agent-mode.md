@@ -168,7 +168,8 @@ unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte; v1
 speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
 Standardwerte weg; siehe codebase-map §4 „Kontoeinstellungen“) legt vier Werte fest, die jede
 Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
-einfriert (Teil der Request-Identität bei Recovery): **Answer depth**
+einfriert (Teil der Request-Identität bei Recovery; seit 2026-10-25 kommt für
+Admins **Audit instead of comparison** dazu, siehe „Audit statt Vergleich“): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
 Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
 (Standard seit 2026-10-07 `all`, „After every model“: wartet auf jedes Modell,
@@ -229,6 +230,126 @@ Marken, kein Model-Pulse-Pick und keine `differences_stats`.
   „Einstellungen umstellen“.
 - Consensus, Watches und Topics behalten ihre Prüfung; der Schalter gehört zu
   Agent · Beta. Ältere Turns ohne `judges` gelten als `on` (`stored_preferences`).
+
+### Audit statt Vergleich (seit 2026-10-25, nur Admins)
+
+Einstellungen → Agent · Beta → **Audit instead of comparison**
+(`AgentPreferences.audit`: `off` = Standard, `on`; Zeile `.admin-only`,
+`#agentAuditSelect`). Der Server nimmt `on` nur von Admin-Konten an
+(`routers/agent.py::effective_preferences`, vor der Request-Identität); jedes
+andere Konto läuft wie bisher, auch wenn seine gespeicherte Einstellung noch
+`on` sagt. Der Turn friert den wirksamen Wert ein. Ohne Einstellung läuft
+alles exakt wie zuvor. Code: `agent_audit.py`, Prompts in `prompt_defaults.py`.
+
+**Der Agent antwortet selbst.** Die Route schickt `AGENT_AUDIT_SYSTEM_PROMPT`
+statt `AGENT_SYSTEM_PROMPT` (`config["prompts"]["agent_audit"]`, im Admin
+lesbar als „Agent: audit mode instructions“). `ComparisonTools` bietet weder
+`compare_models` noch `check_text` an (`audit_mode`, `tools = []`); was nur zum
+Vergleich gehört, entfällt: Vergleichslimit im Prompt, `FREE_PROMPT`,
+Tiefe, Answer start, `_consensus_search_handoff` und `_tool_reminder`
+(eigene Recherche führt nicht mehr in einen Vergleich), das Memory-Feld an
+den Vergleichen (`agent_memory.without_comparisons`: Entscheidung über
+`update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
+(`AGENT_AUDIT_READ_SOURCE_PROMPT` statt `AGENT_READ_SOURCE_PROMPT`; lesbar
+bleiben Seiten, die der Nutzer verlinkt, und Quellen früherer Nachrichten).
+Der Agent sucht in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS` (5) Runden;
+passt die Reservierung nicht, geht `smaller_search` 5 → 3 → 1 → 0. Sein Text
+streamt wie jede Antwort (`research=False`), auch nach eigenen Suchtreffern.
+Watch, Einstellungen, Dateien, Dokumente, Google und Memory bleiben. Sobald
+ein Schritt eigene Suchtreffer hat (`_searched`), ist Memory für die
+Nachricht gesperrt (`memory_locked`, auch für die Aufrufe desselben
+Schritts), wie nach `read_source`: Seiten könnten sonst `update_memory`
+steuern. Der Memory-Prompt sagt deshalb „call update_memory first, before you
+search“.
+
+**Die Vergleichsmodelle prüfen.** Ist die Antwort fertig, fixiert sie
+`capture` als Version, und die App ruft `audit_answer` (`app_tools`, nie dem
+Modell angeboten; Aktivität „Reviewing the answer…“ / „Reviewed the answer“).
+`AnswerAudit.run` fragt alle gewählten Vergleichsmodelle parallel
+(`ComparisonTools.call`, Art `audit`, eigene Websuche mit
+`REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht). Jeder Prüfer bekommt
+`review_system_prompt()` und als JSON den bisherigen Verlauf (neueste
+Nachrichten bis `REVIEW_HISTORY_CHARS`), die letzte Nachricht und die ganze
+Antwort. Er antwortet mit `{"marks": [{quote, kind, note, source}]}`:
+`wrong`, `doubtful` oder `incomplete`, das Zitat wörtlich aus der Antwort und
+so lang, dass es nur einmal darin steht, die Anmerkung in der Sprache der
+Antwort. `parse_review` liest tolerant (Fence, Text drumherum, Synonyme),
+höchstens `MAX_MARKS` je Prüfer; `wrong` braucht eine http(s)-Quelle, sonst
+wird es `doubtful` (jede URL zählt, Max' Entscheidung). `source_url` liest
+auch einen Markdown-Link und entfernt nur Klammern, die sich schließen
+(`…/Mercury_(planet)` bleibt ganz). Keine lesbare Liste: der Prüfer scheitert
+mit `review_unreadable`. Die Sitzung eines Prüfers speichert als Auftrag nur
+`REVIEW_ASSIGNMENT`, keine Kopie von Verlauf und Antwort
+(`ComparisonTools.call(context=…)`).
+
+**Zitate finden.** `place_marks` sucht jedes Zitat mit dem Locator von
+`check_text` (`_search_form`/`_anchor_form`/`_locate_in`: Groß/klein,
+Anführungszeichen, Markdown und Leerraum zählen nicht, ganze Wörter samt
+Satzzeichen am Ende), auch über den sichtbaren Text eines Links und über „…“
+gekürzt, weitet es auf seine Sätze (`_enumerate_consensus_sentences`) und
+legt die Markierungen aller Prüfer je Satz zu einem Claim zusammen: `anchor`,
+`anchor_occurrence`, `kind` (der schwerste), `dissent[]` mit `model`, `kind`,
+`note`, `source`, `target` (die zitierten Worte, ein Link als sein Text) und
+`mark` (Nummer der Markierung, gleich auf jedem ihrer Sätze; die Seite zählt
+und listet sie einmal). In `audit.unplaced` stehen, mit Zitat, Markierungen
+ohne Fundstelle, mit Worten, die mehrfach in der Antwort stehen (welche
+Stelle gemeint ist, bleibt offen), außerhalb der Sätze (Überschrift, Code)
+oder über mehr als `MAX_MARK_SENTENCES` Sätze. Gespeichert wird alles in der
+Review: `mode: "audit"`, `audit.reviewers[]` (Status, Anzahl,
+`failure.code`), erst am Ende `audit.claims`/`audit.unplaced`,
+`audit.issues`. Status `succeeded` (alle Prüfer), `partial` (einige),
+`failed` (keiner), `cancelled` (Stop).
+
+**Ein Fehler kostet Markierungen, nie die Antwort.** Ein Prüfer, der
+scheitert, nicht lesbar antwortet oder bei der Frist noch arbeitet, verliert
+nur seine Marken. Die Prüfer starten nur mit mindestens `REVIEW_MIN_SECONDS`
+bis zum harten Stopp und enden `REVIEW_TIME_MARGIN` davor (`no_time`); der
+Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`).
+Scheitert die Prüfung als Ganzes (Fehler, Speicherbudget auch nach
+`trim_marks`, das erst die zitierten Worte und lange Anmerkungen kürzt),
+endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem
+`completed`. Scheitert nur ein Speichern, bleibt der Stand im Speicher und
+`AnswerAudit.close` speichert am Laufende erneut; eine Audit-Review, die beim
+erfolgreichen Ende noch `required`/`running` sagt, setzt
+`agent_runs.finish_run` auf `failed`. Der Stop des Nutzers während der
+Prüfung stoppt die Prüfer, nicht die fertige Antwort: die Review endet
+`cancelled`, der Turn `completed` (`_finish_review`), auch wenn der Stop kurz
+vor dem Start der Prüfer kommt (dann setzt `close` die Review). Nur ein
+verlorener Laufzustand (`watch_error`) beendet den Turn dort als Fehler. Die
+Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
+keine `differences_stats`, kein Model-Pulse-Pick.
+
+**Answer check aus** schaltet auch die Prüfer ab (`auditor` ist `None`): Der
+Agent antwortet allein, ohne Review, und der Prompt sagt es
+(`AUDIT_OFF_PROMPT`).
+
+**Anzeige** (`agent-review.js` `renderAudit`, `consensus-insights.js`
+`renderStoredAuditMarks`): Während die Prüfer arbeiten, läuft der bekannte
+Schimmer („Checking the answer…“). Die Marken erscheinen erst, wenn alle
+fertig sind, und nur auf genau diesem Text: falsch `is-major` (rot),
+zweifelhaft `is-split` (gelb), unvollständig `is-minor` (grau), dazu
+`is-audit`; die zitierten Worte tragen die Farbe (`wrapSpots`). Die Karte der
+Marke zeigt die markierten Worte und je Prüfer Art, Anmerkung und Quelle.
+Unmarkierter Text heißt „kein Einwand“, nicht „bestätigt“: kein Grün, keine
+Quote, kein Score. Die Highlight-Einstellung zeigt unter „Disagreements &
+issues“ (Standard) und „All“ jede Marke, unter „Contradictions“ und
+„Critical“ nur `wrong`. Nicht platzierte Anmerkungen stehen unter der Antwort
+(„Other notes“). Die Leiste bietet **Notes** (Leser mit den Anmerkungen je
+Prüfer, Ausfällen samt Grund und „Unmarked text means no objection, not
+confirmed.“) und Sources; die Aktivität zeigt eine Karte „Review · n models“,
+die auch bei `cancelled`/`missing` endet („Review stopped“, „Not reviewed“).
+Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
+wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
+
+Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
+der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
+Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
+`prepare_settings_change` kennt die Einstellung nicht.
+
+Tests: `tests/test_agent_audit.py` (Turn, Prüfer, Fristen, Stop, Speichern,
+Memory-Sperre, Zitate, Quellen, Prompts, Route), `tests/js/audit-marks.test.mjs`, die Audit-Fälle in
+`tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
+`model-answer-reader.test.mjs` und `agent-preferences.test.mjs`.
 
 ### Agent freedom: geführt oder frei
 

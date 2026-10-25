@@ -562,6 +562,25 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  it("shows a reviewer of the finished answer with its notes and never its whole task (Agent audit)", async () => {
+    const reviewer = { ...agent(1, "completed"), kind: "audit", title: "Review · Haiku" };
+    const notes = "- **wrong** · “14 euros”: The top costs 36.10 euros.";
+    const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
+      ? { agent: { assignment: { goal: "Review · Haiku", context: '{"latest_message":"Q","answer":"A long answer"}' } },
+          messages: [{ id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "result", text: notes }] }
+      : { agents: [reviewer], status: "succeeded" } }));
+    receive(w, reviewer);
+    w.App.agentDelegation.project({ chatId, turnId });
+    await settle();
+    expect(d.querySelector(".agent-session-role").textContent).toBe("Reviewer");
+    d.querySelector(".agent-session summary").click();
+    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail h3")?.textContent).toBe("Notes"));
+    const detail = d.querySelector(".agent-session-detail").textContent;
+    expect(detail).toContain("The top costs 36.10 euros.");
+    expect(detail).not.toMatch(/→|Orchestrator|Goal|Context|A long answer/);
+    dom.window.close();
+  });
+
   it("keeps the text of a comparison model stopped mid-answer, marked as incomplete", async () => {
     const stopped = { ...agent(1, "stopped"), kind: "comparison", title: "Comparison 1 · Haiku", partial: true };
     const note = "It was still writing when the answer was finished. The answer and its check use the other answers.";

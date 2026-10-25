@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify';
 function setup() {
   return loadScripts(["static/js/agent-review.js"], { body: '<section><div id="answer"></div></section>', before(w) {
     w.injectMarkdown = vi.fn((el, text) => { el.textContent = text; });
-    w.renderStoredConsensusClaims = vi.fn(); w.renderStoredDifferenceCards = vi.fn();
+    w.renderStoredConsensusClaims = vi.fn(); w.renderStoredDifferenceCards = vi.fn(); w.renderStoredAuditMarks = vi.fn();
     w.App = { answerReader: { openContext: vi.fn(), refreshContext: vi.fn() } };
     w.marked = marked; w.DOMPurify = DOMPurify(w);
   }});
@@ -848,5 +848,115 @@ it('parses each answer text for its links once, not on every render', () => {
   // The cached links are the same sources as before.
   const context = w.App.agentReview.contextFor(review, 'c1');
   expect(context.answers[0].sources.map(s => s.url)).toContain('https://example.org/report');
+  dom.window.close();
+});
+
+// --- Audit instead of comparison (admins, since 2026-10-25) --------------------------
+function auditReview(status = 'partial') {
+  return { mode: 'audit', status, answer_version: 1, answer_hash: 'audit-hash', comparisons: [],
+    versions: [{ id: 1, text: 'Exact answer.', hash: 'audit-hash', status, comparison_ids: [] }],
+    audit: { reviewers: [
+      { provider: 'openai', provider_label: 'OpenAI', model: { label: 'GPT', model: 'openai/gpt' }, status: 'completed', marks: 2 },
+      { provider: 'anthropic', provider_label: 'Anthropic', model: { label: 'Claude' }, status: 'completed', marks: 0 },
+      { provider: 'google', provider_label: 'Gemini', model: { label: 'Gemini' }, status: 'failed', failure: { code: 'review_unreadable' } }],
+      claims: [{ anchor: 'Exact answer.', kind: 'wrong', audit: true, agree: [], dissent: [
+        { model: 'OpenAI', kind: 'wrong', note: 'It is not exact.', source: 'https://example.org/proof', target: 'Exact' }] }],
+      unplaced: [{ model: 'OpenAI', kind: 'incomplete', note: 'Missing context.', quote: 'Elsewhere' }],
+      issues: [{ code: 'reviewers_unavailable', count: 1 }] } };
+}
+it('marks a reviewed answer with its reviewers\' notes, without a score or differences', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = auditReview();
+  w.App.agentReview.render(body, review, { sources: [{ url: 'https://example.org', title: 'Source' }], question: 'Q', key: 't1' });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderStoredAuditMarks.mock.calls[0][1]).toBe(review.audit);
+  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
+  expect(w.renderStoredDifferenceCards).not.toHaveBeenCalled();
+  expect(d.querySelector('.agent-agreement')).toBeNull();
+  expect(d.querySelector('.agent-review-status').textContent).toBe('2 of 3 models reviewed the answer');
+  const buttons = [...d.querySelectorAll('.agent-evidence-link')];
+  expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 2', 'Sources 1']);
+  buttons[0].click();
+  const [context, options] = w.App.answerReader.openContext.mock.calls.at(-1);
+  expect(options.section).toBe('differences');
+  expect(context.sections).toEqual(['differences', 'sources']);
+  expect(context.labels).toEqual({ differences: 'Notes' });
+  const panel = context.renderPanel('differences');
+  expect(panel.textContent).toContain('Unmarked text means no objection, not confirmed.');
+  expect(panel.textContent).toContain('It is not exact.');
+  expect(panel.textContent).toContain('Missing context.');
+  expect(panel.textContent).toContain('No objections.');
+  expect(panel.textContent).toContain('No review: its review could not be read.');
+  expect(panel.querySelector('a.agent-audit-source').href).toBe('https://example.org/proof');
+  // Opening the notes from a mark's card leads to the same panel.
+  w.renderStoredAuditMarks.mock.calls[0][4].openNotes();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
+  dom.window.close();
+});
+it('waits with the marks until every reviewer is done, and never marks another text', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  w.App.agentReview.render(body, auditReview('running'));
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  expect(d.querySelector('.agent-review').hidden).toBe(true);
+  body.dataset.markdown = 'Changed answer.';
+  w.App.agentReview.render(body, auditReview('succeeded'));
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  body.dataset.markdown = 'Exact answer.';
+  w.App.agentReview.render(body, auditReview('succeeded'));
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(d.querySelector('.agent-review-status').hidden).toBe(true);
+  dom.window.close();
+});
+it('shows the review in the duration disclosure and opens its notes', () => {
+  const {window: w, document: d, dom} = setup();
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, auditReview('running'), 'Exact answer.');
+  expect(details.textContent).toContain('Reviewing the answer…');
+  expect(details.querySelector('button')).toBeNull();
+  w.App.agentReview.renderActivity(details, auditReview(), 'Exact answer.');
+  expect(details.textContent).toContain('Review · 3 models');
+  expect(details.textContent).toContain('Models: GPT, Claude, Gemini');
+  expect(details.textContent).toContain('No review: Gemini');
+  expect(details.textContent).toContain('2 marked passages');
+  details.querySelector('button').click();
+  const [context, options] = w.App.answerReader.openContext.mock.calls.at(-1);
+  expect(context.key).toBe('agent-audit:audit-hash');
+  expect(options.section).toBe('differences');
+  dom.window.close();
+});
+it('counts and lists a mark over several sentences once', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = auditReview('succeeded');
+  const note = { model: 'OpenAI', kind: 'doubtful', note: 'Both sentences.', mark: 7 };
+  review.audit.claims = [
+    { anchor: 'First one.', kind: 'doubtful', audit: true, agree: [], dissent: [{ ...note, target: 'First one.' }] },
+    { anchor: 'Second one.', kind: 'doubtful', audit: true, agree: [], dissent: [{ ...note, target: 'Second' }] }];
+  review.audit.unplaced = [];
+  w.App.agentReview.render(body, review);
+  const buttons = [...d.querySelectorAll('.agent-evidence-link')];
+  expect(buttons[0].getAttribute('aria-label')).toBe('Notes 1');
+  buttons[0].click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect([...panel.querySelectorAll('.agent-audit-note')].map(n => n.querySelector('q').textContent)).toEqual(['First one. Second']);
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
+  expect(details.textContent).toContain('1 marked passage');
+  dom.window.close();
+});
+it('ends the review in the disclosure when it was stopped or never started, and keeps the answer complete', () => {
+  const {window: w, document: d, dom} = setup();
+  for (const [status, text] of [['cancelled', 'Review stopped'], ['missing', 'Not reviewed']]) {
+    const details = d.createElement('div');
+    w.App.agentReview.renderActivity(details, auditReview(status), 'Exact answer.');
+    expect(details.textContent).toContain(text);
+    expect(details.textContent).not.toContain('Waiting for the reviews.');
+    expect(details.textContent).not.toContain('Reviewing the answer…');
+    // The reviewers start only once the answer is written: it is complete.
+    expect(w.App.agentReview.failureNote({ error: 'stopped' }, auditReview(status), 'Exact answer.')).toBe('');
+  }
+  expect(w.App.agentReview.failureNote({ error: 'stopped' }, auditReview('running'), 'Exact answer.')).not.toBe('');
   dom.window.close();
 });

@@ -15,6 +15,8 @@
     read_settings: ['Settings', 'Checking your settings…', 'Checked your settings'],
     prepare_settings_change: ['Settings', 'Preparing a settings change…', 'Prepared a settings change for you to apply'],
     judge_answer: ['Answer check', 'Checking the answer…', 'Checked the answer'],
+    // Audit instead of comparison: the comparison models review the answer.
+    audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
     send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
@@ -35,7 +37,7 @@
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
   // Checks the app runs once the answer is written (DelegationLoop._finish_review).
-  const answerChecks = new Set(['judge_answer']);
+  const answerChecks = new Set(['judge_answer', 'audit_answer']);
   const toolName = name => tools[name]?.[0] || 'Tool';
   // "Searched the web · 3 sources: skat.dk, virk.dk, borger.dk" says what the
   // answer now rests on; the bare verb said nothing a reader could check.
@@ -535,7 +537,7 @@
     // returns with a new responding status after it.
     const afterLatest = latest ? events.slice(events.indexOf(latest) + 1) : [];
     const writing = latest ? latest.status === "responding" && !afterLatest.some(item => item.kind === "tool") : responding;
-    const reviewStage = review?.status === "running" ? "Checking the answer…"
+    const reviewStage = review?.status === "running" ? (review.mode === "audit" ? "Reviewing the answer…" : "Checking the answer…")
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
     const waiting = running && latest?.status === 'waiting';
     // The run keeps going on the server while the browser is offline or

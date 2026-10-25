@@ -88,6 +88,21 @@ def require_reasoning_access(uid, reasoning_effort):
         raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
 
 
+def effective_preferences(uid, preferences):
+    """The Agent settings this message runs with. Audit instead of comparison
+    (agent_audit.py) is for admin accounts only; any other account runs as
+    before, also when its saved settings still say "on" (a former admin)."""
+    if preferences.audit != "on":
+        return preferences
+    try:
+        admin = is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Account tier is temporarily unavailable. Please retry."
+        ) from None
+    return preferences if admin else preferences.model_copy(update={"audit": "off"})
+
+
 def _memory_snapshot(uid):
     """The user's memory for one turn: one batched read, fail-open.
 
@@ -234,6 +249,8 @@ def available_agent_budget(request: Request):
 def run_agent(request: Request, payload: AgentRequest):
     uid = _chat_uid(request)
     require_agent_access(uid)
+    # What the message runs with is also its request identity below.
+    preferences = effective_preferences(uid, payload.agent_preferences)
     store = AgentRunStore(db_firestore)
     turn = None
     lease = None
@@ -261,7 +278,7 @@ def run_agent(request: Request, payload: AgentRequest):
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
             if stored_preferences(existing.get("agent_settings", {}).get("agent_preferences")) \
-                    != payload.agent_preferences.model_dump():
+                    != preferences.model_dump():
                 raise TurnStatusConflict("Request identity conflicts with different Agent settings")
             if payload.recover_only and existing["status"] == "pending":
                 # A lost producer has no live SSE/poller to close its lease.
@@ -349,6 +366,10 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise HTTPException(403, "Authorize Gmail for the selected account first.")
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
+        if preferences.audit == "on":
+            # Audit instead of comparison: its own instructions, from the
+            # system prompt on (the chat's history follows them unchanged).
+            config = {**config, "prompts": {**config["prompts"], "agent": config["prompts"]["agent_audit"]}}
         delegation_config = config["delegation"]
         # Comparisons always use the shared bounded loop; worker delegation
         # retains its separately configured model/protocol feature gate.
@@ -370,7 +391,7 @@ def run_agent(request: Request, payload: AgentRequest):
                             "google_data_consent": payload.google_data_consent,
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
-                            "agent_preferences": payload.agent_preferences.model_dump(),
+                            "agent_preferences": preferences.model_dump(),
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
                             "answer_mode": "merged",
@@ -390,7 +411,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          google_selection=payload.google_selection,
                          google_data_consent=payload.google_data_consent, google_data=google_data,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
-                         comparison_models=comparisons, agent_preferences=payload.agent_preferences, memory=memory,
+                         comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources,
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).

@@ -28,11 +28,14 @@
     return reasons[failure?.code] || 'no complete answer arrived';
   }
   // The answer text is fixed and its review finished (or was switched off)
-  // before the run ended.
+  // before the run ended. In audit mode a fixed answer is complete whatever
+  // became of its review: the reviewers start only once it is written.
   function reviewedAnswer(review, raw) {
     const version = review?.versions?.find(v => v.id === review.answer_version);
+    const settled = isAudit(review) ? !['required', 'running'].includes(review.status)
+      : ['succeeded', 'partial', 'off'].includes(review?.status);
     return Boolean(version && typeof raw === 'string' && raw.trim() && raw === version.text
-      && version.hash === review.answer_hash && ['succeeded', 'partial', 'off'].includes(review.status));
+      && version.hash === review.answer_hash && settled);
   }
   // The note under an answer whose run did not finish cleanly. A complete,
   // checked answer needs none: whatever failed afterwards changes nothing the
@@ -189,6 +192,7 @@
       UNSHOWN_TEXT.has(key) && typeof value === 'string' ? value !== '' : key === 'claims' ? undefined : value);
   }
   function renderActivity(host, review, raw) {
+    if (isAudit(review)) return renderAuditActivity(host, review);
     const comparisons = review?.comparisons || [];
     host.hidden = !comparisons.length;
     // The buttons open the newest review's contexts, also when it rendered the same.
@@ -514,12 +518,203 @@
     body._previewMarks = { signature, writes: body._markdownWrites, first: body.firstChild };
     body.classList.add('has-provisional-marks');
   }
+  // --- Audit instead of comparison (admins, since 2026-10-25) ----------------
+  // The comparison models reviewed the finished answer (agent_audit.py): their
+  // marks show once every reviewer is done, through the shared markers
+  // (renderStoredAuditMarks), and "Notes" opens their reviews in the reader.
+  // No score and no Differences: unmarked text means no objection.
+  // Done: every reviewer ended, the notes can be read. Ended: also stopped
+  // or never started; nothing is reviewing any more.
+  const AUDIT_DONE = new Set(['succeeded', 'partial', 'failed']);
+  const AUDIT_ENDED = new Set([...AUDIT_DONE, 'cancelled', 'missing']);
+  const AUDIT_KINDS = { wrong: 'Wrong', doubtful: 'Doubtful', incomplete: 'Incomplete' };
+  const auditReasons = { review_unreadable: 'its review could not be read', no_time: 'it ran out of time',
+    audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped' };
+  function auditReason(failure) {
+    return auditReasons[failure?.code] || failureReason(failure);
+  }
+  function isAudit(review) {
+    return review?.mode === 'audit' && Boolean(review.audit);
+  }
+  // Every mark once, in the order of the answer, then those whose passage
+  // the answer does not hold. A mark over several sentences sits on each
+  // (same ``mark`` number): its quote is their quoted words together.
+  function auditMarks(audit) {
+    const marks = new Map();
+    for (const claim of audit?.claims || []) {
+      for (const item of claim.dissent || []) {
+        if (!item) continue;
+        const key = item.mark ?? `${item.model}|${item.kind}|${item.note}`;
+        const words = item.target || claim.anchor;
+        const known = marks.get(key);
+        if (known) known.quote = `${known.quote} ${words}`;
+        else marks.set(key, { ...item, quote: words });
+      }
+    }
+    for (const item of audit?.unplaced || []) {
+      if (item) marks.set(item.mark ?? `${item.model}|${item.kind}|${item.note}|${item.quote}`, item);
+    }
+    return [...marks.values()];
+  }
+  function auditNotes(audit, reviewer) {
+    const label = reviewer.provider_label || reviewer.provider;
+    return auditMarks(audit).filter(item => item.model === label);
+  }
+  function auditStatus(review) {
+    const reviewers = review.audit.reviewers || [];
+    const done = reviewers.filter(r => r.status === 'completed').length;
+    if (review.status === 'partial') return window.App.t('{done} of {total} models reviewed the answer', { done, total: reviewers.length });
+    return { failed: 'The review could not be completed', cancelled: 'Review stopped', missing: 'Not reviewed' }[review.status] || '';
+  }
+  function auditPanel(review) {
+    const panel = node('div', 'agent-evidence-panel agent-audit-panel');
+    const audit = review.audit;
+    const reviewers = audit.reviewers || [];
+    const missing = reviewers.filter(r => r.status !== 'completed');
+    const status = auditStatus(review);
+    if (status) panel.append(node('p', 'agent-evidence-status', status));
+    if (AUDIT_DONE.has(review.status) && reviewers.length > missing.length) {
+      panel.append(node('p', 'agent-review-note', 'Unmarked text means no objection, not confirmed.'));
+    }
+    for (const reviewer of reviewers) {
+      const section = node('section', 'agent-audit-reviewer');
+      const name = reviewer.model?.label || reviewer.provider_label || reviewer.provider;
+      const head = node('h4', 'agent-audit-reviewer-name');
+      head.append(App.createModelMark?.({ provider: reviewer.provider_label, model: reviewer.model?.model, label: name })
+        || node('span', 'model-mark-fallback', String(name).slice(0, 1)), node('span', '', name));
+      head.lastChild.setAttribute('data-i18n-skip', '');
+      section.append(head);
+      if (reviewer.status !== 'completed') {
+        section.append(node('p', 'agent-review-note', `No review: ${auditReason(reviewer.failure)}.`));
+        panel.append(section);
+        continue;
+      }
+      const notes = auditNotes(audit, reviewer);
+      if (!notes.length) section.append(node('p', 'agent-review-note', 'No objections.'));
+      const list = node('ul', 'agent-audit-notes');
+      for (const item of notes) {
+        const entry = node('li', 'agent-audit-note');
+        entry.dataset.kind = item.kind;
+        entry.append(node('span', 'agent-audit-kind', AUDIT_KINDS[item.kind] || 'Doubtful'));
+        const quote = node('q', 'agent-audit-quote', String(item.quote || ''));
+        const text = node('p', 'agent-audit-text', String(item.note || ''));
+        quote.setAttribute('data-i18n-skip', ''); text.setAttribute('data-i18n-skip', '');
+        entry.append(quote, text);
+        try {
+          const url = new URL(String(item.source || ''));
+          if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+            const link = node('a', 'agent-audit-source', url.hostname.replace(/^www\./, ''));
+            link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+            link.setAttribute('data-i18n-skip', '');
+            entry.append(link);
+          }
+        } catch (_) { /* No source. */ }
+        list.append(entry);
+      }
+      if (notes.length) section.append(list);
+      panel.append(section);
+    }
+    return panel;
+  }
+  // The reader context of a reviewed answer: its notes ("Notes") and sources.
+  function auditContext(review, evidence = {}, turnSources = []) {
+    const context = { key: `agent-audit:${review.answer_hash}`, question: evidence.question || 'Answer review',
+      answers: [], sections: ['differences', 'sources'], labels: { differences: 'Notes' },
+      renderPanel: kind => kind === 'sources' ? sourcePanel(turnSources, readUrls(review)) : auditPanel(review) };
+    // One review per answer: the reader offers no other basis to switch to.
+    context.contextGroup = () => [context];
+    contextsByKey.delete(context.key); contextsByKey.set(context.key, context);
+    while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
+    return context;
+  }
+  // The review in the duration disclosure: who reviewed, what came of it.
+  function renderAuditActivity(host, review) {
+    const audit = review.audit, reviewers = audit.reviewers || [];
+    host.hidden = !reviewers.length;
+    host._activityReview = review;
+    const marks = auditMarks(audit).length;
+    const signature = JSON.stringify(['audit', review.status, review.answer_hash, reviewers, marks]);
+    if (host._activitySignature === signature) return;
+    host._activitySignature = signature;
+    host.replaceChildren();
+    if (!reviewers.length) return;
+    host.append(node('h3', 'visually-hidden', 'Review details'));
+    const card = node('section', 'agent-activity-insight');
+    const done = AUDIT_DONE.has(review.status), ended = AUDIT_ENDED.has(review.status);
+    const count = reviewers.length;
+    card.append(node('h4', '', !ended ? 'Review · Reviewing the answer…'
+      : count === 1 ? 'Review · 1 model' : `Review · ${count} models`));
+    const names = reviewers.map(r => r.model?.label || r.provider_label || r.provider).filter(Boolean);
+    if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
+    const missing = reviewers.filter(r => done && r.status !== 'completed').map(r => r.model?.label || r.provider_label);
+    if (missing.length) card.append(node('p', '', `No review: ${missing.join(', ')}`));
+    card.append(node('p', 'agent-activity-check', !ended ? 'Waiting for the reviews.'
+      : review.status !== 'succeeded' && review.status !== 'partial' ? auditStatus(review)
+      : marks === 0 ? 'No objections.' : marks === 1 ? '1 marked passage' : `${marks} marked passages`));
+    if (done) {
+      const actions = node('div', 'agent-activity-insight-actions');
+      const button = node('button', 'consensus-tab', 'Read the notes'); button.type = 'button';
+      button.addEventListener('click', () => {
+        const current = host._activityReview;
+        const context = contextsByKey.get(`agent-audit:${current.answer_hash}`) || auditContext(current);
+        App.answerReader?.openContext(context, { section: 'differences', trigger: button });
+      });
+      actions.append(button); card.append(actions);
+    }
+    host.append(card);
+  }
+  function renderAudit(body, review, evidence, host, raw, turnSources) {
+    const version = review.versions?.find(v => v.id === review.answer_version);
+    const exact = Boolean(version) && raw === version.text && version.hash === review.answer_hash;
+    const done = AUDIT_DONE.has(review.status);
+    if (!host?.isConnected) {
+      host = node('section', 'agent-review'); body.after(host); body._agentReview = host;
+      host.setAttribute('aria-label', 'Answer evidence');
+    }
+    body._agentModels?.remove(); body._agentModels = null;
+    const signature = JSON.stringify(['audit', review, raw, exact, turnSources, body._agentRenderSerial || 0]);
+    if (host.dataset.signature === signature) { window.linkifyAgentSources?.(body, turnSources); return; }
+    host.dataset.signature = signature; host._hasReview = true;
+    // Until every reviewer is done the row waits (the answer shows the check).
+    host.hidden = !exact || !AUDIT_ENDED.has(review.status);
+    host.replaceChildren();
+    const summary = node('div', 'agent-review-summary');
+    const status = node('span', 'agent-review-status', exact ? auditStatus(review) : states.required);
+    status.setAttribute('role', 'status'); status.dataset.state = review.status;
+    status.hidden = !status.textContent;
+    summary.append(status); summary.hidden = status.hidden; host.append(summary);
+    const tabs = node('nav', 'consensus-footer-tabs agent-evidence-links agent-evidence-grid');
+    tabs.setAttribute('aria-label', 'Explore answer evidence'); host.append(tabs);
+    const fallback = node('div', 'consensus-claims-fallback'); fallback.hidden = true; host.append(fallback);
+    const context = auditContext(review, evidence, turnSources);
+    const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
+    // The marks of exactly this answer, once the review is done.
+    overText(body, raw, () => {
+      if (exact && done) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
+        openNotes: () => open('differences', { trigger: document.activeElement }) });
+      window.linkifyAgentSources?.(body, turnSources);
+    });
+    body._markSignature = null;
+    const marks = auditMarks(review.audit).length;
+    const links = [...(done ? [['differences', 'Notes', marks]] : []), ...(turnSources.length ? [['sources', 'Sources', turnSources.length]] : [])];
+    for (const [section, label, count] of links) {
+      const button = evidenceButton(section, label, count);
+      button.addEventListener('click', () => open(section, { trigger: button }));
+      tabs.append(button);
+    }
+    App.answerReader?.refreshContext(context);
+    if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);
+  }
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
     const turnSources = sourcesOf(body, review, evidence, raw);
     let host = body._agentReview;
+    if (isAudit(review) && review.versions?.length) {
+      renderAudit(body, review, evidence, host, raw, turnSources);
+      return;
+    }
     if (!review?.comparisons?.length) {
       const unmark = host?._hasReview && typeof body.dataset.markdown === "string";
       overText(body, unmark ? body.dataset.markdown : null, () => window.linkifyAgentSources?.(body, turnSources));

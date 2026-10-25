@@ -1300,6 +1300,20 @@
                   </span>
                 </label>
               </div>
+              <div class="settings-section admin-only" data-settings-keywords="audit prüfer reviewer review anmerkungen notes vergleich comparison admin">
+                <label for="agentAuditSelect" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Audit instead of comparison</strong>
+                    <small>Admins only. Agent answers on its own, with its own web search, and the answer appears at once. Then your comparison models review the finished answer and mark what they consider wrong, doubtful or incomplete, each with a note. Unmarked text means no objection, not confirmed. With the answer check off, nobody reviews it. Answer depth, answer start and Agent freedom apply only to comparisons.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="agentAuditSelect">
+                      <option value="off" selected>Off</option>
+                      <option value="on">On</option>
+                    </select>
+                  </span>
+                </label>
+              </div>
             </div>
           </section>
 

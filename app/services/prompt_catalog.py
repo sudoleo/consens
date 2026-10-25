@@ -24,6 +24,12 @@ def _comparison():
     return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, comparison_system_prompt("full", SEARCH_ROUNDS["full"]), count=1)
 
 
+def _reviewer():
+    from app.services.agent_audit import review_system_prompt
+    from app.services.prompt_config import DEFAULT_TIMEZONE
+    return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, review_system_prompt(DEFAULT_TIMEZONE), count=1)
+
+
 def _delegation(name):
     from app.services import agent_delegation_config
     return agent_delegation_config.PROMPTS[name]
@@ -46,6 +52,18 @@ _ENTRIES = (
      "Quick depth allows one search round and adds brief-answer guidance instead. The date line is "
      "filled in per request; in chats with Google data a no-web-search note is appended.",
      "agent_comparison.py:comparison_system_prompt()", _comparison),
+    ("agent_audit", "Agent: audit mode instructions",
+     "System prompt of the Agent model instead of \"Agent: instructions\" when an admin switched on Audit instead "
+     "of comparison (agent_audit.py): no comparison tools, the agent researches with its own web search in every "
+     "step and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION). At runtime the source reading "
+     "(AGENT_AUDIT_READ_SOURCE_PROMPT), file, document, Google, Watch, settings and memory instructions are "
+     "appended as for the agent; the memory rules without comparisons (agent_memory.without_comparisons).",
+     "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent_audit")),
+    ("audit_reviewer", "Agent audit: reviewers",
+     "System prompt of each comparison model reviewing the finished answer in audit mode, with up to three search "
+     "rounds. The user message is JSON with the earlier conversation, the latest message and the answer; the "
+     "message's files go along. The date line is filled in per request.",
+     "agent_audit.py:review_system_prompt()", _reviewer),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "
      "personal instructions replace it.",

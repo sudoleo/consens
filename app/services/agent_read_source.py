@@ -349,12 +349,16 @@ class SourceReader:
         self.lock = threading.Lock()
         self._steps = {}
         self._user_urls = None
+        # Audit mode (agent_audit.py) has no comparison answers that cite sources.
+        what = ("a source of an earlier message of this chat or a page the user linked, to answer what it says, "
+                if getattr(comparison, "audit_mode", False) else
+                "a source that a comparison answer of this message cited, a source of an earlier "
+                "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
+                "contradiction, ")
         self.tool = ReadOnlyTool(
             "read_source",
-            "Open one page: a source that a comparison answer of this message cited, a source of an earlier "
-            "message of this chat or a page the user linked, to answer what it says, to settle a concrete contradiction, "
-            "to check a source the user asks about or to get the exact wording of a key figure, definition or "
-            f"statement. At most {READS_PER_MESSAGE} per message; returns the page text.",
+            "Open one page: " + what + "to check a source the user asks about or to get the exact wording of a "
+            f"key figure, definition or statement. At most {READS_PER_MESSAGE} per message; returns the page text.",
             ReadSourceArgs, self.read, activity=self.activity)
 
     # --- What may be read -------------------------------------------------
@@ -409,7 +413,8 @@ class SourceReader:
             return READ_SECONDS
         if left < READ_MIN_SECONDS:
             raise ValueError("There is no time left to read a source before the answer. Write the answer now "
-                             "from what the comparison answers say.")
+                             + ("from what you have." if getattr(self.comparison, "audit_mode", False)
+                                else "from what the comparison answers say."))
         return min(READ_SECONDS, left - READ_TIME_MARGIN)
 
     def _update(self, record, **fields):
