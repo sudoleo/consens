@@ -268,9 +268,11 @@ des Laufs folgt jedes gewählte Vergleichsmodell dem Arbeitsprotokoll
 (`AnswerAudit.follow`, `ReviewerSession`, ein Thread und eine Sitzung je
 Prüfer; Einzelheiten in [agent-work-log.md](agent-work-log.md)). Hat das
 Protokoll einen neuen Schritt mit Tool-Aufrufen, beginnt eine Live-Runde mit
-den neuen Einträgen als JSON (höchstens `MAX_LIVE_ROUNDS` = 6, eigene
+den neuen Einträgen als JSON (keine Rundengrenze, der ganze Lauf; eigene
 Websuche mit `LIVE_SEARCH_ROUNDS` = 2); ihre Befunde nennen den Eintrag
-(`entry`). Ist die Antwort fertig, fixiert sie `capture` als Version, und
+(`entry`). Ist das Gespräch eines Prüfers voll, geht er in einem neuen
+weiter, mit dem Anfang des Laufs und seinen bisherigen Befunden. Ist die
+Antwort fertig, fixiert sie `capture` als Version, und
 die App ruft `audit_answer` (`app_tools`, nie dem Modell angeboten; Aktivität
 „Reviewing the answer…“ / „Reviewed the answer“): `AnswerAudit.run` gibt jedem
 Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort
@@ -287,7 +289,8 @@ Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
 Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
 lesbare Liste: die Runde scheitert mit `review_unreadable`. Eine gescheiterte
 Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge mit der
-nächsten Runde, nach `MAX_ROUND_FAILURES` = 2 keine Live-Runden mehr), auch
+nächsten Runde, nach `MAX_ROUND_FAILURES` = 2 in Folge eine Pause ab 60 s,
+die sich verdoppelt), auch
 ein 429 (sperrt das Modell nicht für den Agenten); scheitert die
 Schlussrunde, gelten die Befunde der Live-Runden. Wie viel ein Prüfer liest,
 hängt am Kontextfenster seines Modells (`session_budget`, `fitted_round`). Die Sitzung eines Prüfers speichert als

@@ -5474,7 +5474,10 @@ Ab dem Start des Laufs folgt jedes Vergleichsmodell dem Arbeitsprotokoll
 Thread, eine Sitzung Art `audit`, Runden über
 `ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde je
 neuem Schritt mit Tool-Aufrufen (`work_goes_on`, `round_message`), Befunde
-mit `entry`. Nach der Antwort fixiert `capture` die Version, `_finish_review`
+mit `entry`, ohne Rundengrenze über den ganzen Lauf. Ist das Gespräch eines
+Prüfers voll, geht er in einem neuen weiter, mit dem Anfang des Laufs und
+seinen bisherigen Befunden (`ReviewerSession._carry`, `opening_entries`).
+Nach der Antwort fixiert `capture` die Version, `_finish_review`
 ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`:
 Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
 seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims

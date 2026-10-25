@@ -88,8 +88,9 @@ class Audit:
                         self._results_at = 0
                     index = int(self.step_id.split(":")[1])
                     if index < script.tool_steps:
+                        # Each step looks up something else: identical calls are refused.
                         self.tool_calls = [{"id": f"call_{index}", "type": "function",
-                                            "function": {"name": "lookup", "arguments": "{}"}}]
+                                            "function": {"name": "lookup", "arguments": json.dumps({"step": index})}}]
                         self.finish_reason = "tool_calls"
                         return
                     for start in range(0, len(script.answer), 60):
@@ -118,6 +119,10 @@ class Audit:
         return Completion()
 
 
+class LookupArgs(JudgeArgs):
+    step: int = 0
+
+
 def lookup(script):
     """The agent's tool in a scripted turn: its n-th call returns once both
     reviewers started n live rounds, so each step has its round."""
@@ -132,7 +137,7 @@ def lookup(script):
         if script.on_lookup:
             script.on_lookup(len(calls))
         return {"text": "The tower is 330 metres tall."}
-    return ReadOnlyTool("lookup", "Look something up.", JudgeArgs, run)
+    return ReadOnlyTool("lookup", "Look something up.", LookupArgs, run)
 
 
 def audit_loop(store, script, *, judges="on", audit="on", messages=None, memory=None):
@@ -157,13 +162,30 @@ def saved(store, loop):
     return store.get_turn(UID, loop.chat_id, loop.turn_id)
 
 
+def round_sections(message):
+    """A round's user message by section: {heading line: JSON}."""
+    sections = {}
+    for section in message["content"].split("\n\n"):
+        head, _, body = section.partition("\n")
+        sections[head] = json.loads(body)
+    return sections
+
+
 def round_entries(message):
-    """The log entries of a round's user message, and the fixed answer of the final round."""
-    text = message["content"]
-    log, _, answer = text.partition("\n\nThe fixed answer:\n")
-    log = log.partition("\n\nYour marks from the earlier rounds:\n")[0]
-    entries = json.loads(log[log.index("\n") + 1:])["entries"]
-    return entries, (json.loads(answer)["answer"] if answer else None)
+    """The new log entries of a round's user message (or the whole log), and
+    the fixed answer of the final round."""
+    entries, answer = None, None
+    for head, value in round_sections(message).items():
+        if head == "The fixed answer:":
+            answer = value["answer"]
+        elif "New entries" in head or "whole work log" in head:
+            entries = value["entries"]
+    return entries, answer
+
+
+def earlier_marks(message):
+    """The marks a round in a new conversation carries over, or None."""
+    return round_sections(message).get("Your marks from the earlier rounds:", {}).get("marks")
 
 
 def entry_of(messages, kind, name=None):
@@ -340,6 +362,72 @@ def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(stor
         "This round failed. The reviewer goes on in a new session."]
 
 
+def test_failures_in_a_row_pause_a_reviewer_but_never_end_its_following(store, monkeypatch):
+    # Without the pause in the test: after two failures in a row the reviewer
+    # still follows the run (it used to stop for good).
+    monkeypatch.setattr(agent_audit, "FAILURE_PAUSE_SECONDS", 0)
+    calls = []
+
+    def live(messages):
+        calls.append(messages[-1]["content"])
+        if len(calls) <= 2:
+            raise RuntimeError("provider down")
+        return json.dumps({"marks": []})
+    script = Audit(tool_steps=3, live={"anthropic": live})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    assert saved(store, loop)["agent_review"]["status"] == "succeeded"
+    assert script.rounds["anthropic"] == ["live", "live", "live", "final"]
+    session = loop.comparison.auditor.sessions["anthropic"]
+    assert session.live_rounds == 1 and session.failures == 0
+    # The pause doubles with every further failure in a row.
+    monkeypatch.setattr(agent_audit, "FAILURE_PAUSE_SECONDS", 60)
+    paused = agent_audit.ReviewerSession.__new__(agent_audit.ReviewerSession)
+    paused.live_rounds, paused.failures, paused.cursor, paused.tried = 1, 2, 5, 5
+    paused.messages, paused.chars, paused.budget = [{}, {}], 0, 100_000
+    paused._request = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down"))
+    before = time.monotonic()
+    paused._round([({"seq": 6, "actor": "agent", "kind": "step"}, "{}")])
+    assert paused.failures == 3 and paused.tried == 6 and 119 < paused.resume_at - before < 121
+
+
+def test_the_reviewers_follow_a_long_run_to_its_end_in_new_conversations(store, monkeypatch):
+    def live(messages):
+        # Each round marks the newest step it read.
+        step = entry_of(messages, "step")
+        return json.dumps({"marks": [{"entry": step, "kind": "doubtful", "note": f"Step {step}."}]})
+    script = Audit(tool_steps=8, live={"anthropic": live})
+    loop = audit_loop(store, script)
+    original = agent_audit.ReviewerSession._round
+
+    def full(self, entries):
+        # The Anthropic reviewer's first conversation is full after round 1.
+        if self.provider == "anthropic" and self.live_rounds == 1 and len(self.messages) > 1:
+            self.chars = self.budget
+        return original(self, entries)
+    monkeypatch.setattr(agent_audit.ReviewerSession, "_round", full)
+    list(loop.run())
+    assert saved(store, loop)["agent_review"]["status"] == "succeeded"
+    # No limit on live rounds: one for each step of the work, then the final round.
+    assert script.rounds["anthropic"] == script.rounds["openai"] == ["live"] * 8 + ["final"]
+    # Round 2 went on in a new conversation: the run's beginning, the marks so
+    # far and the new entries; rounds 3 to 8 and the final round continue it.
+    system, carried, *rest = script.prompts["anthropic"]
+    assert carried["content"].startswith("Round 2. Your earlier rounds no longer fit")
+    opening = next(value["entries"] for head, value in round_sections(carried).items() if "beginning" in head)
+    assert all(e["kind"] != "step" for e in opening)
+    assert ("context", "user", "Tell me about the Eiffel Tower.") in [
+        (e["kind"], e.get("name"), e["content"]) for e in opening]
+    first_step = opening[-1]["seq"] + 1
+    assert earlier_marks(carried) == [{"entry": first_step, "kind": "doubtful", "note": f"Step {first_step}."}]
+    new, _ = round_entries(carried)
+    assert new[0]["seq"] > first_step
+    assert len(rest) == 2 * 7 and rest[-1]["content"].startswith("Final round. The agent's answer is fixed. New entries")
+    # The full conversation's session ended completed, the new one took over.
+    views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+    assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 3
+
+
 def test_a_live_mark_may_name_any_entry_read_so_far(store):
     marks = []
 
@@ -429,9 +517,8 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     assert answer == ANSWER and entries[0]["seq"] == 1
     # It keeps the marks of its live round, whose conversation it no longer has.
     step = [e["seq"] for e in entries if e["kind"] == "step"][0]
-    earlier = final["content"].split("\n\nYour marks from the earlier rounds:\n")[1].split("\n\nThe fixed answer:")[0]
-    assert json.loads(earlier) == {"marks": [{"entry": step, "kind": "doubtful", "note": "Unchecked."}]}
-    assert '"marks": []' in script.prompts["openai"][-1]["content"]
+    assert earlier_marks(final) == [{"entry": step, "kind": "doubtful", "note": "Unchecked."}]
+    assert earlier_marks(script.prompts["openai"][-1]) == []
     views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 4
 

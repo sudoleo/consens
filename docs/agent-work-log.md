@@ -126,14 +126,21 @@ Eintrag über 12.000 (sein ganzes JSON, Listen bis 20 Einträge; `_fit`).
 Strukturierte Einträge bleiben JSON, ohne Verbrauch. Das Gespräch eines
 Prüfers fasst 60 % des Kontextfensters seines Modells nach der Antwort, zu 3
 Zeichen je Token, höchstens 400.000 Zeichen (`session_budget`); der Rest
-bleibt für Suchtreffer. Passt eine Runde nicht in den verbleibenden Platz,
-liest sie ihre Einträge kürzer (1.500, dann 300 Zeichen, `fitted_round`).
-Live-Runden enden bei 75 % des Platzes. Im Normalfall bleibt die Schlussrunde
-im selben Gespräch und sieht alle eigenen Live-Runden. Passt sie nicht mehr,
-beginnt sie in einer neuen Sitzung mit dem ganzen Protokoll, kürzer gelesen,
-und bekommt die Befunde ihrer Live-Runden mit (`earlier`), damit ihre
-vollständige Liste sie nicht verliert; passt auch das nicht, fehlen die
-Schlussbefunde (`context_limit`), und die Live-Befunde gelten.
+bleibt für Suchtreffer. Gezählt wird, was jede weitere Runde erneut sendet,
+auch das mitgeschickte Reasoning der Prüfer. Passt eine Runde nicht in den
+verbleibenden Platz, liest sie ihre Einträge kürzer (1.500, dann 300 Zeichen,
+`fitted_round`). Live-Runden füllen das Gespräch bis 75 % des Platzes; passt
+eine nicht mehr, geht der Prüfer in einem neuen Gespräch weiter (neue
+Sitzung im Panel, die alte endet „completed“). Dessen erste Runde bringt den
+Anfang des Laufs mit, also alles vor dem ersten Modellschritt (was der Agent
+bekam: Anweisungen, Gespräch, Dateien; `opening_entries`), dazu die
+bisherigen Befunde des Prüfers (`earlier`) und die neuen Einträge
+(`ReviewerSession._carry`). Im Normalfall bleibt die Schlussrunde im
+laufenden Gespräch und sieht dessen Live-Runden. Passt sie nicht mehr,
+beginnt sie in einem neuen Gespräch mit den Befunden der Live-Runden und dem
+ganzen Protokoll, kürzer gelesen, oder, wenn das nicht passt, mit dem Anfang
+des Laufs und dem Rest seit der letzten Runde. Passt auch das nicht, fehlen
+die Schlussbefunde (`context_limit`), und die Live-Befunde gelten.
 
 **Auftrag (ein Prompt für alle, `review_system_prompt`):** Prüfe
 unvoreingenommen, ob der Agent die Bitte des Nutzers richtig erfüllt, ob seine
@@ -145,7 +152,10 @@ je Live-Runde, bis zu 3 in der Schlussrunde.
 **Wann:** Eine Live-Runde beginnt, wenn das Protokoll einen Schritt des Agenten
 oder eines Workers mit Tool-Aufrufen hat, den der Prüfer noch nicht kennt, und
 der Prüfer frei ist (`work_goes_on`); alles, was inzwischen kam, geht mit.
-Höchstens 6 Live-Runden je Prüfer und Turn. Ein Schritt ohne Tool-Aufruf ist
+Es gibt keine Rundengrenze: Die Prüfer beobachten den ganzen Lauf, auch lange
+autonome Läufe (seit 2026-10-25, vorher höchstens 6 Live-Runden). Begrenzt
+wird nur durch die Dauer des Turns, denn ein Prüfer ist während seiner Runde
+beschäftigt und nimmt danach alles Neue auf einmal. Ein Schritt ohne Tool-Aufruf ist
 meist die Antwort: Eine Antwort in einem Schritt hat nur die Schlussrunde. Die
 Schlussrunde beginnt, wenn die Antwort fixiert ist (`answer_fixed`), mit dem
 Rest des Protokolls und der Antwort, und ist kurz, weil der Prüfer den Weg
@@ -162,8 +172,9 @@ Antwort werden Marken wie bisher; Befunde zum Ablauf stehen in
 Prüfer („On the work“). Fällt die Schlussrunde eines Prüfers aus, gelten
 seine Befunde aus den Live-Runden (`live`, „During the run“).
 
-**Kosten:** zählen zum Tagesbudget des Kontos wie bisher. Die Runden-Grenze und
-der Cache halten sie im Rahmen; der Verbrauch steht je Prüfer-Sitzung im
+**Kosten:** zählen zum Tagesbudget des Kontos wie bisher. Der Cache (jede Runde
+liest den Anfang ihres Gesprächs aus ihm) und die Dauer des Turns halten sie
+im Rahmen; der Verbrauch steht je Prüfer-Sitzung im
 Agent-Panel.
 
 ## Fehler
@@ -174,9 +185,11 @@ Agent-Panel.
   ganz.
 - Scheitert eine Live-Runde, endet ihre Sitzung (ein gescheiterter Schritt
   beendet eine Sitzung für immer). Die nächste Runde wartet auf neue Arbeit,
-  öffnet eine neue Sitzung und bekommt die Einträge noch einmal; kommt keine,
-  stehen sie in der Schlussrunde. Nach 2 gescheiterten Runden folgt der
-  Prüfer nicht mehr live, die Schlussrunde bekommt er trotzdem.
+  öffnet eine neue Sitzung (das Gespräch geht mit) und bekommt die Einträge
+  noch einmal; kommt keine, stehen sie in der Schlussrunde. Nach 2
+  gescheiterten Runden in Folge wartet der Prüfer 60 s vor der nächsten, bei
+  jedem weiteren Fehlschlag doppelt so lange (`FAILURE_PAUSE_SECONDS`). Er
+  hört nie ganz auf zu folgen; eine gelungene Runde setzt die Zählung zurück.
 - Ein Rate-Limit (429) eines Prüfers kostet nur seine Runde: Es sperrt das
   Modell nicht für den Agenten (`ProviderCooldowns` zählt Prüfer-Schritte
   nicht), auch wenn Agent und Prüfer dasselbe Modell nutzen.

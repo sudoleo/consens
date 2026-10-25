@@ -11,8 +11,10 @@ work independently; there are no roles.
 
 A live round starts when the log holds a step of the agent that called a
 tool (its work goes on) and the reviewer is free; whatever arrived meanwhile
-goes into it, at most MAX_LIVE_ROUNDS per turn. Its marks name the log entry
-they concern. The final round gets the rest of the log and the fixed answer
+goes into it. There is no limit on live rounds: the reviewers follow the
+whole run, however long. When a reviewer's conversation is full, it goes on
+in a new one with the run's beginning and its marks so far. Its marks name
+the log entry they concern. The final round gets the rest of the log and the fixed answer
 and returns the reviewer's complete list: earlier marks that still matter,
 new ones, a quote for a passage of the answer, an entry number for the work.
 An answer written in one step has only the final round.
@@ -28,8 +30,8 @@ wrong names a source (any http(s) URL); without one the mark counts as
 doubtful.
 
 A failure of the review costs marks, never the answer: a failed round only
-costs its own (the reviewer goes on in a new session, at most
-MAX_ROUND_FAILURES times), a reviewer whose final round fails keeps the marks
+costs its own (the reviewer goes on in a new session, after
+MAX_ROUND_FAILURES in a row with a pause), a reviewer whose final round fails keeps the marks
 of its live rounds, and an error of the review as a whole ends it as
 "failed" while the turn succeeds. The user's Stop during the review stops the
 reviewers, not the fixed answer: the review ends "cancelled" and the turn
@@ -44,6 +46,7 @@ import json
 import logging
 import re
 import threading
+import time
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -60,10 +63,11 @@ AGENT_SEARCH_ROUNDS = 5
 # comparison answer at depth "full").
 LIVE_SEARCH_ROUNDS = 2
 REVIEW_SEARCH_ROUNDS = 3
-# Live rounds per reviewer and turn before the final round; failed rounds
-# after which a reviewer stops following (each costs its session).
-MAX_LIVE_ROUNDS = 6
+# Failed live rounds in a row after which a reviewer pauses before the next
+# (each costs its session): FAILURE_PAUSE_SECONDS, doubling with every
+# further failure. It never stops following for good.
 MAX_ROUND_FAILURES = 2
+FAILURE_PAUSE_SECONDS = 60
 # How much of one log entry a reviewer reads (its JSON, all texts in it): the
 # agent's instructions (with the user's memory at their end) up to
 # SYSTEM_ENTRY_CHARS, other entries up to ENTRY_CHARS, lists up to
@@ -78,8 +82,8 @@ ENTRY_ITEMS = 20
 # How much a reviewer's conversation may hold (session_budget): SESSION_SHARE
 # of its model's context window after the reply, at CHARS_PER_TOKEN (JSON in
 # JSON and the input estimate's margin; the rest is room for search results),
-# at most SESSION_CHARS for cost. Live rounds stop at LIVE_SHARE of it, so
-# the final round has room.
+# at most SESSION_CHARS for cost. A live round that does not fit within
+# LIVE_SHARE of it goes on in a new conversation, so the final round has room.
 CHARS_PER_TOKEN = 3
 SESSION_SHARE = .6
 LIVE_SHARE = .75
@@ -231,27 +235,49 @@ def review_entry(entry, text, limit=ENTRY_CHARS):
     return item
 
 
-def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None, earlier=None):
+def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None, earlier=None, opening=None):
     """The user message of one round: the new log entries (as JSON, data) and,
-    in the final round, the fixed answer. ``earlier``: a final round that
-    starts over in a new session gets the whole log and the marks of the live
-    rounds, whose conversation it no longer has."""
-    log = _dumps({"entries": [review_entry(entry, text, limit) for entry, text in entries]})
-    if answer is None:
-        return f"Round {number}. New entries of the work log; the agent is still working:\n{log}"
-    if earlier is not None:
-        return ("Final round. The agent's answer is fixed. Your earlier rounds no longer fit, so you get the whole "
-                f"work log again:\n{log}\n\nYour marks from the earlier rounds:\n" + _dumps({"marks": earlier})
-                + "\n\nThe fixed answer:\n" + _dumps({"answer": answer}))
-    return ("Final round. The agent's answer is fixed. New entries of the work log since your last round:\n"
-            f"{log}\n\nThe fixed answer:\n" + _dumps({"answer": answer}))
+    in the final round, the fixed answer. A round in a new conversation, the
+    last one being full, also gets ``earlier``, the reviewer's marks so far,
+    and either ``opening``, the run's beginning before the entries since its
+    last round, or (``opening`` None, a final round) the whole log as
+    ``entries``."""
+    def log(items):
+        return _dumps({"entries": [review_entry(entry, text, limit) for entry, text in items]})
+    head = f"Round {number}." if answer is None else "Final round. The agent's answer is fixed."
+    new = ("New entries of the work log; the agent is still working:" if answer is None
+           else "New entries of the work log since your last round:")
+    if earlier is None:
+        parts = [f"{head} {new}\n{log(entries)}"]
+    elif opening is None:
+        parts = [f"{head} Your earlier rounds no longer fit, so you get the whole work log again:\n{log(entries)}",
+                 "Your marks from the earlier rounds:\n" + _dumps({"marks": earlier})]
+    else:
+        parts = [f"{head} Your earlier rounds no longer fit, so you go on in a new conversation. The beginning of "
+                 f"the work log, what the agent received:\n{log(opening)}",
+                 "Your marks from the earlier rounds:\n" + _dumps({"marks": earlier}),
+                 f"{new}\n{log(entries)}"]
+    if answer is not None:
+        parts.append("The fixed answer:\n" + _dumps({"answer": answer}))
+    return "\n\n".join(parts)
 
 
-def fitted_round(number, entries, room, *, answer=None, earlier=None):
+def opening_entries(entries):
+    """The run's beginning: the entries before its first model step, what
+    the agent received (its instructions, the conversation, the files)."""
+    opening = []
+    for entry, text in entries:
+        if entry.get("kind") == "step":
+            break
+        opening.append((entry, text))
+    return opening
+
+
+def fitted_round(number, entries, room, *, answer=None, earlier=None, opening=None):
     """The round's message within ``room`` characters, its entries read
     shorter as needed; None when even the shortest does not fit."""
     for limit in (ENTRY_CHARS, TIGHT_ENTRY_CHARS, MIN_ENTRY_CHARS):
-        message = round_message(number, entries, limit=limit, answer=answer, earlier=earlier)
+        message = round_message(number, entries, limit=limit, answer=answer, earlier=earlier, opening=opening)
         if len(message) <= room:
             return message
     return None
@@ -570,10 +596,11 @@ def trim_marks(audit):
 
 class ReviewerSession:
     """One comparison model following the work log: its rounds as one
-    conversation (``messages``) on one agent session, a new session only
-    after a failed round (a session's failed step ends it for good,
-    AgentSessionStore._claim_delegated). Runs on its own thread from the
-    run's start (AnswerAudit.follow) until its final round or a stop."""
+    conversation (``messages``) on one agent session, a new session after a
+    failed round (a session's failed step ends it for good,
+    AgentSessionStore._claim_delegated, the conversation goes on) or with a
+    new conversation once the last one is full. Runs on its own thread from
+    the run's start (AnswerAudit.follow) until its final round or a stop."""
 
     def __init__(self, audit, provider, model):
         self.audit, self.provider, self.model = audit, provider, model
@@ -586,8 +613,12 @@ class ReviewerSession:
         # The last entry of a failed live round: its entries come again with
         # the next round, which waits for new work (or the final round).
         self.tried = 0
+        # Failures in a row; after MAX_ROUND_FAILURES the next live round
+        # waits until ``resume_at`` (time.monotonic).
         self.live_rounds = self.failures = 0
-        # False once a live round no longer fits: the final round still comes.
+        self.resume_at = 0.0
+        # False once a live round does not fit even a new conversation: the
+        # final round still comes.
         self.following = True
         self.worker = None
         # Marks of the live rounds (kept if the final round fails) and the
@@ -612,7 +643,7 @@ class ReviewerSession:
                     self._final(audit.final_answer)
                     return
                 seen = log.last
-                if (self.following and self.live_rounds < MAX_LIVE_ROUNDS and self.failures < MAX_ROUND_FAILURES
+                if (self.following and time.monotonic() >= self.resume_at
                         and work_goes_on(log.entries_after(max(self.cursor, self.tried)))):
                     self._round(log.entries_after(self.cursor))
                     continue
@@ -643,11 +674,33 @@ class ReviewerSession:
 
     # --- Rounds ---------------------------------------------------------------
 
+    def _carry(self):
+        """What a new conversation needs after rounds in an earlier one: the
+        run's beginning and the reviewer's marks so far (nothing for its
+        first conversation)."""
+        if len(self.messages) > 1 or not self.cursor:
+            return {}
+        return {"earlier": list(self.live_marks), "opening": opening_entries(self.audit.work_log.entries_after(0))}
+
+    def _fresh(self):
+        """A new conversation, the last one being full: its session ends
+        completed, the next request opens a new one."""
+        worker, self.worker = self.worker, None
+        if worker is not None and worker.state not in {"completed", "failed", "stopped"}:
+            self.loop._state(worker, "completed")
+        self.messages = [self.messages[0]]
+        self.chars = len(self.messages[0]["content"])
+
     def _round(self, entries):
         number = self.live_rounds + 1
-        message = fitted_round(number, entries, self.budget * LIVE_SHARE - self.chars)
+        message = fitted_round(number, entries, self.budget * LIVE_SHARE - self.chars, **self._carry())
+        if message is None and len(self.messages) > 1:
+            # The conversation is as full as live rounds may make it: the
+            # reviewer goes on in a new one.
+            self._fresh()
+            message = fitted_round(number, entries, self.budget * LIVE_SHARE - self.chars, **self._carry())
         if message is None:
-            # The conversation is as full as live rounds may make it.
+            # Not even a new conversation holds them.
             self.following = False
             return
         # Every entry up to this round's last one: the reviewer has read it.
@@ -657,10 +710,14 @@ class ReviewerSession:
         except ProviderCancelled:
             raise
         except Exception:
-            # The entries go into the next round again.
+            # The entries go into the next round again; after
+            # MAX_ROUND_FAILURES in a row it waits first.
             self.failures += 1
             self.tried = entries[-1][0]["seq"]
+            if self.failures >= MAX_ROUND_FAILURES:
+                self.resume_at = time.monotonic() + FAILURE_PAUSE_SECONDS * 2 ** (self.failures - MAX_ROUND_FAILURES)
             return
+        self.failures = 0
         self.cursor = entries[-1][0]["seq"]
         self.live_rounds += 1
         self.live_marks.extend(mark for mark in marks if mark not in self.live_marks)
@@ -672,19 +729,17 @@ class ReviewerSession:
     def _final(self, answer):
         log = self.audit.work_log
         known = {entry["seq"] for entry, _ in log.entries_after(0)}
-        message = fitted_round(self.live_rounds + 1, log.entries_after(self.cursor), self.budget - self.chars,
-                               answer=answer)
+        rest = log.entries_after(self.cursor)
+        message = fitted_round(self.live_rounds + 1, rest, self.budget - self.chars, answer=answer, **self._carry())
         if message is None and self.cursor:
-            # The conversation is full: the final round starts over with the
-            # whole log, read shorter, in a new session. It gets the marks of
-            # the live rounds, else its complete list would lose them.
-            worker, self.worker = self.worker, None
-            if worker is not None and worker.state not in {"completed", "failed", "stopped"}:
-                self.loop._state(worker, "completed")
-            self.messages = [self.messages[0]]
-            self.chars, self.cursor = len(self.messages[0]["content"]), 0
-            message = fitted_round(1, log.entries_after(0), self.budget - self.chars, answer=answer,
-                                   earlier=self.live_marks)
+            # The conversation is full: the final round starts over in a new
+            # one with the marks of the live rounds, else its complete list
+            # would lose them, and the whole log read shorter or, when that
+            # does not fit, the run's beginning and the rest.
+            self._fresh()
+            room = self.budget - self.chars
+            message = (fitted_round(1, log.entries_after(0), room, answer=answer, earlier=list(self.live_marks))
+                       or fitted_round(1, rest, room, answer=answer, **self._carry()))
         self._set(status="running")
         try:
             if message is None:
@@ -727,8 +782,10 @@ class ReviewerSession:
             self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
                                 failure["error"], failure)
             raise
-        self.messages.append(value.assistant_message())
-        self.chars += len(message) + len(value.text)
+        reply = value.assistant_message()
+        self.messages.append(reply)
+        # What every later round sends again, its replayed reasoning included.
+        self.chars += len(message) + len(_dumps(reply))
         return value, marks
 
     def _open(self):
