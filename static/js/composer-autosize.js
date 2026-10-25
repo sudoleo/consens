@@ -78,6 +78,10 @@
 
   function sizeQuestionInput(input, options = {}) {
     if (!input || !input.isConnected) return null;
+    // Not shown (Watches hides the chat column): at width 0 the twin set
+    // every word on its own line and the multiline form stayed after the
+    // way back. The width observer measures again once the field returns.
+    if (!input.getBoundingClientRect().width) return null;
     const instant = options.instant !== false;
     const measured = apply(input, instant);
     const container = input.closest(".chat-input-container");

@@ -175,4 +175,19 @@ describe('composer autosize', () => {
     expect(app.field.style.overflowY).toBe('auto');
     app.dom.window.close();
   });
+
+  it('measures nothing while the field is not shown (Watches hides the chat column)', () => {
+    // At width 0 every word of the twin breaks onto its own line.
+    const app = boot({ measure: width => width > 0 ? 52 : 900 });
+    app.tick();
+    app.input('Is that right?');
+    expect(app.field.parentElement.classList.contains('is-multiline')).toBe(false);
+    app.geometry(0); app.tick();
+    app.window.dispatchEvent(new app.window.Event('resize'));
+    // Back in the chat the one-line question keeps its one-line form.
+    app.geometry(350); app.tick();
+    expect(app.field.parentElement.classList.contains('is-multiline')).toBe(false);
+    expect(app.field.style.height).toBe('52px');
+    app.dom.window.close();
+  });
 });

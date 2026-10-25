@@ -54,9 +54,12 @@ function paint({ storage = {}, session = {}, sizes = [] } = {}) {
       Object.entries(storage).forEach(([key, value]) => window.localStorage.setItem(key, value));
       Object.entries(session).forEach(([key, value]) => window.sessionStorage.setItem(key, value));
       window.matchMedia = () => ({ matches: false });
-      // The autosizer's twin answers with the draft's height.
+      // The autosizer's twin answers with the draft's height; the field has
+      // the width of a shown composer (jsdom lays nothing out, and a field
+      // without width is not measured).
       Object.defineProperty(window.HTMLTextAreaElement.prototype, "scrollHeight", {
         configurable: true, get() { return this.classList.contains("input-field-twin") ? (sizes.shift() ?? 96) : 0; } });
+      window.HTMLTextAreaElement.prototype.getBoundingClientRect = () => ({ width: 640, height: 52, top: 0, left: 0, right: 640, bottom: 52 });
     },
   });
   contexts.push(ctx);
