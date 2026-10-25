@@ -450,7 +450,7 @@
     const comparisonPicker = document.getElementById("consensusModelDropdown");
     if (comparisonPicker) {
       comparisonPicker.dataset.comparisonOnly = String(look);
-      comparisonPicker.setAttribute("aria-label", look ? "Comparison models" : "Models and consensus engine");
+      comparisonPicker.setAttribute("aria-label", look ? "Comparison models" : "Answering models");
       // Agent shows one chip: the comparison models live in the Agent menu.
       const chip = comparisonPicker.closest(".consensus-model");
       if (chip) chip.hidden = look;
@@ -713,7 +713,6 @@
     frameKey = key;
     window.exitHeroMode?.();
     document.body.classList.remove("direct-comparison-active", "thread-message-pending");
-    App.consensusPipeline?.dismiss?.();
     window.projectAgentModeRun?.(null);
     // First the history, while the live surface still shows the turn this
     // run continues: that turn moves up into the history as it is.
@@ -739,7 +738,6 @@
     App.state?.set?.("lastShareResultId", null, "share");
     App.state?.set?.("consensusCitationMeta", null, "consensus");
     App.state?.set?.("currentEvidenceSources", [], "evidence");
-    window.lastConsensusBookmarkPayload = null;
     return true;
   }
   // The live surface as the page first had it (#threadAsk, #agentAnswer and
@@ -756,7 +754,7 @@
   }
   capturePristine();
   // Which turn the live surface shows, in the history's own key
-  // (consensus-run.js turnKey); only that turn can move up.
+  // (thread-history.js turnKey); only that turn can move up.
   function markLiveTurn(turn) {
     const panel = document.getElementById("agentAnswer");
     if (!panel) return;
@@ -781,7 +779,7 @@
       panel.replaceWith(freshPanel);
       // Retry, "Choose another model" and "Recover saved answer" act on the
       // run on screen: the turn in the history keeps its words, not these
-      // buttons (review B2; a saved failure there reads as one, consensus-run.js).
+      // buttons (review B2; a saved failure there reads as one, thread-history.js).
       panel.querySelector("#agentAnswerErrorActions")?.remove();
       panel.querySelector("#agentRecover")?.remove();
       for (const el of [ask, ...ask.querySelectorAll("[id]"), panel, ...panel.querySelectorAll("[id]")]) {

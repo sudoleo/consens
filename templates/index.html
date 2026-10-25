@@ -122,7 +122,7 @@
     <button type="button" id="authTopLoginBtn" class="auth-top-login">Log in</button>
     <button type="button" id="authTopSignupBtn" class="auth-top-signup">Sign up</button>
   </div>
-  <!-- Ansichts-Umschalter oben mittig (Consensus | Watches), auf Start-/Watch-Ansicht —
+  <!-- Ansichts-Umschalter oben mittig (Chat | Watches), auf Start-/Watch-Ansicht —
        ausgeloggt bittet der Watches-Klick per Popup um Login (watch.js
        verdrahtet Klicks + aktiven Zustand). -->
   <nav id="viewSwitch" class="view-switch" aria-label="Switch view" data-active="chat">
@@ -257,8 +257,8 @@
          ausschließlich die Auth-Aktionen oben rechts. -->
     <div class="sidebar-settings">
       <!-- Kontingent-Panel: öffnet nach oben über dem Account-Footer.
-           Eine Zahl für alle Modi: das Tokenkonto des Tages (Compare,
-           Consensus, Reasoning-Läufe, Agent), gefüllt von sidebar-quota.js aus
+           Eine Zahl für alle Modi: das Tokenkonto des Tages (Agent, Compare,
+           Reasoning-Läufe), gefüllt von sidebar-quota.js aus
            App.tokenBudget. Watches haben ihr eigenes Kontingent und bleiben
            eine kleine eigene Zeile. -->
       <div id="sidebarQuota" class="sidebar-quota" role="region" aria-labelledby="quotaHeading">
@@ -358,16 +358,16 @@
     <h1 id="appHeading" class="visually-hidden" data-i18n-skip>consens.io</h1>
     <!-- "Answer ready" for screen readers when a run ends (tab-status.js). -->
     <p id="answerStatus" class="visually-hidden" role="status" aria-live="polite"></p>
-    <!-- Abgeschlossene Turns eines Follow-ups. Vor dem neuen aktiven Turn wird
-         die bisherige Frage samt gerenderter Consensus-Antwort hier als
-         schreibgeschuetzter Verlauf abgelegt. New comparison leert ihn wieder. -->
+    <!-- Abgeschlossene Turns eines Chats (Agent, gespeicherte Consensus-Chats)
+         als schreibgeschuetzter Verlauf ueber dem aktiven Turn
+         (thread-history.js). Ein neuer Chat leert ihn wieder. -->
     <div id="threadHistory" class="thread-history" aria-label="Conversation history" hidden></div>
     <!-- Kopf des aktiven Turns: die gestellte Frage. Wird von window.App.setThreadQuestion
          (app-core.js) gefüllt, sobald ein Lauf startet oder ein Bookmark lädt.
          Lange Nachrichten klappen auf acht Zeilen ein; "Show more" in der
          Blase klappt auf. Die unsichtbare Ueberschrift gliedert den Chat fuer
          Screenreader in Nachricht und Antwort; sie wandert mit in den Verlauf
-         (agent-chat.js liveTurn, consensus-run.js buildHistoryTurn). -->
+         (agent-chat.js liveTurn, thread-history.js buildHistoryTurn). -->
     <div id="threadAsk" class="thread-ask" hidden>
       <h2 class="visually-hidden">Your message</h2>
       <div class="thread-ask-bubble">
@@ -396,40 +396,8 @@
       </div>
       <div class="attachment-bar message-attachments" id="threadPendingAskAttachments" hidden></div>
     </div>
-    <!-- Gefuehrter Lauf. Oben die vier Schritte als Stepper (erledigt,
-         aktiv, offen), rechts Preset und Uhr. Die Modell-Zeilen erscheinen
-         nur, solange die Modelle antworten, jede mit Status-Icon, Balken und
-         einem Wort Status. Auf schmalen Breiten wird der Stepper zu einer
-         Zeile plus Segmentbalken. Nach dem Lauf blendet der Block sich weich
-         aus und uebergibt an die Provenance-Zeile unter der Antwort. Lebt im
-         Thread (unter der Frage, wo gleich die Antwort steht), nicht am
-         Composer. Gesteuert von static/js/consensus-progress.js. -->
-    <section id="consensusRun" class="run" data-stage="idle" aria-label="Consensus progress" hidden>
-      <span id="runStatus" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></span>
-      <div class="run-head">
-        <div class="run-compact" aria-hidden="true">
-          <span class="run-compact-dot"></span>
-          <span class="run-compact-label" id="runCompactLabel"></span>
-          <span class="run-compact-count" id="runCompactCount"></span>
-        </div>
-        <ol class="run-steps" id="runSteps" aria-label="Run steps">
-          <li class="run-step" data-step="prepare" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Prepare</span></li>
-          <li class="run-step" data-step="answers" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Answers</span><span class="run-count" id="runCount"></span></li>
-          <li class="run-step" data-step="consensus" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Consensus</span></li>
-          <li class="run-step" data-step="differences" data-status="pending"><span class="run-step-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7"/><path d="M5 8.2l2 2 4-4.2"/></svg></span><span class="run-step-label">Answer check</span></li>
-        </ol>
-        <p class="run-meta"><span class="run-meta-text" id="runMeta"></span><span class="run-meta-next" id="runMetaNext"></span></p>
-        <span class="run-time" id="runTime"></span>
-      </div>
-      <div class="run-track" id="runTrack" aria-hidden="true"><i id="runBar"></i></div>
-      <div class="run-detail" id="runDetail" hidden></div>
-      <p class="run-note" id="runNote" hidden><svg class="run-note-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M8 7.2v4"/><circle class="run-note-dot" cx="8" cy="4.9" r=".9"/></svg><span id="runNoteText"></span></p>
-    </section>
     <!-- Der Lauf hat NICHT stattgefunden. Das ist ein eigener Zustand, kein
-         Zwischenschritt: der gefuehrte Lauf oben blendet sich bei "error"
-         weg (dismiss), und die Fehlermeldung in den Antwortboxen liegt im
-         Agent Mode hinter "Compare answers" — zusammen ergab das ein
-         Aufblitzen und danach nichts. Diese Karte bleibt stehen, bis der
+         Zwischenschritt. Diese Karte bleibt stehen, bis der
          Nutzer sie schliesst oder der naechste Lauf startet, und sagt drei
          Dinge: was passiert ist, wann es wieder geht, was jetzt moeglich
          ist. Gefuellt von static/js/usage-limit.js. -->
@@ -467,10 +435,6 @@
              Nachricht (#threadAskAttachments) — ein Anhang gehoert zu der
              Frage, mit der er rausgegangen ist, nicht ans leere Feld. -->
         <div id="attachmentBar" class="attachment-bar composer-attachments" role="group" aria-label="Files for your next question" hidden></div>
-        <!-- "Run again" fuellt nur vor, abgeschickt wird bewusst. Genau
-             dazwischen steht hier, was das Abschicken kostet. Gesetzt und
-             wieder geleert von consensus-progress.js. -->
-        <p id="composerRunNotice" class="composer-run-notice" role="status" hidden></p>
         <!-- Zitierter Abschnitt aus einer Antwort ("Ask about this"). Er steht
              sichtbar UEBER dem Feld statt als Text darin: das Zitat bleibt vom
              Getippten getrennt und ist mit einem Klick wieder weg. Beim Senden
@@ -499,8 +463,7 @@
                open Agent chat cannot switch, so the group steps aside. -->
           <div id="runModeControl" class="attach-menu-modes" role="group" aria-label="Mode">
             <select id="runModeSelect" aria-label="Mode" tabindex="-1" hidden>
-              <option value="compare" data-description="Answers side by side, no consensus.">Compare</option>
-              <option value="consensus" data-description="One answer with its differences and checks." selected>Consensus</option>
+              <option value="compare" data-description="Answers side by side.">Compare</option>
             </select>
           </div>
           <div class="attach-menu-divider attach-menu-mode-divider"></div>
@@ -545,12 +508,12 @@
           </label>
         </div>
         <input type="file" id="attachFileInput" accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp" multiple hidden>
-        <!-- Composer-Anatomie, fuer Compare, Consensus und Agent dieselbe
+        <!-- Composer-Anatomie, fuer Compare und Agent dieselbe
              (Layout: static/css/composer.css, sonst nirgends):
              .composer-lead    links:  (+), darin der Modus (App.runMode)
              .composer-models  rechts: wer antwortet, EIN Chip je Modus (Agent:
                                Chatmodell + Vergleichsmodelle in einem Menue,
-                               sonst Vergleichs- bzw. Consensus-Modelle)
+                               sonst die antwortenden Modelle)
              .input-actions-container rechts aussen: Demo und Senden -->
         <div class="composer-lead">
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Mode, files and options" aria-label="Mode, files and options">
@@ -572,11 +535,13 @@
             </div>
             <button id="agentModelsRetry" type="button" class="thread-ask-more" hidden>Reload models</button>
           </div>
-          <!-- Lauf-Schalter: Modellanzahl + Preset in einem Chip. model-picker.js
-               ersetzt das Select durch den Custom-Picker mit Preset-Ebene. -->
-          <div class="consensus-model consensus-model-inline" title="How many models answer, and which one writes the consensus">
+          <!-- Compare: wie viele Modelle antworten, mit Preset-Ebene
+               (model-picker.js ersetzt das Select durch den Custom-Picker).
+               Die Optionen sind die frueheren Consensus-Engines und bleiben
+               nur Anker der Preset-Aufloesung; die ID ist historisch. -->
+          <div class="consensus-model consensus-model-inline" title="How many models answer side by side">
             <div class="select-wrapper">
-              <select id="consensusModelDropdown" aria-label="Models and consensus engine">
+              <select id="consensusModelDropdown" aria-label="Answering models">
                 {% for model in consensus_models %}
                 <option value="{{ model.value }}" data-model-label="{{ model.label }}" data-model-badge="{{ model.badge }}" data-engine-provider="{{ model.provider }}" {% if loop.first %}selected{% endif %} {% if model.is_premium %}disabled class="premium-option"{% endif %}>{{ model.label }}{% if model.badge %} · {{ model.badge }}{% endif %}</option>
                 {% endfor %}
@@ -614,7 +579,7 @@
             <span id="composerModelIcons" class="composer-model-icons"></span>
           </button>
         </div>
-        <p id="composerModeDescription" class="composer-mode-description">One answer with its differences and checks.</p>
+        <p id="composerModeDescription" class="composer-mode-description">Works in steps with research, files and tools.</p>
         <p id="composerComparisonStatus" class="composer-comparison-status" role="status" aria-live="polite" hidden></p>
       </div>
       <div id="agentComposerNotice" class="agent-composer-notice" hidden>
@@ -745,15 +710,6 @@
                   </button>
                 </div>
                 <span class="consensus-footer-actions" id="consensusFooterActions"></span>
-                  <div class="consensus-footer-facts">
-                    <span class="run-provenance-facts" id="runProvenanceFacts"></span>
-                    <!-- "Run again" ist ein vollstaendiger neuer Lauf und kostet
-                         entsprechend Kontingent. Label und Titel schreibt
-                         consensus-progress.js (renderProvenance) aus dem echten
-                         Zaehler, damit hier nie ein falscher Preis steht. -->
-                    <button type="button" id="runReplayButton" class="run-replay-btn"
-                      title="Start a new chat with the same question"><span class="run-replay-label">Run again</span><span class="run-replay-cost" id="runReplayCost"></span></button>
-                  </div>
               </div>
               <!-- Quellenverzeichnis: die hochgestellten Zahlen im Antworttext
                    zeigen hierher. Standardmaessig zu, geoeffnet ueber den
@@ -1204,7 +1160,7 @@
               <div class="settings-section" data-settings-keywords="systemprompt prompt anweisungen instructions custom instructions vorgabe ton tone stil style">
                 <label class="settings-field-label" for="systemPromptInput">System prompt</label>
                 <p>Customize how the models respond. Leave empty to use the default.</p>
-                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7" maxlength="12000" placeholder="Use the app default, or enter your own instructions for Consensus answers."></textarea>
+                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7" maxlength="12000" placeholder="Use the app default, or enter your own instructions for Compare answers."></textarea>
                 <button id="saveSystemPromptBtn" class="btn save-prompt-btn">Save system prompt</button>
               </div>
             </div>
@@ -1217,16 +1173,16 @@
               <p>How consens answers your next message.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section" data-settings-keywords="modus mode vergleich vergleichen compare konsens consensus nebeneinander side by side agent standard default">
+              <div class="settings-section" data-settings-keywords="modus mode vergleich vergleichen compare nebeneinander side by side agent standard default">
                 <label for="runModeSetting" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Mode</strong>
-                    <small>What consens does with a new message. Compare shows the answers side by side, Consensus writes one answer with its differences and checks. An open chat keeps its kind; the composer offers the same choice.</small>
+                    <small>What consens does with a new message. Agent works in steps with research, files and tools; Compare shows the answers side by side. An open chat keeps its kind; the composer offers the same choice.</small>
                   </span>
                   <span class="settings-select">
                     <select id="runModeSetting">
+                      <option value="agent" selected>Agent · Beta</option>
                       <option value="compare">Compare</option>
-                      <option value="consensus" selected>Consensus</option>
                     </select>
                   </span>
                 </label>
@@ -1529,7 +1485,7 @@
                 Agent researches your question, asks the models you chose for their own answers and writes one
                 answer from them. The models come from OpenAI, Anthropic, Google Gemini, Mistral, Grok, DeepSeek,
                 Moonshot AI/Kimi, Z.ai/GLM, Meta Muse and Alibaba Qwen. While it works, the line above the answer shows each step;
-                open it later to see what was done. Compare (the answers side by side), Consensus, files and Reasoning are in the (+)
+                open it later to see what was done. Compare (the answers side by side), files and Reasoning are in the (+)
                 menu next to the message box.
               </p>
             </div>

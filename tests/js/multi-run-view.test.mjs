@@ -32,7 +32,7 @@ function boot({ realHistory = false } = {}) {
   const user = { uid: "view-user", getIdToken: vi.fn(async () => "token") };
   const state = new Map();
   const harness = loadScripts(
-    ["static/js/run-registry.js", ...(realHistory ? ["static/js/consensus-run.js"] : []), "static/js/run-view.js"],
+    ["static/js/run-registry.js", ...(realHistory ? ["static/js/thread-history.js"] : []), "static/js/run-view.js"],
     {
       body: BODY,
       before(window) {
@@ -68,25 +68,12 @@ function boot({ realHistory = false } = {}) {
           setThreadQuestion: vi.fn(),
           setThreadQuestionAttachments: vi.fn(),
           bookmarkSession: { restore: vi.fn() },
-          chatSession: { reset: vi.fn(), restoreCompletedChat: vi.fn() },
           followup: {
             renderStoredTurns: vi.fn(),
-            reset: vi.fn(),
-            offer: vi.fn()
+            clearHistory: vi.fn(),
+            reset: vi.fn()
           },
-          consensusPipeline: {
-            dismiss: vi.fn(),
-            onPrepare: vi.fn(),
-            onQueryStatus: vi.fn(),
-            onConsensusStart: vi.fn(),
-            onDifferencesStart: vi.fn(),
-            onConsensusEnd: vi.fn(),
-            renderProvenance: vi.fn()
-          },
-          differencesPanel: {
-            setSynthesizing: vi.fn(),
-            expandForFallback: vi.fn()
-          },
+          consensusFooter: { render: vi.fn(), clear: vi.fn() },
           syncSendButtonRunning: vi.fn()
         };
         window.injectMarkdown = (element, markdown) => { element.textContent = markdown; };
@@ -99,7 +86,6 @@ function boot({ realHistory = false } = {}) {
         window.enterDirectComparisonView = vi.fn();
         window.hideConsensusOutput = vi.fn();
         window.spinnerHTML = "loading";
-        window.consensusSpinnerHTML = "consensus loading";
       }
     }
   );
@@ -112,7 +98,7 @@ function createRunning(registry, question) {
     mode: "Standard",
     bookmarkId: `bookmark-${question}`,
     config: {
-      agentMode: true,
+      agentMode: false,
       providers: [{ provider: "OpenAI", modelId: `model-${question}`, modelLabel: `Model ${question}` }]
     }
   });
@@ -151,45 +137,34 @@ describe("selected RunContext projection", () => {
     expect(turn.querySelector('.thread-history-footer').hidden).toBe(true);
     dom.window.close();
   });
-  it("preserves completed history, open drawers and waiting model animations during follow-up streaming", () => {
-    const { registry, window, document, dom } = boot({ realHistory: true });
+  it("preserves waiting model animations and finished answers while the others stream", () => {
+    const { registry, window, document, dom } = boot();
     window.spinnerHTML = '<span class="thinking-wrap"><span class="thinking typing-indicator"></span></span>';
     const run = registry.create({
       question: "Second question",
-      config: { agentMode: true, providers: [
+      config: { agentMode: false, providers: [
         { provider: "OpenAI", modelLabel: "OpenAI" },
         { provider: "Gemini", modelLabel: "Gemini" }
       ] }
     });
-    run.historyTurns.push({ turn_id: "first-turn", question: "First question",
-      consensus: "Completed consensus", differences: "A previous difference" });
     run.modelResults.OpenAI = { status: "streaming", streamText: "New answer" };
     run.modelResults.Gemini = { status: "pending", streamText: "" };
     run.phase = "answers";
     registry.setStatus(run.runId, "running");
 
-    const historyTurn = document.querySelector(".thread-history-turn");
-    const tab = historyTurn.querySelector(".consensus-tab");
-    tab.click();
-    tab.focus();
-    const panel = document.getElementById(tab.getAttribute("aria-controls"));
+    // A comparison continues nothing: no history above it.
+    expect(window.App.followup.clearHistory).toHaveBeenCalled();
+    expect(window.App.followup.renderStoredTurns).not.toHaveBeenCalled();
     const spinner = document.querySelector("#geminiResponse .thinking-wrap");
     const render = vi.spyOn(window, "injectMarkdown");
     for (let i = 0; i < 12; i += 1) {
       run.modelResults.OpenAI.streamText += " token";
       registry.renderVisible();
     }
-    expect(document.querySelector(".thread-history-turn")).toBe(historyTurn);
-    expect(document.activeElement).toBe(tab);
-    expect(panel.hidden).toBe(false);
     expect(document.querySelector("#geminiResponse .thinking-wrap")).toBe(spinner);
     expect(render.mock.calls.every(([element]) => element.closest("#openaiResponse"))).toBe(true);
     expect(document.querySelector("#openaiResponse .collapsible-content").textContent).toBe(run.modelResults.OpenAI.streamText);
 
-    // An actual history change must still project, including an in-place update.
-    run.historyTurns[0].consensus = "Updated saved consensus";
-    registry.renderVisible();
-    expect(document.querySelector(".thread-history-answer-body").textContent).toBe("Updated saved consensus");
     run.modelResults.Gemini.status = "reasoning";
     registry.renderVisible();
     expect(document.querySelector("#geminiResponse .typing-indicator").dataset.text).toBe("Reasoning");
@@ -204,10 +179,8 @@ describe("selected RunContext projection", () => {
 
     // Saved views can replace the same DOM; returning must invalidate caches.
     registry.showSavedView({ type: "bookmark", bookmarkId: "saved" }, { bookmarkId: "saved" });
-    window.App.followup.clearHistory();
     document.querySelector("#geminiResponse .collapsible-content").textContent = "Saved answer";
     registry.show(run.runId);
-    expect(document.querySelector(".thread-history-answer-body").textContent).toBe("Updated saved consensus");
     expect(document.querySelector("#geminiResponse .collapsible-content").textContent).toBe("Finished answer");
     dom.window.close();
   });
@@ -231,28 +204,25 @@ describe("selected RunContext projection", () => {
     dom.window.close();
   });
 
-  it("publishes insights before the run finishes and preserves their DOM through the final event", () => {
+  it("takes a saved Consensus answer off the screen when a comparison opens, once", () => {
     const { registry, window, document, dom } = boot();
-    const run = createRunning(registry, "Independent judges");
-    window.renderConsensusInsights = vi.fn(() => {
-      document.getElementById("consensusAnswerBody").innerHTML = '<span class="cx-claim">Consensus claim</span>';
-      document.querySelector(".consensus-differences p").innerHTML = '<span class="diff-card">Original difference</span>';
-      return true;
-    });
-    registry.update(run.runId, context => {
-      Object.assign(context.consensus, { text: "Consensus claim", status: "complete",
-        differences: "Original difference", differencesData: { agreement: { score: 88 } },
-        differencesComplete: true });
-      context.phase = "finalizing";
-    });
-    const claim = document.querySelector(".cx-claim"), diff = document.querySelector(".diff-card");
-    expect(claim).not.toBeNull(); expect(diff).not.toBeNull();
-    expect(window.App.consensusPipeline.onConsensusEnd).toHaveBeenCalled();
-    const renders = window.renderConsensusInsights.mock.calls.length;
-    registry.setStatus(run.runId, "succeeded");
-    expect(window.renderConsensusInsights).toHaveBeenCalledTimes(renders);
-    expect(document.querySelector(".cx-claim")).toBe(claim);
-    expect(document.querySelector(".diff-card")).toBe(diff);
+    const output = document.getElementById("consensusOutput");
+    output.classList.remove("is-hidden");
+    output.classList.add("is-visible");
+    document.getElementById("consensusAnswerBody").textContent = "Saved consensus";
+    document.querySelector(".consensus-differences p").textContent = "Saved difference";
+    const run = createRunning(registry, "Compare");
+    expect(output.classList.contains("is-hidden")).toBe(true);
+    expect(output.classList.contains("is-visible")).toBe(false);
+    expect(document.getElementById("consensusAnswerBody").textContent).toBe("");
+    expect(document.querySelector(".consensus-differences p").textContent).toBe("");
+    expect(window.resetConsensusInsights).toHaveBeenCalled();
+    expect(window.App.consensusFooter.clear).toHaveBeenCalled();
+    expect(window.enterDirectComparisonView).toHaveBeenCalled();
+    // Further updates of the same run leave the consensus area alone.
+    const resets = window.resetConsensusInsights.mock.calls.length;
+    for (let i = 0; i < 3; i += 1) registry.update(run.runId, () => {});
+    expect(window.resetConsensusInsights).toHaveBeenCalledTimes(resets);
     dom.window.close();
   });
   it("builds a run's row once and changes only its words, so its pulse runs on (Apple audit C7)", () => {
@@ -262,11 +232,12 @@ describe("selected RunContext projection", () => {
     const label = row.querySelector("p"), status = row.querySelector(".run-entry-status");
     const writes = [];
     new dom.window.MutationObserver(records => writes.push(...records)).observe(label, { childList: true, characterData: true, subtree: true });
-    registry.update(run.runId, context => { context.phase = "consensus"; });
+    expect(status.textContent).toBe("Models answering");
+    registry.update(run.runId, context => { context.phase = "prepare"; });
     for (let i = 0; i < 5; i += 1) registry.update(run.runId, () => {});
     expect(row.querySelector("p")).toBe(label);
     expect(row.querySelector(".run-entry-status")).toBe(status);
-    expect(status.textContent).toBe("Writing consensus");
+    expect(status.textContent).toBe("Preparing");
     expect(row.classList.contains("is-pending")).toBe(true);
     return new Promise(resolve => setTimeout(() => {
       // The unchanged title was never written again.

@@ -14,7 +14,7 @@ const MARKUP = `
   </section>
   <button id="quotaTrigger" hidden><svg><circle id="quotaRingArc"/></svg></button>`;
 
-function boot({ mode = 'consensus' } = {}) {
+function boot({ mode = 'compare' } = {}) {
   const ctx = loadScripts(['static/js/token-budget.js', 'static/js/sidebar-quota.js'], {
     body: MARKUP,
     before(w) {
@@ -48,9 +48,9 @@ it('shows one quiet ring for the shared account, the value only in label and pan
   expect(d.getElementById('quotaReset').textContent).toMatch(/^Resets at .+ · in /);
   // The token figures are the operator's: they stand in an admin-only part
   // (style.css hides .admin-only without body.viewer-is-admin, Apple-Audit H4).
-  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · A Consensus run uses about 8%.');
+  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · A Compare run uses about 5%.');
   expect(d.querySelector('#quotaDetail .admin-only').textContent).toBe('409k of 660k tokens · ');
-  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Consensus run uses about 8%.');
+  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Compare run uses about 5%.');
   // The Reasoning switch shows its own (larger) run, under its new name.
   const reasoning = d.getElementById('reasoningToggle');
   reasoning.checked = true;
@@ -105,11 +105,11 @@ it('orders concurrent snapshots and fences other accounts', () => {
 it('admits a run like the server: available tokens against the mode estimate', () => {
   const { w, dom } = boot({ mode: 'compare' });
   const api = w.App.tokenBudget;
-  expect(api.canStart('consensus')).toBe(null);
+  expect(api.canStart('compare')).toBe(null);
   api.apply({ limit: 660000, used: 600000, reserved: 10000, remaining: 50000, revision: 1, day: '2026-10-01',
     run_estimates: estimates });
   expect(api.canStart('compare')).toBe(true);
-  expect(api.canStart('consensus')).toBe(false);
+  expect(api.canStart('deep_think')).toBe(false);
   expect(api.runShare('deep_think')).toBe('23%');
   expect(api.formatTokens(1650000)).toBe('1.7M');
   expect(api.formatTokens(5000000)).toBe('5M');

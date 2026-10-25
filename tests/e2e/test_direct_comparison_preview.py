@@ -1,12 +1,13 @@
 """Empty direct mode uses the real answer layout without issuing a query."""
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from playwright.sync_api import expect
 
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
 from test_model_answer_reader import seed_reader
-from test_run_mode_selector import choose
+from test_run_mode_selector import choose, _signed_in
 
 
 def settle(page):
@@ -21,13 +22,15 @@ def settle(page):
     (320, 568, 'dark'), (844, 390, 'light')])
 def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, height, theme):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('runMode','consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12'); localStorage.setItem('theme','{theme}');")
+        init_script=f"localStorage.setItem('runMode','agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); localStorage.setItem('theme','{theme}');")
     errors, requests = [], []
     page.on('pageerror', lambda error: errors.append(str(error)))
     page.on('request', lambda request: requests.append(request.url)
-        if any(part in request.url for part in ['/prepare', '/ask_', '/consensus']) else None)
+        if urlparse(request.url).path in ('/prepare', '/consensus', '/agent')
+        or urlparse(request.url).path.startswith('/ask_') else None)
     try:
         page.set_viewport_size({'width': width, 'height': height})
+        _signed_in(page, agent_access=True)
         draft = page.locator('#questionInput')
         draft.fill('Compare the alternatives for my next project.')
         choose(page, 'compare')
@@ -59,7 +62,7 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         cards.last.scroll_into_view_if_needed()
         page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
         assert cards.last.bounding_box()['y'] + cards.last.bounding_box()['height'] <= page.locator('.input-section').bounding_box()['y'] + 1
-        choose(page, 'consensus')
+        choose(page, 'agent')
         expect(intro).to_be_hidden()
         expect(draft).to_have_value('Compare the alternatives for my next project.')
         settle(page)
@@ -79,7 +82,8 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         expect(intro).to_be_hidden()
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(3)
         expect(page.locator('#answerReaderColumns')).to_contain_text('Original answer')
-        choose(page, 'consensus')
+        # The choice for the next message changes; the result on screen stays.
+        page.evaluate("App.runMode.set('agent')")
         expect(page.locator('#answerReaderColumns')).to_contain_text('Original answer')
         assert errors == []
     finally:
@@ -103,7 +107,7 @@ def test_persisted_off_new_comparison_and_model_selection(browser, phase4_server
         expect(intro).to_be_visible()
         expect(cards).to_have_count(5)
         page.evaluate("""() => {
-          for (let i = 0; i < 8; i++) App.runMode.set(i % 2 === 0 ? 'consensus' : 'compare');
+          for (let i = 0; i < 8; i++) App.runMode.set(i % 2 === 0 ? 'agent' : 'compare');
         }""")
         expect(intro).to_be_visible()
         settle(page)

@@ -1292,7 +1292,7 @@
       });
     } else if (!directQuestion && !window.lastShareResultId) {
       confirm.disabled = true;
-      confirm.textContent = "Run a consensus first";
+      confirm.textContent = "Nothing to watch yet";
     }
     refreshDialogWatchLimit();
     // The focus lands on the step's first choice, never on the page (J27).
@@ -2023,7 +2023,7 @@
   // without an evidence row, on a line of its own under the answer.
   // Every finished Agent answer has one (Max, Apple-Audit J20): the live
   // answer (agent-chat.js, on every projection), a reopened chat's answer
-  // and each Agent turn of the history (consensus-run.js, built off the
+  // and each Agent turn of the history (thread-history.js, built off the
   // page, `history: true`). The pill carries the question of its own turn,
   // set on every call; a follow-up opens at the question so it can stand
   // alone. Only the live answer's pill is #agentAnswerWatchButton.

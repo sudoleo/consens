@@ -35,15 +35,15 @@ def test_compare_mode_is_a_direct_six_answer_flow():
     core = (ROOT / "static" / "js" / "app-core.js").read_text(encoding="utf-8")
     input_css = (ROOT / "static" / "css" / "components-input.css").read_text(encoding="utf-8")
 
-    # config.agentMode is the persisted run field "the consensus pipeline
-    # ran"; it now comes from the one mode choice (run-mode.js).
-    assert 'const agentMode = window.App.runMode.pipeline();' in query
-    assert "const config = {\n      agentMode," in query
-    assert "autoConsensus: agentMode," in query
+    # config.agentMode/autoConsensus are the persisted run fields "the
+    # consensus pipeline ran"; the browser's own run is Compare (2026-10-25).
+    assert "      agentMode: false,\n      autoConsensus: false," in query
+    assert "runMode.pipeline" not in query
+    assert "executeConsensusRun" not in query
+    assert '"/consensus"' not in query
     # Die Vergleichsansicht wird an EINER Stelle aufgebaut, damit ein frisch
     # gesendeter und ein aus einem Bookmark geladener Direktvergleich nicht
     # auseinanderlaufen.
-    assert 'if (context.config?.agentMode === false)' in view
     assert 'window.enterDirectComparisonView?.();' in view
     assert 'document.body.classList.add("direct-comparison-active")' in core
     # Die Frage bleibt stehen: der Direktvergleich fuehrt keinen Thread, aber
@@ -52,19 +52,19 @@ def test_compare_mode_is_a_direct_six_answer_flow():
     enter_view = core.split("function enterDirectComparisonView()", 1)[1].split("}", 1)[0]
     assert 'setThreadQuestion("")' not in enter_view
     assert 'followup?.reset?.();' in view
-    assert 'window.App.chatSession?.reset?.();' in view
-    assert 'pipeline.dismiss?.();' in view
-    assert 'if (context.config.agentMode && context.config.autoConsensus)' in query
+    assert "chatSession" not in view
+    assert "consensusPipeline" not in view
     # Auto Consensus was only a read-only mirror of the old switch.
     assert 'autoConsensusToggle' not in agent
-    assert 'if (pipelineEnabled()) {' in agent
+    assert "pipelineEnabled" not in agent
+    assert 'const threadMode = () => runMode() !== "compare" || agentAwaited();' in agent
     assert 'const hiddenInHero = document.body.classList.contains("is-hero")' in core
     assert 'body.is-hero .response-section,' in input_css
     assert 'body.is-hero .consensus-section { display: none; }' in input_css
 
 
 def test_one_mode_selector_replaces_every_old_switch():
-    """Compare / Consensus / Agent is ONE choice with one owner (run-mode.js).
+    """Agent / Compare is ONE choice with one owner (run-mode.js).
     Before 2026-10 six controls and two storage keys decided it: a composer
     chip, a (+) menu switch, a Settings switch, a Pro-only dropdown, a
     read-only Auto Consensus mirror and a keyboard helper."""
@@ -109,14 +109,15 @@ def test_direct_comparison_keeps_compact_copy_and_an_accurate_placeholder():
     """Die kompakte Leiste ersetzt den langen Hinweis; der Platzhalter bleibt korrekt."""
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
-    run = (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
+    history = (ROOT / "static" / "js" / "thread-history.js").read_text(encoding="utf-8")
 
     assert 'id="modeNotice"' not in template
     assert "Follow-up questions need Agent Mode." not in script
     mode = (ROOT / "static" / "js" / "run-mode.js").read_text(encoding="utf-8")
-    assert "Answers side by side, no consensus." in mode
+    assert 'description: "Answers side by side."' in mode
     # ... und der Platzhalter verspricht kein Follow-up, das es nicht gibt.
-    assert "window.App.runMode?.pipeline?.() === true" in run
+    assert "input.placeholder = DEFAULT_INPUT_PLACEHOLDER;" in history
+    assert "Ask a follow-up" not in history
     assert "window.App?.followup?.render?.();" in script
 
 
@@ -165,11 +166,12 @@ def test_consensus_actions_are_explicit_and_hover_preview_has_no_native_duplicat
     assert "span.title" not in insights
 
 
-def test_answer_disclosure_is_restored_for_manual_consensus_and_bookmarks():
-    """Der Footer darf nicht davon abhaengen, ob noch eine Query-Pipeline lebt."""
-    progress = (ROOT / "static" / "js" / "consensus-progress.js").read_text(encoding="utf-8")
+def test_answer_disclosure_is_restored_for_saved_answers():
+    """Der Footer haengt an keinem laufenden Lauf: eine gespeicherte Antwort
+    zeichnet ihn selbst (consensus-footer.js)."""
+    footer = (ROOT / "static" / "js" / "consensus-footer.js").read_text(encoding="utf-8")
     firebase = (ROOT / "static" / "firebase.js").read_text(encoding="utf-8")
 
-    assert 'if (stage !== "consensus" && stage !== "differences") {' in progress
-    assert "renderProvenance();" in progress
-    assert "consensusPipeline?.renderProvenance?.()" in firebase
+    assert "function render()" in footer
+    assert "window.App?.consensusFooter?.render?.();" in firebase
+    assert "consensusPipeline" not in firebase

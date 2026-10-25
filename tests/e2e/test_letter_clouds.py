@@ -23,6 +23,10 @@ def clouds(page):
 
 def test_letter_clouds_live_only_on_the_empty_start_screen(app_page, get_console_errors):
     page = app_page
+    # The clouds belong to the hero, Agent's start screen (every account has
+    # Agent; the suite starts in Compare, whose start is the answer grid).
+    page.evaluate("() => window.App.runMode.set('agent')")
+    page.wait_for_function("() => document.body.classList.contains('is-hero')")
     page.wait_for_function("() => window.App.letterClouds && window.App.letterClouds.state().active")
     state = clouds(page)
     assert state["supported"] and state["running"]
@@ -35,6 +39,8 @@ def test_letter_clouds_live_only_on_the_empty_start_screen(app_page, get_console
     page.click("#questionInput")
     assert clouds(page)["ripples"] > 0  # Klick ins Feld startet keine neue Welle, stört die laufende nicht
 
+    # Agent sends once its model list is there (agent-chat.js sendBlocker).
+    page.wait_for_function("() => document.getElementById('agentModelDropdown')?.dataset.catalog === 'ready'")
     page.fill("#questionInput", "Wie sicher ist die Prognose?")
     page.keyboard.press("Enter")
     page.wait_for_function("() => !document.body.classList.contains('is-hero')")

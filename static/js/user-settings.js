@@ -142,7 +142,9 @@
 
   // run_mode ---------------------------------------------------------------
   const RUN_MODE_KEY = "runMode";
-  const RUN_MODES = ["compare", "consensus", "agent"];
+  // "consensus" was a mode until 2026-10-25: a stored one reads as unchosen
+  // (the default, Agent), here and on the server (user_settings.py).
+  const RUN_MODES = ["compare", "agent"];
 
   const runMode = keyed([RUN_MODE_KEY], {
     read() {

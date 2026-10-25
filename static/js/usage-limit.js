@@ -2,15 +2,9 @@
    usage-limit.js — "dieser Lauf hat nicht stattgefunden"
 
    Ein aufgebrauchtes Kontingent war bis 2026-07-31 der einzige Fehlerfall,
-   den die App gar nicht erzaehlt hat. Der Grund war kein fehlender Text,
-   sondern ein fehlender ORT: der gefuehrte Lauf (consensus-progress.js)
-   startet schon bei /prepare, und der Limit-Pfad meldete danach
-   setAgentModeStatus("error") — was den Block per dismiss() wieder
-   wegnimmt. Die eigentliche Meldung landete in den Antwortboxen, die im
-   Agent Mode (Default) hinter "Compare answers" liegen. Ergebnis: eine
-   Sekunde Fortschritt, dann eine leere Seite.
-
-   Dieses Modul ist die eine Stelle, die diesen Zustand besitzt:
+   den die App gar nicht erzaehlt hat: die Meldung landete in Antwortboxen,
+   die niemand sah. Dieses Modul ist die eine Stelle, die diesen Zustand
+   besitzt:
 
      - erkennt Limit-Antworten (ein Detektor, nicht drei),
      - prueft VOR dem Absenden gegen dasselbe Tokenkonto wie der Ring
@@ -18,8 +12,8 @@
      - rendert eine bleibende Karte im Thread (#runBlocked), genau dort, wo
        sonst die Antwort stuende.
 
-   Seit 2026-10-01 gibt es keine Run-Zaehler mehr: Compare, Consensus,
-   Reasoning-Laeufe und Agent teilen ein Tokenkonto pro Tag. Ein Lauf startet, wenn das
+   Seit 2026-10-01 gibt es keine Run-Zaehler mehr: Agent, Compare und
+   Reasoning-Laeufe teilen ein Tokenkonto pro Tag. Ein Lauf startet, wenn das
    freie Budget die erwarteten Tokens eines typischen Laufs dieses Modus
    deckt — dieselbe Regel wie die Admission auf dem Server.
 
@@ -41,7 +35,7 @@
   // {error: {...}}; die Streams reichen das Objekt teils schon ausgepackt
   // weiter, die vereinbarte Form ist flach ({error: "<Satz>", code}). Alle
   // muessen hier ankommen duerfen (App.errorFields, app-text.js; ohne das
-  // erkannte Consensus/Compare ein leeres Kontingent nicht, Review 2).
+  // erkannte Compare ein leeres Kontingent nicht, Review 2).
   function unwrap(data) {
     if (window.App.errorFields) return window.App.errorFields(data);
     var detail = data && data.detail;
@@ -81,9 +75,9 @@
     return window.App.tokenBudget || null;
   }
 
-  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Reasoning run" };
+  var MODE_NAMES = { compare: "Compare run", deep_think: "Reasoning run" };
 
-  /* "4% left today · a Consensus run needs about 8% · resets at 02:00 (in 1 h 58 min)".
+  /* "4% left today · a Compare run needs about 8% · resets at 02:00 (in 1 h 58 min)".
      Zahlen aus der Server-Absage (frischeste Quelle, schon im Store), sonst
      aus demselben Konto wie der Ring. Ohne Zahl bleibt die Reset-Zeit. */
   function metaLine(mode) {
@@ -173,10 +167,7 @@
     if (opts && opts.mode) return opts.mode;
     // "deep_think" is the kept estimate key of a run with Reasoning on.
     if ((opts && opts.deepThink) || reasoningIsOn()) return "deep_think";
-    try {
-      if (window.App.runMode && window.App.runMode.pipeline && window.App.runMode.pipeline() === false) return "compare";
-    } catch (_) { /* default */ }
-    return "consensus";
+    return "compare";
   }
 
   // Das Kontingent-Panel haengt im Sidebar-Fuss. Bei zugeklappter Sidebar
@@ -205,21 +196,16 @@
     // A refusal carries the account; it becomes the ring's value too.
     if (budget()) budget().fromResponse(data);
     var mode = currentMode(opts);
-    var phase = opts.phase;
     var view = { bucket: "tokens", actions: [] };
     var api = budget();
 
     view.title = "Not enough of today’s allowance left";
-    if (phase === "consensus") {
-      view.body = "The models answered, but the consensus could not be written: today’s allowance ran out during this run. The individual answers are still there under “Compare answers”.";
-    } else {
-      view.body = "Compare, Consensus and Agent share one daily allowance, and what is left does not cover a typical "
-        + (MODE_NAMES[mode] || "run") + ". Nothing was sent, and your question is still in the box.";
-    }
+    view.body = "Agent and Compare share one daily allowance, and what is left does not cover a typical "
+      + (MODE_NAMES[mode] || "run") + ". Nothing was sent, and your question is still in the box.";
     view.meta = metaLine(mode);
 
     // A Reasoning run is the largest run. If a normal one still fits, offer it.
-    if (mode === "deep_think" && api && api.canStart("consensus") === true) {
+    if (mode === "deep_think" && api && api.canStart("compare") === true) {
       // Warning tone, not refusal: there is another way (shell.css).
       view.bucket = "reasoning";
       view.body = "A Reasoning run needs more of today’s allowance than is left. A normal run still fits, and your question is still in the box.";
@@ -338,7 +324,7 @@
     });
   }
 
-  // "New comparison" raeumt den Thread — die Absage gehoert zum geraeumten
+  // "New chat" raeumt den Thread — die Absage gehoert zum geraeumten
   // Lauf und darf nicht ueber ihn hinaus stehenbleiben. Delegiert, weil der
   // Knopf auch aus dem Composer-Gate heraus geklickt wird.
   document.addEventListener("click", function (event) {

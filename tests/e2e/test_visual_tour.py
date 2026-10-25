@@ -365,10 +365,10 @@ def _app_start(browser, server, view, shoot):
 
     context, page = _open(browser, server, view, init_script=(
         "if (!sessionStorage.getItem('tourModeSeeded')) {"
-        " localStorage.setItem('runMode', 'consensus'); sessionStorage.setItem('tourModeSeeded', '1'); }"))
+        " localStorage.setItem('runMode', 'compare'); sessionStorage.setItem('tourModeSeeded', '1'); }"))
     try:
         _soft_wait(page, "() => document.querySelectorAll('#composerModelIcons img').length >= 2")
-        shoot(page, "konto-consensus")
+        shoot(page, "konto-compare")
     finally:
         context.close()
 

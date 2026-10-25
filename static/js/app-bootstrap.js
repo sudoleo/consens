@@ -159,13 +159,6 @@
       look.agentModel = text(agent.selectedOptions?.[0]);
       look.agentEffort = text(document.getElementById("agentReasoningEffort")?.selectedOptions?.[0]);
     }
-    // The Consensus/Compare chip only while it is the one on screen; next to
-    // Agent it names the comparison models alone.
-    const chip = document.querySelector(".consensus-model");
-    const consensus = text(chip?.querySelector(".model-picker-display-text"));
-    if (consensus && !chip.hidden && document.getElementById("consensusModelDropdown")?.dataset.comparisonOnly !== "true") {
-      look.consensus = consensus;
-    }
     try { window.localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private mode */ }
   }
   window.App.firstFrame = Object.freeze({
@@ -296,18 +289,11 @@
     }));
     icons.dataset.providers = families.map(family => family.provider).join(",");
   }
-  // "6 models · Daily": Consensus names how many answer and which preset
-  // writes; Compare only how many (model-picker.js syncCustomModelPicker).
+  // "6 models": Compare's chip names how many answer
+  // (model-picker.js syncCustomModelPicker).
   function consensusChipLabel() {
-    const remembered = rememberedLook()?.consensus;
-    if (remembered) return remembered;
     const count = checkedFamilies().length;
-    const models = count === 1 ? "1 model" : `${count} models`;
-    if (window.App.runMode?.preference?.() === "compare") return models;
-    const presetId = window.App.userSettings?.get?.("consensus_preset") || window.DEFAULT_CONSENSUS_PRESET;
-    const preset = (window.CONSENSUS_PRESETS || []).find(entry => entry.id === presetId);
-    // Translated part by part, as model-picker.js draws it.
-    return preset ? `${window.App.t(models)} · ${window.App.t(preset.label)}` : "";
+    return count === 1 ? "1 model" : `${count} models`;
   }
 
   let draftSeeded = false;
@@ -324,12 +310,12 @@
     if (once("body", document.body)) {
       if (watchPage) document.body.classList.add("is-watch-view");
       if (theme === "dark") document.body.classList.add("dark-mode");
-      // The consensus view is painted before auth resolves; run-mode.js
-      // (earlier in this bundle) owns the stored choice.
+      // Agent's start screen (not Compare's) is painted before auth
+      // resolves; run-mode.js (earlier in this bundle) owns the stored choice.
       if (window.App?.runMode?.preference() !== "compare") {
         document.body.classList.add("agent-mode-enabled");
       }
-      // A guest's composer (greeting on phones, no Consensus chip, the demo
+      // A guest's composer (greeting on phones, no Compare chip, the demo
       // beside Agent's) from the first paint; app-init.js keeps the class in
       // step with the session.
       if (guestExpected()) document.body.classList.add("is-guest");

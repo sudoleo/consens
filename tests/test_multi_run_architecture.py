@@ -34,9 +34,8 @@ def test_registry_is_the_single_browser_session_owner_and_loads_before_consumers
     assert "clearAll(reason" in registry
 
 
-def test_query_and_consensus_callbacks_use_their_bound_context_not_visible_dom():
+def test_query_callbacks_use_their_bound_context_not_visible_dom():
     query = read("static/js/query-send.js")
-    consensus = read("static/js/consensus-run.js")
     sources = read("static/js/sources.js")
 
     assert "async function runProvider(context, providerConfig" in query
@@ -46,26 +45,17 @@ def test_query_and_consensus_callbacks_use_their_bound_context_not_visible_dom()
     assert "persistenceOptions(context)" in query
     assert 'document.getElementById("openaiResponse")' not in query
     assert "window.currentEvidenceSources =" not in query
-
-    assert "window.App.executeConsensusRun = async function (context" in consensus
-    context_path = consensus.split(
-        "window.App.executeConsensusRun = async function (context", 1
-    )[1].split("window.getConsensus =", 1)[0]
-    # R09: the bound context sends server receipts of its own answers.
-    assert "answer_receipts: runReceipts(context)" in context_path
-    assert "context.consensus.bookmarkPayload" in context_path
-    assert "window.saveBookmarkConsensus?.(" in context_path
-    assert 'disposition?.chat_turn_state === "failed"' in context_path
-    assert 'disposition?.chat_turn_state === "pending"' in context_path
-    assert "failedChatTurn" in context_path
-    assert "pendingChatTurn" in context_path
-    assert 'document.getElementById("openaiResponse")' not in context_path
-    manual_bridge = consensus.split("window.getConsensus =", 1)[1]
-    assert 'registry?.visible?.()' in manual_bridge
-    assert 'registry.isExecuting(boundContext.runId)' in manual_bridge
-    assert 'consensusLifecycle.startRun()' not in manual_bridge
-    assert 'streamSSERequest(' not in manual_bridge
     assert "prepareResponseSourcesForEvidence" in sources
+
+    # The Consensus pipeline left the browser on 2026-10-25: no script
+    # starts it, and no bridge reaches it from the visible DOM.
+    scripts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [*(ROOT / "static" / "js").glob("*.js"), ROOT / "static" / "firebase.js"]
+    )
+    for gone in ("executeConsensusRun", "window.getConsensus =", "saveBookmarkConsensus",
+                 "consensusPipeline", "consensusLifecycle", "cancelCurrentConsensus"):
+        assert gone not in scripts, gone
 
 
 def test_bookmark_view_and_logout_keep_run_ownership_explicit():
@@ -76,7 +66,6 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
 
     assert "runOptions?.runId" in firebase
     assert "conversation?.runId" in firebase
-    assert "conversation?.bookmarkId" in firebase
     assert "window.App?.runRegistry?.showSavedView?.(" in firebase
     assert 'window.App?.runRegistry?.clearAll?.("logout")' in firebase
     assert "restoreRegistryRunRows()" in firebase
@@ -87,11 +76,10 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "versionParts" in firebase
 
     assert "registry.setProjector(project)" in view
-    # The guided-run block is part of the projection, not a free-floating
-    # display: a saved bookmark opened while a run keeps going in the
-    # background must not inherit its progress bar or its facts.
-    assert "window.App.consensusPipeline?.detach?.()" in view
-    assert "pipeline.setRunFacts?.(runFacts(context))" in view
+    # A run switch clears what a saved answer left on screen: a comparison
+    # opened next to it must not inherit its consensus or its footer.
+    assert "clearConsensus();" in view
+    assert "window.App.consensusFooter?.clear?.()" in view
     assert 'row.dataset.runId = context.runId' in view
     # One delegated listener opens every run row, also one that became a
     # saved row in place (Apple audit C7/A11).
@@ -106,10 +94,7 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "cancelCurrentConsensus" not in new_comparison
     assert "clearResponseBoxes" in new_comparison
 
-    assert "const boundContext = window.App.runRegistry?.visible?.()" in insights
-    assert "resolutionBindingIsWritable(binding)" in insights
-    assert "window.App.runRegistry?.beginAction?.(" in insights
-    assert "expectedBookmarkVersion" in insights
-    assert "signal: actionController.signal" in insights
-    assert "sources: sourceReferences ? context.evidenceSources || [] : []" in view
-    assert "body.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none'" in view
+    # A saved contradiction shows its stored Resolve result; the browser
+    # starts no new round against the visible run (2026-10-25).
+    assert "function runResolveRound" not in insights
+    assert "resolutionBindingIsWritable" not in insights

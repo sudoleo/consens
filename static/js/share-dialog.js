@@ -284,7 +284,9 @@
       prepareLink();
     } else if (!pendingId) {
       confirmBtn.disabled = true;
-      confirmBtn.textContent = "Run a consensus first";
+      // Nothing on screen to publish (the browser runs no Consensus since
+      // 2026-10-25; a saved answer prepares itself above).
+      confirmBtn.textContent = "Nothing to share yet";
     }
     confirmBtn.addEventListener("click", async function () {
       if (!pendingId) {

@@ -153,7 +153,6 @@ function resetLoadedRunAfterLogout() {
   window.clearPreparedBookmarkShareResult?.();
   window.App.state.set("currentEvidenceSources", [], "evidence");
   window.App.state.set("consensusCitationMeta", null, "consensus");
-  window.App?.chatSession?.reset?.();
   window.App?.bookmarkSession?.reset?.();
   window.App?.sharedModal?.close?.();
   window.App?.watch?.resetAfterLogout?.();
@@ -1801,43 +1800,6 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async eve
   }
 });
 
-async function recordModelVote(model, type, resultId = window.lastShareResultId) {
-  // Prüfe, ob der Nutzer eingeloggt ist.
-  if (!auth.currentUser) {
-    return;
-  }
-  
-  try {
-    const requestUser = auth.currentUser;
-    const generation = authState.generation;
-    const id_token = await requestUser.getIdToken(/* forceRefresh= */ false);
-    if (!isCurrentAuthenticatedUser(requestUser.uid, generation)) return;
-    if (!id_token || !resultId) {
-      console.error("No id_token available for voting.");
-      return;
-    }
-
-    const response = await fetch("/vote", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id_token: id_token,
-        model: model,
-        vote_type: type,
-        result_id: resultId
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      console.error("Error recording vote:", data.detail);
-    }
-  } catch (error) {
-    console.error("Error connecting to backend for vote recording:", error);
-  }
-}
-
-window.recordModelVote = recordModelVote;
-
 // The sidebar shows the whole name; the row's CSS ellipsis cuts it where the
 // space ends. The former five-word cut ("Our house is from 1978...")
 // shortened even names that fitted.
@@ -2304,128 +2266,6 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
 
 window.saveBookmark = saveBookmark;
 
-async function saveBookmarkConsensus(question, consensusText, differencesText, differencesData,
-                                     resultId, consensusModel, modelLabels,
-                                     previousQuestion = "", previousTurn = null,
-                                     conversation = null) {
-  const requestUser = auth.currentUser;
-  const boundRunId = String(conversation?.runId || "").trim() || null;
-  const boundAuth = conversation?.auth || null;
-  const boundRequestUser = boundAuth?.user || requestUser;
-  if (!boundRequestUser) return;
-  const requestUid = boundAuth?.uid || boundRequestUser.uid;
-  const requestGeneration = boundAuth?.generation ?? authState.generation;
-  const bookmarkId = conversation?.bookmarkId
-    || window.App.bookmarkSession?.currentId?.()
-    || bookmarkIdForQuestion(question);
-  const waitForDeleteOutcome = !bookmarkWriteAllowed(requestUid, bookmarkId);
-  // Only identifiers and the small legacy-required text copies travel over
-  // this compatibility path. Sources, structured differences, labels and
-  // provider answers are materialized from the owner-bound completed run.
-  // Sending those ignored copies used to reject valid runs at source 25 even
-  // though the authoritative snapshot supports 50.
-  const payloadSnapshot = {
-    question: String(question || ""),
-    consensusText: String(consensusText || ""),
-    differencesText: String(differencesText || ""),
-    resultId: resultId || null,
-    chatId: conversation?.chatId || null,
-    turnId: conversation?.turnId || null,
-    previousQuestion: String(previousQuestion || ""),
-    previousTurn: snapshotBookmarkValue(previousTurn) || null
-  };
-  return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
-    if (waitForDeleteOutcome && !bookmarkWriteAllowed(requestUid, bookmarkId)) return;
-    const id_token = await boundRequestUser.getIdToken(/* forceRefresh= */ false);
-    if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-
-    try {
-      const requestBody = JSON.stringify({
-        id_token: id_token,
-        question: payloadSnapshot.question,
-        consensusText: payloadSnapshot.consensusText,
-        differencesText: payloadSnapshot.differencesText,
-        resultId: payloadSnapshot.resultId,
-        bookmarkId: bookmarkId || null,
-        chatId: payloadSnapshot.chatId,
-        turnId: payloadSnapshot.turnId,
-        previousQuestion: payloadSnapshot.previousQuestion,
-        previousTurn: payloadSnapshot.previousTurn
-      });
-      let res = null;
-      let data = null;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          res = await fetch("/bookmark/consensus", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: requestBody,
-            keepalive: true
-          });
-          data = await res.json().catch(() => ({}));
-        } catch (networkError) {
-          if (attempt >= 2) throw networkError;
-          await new Promise(resolve => setTimeout(resolve, 250 * (4 ** attempt)));
-          if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-          continue;
-        }
-        const retryable = res.status === 408 || res.status === 425
-          || res.status === 429 || res.status >= 500;
-        if (res.ok || !retryable || attempt >= 2) break;
-        const retryDelay = res.status === 429
-          ? 1000 * (attempt + 1)
-          : 250 * (4 ** attempt);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-      }
-      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-      if (!res.ok) {
-        const errorDetail = window.App?.errorFields?.(data)?.error || data.detail || "Chat answer save failed";
-        data.detail = errorDetail;
-        console.error("Error saving consensus bookmark:", errorDetail, data.details || "");
-        if (boundRunId) {
-          window.App.runRegistry?.notePersistence?.(boundRunId, {
-            status: "error",
-            error: { type: "consensus", status: res.status, detail: errorDetail }
-          });
-        }
-        if (!boundRunId || window.App.runRegistry?.isVisible?.(boundRunId)) {
-          showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
-        }
-        return;
-      }
-      if (data.bookmark) {
-        if (boundRunId && window.App.runRegistry?.get?.(boundRunId)) {
-          const persistedBookmark = snapshotBookmarkValue(data.bookmark);
-          window.App.runRegistry.update(boundRunId, context => {
-            context.persistence.consensusBookmark = persistedBookmark;
-            context.persistence.consensusVersionParts = bookmarkShareVersionParts(data.bookmark);
-          }, { render: false, eventType: "persistence" });
-        }
-        if (!boundRunId) window.App.bookmarkSession?.restore?.(data.bookmark.id);
-        upsertBookmarkMeta(data.bookmark, {
-          runId: boundRunId,
-          writeType: "consensus",
-          requestUid
-        });
-        if (openedBookmarkId === data.bookmark.id) {
-          bookmarkDetailCache.clear();
-          bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
-        }
-      }
-    } catch (error) {
-      console.error("Error in saveBookmarkConsensus:", error);
-      if (boundRunId) {
-        window.App.runRegistry?.notePersistence?.(boundRunId, {
-          status: "error",
-          error: { type: "consensus", detail: error?.message || "Chat answer save failed" }
-        });
-      }
-    }
-  }, boundRunId);
-}
-window.saveBookmarkConsensus = saveBookmarkConsensus;
-
 window.acceptPersistedConsensusBookmark = function (bookmarkMeta, conversation = null) {
   const runId = String(conversation?.runId || "").trim() || null;
   const requestUid = conversation?.auth?.uid || auth.currentUser?.uid || null;
@@ -2789,6 +2629,9 @@ async function loadBookmarkConversation(bookmarkId) {
   }
 }
 
+// Chat and turn IDs the server issues (chat_history.py): 32 hex characters.
+const SERVER_ID = /^[0-9a-f]{32}$/;
+
 function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = {}) {
     const materialized = materializeConversationBookmark(sourceBookmark, conversationTurns);
     const bookmark = materialized.bookmark;
@@ -2803,25 +2646,22 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     // zentrierten Leerzustand.
     if (directComparison) {
         window.enterDirectComparisonView?.();
-        window.App?.consensusPipeline?.dismiss?.();
     } else {
         window.exitHeroMode?.();
     }
     window.App?.followup?.reset?.();
-    window.App?.chatSession?.reset?.();
     window.App?.bookmarkSession?.restore?.(sourceBookmark?.id);
     // One step, never emptied first: turns already on the page stay
-    // (consensus-run.js renderStoredTurns).
+    // (thread-history.js renderStoredTurns).
     window.App?.followup?.renderStoredTurns?.(materialized.historyTurns.length
         ? materialized.historyTurns
         : (bookmark?.previous_turn ? [bookmark.previous_turn] : []));
     const continuationTurn = materialized.currentTurn;
-    const authoritativeChatRestored = continuationTurn && bookmark.chat_id
-      ? window.App?.chatSession?.restoreCompletedChat?.(
-          bookmark.chat_id,
-          continuationTurn.turn_id
-        ) === true
-      : false;
+    // A chat the server owns (server IDs for chat and turn): an Agent chat
+    // continues from it (agent-chat.js reads basis.chatId).
+    const authoritativeChatRestored = Boolean(continuationTurn
+      && SERVER_ID.test(String(bookmark.chat_id || ""))
+      && SERVER_ID.test(String(continuationTurn.turn_id || "")));
     window.App?.runRegistry?.showSavedView?.(
       { type: "bookmark", bookmarkId: sourceBookmark?.id || "" },
       {
@@ -2921,27 +2761,6 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             structuredRendered = window.renderConsensusInsights(differencesData, includedCount, {sources: []});
         }
 
-        // Resolve-Persistenz: Payload setzen, damit eine Resolve-Runde aus dem
-        // geladenen Bookmark heraus ihr Ergebnis in dasselbe Bookmark schreibt.
-        window.lastConsensusBookmarkPayload = (consensusText.trim() && bookmark.query) ? {
-            question: bookmark.query,
-            previousQuestion: bookmark.previous_question || "",
-            previousTurn: bookmark.previous_turn || null,
-            consensusText: consensusText,
-            differencesText: bookmark.responses["differences"] || "",
-            differencesData: (differencesData && typeof differencesData === "object") ? differencesData : null,
-            conversation: materialized.currentTurn ? {
-              bookmarkId: sourceBookmark.id,
-              chatId: bookmark.chat_id,
-              turnId: materialized.currentTurn.turn_id,
-              modelResponses: Object.fromEntries(
-                Object.entries(materialized.currentTurn.model_answers || {}).map(([provider, item]) => [
-                  provider,
-                  typeof item === "string" ? item : String(item?.answer || "")
-                ])
-              )
-            } : { bookmarkId: sourceBookmark.id }
-        } : null;
 
         if (!structuredRendered) {
             // Freitext-Fallback (ältere Bookmarks ohne differences_data),
@@ -2963,21 +2782,11 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // (rahmenlose) Bereich sichtbar und funktional (Copy, Quellen-Links).
         if (consensusText.trim()) {
             window.revealConsensusOutput?.();
-            // Bookmark-Restore durchlaeuft keinen Query-/Consensus-Lifecycle.
-            // Den fertigen Antwort-Footer daher explizit synchronisieren,
-            // damit "Show model answers" und die vorhandenen Drawer immer
-            // unter der wiederhergestellten Antwort stehen.
+            // A saved answer has no run that would draw its footer, so it is
+            // drawn here: "Compare answers" and the drawers stand under it.
             window.updateAgentModeUI?.();
-            window.App?.consensusPipeline?.renderProvenance?.();
-            if (continuationTurn) {
-                window.App?.followup?.offer?.(
-                  displayQuestion,
-                  consensusText,
-                  continuationTurn
-                );
-            } else {
-                window.App?.followup?.markContinuationUnavailable?.();
-            }
+            window.App?.consensusFooter?.render?.();
+            window.App?.followup?.showExchange?.(displayQuestion, consensusText, continuationTurn);
         } else {
             window.hideConsensusOutput?.();
         }
@@ -3016,9 +2825,6 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         }
     }
     if (directComparison) window.App?.answerReader?.showDirectBookmark?.(bookmark);
-    if (!continuationTurn) {
-        window.App?.followup?.markContinuationUnavailable?.();
-    }
     // === NEU: Citation-Meta immer nach dem Rendern setzen ===
     try {
         let includedModels = bookmarkCitationModels;
@@ -3044,7 +2850,11 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         window.App.state.set("consensusCitationMeta", null, "consensus");
     }
     if (options.conversationLoadFailed) {
-        const message = authoritativeChatRestored
+        // Only an Agent chat continues; a saved Consensus chat is read-only
+        // since 2026-10-25, so its message promises no follow-up context.
+        const message = bookmark.mode !== "Agent"
+          ? "Some earlier messages of this chat could not be displayed."
+          : authoritativeChatRestored
           ? "Some earlier messages could not be displayed. Follow-ups still use the saved chat context."
           : "The full saved conversation could not be loaded. Only the visible answer is available as follow-up context.";
         window.App?.showPopup?.(message);

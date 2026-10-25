@@ -34,9 +34,7 @@
   // "answer" per run, with the same shape in every mode. The older
   // app_query_*/app_consensus_* events keep firing as the detailed record.
   function analyticsMode(context) {
-    const config = context?.config || {};
-    if (config.executionMode === "agent") return "agent";
-    return config.autoConsensus ? "consensus" : "compare";
+    return context?.config?.executionMode === "agent" ? "agent" : "compare";
   }
 
   function trackAsk(context) {
@@ -56,7 +54,7 @@
   }
 
   // status: "ok" | "partial" | "failed". The first terminal state of a run
-  // counts; a manual Consensus on an already answered run adds nothing.
+  // counts.
   function trackAnswer(context, status) {
     if (!context?.metadata || context.metadata.answerTracked) return;
     context.metadata.answerTracked = true;
@@ -398,7 +396,7 @@
   // Dutzend Stellen. Das Inline-Marker-Rendering braucht einen stabilen
   // Blockcontainer, deshalb laeuft jeder Zugriff jetzt ueber diesen Helfer.
   // Der scope-Parameter erlaubt es, gezielt in einer bestimmten Konsens-Box zu
-  // suchen (z. B. der von getConsensus gehaltenen Referenz).
+  // suchen.
   function consensusBodyEl(scope) {
     const root = scope || document;
     return (
@@ -464,10 +462,15 @@
   // verlaesst auch den Direktvergleich. Die Marke haengen zu lassen waere eine
   // Mine — sie steuert Sichtbarkeit und inert der .response-section.
   function exitHeroMode() {
+    const wasPreview = document.body.classList.contains("direct-comparison-preview");
     glideComposer(() => {
       document.body.classList.remove("is-hero", "direct-comparison-active", "direct-comparison-preview");
       syncHeroResponseAccess();
     });
+    // Compare's start (the answer grid) is a start screen without the hero:
+    // leaving it runs no glide that settles the tool bar, so the bar is drawn
+    // again here instead of standing until the next render.
+    if (wasPreview) window.App.renderComposerMode?.();
   }
 
   // Direct answers share the normal thread shell: question bubble, dimensions,

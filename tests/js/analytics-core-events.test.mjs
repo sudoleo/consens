@@ -132,9 +132,9 @@ describe('ask and answer', () => {
 
   it('count only the first terminal state of a run', () => {
     const { App, events } = harness();
-    const context = { config: { autoConsensus: true }, metadata: {} };
+    const context = { config: { autoConsensus: false }, metadata: {} };
     App.trackAnswer(context, 'ok');
     App.trackAnswer(context, 'failed');
-    expect(events).toEqual([['answer', { mode: 'consensus', status: 'ok' }]]);
+    expect(events).toEqual([['answer', { mode: 'compare', status: 'ok' }]]);
   });
 });

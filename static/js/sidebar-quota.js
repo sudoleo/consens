@@ -68,7 +68,7 @@
 
   // The mode the next message will run in, for the "one run ≈ x %" hint.
   function nextRunMode() {
-    var mode = "consensus";
+    var mode = "compare";
     try {
       var runMode = window.App.runMode;
       mode = runMode && runMode.effective ? runMode.effective() : mode;
@@ -77,10 +77,10 @@
     // "deep_think" is the kept estimate key of a run with Reasoning on.
     var reasoning = el("reasoningToggle");
     if (reasoning && reasoning.checked) return "deep_think";
-    return mode === "compare" ? "compare" : "consensus";
+    return "compare";
   }
 
-  var MODE_NAMES = { compare: "Compare run", consensus: "Consensus run", deep_think: "Reasoning run" };
+  var MODE_NAMES = { compare: "Compare run", deep_think: "Reasoning run" };
 
   function renderRing(view) {
     var trigger = el("quotaTrigger");

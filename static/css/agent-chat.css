@@ -355,8 +355,8 @@
 @media (pointer: coarse) {
   .agent-composer-notice button, .agent-evidence-links .agent-evidence-link { min-height: 44px; }
 }
-body.single-agent-active :is(#consensusOutput, #consensusRun, .response-section,
-  #runProvenance, .consensus-footer-actions, #composerRunNotice,
+body.single-agent-active :is(#consensusOutput, .response-section,
+  #runProvenance, .consensus-footer-actions,
   .models-section, .models-section + .sidebar-separator) { display: none !important; }
 /* "Try the demo" is a guest's offer (demo.js plays an Agent turn): a guest in
    Agent's composer keeps it (Apple-Audit H3), an account has no use for it. */

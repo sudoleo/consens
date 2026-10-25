@@ -23,7 +23,7 @@ const CHAT = "a".repeat(32);
 function agentApp() {
   let answer = 0;
   const app = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js",
-    "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/consensus-run.js",
+    "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/thread-history.js",
     "static/js/agent-chat.js", "static/js/run-view.js",
     "static/js/modal-dialog.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js"], {
     body: BODY,

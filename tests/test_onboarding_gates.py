@@ -111,16 +111,14 @@ def test_registration_never_probes_account_existence_with_caller_credentials():
 # ---------------------------------------------------------------------------
 
 def test_followups_are_no_longer_pro_gated():
-    consensus_run = read("static/js/consensus-run.js")
+    agent_chat = read("static/js/agent-chat.js")
     chat_router = read("app/api/routers/chat.py")
 
-    # Ein fortsetzbarer Turn IST der Follow-up-Zustand: kein Tier, kein Badge,
-    # keine Zwischenentscheidung.
-    armed = consensus_run[consensus_run.index("isArmed() {"):]
-    armed = armed[:armed.index("consume() {")]
-    assert "isUserPro" not in armed
-    assert "pro-badge" not in armed
-    assert "is-pro-locked" not in armed
+    # Folgefragen laufen seit 2026-10-25 im Agent weiter: kein Tier, kein
+    # Badge, keine Zwischenentscheidung vor der naechsten Frage.
+    assert "require_pro_for_followup" not in agent_chat
+    assert "followup-pro" not in agent_chat
+    assert not (ROOT / "static" / "js" / "consensus-run.js").exists()
 
     # Serverseitig gibt es kein Follow-up-Gate mehr - der Kontext kostet ueber
     # das normale Tagesbudget, nicht ueber ein Tier.

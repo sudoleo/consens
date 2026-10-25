@@ -1,3 +1,12 @@
+"""Thread and footer contracts of the app page.
+
+Since 2026-10-25 the browser runs Agent and Compare only; the guided
+Consensus run (#consensusRun, consensus-progress.js, consensus-lifecycle.js)
+left with the pipeline, which runs on the server for Watches, the API and
+topics. A saved Consensus answer still shows its footer drawers
+(consensus-footer.js) and its earlier turns (thread-history.js).
+"""
+
 from pathlib import Path
 from tests.frontend_order import loads_before
 
@@ -9,137 +18,37 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_consensus_result_precedes_model_answers_and_run_block_is_loaded():
+def test_saved_consensus_precedes_model_answers_without_a_run_block():
     template = read("templates/index.html")
+    bundles = read("static/js/bundles.json")
 
     assert template.index('class="consensus-section"') < template.index(
         'class="response-section"'
     )
-    assert 'id="consensusRun"' in template
-    assert 'id="runStatus"' in template
-    assert loads_before("agent-mode.js", "consensus-progress.js")
-    assert loads_before("consensus-progress.js", "consensus-lifecycle.js")
+    for retired in ('id="consensusRun"', 'id="runStatus"', 'id="runSteps"',
+                    'id="runProvenanceFacts"', 'id="runReplayButton"',
+                    'id="composerRunNotice"'):
+        assert retired not in template, retired
+    for retired in ("consensus-progress.js", "consensus-lifecycle.js",
+                    "consensus-run.js", "chat-session.js"):
+        assert retired not in bundles, retired
+        assert not (ROOT / "static" / "js" / retired).exists(), retired
+    assert loads_before("agent-mode.js", "consensus-footer.js")
+    assert loads_before("consensus-footer.js", "thread-history.js")
 
 
-def test_run_block_shows_one_step_at_a_time():
-    """The stepper names all four steps, but exactly one is active: ONE
-    stepper, ONE count, ONE bar and ONE note line. If a second set ever
-    appears here, the reduction has been undone."""
+def test_a_saved_answer_hands_over_to_a_footer_of_drawers():
     template = read("templates/index.html")
-    progress = read("static/js/consensus-progress.js")
-
-    for single in ('id="runSteps"', 'id="runCount"', 'id="runBar"', 'id="runNote"'):
-        assert template.count(single) == 1, f"expected exactly one {single}"
-    for step in ("prepare", "answers", "consensus", "differences"):
-        assert template.count(f'data-step="{step}"') == 1, step
-    assert 'if (step === stage) return "active";' in progress
-
-    # Per-model rows live in the detail container and are only shown while
-    # the models answer.
-    assert 'id="runDetail"' in template
-
-
-def test_the_direct_comparison_has_no_run_block_at_all():
-    """Der gefuehrte Lauf beschreibt eine Abfolge, die es ohne Agent Mode
-    nicht gibt: nach den sechs Antworten kommt kein Consensus und keine
-    Widerspruchspruefung. Waehrend die Antworten sichtbar danebenstreamen,
-    kuendigte der Block Schritte an, die nie kamen (User-Vorgabe 2026-08-31:
-    "bei dem Direktvergleich braucht man keinerlei Ladefortschritt")."""
-    progress = read("static/js/consensus-progress.js")
-    view = read("static/js/run-view.js")
-
-    # Der Projektor ruft die Pipeline erst gar nicht ...
-    sync = view.split("function syncPipeline(context, force)", 1)[1].split(
-        "function syncAgentStatus", 1
-    )[0]
-    assert 'if (context.config?.agentMode === false) {' in sync
-    assert "pipeline.dismiss?.();" in sync
-
-    # ... und der Block selbst geht auch dann nicht auf, wenn ihn jemand
-    # anderes anstoesst (Lifecycle, Demo, Replay).
-    assert 'return document.body.classList.contains("direct-comparison-active");' in progress
-    show = progress.split("function show() {", 1)[1].split("function vanish", 1)[0]
-    assert "if (isDirectComparison()) return;" in show
-    for hook in ("function onPrepare(startedAtMs) {", "function onQueryStatus(status) {"):
-        body = progress.split(hook, 1)[1][:200]
-        assert "if (isDirectComparison()) {" in body, hook
-
-
-def test_the_per_model_rows_show_live_progress_and_measured_time():
-    """Jede Modellzeile behaelt den Live-Balken aus dem Antwortstream und
-    friert beim Abschluss die gemessene Laufzeit ein."""
-    progress = read("static/js/consensus-progress.js")
-
-    assert 'class="run-model-track"' in progress
-    assert ".run-model-track" in read("static/css/shell.css")
-    assert "function estimateRowProgress(box, done)" in progress
-    assert "Math.max(rowProgress.get(box.id) || 0, nextProgress)" in progress
-    assert 'bar.style.setProperty("--p"' in progress
-    assert "rowTimes.set(box.id, Date.now() - startedAt)" in progress
-    assert 'class="run-model-time"' in progress
-
-
-def test_run_covers_every_phase_and_terminal_state():
-    progress = read("static/js/consensus-progress.js")
-    lifecycle = read("static/js/consensus-lifecycle.js")
-    query = read("static/js/query-send.js")
-    view = read("static/js/run-view.js")
-    demo = read("static/demo.js")
-
-    # Four phases, in order, each with its own step.
-    for stage in ("prepare", "answers", "consensus", "differences"):
-        assert f'{stage}: {{' in progress or f'"{stage}"' in progress, stage
-
-    assert 'responseState === "complete"' in progress
-    assert "onConsensusStart" in lifecycle
-    assert "onConsensusEnd" in lifecycle
-    assert 'window.setAgentModeStatus("canceled")' in view
-    assert "consensusPipeline?.onConsensusEnd" in demo
-
-    # The run starts at /prepare, not at the fan-out: the gap between click
-    # and first answer is exactly where a user needs to see something happen.
-    # The run hands over its own start time, so a run reopened from the
-    # sidebar keeps counting instead of restarting its clock.
-    assert "pipeline.onPrepare?.(context.startedAt)" in view
-    # The differences judge gets its own step, signalled from the stream.
-    assert 'context.phase = "differences"' in read("static/js/consensus-run.js")
-    assert 'if (context.phase === "differences") pipeline.onDifferencesStart?.();' in view
-
-
-def test_completed_consensus_survives_differences_or_transport_failure():
-    run = read("static/js/consensus-run.js")
-    chat = read("app/api/routers/chat.py")
-
-    assert 'sse_pack("consensus.final"' in chat
-    assert '"consensus.final": contextConsensusRenderer(context, "consensus-final")' in run
-    assert "context.consensus.text = context.consensus.text || context.consensus.streamText" in run
-    assert 'context.consensus.error = { message:' in run
-
-
-def test_run_is_compact_and_unknowable_phases_stay_indeterminate():
-    css = read("static/css/shell.css")
-
-    assert ".run.is-visible" in css
-    # Collapses away instead of vanishing, so the eye follows the answer up.
-    assert ".run.is-gone" in css
-    assert "height: 2px" in css
-    # A phase that cannot report a share of itself sweeps, it does not fake
-    # a percentage.
-    assert ".run-track.is-indeterminate" in css
-    assert "runSweep" in css
-    assert "@media (prefers-reduced-motion: reduce)" in css
-
-
-def test_run_hands_over_to_a_provenance_line():
-    template = read("templates/index.html")
-    progress = read("static/js/consensus-progress.js")
+    footer = read("static/js/consensus-footer.js")
     css = read("static/css/shell.css")
 
     assert 'id="runProvenance"' in template
-    assert 'id="runProvenanceFacts"' in template
-    assert 'id="runReplayButton"' in template
+    assert 'id="consensusFooterTabs"' in template
     assert ".run-provenance" in css
-    assert "renderProvenance" in progress
+    assert "App.consensusFooter = Object.freeze({ render, clear })" in footer
+    # The live run's styles went with it.
+    assert ".run-step" not in css
+    assert ".run-replay" not in css
 
 
 def test_result_footer_has_one_boundary_before_the_composer():
@@ -152,57 +61,43 @@ def test_result_footer_has_one_boundary_before_the_composer():
 
 
 def test_the_composer_carries_no_followup_affordance_at_all():
-    """Ein Gespraech laeuft ueber das Eingabefeld weiter — ohne Kontext-Chip,
-    ohne Angebots-Leiste und ohne ein zweites "New comparison" am Composer.
-    Der Ausstieg steht in der Sidebar."""
+    """Ein Gespraech laeuft im Agent ueber das Eingabefeld weiter, ohne
+    Kontext-Chip, ohne Angebots-Leiste und ohne ein zweites "New comparison"
+    am Composer. Der Ausstieg steht in der Sidebar."""
     template = read("templates/index.html")
-    run = read("static/js/consensus-run.js")
+    history = read("static/js/thread-history.js")
 
     assert 'id="followupChipBar"' not in template
     assert 'id="followupBar"' not in template
-    assert "followupChipBar" not in run
-    assert "followup-newrun" not in run
+    assert "followupChipBar" not in history
+    assert "followup-newrun" not in history
     assert 'id="newRunButton"' in template
-
-    # Der Kontext geht mit, solange es einen gibt — und den gibt es nur,
-    # wenn die Consensus-Pipeline laeuft (query-send bindet ihn genau dort),
-    # nie in Compare. Der Platzhalter verspricht kein Follow-up, das der
-    # naechste Lauf nicht gibt.
-    assert (
-        "isArmed() {\n"
-        "      return !!this.lastExchange && window.App.runMode?.pipeline?.() === true;\n"
-        "    }"
-    ) in run
+    # Compare setzt keinen Chat fort: kein Angebot, kein scharfer Kontext.
+    assert "isArmed" not in history
+    assert "offer(" not in history
 
 
-def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
+def test_saved_turns_render_as_a_static_history_above_the_active_one():
     template = read("templates/index.html")
-    run = read("static/js/consensus-run.js")
-    query = read("static/js/query-send.js")
+    history = read("static/js/thread-history.js")
     app_init = read("static/js/app-init.js")
+    view = read("static/js/run-view.js")
     css = read("static/css/shell.css")
 
     # Der statische Verlauf steht im DOM vor dem aktiven Turn. Der Live-
     # Renderbaum mit seinen einmaligen IDs bleibt dadurch unveraendert.
     assert template.index('id="threadHistory"') < template.index('id="threadAsk"')
-    assert "archiveCurrentExchange()" in run
-    assert 'clone.removeAttribute("id")' in run
-    assert "renderStoredTurn(turnData)" in run
-    assert "renderStoredTurns(turns, options = {})" in run
-    assert 'node.querySelector?.(".thread-history-question-text")' in run
-    assert "buildStoredAgreement(differencesData)" in run
+    assert "renderStoredTurn(turnData)" in history
+    assert "renderStoredTurns(turns, options = {})" in history
+    assert 'questionText.className = "thread-history-question-text"' in history
+    assert "buildStoredAgreement(differencesData)" in history
     assert "const insightRoot = window.App.consensusBodyEl?.() || document" in read(
         "static/js/consensus-insights.js"
     )
-    # Der RunContext uebernimmt die frozen completed Basis schon beim Anlegen
-    # in seinen Verlauf (Apple-Audit A1): seine erste Projektion zeigt sie.
-    append_at = query.index("historyTurns.push(basis.currentTurn)")
-    create_at = query.index("registry.create({", append_at)
-    assert "historyTurns," in query[create_at:query.index("});", create_at)]
-    view = read("static/js/run-view.js")
-    assert "followup?.renderStoredTurns?.(context.historyTurns || [])" in view
-    # Auch der Direktvergleich zeigt seine Frage: er fuehrt keinen Thread,
-    # aber ohne sie stand auf dem Schirm nur die Antwort auf etwas Ungesagtes.
+    # Ein Compare-Lauf fuehrt keinen Verlauf; ein Wechsel des Laufs leert ihn.
+    assert "followup?.clearHistory?.()" in view
+    # Auch der Direktvergleich zeigt seine Frage: ohne sie stand auf dem
+    # Schirm nur die Antwort auf etwas Ungesagtes.
     assert "window.App.setThreadQuestion?.(context.question)" in view
     assert "clearHistory?.()" in app_init
 
@@ -220,24 +115,19 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
 
 def test_the_sent_message_leaves_the_field_before_prepare_runs():
     """Zwischen Klick und dem Moment, in dem der Lauf den neuen Turn aufmacht,
-    liegen /prepare und — im laufenden Gespraech — das Binden des Chat-
-    Kontexts. Ab der dritten Frage dauerte das so lange, dass es aussah, als
-    sei der Klick ins Leere gegangen: die Frage stand unveraendert im Feld
-    (User-Befund 2026-08-15). Sie geht deshalb SOFORT raus und steht als
-    eigene Blase im Thread — der Vorgaenger bleibt bis zum Archivieren
-    unangetastet."""
+    liegt /prepare. Das dauerte so lange, dass es aussah, als sei der Klick
+    ins Leere gegangen: die Frage stand unveraendert im Feld (User-Befund
+    2026-08-15). Sie geht deshalb SOFORT raus und steht als eigene Blase im
+    Thread."""
     template = read("templates/index.html")
     query = read("static/js/query-send.js")
     core = read("static/js/app-core.js")
     css = read("static/css/shell.css")
 
-    # Die alten Pending-Knoten bleiben als Legacy-Markup vorhanden; der neue
-    # Multi-Run-Projektor zeigt die gesendete Frage direkt als aktiven Kopf.
     assert 'id="threadPendingAsk"' in template
     assert 'id="threadPendingAskText"' in template
     assert 'id="threadPendingAskAttachments"' in template
     assert template.index('id="threadAsk"') < template.index('id="threadPendingAsk"')
-    assert template.index('id="threadPendingAsk"') < template.index('id="consensusRun"')
 
     # Der synchrone Hand-off leert das Feld und projiziert den Context, bevor
     # executeRun mit Token-/prepare-Awaits beginnt.
@@ -248,26 +138,18 @@ def test_the_sent_message_leaves_the_field_before_prepare_runs():
     )[0]
     assert 'input.value = "";' in handoff
     assert "registry.renderVisible();" in handoff
-    assert "window.App.setThreadQuestion?.(context.question)" in read(
-        "static/js/run-view.js"
-    )
 
-    # Sie steht dort, wo sie gleich als Kopf weiterlebt: unter der bisherigen
-    # Antwort, mit dem gefuehrten Lauf darunter.
     assert ".thread-ask-pending { order: 4; }" in css
-    assert "body.thread-message-pending:not(.is-hero) #consensusRun { order: 4; }" in css
     assert "body.thread-message-pending:not(.is-hero) .response-section { order: 3; }" in css
     assert css.index("body:not(.is-hero) .consensus-section { order: 3; }") < css.index(
         ".thread-ask-pending { order: 4; }"
     )
 
     # Jeder Kopf im Thread wird vom selben Renderer gefuellt (Clamp, Aufklapp-
-    # Link, ResizeObserver) — sonst verhielte sich die Blase anders als der
+    # Link, ResizeObserver), sonst verhielte sich die Blase anders als der
     # Kopf, zu dem sie wird.
     assert "function renderThreadQuestion(wrap, text, question)" in core
     assert "const threadAskResizeObservers = new WeakMap()" in core
-    # Wer den Kopf setzt, hat die schwebende Nachricht uebernommen — das gilt
-    # auch fuer Bookmark-Restore, "New comparison" und den Direktvergleich.
     set_head = core.split("function setThreadQuestion(", 1)[1].split("}", 1)[0]
     assert "clearPendingThreadQuestion()" in set_head
 
@@ -275,37 +157,29 @@ def test_the_sent_message_leaves_the_field_before_prepare_runs():
 def test_a_run_that_never_happens_gives_the_message_back():
     """Kontingent leer, fehlender Key, abgebrochen: dann ist nichts
     rausgegangen. Die Nachricht gehoert unveraendert und abschickbar zurueck
-    ins Feld, und der bisherige Turn bleibt, wo er ist."""
+    ins Feld."""
     query = read("static/js/query-send.js")
 
     restore_block = query.split("function restoreComposerAfterUnsentRun(context)", 1)[1].split(
         "function finishFailed", 1
     )[0]
     assert "registry.isVisible(context.runId)" in restore_block
-    assert "registry.selectConversationBasis(context.basis)" in restore_block
-    # Zurueck kommt der Composer-Stand, aus dem die Nachricht entstanden ist:
-    # das Getippte im Feld, das Zitat wieder darueber.
     assert "input.value = context.metadata.draftQuestion || context.question;" in restore_block
     assert "window.App.quote?.set?.(context.metadata.quotedContext)" in restore_block
     # Ein inzwischen vorbereiteter Entwurf (Text, Zitat oder Datei) wird nie
     # von einem spaeter abgebrochenen Hintergrund-Run ueberschrieben.
-    assert "composerOccupied" in restore_block
     assert "if (composerOccupied) return;" in restore_block
     assert "composerAttachments.length > 0" in restore_block
 
-    # Fehler vor Fan-out und Cancel waehrend prepare gehen durch denselben
-    # rungebundenen Restore-Pfad.
     assert "if (failedBeforeFanout) restoreComposerAfterUnsentRun(context);" in query
     assert 'if (registry.isVisible(context.runId) && context.phase === "prepare")' in query
 
 
 def test_archived_questions_clamp_like_the_active_one():
-    """Eine lange Frage bleibt auch im Verlauf eingeklappt (acht Zeilen).
-    Ohne Clamp hat ab dem zweiten Turn jede lange Frage den Thread wieder
-    aufgerissen — es sah aus, als schalte sich das Einklappen im Lauf eines
-    Chats ab (User-Befund 2026-08-14)."""
+    """Eine lange Frage bleibt auch im Verlauf eingeklappt (acht Zeilen)
+    (User-Befund 2026-08-14)."""
     css = read("static/css/shell.css")
-    run = read("static/js/consensus-run.js")
+    history = read("static/js/thread-history.js")
     core = read("static/js/app-core.js")
 
     clamp_block = css.split(
@@ -314,44 +188,39 @@ def test_archived_questions_clamp_like_the_active_one():
     assert "-webkit-line-clamp: 8" in clamp_block
     assert ".thread-history-question.is-long .thread-ask-more" in css
 
-    history_block = run.split("appendHistoryTurn(", 1)[1].split(
-        "archiveCurrentExchange()", 1
+    turn = history.split("buildHistoryTurn(turnData, options = {})", 1)[1].split(
+        "renderStoredTurn(turnData)", 1
     )[0]
-    assert 'questionMore.className = "thread-ask-more"' in history_block
-    assert "window.App.observeQuestionFold?.(question, questionText);" in history_block
+    assert 'questionMore.className = "thread-ask-more"' in turn
+    assert "window.App.observeQuestionFold?.(question, questionText);" in turn
 
-    # Ein Klick auf den Link gehoert zu der Frage, unter der er steht — nicht
-    # fest zum aktiven Kopf.
     assert 'event.target.closest(".thread-ask-more")' in core
     assert 'more.closest(".thread-ask, .thread-history-question")' in core
 
 
-def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
+def test_archived_turns_use_the_same_drawer_row_as_a_saved_answer():
     """Differences, Sources und Model answers liegen im Verlauf NEBEN-, nicht
-    untereinander: dieselben .consensus-tab-Chips wie im Fuss der aktiven
-    Antwort. Drei gestapelte <details> haben jeden alten Turn im Thread um
-    drei Zeilen verlaengert, obwohl alles zugeklappt war."""
-    run = read("static/js/consensus-run.js")
+    untereinander: dieselben .consensus-tab-Chips wie im Fuss der Antwort."""
+    import re
+
+    history = read("static/js/thread-history.js")
     css = read("static/css/shell.css")
 
-    history_block = run.split("appendHistoryTurn(", 1)[1].split(
-        "archiveCurrentExchange()", 1
+    turn = history.split("buildHistoryTurn(turnData, options = {})", 1)[1].split(
+        "renderStoredTurn(turnData)", 1
     )[0]
-    assert "thread-history-details" not in history_block
-    assert '"consensus-footer-tabs thread-history-tabs"' in history_block
-    # Class membership is the contract; the DOM regression in
-    # stored-turn-markers.test.mjs exercises each real drawer and its own turn.
-    import re
-    drawer_classes = re.search(r'tab\.className = "([^"]+)"', history_block)
+    assert "thread-history-details" not in turn
+    assert '"consensus-footer-tabs thread-history-tabs"' in turn
+    drawer_classes = re.search(r'tab\.className = "([^"]+)"', turn)
     assert drawer_classes is not None
     assert {"consensus-tab", "consensus-evidence-action"} <= set(drawer_classes[1].split())
-    assert '"Review differences",\n          "Differences",' in history_block
-    assert 'addDrawer("Sources", "Sources", turnSources.length' in history_block
-    assert 'addDrawer("Compare answers", "Answers", usableAnswers.length' in history_block
+    assert '"Review differences",\n          "Differences",' in turn
+    assert 'addDrawer("Sources", "Sources", turnSources.length' in turn
+    assert 'addDrawer("Compare answers", "Answers", usableAnswers.length' in turn
     # Der Verlauf teilt sich den DOM mit dem Live-Renderbaum: keine ID darf
     # dort ein zweites Mal auftauchen.
-    assert "`threadHistoryPanel-${++panelSequence}`" in history_block
-    assert 'tab.setAttribute("aria-controls", panelId)' in history_block
+    assert "`threadHistoryPanel-${++panelSequence}`" in turn
+    assert 'tab.setAttribute("aria-controls", panelId)' in turn
 
     assert ".thread-history-footer" in css
     assert ".thread-history-panel[hidden]" in css
@@ -359,7 +228,7 @@ def test_archived_turns_use_the_same_drawer_row_as_the_live_answer():
 
 def test_composer_row_is_reduced_to_attach_run_switch_and_send():
     """The mode explainer and the clear button left the composer; the one
-    mode selector (Compare / Consensus / Agent) is its only mode control."""
+    mode selector (Agent / Compare) is its only mode control."""
     template = read("templates/index.html")
 
     assert 'id="attachTrigger"' in template
@@ -397,10 +266,8 @@ def test_consensus_loader_matches_the_run_visual_language():
 
     Frueher lief hier eine wandernde Linie (.is-synthesizing::after mit
     @keyframes consensusLoadingLine) und davor ein Sweep-Verlauf. Beides wurde
-    bewusst entfernt: der gefuehrte Lauf (#consensusRun) ist die EINZIGE
-    Fortschrittsanzeige, die Antwortflaeche selbst zappelt nicht mehr. Der Test
-    haelt genau diese Entscheidung fest, statt die geloeschte Animation zu
-    fordern.
+    bewusst entfernt: die Antwortflaeche selbst zappelt nicht. Der Test haelt
+    genau diese Entscheidung fest, statt die geloeschte Animation zu fordern.
     """
     consensus_css = read("static/css/components-consensus.css")
     feedback_css = read("static/css/components-feedback.css")

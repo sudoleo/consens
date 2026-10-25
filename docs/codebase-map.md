@@ -1,5 +1,30 @@
 # consens.io — Codebase Map
 
+Consensus nur noch auf dem Server (25.10.2026): Die App bietet zwei Modi,
+**Agent** (Standard) und **Compare**. Der Consensus-Modus ist aus dem Browser
+entfernt; die Pipeline (`consensus_pipeline.py`) läuft weiter für Watches,
+API v1 und kuratierte Topics.
+- Entfernt: Moduswahl Consensus (`run_mode` kennt nur `agent|compare`, ein
+  gespeichertes `consensus` liest sich als ungewählt, Browser und Server),
+  `consensus-progress.js` (geführter Lauf, Skip, „Run again“),
+  `consensus-lifecycle.js`, `chat-session.js`, der Lauf in `consensus-run.js`
+  (`executeConsensusRun`, `getConsensus`, Recovery), die Resolve-Runde, die
+  Consensus-Engine im Modell-Picker, der Consensus-Teil der Demo,
+  `saveBookmarkConsensus`/`recordModelVote` in `firebase.js`.
+- Umbenannt/neu: `thread-history.js` (Verlauf, vorher `consensus-run.js`),
+  `consensus-footer.js` (Anzeige und Fuss gespeicherter Consensus-Antworten),
+  `App.chatPersistenceErrorMessage` liegt in `app-text.js`.
+- Bleibt: gespeicherte Consensus-Chats sind lesbar (Antwort, Marker, Verdict,
+  Differences inkl. gespeicherter Resolve-Ergebnisse, Quellen, Antworten,
+  Share/Watch/Cite), aber nicht fortsetzbar. Ihre Antworten liegen hinter
+  „Compare answers“, auch wenn die nächste Nachricht als Compare läuft
+  (`agent-mode.js` `updateAgentModeUI`: sichtbares `#consensusOutput` ohne
+  `direct-comparison-active`). Ohne Ergebnis sagen Share/Watch „Nothing to
+  share yet“/„Nothing to watch yet“. Die Server-Endpunkte `/consensus`,
+  `/resolve`, `/bookmark/consensus` und die Consensus-Turn-Routen unter
+  `/chats` ruft die App nicht mehr auf.
+- Details: „Modus: Agent und Compare“ und „Gespeicherte Consensus-Chats“ in §4.
+
 Google als Quelle (03.10.2026): Google ist in Consens eine **Quelle von Belegen,
 keine Hand**. Agent-Chats lesen Gmail und Kalender pro Nachricht und nehmen Dateien
 aus Google Drive als normale Anhänge; zurückgeschrieben wird standardmäßig nichts.
@@ -570,7 +595,8 @@ den Fixture-Texten geschätzt (~4 Zeichen/Token). `demo(null)` gibt alles frei
 Demo-Ansicht). Ein echter Lauf
 (`registry.visible()`), der Hero-Zustand oder „New chat“ beenden die
 Demo-Ansicht. Die Demo-Texte (Fixtures und Landing-Mockups) kommen seit
-2026-10-02 ohne Geviertstriche aus. Compare und Consensus behalten ihre bisherigen Demo-Abläufe.
+2026-10-02 ohne Geviertstriche aus. Compare behält seinen bisherigen Demo-Ablauf (sechs Antworten,
+danach der Login-Hinweis); der Consensus-Demo-Ablauf ist am 2026-10-25 mit dem Modus entfallen.
 Sie bleibt vollständig clientseitig und ruft weder
 `recordModelVote` noch `/consensus`/Bookmark-Persistenz auf; Demo-Läufe verändern
 damit weder das Best-answer-Nutzungssignal noch `differences_stats`.
@@ -1496,8 +1522,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Prozentwert und Reset stehen im `title`/`aria-label` und im Panel. Panel:
   Kopf „Today's allowance" + Plan, eine Hauptzahl (`#quotaPercent` „62 %
   left today"), dünner Balken `#quotaTrack` (`role=meter`), Reset-Zeile, eine
-  Detailzeile (`#quotaDetail`: „409k of 660k tokens · a Consensus run uses
-  about 8 %" bzw. in Agent „Agent books each model call"), Watches als
+  Detailzeile (`#quotaDetail`: „409k of 660k tokens · A Compare run uses
+  about 5 %" bzw. in Agent „Agent books each model call"), Watches als
   eigene kleine Zeile (aus `#watchUsageDisplay`, eigenes Kontingent) und nur
   bei Bedarf eine Fußnote (Holds laufender Arbeit, Schätzungen, leeres Konto,
   veralteter Stand). Ampelfarbe nur auf Ring-Bogen und Balkenfüllung
@@ -1648,7 +1674,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   selbst um. Die Fakten-Hülle bekommt `flex: 0 1 auto` und wird per `:has()`
   ausgeblendet, wenn sie weder Fakten noch ein sichtbares „Run again" trägt;
   mit `flex-grow` bzw. als leere Hülle hat sie die Aktionen sonst grundlos in
-  den Umbruch gedrängt. Das Handy behält sein gestapeltes Raster.
+  den Umbruch gedrängt. Das Handy behält sein gestapeltes Raster. (Seit
+  2026-10-25 gibt es Fakten-Hülle und „Run again“ nicht mehr, siehe
+  `consensus-footer.js`.)
   Der Vorgängerschlüssel `consensio.showAgreementScore.v1` wird beim Lesen
   einmal migriert (`false` = `summary`) und danach entfernt; er wird nicht mehr
   mitgeschrieben.
@@ -2127,7 +2155,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `scope(el, {chatId, turnId, checked})` (`data-task-turn`/`data-task-chat` am
   Antwort-Element: `#agentAnswerBody` in `agent-chat.js` für gespeicherten und
   fertigen Live-Turn, `#consensusAnswerBody` in `run-view.js` über
-  `completedBasis`, Verlaufs-Turns in `consensus-run.js::buildHistoryTurn`;
+  `completedBasis`, Verlaufs-Turns in `thread-history.js::buildHistoryTurn`;
   wandert der Live-Turn in den Verlauf, nimmt das Element die Attribute mit).
   Ohne Turn (Einzelantworten im Leser, laufende Antwort) bleiben Kästchen
   `disabled`. Gezählt wird die Reihenfolge der Kästchen dieser Antwort (nicht
@@ -2352,159 +2380,47 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Button-Selektor auszunehmen, entfällt seit `.btn` opt-in ist.)
   **Folgefalle:** wer den Text einer Antwortbox liest, muss `textContent`
   nehmen — `innerText` liefert fuer `display:none` den leeren String. Die
-  Zaehlung in `consensus-lifecycle.js`, die Zitations-Modelle in
-  `consensus-run.js`/`consensus-actions.js` und `isBoxDone` in
-  `consensus-progress.js` sind entsprechend umgestellt.
-  Seit **2026-08-31** ist die globale Stream-Fortschritts-Bruecke
-  (`--stream-progress`, der 120-ms-Agent-Ticker und
-  `window.App.agentMode.streamProgressByResponseId()`) **entfallen**.
-  `consensus-progress.js` berechnet die visuellen Modell-Balken stattdessen
-  lokal aus dem sichtbaren Antwortstream, haelt sie innerhalb eines Laufs
-  monoton und setzt sie erst beim terminalen Modellstatus auf 100 Prozent.
+  Zitations-Modelle in `consensus-actions.js` sind entsprechend umgestellt.
   Seit 2026-08-31 zeigt die Moduswahl **immer die Einstellung fuer die
   naechste Nachricht** (heute `App.runMode`), nie den projizierten Lauf.
   Die Body-Klassen (`agent-mode-enabled` &c.) folgen weiterhin dem Lauf auf
-  dem Schirm. In Compare gibt es keinen Folgeturn, jede Frage ist ein
-  eigener Lauf — `isArmed()` in `consensus-run.js` prueft
-  `App.runMode.pipeline()`, damit der Platzhalter kein Follow-up verspricht.
-- **`consensus-progress.js`** — der **gefuehrte Lauf** `#consensusRun` unter dem
-  Input, seit 2026-07-27 die **einzige** Fortschrittsanzeige (auch im Agent
-  Mode; dessen Panel ist als Progress-Flaeche stillgelegt, siehe unten) — und
-  seit **2026-08-31 nur noch im Agent Mode ueberhaupt**: im Direktvergleich
-  gibt es keinen Ablauf anzukuendigen (sechs Antworten, danach nichts), also
-  keinen Block. Gesperrt an zwei Stellen: `run-view.js::syncPipeline` ruft die
-  Pipeline bei `agentMode === false` gar nicht erst, und `isDirectComparison()`
-  (Body-Klasse `direct-comparison-active`) haelt `show()`/`onPrepare`/
-  `onQueryStatus` auch gegen fremde Aufrufer zu (Lifecycle, Demo, Replay).
-  Vier Phasen in dieser Reihenfolge: `prepare → answers → consensus →
-  differences`, genau eine aktiv. Seit **2026-09-30** ist der Block eine
-  ruhige Karte mit Stepper-Kopf (`#runSteps`, je `li.run-step[data-step]`
-  mit `data-status="done|active|pending"`; erledigt = Haken, aktiv =
-  pulsierender Punkt, offen = leerer Kreis), rechts `#runMeta`
-  (`Preset · N models`, gesetzt beim Fan-out) und die Uhr `#runTime`. Die
-  frueheren grauen Haken-Zeilen (`#runPast`), die Taetigkeitszeile
-  (`#runLabel`, drei Striche, Textschimmer) und die `Next: … → …`-Zeile sind
-  entfallen: der Stepper nennt alle Schritte zugleich. Die Dauer der
-  Antwortphase steht als Tooltip am erledigten Schritt `answers`. Schmale
-  Karten (Container-Query bis 600 px) zeigen statt des Steppers eine Zeile
-  (`#runCompactLabel` + `#runCompactCount`) ueber vier Segmenten und darunter
-  `#runMeta` plus `#runMetaNext`; 601–680 px ruecken das Preset unter die
-  Schritte. Die Modell-Zeilen (`#runDetail`) existieren nur waehrend der
-  Antwortphase: Status-Icon (Spinner/Haken/gestrichelter Kreis, ein SVG,
-  CSS waehlt per `data-state`), Name, 4-px-Balken, reservierte Skip-Spalte
-  und ein Wort Status rechts: `Writing`, `Thinking`, `Waiting`, bei Abschluss
-  nur die **gemessene** Zeit (`12.3s`), terminal `No answer` (Fehler),
-  `Skipped`, `Canceled`. Die Zeichenzahl pro Modell (seit 2026-09-11 samt
-  260-ms-Zaehlanimation) ist wieder aus der Zeile entfernt und steht nur noch
-  im Tooltip (`1,234 characters received so far`); gezaehlt wird weiter in
-  Unicode-Codepoints aus dem projizierten rohen `dataset.consensusAnswer`,
-  der Wert treibt ausserdem die Balkenschaetzung. Ohne Antworttext laufen
-  `Thinking`/`Waiting` als wandernder Kurzbalken statt einer geratenen
-  Fuellung; `Writing` fuellt monoton mit Lichtstreifen, erst der terminale
-  Status setzt 100 %. Ausgefallene Modelle (`error|skipped|canceled`) sinken
-  per `order` ans Ende, bekommen eine leere gestrichelte Schiene, und
-  `#runNote` sagt es einmal ruhig: `Claude didn't answer. The consensus uses
-  the other 5 answers.` (nur in Antwort- und Consensus-Phase; in
-  `differences` steht dort der Hinweis auf das unbeteiligte Pruefmodell).
-  Phasen ohne ehrlichen Prozentwert laufen indeterminiert
-  (`.run-track.is-indeterminate`); waehrend des Fan-outs ist der Gesamtbalken
-  ausgeblendet. Nur `#runStatus` ist eine Live-Region und wird bei Phasen-/
-  Abschlusswechsel aktualisiert. `Skip` erscheint in der von Anfang an
-  reservierten Aktionsspalte ohne Layoutsprung; die rechte Kante der
-  Statusangaben stimmt mit der Uhr im Kopf ueberein. Bis 640 px stehen
-  Icon+Name, Skip und Status ueber einem durchgehenden Balken (Touch: 44 px
-  Zeilen- und Skip-Hoehe). Reduced Motion stoppt Puls, Spinner, Sweeps,
-  Lichtstreifen und Uebergaenge; Forced Colors blendet den Balkenschimmer aus.
-  Der 200-ms-Ticker bewegt seit 2026-10-15 nur Uhr und Modellzeilen
-  (`renderDetail`: Fuellung aus dem Stream, Skip-Angebot); Schritte, Zaehler und
-  `#runNote` rendert der MutationObserver bei `data-response-state`,
-  `data-response-error`, `data-response-skipped` und `class`. In einem
-  versteckten Tab (`document.hidden`) laeuft kein Ticker; `visibilitychange`
-  zeichnet beim Zurueckkommen sofort nach (die Uhr zaehlt ab `startedAt`).
-  Die Landingpage (Szene 02, `landing-scenes.js` + `.lp-run*` in
-  `landing.css`) spiegelt diesen Aufbau mit denselben Schritten, Wörtern und
-  Zustaenden.
-  Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
-  `#runProvenance` unter der Antwort. Desktop: Differences / Answers / Sources
-  bilden die primäre Zeile, Share / Watch / Cite stehen daneben. Eine zweite,
-  zurückhaltende Zeile enthält Quellenstatus und Laufdetails. Bis 640 px
-  nutzen die sichtbaren Navigationspunkte gleichmäßig die volle Breite;
-  `.consensus-evidence-action` zeigt dort Icon und Anzahl über dem Kurzlabel
-  mit mindestens 56 px hohen Touch-Flächen. Auf Desktop stehen die dezenten
-  15-px-Icons vor dem Label, mit mindestens 44 px hohen Zielen. Die Gestaltung
-  gilt auch für archivierte Turns aus `consensus-run.js` und
-  `model-answer-reader.js::registerTurn`. Quellenstatus und Laufdetails
-  (Modellzahl/Dauer) sind mobil ausgeblendet. Share/Watch/Cite wandern bis
-  1099 px mit demselben DOM in den mobilen Header (siehe `mobile-header.js`);
-  „Run again“ bleibt unten rechts. Die Header-Icons behalten 44-px-Ziele,
-  aria-label und Tooltips.
-  `.run-provenance` nutzt Grid mit Varianten für ausgeblendetes Verdict.
-  Die stabilen Hosts `#consensusFooterTabs`, `#consensusFooterActions` und
-  `.consensus-footer-facts` stehen direkt darin. Sichtbare Kurzlabels kommen
-  weiterhin aus `data-short`; die vollständigen Namen bleiben für Screenreader.
-  Der Status `#consensusSourceCheckStatus` liegt separat in
-  `.consensus-footer-source-status` als `#consensusSourceCheckButton`. Dieser
-  öffnet über `sourceVerification.openResults` bei v4 die konkrete Prüfbegründung
-  in Differences: zuerst eine nicht abgeschlossene/ausgelassene Prüfung, sonst
-  das erste Ergebnis. Nur die zugehörige Karte wird aufgeklappt; der Prüfbereich
-  erhält Fokus, wird in Sicht gescrollt und für 2,8 Sekunden dezent hervorgehoben.
-  Polling erhält den verbleibenden Hinweis, ein anderer Run/Antwortstand oder
-  Clear entfernt ihn. Reduced Motion verzichtet auf Animation und sanftes Scrollen;
-  Forced Colors nutzt einen Systemrahmen. Legacy-Prüfungen und v4 ohne gebundenes
-  Einzelergebnis öffnen und markieren den Statusbericht in Sources.
-  Sources referenziert den Status auch mobil per
-  `aria-describedby`. Mobil zeigt `data-check-state` am Sources-Tab ein Häkchen
-  nur bei vollständiger positiver v3-Prüfung; `!` bedeutet Quellenprobleme,
-  `?` unklare/unvollständige oder technisch nicht verfügbare Ergebnisse. Der
-  Statushinweis steht in `.consensus-tab-meta` neben der Anzahl, ohne die
-  symmetrische Ausrichtung der Labels zu verschieben. Pending
-  behält den Label-Schimmer. Ohne Prüfung bleibt das Icon leer; ein neuer Lauf
-  setzt den Zustand zurück. Leere Statuszeilen und Status bei verstecktem Sources-Tab
-  sind nicht sichtbar. Die Markierungserklärung und der Hide/Show-Button sind
-  entfernt; ihre Aufgabe übernimmt Settings → Display.
-  Der Run-again-Knopf setzt über `#newRunButton` den normalen Hero-/Composer-
-  Ausgangszustand zurück und füllt die letzte Frage vor, sendet aber nicht
-  automatisch. Eine Wiederholung ist ein
-  **vollstaendiger zweiter Lauf** und kostet entsprechend Kontingent; seit
-  2026-07-28 steht der Preis deshalb am Knopf (`#runReplayCost`, seit
-  2026-10-01 „· about 8 % of today" statt „uses 1 run", ohne bekanntes Konto
-  leer) und nach dem Klick bis zum Absenden ueber dem Eingabefeld
-  (`#composerRunNotice`). Beides liest `labelRunAgain` / `prepareRunAgain` in
-  `consensus-progress.js` aus `App.tokenBudget.runShare/canStart` — derselben
-  Quelle wie der Ring; `consensio:token-budget` zieht das Label nach.
+  dem Schirm: ein Compare-Lauf setzt `agent-mode-enabled` aus, ohne Lauf folgt
+  sie der Wahl (Agent = an). In Compare gibt es keinen Folgeturn, jede Frage
+  ist ein eigener Chat.
+- **`consensus-footer.js`** (seit 2026-10-25, ersetzt `consensus-progress.js`
+  und `consensus-lifecycle.js`) — was eine **gespeicherte Consensus-Antwort**
+  (Chats von vor dem 25.10.2026) auf dem Schirm braucht: `window.revealConsensusOutput`
+  / `window.hideConsensusOutput` (Klassen `is-hidden`/`is-visible` an
+  `#consensusOutput`) und `window.App.consensusFooter.{render, clear}` fuer den
+  **Provenance-Fuss** `#runProvenance` unter der Antwort. Der gefuehrte Lauf
+  `#consensusRun` (Stepper, Modellzeilen, Skip, Uhr), die Lauf-Fakten
+  (`#runProvenanceFacts`) und „Run again“ (`#runReplayButton`,
+  `#composerRunNotice`) sind mit dem Consensus-Lauf im Browser entfallen.
+  Desktop: Differences / Answers / Sources bilden die primäre Zeile,
+  Share / Watch / Cite stehen daneben. Bis 640 px nutzen die sichtbaren
+  Navigationspunkte gleichmäßig die volle Breite; `.consensus-evidence-action`
+  zeigt dort Icon und Anzahl über dem Kurzlabel mit mindestens 56 px hohen
+  Touch-Flächen. Auf Desktop stehen die dezenten 15-px-Icons vor dem Label,
+  mit mindestens 44 px hohen Zielen. Die Gestaltung gilt auch für archivierte
+  Turns aus `thread-history.js` und `model-answer-reader.js::registerTurn`.
+  Share/Watch/Cite wandern bis 1099 px mit demselben DOM in den mobilen Header
+  (siehe `mobile-header.js`). `.run-provenance` nutzt Grid mit Varianten für
+  ausgeblendetes Verdict; die stabilen Hosts `#consensusFooterTabs` und
+  `#consensusFooterActions` stehen direkt darin. Sichtbare Kurzlabels kommen
+  aus `data-short`; die vollständigen Namen bleiben für Screenreader.
+  `render()` zeigt jeden Drawer nur mit Inhalt und zaehlt aus dem DOM:
+  Differences die gerenderten `.diff-card` (der Freitext-Fallback zeigt den
+  Chip ohne Zahl), Sources die Eintraege von `#consensusSourcesList`, Compare
+  answers die eingeschlossenen Antwortboxen; `firebase.js::loadSingleBookmarkUI`,
+  `consensus-insights.js` (nach dem Markieren) und
+  `app-init.js::renderEvidenceSources` rufen es. `clear()` blendet den Fuss mit
+  dem Wechsel der Ansicht aus (`run-view.js` ohne Lauf, Compare-Lauf, Clear).
   Das Verdict bleibt unter der Antwort: Ampelfarbe auf der Agreement-Zahl,
-  Headline mit dem schwerwiegendsten Thema, eine Meta-Zeile. Der Gauge
-  (`.verdict-gauge`, Zahl /100 und Messbalken) ist weiterhin zentral in
-  `components-consensus-insights.css` definiert. Die Footer-Hülle trägt keine
-  Summary-Fläche; eine feine Unterkante trennt ein sichtbares Verdict von
-  der Navigation. Full/Summary/Hidden beeinflussen ausschließlich das Urteil.
-  Die Tabs bleiben rahmenlos mit Hover-/Fokus- und Offen-Zuständen.
-  Der Footer erscheint bei `stage === "idle"|"done"|"differences"`;
-  Quellen sind nach fertiger Synthese unabhängig von laufenden Judges zugänglich.
-  Geschlossene Differences-/Sources-Panels nehmen keinen zusätzlichen Platz ein;
-  geöffnete Panels behalten ihre interne Oberkante. Öffentliche Marketing-
-  Mockups haben eigene Footer-Strukturen und werden durch diese App-Hülle
-  nicht geändert.
-  Beim Oeffnen fahren alle drei Disclosures ihren jeweiligen Inhaltsanfang
-  nach dem Layout per sanftem `scrollIntoView({block:"nearest"})` an:
-  Differences den Drawer, Sources den ersten Quellen-Eintrag und Compare
-  answers die erste eingeschlossene Modellantwort.
-  `onConsensusEnd()` rendert ihn auch ohne aktive Query-Pipeline (spaeter
-  manuell gestarteter Consensus); `firebase.js::loadSingleBookmarkUI` tut
-  dasselbe explizit fuer wiederhergestellte Bookmarks.
-  Die strittigen
-  Stellen werden aus den tatsaechlich gerenderten Marken gezaehlt, nicht
-  separat gebucht; `consensus-insights.js` ruft dafuer nach dem Markieren
-  `renderProvenance()` nach; `app-init.js::renderEvidenceSources` ebenso fuer
-  den Quellen-Chip. Bruecke: `window.App.consensusPipeline.{onPrepare,
-  onQueryStatus,onConsensusStart,onConsensusText,onDifferencesStart,onConsensusEnd,
-  renderProvenance,dismiss}`. `onPrepare` kommt aus `query-send.js` **vor**
-  `/prepare`, `onDifferencesStart` aus dem ersten `differences.delta`
-  (`consensus-run.js`). Seit 2026-10-09 weicht die Karte, sobald Konsens-Text
-  existiert (`run-view.js::syncPipeline` → `onConsensusText()` → `hideNow()`),
-  solange darunter noch nichts steht; vorher klappte sie ~0,7 s nach der
-  fertigen Antwort zu und zog sie 100–130 px hoch. Der Lauf lebt in der
-  Provenienzzeile weiter.
+  Headline mit dem schwerwiegendsten Thema, eine Meta-Zeile; Full/Summary/
+  Hidden (Settings) beeinflussen ausschließlich das Urteil. Beim Oeffnen fahren
+  die Disclosures ihren Inhaltsanfang per sanftem
+  `scrollIntoView({block:"nearest"})` an; nimmt der Antwortleser den Drawer
+  (`answerReader.openPanel`), oeffnet er dort.
 - **Composer-Hoehe** — `composer-autosize.js` liegt seit 2026-10-20 im
   `head`-Bundle (vor `app-bootstrap.js`): `App.sizeQuestionInput(input,
   {instant})` misst und setzt die Hoehe ohne Listener, damit
@@ -2679,15 +2595,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   angeschnittener Streifen der vierten Zeile sichtbar.
   Denselben Clamp und denselben „Show full question“-Link bekommt jede
   archivierte Frage im Verlauf (`.thread-history-question`, gebaut in
-  `consensus-run.js::appendHistoryTurn`); der Klick-Handler in app-core.js
+  `thread-history.js::buildHistoryTurn`); der Klick-Handler in app-core.js
   hängt am `.thread-ask-more`-Knopf, nicht an einer festen ID. Die
   **Demo** laesst ihre Frage waehrend des animierten Laufs zusaetzlich im
   Composer stehen (echte Laeufe leeren ihn), damit der selbst getippte Text
   nicht mitten im Ablauf verschwindet. Nach der fertigen Antwort ersetzt bei
   Gaesten `#postDemoLoginPrompt` den ganzen deaktivierten Composer; die Frage
   bleibt im Thread-Kopf sichtbar. Der Composer wird beim Senden **geleert** —
-  deshalb ist `window.lastQuestion` die Quelle fuer `getConsensus` und die
-  Citation, nicht mehr `#questionInput`. **Seit 2026-08-15 sofort** (im Thread;
+  deshalb ist `window.lastQuestion` die Quelle fuer die Citation, nicht mehr
+  `#questionInput`. **Seit 2026-08-15 sofort** (im Thread;
   der Direktvergleich leert weiter erst nach `/prepare`): zwischen Klick und
   dem Moment, in dem der Lauf den neuen Turn aufmacht, liegen `/prepare` und im
   laufenden Gespraech das Binden des Chat-Kontexts. Ab der dritten Frage dauerte
@@ -2751,8 +2667,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   sofort; Verkleinerung des Inhalts zieht nie nach oben. Dialoge, versteckte Tabs,
   Run-/Kontowechsel stoppen ausstehende Animationen. Verhaltenstests liegen in
   `tests/js/chat-scroll.test.mjs` und `tests/e2e/test_chat_scroll_frontend.py`.
-  Der gefuehrte Lauf `#consensusRun` liegt jetzt als
-  Container-Kind im Thread (unter der Frage), nicht mehr in der Input-Section.
+  Der gefuehrte Lauf `#consensusRun` lag als Container-Kind im Thread (unter
+  der Frage); seit 2026-10-25 gibt es ihn nicht mehr.
   Antwort-Typo im Mockup-Mass: `.consensus-main`-H2 als Eyebrow, Body 1.03rem/
   1.7 auf max. 64ch; `.consensus-main` ist `overflow:visible`, weil der alte
   `overflow-x:auto` mit den -8px-Copy-Icons einen Quer-Scrollbalken unter der
@@ -2805,9 +2721,6 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `#modeExplainerTrigger` samt `#modeExplainer`-Section (Modi werden dort
   erklaert, wo man sie schaltet) und `#clearButton` (→ „New comparison").
   Alle betroffenen JS-Stellen waren bereits null-gesichert.
-- **`consensus-lifecycle.js`** — Consensus-Sichtbarkeit/Availability,
-  Run-State, Abort/Cancel, Run-ID-Gating, Auto-Consensus-Persistenz. Exponiert die
-  `window.App.consensusLifecycle.*`-Brücke (siehe §4/§8).
 - **`share-dialog.js`** — `window.openShareDialog`, Share-Liste und die gemeinsame
   `window.App.sharedModal.*`-Steuerung für den Share-/Watch-Dialog (einziger
   innerer Scrollbereich, Background-Scroll-Lock, Escape/Focus-Restore). Esc
@@ -2833,7 +2746,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Verlauf nimmt beim Klick den Chat auf dem Bildschirm. `App.answerShare.open`
   öffnet den Dialog für einen Turn (auch aus dem Chat-Menü, wenn der Chat als
   laufender Agent-Run sichtbar ist, `firebase.js shareBookmark`).
-- **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus.
+- **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus. Das
+  Menü schließt beim Scrollen nur, wenn sich die Seite wirklich bewegt (ein
+  Scroll-Ereignis ohne Bewegung nach dem ersten Tippen in einem geöffneten
+  Chat schloss es sofort wieder, 2026-10-25).
 - **`watch-fields.js`** (seit 2026-10-20, vor `watch.js`) —
   `window.App.watchFields`: die Bausteine, aus denen der „New watch“-Dialog
   und die Karten-Einstellungen gebaut sind (Apple-Audit J7): `goalList`
@@ -2891,7 +2807,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `agent-chat.js` `project()` (ohne eigene Agent-Watch-Karte), in einem wieder
   geöffneten Chat aus dem Basis-Zweig von `renderShell` (Frage des
   `currentTurn`, nie die des vorher gezeigten Chats; ohne Antwort weg) und an
-  jedem Agent-Turn des Verlaufs aus `consensus-run.js` `buildHistoryTurn`
+  jedem Agent-Turn des Verlaufs aus `thread-history.js` `buildHistoryTurn`
   (`history: true`, außerhalb der Seite gebaut, auch mit vorbereiteter Watch,
   weil der Verlauf deren Karte nicht zeigt). Auf dem Telefon (≤540 px)
   sind Watch und Share seit 2026-10-22 zwei weitere Zellen der Belegleiste:
@@ -3470,69 +3386,57 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   ursprüngliche Start-/End-Offsets, damit Zitatmarkierungen gültige DOM-Ranges
   bilden. Suchtext und Zitat werden identisch pro Unicode-Codepoint normalisiert
   (auch griechisches Sigma und Zeichen außerhalb der BMP).
-- **`consensus-run.js`** — `window.App.executeConsensusRun(context, options)` ist
-  der einzige Consensus-Ausführungspfad: baut `/consensus`-Payload, fährt den
-  SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
-  abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und
-  Modellantworten. Payload, Stream, Turn-Disposition und Persistenz bleiben am
-  übergebenen `RunContext`; nur dessen sichtbare Projektion darf den Haupt-DOM
-  ändern. `window.getConsensus` ist nur noch eine Brücke: sie delegiert an den
-  sichtbaren, laufenden Context und startet sonst nichts (der alte DOM-/
-  Singleton-Ablauf ist seit 2026-10-04 entfernt). Bricht der Stream ab, liest
-  `recoverConsensusResult` den Turn owner-gebunden nach: `completed` ersetzt
-  Consensus **und** Modellantworten durch die gespeicherten (Replay, zählt nicht
-  als `app_consensus_completed`), `failed` ist eine echte Disposition und gibt
-  die Gesprächssperre frei; nur unbekannt/pending bleibt gesperrt. Ein
-  Tokenlimit-Fehler öffnet für den sichtbaren Lauf das `#runBlocked`-Panel.
-  `parseBestModel`.
-- **`chat-session.js`** — `window.App.createChatSession(initial)` erzeugt pro
-  `RunContext` eine private Chat-Zustandsmaschine für completed Basis, pending
-  Turn/Context, stabile `client_request_id`, Usage-Key und whitelisted
-  Run-Metadaten. Sie hält keine Provider-Antworten, kapselt Chat-/Turn-Anlage,
-  Context-Build samt begrenztem 202-Retry und owner-gebundene Turn-
-  Reconciliation. `window.App.chatSession` bleibt nur der Kompatibilitäts-
-  Spiegel der sichtbaren Ansicht. Das Modul muss nach `app-core.js`, aber vor
-  `consensus-run.js` geladen werden.
+- **`thread-history.js`** (bis 2026-10-25 `consensus-run.js`) —
+  `window.App.followup`: baut den Verlauf ueber der neuesten Antwort eines
+  Chats aus den gespeicherten Turns (`renderStoredTurns`, `buildHistoryTurn`,
+  `turnKey`, `clearHistory`), fuer Agent-Turns und die Turns gespeicherter
+  Consensus-Chats; `lastExchange` haelt die gespeicherte Consensus-Antwort auf
+  dem Schirm fuer den Antwortleser (`showExchange` aus
+  `firebase.js::loadSingleBookmarkUI`, `reset` beim Wechsel), `render()` /
+  `syncInputLock()` ziehen Login-Schranke und Platzhalter nach („Enter your
+  question“; Agent setzt danach seinen eigenen). Der Consensus-Lauf im Browser
+  (`executeConsensusRun`, `window.getConsensus`, `/consensus`-SSE,
+  `recoverConsensusResult`, Follow-up-Kontext `offer`/`consume`) ist
+  entfallen; gespeicherte Consensus-Chats werden nicht mehr fortgesetzt.
 - **`run-view.js`** — einziger Projektor von `runRegistry.visibleRunId` in den
-  gemeinsam genutzten Ergebnis-DOM und die Kompatibilitäts-Globals. Er baut
-  Modellboxen, Quellen, Consensus/Differences, Chat-Verlauf, Pipeline und
-  gefrorene Mode-/Modell-Labels aus dem Context wieder auf. Registry-Ereignisse
-  dürfen für Hintergrundläufe nur deren anklickbare Sidebar-Zeile aktualisieren
-  (Preparing/Models answering/Writing consensus/Completed/Failed/Canceled).
+  gemeinsam genutzten Ergebnis-DOM und die Kompatibilitäts-Globals. Ein
+  Agent-Lauf geht an `agent-chat.js` (`agentChat.project`); jeder andere Lauf
+  ist seit 2026-10-25 ein Compare-Lauf: Modellboxen, Quellen und gefrorene
+  Modell-Labels aus dem Context, Direktvergleichsansicht. Beim ersten Bild
+  eines Laufs leert er den Verlauf (`followup.clearHistory`) und nimmt eine
+  vorher gezeigte gespeicherte Consensus-Antwort samt Markern und Fuss vom
+  Schirm (`clearConsensus`). Registry-Ereignisse dürfen für Hintergrundläufe
+  nur deren anklickbare Sidebar-Zeile aktualisieren (Preparing/Models
+  answering/Completed/Failed/Stopped; Agent: Working/Thinking/Writing answer).
   Beim Streaming bleiben unveränderte Modellboxen (inklusive Ladeindikatoren)
-  und abgeschlossene History-Turns im DOM erhalten. Inhalts-Signaturen beziehen
-  Status, Fehler und Quellen ein; ein Sichtwechsel invalidiert die Projektion.
-  So parst eine Folgefrage nicht pro Token den gesamten bisherigen Verlauf neu
-  und erhält geöffnete History-Details sowie deren Fokus.
-- **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
-  vorgelagerte Turn-/Context-Bindung, Streaming-Rendering, Usage/Tier-UI,
-  Agent-Mode-gebundener Auto-Consensus-Trigger und vollständiger RunContext-
-  Lifecycle. Vor dem ersten `await` werden Frage, Mode, Provider-/Modelllabels,
-  Consensus-Engine, Flags, Auth, Attachments, Conversation-Basis und lokale
-  Credentials gesnapshottet. Jeder Callback und jedes Save adressiert danach
-  explizit `runId`/Context; `cancelCurrentQuery(runId)` bricht gezielt nur
-  dessen Controller ab. Ein valider Agent-Mode-Lauf
-  beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand; der
+  im DOM erhalten. Inhalts-Signaturen beziehen Status, Fehler und Quellen ein;
+  ein Sichtwechsel invalidiert die Projektion.
+- **`query-send.js`** — `window.sendQuestion`: eine Agent-Nachricht geht an
+  `agent-chat.js`; sonst ein **Compare-Lauf**: `/prepare` (Admission
+  `run_mode: "compare"` bzw. `deep_think` mit Reasoning) + `/ask_*`-Fan-out,
+  Streaming-Rendering, Usage/Tier-UI und vollständiger RunContext-Lifecycle.
+  Ein Compare-Lauf setzt nichts fort: `basis: null`, keine Verlaufs-Turns,
+  kein Chat-/Kontext-Binding, auch wenn ein gespeicherter Chat offen ist; jede
+  fertige Antwort wird einzeln ins Bookmark des Laufs gespeichert
+  (`saveBookmark`), eine unvollständige nie (R06). Bis 2026-10-25 lief danach
+  im Browser die Consensus-Pipeline (`executeConsensusRun`, Follow-ups ueber
+  `chat-session.js`); die laeuft jetzt nur noch auf dem Server (Watches, API v1,
+  kuratierte Topics). Vor dem ersten `await` werden Frage, Provider-/
+  Modelllabels, Flags, Auth, Attachments und lokale Credentials gesnapshottet.
+  Jeder Callback und jedes Save adressiert danach explizit `runId`/Context;
+  `cancelCurrentQuery(runId)` bricht gezielt nur dessen Controller ab. Der
   Direktvergleich zeigt `#threadAsk` als Dokumentkopf, darunter alle
-  Modellantworten im offenen Raster und danach den Composer. Die Frage
-  bleibt beim Senden sichtbar. Vor
-  `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
+  Modellantworten im offenen Raster und danach den Composer. Vor `/prepare`
+  gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
   `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
   synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals
-  abweist. Nach Attachment-/Tier-/Run-Filtern wird dieselbe Mindestzahl vor
-  Usage-Reservierung erneut geprüft. Schlagen sämtliche tatsächlichen
-  Modellrequests fehl, endet der Lauf als Fehler (inklusive Fehlertelemetrie),
-  nicht als erfolgreicher Agent-Mode-Abschluss. Beim Laufstart wird gezielt nur
-  `#consensusAnswerBody` geleert; die Markerlegende bleibt erhalten.
-  Ein `usage_storage_busy` aus `/prepare` wird mit demselben Idempotency-Key
-  kurz erneut versucht; bleibt Firestore beschäftigt, endet der Lauf vor dem
-  Fan-out mit einer erneut versuchbaren Thread-Karte (kein falscher
-  Provider-Gesamtausfall).
-  Der Send-Button spiegelt den GANZEN Lauf: `window.isRunActive()` = Modell-
-  Phase ODER Consensus-Phase; `window.App.syncSendButtonRunning()` wird von
-  `consensus-lifecycle.js` bei Start/Ende der Consensus-Phase gerufen, damit
-  der Cancel-Button bis zum fertigen Consensus/Differences stehen bleibt
-  (ein Klick bricht dann via `cancelCurrentConsensus` ab).
+  abweist. Schlagen sämtliche tatsächlichen Modellrequests fehl, endet der Lauf
+  als Fehler (inklusive Fehlertelemetrie). Ein `usage_storage_busy` aus
+  `/prepare` wird mit demselben Idempotency-Key kurz erneut versucht; bleibt
+  Firestore beschäftigt, endet der Lauf vor dem Fan-out mit einer erneut
+  versuchbaren Thread-Karte (kein falscher Provider-Gesamtausfall). Der
+  Send-Button spiegelt den Lauf: `window.isRunActive()`;
+  `window.App.syncSendButtonRunning()`.
 - **`tab-status.js`** (seit 2026-10-02, nach `query-send.js` gebündelt) —
   solange die Seite verborgen ist (`document.hidden`), nennt der Tab-Titel den
   sichtbaren Lauf: „Working… · <Titel>“, danach „Answer ready“ bzw. „Run
@@ -3809,7 +3713,7 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   sechs Modell-Writes und repariert als autoritativer Vollsnapshot auch einen
   fehlgeschlagenen Modell-Write. Die Firestore-Transaktion behält zusätzlich
   ein erhöhtes Konflikt-Retry-Budget für alte, noch parallel schreibende Clients.
-  Im Multi-Run-Pfad tragen `saveBookmark`/`saveBookmarkConsensus` explizit
+  Im Multi-Run-Pfad trägt `saveBookmark` (bis 2026-10-25 auch `saveBookmarkConsensus`) explizit
   `runId`, Bookmark-ID, Auth-Snapshot, Quellen, Attachments und Chat-Bindung.
   Die Queue zählt offene Writes im zugehörigen `RunContext`; weder aktuelle
   Globals noch ein später ausgewählter Bookmark dürfen Ziel oder Payload
@@ -4203,7 +4107,7 @@ gesperrt, die Vergleichsmodelle für die nächste Nachricht bleiben änderbar.
 Die Chatmodell-Ebene zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
 Agent-Antworten haben keine Modellüberschrift über der Nachricht: weder die
 aktive bzw. wiederhergestellte Antwort in `agent-chat.js` noch archivierte
-Agent-Turns in `consensus-run.js`. Die Überschrift normaler Consensus-Turns bleibt bestehen.
+Agent-Turns in `thread-history.js`. Die Überschrift gespeicherter Consensus-Turns bleibt bestehen.
 `agent-chat.js` erzeugt native `optgroup`-Elemente in der bestehenden Anbieterreihenfolge;
 `model-picker.js` aktiviert sie über `grouped: true` als `groups` → `group:<key>`
 mit Rückweg (verknüpft: `overview` → `groups` → `group:<key>`). Nur Modelle der
@@ -5066,7 +4970,7 @@ bzw. ausstehende Reviews werden zu `failed`/`missing`/`cancelled`.
 `agentReview.failureNote` entscheidet über den Hinweis unter der Antwort: unter
 einer vollständigen, geprüften Antwort keiner, sonst ein ruhiger Satz zur
 möglicherweise unvollständigen Antwort, ohne Antwort der sichere Fehlertext.
-Live-Ansicht, gespeicherter Turn und Verlauf (`consensus-run.js`) nutzen ihn.
+Live-Ansicht, gespeicherter Turn und Verlauf (`thread-history.js`) nutzen ihn.
 
 **Composer und Antwortaktionen (21.09.2026).** `agentChat.sendBlocker()` verbindet
 Zugriff, Katalogstatus, verfügbare Chatmodelle, Vergleichsauswahl, Anhänge und
@@ -5307,7 +5211,7 @@ optionale `secondarySelect`-Ebene von model-picker.js auch die Reasoning-Wahl.
 Ein gesperrter Agent-Modusschalter und die frühere Tokenzeile bleiben verborgen.
 Die Aktivitätsliste enthält auch weitere Vergleichs-/Judge-Runden über 64 Sitzungen;
 Parallelitäts- und Nachrichtengrößen bleiben begrenzt. agent-review.js steht in bundles.json vor
-consensus-run.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
+thread-history.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
 agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
 `agent_comparison.py::review_issues` persistiert `checks[].issues` mit getrennten
 Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
@@ -5766,7 +5670,7 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   eines anderen Turns, klappt sie zu); abgehängte Karten fallen bei jedem
   `apply` aus der Beobachterliste. Aufgerufen aus `agent-chat.js`
   (live, gespeichert, und leerend für Consensus/neuen Chat), `run-view.js`
-  (leerend) und `consensus-run.js::appendHistoryTurn`. Der Aufklapp-Link der
+  (leerend) und `thread-history.js::buildHistoryTurn`. Der Aufklapp-Link der
   Nachricht heißt seit 2026-10-09 „Show more"/„Show less" und steht in der
   Blase (`.thread-ask-bubble`).
 - **Länge:** Im Agent-Modus prüft `validateInputText` die Zeichengrenze des
@@ -5893,9 +5797,14 @@ serverseitigen Datumsblock ein. Nur vor einem ausdrücklich gespeicherten eigene
 Prompt ergänzt der Browser wie bisher sein lokales Datum. Dieser persönliche
 Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
 
+Seit 2026-10-25 startet der Browser auf diesem Weg nur noch **Compare**
+(Agent hat `/agent`, siehe dort); die Schritte 1–3 gelten unverändert, ein
+Consensus-Lauf danach (`/consensus`) kommt aus dem Browser nicht mehr.
+
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
    Auth sowie transaktionale Admission auf dem Tokenkonto (`run_mode`
-   `compare|consensus`, Reasoning-Schätzung aus `deep_search`) und sofortiger Consume
+   `compare`; der Server kennt weiter `consensus` für andere Aufrufer,
+   Reasoning-Schätzung aus `deep_search`) und sofortiger Consume
    des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
    `system_prompt`, `token_budget` und `run_estimate`. Vorher blockt
    `usageLimit.blockIfExhausted` clientseitig mit derselben Regel.
@@ -5940,36 +5849,31 @@ Client-Prompt behält Vorrang in `/prepare` und im Fan-out.
    Browserabbruch beendet einen begonnenen SSE-Lauf: das Cancellation-Signal
    schließt aktive HTTP-/SDK-Streams, unterbindet weitere Provider-Retries und
    der abgebrochene Generator erreicht keine nachgelagerte Persistenz.
-4. **Agent Mode an:** `consensus-progress.js` begleitet den gefuehrten Lauf
-   rahmenlos unter dem Input. Der Gesamtzaehler basiert auf
-   `dataset.responseState`; die einzelnen Modell-Balken wachsen monoton aus
-   dem sichtbaren Stream und erreichen erst beim Abschluss 100 Prozent. Nach
-   dem Fan-out wechselt die Anzeige zur nicht prozentual geschaetzten
-   Synthesephase und verschwindet bei Abschluss, Fehler oder Abbruch.
-   **Agent Mode aus:** `model-answer-reader.js` zeigt alle Originalantworten
+4. **Compare:** `model-answer-reader.js` zeigt alle Originalantworten
    rahmenlos in zwei Spalten (bei schmaler Leseflaeche untereinander). Die
-   Frage steht einmal als normale Chat-Nachricht darueber, der Composer darunter. Die Frage wird
-   nur an `/ask_*` gefächert. Es gibt keinen Pipeline-Block, keinen
-   `/consensus`-Aufruf und folglich keine Differences oder Claims. Die Body-
-   Klasse `.direct-comparison-active` haelt diesen Layoutzustand auch mobil
-   sichtbar. Der Differences-Spinner hatte bis
-   2026-07-27 eine eigene Leiste (`.differences-progress`), die mit ihr
-   dieselbe Phase doppelt zeigte und deshalb entfallen ist. Im zweiten
-   Schritt ist auch der verbliebene Text „Comparing responses" weg:
-   `window.consensusDifferencesSpinnerHTML` ist leer, `consensus-run.js`
-   faellt bewusst NICHT auf `window.spinnerHTML` zurueck, und
-   `differencesPanel.setSynthesizing()` laesst das Panel jetzt ZU (ein
-   aufgeklapptes leeres Panel waere die dritte Anzeige desselben Vorgangs).
+   Frage steht einmal als normale Chat-Nachricht darueber, der Composer
+   darunter. Die Frage wird nur an `/ask_*` gefächert. Es gibt keinen
+   Pipeline-Block, keinen `/consensus`-Aufruf und folglich keine Differences
+   oder Claims. Die Body-Klasse `.direct-comparison-active` haelt diesen
+   Layoutzustand auch mobil sichtbar. Der gefuehrte Lauf (`consensus-progress.js`,
+   `#consensusRun`) des fruehreren Consensus-Modus ist am 2026-10-25 entfallen.
 5. **Ein hängendes Modell blockiert den Lauf nicht**: jedes `/ask_*` bekommt in
    `query-send.js` einen eigenen `AbortController` (der Lauf-Controller
-   kaskadiert darauf). Haben mindestens zwei Modelle geantwortet und wartet der
-   Lauf danach ≥ 8 s weiter, bietet die Modellzeile im gefuehrten Lauf
-   „Skip" an; `window.App.skipModel(boxId)` bricht genau dieses
-   Modell ab, markiert die Box als `responseState="error"` +
-   `responseSkipped="true"` und zaehlt es einmalig als beantwortet.
+   kaskadiert darauf); eine fertige Antwort steht sofort im Raster, gleich was
+   die anderen tun. Das „Skip“-Angebot (`App.skipModel`) gehoerte zum
+   gefuehrten Lauf und ist mit ihm entfallen.
 
 ### Follow-up-Fragen
-Nach jedem erfolgreichen Consensus kann derselbe owner-gebundene Chat um eine
+**Seit 2026-10-25 gibt es Folgefragen im Browser nur noch in Agent-Chats**
+(`agent-chat.js`, `/agent` mit `chat_id`). Gespeicherte Consensus-Chats sind
+lesbar, aber nicht mehr fortsetzbar; ein Compare-Lauf ist immer ein eigener
+Chat. `chat-session.js` (`App.createChatSession`, `App.chatSession`) und der
+Follow-up-Kontext in `followup` (`offer`/`consume`/`isArmed`) sind entfallen.
+Was unten zum Consensus-Pfad steht (`/chats/{id}/turns`, `/context`,
+`context_version_id` an `/ask_*`/`/consensus`, Legacy-`context`), beschreibt
+den Server, der diese Endpunkte weiter anbietet, und die Daten alter Chats.
+
+Nach jedem erfolgreichen Consensus konnte derselbe owner-gebundene Chat um eine
 weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
 Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
 - Frontend: Die autoritative Fortsetzungsbasis liegt getrennt von der Ansicht
@@ -5981,8 +5885,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   ein Ereignis, damit seine Seitenleisten-Zeile nachzieht), dazu die Basen
   (gewählte, `basis`/`completedBasis` jedes Laufs), aus denen die nächste
   Nachricht ihren Namen nimmt. `window.App.followup`
-  (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
-  sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
+  (in `thread-history.js`) hält **nur noch den DOM-State der sichtbaren
+  Projektion, keine Ausführungsautorität und keine eigene Fläche**.
   `run-view.js` gleicht ihn bei jedem Sichtwechsel mit `historyTurns` und der
   completed Basis des gewählten Contexts ab (Verlauf: nur anhängen, siehe unten). **Seit 2026-08-07 hat der
   Composer überhaupt keine
@@ -6068,6 +5972,16 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
 
 ### Consensus & Differences
 
+> **Seit 2026-10-25 startet der Browser keinen Consensus mehr.** Pipeline,
+> Judges und Persistenz unten gelten weiter für den Server: Watches, API v1
+> und kuratierte Topics rufen `consensus_pipeline.run_consensus_pipeline`, und
+> die Endpunkte `/consensus`, `/resolve` und `/bookmark/consensus` bestehen
+> fort. Was unten den Browser betrifft (`executeConsensusRun`,
+> `consensus-run.js`, `getConsensus`, `chat-session.js`, Recovery,
+> Bookmark-Dual-Write, Best-Model-Vote, Watch-Nudge nach dem Lauf), beschreibt
+> den entfernten Pfad bis zu diesem Datum; gespeicherte Consensus-Chats
+> rendert die App weiter (siehe „Gespeicherte Consensus-Chats“).
+
 **Ergebnisintegrität (2026-09-29, Review R06/R09):**
 `llm/completion.py` definiert den typisierten Abschlusszustand
 `complete | token_limit | interrupted | error | cancelled`. Nur
@@ -6115,9 +6029,9 @@ unvollständige Stream- und sonstige Verarbeitungsfehler. Die Kategorie wird
 in Telegram angezeigt und bei der Deduplizierung berücksichtigt; Freitext,
 Stack und Nutzdaten werden am Browser-Intake weiterhin verworfen.
 
-**Browser-Ausfallsicherung (2026-09-17):** Der SSE-Reader erkennt LF, CRLF und
-CR auch über Chunk-Grenzen hinweg. Nach Request-/Read-/EOF-Fehlern prüft
-`executeConsensusRun` höchstens dreimal innerhalb von fünf Sekunden den
+**Browser-Ausfallsicherung (2026-09-17, Consensus-Teil bis 2026-10-25):** Der
+SSE-Reader erkennt LF, CRLF und CR auch über Chunk-Grenzen hinweg. Nach
+Request-/Read-/EOF-Fehlern prüfte `executeConsensusRun` höchstens dreimal innerhalb von fünf Sekunden den
 ownergebundenen `GET /chats/{chat_id}/turns/{turn_id}` (ohne Cache).
 Nur ein gespeicherter `completed`-Turn mit Consensus wird als Replay übernommen;
 es gibt keinen erneuten Modell-POST, Vote oder Bookmark-Write. Authwechsel und
@@ -6299,7 +6213,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Die lokale Produkt-Demo spiegelt denselben Coverage-Vertrag: Jeder ihrer 19
   prüfbaren Consensus-Sätze besitzt einen expliziten `supported`-/`split`-Claim;
   Difference-Marker übersteuern an überlappenden Sätzen weiterhin das Badge.
-- `executeConsensusRun(context)` (`consensus-run.js`) liest Modellantworten,
+- (bis 2026-10-25) `executeConsensusRun(context)` (`consensus-run.js`) liest Modellantworten,
   `excluded_models`, Modelllabels, Quellen und `consensus_model` ausschließlich
   aus dem gebundenen Context und ruft **`POST /consensus`** (`stream:true`) mit
   dessen `usage_run_key`. Ein späterer Sicht-/Picker-Wechsel kann den Payload
@@ -6307,7 +6221,8 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   idempotent und erzeugt keine zweite Usage-Einheit. `getConsensus` delegiert
   für einen aktiven Registry-Run dorthin; sein DOM-basierter Pfad ist nur noch
   Legacy/Demo.
-- **Chat-Turn-Persistenz und Context-Verdrahtung (Sessions 5–6):** Nach
+- **Chat-Turn-Persistenz und Context-Verdrahtung (Sessions 5–6, im Browser bis
+  2026-10-25):** Nach
   erfolgreichem `/prepare` legt `query-send.js` den logischen Run fest. Nur bei
   einer aktiven Fortsetzung erzeugt die private ChatSession des Contexts den
   pending Turn bereits
@@ -6402,7 +6317,8 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Ein nicht completed Chat wird nie als persistierte Grundlage
   eines folgenden Follow-ups verwendet.
 - Die bisherigen `saveBookmark(...)`-/`saveBookmarkConsensus(...)`-Aufrufe
-  bleiben als Dual-Write für Sidebar, Restore, Share und Watch aktiv. Innerhalb
+  blieben bis 2026-10-25 als Dual-Write für Sidebar, Restore, Share und Watch
+  aktiv (heute speichert nur Compare per `saveBookmark`, Agent über `/agent`). Innerhalb
   eines Browser-Chats verwenden alle Turns dieselbe stabile Bookmark-ID; nach
   erfolgreicher Chat-Completion speichert das Bookmark nur `chat_id`/letzte
   `turn_id`, und der Restore liest den vollständigen kanonischen Transcript
@@ -6693,13 +6609,21 @@ mutiert nur die Differences dieses Contexts, rendert nur bei weiterhin
 sichtbarer Run-ID und schreibt eine optionale Bookmark-Aktualisierung explizit
 an dessen Bookmark statt an die inzwischen geöffnete Ansicht.
 
-### Modus: Compare, Consensus, Agent (seit 2026-09-30)
+### Modus: Agent und Compare (seit 2026-09-30, Consensus bis 2026-10-25)
 Eine Wahl, ein Besitzer: `static/js/run-mode.js` (`App.runMode`) haelt die
-Kontoeinstellung `run_mode` ∈ {`compare`, `consensus`, `agent`} (lokal
+Kontoeinstellung `run_mode` ∈ {`agent`, `compare`} (lokal
 `localStorage.runMode`, siehe „Kontoeinstellungen“). `DEFAULT_MODE`
 steht dort als eine Konstante (seit 2026-10-02 `agent`); wer nie waehlte, hat
-keinen gespeicherten Wert. Andere Tabs, der Server und das Abmelden melden
-Aenderungen ueber `consensio:settings-change`, das `run-mode.js` als
+keinen gespeicherten Wert. **Consensus war bis 2026-10-25 der dritte Modus**:
+ein gespeichertes `"consensus"` validiert seitdem nicht mehr und liest sich
+als ungewaehlt, also Agent (Browser: `user-settings.js` `RUN_MODES`; Server:
+`user_settings.py` `run_mode`-Literal, `sanitize_settings` laesst den alten
+Wert beim Lesen fallen, ein PATCH damit landet in `rejected`). Die Pipeline
+selbst laeuft weiter auf dem Server: Watches (`watch_scheduler.py`), die
+nutzergebundene API v1 (`api_consensus_runner.py`) und kuratierte Topics
+(`topic_pipeline.py`) rufen `consensus_pipeline.run_consensus_pipeline`.
+Andere Tabs, der Server und das Abmelden melden Aenderungen ueber
+`consensio:settings-change`, das `run-mode.js` als
 `consensio:run-mode-change` weitergibt. Der einmalige Reset vom 2026-10-12
 („Kontoeinstellungen“) hat jeden Browser auf Agent gesetzt und dabei die
 Altschluessel `agentMode`, `autoConsensus` und die fruehere Marke
@@ -6708,36 +6632,41 @@ Laden vorbelegen, setzen die Reset-Marke `consensio.settingsReset = "2026-10-12"
 mit, sonst entfernt der Reset ihre Werte.
 - `preference()` ist die Wahl fuer neue Nachrichten, `effective()` das, was die
   naechste Nachricht tatsaechlich tut: ein offener Agent-Chat bleibt Agent, ein
-  offener Consensus-Chat kann nur zwischen Compare und Consensus wechseln
-  (serverseitig getrennte Chat-Familien, `agent-chat.js` meldet sie ueber
-  `App.agentChat.modeState()`), und ohne Agent-Zugang laeuft eine Agent-Wahl
-  als Consensus. Ein Gast (`modeState().guest`, `App.isGuest()`) bekommt Agent
-  wie ein Konto im Standard (Max, Apple-Audit H3; geschickt wird erst nach dem
-  Login, `composer-invite.js`). `pipeline()` (= nicht Compare) ersetzt das fruehere
-  `isAgentModeEnabled()` und fuellt das persistierte Laufsfeld
-  `config.agentMode`/`autoConsensus` (Feldname historisch).
-- `availability()` liefert je Modus `enabled`/`reason`; der Wähler zeigt
-  gesperrte Modi mit Grund statt sie zu verstecken, Agent nur mit Zugang oder
-  für einen Gast. In
-  einem offenen Agent-Chat gibt es nichts zu wählen: dort tritt `#runModeControl`
-  (die Modusgruppe im (+)-Menü) zurück, das (+) heißt dann „Chat options“.
+  offener Chat der anderen Familie (ein Compare-Ergebnis oder ein
+  gespeicherter Consensus-Chat; serverseitig `execution_mode` ≠ `agent`,
+  `agent-chat.js` meldet sie ueber `App.agentChat.modeState()` als
+  `family: "consensus"`) laesst nur Compare zu, und ohne Agent-Zugang (ein
+  verweigerter Status-Check) laeuft eine Agent-Wahl als Compare. Ein Gast
+  (`modeState().guest`, `App.isGuest()`) bekommt Agent wie ein Konto im
+  Standard (Max, Apple-Audit H3; geschickt wird erst nach dem Login,
+  `composer-invite.js`). `pipeline()` gibt es nicht mehr.
+- `availability()` liefert je Modus (`agent`, `compare`) `enabled`/`reason`;
+  der Wähler zeigt gesperrte Modi mit Grund statt sie zu verstecken, Agent nur
+  mit Zugang oder für einen Gast. In einem offenen Agent-Chat gibt es nichts zu
+  wählen: dort tritt `#runModeControl` (die Modusgruppe im (+)-Menü) zurück,
+  das (+) heißt dann „Chat options“.
 - Aenderungen laufen nur ueber `set(mode, {source})`, feuern
   `consensio:run-mode-change` und `app_run_mode_changed` (mode, previous, source).
 - Solange eine gespeicherte Agent-Wahl auf den Agent-Zugang des Kontos wartet,
-  sperrt `updateQuestionInputAccess()` das Senden, statt still als Consensus
-  zu senden. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
-  „nicht erlaubt“; der Wähler zeigt dann sichtbar Consensus.
+  sperrt `updateQuestionInputAccess()` das Senden, statt still als Compare
+  zu senden. Die Ansicht wartet dabei auf Agent (`agent-mode.js`
+  `agentAwaited`: Hero statt des Compare-Antwortrasters), sonst blitzte das
+  Raster bei jedem Laden auf, bis der Zugang da ist. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
+  „nicht erlaubt“; der Wähler zeigt dann sichtbar Compare.
 - UI seit 2026-10-02: der Modus ist die ERSTE Gruppe im (+)-Menü
   (`#runModeControl.attach-menu-modes`): `agent-mode.js::renderModeRows` baut
-  drei Zeilen Agent · Consensus · Compare (`.attach-menu-mode[data-value]`,
+  zwei Zeilen Agent · Compare (`.attach-menu-mode[data-value]`,
   `aria-pressed`, Haken am aktuellen, gesperrte mit Grund, Agent mit „Beta“);
   ein Klick ruft `onRunModeChoice` und schließt das Menü. `#runModeSelect`
   bleibt versteckt im Container als Wert dahinter (Settings-Spiegel
-  `#runModeSetting`, Tests, `change`-Listener). In der Composer-Zeile steht kein
-  Moduschip mehr; das (+) heißt „Mode, files and options“.
+  `#runModeSetting` mit Agent · Beta und Compare, Tests, `change`-Listener);
+  eine Option eines unbekannten Modus entfernt `renderRunModeControl` aus
+  beiden Selects. In der Composer-Zeile steht kein Moduschip mehr; das (+)
+  heißt „Mode, files and options“.
   Entfernt: `#composerAgentToggle`, `#agentModeMenuSwitch`,
   `#agentModeSwitch`, `#autoConsensusToggle`, `#chatExecutionMode`,
-  `window.setAgentMode`, `window.isAgentModeEnabled`, `window.toggleAllResponses`.
+  `window.setAgentMode`, `window.isAgentModeEnabled`, `window.toggleAllResponses`,
+  seit 2026-10-25 auch `App.runMode.pipeline` und `window.isAgentModeRunning`.
 
 ### Composer: eine Anatomie für alle Modi
 `templates/index.html` gliedert die Composer-Zeile in drei Gruppen, für Compare,
@@ -6803,30 +6732,39 @@ ein Kuchen (Tagesrest) in einem feinen Ring statt eines offenen Bogens, der wie
 ein Ladekreisel aussah (`#quotaRingArc` r=3.5, stroke-width 7, gleiche
 dashoffset-Logik in `sidebar-quota.js`). Unter dem Feld steht nur der
 Hinweissatz. Pro Modus gibt es genau EINEN
-Modell-Chip; er nennt nur, wer antwortet („6 models · Daily“ mit Consensus,
-„6 models“ in Compare, „6 AIs cross-check“ in Agent: was die
-Vergleichsmodelle tun, das Menü trägt Chatmodell und Vergleich), nie den
-Modusnamen.
+Modell-Chip; er nennt nur, wer antwortet („6 models“ in Compare,
+„6 AIs cross-check“ in Agent: was die Vergleichsmodelle tun, das Menü trägt
+Chatmodell und Vergleich), nie den Modusnamen. Die Consensus-Engine (früher
+„6 models · Daily“ und der Abschnitt „Consensus engine“ unter Custom) wählt
+seit 2026-10-25 niemand mehr; `#consensusModelDropdown` (Name historisch)
+bleibt der Host des Preset-Pickers, seine Optionen nur Anker der
+Preset-Auflösung.
 
-### Consensus-Lauf (historisch „Agent Mode“)
-Wo dieses Dokument „Agent Mode an/aus“ sagt, ist heute Consensus bzw. Compare
-gemeint. `agent-mode.js` koppelt Auto-Consensus: nach Abschluss aller Modellantworten löst
-`query-send.js` automatisch `executeConsensusRun(context)` aus. Run-State/Gating
-läuft für Registry-Runs über deren Status/Controller und die kompatible
-`consensus-lifecycle.js`-Brücke (`isActiveRun`, `finishRun`, `setSynthesizing`,
-`cancelCurrentConsensus(runId)`). Auto-Consensus ist keine eigene Einstellung
-mehr: `config.autoConsensus` = `App.runMode.pipeline()` beim Start des Laufs,
-und `consensus-progress.js` liest den Wert des sichtbaren Laufs. Standardmäßig
-bleiben die Einzelantwortboxen verborgen; `#agentModeAnswersToggle` oeffnet den
-gemeinsamen `window.App.answerReader`, ohne Agent Mode oder dessen
-Auto-Consensus-Kopplung zu deaktivieren. Die bisherige Body-Klasse
-`.agent-mode-show-answers` bleibt nur als Legacy-Fallback ohne Reader-Modul.
+### Gespeicherte Consensus-Chats (seit 2026-10-25 nur lesend)
+Der Consensus-Lauf im Browser (`query-send.js` → `executeConsensusRun`,
+`consensus-progress.js`, `consensus-lifecycle.js`, `chat-session.js`, die
+Resolve-Runde `POST /resolve` in `consensus-insights.js`, der Watch-Hinweis
+nach einem Lauf und der Consensus-Teil der Demo) ist entfernt. Was bleibt:
+- Ein gespeicherter Consensus-Chat oeffnet wie bisher ueber
+  `firebase.js::loadSingleBookmarkUI`: Antwort mit Markern
+  (`renderConsensusInsights`), Verdict, Differences-Karten samt gespeicherter
+  Resolve-Ergebnisse (`buildResolveSection` zeigt nur noch `diff.resolution`),
+  Quellen, Compare answers (`answerReader`), Verlauf (`thread-history.js`),
+  Fuss (`consensusFooter.render`) sowie Share/Watch/Cite (`consensus-actions.js`,
+  `/bookmark/consensus/share-result`).
+- Fortgesetzt wird er nicht: Agent ist dort „Available in a new chat“, eine
+  Compare-Nachricht beginnt einen eigenen Chat.
+- Die Server-Endpunkte des alten Browser-Pfads (`/consensus`, `/resolve`,
+  `/bookmark/consensus`, `POST /chats` + Turns/Context der Consensus-Familie)
+  bestehen weiter, werden aber von der App nicht mehr aufgerufen.
+- `config.agentMode`/`autoConsensus` bleiben die persistierten Laufsfelder
+  („die Pipeline lief“): ein Compare-Lauf traegt `false`, ein Agent-Lauf
+  `agentMode: true` (fuer `firebase.js::finalizeRegistryRunBookmark`).
 
-Bei deaktiviertem Agent Mode ist der Fan-out selbst das Endergebnis. Der Client
-bleibt in der durch `.direct-comparison-active` markierten Vergleichsansicht,
-zeigt den Antwortleser inline mit Modellstatus und startet weder Consensus noch
-Differences/Claims. Follow-up-/Chat-Turn-Persistenz wird in diesem Ein-Frage-Pfad nicht
-begonnen, weil deren Abschluss an `/consensus` gebunden ist.
+Bei Compare ist der Fan-out selbst das Endergebnis. Der Client bleibt in der
+durch `.direct-comparison-active` markierten Vergleichsansicht, zeigt den
+Antwortleser inline mit Modellstatus und startet weder Consensus noch
+Differences/Claims.
 
 ### Gemeinsamer Modellantwort-Leser
 `static/js/model-answer-reader.js` wird in `bundles.json` nach den Attachments
@@ -6842,7 +6780,8 @@ dekorative Quellen-Favicons nutzen den bestehenden `/api/topics/favicon?d=`-Prox
 beim Direktvergleich, sonst in einem nativen `dialog` ausserhalb `.container`.
 Der Direktvergleich zeigt alle Modelle ohne Auswahl-Tabs und ohne aeusseren Rahmen.
 Der Ergebnis-Kopf bleibt verborgen; der Composer zeigt den Bereitschaftsstatus
-und bei abweichender naechster Einstellung „Shown: Compare result“. Nur die leere
+(„6 of 6 ready“; seit 2026-10-25 ohne „Shown: Compare result“, Agent hat einen
+eigenen Composer). Nur die leere
 Vorschau zeigt die Einleitung „One question. Individual answers.“. Der gespeicherte
 Ergebnismodus bleibt getrennt von der Einstellung fuer die naechste Frage.
 Die Agent-Mode-Ausblendregel in `shell.css` nimmt
@@ -6978,7 +6917,7 @@ auf dem Menü). Auf Touch haben die Aktionen 44-px-Flächen.
 Die originalen `.response-box`-IDs bleiben versteckte Render-/Konfigurationsziele;
 im ungesendeten Hero bleiben sie verborgen und inert; die Modellauswahl erfolgt
 ueber Sidebar und Composer-Picker.
-`consensus-run.js::appendHistoryTurn` registriert Turn-Daten an ihrem Article per
+`thread-history.js::buildHistoryTurn` registriert Turn-Daten an ihrem Article per
 WeakMap und ersetzt die gestapelten Originaltexte durch einen Reader-Button.
 Die Quellen, Modellnamen und Texte des Readers kommen jeweils aus diesem Turn;
 `consensus-insights.js` fuehrt Live- und gespeicherte Claim-Spruenge in denselben
@@ -8223,7 +8162,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     der Browser den Chat vor dem ersten Turn anlegt (abgelehnte Agent-Nachricht,
     Stop, Lauf ohne gespeicherte Antwort); ohne Bookmark sieht und löscht sie
     niemand. Erst wenn nichts frei wird, bleibt es bei 403; Agent zeigt dann wie
-    Consensus den Text aus `App.chatPersistenceErrorMessage` (chat-session.js).
+    früher Consensus den Text aus `App.chatPersistenceErrorMessage` (seit
+    2026-10-25 in `app-text.js`).
   - `chats/{chat_id}/turns/{turn_id}` — `schema_version`, monoton aus dem
     Chat-Zähler vergebene `position`, `status=pending|completed|failed`, begrenzte `question` und
     `mode`, boolesches `deep_search`, begrenzte/normalisierte
@@ -9898,7 +9838,7 @@ zählen nicht):
   Token-Zahlen im Kontingent-Panel) blendet `style.css` aus, solange
   `body.viewer-is-admin` fehlt; `firebase.js` setzt die Klasse aus
   `/user_status` `is_admin` und nimmt sie beim Logout weg. Nutzertexte sprechen
-  von „allowance“ in Prozent („A Consensus run uses about 8%.“, „8% is held
+  von „allowance“ in Prozent („A Compare run uses about 5%.“, „8% is held
   for a message still running.“, Agent-Absagen „Not enough of today’s
   allowance is left for this step.“).
 - **Hilfe** (`#helpModal`, „Help“): sechs Fragen zum heutigen Produkt (eine
@@ -9934,7 +9874,7 @@ zählen nicht):
   `.thread-ask-text` und `.thread-history-question-text` tragen seit 2026-10-09
   `dataset.question` (die whitespace-kollabierte Frage). `renderThreadQuestion`
   (Gleichheit, Disclosure-State), die Verlaufs-Idempotenz in
-  `consensus-run.js::appendHistoryTurn` und der Reader-Fallback lesen dieses
+  `thread-history.js` (`turnKey`) und der Reader-Fallback lesen dieses
   Feld, weil eine geprüfte Passage (`passage-check.js`) den `textContent`
   verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
@@ -9957,8 +9897,7 @@ zählen nicht):
   `app-bootstrap.js` setzt Config, die State-Owner und `run-registry.js` laden
   vor Firebase und den Feature-Modulen; `app-core.js` ergänzt den bestehenden
   `window.App`-Bus;
-  `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
-  `run-view.js` muss nach `consensus-run.js`, aber vor `query-send.js` laufen;
+  `run-view.js` muss nach `thread-history.js`, aber vor `query-send.js` laufen;
   `composer-quote.js` liegt bei `memory-edit.js` (dessen Auswahlmenü es füllt)
   und muss vor `query-send.js` stehen, das beim Senden `window.App.quote`
   abfragt;
@@ -9973,9 +9912,8 @@ zählen nicht):
   Feature-Modulen. Wer eine Funktion umbenennt/verschiebt, muss alle `window.`-
   Aufrufstellen mitziehen (Grep über `static/js/` + `static/firebase.js` +
   `static/demo.js`). Wichtige Globals u. a.: `window.sendQuestion`,
-  `window.getConsensus`, `window.canGenerateConsensus`, `window.App.consensusBodyEl`,
-  `window.updateConsensusButtonAvailability`, `window.revealConsensusOutput` /
-  `hideConsensusOutput`, `window.cancelCurrentConsensus`, `window.openShareDialog`,
+  `window.App.consensusBodyEl`, `window.revealConsensusOutput` /
+  `hideConsensusOutput`, `window.App.consensusFooter`, `window.openShareDialog`,
   `window.openWatchDialog`, `window.openWatchDashboard`,
   die read-only Kompatibilitäts-Getter `window.currentEvidenceSources`,
   `window.consensusCitationMeta`, `window.lastShareResultId`,
@@ -10002,31 +9940,20 @@ zählen nicht):
   definiert und von `firebase.js` konsumiert. Die Brücke hält
   `email-verify.js` im content-gehashten Manifest statt hinter einem separaten,
   manuell versionierten ESM-Import.
-- **`window.App.followup`** (definiert in `consensus-run.js`) ist nur der
-  Follow-up-Kompatibilitäts- und Verlauf-State der sichtbaren Projektion
-  (`offer/consume/reset/render`,
-  `isArmed/hasContinuableExchange/markContinuationUnavailable/
-  archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory/
-  turnKey/buildHistoryTurn`; `renderStoredTurns` hängt nur an, siehe
-  „Follow-up-Fragen“).
-  `run-view.js` speist ihn aus dem gewählten Context; `query-send.js` darf ihn
-  nicht als Fortsetzungsquelle verwenden. `app-init.js` (reset in
-  `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
-  weiterhin daran; einziges DOM-Ziel ist `#threadHistory` in `index.html`.
-- **`window.App.createChatSession(initial)`** (definiert in `chat-session.js`)
-  erzeugt die laufzeitlokale Chat-Zuordnung jedes Contexts (`activeChatId` +
-  `activeTurnId` ausschließlich
-  als completed Basis, `pendingChatId`/`pendingTurnId`/
-  `pendingContextVersionId`, stabile pending Request-/Usage-ID und whitelisted
-  logische Run-Metadaten). `query-send.js` startet diesen privaten State nach
-  `/prepare`,
-  erzeugt bei aktiven Fortsetzungen Turn und Context vor dem Provider-Fan-out
-  und reconciliert mehrdeutige
-  Abbrüche; `consensus-run.js` verändert ihn nur anhand der autoritativen
-  `chat_turn_state`-Disposition. `window.App.chatSession` bleibt nur ein durch
-  `run-view.js` gesetzter Legacy-Spiegel und ist keine Ausführungsquelle.
-  Ein owner-gebundenes Chat-Bookmark setzt nach vollständigem Transcript-Load
-  über `showSavedView` die letzte completed Basis für den nächsten Context.
+- **`window.App.followup`** (definiert in `thread-history.js`) ist nur der
+  Verlauf-State der sichtbaren Projektion (`lastExchange`, `showExchange`,
+  `reset`, `render`, `syncInputLock`, `renderStoredTurn`, `renderStoredTurns`,
+  `clearHistory`, `turnKey`, `buildHistoryTurn`, `isStorableTurn`;
+  `renderStoredTurns` hängt nur an, siehe „Follow-up-Fragen“). Agent
+  (`agent-chat.js`) und `firebase.js` speisen ihn; `run-view.js` leert ihn
+  für einen Compare-Lauf. `app-init.js` (reset in `clearResponseBoxes`) und
+  `user-tier.js` (render bei Tier-Wechsel) hängen weiterhin daran; einziges
+  DOM-Ziel ist `#threadHistory` in `index.html`. Ein owner-gebundenes
+  Chat-Bookmark setzt nach vollständigem Transcript-Load über `showSavedView`
+  die letzte completed Basis; ein Agent-Chat setzt von dort fort
+  (`basis.chatId` nur mit Server-IDs, `firebase.js` `SERVER_ID`).
+  `App.createChatSession`/`App.chatSession` (`chat-session.js`) sind seit
+  2026-10-25 entfallen.
 - **`window.App.bookmarkSession`** (definiert in `firebase.js`) spiegelt nur die
   Bookmark-Dokument-ID der sichtbaren Unterhaltung. Im Multi-Run-Pfad gehören
   ID, Pending-/Save-Zähler und Fehler zu `RunContext.bookmark`/
@@ -10042,9 +9969,8 @@ zählen nicht):
 - **`window.App.consensusBodyEl(scope?)`** (definiert in `app-core.js`) ist das
   EINZIGE Renderziel des Konsenstextes (`#consensusAnswerBody`). Nie wieder per
   `.consensus-main p` adressieren — dieses `<p>` existiert nicht mehr; alle
-  Aufrufer (`consensus-run.js`, `consensus-lifecycle.js`, `consensus-actions.js`,
-  `consensus-insights.js`, `query-send.js`, `app-init.js`, `firebase.js`,
-  `demo.js`) gehen über den Helfer. Reihenfolge bleibt Vertrag: erst
+  Aufrufer (`consensus-actions.js`, `consensus-insights.js`, `run-view.js`,
+  `app-init.js`, `firebase.js`) gehen über den Helfer. Reihenfolge bleibt Vertrag: erst
   `injectMarkdown` (inkl. KaTeX), **danach** `renderConsensusInsights` — sonst
   zerstört der Math-Renderer die Marker bzw. die Ankersuche trifft KaTeX-Knoten.
 - **`window.App.differencesPanel.{setSynthesizing,expandForFallback}`**
@@ -10052,13 +9978,11 @@ zählen nicht):
   `<details>` unter der Antwort. Wer einen neuen Freitext-Fallback-Pfad baut,
   muss `expandForFallback()` rufen — sonst verschwindet die Analyse
   stillschweigend hinter einer zugeklappten Zeile.
-- **`window.App.consensusLifecycle.*`** ist die gezielte Run-State-Brücke
-  (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/
-  markPendingCanceled/initAutoConsensusToggle`). Für Registry-Contexts delegiert
-  sie Status, Synthese und Cancel an die explizite Run-ID; der Singleton-Pfad
-  ist nur Legacy. Run-ID-Gating nicht umgehen, sonst rendern alte Läufe in neue.
-- **`window.App.watch.showFeatureNudge(source?)`** wird nach einem erfolgreichen
-  Consensus-Final (ohne Argument) und nach einem Agent-Lauf
+- **`window.App.consensusFooter.{render,clear}`** (definiert in
+  `consensus-footer.js`, seit 2026-10-25 statt `App.consensusLifecycle` und
+  `App.consensusPipeline`) zeichnet bzw. leert den Fuss einer gespeicherten
+  Consensus-Antwort; Zahlen kommen aus dem DOM.
+- **`window.App.watch.showFeatureNudge(source?)`** wird nach einem Agent-Lauf
   (`agent-chat.js offerWatch`, `source = {eligible, question, anchor}`) aufgerufen
   und zeigt den einmaligen, lokal dismissbaren Consensus-Watch-Hinweis nur für
   eingeloggte Nutzer. Consensus startet die Watch per `result_id`, Agent per
@@ -10394,7 +10318,7 @@ Dateiliste unter der Antwort mehr:
   eingeklappt, ein Revisionshinweis. Dazu die in dieser Turn geholten
   Mail-Anhänge („From email: Betreff (Absender)“, Fallback
   `App.agentGoogle?.evidenceFor`). Keine Roh-IDs in der Oberfläche.
-- Archivierte Agent-Turns (`appendHistoryTurn` in `consensus-run.js`) bekommen
+- Archivierte Agent-Turns (`buildHistoryTurn` in `thread-history.js`) bekommen
   eine eigene Ressourcenzeile: `App.agentWorkspace.renderTurnResources(row, turnId)`
   registriert sie (`data-agent-turn-resources`), jede Projektion füllt sie aus der
   gecachten Liste mit den Dokumentversionen bis zu dieser Turn (kompakt) und

@@ -5,27 +5,30 @@ import pytest
 from playwright.sync_api import expect
 
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
-from test_run_mode_selector import choose
+from test_run_mode_selector import _signed_in
 
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (320, True)])
 def test_composer_mode_bar(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('runMode', 'consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12');")
+        init_script="localStorage.setItem('runMode', 'compare'); localStorage.setItem('consensio.settingsReset','2026-10-12');")
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
     try:
         page.set_viewport_size({"width": width, "height": 900})
+        # An account with Agent beside Compare, so the next message can
+        # change mode while a result stays on screen.
+        _signed_in(page, agent_access=True)
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
         bar = page.locator('#composerModeBar')
         mode = page.locator('#runModeSelect')
         expect(bar).to_be_visible()
-        expect(mode).to_have_value('consensus')
+        expect(mode).to_have_value('compare')
         expect(page.locator('#composerModelIcons img')).to_have_count(6)
         expect(page.locator('#composerModelCount')).to_have_count(0)
         expect(page.locator('#composerReasoningToggle')).to_be_visible()
         expect(page.locator('#composerAttachButton')).to_be_visible()
-        expect(page.locator('#composerModeDescription')).to_contain_text('differences and checks')
+        expect(page.locator('#composerModeDescription')).to_contain_text('side by side')
         output = Path('test-results/composer-mode-bar')
         output.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-hero.png'))
@@ -33,9 +36,6 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         marks = page.locator('.composer-model-icon')
         first, second = marks.nth(0).bounding_box(), marks.nth(1).bounding_box()
         assert second['x'] < first['x'] + first['width']
-        choose(page, 'compare')
-        expect(bar).to_be_visible()
-        expect(page.locator('#composerModeDescription')).to_contain_text('no consensus')
         expect(page.locator('#modeNotice')).to_have_count(0)
         # On the start screen the bar is simply there: no rise on the first
         # paint or a mode change (Apple-Audit B1) ...
@@ -81,19 +81,21 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.locator('.input-section').screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-dock.png'))
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-direct.png'))
         page.evaluate("document.body.classList.remove('composer-collapsed')")
-        choose(page, 'consensus')
-        # The status line stays with the result on screen at every width.
-        expect(bar).to_be_visible()
-        # Bookmark provenance does not change when the next question changes mode.
-        expect(page.locator('#composerComparisonStatus')).to_contain_text('Shown: Compare result')
+        # The choice for the next message changes; the result on screen
+        # stays. Agent has its own composer, so this bar steps aside.
+        page.evaluate("App.runMode.set('agent')")
+        expect(bar).to_be_hidden()
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(6)
+        page.evaluate("App.runMode.set('compare')")
+        expect(bar).to_be_visible()
+        expect(page.locator('#composerComparisonStatus')).to_contain_text('6 of 6 ready')
         page.screenshot(path=str(output / f'{width}-{"dark" if dark else "light"}-agent.png'))
         page.evaluate('App.answerReader.reset()')
         expect(page.locator('#composerComparisonStatus')).to_be_hidden()
         expect(bar).to_be_hidden()
         page.evaluate("document.getElementById('newRunButton').click()")
         expect(bar).to_be_visible()
-        expect(mode).to_have_value('consensus')
+        expect(mode).to_have_value('compare')
         assert errors == []
     finally:
         context.close()
@@ -102,7 +104,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, False), (320, True)])
 def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('runMode', 'consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12');")
+        init_script="localStorage.setItem('runMode', 'compare'); localStorage.setItem('consensio.settingsReset','2026-10-12');")
     try:
         page.set_viewport_size({'width': width, 'height': 844})
         page.evaluate("dark => document.body.classList.toggle('dark-mode', dark)", dark)
@@ -126,9 +128,9 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
             page.locator('#composerAttachButton').click()
         expect(notice).to_be_hidden()
         # A feature that is still gated shows the same calm notice.
-        page.evaluate("App.showProFeatureModal('Resolve')")
+        page.evaluate("App.showProFeatureModal('High Quality mode')")
         expect(notice).to_be_visible()
-        expect(notice).to_contain_text('Resolve')
+        expect(notice).to_contain_text('High Quality mode')
         expect(page.locator('#proFeatureModal')).to_be_hidden()
         expect(draft).to_have_value('The composer is still usable.')
         output = Path('test-results/early-access')
@@ -155,10 +157,9 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
         expect(modal).to_be_visible()
         page.locator('#keepFreeBtn').click()
         expect(modal).to_be_hidden()
-        # Plus keeps uploads and Resolve; a tier change leaves Reasoning alone.
+        # Plus keeps uploads; a tier change leaves Reasoning alone.
         reasoning.click()
         page.evaluate("window.updateUserTierUI('plus', true)")
-        assert page.evaluate("App.showProFeatureModal('Resolve')") is False
         expect(page.locator('#reasoningToggle')).to_be_checked()
         with page.expect_file_chooser():
             page.locator('#composerAttachButton').click()

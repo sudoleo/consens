@@ -8,8 +8,8 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 const BODY = `
   <button id="attachTrigger"></button>
   <div id="runModeControl" class="attach-menu-modes"><select id="runModeSelect" hidden>
-    <option value="compare">Compare</option><option value="consensus">Consensus</option></select></div>
-  <select id="runModeSetting"><option value="compare">Compare</option><option value="consensus">Consensus</option></select>
+    <option value="compare">Compare</option></select></div>
+  <select id="runModeSetting"><option value="agent">Agent · Beta</option><option value="compare">Compare</option></select>
   <div id="composerModeBar">
     <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
     <p id="composerComparisonStatus"></p>
@@ -25,7 +25,9 @@ const BODY = `
   <div id="openaiResponse" class="response-box"><div class="collapsible-content"></div></div>
 `;
 
-function boot({ mode = "consensus" } = {}) {
+// An account with Agent access in a new chat whose composer is not Agent's
+// (isSelected false): the tests read the shared controls.
+function boot({ mode = "agent" } = {}) {
   return loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
@@ -43,6 +45,7 @@ function boot({ mode = "consensus" } = {}) {
         initCustomModelPicker: vi.fn(),
         trackAppEvent: vi.fn()
       };
+      window.App.agentChat = { isSelected: () => false, modeState: () => ({ family: null, canUse: true, pending: false }) };
       window.localStorage.setItem("runMode", mode);
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
     }
@@ -58,7 +61,7 @@ describe("agent mode panel projection", () => {
     document.body.classList.remove('is-hero');
     window.App.renderComposerMode();
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
-    // An open Agent chat shows Agent; Compare/Consensus need a new chat.
+    // An open Agent chat shows Agent; Compare needs a new chat.
     const select = document.getElementById('runModeSelect');
     expect(select.value).toBe('agent');
     expect(select.querySelector('[value="compare"]').disabled).toBe(true);
@@ -91,15 +94,15 @@ describe("agent mode panel projection", () => {
     window.App.renderComposerMode();
     expect(document.getElementById('runModeSelect').value).toBe('compare');
     expect(document.getElementById('runModeControl').hidden).toBe(false);
-    // The mode is the first group of the (+) menu: three rows, the current one pressed.
+    // The mode is the first group of the (+) menu: two rows, the current one pressed.
     const rows = [...document.querySelectorAll('#runModeControl .attach-menu-mode')];
-    expect(rows.map(row => row.dataset.value)).toEqual(['agent', 'consensus', 'compare']);
+    expect(rows.map(row => row.dataset.value)).toEqual(['agent', 'compare']);
     expect(rows.find(row => row.dataset.value === 'compare').getAttribute('aria-pressed')).toBe('true');
     expect(rows.find(row => row.dataset.value === 'agent').textContent).toContain('Beta');
     expect(document.getElementById('attachTrigger').title).toBe('Mode, files and options');
-    rows.find(row => row.dataset.value === 'consensus').click();
-    expect(window.localStorage.getItem('runMode')).toBe('consensus');
-    expect(rows.find(row => row.dataset.value === 'consensus').getAttribute('aria-pressed')).toBe('true');
+    rows.find(row => row.dataset.value === 'agent').click();
+    expect(window.localStorage.getItem('runMode')).toBe('agent');
+    expect(rows.find(row => row.dataset.value === 'agent').getAttribute('aria-pressed')).toBe('true');
     window.App.runMode.set('compare');
     expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
@@ -116,13 +119,13 @@ describe("agent mode panel projection", () => {
     await Promise.resolve();
     expect(bar.hidden).toBe(false);
     expect(bar.dataset.docked).toBe('false');
-    for (const mode of ['compare', 'consensus']) {
+    for (const mode of ['compare', 'agent']) {
       window.App.runMode.set(mode);
       expect(bar.hidden).toBe(false);
     }
     document.body.classList.remove('is-hero');
     await Promise.resolve();
-    for (const mode of ['compare', 'consensus']) {
+    for (const mode of ['compare', 'agent']) {
       window.App.runMode.set(mode);
       expect(bar.hidden).toBe(true);
     }
@@ -148,7 +151,7 @@ describe("agent mode panel projection", () => {
     expect(bar.hidden).toBe(true);
     window.App.runMode.set('compare');
     expect(bar.hidden).toBe(true);
-    window.App.runMode.set('consensus');
+    window.App.runMode.set('agent');
     document.body.classList.add('is-hero');
     await Promise.resolve();
     expect(bar.hidden).toBe(false);
@@ -180,19 +183,21 @@ describe("agent mode panel projection", () => {
     window.projectAgentModeRun({runId: 'direct', config: {agentMode: false}});
     const select = document.getElementById('runModeSelect');
     const setting = document.getElementById('runModeSetting');
-    expect(select.value).toBe('consensus');
+    expect(select.value).toBe('agent');
+    expect([...select.options].map(option => option.value)).toEqual(['compare', 'agent']);
+    expect([...setting.options].map(option => option.value)).toEqual(['agent', 'compare']);
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
-    expect(document.getElementById('composerModeDescription').textContent).toContain('differences and checks');
+    expect(document.getElementById('composerModeDescription').textContent).toContain('research, files and tools');
     select.value = 'compare';
     select.dispatchEvent(new window.Event('change'));
     expect(window.localStorage.getItem('runMode')).toBe('compare');
-    expect(window.App.trackAppEvent).toHaveBeenCalledWith('app_run_mode_changed', {mode: 'compare', previous: 'consensus', source: 'composer'});
+    expect(window.App.trackAppEvent).toHaveBeenCalledWith('app_run_mode_changed', {mode: 'compare', previous: 'agent', source: 'composer'});
     expect(setting.value).toBe('compare');
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
-    expect(document.getElementById('composerModeDescription').textContent).toContain('no consensus');
-    setting.value = 'consensus';
+    expect(document.getElementById('composerModeDescription').textContent).toBe('Answers side by side.');
+    setting.value = 'agent';
     setting.dispatchEvent(new window.Event('change'));
-    expect(select.value).toBe('consensus');
+    expect(select.value).toBe('agent');
     expect(document.getElementById('composerModeBar').hidden).toBe(true);
     dom.window.close();
   });
@@ -201,7 +206,7 @@ describe("agent mode panel projection", () => {
     const {window, document, dom} = boot();
     window.App.answerReader = {directSummary: () => '1 of 2 ready · 1 unavailable'};
     window.updateAgentModeUI();
-    expect(document.getElementById('composerComparisonStatus').textContent).toBe('Shown: Compare result · 1 of 2 ready · 1 unavailable.');
+    expect(document.getElementById('composerComparisonStatus').textContent).toBe('1 of 2 ready · 1 unavailable.');
     expect(document.querySelector('.composer-model-icon').getAttribute('aria-label')).toContain('GPT');
     document.getElementById('openaiCheck').checked = false;
     window.App.answerReader.directSummary = () => null;
@@ -210,32 +215,71 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('composerComparisonStatus').hidden).toBe(true);
     dom.window.close();
   });
-  it("falls back to the controls when no run is selected", () => {
+  it("previews the chosen models and marks the view by the run on screen", () => {
     const { window, document, dom } = boot();
     const syncPreview = vi.fn();
     window.App.answerReader = { syncPreview };
     const previewedModels = () => syncPreview.mock.lastCall[1].map(model => model.model).join(" ");
 
+    // A Compare run on screen: its answers side by side, not a thread.
     window.projectAgentModeRun({
       runId: "run-1",
       status: "running",
       phase: "answers",
       startedAt: Date.now(),
-      config: { agentMode: true, providers: [{ provider: "OpenAI", modelLabel: "Frozen model" }] },
+      config: { agentMode: false, providers: [{ provider: "OpenAI", modelLabel: "Frozen model" }] },
       modelResults: { OpenAI: { status: "streaming", streamText: "half" } }
     });
-    expect(previewedModels()).toContain("Frozen model");
-    expect(document.body.classList.contains("agent-mode-running")).toBe(true);
-    expect(window.isAgentModeRunning()).toBe(true);
+    expect(previewedModels()).toContain("GPT");
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
+    expect(document.body.classList.contains("agent-mode-running")).toBe(false);
 
     // Deselecting the run must not throw: everything after this call in
-    // run-view's projection (the guided-run block, the send button) would
-    // otherwise be skipped, and the bookmark restore that triggered it would
-    // abort halfway through.
+    // run-view's projection (the send button) would otherwise be skipped,
+    // and the bookmark restore that triggered it would abort halfway.
     expect(() => window.projectAgentModeRun(null)).not.toThrow();
-    expect(previewedModels()).not.toContain("Frozen model");
     expect(previewedModels()).toContain("GPT");
-    expect(document.body.classList.contains("agent-mode-running")).toBe(false);
+    // Nothing on screen: the view follows the choice, here Agent.
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(true);
+    expect(window).not.toHaveProperty("isAgentModeRunning");
+    dom.window.close();
+  });
+
+  it("shows Agent's start screen, not Compare's grid, while Agent access loads", () => {
+    const { window, document, dom } = boot();
+    const syncPreview = vi.fn();
+    window.App.answerReader = { syncPreview };
+    const state = { family: null, canUse: false, pending: true };
+    window.App.agentChat = { isSelected: () => false, modeState: () => state };
+    window.updateAgentModeUI();
+    // The next message would run as Compare until access arrives, but the
+    // view waits for Agent.
+    expect(window.App.runMode.effective()).toBe("compare");
+    expect(syncPreview.mock.lastCall[0]).toBe(true);
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(true);
+    // A refusal settles the account in Compare.
+    state.pending = false;
+    window.updateAgentModeUI();
+    expect(syncPreview.mock.lastCall[0]).toBe(false);
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
+    dom.window.close();
+  });
+
+  it("keeps a saved Consensus answer's answers behind its footer whatever the next mode is", () => {
+    // An open saved chat runs its next message as Compare (run-mode.js);
+    // the answer on screen still reads as a thread, not a side-by-side grid.
+    const { window, document, dom } = boot({ mode: "compare" });
+    document.body.insertAdjacentHTML("beforeend", '<div id="consensusOutput" class="consensus-output is-visible"></div>');
+    window.updateAgentModeUI();
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(true);
+    // A saved direct comparison is a grid, and a cleared view follows the mode.
+    document.body.classList.add("direct-comparison-active");
+    window.updateAgentModeUI();
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
+    document.body.classList.remove("direct-comparison-active");
+    document.getElementById("consensusOutput").classList.remove("is-visible");
+    window.updateAgentModeUI();
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
     dom.window.close();
   });
 
@@ -249,12 +293,12 @@ describe("agent mode panel projection", () => {
         runId: "run-2",
         status: "running",
         startedAt: Date.now(),
-        config: { agentMode: true, providers: [{ provider: "OpenAI", modelLabel: "GPT" }] },
+        config: { agentMode: false, providers: [{ provider: "OpenAI", modelLabel: "GPT" }] },
         modelResults: {}
       });
       expect(setInterval).not.toHaveBeenCalled();
       window.setAgentModeStatus("complete");
-      expect(window.isAgentModeRunning()).toBe(false);
+      expect(setInterval).not.toHaveBeenCalled();
       dom.window.close();
     } finally {
       vi.useRealTimers();

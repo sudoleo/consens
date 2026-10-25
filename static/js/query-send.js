@@ -1,6 +1,9 @@
-// Multi-run query orchestration.
+// Compare: one question, the chosen models answer side by side.
 // Every await/callback is bound to one RunContext from App.runRegistry; the
 // shared response DOM is written only by run-view.js when that run is visible.
+// Agent messages go to agent-chat.js (window.sendQuestion hands them over).
+// Until 2026-10-25 this module also ran the Consensus pipeline after the
+// answers; that now runs only on the server (Watches, the API, topics).
 (function () {
   "use strict";
 
@@ -24,12 +27,6 @@
 
   function isAbortError(error) {
     return error?.name === "AbortError";
-  }
-
-  // Compare = answers only, otherwise the full Consensus pipeline. The
-  // Reasoning switch travels separately as deep_search (kept wire name).
-  function runModeOf(context) {
-    return context?.config?.agentMode ? "consensus" : "compare";
   }
 
   // Bookmark/turn label. "Deep Think" only survives in old bookmarks; the
@@ -192,8 +189,8 @@
 
   function incompleteMessage(completion) {
     return completion === "token_limit"
-      ? "This answer stopped at the output limit; its end is missing. It is used for the consensus as a truncated answer."
-      : "This answer was interrupted and is incomplete. It is not used for the consensus.";
+      ? "This answer stopped at the output limit; its end is missing."
+      : "This answer was interrupted and is incomplete.";
   }
 
   function contextStreamRenderer(context, provider) {
@@ -235,18 +232,6 @@
     };
   }
 
-  function conversationPayload(context, payload) {
-    const binding = context.chatSession?.contextBinding?.();
-    if (binding) Object.assign(payload, binding);
-    else if (context.previousExchange && !context.basis?.chatId) {
-      payload.context = {
-        previous_question: context.previousExchange.question,
-        previous_consensus: context.previousExchange.consensus
-      };
-    }
-    return payload;
-  }
-
   function persistenceOptions(context) {
     return {
       runId: context.runId,
@@ -264,12 +249,12 @@
     const abortProvider = () => controller.abort();
     context.controllers.query.signal.addEventListener("abort", abortProvider, { once: true });
 
-    const payload = conversationPayload(context, {
+    const payload = {
       question: context.question,
       deep_search: context.config.deepSearch,
       system_prompt: systemPrompt,
       mode: context.mode,
-      run_mode: runModeOf(context),
+      run_mode: "compare",
       model: providerConfig.modelId,
       id_token: idToken,
       useOwnKeys: context.config.useOwnKeys,
@@ -277,7 +262,7 @@
       // Binds the server-stored answer (receipt) to this logical run, also
       // for own-key runs that have no usage key.
       run_id: context.runId
-    });
+    };
     if (context.attachments.length) payload.attachments = context.attachments;
     if (context.config.useOwnKeys) payload.openrouter_key = context.credentials.openrouterKey || "";
 
@@ -298,11 +283,10 @@
         ? window.App.prepareResponseSourcesForEvidence(data.response, data.sources || [], context.evidenceSources)
         : { markdown: data.response, sources: data.sources || [], evidenceSources: context.evidenceSources };
       context.evidenceSources = prepared.evidenceSources;
-      // Typed completion state (R06). Partial text stays visible, but it is
-      // labelled and never counts as a completed answer for the Consensus.
+      // Typed completion state (R06). Partial text stays visible, labelled.
+      // A token-limit answer still counts, marked as truncated; an
+      // interrupted one is incomplete.
       const completion = typeof data.completion === "string" ? data.completion : "complete";
-      // A token-limit answer is still used, marked as truncated; only
-      // interrupted answers are excluded from the Consensus.
       const usable = completion === "complete" || completion === "token_limit";
       result.status = usable ? "complete" : "incomplete";
       result.completion = completion;
@@ -310,34 +294,22 @@
       result.streamText = prepared.markdown;
       result.sources = prepared.sources;
       result.rawSources = Array.isArray(data.sources) ? data.sources : [];
-      // Server receipt of exactly this answer (R09): /consensus reads the
-      // stored text, never the browser copy.
-      result.receipt = typeof data.answer_receipt === "string" ? data.answer_receipt : null;
-      if (usable && !result.receipt) {
-        // The server could not store this answer, so it cannot be verified
-        // for the Consensus. Say so instead of failing later with a vague error.
-        result.status = "incomplete";
-        result.error = "This answer could not be saved for the comparison. It is not used for the consensus; run the question again to include it.";
-      } else {
-        result.error = completion === "complete" ? null : incompleteMessage(completion);
-      }
+      result.error = completion === "complete" ? null : incompleteMessage(completion);
       context.progress.completedModels += 1;
       if (result.status === "complete") context.progress.successfulModels += 1;
       else context.progress.failedModels += 1;
       registry.update(context.runId, () => {});
 
-      // Agent-mode provider answers are staged in the run context. Only the
-      // completed consensus endpoint promotes its server-authoritative answer
-      // set to the bookmark atomically. Writing each follow-up provider here
-      // would temporarily mix a new failed turn with the previous consensus.
-      // An incomplete answer is never stored as if it were a finished one (R06).
-      if (authIsCurrent(context) && context.config.agentMode !== true && completion === "complete") {
+      // Each finished answer is saved to the comparison's bookmark as it
+      // arrives. An incomplete answer is never stored as if it were a
+      // finished one (R06).
+      if (authIsCurrent(context) && completion === "complete") {
         const promise = window.saveBookmark?.(
           context.question,
           result.text,
           providerConfig.provider,
           context.mode,
-          context.previousExchange?.question || "",
+          "",
           { ...persistenceOptions(context), modelLabel: providerConfig.modelLabel || providerConfig.modelId }
         );
         if (promise?.catch) promise.catch(() => undefined);
@@ -391,12 +363,6 @@
     // background and then reopened it only to cancel. Never replace that newer
     // composer ownership with the canceled run's frozen draft/attachments.
     if (composerOccupied) return;
-    // Admission deliberately detaches the shared composer from its previous
-    // conversation. If the run never reached provider fan-out, restore that
-    // exact frozen basis so retrying the draft remains a follow-up.
-    if (context.previousExchange && context.basis) {
-      registry.selectConversationBasis(context.basis);
-    }
     if (input) {
       input.value = context.metadata.draftQuestion || context.question;
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -444,18 +410,12 @@
         system_prompt: context.config.systemPrompt,
         deep_search: context.config.deepSearch,
         mode: context.mode,
-        // Admission: the expected tokens of a typical run of this mode.
-        run_mode: runModeOf(context),
+        // Admission: the expected tokens of a typical Compare run.
+        run_mode: "compare",
         useOwnKeys: context.config.useOwnKeys,
         id_token: idToken
       };
       if (context.usage.key) preparePayload.usage_run_key = context.usage.key;
-      if (context.previousExchange && !context.basis?.chatId) {
-        preparePayload.context = {
-          previous_question: context.previousExchange.question,
-          previous_consensus: context.previousExchange.consensus
-        };
-      }
 
       const prepared = await prepareWithRetry(preparePayload, signal);
       if (!runIsCurrent(context)) return;
@@ -473,42 +433,6 @@
       const effectivePrompt = prepared.response.ok && prepared.data?.system_prompt
         ? prepared.data.system_prompt
         : context.config.systemPrompt;
-
-      context.chatSession.beginRun({
-        question: context.question,
-        mode: context.mode,
-        deepSearch: context.config.deepSearch,
-        selectedModels: context.config.providers.map(provider => provider.modelId),
-        consensusModel: context.config.consensusModel,
-        isFollowup: Boolean(context.previousExchange),
-        prepareSucceeded: prepared.response.ok,
-        useOwnKeys: context.config.useOwnKeys,
-        usageRunKey: context.usage.key,
-        attachments: context.attachmentMeta
-      });
-
-      if (context.previousExchange && context.basis?.chatId) {
-        const turn = await context.chatSession.ensurePendingTurn({
-          idToken,
-          question: context.question,
-          consensusModel: context.config.consensusModel,
-          signal
-        });
-        if (!turn) throw new Error(
-          context.chatSession.lastPersistenceError || "The conversation turn could not be prepared. Please retry."
-        );
-        const memoryKey = context.config.useOwnKeys
-          ? context.credentials[context.config.memoryKeyName] || ""
-          : "";
-        await context.chatSession.ensureContext({
-          idToken,
-          useOwnKeys: context.config.useOwnKeys,
-          usageRunKey: context.usage.key,
-          memoryApiKey: memoryKey,
-          signal
-        });
-        if (!context.chatSession.contextBinding()) throw new Error("The conversation context could not be bound.");
-      }
       if (!runIsCurrent(context)) return;
 
       context.phase = "answers";
@@ -526,44 +450,7 @@
           message: "All selected model requests failed.",
           details: `${context.progress.totalModels} providers failed`
         });
-        if (context.chatSession.pendingTurnId) {
-          await window.App.executeConsensusRun?.(context, {
-            trigger: "disposition",
-            dispositionOnly: true
-          });
-          if (registry.isExecuting(context.runId)) {
-            context.keepConversationLock = true;
-            finishFailed(context, "All selected model requests failed.");
-          }
-          return;
-        }
         finishFailed(context, "All selected model requests failed.");
-        return;
-      }
-
-      if (context.config.agentMode && context.config.autoConsensus) {
-        if (successes < 2 && context.chatSession.pendingTurnId) {
-          await window.App.executeConsensusRun?.(context, { trigger: "disposition", dispositionOnly: true });
-          if (registry.isExecuting(context.runId)) finishFailed(context, "At least two completed model answers are required.");
-          return;
-        }
-        if (successes < 2) {
-          finishFailed(context, "At least two model responses are required for a consensus.");
-          return;
-        }
-        await window.App.executeConsensusRun?.(context, { trigger: "auto" });
-        return;
-      }
-
-      if (context.config.agentMode) {
-        // Models are complete, but this run still owns a potential manual
-        // synthesis (and, for an authoritative follow-up, its pending turn).
-        // Keep it active so the conversation lock and frozen credentials stay
-        // attached to exactly this run until Consensus or Cancel resolves it.
-        context.phase = "answers_ready";
-        context.bookmark.status = "waiting";
-        registry.update(context.runId, () => {});
-        trackAppEvent("app_query_completed", { status: "answers_ready", selected_models: context.progress.totalModels });
         return;
       }
 
@@ -575,10 +462,6 @@
       window.App.trackAnswer?.(context, "ok");
     } catch (error) {
       if (isAbortError(error) || !registry.isExecuting(context.runId)) return;
-      context.chatSession?.markPendingUncertain?.();
-      if (context.chatSession?.pendingTurnId || context.chatSession?.hasUncertainTurn?.()) {
-        context.keepConversationLock = true;
-      }
       // Failed before the models were asked: the message went back into the
       // box (restoreComposerAfterUnsentRun), and the sentence says so.
       const message = window.App.userError(error, { context: context.phase === "prepare" ? "send" : undefined,
@@ -588,18 +471,12 @@
     }
   }
 
-  function validateOwnKeys(providers, memoryKeyName) {
+  function validateOwnKeys(providers) {
     const required = new Set(providers.map(provider => provider.keyName));
-    if (memoryKeyName) required.add(memoryKeyName);
     return Array.from(required).filter(keyName => !String(localStorage.getItem(keyName) || "").trim());
   }
 
   function beginContext(question, draftQuestion, quotedContext) {
-    // Persisted run field: "the consensus pipeline runs" (Consensus or an
-    // Agent choice this chat or account cannot honour). Compare skips it.
-    const agentMode = window.App.runMode.pipeline();
-    const basis = registry.getSelectedConversationBasis();
-    const followup = Boolean(agentMode && basis && basis.question && basis.consensus && !basis.continuationUnavailable);
     // Reasoning switch; kept as config.deepSearch / deep_search on the wire.
     const deepSearch = document.getElementById("reasoningToggle")?.checked === true;
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
@@ -616,17 +493,9 @@
       return null;
     }
 
-    const consensusSelect = document.getElementById("consensusModelDropdown");
-    const consensusModel = String(consensusSelect?.value || "").trim();
-    const consensusModelLabel = optionLabel(consensusSelect);
-    const memoryProvider = String(consensusSelect?.selectedOptions?.[0]?.dataset?.engineProvider || "").trim().toLowerCase();
-    const memoryKeyName = "openrouterKey";
-    if (useOwnKeys) {
-      const missing = validateOwnKeys(providers, memoryKeyName);
-      if (missing.length) {
-        window.App.showPopup?.("Add your OpenRouter API key before sending.");
-        return null;
-      }
+    if (useOwnKeys && validateOwnKeys(providers).length) {
+      window.App.showPopup?.("Add your OpenRouter API key before sending.");
+      return null;
     }
 
     const authUser = window.auth?.currentUser || null;
@@ -635,52 +504,38 @@
       return null;
     }
 
-    const chatSession = window.App.createChatSession?.({
-      activeChatId: basis?.chatId,
-      activeTurnId: basis?.turnId
-    });
     const usage = createUsage(deepSearch, useOwnKeys);
+    // agentMode/autoConsensus are the persisted run fields for "the
+    // Consensus pipeline ran"; a Compare run never runs it.
     const config = {
-      agentMode,
-      autoConsensus: agentMode,
+      agentMode: false,
+      autoConsensus: false,
       deepSearch,
       useOwnKeys,
       providers: providers.map(provider => ({ ...provider })),
-      consensusModel,
-      consensusModelLabel,
-      memoryProvider,
-      memoryKeyName,
       systemPrompt: currentSystemPrompt()
     };
 
-    // The continued turn belongs to the history from the run's first
-    // projection on (run-registry.js create).
-    const historyTurns = [...(basis?.historyTurns || [])];
-    if (followup && basis?.currentTurn) {
-      const turnId = String(basis.currentTurn.turn_id || basis.currentTurn.id || "");
-      const alreadyStored = historyTurns.some(turn => String(turn?.turn_id || turn?.id || "") === turnId && turnId);
-      if (!alreadyStored) historyTurns.push(basis.currentTurn);
-    }
-
+    // A comparison is always a new chat of its own: it continues nothing,
+    // also when a saved chat is open.
     let context;
     try {
       context = registry.create({
         question,
         mode: getActiveMode(),
         config,
-        basis,
-        followup,
-        historyTurns,
-        bookmarkId: followup ? basis.bookmarkId : "",
-        bookmarkTitle: followup ? basis.title : question,
-        chatSession,
+        basis: null,
+        followup: false,
+        historyTurns: [],
+        bookmarkId: "",
+        bookmarkTitle: question,
         usage,
         attachments,
         attachmentMeta,
         metadata: { draftQuestion, quotedContext }
       });
     } catch (error) {
-      if (["parallel_limit", "conversation_busy", "conversation_uncertain", "bookmark_deleting"].includes(error?.code)) {
+      if (error?.code === "parallel_limit") {
         window.App.showPopup?.(error.message);
         trackAppEvent("app_query_blocked", { reason: error.code });
         return null;
@@ -715,14 +570,6 @@
           result.error = "Request canceled.";
         }
       });
-      if (["pending", "streaming", "differences"].includes(context.consensus.status)) {
-        context.consensus.status = "canceled";
-        context.consensus.error = { message: "Request canceled." };
-      }
-      context.chatSession?.handleConsensusCancelled?.();
-      if (context.chatSession?.pendingTurnId || context.chatSession?.hasUncertainTurn?.()) {
-        context.keepConversationLock = true;
-      }
       context.bookmark.status = "canceled";
       if (registry.isVisible(context.runId) && context.phase === "prepare") {
         restoreComposerAfterUnsentRun(context);
@@ -808,7 +655,7 @@
 
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
     const deepThink = document.getElementById("reasoningToggle")?.checked === true;
-    const runMode = deepThink ? "deep_think" : (window.App.runMode?.pipeline?.() === false ? "compare" : "consensus");
+    const runMode = deepThink ? "deep_think" : "compare";
     if (window.App.usageLimit?.blockIfExhausted?.({ useOwnKeys, deepThink, mode: runMode, source: "send" })) {
       trackAppEvent("app_query_blocked", { reason: "usage_limit" });
       return;
@@ -822,9 +669,7 @@
       mode: context.mode,
       selected_models: context.progress.totalModels,
       custom_credentials: context.config.useOwnKeys,
-      logged_in: true,
-      agent_mode: context.config.agentMode,
-      auto_consensus: context.config.autoConsensus
+      logged_in: true
     });
     window.App.trackAsk?.(context);
     await executeRun(context);
@@ -839,21 +684,6 @@
     const canceled = registry.cancel(target, "user");
     if (canceled) trackAppEvent("app_query_canceled");
     return canceled;
-  };
-
-  window.App.skipModel = function (boxId, runId = null) {
-    const context = registry.get(runId || registry.visible()?.runId);
-    if (!context || !registry.isExecuting(context.runId) || context.phase !== "answers") return false;
-    const result = Object.values(context.modelResults).find(item => item.boxId === boxId);
-    if (!result || !["pending", "reasoning", "streaming"].includes(result.status)) return false;
-    result.status = "skipped";
-    result.error = "Skipped — this model took too long, so the run went on without it.";
-    context.controllers.providers.get(result.provider)?.abort?.();
-    context.progress.completedModels += 1;
-    context.progress.failedModels += 1;
-    registry.update(context.runId, () => {});
-    trackAppEvent("app_model_skipped", { model: result.provider });
-    return true;
   };
 
   window.isQueryRequestRunning = function (runId = null) {

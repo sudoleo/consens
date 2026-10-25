@@ -3,7 +3,7 @@ import pytest
 from playwright.sync_api import expect
 
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
-from test_model_answer_reader import seed_insights, reader_screenshot
+from test_model_answer_reader import DIFFERENCES, seed_insights, reader_screenshot
 
 
 @pytest.mark.parametrize('theme', ['light', 'dark'])
@@ -11,29 +11,16 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
     context, page = _real_firebase_page(browser, phase4_server,
         init_script=f"localStorage.setItem('theme','{theme}')")
     try:
-        seed_insights(page)
-        page.evaluate("""() => {
-          const ctx = App.runRegistry.visible();
-          ctx.consensus.differencesData.differences.splice(1);
-          ctx.consensus.differencesData.agreement = {score:64, model_count:3,
-            scored_claims:7, total_claims:10, coverage_percent:70};
-          ctx.evidenceSources = Array.from({length:10}, (_, i) => i + 1).map(i => ({id:'S'+i,
-            title:'Official results and participant registration '+i,
-            url:'https://results.example.invalid/report/'+i}));
-          App.runRegistry.renderVisible();
-        }""")
-        page.evaluate("""() => {
-          App.state.set('lastQuestion', App.runRegistry.visible().question, 'run');
-          App.consensusPipeline.setRunFacts({models: 5, durationMs: 103000});
-        }""")
+        # A saved Consensus answer: since 2026-10-25 the browser runs none,
+        # so its footer carries no run facts or "Run again".
+        seed_insights(page, differences=DIFFERENCES[:1],
+                      agreement={'score': 64, 'model_count': 3, 'scored_claims': 7, 'total_claims': 10, 'coverage_percent': 70},
+                      sources=[{'id': f'S{i}', 'title': f'Official results and participant registration {i}',
+                                'url': f'https://results.example.invalid/report/{i}'} for i in range(1, 11)])
         for width in [390, 320, 640, 641, 1440]:
             page.set_viewport_size({'width':width, 'height':900})
             page.evaluate('window.scrollTo(0,document.documentElement.scrollHeight)')
-            if width <= 640:
-                expect(page.locator('#runProvenanceFacts')).to_be_hidden()
-            else:
-                expect(page.locator('#runProvenanceFacts')).to_be_visible()
-                expect(page.locator('#runProvenanceFacts')).to_contain_text('103 s')
+            expect(page.locator('#runProvenanceFacts, #runReplayButton')).to_have_count(0)
             for row in page.locator('#consensusFooterTabs, .thread-history-tabs').all():
                 actions = row.locator('.consensus-evidence-action:visible')
                 expect(actions.locator('.consensus-evidence-icon[aria-hidden="true"]')).to_have_count(3)
@@ -54,7 +41,6 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
                             && c.top >= r.top - 1 && c.bottom <= r.bottom + 1;});
                     }""")
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-            expect(page.locator('#runReplayButton')).to_be_visible()
             expect(page.locator('.consensus-output')).to_have_css('padding-bottom', '24px')
             reader_screenshot(page, f'polished-footer-{width}-{theme}')
             page.locator('#consensusSourcesTab').click()
@@ -89,26 +75,9 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             if card.get_attribute('open') is None:
                 card.locator('summary').click()
             expect(card).to_have_attribute('open', '')
-            button = inspector.locator('.diff-resolve-btn')
-            expect(button).to_be_visible()
-            # Compact and sized to its content, not the chat's card-wide bar.
-            # Measured against its own content, not a share of the inspector:
-            # at 320 px the content alone fills ~90 % since the Plus chip
-            # grew to the 12-px minimum (Apple-Audit G11).
-            fit = button.evaluate("""b => {
-              const width = b.getBoundingClientRect().width;
-              b.style.width = 'max-content';
-              const content = b.getBoundingClientRect().width;
-              b.style.width = '';
-              return {width, content};
-            }""")
-            assert fit['width'] <= fit['content'] + 1
-            assert fit['width'] <= inspector.bounding_box()['width']
+            # A saved answer starts no Resolve round (2026-10-25).
+            expect(inspector.locator('.diff-resolve-btn')).to_have_count(0)
             reader_screenshot(page, f'polished-differences-{width}-{theme}')
-            # A finished resolve must still remove its button despite custom display.
-            button.evaluate('(node) => node.hidden = true')
-            expect(button).to_be_hidden()
-            button.evaluate('(node) => node.hidden = false')
             page.locator('#answerReaderClose').click()
         page.set_viewport_size({'width':320, 'height':844})
         for mode in ['summary', 'off', 'full']:

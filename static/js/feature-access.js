@@ -8,10 +8,11 @@
   const modal = document.getElementById("proFeatureModal");
   const closeButton = document.getElementById("closeProModal");
   const sidebarLink = document.getElementById("upgradeLink");
-  const plusFeatures = new Set(["Resolve"]);
+  // Features a Plus account already has (none since Resolve left the
+  // browser with the Consensus run, 2026-10-25).
+  const plusFeatures = new Set();
   const messages = {
     "High Quality mode": "High Quality mode is not available on your account yet. Your current models are still selected.",
-    "Resolve": "Resolve is not available on your account yet. You can still review the differences and model answers.",
     "More frequent Consensus Watch checks": "More frequent Watch checks are not available on your account yet.",
     "More Consensus Watches": "Your active Watch limit has been reached. Pause a Watch to make room for another.",
   };

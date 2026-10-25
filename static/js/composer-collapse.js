@@ -95,9 +95,6 @@
     const quote = document.getElementById("composerQuote");
     if (quote && !quote.hidden) return true;
 
-    const notice = document.getElementById("composerRunNotice");
-    if (notice && !notice.hidden) return true;
-
     const inputBox = document.querySelector(".input-section .chat-input-container");
     if (inputBox && (inputBox.classList.contains("attach-menu-open") ||
                      inputBox.querySelector(".model-picker-menu.is-open"))) {

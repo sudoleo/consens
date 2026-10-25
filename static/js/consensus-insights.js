@@ -1792,7 +1792,7 @@
           // Karte und das Blatt auf dem Handy bauen denselben Inhalt. Bedienbar
           // (ctx.interactive) werden die Logos zu Wegen in die Antwort ihres
           // Modells, und die Fusszeile (cardActions) fuehrt in den Leser: zum
-          // Unterschied (Resolve, Zitate, alle Unterschiede) und zu den
+          // Unterschied (Zitate, alle Unterschiede) und zu den
           // Antworten. Ihr Titel fuehrte vorher als Chevron dorthin, das sah
           // niemand (Max 2026-10-23). `ctx.close` schliesst die Karte vor dem
           // Weg (festgehalten: closeClaimPopover, Vorschau: leavePreviewFor).
@@ -2428,14 +2428,9 @@
               fallbackBox.hidden = false;
             }
 
-            // Legende nur, wenn wirklich etwas markiert wurde. Sie verhindert,
-            // dass unmarkierter Text als geprueft-und-bestaetigt gelesen wird.
-            if (!options.stored) {
-              // Die Provenance-Zeile zaehlt die strittigen Stellen aus genau
-              // diesen Markern. Sie wird beim Laufende zuerst ohne sie gerendert
-              // (die Marker entstehen erst hier) und holt die Zahl jetzt nach.
-              window.App?.consensusPipeline?.renderProvenance?.();
-            }
+            // Die Fusszeile zaehlt die Unterschiede aus genau diesen Markern;
+            // sie entstehen erst hier, also holt sie die Zahl jetzt nach.
+            if (!options.stored) window.App?.consensusFooter?.render?.();
 
             // History-Turns werden vor dem Einfuegen in den DOM aufgebaut.
             // Filter und Passage-Tabstopps deshalb direkt auf ihren Containern
@@ -2615,12 +2610,11 @@
             return claims.length > 0;
           }
 
-          // --- Resolve-Runde ---------------------------------------------------
-          // Konfrontiert die dissentierenden Modelle eines Widerspruchs gezielt
-          // mit der Gegenposition (POST /resolve). Pro-Feature: Free-Nutzer
-          // sehen den Button als Teaser (öffnet das Pro-Modal). Ergebnis wird
-          // in der Karte gerendert, am diff-Objekt gemerkt und über das
-          // Consensus-Bookmark persistiert.
+          // --- Resolve-Ergebnis -----------------------------------------------
+          // Bis 2026-10-25 konnte eine Resolve-Runde (POST /resolve) die
+          // dissentierenden Modelle eines Widerspruchs mit der Gegenposition
+          // konfrontieren; ihr Ergebnis steht am diff-Objekt gespeicherter
+          // Consensus-Antworten und wird hier weiter gezeigt.
           const RESOLVE_STATUS = {
             resolved: { cls: "is-resolved", label: "Resolved" },
             standoff: { cls: "is-standoff", label: "Dissent confirmed" },
@@ -2728,8 +2722,8 @@
             });
 
             // Transparenz: den tatsaechlich gestellten Prompt hinter einem
-            // Toggle zeigen. Nur in der Live-Session verfuegbar (das Feld wird
-            // nicht ins Bookmark/Share persistiert, s. runResolveRound).
+            // Toggle zeigen, wo das Ergebnis ihn mitbringt (gespeichert wurde
+            // er nie, gespeicherte Ergebnisse zeigen den Toggle also nicht).
             const withPrompt = (Array.isArray(data.results) ? data.results : []).filter(function (r) { return r.prompt; });
             if (withPrompt.length) {
               const promptWrap = document.createElement("div");
@@ -2787,383 +2781,20 @@
             tagRow.appendChild(chip);
           }
 
-          // Resolve is bound to one immutable bookmark revision before its
-          // first await. The server persists only its own model result and
-          // rechecks that revision inside the bookmark transaction.
-          function resolutionBindingIsWritable(binding) {
-            if (!binding?.bookmarkId) return false;
-            if (window.App.bookmarkUi?.canWrite?.(binding.bookmarkId, binding.auth?.uid) === false) {
-              return false;
-            }
-            const registry = window.App.runRegistry;
-            if (!registry) return true;
-            const owner = binding.runId ? registry.get?.(binding.runId) : null;
-            if (binding.runId && (!owner || owner.bookmark?.deleted === true)) return false;
-            const ownerCreatedAt = Number(binding.ownerCreatedAt || owner?.createdAt || 0);
-            const boundary = ownerCreatedAt || Number(binding.boundAt || 0);
-            // A follow-up created from the same bookmark is a newer resource
-            // mutation. A late Resolve round from the predecessor may still be
-            // shown in that predecessor's view, but must never roll persistence
-            // back to its older chat/turn snapshot.
-            return !(registry.list?.() || []).some(function (context) {
-              return context.runId !== binding.runId
-                && context.bookmark?.id === binding.bookmarkId
-                && context.bookmark?.deleted !== true
-                && Number(context.createdAt || 0) > boundary;
-            });
-          }
-
-          function showResolveProTeaser() {
-            window.trackUmamiEvent?.("app_resolve_pro_teaser_click");
-            const shown = window.App?.showProFeatureModal?.("Resolve");
-            if (!shown) {
-              window.App?.showPopup?.("Resolve is not available on your account yet. You can still review the differences and model answers.");
-            }
-          }
-
-          async function runResolveRound(diff, button, resultBox) {
-            if (!window.auth?.currentUser) {
-              window.App?.askToLogIn?.("Log in to resolve this disagreement.", { trigger: button, source: "resolve" });
-              return;
-            }
-            // Bind everything before the first await. A different run or
-            // bookmark may become visible while /resolve is still in flight.
-            const boundContext = window.App.runRegistry?.visible?.() || null;
-            const boundPayload = boundContext?.consensus?.bookmarkPayload
-              || window.lastConsensusBookmarkPayload;
-            const boundUser = boundContext?.auth?.user || window.auth.currentUser;
-            const preparedShareContext = window.currentBookmarkShareResultContext;
-            const boundConversation = boundPayload?.conversation || {};
-            const boundBookmarkId = boundContext?.bookmark?.id
-              || boundPayload?.conversation?.bookmarkId
-              || window.App.runRegistry?.getSelectedConversationBasis?.()?.bookmarkId
-              || null;
-            const syntheticBookmark = {
-              query: boundContext?.question || boundPayload?.question || "",
-              chat_id: boundConversation.chatId || boundContext?.completedBasis?.chatId || "",
-              turn_id: boundConversation.turnId || boundContext?.completedBasis?.turnId || "",
-              share_result_id: boundPayload?.previousQuestion
-                ? ""
-                : (boundPayload?.resultId || boundContext?.consensus?.resultId || ""),
-              responses: {
-                consensus: boundContext?.consensus?.text || boundPayload?.consensusText || "",
-                differences_data: boundPayload?.differencesData
-                  || boundContext?.consensus?.differencesData
-                  || null
-              }
-            };
-            const binding = {
-              runId: boundContext?.runId || null,
-              bookmarkId: boundBookmarkId,
-              payload: boundPayload,
-              auth: boundContext?.auth || {
-                user: boundUser,
-                uid: boundUser?.uid || null,
-                generation: window.App.authState?.generation
-              },
-              question: String(boundContext?.question || boundPayload?.question || "").trim(),
-              useOwnKeys: boundContext?.config?.useOwnKeys
-                ?? ($("useOwnKeysSwitch")?.checked === true),
-              credentials: boundContext?.credentials
-                ? Object.assign({}, boundContext.credentials)
-                : Object.fromEntries(
-                    ["openrouterKey"]
-                      .map(function (key) { return [key, localStorage.getItem(key) || ""]; })
-                  ),
-              boundAt: Date.now(),
-              ownerCreatedAt: Number(boundContext?.createdAt || 0),
-              // A live run receives the exact, server-sanitized revision from
-              // its queued consensus save. A prepared saved-bookmark view is
-              // already bound to its own exact version. Synthetic parts are a
-              // fail-safe fallback and can only fail the server-side guard.
-              versionParts: Array.isArray(boundContext?.persistence?.consensusVersionParts)
-                ? boundContext.persistence.consensusVersionParts.slice()
-                : (!boundContext && preparedShareContext?.bookmarkId === boundBookmarkId
-                    && Array.isArray(preparedShareContext.versionParts)
-                  ? preparedShareContext.versionParts.slice()
-                  : null),
-              syntheticBookmark: syntheticBookmark
-            };
-            const actionController = new AbortController();
-            let registryAction = null;
-            try {
-              registryAction = window.App.runRegistry?.beginAction?.({
-                key: binding.bookmarkId
-                  ? "resolve"
-                  : `resolve:${JSON.stringify([diff.claim, diff.positions])}`,
-                ownerRunId: binding.runId,
-                bookmarkId: binding.bookmarkId,
-                auth: binding.auth,
-                controller: actionController
-              }) || null;
-            } catch (error) {
-              window.App?.showPopup?.(window.App.userError(error, { fallback: "This resolve round can’t start yet." }));
-              return;
-            }
-            const finishRegistryAction = function () {
-              if (registryAction) {
-                window.App.runRegistry?.finishAction?.(registryAction.actionId);
-                registryAction = null;
-              }
-            };
-            const authIsCurrent = function () {
-              if (boundContext) return window.App.runRegistry?.isAuthCurrent?.(boundContext) === true;
-              return window.auth?.currentUser === boundUser
-                && window.auth?.currentUser?.uid === binding.auth.uid
-                && window.App.authState?.generation === binding.auth.generation;
-            };
-            const viewStillOwnsResult = function () {
-              if (binding.runId) return window.App.runRegistry?.isVisible?.(binding.runId) === true;
-              const basis = window.App.runRegistry?.getSelectedConversationBasis?.();
-              return !window.App.runRegistry?.visible?.()
-                && Boolean(binding.bookmarkId)
-                && basis?.bookmarkId === binding.bookmarkId;
-            };
-            let idToken = null;
-            let expectedBookmarkVersion = "";
-            try {
-              [idToken] = await Promise.all([
-                boundUser.getIdToken(),
-                Promise.resolve(boundContext?.persistence?.consensusPromise).catch(() => undefined)
-              ]);
-              if (Array.isArray(boundContext?.persistence?.consensusVersionParts)) {
-                binding.versionParts = boundContext.persistence.consensusVersionParts.slice();
-              }
-              if (!Array.isArray(binding.versionParts)) {
-                binding.versionParts = window.App.bookmarkUi?.versionParts?.(binding.syntheticBookmark)
-                  || [];
-              }
-              expectedBookmarkVersion = resolutionBindingIsWritable(binding)
-                ? await window.App.bookmarkUi?.versionForParts?.(binding.versionParts)
-                : "";
-            } catch (e) {
-              console.error("Token refresh error in resolve:", e);
-            }
-            if (!idToken || !authIsCurrent()) {
-              finishRegistryAction();
-              window.App?.showPopup?.("Your session has ended. Log in again to resolve this disagreement.");
-              return;
-            }
-
-            const question = binding.question;
-            const useOwnKeys = binding.useOwnKeys;
-            const resolveUsageRunKey = useOwnKeys
-              ? null
-              : (globalThis.crypto?.randomUUID?.()
-                || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-            // Nur den Label-Text austauschen; der Pro-Chip bleibt dabei an
-            // seinem Platz und der CSS-Spinner kann den Ladezustand anzeigen.
-            const labelEl = button.querySelector(".diff-resolve-btn-label");
-            const setLabel = function (text) {
-              if (labelEl) labelEl.textContent = text;
-              else button.textContent = text;
-            };
-            const originalLabel = labelEl ? labelEl.textContent : button.textContent;
-            button.disabled = true;
-            button.classList.add("is-loading");
-            setLabel("Asking the models…");
-            window.trackUmamiEvent?.("app_resolve_started", { positions: diff.positions.length });
-
-            try {
-              const response = await fetch("/resolve", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  id_token: idToken,
-                  useOwnKeys: useOwnKeys,
-                  usage_run_key: resolveUsageRunKey,
-                  question: question,
-                  claim: diff.claim,
-                  positions: diff.positions,
-                  bookmarkId: expectedBookmarkVersion ? binding.bookmarkId : null,
-                  expectedBookmarkVersion: expectedBookmarkVersion || null,
-                  openrouter_key: binding.credentials.openrouterKey || ""
-                }),
-                signal: actionController.signal
-              });
-              const data = await window.App.readJson(response).catch(() => ({}));
-              if (!authIsCurrent()) return;
-              if (!response.ok) {
-                // Any form of the refusal ({detail}, {error: {…}}, flat; App.errorFields).
-                const refusal = window.App.errorFields?.(data) || data?.detail || {};
-                const refusalCode = refusal.error_code || refusal.code;
-                if (refusalCode === "pro_required" || refusalCode === "plus_required") {
-                  // Tier-Status war veraltet: Button in den Teaser-Zustand
-                  // zurücksetzen und das Pro-Modal zeigen.
-                  button.disabled = false;
-                  button.classList.remove("is-loading");
-                  setLabel(originalLabel);
-                  showResolveProTeaser();
-                  return;
-                }
-                throw window.App.httpError(response, data);
-              }
-
-              window.App.renderUsageDisplay(data, binding.auth);
-
-              // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
-              // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.
-              // Prompt-Feld vor der Persistenz strippen: Bookmarks/Shares
-              // bleiben schlank, die Prompt-Ansicht gibt es nur live.
-              const persistedResolution = {
-                outcome: data.outcome,
-                results: (Array.isArray(data.results) ? data.results : []).map(function (r) {
-                  return {
-                    model: String(r?.model || ""),
-                    decision: String(r?.decision || "error"),
-                    position: String(r?.position || ""),
-                    reason: String(r?.reason || "")
-                  };
-                })
-              };
-              diff.resolution = persistedResolution;
-              if (boundContext) {
-                boundContext.consensus.differencesData = binding.payload?.differencesData
-                  || boundContext.consensus.differencesData;
-                window.App.runRegistry?.update?.(boundContext.runId, function () {}, {
-                  render: false,
-                  eventType: "post-action"
-                });
-              }
-              if (viewStillOwnsResult()) {
-                renderResolveResult(resultBox, data);
-                // Ladezustand beenden und Button entfernen (das [hidden]
-                // greift erst durch die zugehoerige CSS-Regel).
-                button.classList.remove("is-loading");
-                button.hidden = true;
-                markCardResolved(resultBox.closest(".diff-card"), data.outcome);
-              }
-              if (data.bookmark_persisted === true && binding.bookmarkId) {
-                window.App.bookmarkUi?.invalidate?.(binding.bookmarkId);
-                window.clearPreparedBookmarkShareResult?.();
-                let resolvedBookmark = null;
-                const persistedBookmark = boundContext?.persistence?.consensusBookmark;
-                if (persistedBookmark) {
-                  try {
-                    resolvedBookmark = structuredClone(persistedBookmark);
-                  } catch (_) {
-                    try { resolvedBookmark = JSON.parse(JSON.stringify(persistedBookmark)); } catch (_) {}
-                  }
-                }
-                if (!resolvedBookmark) resolvedBookmark = syntheticBookmark;
-                const persistedDifferences = resolvedBookmark?.responses?.differences_data?.differences;
-                const diffKey = JSON.stringify([
-                  String(diff.claim || "").trim(),
-                  Array.isArray(diff.positions) ? diff.positions : []
-                ]);
-                if (Array.isArray(persistedDifferences)) {
-                  const persistedDiff = persistedDifferences.find(function (item) {
-                    return JSON.stringify([
-                      String(item?.claim || "").trim(),
-                      Array.isArray(item?.positions) ? item.positions : []
-                    ]) === diffKey;
-                  });
-                  if (persistedDiff) persistedDiff.resolution = persistedResolution;
-                }
-                resolvedBookmark.share_result_id = "";
-                const resolvedVersionParts = window.App.bookmarkUi?.versionParts?.(resolvedBookmark) || [];
-                if (boundContext) {
-                  boundContext.consensus.resultId = null;
-                  if (boundContext.consensus.bookmarkPayload) {
-                    boundContext.consensus.bookmarkPayload.resultId = null;
-                  }
-                  boundContext.persistence.consensusBookmark = resolvedBookmark;
-                  boundContext.persistence.consensusVersionParts = resolvedVersionParts.slice();
-                  const exactDifferences = resolvedBookmark?.responses?.differences_data;
-                  if (exactDifferences) {
-                    boundContext.consensus.differencesData = exactDifferences;
-                    if (boundContext.consensus.bookmarkPayload) {
-                      boundContext.consensus.bookmarkPayload.differencesData = exactDifferences;
-                    }
-                  }
-                }
-                window.currentBookmarkShareResultContext = {
-                  bookmarkId: binding.bookmarkId,
-                  versionParts: resolvedVersionParts
-                };
-              }
-              window.trackUmamiEvent?.("app_resolve_completed", {
-                outcome: data.outcome,
-                bookmark_persisted: data.bookmark_persisted === true
-              });
-            } catch (error) {
-              if (error?.name === "AbortError" || !authIsCurrent()) return;
-              console.error("Resolve round failed:", error);
-              resultBox.innerHTML = "";
-              const note = document.createElement("div");
-              note.className = "resolve-outcome is-error";
-              note.textContent = window.App.userError(error, { fallback: "The resolve round failed. Try again." });
-              resultBox.appendChild(note);
-              resultBox.hidden = false;
-              button.disabled = false;
-              button.classList.remove("is-loading");
-              setLabel(originalLabel);
-              window.trackUmamiEvent?.("app_resolve_completed", { outcome: "request_error" });
-            } finally {
-              finishRegistryAction();
-            }
-          }
-
-          const RESOLVE_BTN_ICON =
-            '<svg class="diff-resolve-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" '
-            + 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
-            + '<path d="M2 5h9M11 5 8.8 2.8M11 5 8.8 7.2"/>'
-            + '<path d="M14 11H5M5 11l2.2-2.2M5 11l2.2 2.2"/></svg>';
-
+          // Ein gespeicherter Widerspruch zeigt das Ergebnis seiner Resolve-Runde
+          // (persistiert im Bookmark). Neue Runden gibt es seit 2026-10-25 nicht
+          // mehr: sie gehoerten zum Consensus-Lauf im Browser. Die
+          // Karten-Kennzeichnung uebernimmt renderDifferenceCards nach dem
+          // Einhaengen der Karte.
           function buildResolveSection(diff) {
             if (diff.type !== "contradiction") return null;
-
+            if (!diff.resolution || !RESOLVE_STATUS[diff.resolution.outcome]) return null;
             const wrap = document.createElement("div");
             wrap.className = "diff-resolve";
             const resultBox = document.createElement("div");
             resultBox.className = "diff-resolve-result";
-            resultBox.hidden = true;
-
-            // Bereits gelöster Widerspruch (persistiert im Bookmark): Ergebnis
-            // direkt zeigen, kein Button. Die Karten-Kennzeichnung übernimmt
-            // renderDifferenceCards nach dem Einhängen der Karte.
-            if (diff.resolution && RESOLVE_STATUS[diff.resolution.outcome]) {
-              renderResolveResult(resultBox, diff.resolution);
-              wrap.appendChild(resultBox);
-              return wrap;
-            }
-
-            const involved = new Set();
-            diff.positions.forEach(function (pos) {
-              (pos.models || []).forEach(function (m) { if (MODEL_BOX_IDS[m]) involved.add(m); });
-            });
-            if (involved.size < 2 || diff.positions.length < 2) return null;
-
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "diff-resolve-btn";
-            btn.insertAdjacentHTML("afterbegin", RESOLVE_BTN_ICON);
-            const label = document.createElement("span");
-            label.className = "diff-resolve-btn-label";
-            label.textContent = "Resolve with the models";
-            btn.appendChild(label);
-            btn.title = "Ask the disagreeing models to re-examine this point against each other’s position (uses 1 request)";
-            // Pro-Chip immer zeigen: Free-Nutzer sehen den Hinweis (Klick öffnet
-            // die Kosten-Erklaerung), Pro-Nutzer die gleiche klare Kennzeichnung.
-            const chip = document.createElement("span");
-            chip.className = "pro-badge diff-resolve-pro-chip";
-            // Resolve laeuft auf dem Standard-Judge und ist deshalb ab Plus
-            // frei; das Chip nennt die niedrigste Stufe, die es freischaltet.
-            chip.textContent = "Plus";
-            btn.appendChild(chip);
-            if (!window.isUserPlus) {
-              btn.classList.add("is-pro-locked");
-              btn.title = "Off by default: a Resolve round is a second full round of model calls";
-            }
-
-            btn.addEventListener("click", function () {
-              if (!window.isUserPlus) {
-                showResolveProTeaser();
-                return;
-              }
-              runResolveRound(diff, btn, resultBox);
-            });
-            wrap.append(btn, resultBox);
+            renderResolveResult(resultBox, diff.resolution);
+            wrap.appendChild(resultBox);
             return wrap;
           }
 
@@ -3200,8 +2831,7 @@
           // Baut die Karten in einen beliebigen Container, damit der Live-Fuss
           // und ein archivierter Turn dieselbe Darstellung teilen. Ein
           // archivierter Turn bekommt die statische Fassung: seine Sprunglinks
-          // zeigten sonst auf die Antwortboxen des NEUESTEN Laufs, und eine
-          // Resolve-Runde gehoert immer zum aktiven Lauf.
+          // zeigten sonst auf die Antwortboxen des NEUESTEN Laufs.
           function differenceRank(diff) {
             if (diff.type !== "contradiction") return 2;
             return diff.severity === "minor" ? 1 : 0;
@@ -3630,16 +3260,8 @@
                 });
                 body.appendChild(sides);
 
-                // Im Archiv nur das PERSISTIERTE Ergebnis, nie der Auslöser:
-                // eine Resolve-Runde laeuft gegen die Modelle des aktiven Laufs.
-                // Deshalb faellt jeder Knopf raus, auch bei einer Resolution
-                // mit unbekanntem Ausgang — die baut sonst wieder den Starter.
-                const resolveSection = (entry.claim || (isStatic && !diff.resolution))
-                  ? null
-                  : buildResolveSection(diff);
-                if (resolveSection && isStatic) {
-                  resolveSection.querySelectorAll("button").forEach(b => b.remove());
-                }
+                // Nur das PERSISTIERTE Ergebnis einer Resolve-Runde.
+                const resolveSection = entry.claim ? null : buildResolveSection(diff);
                 if (resolveSection && resolveSection.childNodes.length) {
                   body.appendChild(resolveSection);
                 }

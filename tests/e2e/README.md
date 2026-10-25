@@ -108,14 +108,6 @@ Firestore-Emulator wie oben beschrieben.
 
 ## Erzwungene Isolation
 
-`test_consensus_live_progress.py` prueft ausschliesslich die echte
-Fortschritts-Komponente (Template, gebautes CSS und JS) mit lokal simulierten
-Modellzustaenden im Browser. Alle Requests werden auf Repository-Assets
-geroutet; es startet keinen App-Server und braucht keinen Emulator. Lauf:
-`RUN_E2E=1 UNIT_TEST_MODE=1 python -m pytest tests/e2e/test_consensus_live_progress.py`.
-Mit `PROGRESS_SCREENSHOTS=<Verzeichnis>` speichert der Lauf zusaetzlich
-Light-/Dark-Bilder bei 390 und 1280 px.
-
 `tests/e2e/conftest.py` setzt vor dem uvicorn-Start:
 
 - `E2E_TEST_MODE=1`,
@@ -138,7 +130,7 @@ werden, landen aber nur im kurzlebigen Emulator. Inventar:
   `/prepare` sowie Chats, Turns, Context-Versionen, Modell-Completions und
   Turn-Abschluss; der serverseitige Bookmark-Writer bleibt ebenfalls aktiv,
 - im Mock-Profil ausdrücklich unterdrückt: `pending_results` und Differences-
-  Telemetrie; `firebase_stub.js` ersetzt die direkten Bookmark-/Vote-Funktionen
+  Telemetrie; `firebase_stub.js` ersetzt die direkten Bookmark-Funktionen
   des Browsers, aber nicht die serverseitigen Writes,
 - persistierte Reisen verwenden originales AppFirebase und echte HTTP-Routen
   für Bookmarks, Shares, Follow/Watch und Kontolöschung. Native Tests erreichen

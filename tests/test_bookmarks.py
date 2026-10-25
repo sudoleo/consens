@@ -706,13 +706,19 @@ def test_a_follow_up_bookmark_may_rest_on_its_own_run_snapshot():
     assert bookmark["share_result_id"] == ""
 
 
-def test_the_browser_sends_the_run_snapshot_with_every_consensus_bookmark():
-    consensus_run = (
-        Path(__file__).resolve().parents[1] / "static" / "js" / "consensus-run.js"
-    ).read_text(encoding="utf-8")
-    assert "context.consensus.resultId = data.result_id || null;" in consensus_run
-    assert "resultId: context.consensus.resultId" in consensus_run
-    assert "bookmarkPreviousQuestion ? null : data.result_id" not in consensus_run
+def test_the_browser_writes_no_consensus_bookmark_since_the_pipeline_left_it():
+    """Seit 2026-10-25 startet der Browser keinen Consensus mehr; das
+    Bookmark eines Agent-Turns schreibt der Server (agent_runs.py) und der
+    Browser uebernimmt nur dessen Meta."""
+    root = Path(__file__).resolve().parents[1]
+    scripts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [*(root / "static" / "js").glob("*.js"), root / "static" / "firebase.js"]
+    )
+    assert 'fetch("/bookmark/consensus",' not in scripts
+    assert "saveBookmarkConsensus" not in scripts
+    agent = (root / "static" / "js" / "agent-chat.js").read_text(encoding="utf-8")
+    assert "window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, conversation);" in agent
 
 
 def test_a_consensus_bookmark_without_a_completed_run_is_rejected():
@@ -1283,30 +1289,17 @@ def test_bookmark_frontend_prepares_share_and_watch_result():
     assert "resolveCurrentShareResultId" in watch
 
 
-def test_consensus_frontend_uses_primary_write_and_small_retry_payload():
+def test_a_persisted_consensus_bookmark_is_accepted_by_its_meta():
     root = Path(__file__).resolve().parents[1]
     firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
-    consensus_run = (root / "static" / "js" / "consensus-run.js").read_text(
-        encoding="utf-8"
-    )
-    fallback = firebase.split("async function saveBookmarkConsensus(", 1)[1]
-    fallback = fallback.split("window.saveBookmarkConsensus =", 1)[0]
 
-    assert "bookmarkId: context.bookmark.id" in consensus_run
-    assert "data.bookmark_persisted === true && data.bookmark_meta" in consensus_run
-    assert "window.acceptPersistedConsensusBookmark" in firebase
-    assert "keepalive: true" in fallback
-    assert "attempt < 3" in fallback
-    assert "sources:" not in fallback
-    assert "differencesData:" not in fallback
-    assert "modelResponses:" not in fallback
+    assert "window.acceptPersistedConsensusBookmark = function (bookmarkMeta, conversation = null)" in firebase
 
 
 def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     root = Path(__file__).resolve().parents[1]
     firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
-    query_send = (root / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
-    consensus_run = (root / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
+    history = (root / "static" / "js" / "thread-history.js").read_text(encoding="utf-8")
 
     assert "function bookmarkDisplayQuestion(bookmark)" in firebase
     # Auch ein Direktvergleich-Bookmark laedt mit seiner Frage zurueck.
@@ -1319,19 +1312,18 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     assert "This chat’s conversation was incomplete." in firebase
     assert "This chat’s conversation repeated a page." in firebase
     assert "function bookmarkFallbackTurn(bookmark)" in firebase
-    assert "restoreCompletedChat?.(" in firebase
     assert "continuationTurn.turn_id" in firebase
-    assert "followup?.offer?.(" in firebase
-    assert "markContinuationUnavailable?.()" in firebase
+    # Only an Agent chat continues from its saved basis; a saved Consensus
+    # chat is read-only (2026-10-25) and its message promises nothing more.
     assert "Follow-ups still use the saved chat context" in firebase
+    assert "Some earlier messages of this chat could not be displayed." in firebase
+    assert "followup?.offer?.(" not in firebase
+    assert "markContinuationUnavailable" not in firebase
+    assert "window.App?.followup?.showExchange?.(displayQuestion, consensusText, continuationTurn);" in firebase
     assert "window.App.bookmarkSession" in firebase
     assert "question: displayQuestion" in firebase
-    assert "function conversationPayload(context, payload)" in query_send
-    assert "context.previousExchange.question" in query_send
-    assert "previousQuestion: context.previousExchange?.question" in consensus_run
-    assert "previousTurn: context.previousExchange?.turn" in consensus_run
-    assert "buildStoredAgreement(differencesData)" in consensus_run
-    assert "Start a new chat — the saved context is unavailable" in consensus_run
+    assert "buildStoredAgreement(differencesData)" in history
+    assert "showExchange(question, consensusText, turn = null)" in history
 
 
 def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_state():

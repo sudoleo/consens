@@ -12,8 +12,8 @@
 //
 // Drei Stufen, zwei Flags (Serverseite: app/core/entitlements.py):
 //   Free  - Basis-Modelle, kleines Kontingent.
-//   Plus  - Modellauswahl wie Free, aber Anhaenge, Resolve
-//           und das groesste Kontingent.
+//   Plus  - Modellauswahl wie Free, aber Anhaenge und das groesste
+//           Kontingent.
 //   Pro   - alles.
 // Der Reasoning-Schalter ist fuer alle Stufen frei und wird hier nicht
 // gesperrt (seit 2026-10-02; vorher Pro-only als "Deep Think").

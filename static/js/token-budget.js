@@ -1,11 +1,10 @@
 /* ==========================================================================
    token-budget.js — the one daily token account in the browser
 
-   Compare, Consensus, Reasoning runs and Agent book on the same server-side
-   account (app/services/agent_quota.py). Every response that knows the
-   account carries the same `token_budget` snapshot: /usage, /user_status,
-   /prepare, the final event of /ask_* and /consensus, /resolve, Agent's
-   quota events and /agent/budget. This module is the only place that keeps
+   Agent, Compare and Reasoning runs book on the same server-side account
+   (app/services/agent_quota.py). Every response that knows the account
+   carries the same `token_budget` snapshot: /usage, /user_status, /prepare,
+   the final event of /ask_*, Agent's quota events and /agent/budget. This module is the only place that keeps
    it, orders concurrent snapshots and derives what the UI shows:
 
      - the percentage left ((limit − measured − estimated) / limit). Short
@@ -157,6 +156,9 @@
     };
   }
 
+  // The server's estimate keys; "consensus" stays its key for any other
+  // pipeline run (agent_budget_config.run_mode), which the browser no
+  // longer starts.
   function modeKey(mode) {
     return mode === "deep_think" || mode === "compare" ? mode : "consensus";
   }

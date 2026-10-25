@@ -63,7 +63,7 @@ function boot() {
   return { window, document, body, fallback };
 }
 
-// Die Karten baut consensus-run.js erst NACH dem Verankern in die Schublade
+// Die Karten baut thread-history.js erst NACH dem Verankern in die Schublade
 // des Turns -- genau diese Reihenfolge bildet der Helfer nach.
 function appendStoredCards(window, document, data) {
   const turn = document.querySelector(".thread-history-turn");
@@ -137,7 +137,7 @@ describe("renderStoredConsensusClaims", () => {
 
 describe('real archived drawer row', () => {
   it('keeps all drawers in one row, toggles only its own panel and allocates unique IDs', () => {
-    const { window, document } = loadScripts(['static/js/user-settings.js', 'static/js/consensus-anchor.js', 'static/js/consensus-insights.js', 'static/js/consensus-run.js'], {
+    const { window, document } = loadScripts(['static/js/user-settings.js', 'static/js/consensus-anchor.js', 'static/js/consensus-insights.js', 'static/js/thread-history.js'], {
       body: '<div id="threadHistory" hidden></div><div id="differencesCards"></div>'
         + '<div id="claimPopover" hidden></div><div id="claimSheetBackdrop" hidden></div>',
       before(window) { window.App = {}; window.Element.prototype.scrollIntoView = () => {}; },

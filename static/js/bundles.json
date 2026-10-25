@@ -25,7 +25,7 @@
         },
         {
           "file": "static/js/run-mode.js",
-          "note": "Single source of truth for Compare / Consensus / Agent. Must precede app-bootstrap.js, which paints the stored mode."
+          "note": "Single source of truth for Agent / Compare. Must precede app-bootstrap.js, which paints the stored mode."
         },
         {
           "file": "static/js/composer-starters.js",
@@ -39,7 +39,7 @@
         "static/js/app-state.js",
         {
           "file": "static/js/token-budget.js",
-          "note": "The one daily token account (Compare, Consensus, Agent). Before firebase.js and every run module, which feed it."
+          "note": "The one daily token account (Agent, Compare). Before firebase.js and every run module, which feed it."
         },
         {
           "file": "static/js/email-verify.js",
@@ -151,10 +151,9 @@
         "static/js/attachments.js",
         "static/js/model-answer-reader.js",
         "static/js/agent-mode.js",
-        "static/js/consensus-progress.js",
         {
-          "file": "static/js/consensus-lifecycle.js",
-          "note": "Gate/visibility/abort/run-state + auto-consensus persistence."
+          "file": "static/js/consensus-footer.js",
+          "note": "App.consensusFooter and reveal/hide of a saved Consensus answer (chats from before 2026-10-25). Before consensus-insights.js and app-init.js, which render it."
         },
         "static/js/share-dialog.js",
         "static/js/consensus-actions.js",
@@ -184,11 +183,10 @@
         "static/js/sidebar-quota.js",
         {
           "file": "static/js/usage-limit.js",
-          "note": "Before query-send/consensus-run, which use it."
+          "note": "Before query-send.js, which uses it."
         },
         "static/js/consensus-anchor.js",
         "static/js/consensus-insights.js",
-        "static/js/chat-session.js",
         "static/js/agent-activity.js",
         "static/js/request-deadline.js",
         {
@@ -203,7 +201,7 @@
         "static/js/agent-review.js",
         {
           "file": "static/js/passage-check.js",
-          "note": "App.passageCheck: the result card of a pasted text the Agent checked, above the answer. Uses App.claimPopover (consensus-insights.js) and App.agentReview.contextFor; called by agent-chat.js, run-view.js and consensus-run.js at runtime."
+          "note": "App.passageCheck: the result card of a pasted text the Agent checked, above the answer. Uses App.claimPopover (consensus-insights.js) and App.agentReview.contextFor; called by agent-chat.js, run-view.js and thread-history.js at runtime."
         },
         "static/js/agent-preferences.js",
         "static/js/agent-memory.js",
@@ -215,7 +213,10 @@
           "file": "static/js/agent-settings.js",
           "note": "App.agentSettings: the settings-change card under an Agent answer. Uses App.userSettings, App.agentPreferences, App.agentChat and App.activeConsensusPresetId (model-picker.js) at runtime; agent-chat.js renders it."
         },
-        "static/js/consensus-run.js",
+        {
+          "file": "static/js/thread-history.js",
+          "note": "App.followup: the turns above a chat's newest answer (Agent and saved Consensus chats) and the composer's placeholder. Before run-view.js and agent-chat.js, which render through it."
+        },
         "static/js/agent-workspace.js",
         "static/js/agent-google.js",
         {
@@ -225,7 +226,7 @@
         "static/js/agent-chat.js",
         {
           "file": "static/js/run-view.js",
-          "note": "Projects only runRegistry.visibleRunId into the shared DOM; must follow consensus-run.js (follow-up renderer) and precede query-send.js."
+          "note": "Projects only runRegistry.visibleRunId into the shared DOM; must follow thread-history.js (history renderer) and precede query-send.js."
         },
         "static/js/query-send.js",
         "static/js/tab-status.js",

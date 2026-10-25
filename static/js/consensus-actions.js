@@ -358,8 +358,11 @@
       opener: () => toggleBtn,
     });
 
+    // The page's position when the menu opened: only a real scroll closes it.
+    let openedAtY = 0;
     function openMenu({ focusFirst = false } = {}) {
       closeMenu();
+      openedAtY = window.scrollY;
 
       window.App?.popover?.opened(menu, { trigger: toggleBtn });
       menu.style.visibility = "hidden";
@@ -402,8 +405,11 @@
       toggleBtn.focus({preventScroll: true});
     });
 
+    // A scroll event without movement (scroll anchoring settling after an
+    // opened chat's first tap, chat-scroll.js) used to close the menu the
+    // moment it opened.
     window.addEventListener("scroll", () => {
-      if (menu.classList.contains("open")) closeMenu();
+      if (menu.classList.contains("open") && Math.abs(window.scrollY - openedAtY) > 2) closeMenu();
     }, { passive: true });
 
     window.addEventListener("resize", () => {

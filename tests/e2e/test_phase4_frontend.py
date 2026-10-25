@@ -238,104 +238,36 @@ def _real_firebase_page(
     return context, page
 
 
-def test_followup_stream_preserves_history_and_model_loading_nodes(browser, phase4_server):
+def test_compare_stream_keeps_model_loading_nodes(browser, phase4_server):
+    """Streamed tokens update a Compare answer in place: the answer that is
+    still waiting keeps its loading node, nothing is rebuilt per chunk."""
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         page.evaluate('''() => {
           const registry = window.App.runRegistry;
-          const run = registry.create({question:'Second question', config:{agentMode:true,
+          const run = registry.create({question:'Streaming question', config:{agentMode:false,
             providers:[{provider:'OpenAI',modelLabel:'OpenAI'}, {provider:'Gemini',modelLabel:'Gemini'}]}});
-          run.historyTurns.push({turn_id:'first',question:'First question',
-            consensus:'A completed answer with **Markdown** and a source. [S1]',
-            differences:'A completed comparison.', sources:[{id:'S1',url:'https://example.com',title:'Source'}]});
           run.modelResults = {OpenAI:{status:'streaming',streamText:'A new answer'}, Gemini:{status:'pending'}};
           run.phase = 'answers';
           registry.setStatus(run.runId,'running');
-          window.__followupRun = run;
-          window.__followupHistory = document.querySelector('.thread-history-turn');
-          window.__followupSpinner = document.querySelector('#geminiResponse .thinking-wrap');
-          window.__followupBar = document.querySelector('#runDetail [data-box="openaiResponse"] i');
-          window.__followupHistoryMutations = 0;
-          new MutationObserver(records => { window.__followupHistoryMutations += records.length; })
-            .observe(document.getElementById('threadHistory'), {childList:true,subtree:true});
+          window.__streamRun = run;
+          window.__waiting = document.querySelector('.is-direct .answer-reader-body[data-provider="Gemini"]');
+          window.__waitingSkeleton = window.__waiting?.querySelector('.answer-skeleton');
         }''')
-        expect(page.locator('#runDetail')).to_be_visible()
-        assert page.evaluate('Boolean(window.__followupSpinner && window.__followupBar)')
+        assert page.evaluate('Boolean(window.__waiting && window.__waitingSkeleton)')
         page.evaluate('''async () => {
           for (let i = 0; i < 12; i++) {
-            window.__followupRun.modelResults.OpenAI.streamText += ' another token';
+            window.__streamRun.modelResults.OpenAI.streamText += ' another token';
             window.App.runRegistry.renderVisible();
             await new Promise(resolve => setTimeout(resolve, 120));
           }
         }''')
-        assert page.evaluate('''() => window.__followupHistory === document.querySelector('.thread-history-turn')
-          && window.__followupSpinner === document.querySelector('#geminiResponse .thinking-wrap')
-          && window.__followupBar === document.querySelector('#runDetail [data-box="openaiResponse"] i')
-          && window.__followupHistoryMutations === 0''')
-        assert page.evaluate("parseFloat(window.__followupBar.style.getPropertyValue('--p')) > 12")
+        assert page.evaluate('''() => window.__waiting === document.querySelector('.is-direct .answer-reader-body[data-provider="Gemini"]')
+          && window.__waitingSkeleton === window.__waiting.querySelector('.answer-skeleton')''')
         expect(page.locator('#openaiResponse .collapsible-content')).to_contain_text('another token')
-    finally:
-        context.close()
-
-
-def test_consensus_stream_keeps_claims_and_cards_through_the_final_frame(browser, phase4_server):
-    """Claims and difference cards survive the final (replayed) frame, and new
-    consensus prose never turns a numeric [1] into a citation."""
-    context, page = _real_firebase_page(browser, phase4_server,
-        init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','all')")
-    errors = []
-    page.on('pageerror', lambda error: errors.append(str(error)))
-    try:
-        # Raw: the SSE frame's "\n" must reach JavaScript as an escape.
-        page.evaluate(r"""() => {
-          const registry=App.runRegistry;
-          const source={id:'S1',url:'https://example.invalid/prices',title:'Original source'};
-          const run=registry.create({question:'What does the plan cost?',config:{agentMode:true,
-            consensusModel:'Gemini',providers:[{provider:'OpenAI',modelLabel:'OpenAI'},{provider:'Gemini',modelLabel:'Gemini'}]}});
-          run.chatSession=null;run.evidenceSources=[source];
-          run.modelResults={OpenAI:{status:'complete',text:'20 euros [S1]',sources:[source]},Gemini:{status:'complete',text:'30 euros [S1]',sources:[source]}};
-          registry.setStatus(run.runId,'running');window.__streamRun=run;
-          window.__streamText='The plan costs 20 euros. The list contains [1]. Both models describe a monthly subscription.';
-          window.__streamDifferences={models_compared:['OpenAI','Gemini'],claims:[{anchor:'Both models describe a monthly subscription.',agree:['OpenAI','Gemini'],dissent:[],coverage:'supported'}],differences:[
-            {claim:'The plan price',consensus_anchor:'The plan costs 20 euros.',type:'contradiction',severity:'major',positions:[
-              {models:['OpenAI'],stance:'20 euros',quote:'20 euros'},{models:['Gemini'],stance:'30 euros',quote:'30 euros'}]},
-            {claim:'Different emphasis',type:'emphasis',positions:[{models:['OpenAI'],stance:'Cost focus'},{models:['Gemini'],stance:'Flexibility focus'}]}]};
-          const originalFetch=window.fetch;
-          window.fetch=(url,options)=>{
-            if(url!=='/consensus') return originalFetch(url,options);
-            window.__streamPayload=JSON.parse(options.body);
-            return Promise.resolve(new Response(new ReadableStream({start(controller){window.__stream=controller;}}),{headers:{'content-type':'text/event-stream'}}));
-          };
-          window.__streamSend=(name,data)=>window.__stream.enqueue(new TextEncoder().encode('event: '+name+'\ndata: '+JSON.stringify(data)+'\n\n'));
-          window.__streamCompletion=App.executeConsensusRun(run);
-        }""")
-        page.wait_for_function('Boolean(window.__stream)')
-        # The contradiction source check is gone: the request no longer asks for it.
-        assert page.evaluate("'check_sources' in window.__streamPayload") is False
-        page.evaluate("""() => {
-          __streamSend('consensus.final',{text:__streamText});
-          __streamSend('differences.final',{differences:'Price disagreement and different emphasis.',differences_data:__streamDifferences});
-        }""")
-        expect(page.locator('#consensusAnswerBody .cx-claim')).to_have_count(2)
-        expect(page.locator('.diff-card')).to_have_count(2)
-        expect(page.locator('#consensusAnswerBody .src-ref')).to_have_count(0)
-        expect(page.locator('#consensusAnswerBody')).to_contain_text('[1]')
-        page.evaluate("""() => {
-          window.__streamClaim=document.querySelector('#consensusAnswerBody .cx-claim');
-          window.__streamCards=[...document.querySelectorAll('.diff-card')];
-          // A replay carries the authoritative saved answers; it must not
-          // borrow model text from the local pre-recovery projection.
-          const model_answers=Object.fromEntries(Object.entries(__streamRun.modelResults).map(([provider,result])=>[
-            provider,{answer:result.text,model_label:provider,sources:result.sources}
-          ]));
-          __streamSend('final',{consensus_response:__streamText,differences:'Price disagreement and different emphasis.',differences_data:__streamDifferences,model_answers,chat_replayed:true});
-          __stream.close();
-        }""")
-        page.wait_for_function("window.__streamRun.status === 'succeeded'")
-        assert page.evaluate("__streamClaim===document.querySelector('#consensusAnswerBody .cx-claim') && __streamCards.every((card,index)=>card===document.querySelectorAll('.diff-card')[index])")
-        assert page.evaluate("__streamRun.modelResults.OpenAI.text") == '20 euros [S1]'
-        expect(page.locator('#consensusAnswerBody .src-ref')).to_have_count(0)
-        assert not errors
+        expect(page.locator('.is-direct .answer-reader-body[data-provider="OpenAI"]')).to_contain_text('another token')
+        # A comparison continues nothing: no history above it.
+        expect(page.locator('#threadHistory .thread-history-turn')).to_have_count(0)
     finally:
         context.close()
 
@@ -403,7 +335,9 @@ def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, ph
                 Array.from({ length: 20 }, (_, index) =>
                   `<p>Consensus answer line ${index + 1}: enough content to make the thread scroll.</p>`
                 ).join("");
-              window.App.consensusPipeline.onConsensusEnd();
+              // A saved answer draws its footer itself (firebase.js).
+              window.updateAgentModeUI();
+              window.App.consensusFooter.render();
               window.App.state.set("lastShareResultId", "phase4-nudge-result", "share");
               // Der Hinweis kommt erst ab der dritten abgeschlossenen Frage.
               window.App.watch.showFeatureNudge();
@@ -671,233 +605,115 @@ def test_all_model_failures_end_in_error_without_consensus(browser, phase4_serve
         context.close()
 
 
+# Holds every /ask_* request in the page until the test releases it. Compare
+# is the browser's run besides Agent since 2026-10-25: no chat, no turn, no
+# /consensus; each finished answer is saved to its run's bookmark.
+RUN_GATE = """() => {
+  const included = new Set(["OpenAI", "Mistral"]);
+  window.App.modelPrefs.forEach(pref => {
+    window.App.setModelSelectionState(pref, included.has(pref.key),
+      {persist: false, syncCheckbox: true, animate: false});
+  });
+  window.updateQuestionInputAccess?.();
+  const nativeFetch = window.fetch.bind(window);
+  const held = [];
+  const aborted = [];
+  const calls = [];
+  const response = data => new Response(JSON.stringify(data), {
+    status: 200, headers: {"Content-Type": "application/json"}
+  });
+  window.fetch = (input, options = {}) => {
+    const url = new URL(String(input), window.location.href);
+    if (!url.pathname.startsWith("/ask_") && url.pathname !== "/consensus") return nativeFetch(input, options);
+    const body = JSON.parse(options.body || "{}");
+    const kind = url.pathname === "/consensus" ? "consensus" : "ask";
+    return new Promise((resolve, reject) => {
+      const entry = {kind, path: url.pathname, question: body.question, body, resolve, reject, settled: false};
+      held.push(entry);
+      calls.push({kind, path: entry.path, question: entry.question, body});
+      const abort = () => {
+        if (entry.settled) return;
+        entry.settled = true;
+        aborted.push(`${kind}|${entry.question}|${entry.path}`);
+        reject(new DOMException("Aborted", "AbortError"));
+      };
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener("abort", abort, {once: true});
+    });
+  };
+  window.__runGate = {
+    pending(question) {
+      return held.filter(item => !item.settled && item.question === question).length;
+    },
+    resolveAsks(question) {
+      held.filter(item => !item.settled && item.kind === "ask" && item.question === question)
+        .forEach(item => {
+          item.settled = true;
+          const provider = item.path.replace("/ask_", "");
+          item.resolve(response({response: `${question} ${provider} answer`, sources: [],
+            usage_run_status: "consumed", free_usage_remaining: 2, limit: 3, deep_limit: 0}));
+        });
+    },
+    aborted: () => aborted.slice(),
+    calls: (kind, question) => calls.filter(item =>
+      (!kind || item.kind === kind) && (!question || item.question === question))
+  };
+  window.__runPromises = [];
+}"""
+
+
+def _route_compare_runs(page, bookmark_bodies):
+    def prepare_route(route):
+        _json(route, {"system_prompt": "Prepared multi-run prompt", "usage_run_status": "reserved",
+                      "free_usage_remaining": 3, "limit": 3, "deep_limit": 0})
+
+    def model_bookmark_route(route):
+        body = json.loads(route.request.post_data or "{}")
+        bookmark_bodies.append(body)
+        _json(route, {"bookmark": {"id": body.get("bookmarkId") or "missing-bookmark-id",
+                                   "query": body.get("question") or "", "title": body.get("question") or "",
+                                   "mode": body.get("mode") or "Standard",
+                                   "responses": {body.get("modelName") or "Unknown": body.get("response") or ""},
+                                   "sources": [], "attachments": []}})
+    page.route("**/prepare", prepare_route)
+    page.route("**/bookmark", model_bookmark_route)
+    page.wait_for_function("() => window.App?.runRegistry && typeof window.sendQuestion === 'function'")
+    page.evaluate("() => window.App.runMode.set('compare')")
+    page.evaluate(RUN_GATE)
+    assert page.evaluate("() => window.App.getSelectedModelCount()") == 2
+
+
+def _start_compare_run(page, question, *, new_chat=False):
+    if new_chat:
+        page.evaluate("() => document.getElementById('newRunButton').click()")
+        page.wait_for_timeout(500)  # leave the intentional duplicate-click window
+    page.evaluate(
+        """question => {
+          const input = document.getElementById("questionInput");
+          input.value = question;
+          input.dispatchEvent(new Event("input", {bubbles: true}));
+          window.__runPromises.push(window.sendQuestion());
+        }""",
+        question,
+    )
+    page.wait_for_function("question => window.__runGate.pending(question) === 2", arg=question)
+    return page.evaluate(
+        "question => window.App.runRegistry.list().find(run => run.question === question).runId", question)
+
+
 def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
     browser, phase4_server
 ):
     """Reverse completion order must never mix two live RunContexts."""
 
     context, page = _real_firebase_page(browser, phase4_server)
-    bookmark_state = {}
-    consensus_bookmark_bodies = []
-    chat_counter = 0
-    turn_counter = 100
-
-    def bookmark_document(body, consensus=False):
-        bookmark_id = body.get("bookmarkId") or "missing-bookmark-id"
-        state = bookmark_state.setdefault(bookmark_id, {
-            "responses": {},
-            "sources": [],
-            "attachments": [],
-        })
-        if consensus:
-            state["responses"].update(body.get("modelResponses") or {})
-            state["responses"]["consensus"] = body.get("consensusText") or ""
-            state["responses"]["differences"] = body.get("differencesText") or ""
-            state["responses"]["differences_data"] = body.get("differencesData")
-            state["sources"] = body.get("sources") or []
-        else:
-            state["responses"][body.get("modelName") or "Unknown"] = (
-                body.get("response") or ""
-            )
-            state["sources"] = body.get("sources") or state["sources"]
-            state["attachments"] = body.get("attachments") or state["attachments"]
-        return {
-            "id": bookmark_id,
-            "query": body.get("question") or "",
-            "title": body.get("question") or "",
-            "mode": body.get("mode") or "Standard",
-            "responses": dict(state["responses"]),
-            "sources": list(state["sources"]),
-            "attachments": list(state["attachments"]),
-            "chat_id": body.get("chatId"),
-            "turn_id": body.get("turnId"),
-            "consensus_model": body.get("consensusModel") or "",
-            "model_labels": body.get("modelLabels") or {},
-        }
-
-    def prepare_route(route):
-        _json(route, {
-            "system_prompt": "Prepared multi-run prompt",
-            "usage_run_status": "reserved",
-            "free_usage_remaining": 3,
-            "limit": 3,
-            "deep_limit": 0,
-        })
-
-    def create_chat_route(route):
-        nonlocal chat_counter
-        chat_counter += 1
-        _json(route, {"chat": {"id": f"{chat_counter:032x}"}})
-
-    def create_turn_route(route):
-        nonlocal turn_counter
-        turn_counter += 1
-        _json(route, {"turn": {"id": f"{turn_counter:032x}", "status": "pending"}})
-
-    def model_bookmark_route(route):
-        body = json.loads(route.request.post_data or "{}")
-        _json(route, {"bookmark": bookmark_document(body)})
-
-    def consensus_bookmark_route(route):
-        body = json.loads(route.request.post_data or "{}")
-        consensus_bookmark_bodies.append(body)
-        _json(route, {"bookmark": bookmark_document(body, consensus=True)})
-
+    bookmark_bodies = []
     try:
-        page.route("**/prepare", prepare_route)
-        page.route("**/chats", create_chat_route)
-        page.route("**/chats/*/turns", create_turn_route)
-        page.route("**/bookmark", model_bookmark_route)
-        page.route("**/bookmark/consensus", consensus_bookmark_route)
-
-        page.wait_for_function(
-            "() => window.App?.runRegistry"
-            " && typeof window.sendQuestion === 'function'"
-            " && typeof window.App.executeConsensusRun === 'function'"
-        )
-        page.evaluate(
-            """() => {
-              window.App.runMode.set('consensus');
-              const included = new Set(["OpenAI", "Mistral"]);
-              window.App.modelPrefs.forEach(pref => {
-                window.App.setModelSelectionState(
-                  pref,
-                  included.has(pref.key),
-                  {persist: false, syncCheckbox: true, animate: false}
-                );
-              });
-              window.updateQuestionInputAccess?.();
-
-              const nativeFetch = window.fetch.bind(window);
-              const held = [];
-              const aborted = [];
-              const calls = [];
-              const response = data => new Response(JSON.stringify(data), {
-                status: 200,
-                headers: {"Content-Type": "application/json"}
-              });
-              window.fetch = (input, options = {}) => {
-                const url = new URL(String(input), window.location.href);
-                const isAsk = url.pathname.startsWith("/ask_");
-                const isConsensus = url.pathname === "/consensus";
-                if (!isAsk && !isConsensus) return nativeFetch(input, options);
-                const body = JSON.parse(options.body || "{}");
-                const kind = isConsensus ? "consensus" : "ask";
-                return new Promise((resolve, reject) => {
-                  const entry = {
-                    kind,
-                    path: url.pathname,
-                    question: body.question,
-                    body,
-                    resolve,
-                    reject,
-                    settled: false
-                  };
-                  held.push(entry);
-                  calls.push({kind, path: entry.path, question: entry.question, body});
-                  const abort = () => {
-                    if (entry.settled) return;
-                    entry.settled = true;
-                    aborted.push(`${kind}|${entry.question}`);
-                    reject(new DOMException("Aborted", "AbortError"));
-                  };
-                  if (options.signal?.aborted) abort();
-                  else options.signal?.addEventListener("abort", abort, {once: true});
-                });
-              };
-              window.__runGate = {
-                pending(kind, question) {
-                  return held.filter(item => !item.settled
-                    && item.kind === kind && item.question === question).length;
-                },
-                resolveAsks(question) {
-                  held.filter(item => !item.settled
-                    && item.kind === "ask" && item.question === question)
-                    .forEach(item => {
-                      item.settled = true;
-                      const provider = item.path.replace("/ask_", "");
-                      item.resolve(response({
-                        response: `${question} ${provider} answer`,
-                        answer_receipt: `receipt:${question}:${provider}`,
-                        sources: [],
-                        usage_run_status: "consumed",
-                        free_usage_remaining: 2,
-                        limit: 3,
-                        deep_limit: 0
-                      }));
-                    });
-                },
-                resolveConsensus(question) {
-                  held.filter(item => !item.settled
-                    && item.kind === "consensus" && item.question === question)
-                    .forEach(item => {
-                      item.settled = true;
-                      item.resolve(response({
-                        consensus_response: `Consensus for ${question}`,
-                        differences: `Differences for ${question}`,
-                        differences_data: null,
-                        sources: [],
-                        result_id: question.endsWith("B") ? "result-b" : "result-a",
-                        chat_id: item.body.chat_id,
-                        turn_id: item.body.turn_id,
-                        chat_persisted: true,
-                        chat_turn_state: "completed",
-                        usage_run_status: "consumed",
-                        free_usage_remaining: 1,
-                        limit: 3,
-                        deep_limit: 0
-                      }));
-                    });
-                },
-                aborted: () => aborted.slice(),
-                calls: (kind, question) => calls.filter(item =>
-                  (!kind || item.kind === kind) && (!question || item.question === question))
-              };
-              window.__runPromises = [];
-            }"""
-        )
-        assert page.evaluate("() => window.App.getSelectedModelCount()") == 2
-
+        _route_compare_runs(page, bookmark_bodies)
         question_a = "Parallel isolation run A"
         question_b = "Parallel isolation run B"
-
-        page.evaluate(
-            """question => {
-              document.getElementById("questionInput").value = question;
-              window.__runPromises.push(window.sendQuestion());
-            }""",
-            question_a,
-        )
-        page.wait_for_function(
-            "question => window.__runGate.pending('ask', question) === 2",
-            arg=question_a,
-        )
-        run_a = page.evaluate(
-            "question => window.App.runRegistry.list()"
-            ".find(run => run.question === question).runId",
-            question_a,
-        )
-
-        page.evaluate("() => document.getElementById('newRunButton').click()")
-        page.wait_for_timeout(500)  # leave the intentional duplicate-click window
-        page.evaluate(
-            """question => {
-              const input = document.getElementById("questionInput");
-              input.value = question;
-              input.dispatchEvent(new Event("input", {bubbles: true}));
-              window.__runPromises.push(window.sendQuestion());
-            }""",
-            question_b,
-        )
-        page.wait_for_function(
-            "question => window.__runGate.pending('ask', question) === 2",
-            arg=question_b,
-        )
-        run_b = page.evaluate(
-            "question => window.App.runRegistry.list()"
-            ".find(run => run.question === question).runId",
-            question_b,
-        )
+        run_a = _start_compare_run(page, question_a)
+        run_b = _start_compare_run(page, question_b, new_chat=True)
         assert run_a != run_b
         assert page.evaluate("() => window.App.runRegistry.activeCount()") == 2
         expect(page.locator("[data-run-id]")).to_have_count(2)
@@ -909,83 +725,39 @@ def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
         expect(page.locator("#threadAskText")).to_have_text(question_a)
         expect(page.locator(f'[data-run-id="{run_a}"]')).to_have_attribute("role", "button")
 
+        # B finishes in the background; A on screen shows none of it.
         page.evaluate("question => window.__runGate.resolveAsks(question)", question_b)
-        page.wait_for_function(
-            "question => window.__runGate.pending('consensus', question) === 1",
-            arg=question_b,
-        )
-        assert page.evaluate(
-            "id => ({status: App.runRegistry.get(id).status, phase: App.runRegistry.get(id).phase})",
-            run_b,
-        ) == {"status": "running", "phase": "consensus"}
+        page.wait_for_function("id => window.App.runRegistry.get(id).status === 'succeeded'", arg=run_b)
         expect(page.locator("#openaiResponse")).not_to_contain_text(question_b)
-        expect(page.locator("#consensusAnswerBody")).not_to_contain_text(
-            f"Consensus for {question_b}"
-        )
+        expect(page.locator("#threadAskText")).to_have_text(question_a)
 
-        page.evaluate("question => window.__runGate.resolveAsks(question)", question_a)
-        page.wait_for_function(
-            "question => window.__runGate.pending('consensus', question) === 1",
-            arg=question_a,
-        )
+        # Cancelling A stops only A's requests.
         expect(page.locator("#sendButton")).to_have_attribute("aria-label", "Cancel this run")
         page.click("#sendButton")
-        page.wait_for_function(
-            "id => window.App.runRegistry.get(id).status === 'canceled'",
-            arg=run_a,
-        )
-
-        assert page.evaluate("id => App.runRegistry.get(id).status", run_b) == "running"
-        assert page.evaluate("() => App.runRegistry.activeCount()") == 1
+        page.wait_for_function("id => window.App.runRegistry.get(id).status === 'canceled'", arg=run_a)
+        assert page.evaluate("id => App.runRegistry.get(id).status", run_b) == "succeeded"
+        assert page.evaluate("() => App.runRegistry.activeCount()") == 0
         aborted = page.evaluate("() => window.__runGate.aborted()")
-        assert f"consensus|{question_a}" in aborted
-        assert f"consensus|{question_b}" not in aborted
+        assert sorted(aborted) == [f"ask|{question_a}|/ask_mistral", f"ask|{question_a}|/ask_openai"]
         expect(page.locator(f'[data-run-id="{run_a}"]')).to_contain_text("Stopped")
-        expect(page.locator(f'[data-run-id="{run_b}"]')).to_contain_text(
-            "Writing consensus"
-        )
-
-        page.evaluate("question => window.__runGate.resolveConsensus(question)", question_b)
-        page.wait_for_function(
-            "id => window.App.runRegistry.get(id).status === 'succeeded'",
-            arg=run_b,
-        )
-        assert page.evaluate("() => window.App.runRegistry.visible().runId") == run_a
-        expect(page.locator("#threadAskText")).to_have_text(question_a)
-        expect(page.locator("#consensusAnswerBody")).not_to_contain_text(
-            f"Consensus for {question_b}"
-        )
 
         page.locator(f'[data-run-id="{run_b}"]').click()
         assert page.evaluate("() => window.App.runRegistry.visible().runId") == run_b
         expect(page.locator("#threadAskText")).to_have_text(question_b)
-        expect(page.locator("#openaiResponse")).to_contain_text(
-            f"{question_b} openai answer"
-        )
-        expect(page.locator("#mistralResponse")).to_contain_text(
-            f"{question_b} mistral answer"
-        )
-        expect(page.locator("#consensusAnswerBody")).to_contain_text(
-            f"Consensus for {question_b}"
-        )
+        expect(page.locator("#openaiResponse")).to_contain_text(f"{question_b} openai answer")
+        expect(page.locator("#mistralResponse")).to_contain_text(f"{question_b} mistral answer")
+        expect(page.locator("#consensusOutput")).to_be_hidden()
 
-        calls_a = page.evaluate(
-            "question => window.__runGate.calls('consensus', question)", question_a
-        )
-        calls_b = page.evaluate(
-            "question => window.__runGate.calls('consensus', question)", question_b
-        )
-        assert len(calls_a) == len(calls_b) == 1
-        # The server accepts receipts, never browser-supplied answer text.
-        assert 'answers' not in calls_a[0]['body'] and 'answers' not in calls_b[0]['body']
-        answers_a = calls_a[0]["body"]["answer_receipts"]
-        answers_b = calls_b[0]["body"]["answer_receipts"]
-        assert calls_a[0]["body"]["question"] == question_a
-        assert answers_a == {"OpenAI": f"receipt:{question_a}:openai", "Mistral": f"receipt:{question_a}:mistral"}
-        assert calls_b[0]["body"]["question"] == question_b
-        assert answers_b == {"OpenAI": f"receipt:{question_b}:openai", "Mistral": f"receipt:{question_b}:mistral"}
-        assert 'sources' not in calls_a[0]['body'] and 'sources' not in calls_b[0]['body']
-        assert [body["question"] for body in consensus_bookmark_bodies] == [question_b]
+        # Each run asked with its own question, and nothing asked for a consensus.
+        for question in (question_a, question_b):
+            calls = page.evaluate("question => window.__runGate.calls('ask', question)", question)
+            assert sorted(call["path"] for call in calls) == ["/ask_mistral", "/ask_openai"]
+            assert all(call["body"]["run_mode"] == "compare" for call in calls)
+        assert page.evaluate("() => window.__runGate.calls('consensus')") == []
+        # Only B's finished answers are saved, each to B's bookmark.
+        assert sorted((body["question"], body["modelName"]) for body in bookmark_bodies) == [
+            (question_b, "Mistral"), (question_b, "OpenAI")]
+        assert len({body["bookmarkId"] for body in bookmark_bodies}) == 1
     finally:
         context.close()
 
@@ -996,561 +768,67 @@ def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
     """Both runs finish and persist without replacing the saved chat view."""
 
     context, page = _real_firebase_page(browser, phase4_server)
-    saved_bookmark_id = "saved_bookmark_a"
-    saved_chat_id = "a" * 32
-    saved_turn_id = "b" * 32
+    saved_id = "saved_bookmark_a"
     saved_question = "Saved bookmark A question"
     saved_consensus = "Saved bookmark A consensus"
-    saved_source = {
-        "id": "S1",
-        "title": "Saved bookmark A source",
-        "url": "https://saved.example.invalid/a",
-        "provider": "Saved",
-    }
-    saved_turn = {
-        "id": saved_turn_id,
-        "status": "completed",
-        "position": 1,
-        "question": saved_question,
-        "mode": "Standard",
-        "consensus_model": "saved-consensus-model",
-        "consensus": saved_consensus,
-        "differences": "Saved bookmark A differences",
-        "differences_data": None,
-        "sources": [saved_source],
-        "attachments": [{
-            "name": "saved-a.pdf",
-            "mime": "application/pdf",
-            "size": 321,
-        }],
-        "model_answers": {
-            "OpenAI": {
-                "provider": "OpenAI",
-                "model_label": "Saved OpenAI",
-                "answer": "Saved bookmark A OpenAI answer",
-                "sources": [saved_source],
-            },
-            "Mistral": {
-                "provider": "Mistral",
-                "model_label": "Saved Mistral",
-                "answer": "Saved bookmark A Mistral answer",
-                "sources": [saved_source],
-            },
-        },
-    }
-    saved_bookmark = {
-        "id": saved_bookmark_id,
-        "query": saved_question,
-        "title": "Saved bookmark A",
-        "mode": "Standard",
-        "created_at": "2026-08-24T08:00:00Z",
-        "responses": {
-            "OpenAI": "Saved bookmark A OpenAI answer",
-            "Mistral": "Saved bookmark A Mistral answer",
-            "consensus": saved_consensus,
-            "differences": "Saved bookmark A differences",
-            "differences_data": None,
-        },
-        "sources": [saved_source],
-        "attachments": list(saved_turn["attachments"]),
-        "chat_id": saved_chat_id,
-        "turn_id": saved_turn_id,
-        "consensus_model": "saved-consensus-model",
-        "model_labels": {
-            "OpenAI": "Saved OpenAI",
-            "Mistral": "Saved Mistral",
-        },
-    }
+    saved_turn = {"id": "b" * 32, "status": "completed", "position": 1, "question": saved_question,
+                  "mode": "Standard", "execution_mode": "consensus", "consensus": saved_consensus,
+                  "sources": [], "model_answers": {
+                      "OpenAI": {"provider": "OpenAI", "model_label": "Saved OpenAI", "answer": "Saved bookmark A OpenAI answer"},
+                      "Mistral": {"provider": "Mistral", "model_label": "Saved Mistral", "answer": "Saved bookmark A Mistral answer"}}}
+    saved_bookmark = {"id": saved_id, "query": saved_question, "title": "Saved bookmark A", "mode": "Standard",
+                      "chat_id": "a" * 32, "responses": {"consensus": saved_consensus}}
+    bookmark_bodies = []
+    try:
+        page.route(f"**/bookmarks/{saved_id}/conversation*",
+                   lambda route: _json(route, {"chat_id": "a" * 32, "turns": [saved_turn], "has_more": False}))
+        page.route(f"**/bookmarks/{saved_id}", lambda route: _json(route, {"bookmark": saved_bookmark}))
+        _route_compare_runs(page, bookmark_bodies)
+        question_a = "Reverse order run A"
+        question_b = "Reverse order run B"
+        run_a = _start_compare_run(page, question_a)
+        run_b = _start_compare_run(page, question_b, new_chat=True)
 
-    bookmark_state = {}
-    model_bookmark_bodies = []
-    consensus_bookmark_bodies = []
-    turn_assignments = {}
-    chat_counter = 0
-    turn_counter = 200
+        page.evaluate("id => window.openBookmark(id)", saved_id)
+        expect(page.locator("#threadAskText")).to_have_text(saved_question)
+        expect(page.locator("#consensusAnswerBody")).to_contain_text(saved_consensus)
+        assert page.evaluate("() => window.App.runRegistry.visible()") is None
 
-    def bookmark_document(body, consensus=False):
-        bookmark_id = body.get("bookmarkId") or "missing-bookmark-id"
-        state = bookmark_state.setdefault(bookmark_id, {
-            "responses": {},
-            "sources": [],
-            "attachments": [],
-        })
-        if consensus:
-            state["responses"].update(body.get("modelResponses") or {})
-            state["responses"]["consensus"] = body.get("consensusText") or ""
-            state["responses"]["differences"] = body.get("differencesText") or ""
-            state["responses"]["differences_data"] = body.get("differencesData")
-            state["sources"] = body.get("sources") or []
-        else:
-            state["responses"][body.get("modelName") or "Unknown"] = (
-                body.get("response") or ""
-            )
-            state["sources"] = body.get("sources") or state["sources"]
-            state["attachments"] = body.get("attachments") or state["attachments"]
-        return {
-            "id": bookmark_id,
-            "query": body.get("question") or "",
-            "title": body.get("question") or "",
-            "mode": body.get("mode") or "Standard",
-            "responses": dict(state["responses"]),
-            "sources": list(state["sources"]),
-            "attachments": list(state["attachments"]),
-            "chat_id": body.get("chatId"),
-            "turn_id": body.get("turnId"),
-            "consensus_model": body.get("consensusModel") or "",
-            "model_labels": body.get("modelLabels") or {},
-        }
+        # B first, then A: both finish in the background.
+        page.evaluate("question => window.__runGate.resolveAsks(question)", question_b)
+        page.wait_for_function("id => window.App.runRegistry.get(id).status === 'succeeded'", arg=run_b)
+        page.evaluate("question => window.__runGate.resolveAsks(question)", question_a)
+        page.wait_for_function("id => window.App.runRegistry.get(id).status === 'succeeded'", arg=run_a)
 
-    def prepare_route(route):
-        _json(route, {
-            "system_prompt": "Prepared reverse-order prompt",
-            "usage_run_status": "reserved",
-            "free_usage_remaining": 3,
-            "limit": 3,
-            "deep_limit": 0,
-        })
-
-    def create_chat_route(route):
-        nonlocal chat_counter
-        chat_counter += 1
-        _json(route, {"chat": {"id": f"{chat_counter:032x}"}})
-
-    def create_turn_route(route):
-        nonlocal turn_counter
-        body = json.loads(route.request.post_data or "{}")
-        chat_id = route.request.url.split("/chats/", 1)[1].split("/", 1)[0]
-        turn_counter += 1
-        turn_id = f"{turn_counter:032x}"
-        turn_assignments[body["question"]] = {
-            "chat_id": chat_id,
-            "turn_id": turn_id,
-        }
-        _json(route, {"turn": {"id": turn_id, "status": "pending"}})
-
-    def model_bookmark_route(route):
-        body = json.loads(route.request.post_data or "{}")
-        model_bookmark_bodies.append(body)
-        _json(route, {"bookmark": bookmark_document(body)})
-
-    def consensus_bookmark_route(route):
-        body = json.loads(route.request.post_data or "{}")
-        consensus_bookmark_bodies.append(body)
-        _json(route, {"bookmark": bookmark_document(body, consensus=True)})
-
-    def assert_saved_view_unchanged(expected_snapshot):
-        assert page.evaluate("() => window.__captureSavedBookmarkView()") == expected_snapshot
+        # The saved chat stays as it was.
         assert page.evaluate("() => window.App.runRegistry.visible()") is None
         expect(page.locator("#threadAskText")).to_have_text(saved_question)
         expect(page.locator("#consensusAnswerBody")).to_contain_text(saved_consensus)
-        expect(page.locator("#openaiResponse .collapsible-content")).to_contain_text(
-            "Saved bookmark A OpenAI answer"
-        )
+        expect(page.locator("#openaiResponse .collapsible-content")).to_contain_text("Saved bookmark A OpenAI answer")
+        expect(page.locator("#runProvenance")).to_be_visible()
 
-    try:
-        page.route("**/prepare", prepare_route)
-        page.route("**/chats", create_chat_route)
-        page.route("**/chats/*/turns", create_turn_route)
-        page.route("**/bookmark", model_bookmark_route)
-        page.route("**/bookmark/consensus", consensus_bookmark_route)
-        page.route(
-            f"**/bookmarks/{saved_bookmark_id}",
-            lambda route: _json(route, {"bookmark": saved_bookmark}),
-        )
-        page.route(
-            f"**/bookmarks/{saved_bookmark_id}/conversation?*",
-            lambda route: _json(route, {
-                "bookmark_id": saved_bookmark_id,
-                "chat_id": saved_chat_id,
-                "turns": [saved_turn],
-                "next_cursor": None,
-                "has_more": False,
-            }),
-        )
+        # Each run saved its own answers to its own bookmark.
+        page.wait_for_function("() => window.App.runRegistry.list().every(run => run.persistence.pendingWrites === 0)")
+        saved = sorted((body["question"], body["modelName"]) for body in bookmark_bodies)
+        assert saved == [(question_a, "Mistral"), (question_a, "OpenAI"),
+                         (question_b, "Mistral"), (question_b, "OpenAI")]
+        by_question = {}
+        for body in bookmark_bodies:
+            by_question.setdefault(body["question"], set()).add(body["bookmarkId"])
+        assert all(len(ids) == 1 for ids in by_question.values())
+        assert by_question[question_a] != by_question[question_b]
+        assert saved_id not in by_question[question_a] | by_question[question_b]
 
-        page.wait_for_function(
-            "() => window.App?.runRegistry"
-            " && typeof window.sendQuestion === 'function'"
-            " && typeof window.App.executeConsensusRun === 'function'"
-        )
-        page.evaluate(
-            """() => {
-              window.App.runMode.set('consensus');
-              const included = new Set(["OpenAI", "Mistral"]);
-              window.App.modelPrefs.forEach(pref => {
-                window.App.setModelSelectionState(
-                  pref,
-                  included.has(pref.key),
-                  {persist: false, syncCheckbox: true, animate: false}
-                );
-              });
-              window.updateQuestionInputAccess?.();
-
-              const nativeFetch = window.fetch.bind(window);
-              const held = [];
-              const calls = [];
-              const response = data => new Response(JSON.stringify(data), {
-                status: 200,
-                headers: {"Content-Type": "application/json"}
-              });
-              const slug = question => question.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-              window.fetch = (input, options = {}) => {
-                const url = new URL(String(input), window.location.href);
-                const isAsk = url.pathname.startsWith("/ask_");
-                const isConsensus = url.pathname === "/consensus";
-                if (!isAsk && !isConsensus) return nativeFetch(input, options);
-                const body = JSON.parse(options.body || "{}");
-                const kind = isConsensus ? "consensus" : "ask";
-                return new Promise((resolve, reject) => {
-                  const entry = {
-                    kind,
-                    path: url.pathname,
-                    question: body.question,
-                    body,
-                    resolve,
-                    reject,
-                    settled: false
-                  };
-                  held.push(entry);
-                  calls.push({kind, path: entry.path, question: entry.question, body});
-                  const abort = () => {
-                    if (entry.settled) return;
-                    entry.settled = true;
-                    reject(new DOMException("Aborted", "AbortError"));
-                  };
-                  if (options.signal?.aborted) abort();
-                  else options.signal?.addEventListener("abort", abort, {once: true});
-                });
-              };
-              window.__runGate = {
-                pending(kind, question) {
-                  return held.filter(item => !item.settled
-                    && item.kind === kind && item.question === question).length;
-                },
-                resolveAsks(question) {
-                  held.filter(item => !item.settled
-                    && item.kind === "ask" && item.question === question)
-                    .forEach(item => {
-                      item.settled = true;
-                      const provider = item.path.replace("/ask_", "");
-                      item.resolve(response({
-                        response: `${question} ${provider} answer [S1]`,
-                        answer_receipt: `receipt:${question}:${provider}`,
-                        sources: [{
-                          id: "S1",
-                          title: `${question} ${provider} source`,
-                          url: `https://runs.example.invalid/${slug(question)}/${provider}`,
-                          provider
-                        }],
-                        usage_run_status: "consumed",
-                        free_usage_remaining: 2,
-                        limit: 3,
-                        deep_limit: 0
-                      }));
-                    });
-                },
-                resolveConsensus(question) {
-                  held.filter(item => !item.settled
-                    && item.kind === "consensus" && item.question === question)
-                    .forEach(item => {
-                      item.settled = true;
-                      item.resolve(response({
-                        consensus_response: `Consensus for ${question}`,
-                        differences: `Differences for ${question}`,
-                        differences_data: null,
-                        sources: [{
-                          id: "S1",
-                          title: `${question} consensus source`,
-                          url: `https://runs.example.invalid/${slug(question)}/consensus`,
-                          provider: "Consensus"
-                        }],
-                        result_id: `result-${slug(question)}`,
-                        chat_id: item.body.chat_id,
-                        turn_id: item.body.turn_id,
-                        chat_persisted: true,
-                        chat_turn_state: "completed",
-                        usage_run_status: "consumed",
-                        free_usage_remaining: 1,
-                        limit: 3,
-                        deep_limit: 0
-                      }));
-                    });
-                },
-                calls: (kind, question) => calls.filter(item =>
-                  (!kind || item.kind === kind) && (!question || item.question === question))
-              };
-              window.__runPromises = [];
-              window.__settledRunQuestions = [];
-              window.__finishedRunQuestions = [];
-              window.addEventListener("consensio:run-registry-change", event => {
-                if (event.detail?.type === "finished"
-                    && event.detail?.context?.status === "succeeded") {
-                  window.__finishedRunQuestions.push(event.detail.context.question);
-                }
-              });
-            }"""
-        )
-        assert page.evaluate("() => window.App.getSelectedModelCount()") == 2
-
-        question_first = "Parallel completion run first"
-        question_second = "Parallel completion run second"
-
-        page.evaluate(
-            """question => {
-              const input = document.getElementById("questionInput");
-              input.value = question;
-              input.dispatchEvent(new Event("input", {bubbles: true}));
-              const promise = window.sendQuestion();
-              window.__runPromises.push(promise);
-              promise.finally(() => window.__settledRunQuestions.push(question));
-            }""",
-            question_first,
-        )
-        page.wait_for_function(
-            "question => window.__runGate.pending('ask', question) === 2",
-            arg=question_first,
-        )
-        run_first = page.evaluate(
-            "question => window.App.runRegistry.list()"
-            ".find(run => run.question === question).runId",
-            question_first,
-        )
-
-        page.evaluate("() => document.getElementById('newRunButton').click()")
-        page.wait_for_timeout(500)  # run-start double-click fence
-        page.evaluate(
-            """question => {
-              const input = document.getElementById("questionInput");
-              input.value = question;
-              input.dispatchEvent(new Event("input", {bubbles: true}));
-              const promise = window.sendQuestion();
-              window.__runPromises.push(promise);
-              promise.finally(() => window.__settledRunQuestions.push(question));
-            }""",
-            question_second,
-        )
-        page.wait_for_function(
-            "question => window.__runGate.pending('ask', question) === 2",
-            arg=question_second,
-        )
-        run_second = page.evaluate(
-            "question => window.App.runRegistry.list()"
-            ".find(run => run.question === question).runId",
-            question_second,
-        )
-
-        assert run_first != run_second
-        assert page.evaluate(
-            "ids => ids.every(id => {"
-            " const run = window.App.runRegistry.get(id);"
-            " return run?.basis === null && !run?.conversationLockKey;"
-            "})",
-            [run_first, run_second],
-        ) is True
-        assert page.evaluate("() => window.App.runRegistry.activeCount()") == 2
-
-        page.evaluate("id => window.openBookmark(id)", saved_bookmark_id)
-        page.wait_for_function(
-            "expected => {"
-            " const basis = window.App.runRegistry.getSelectedConversationBasis();"
-            " return window.App.runRegistry.visible() === null"
-            "   && window.App.bookmarkSession.currentId() === expected.bookmarkId"
-            "   && window.App.chatSession.activeChatId === expected.chatId"
-            "   && window.App.chatSession.activeTurnId === expected.turnId"
-            "   && basis?.bookmarkId === expected.bookmarkId"
-            "   && basis?.chatId === expected.chatId"
-            "   && basis?.turnId === expected.turnId;"
-            "}",
-            arg={
-                "bookmarkId": saved_bookmark_id,
-                "chatId": saved_chat_id,
-                "turnId": saved_turn_id,
-            },
-        )
-        page.evaluate(
-            """() => {
-              const text = selector => document.querySelector(selector)?.textContent
-                ?.replace(/\\s+/g, " ").trim() || "";
-              window.__captureSavedBookmarkView = () => ({
-                visibleRunId: window.App.runRegistry.snapshot().visibleRunId,
-                basis: window.App.runRegistry.getSelectedConversationBasis(),
-                bookmarkId: window.App.bookmarkSession.currentId(),
-                chat: {
-                  activeChatId: window.App.chatSession.activeChatId,
-                  activeTurnId: window.App.chatSession.activeTurnId,
-                  pendingChatId: window.App.chatSession.pendingChatId,
-                  pendingTurnId: window.App.chatSession.pendingTurnId
-                },
-                followup: {
-                  question: window.App.followup.lastExchange?.question || "",
-                  consensus: window.App.followup.lastExchange?.consensus || "",
-                  turnId: window.App.followup.lastExchange?.turn?.turn_id || ""
-                },
-                lastQuestion: window.lastQuestion,
-                citationMeta: window.consensusCitationMeta,
-                evidenceSources: window.currentEvidenceSources,
-                consensusBookmarkPayload: window.lastConsensusBookmarkPayload,
-                dom: {
-                  question: text("#threadAskText"),
-                  openai: text("#openaiResponse .collapsible-content"),
-                  mistral: text("#mistralResponse .collapsible-content"),
-                  consensus: text("#consensusAnswerBody"),
-                  differences: text("#consensusResponse .consensus-differences p")
-                }
-              });
-            }"""
-        )
-        saved_view_snapshot = page.evaluate(
-            "() => window.__captureSavedBookmarkView()"
-        )
-        assert saved_view_snapshot["visibleRunId"] is None
-        assert saved_view_snapshot["bookmarkId"] == saved_bookmark_id
-        assert saved_view_snapshot["basis"]["key"] == f"chat:{saved_chat_id}"
-        assert saved_view_snapshot["evidenceSources"] == [saved_source]
-        assert_saved_view_unchanged(saved_view_snapshot)
-
-        # The second-created run reaches terminal persistence before the first
-        # run has even left its held model fan-out.
-        page.evaluate(
-            "question => window.__runGate.resolveAsks(question)", question_second
-        )
-        page.wait_for_function(
-            "question => window.__runGate.pending('consensus', question) === 1",
-            arg=question_second,
-        )
-        assert_saved_view_unchanged(saved_view_snapshot)
-        page.evaluate(
-            "question => window.__runGate.resolveConsensus(question)", question_second
-        )
-        page.wait_for_function(
-            "id => {"
-            " const run = window.App.runRegistry.get(id);"
-            " return run?.status === 'succeeded'"
-            "   && run.bookmark.uiReady === true"
-            "   && run.persistence.consensusWrite === true"
-            "   && run.persistence.pendingWrites === 0;"
-            "}",
-            arg=run_second,
-        )
-        assert page.evaluate(
-            "id => window.App.runRegistry.get(id).status", run_first
-        ) == "running"
-        assert page.evaluate("() => window.__finishedRunQuestions") == [question_second]
-        assert_saved_view_unchanged(saved_view_snapshot)
-
-        page.evaluate(
-            "question => window.__runGate.resolveAsks(question)", question_first
-        )
-        page.wait_for_function(
-            "question => window.__runGate.pending('consensus', question) === 1",
-            arg=question_first,
-        )
-        assert_saved_view_unchanged(saved_view_snapshot)
-        page.evaluate(
-            "question => window.__runGate.resolveConsensus(question)", question_first
-        )
-        page.wait_for_function(
-            "id => {"
-            " const run = window.App.runRegistry.get(id);"
-            " return run?.status === 'succeeded'"
-            "   && run.bookmark.uiReady === true"
-            "   && run.persistence.consensusWrite === true"
-            "   && run.persistence.pendingWrites === 0;"
-            "}",
-            arg=run_first,
-        )
-        page.wait_for_function("() => window.__settledRunQuestions.length === 2")
-        assert page.evaluate("() => window.__finishedRunQuestions") == [
-            question_second,
-            question_first,
-        ]
-        assert page.evaluate("() => window.App.runRegistry.activeCount()") == 0
-        assert_saved_view_unchanged(saved_view_snapshot)
-
-        run_persistence = page.evaluate(
-            """ids => Object.fromEntries(ids.map(id => {
-              const run = window.App.runRegistry.get(id);
-              return [run.question, {
-                bookmarkId: run.bookmark.id,
-                chatId: run.completedBasis.chatId,
-                turnId: run.completedBasis.turnId,
-                consensus: run.consensus.text,
-                sources: run.consensus.sources
-              }];
-            }))""",
-            [run_first, run_second],
-        )
-        assert set(bookmark_state) == {
-            run_persistence[question_first]["bookmarkId"],
-            run_persistence[question_second]["bookmarkId"],
-        }
-        assert saved_bookmark_id not in bookmark_state
-        assert [body["question"] for body in consensus_bookmark_bodies] == [
-            question_second,
-            question_first,
-        ]
-        # Agent-mode answers stay local until the authoritative consensus
-        # bookmark promotes the complete provider set atomically.
-        assert model_bookmark_bodies == []
-
-        for question in (question_first, question_second):
-            slug = question.lower().replace(" ", "-")
-            expected = run_persistence[question]
-            assignment = turn_assignments[question]
-            consensus_body = next(
-                body for body in consensus_bookmark_bodies
-                if body["question"] == question
-            )
-
-            assert consensus_body["bookmarkId"] == expected["bookmarkId"]
-            assert consensus_body["chatId"] == assignment["chat_id"]
-            assert consensus_body["turnId"] == assignment["turn_id"]
-            assert consensus_body["chatId"] == expected["chatId"]
-            assert consensus_body["turnId"] == expected["turnId"]
-            assert consensus_body["previousQuestion"] == ""
-            assert consensus_body["previousTurn"] is None
-            # The compatibility fallback intentionally sends only identifiers
-            # and small legacy text copies. Sources and model answers are
-            # materialized server-side from the owner-bound completed run.
-            assert "sources" not in consensus_body
-            assert "modelResponses" not in consensus_body
-            assert all(slug in source["url"] for source in expected["sources"])
-            assert bookmark_state[expected["bookmarkId"]]["responses"][
-                "consensus"
-            ] == f"Consensus for {question}"
-            assert assignment["chat_id"] != saved_chat_id
-            assert assignment["turn_id"] != saved_turn_id
-
-        consensus_calls = page.evaluate(
-            "() => window.__runGate.calls('consensus').map(call => call.question)"
-        )
-        assert consensus_calls == [question_second, question_first]
+        page.locator(f'[data-run-id="{run_a}"]').click()
+        expect(page.locator("#threadAskText")).to_have_text(question_a)
+        expect(page.locator("#openaiResponse")).to_contain_text(f"{question_a} openai answer")
+        expect(page.locator("#consensusOutput")).to_be_hidden()
+        expect(page.locator("#threadHistory .thread-history-turn")).to_have_count(0)
     finally:
         context.close()
 
 
-def test_missing_answer_receipts_remain_visible_but_never_start_consensus(browser, phase4_server):
-    """Negative control for the receipt-bearing provider fixtures above."""
-    context, page = _real_firebase_page(browser, phase4_server)
-    consensus_calls = []
-    try:
-        page.route('**/prepare', lambda route: _json(route, {'system_prompt': 'Prepared prompt'}))
-        page.route('**/ask_*', lambda route: _json(route, {'response': 'Unstored model answer', 'sources': []}))
-        page.route('**/consensus', lambda route: (consensus_calls.append(route.request.post_data_json), _json(route, {})))
-        page.locator('#questionInput').fill('Check the storage boundary')
-        page.locator('#sendButton').click()
-        page.wait_for_function("() => App.runRegistry.visible()?.status === 'failed'")
-        results = page.evaluate("() => Object.values(App.runRegistry.visible().modelResults).map(r => ({text:r.text,status:r.status,error:r.error,receipt:r.receipt}))")
-        assert len(results) == 6
-        assert all(item['text'] == 'Unstored model answer' and item['status'] == 'incomplete'
-                   and item['receipt'] is None and 'could not be saved' in item['error'] for item in results)
-        assert consensus_calls == []
-        expect(page.locator('#consensusAnswerBody')).not_to_contain_text('Unstored model answer')
-    finally:
-        context.close()
-
-
-def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
+def test_compare_is_six_answers_only(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     model_bookmark_bodies = []
     bookmark_responses = {}
@@ -1595,7 +873,8 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
         )
         page.route("**/bookmark", model_bookmark_route)
         mode = page.locator("#runModeSelect")
-        expect(mode).to_have_value("consensus")
+        # Without Agent access an account starts in Compare.
+        expect(mode).to_have_value("compare")
         page.locator("#attachTrigger").click()
         page.locator('#runModeControl [data-value="compare"]').click()
         expect(mode).to_have_value("compare")
@@ -1641,7 +920,7 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
         expect(page.locator("#threadAskText")).to_contain_text(
             "Give me six direct answers only."
         )
-        expect(page.locator("#consensusRun")).to_be_hidden()
+        expect(page.locator("#consensusRun")).to_have_count(0)
         expect(page.locator("#consensusOutput")).to_be_hidden()
         expect(page.locator("#consensusAnswerBody .cx-claim")).to_have_count(0)
         expect(page.locator("#differencesCards")).to_be_hidden()
@@ -1736,7 +1015,7 @@ def test_watched_navigation_closes_the_shared_modal(browser, phase4_server):
         context.close()
 
 
-def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
+def test_cancel_during_token_resolution_gives_the_question_back_and_creates_no_usage_run(
     browser, phase4_server
 ):
     context, page = _real_firebase_page(browser, phase4_server)
@@ -1746,21 +1025,7 @@ def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
               document.getElementById("selectOpenAI").checked = true;
               document.getElementById("selectMistral").checked = true;
               document.getElementById("questionInput").value = "What changed since yesterday?";
-              window.App.runMode.set('consensus');
-              window.App.runRegistry.selectConversationBasis({
-                bookmarkId: "followup-bookmark",
-                chatId: "a".repeat(32),
-                turnId: "b".repeat(32),
-                question: "Previous question",
-                consensus: "Previous consensus",
-                currentTurn: {
-                  turn_id: "b".repeat(32),
-                  question: "Previous question",
-                  consensus: "Previous consensus",
-                },
-                title: "Previous question",
-              });
-              window.App.followup.offer("Previous question", "Previous consensus");
+              window.App.runMode.set('compare');
               let release;
               const pending = new Promise(resolve => { release = resolve; });
               window.auth.currentUser.getIdToken = () => pending;
@@ -1774,18 +1039,11 @@ def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
         page.evaluate("() => window.__releaseSlowToken()")
         page.wait_for_function("() => window.__slowSendDone === true")
 
-        # The selected Registry basis is the continuation authority. The
-        # compatibility followup projection may be rebuilt while the canceled
-        # run is removed, so it is not the state to assert here.
-        selected_basis = page.evaluate(
-            "() => window.App.runRegistry.getSelectedConversationBasis()"
-        )
-        assert selected_basis["key"] == "chat:" + "a" * 32
-        assert selected_basis["question"] == "Previous question"
-        assert selected_basis["consensus"] == "Previous consensus"
-        assert page.evaluate("() => !!window.App.followup.spentExchange") is False
+        # Nothing went out: no usage run, nothing running, the question is
+        # back in the field.
         assert page.evaluate("() => window.App.usageRun?.current?.key || null") is None
         assert page.evaluate("() => window.isQueryRequestRunning()") is False
+        expect(page.locator("#questionInput")).to_have_value("What changed since yesterday?")
     finally:
         context.close()
 

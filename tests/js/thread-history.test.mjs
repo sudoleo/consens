@@ -5,7 +5,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // a follow-up only appends, and the turn on screen moves up as it is (A4).
 
 function historyApp() {
-  const app = loadScripts(["static/js/consensus-run.js"], {
+  const app = loadScripts(["static/js/thread-history.js"], {
     body: '<div id="threadHistory" hidden></div><textarea id="questionInput"></textarea>',
     before(window) {
       window.App = { runMode: { pipeline: () => true } };
@@ -119,7 +119,7 @@ const CATALOG = { default_model_id: "deepseek/deepseek-v4.1-flash", models: [
 function agentApp() {
   let answer = 0;
   const app = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js",
-    "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/consensus-run.js",
+    "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/thread-history.js",
     "static/js/agent-chat.js", "static/js/run-view.js"], {
     body: BODY,
     before(window) {

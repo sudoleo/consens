@@ -418,31 +418,6 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-dialog li.answer-reader-source-card .consensus-source-host { margin: 2px 0 0; line-height: 1.4; }
 .answer-reader-dialog .answer-reader-source-excerpt { width: 100%; margin-top: 8px; padding-top: 6px; }
 .answer-reader-dialog .diff-resolve { margin-top: 12px; }
-.answer-reader-dialog .diff-resolve-btn {
-  display: inline-flex;
-  width: auto;
-  min-height: 32px;
-  padding: 6px 10px;
-  gap: 7px;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--ink);
-  background: transparent;
-  border-color: var(--line);
-}
-.answer-reader-dialog .diff-resolve-pro-chip {
-  margin-left: 2px;
-  padding: 1px 4px;
-  font-size: var(--font-size-xs);
-  background: var(--well);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-  box-shadow: none;
-}
-.answer-reader-dialog .diff-resolve-btn[hidden] { display: none; }
-@media (pointer: coarse) {
-  .answer-reader-dialog .diff-resolve-btn { min-height: 44px; }
-}
 @media (max-width: 759px) {
   .answer-reader-dialog { --reader-inset: 16px; --reader-card-inset: 14px; }
   .answer-reader-dialog .model-answer-reader { padding-top: max(12px, env(safe-area-inset-top)); }

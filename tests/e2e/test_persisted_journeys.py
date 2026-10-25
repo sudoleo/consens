@@ -74,11 +74,12 @@ class Journey:
         self.context = browser.new_context(viewport={'width': 1440, 'height': 950})
         self.context.add_init_script('window.__E2E_INITIAL_UID = sessionStorage.getItem("journey_uid") || ' + json.dumps(self.uid))
         # Agent is the default since 2026-10-02; these journeys start from a
-        # Consensus run and pick Agent explicitly where they need it. Seeded
-        # once per tab so a reload keeps the mode the journey chose.
+        # Compare run (the browser runs no Consensus since 2026-10-25) and
+        # pick Agent explicitly where they need it. Seeded once per tab so a
+        # reload keeps the mode the journey chose.
         self.context.add_init_script(
             "if (!sessionStorage.getItem('journeyRunModeSeeded')) {"
-            " localStorage.setItem('runMode', 'consensus');"
+            " localStorage.setItem('runMode', 'compare');"
             " localStorage.setItem('consensio.settingsReset', '2026-10-12');"
             " sessionStorage.setItem('journeyRunModeSeeded', '1'); }")
         for name, source in [('app', FIREBASE_APP_STUB), ('auth', FIREBASE_AUTH_STUB)]:
@@ -130,7 +131,7 @@ class Journey:
         self.page.click('#sendButton')
         self.page.wait_for_function('q => window.App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")', arg=question, timeout=60000)
         self.page.wait_for_function('q => window.App.runRegistry.list().some(r => r.question === q && r.persistence?.status === "saved")', arg=question, timeout=30000)
-        return self.page.evaluate('q => {const r=window.App.runRegistry.list().find(r => r.question === q); return {run:r.runId, chat:r.chatSession.activeChatId, turn:r.chatSession.activeTurnId, bookmark:r.bookmark.id, result:r.consensus.resultId};}', question)
+        return self.page.evaluate('q => {const r=window.App.runRegistry.list().find(r => r.question === q); return {run:r.runId, bookmark:r.bookmark.id};}', question)
 
     def close(self):
         self.control('release', {})
@@ -151,7 +152,10 @@ def journey(browser, journey_server):
         value.close()
 
 
-def test_j01_saved_consensus_reload_followup_keeps_native_identity_and_context(journey):
+def test_j01_saved_comparison_reloads_and_the_next_question_is_a_new_chat(journey):
+    """Compare: the answers are saved to their own bookmark, reopen after a
+    reload, and the next question starts a comparison of its own (it
+    continues no chat and asks for no consensus)."""
     j = journey
     j.open()
     first = j.run('When was the Eiffel Tower completed? ' + j.uid)
@@ -161,27 +165,18 @@ def test_j01_saved_consensus_reload_followup_keeps_native_identity_and_context(j
     j.page.reload()
     j.page.wait_for_function('() => typeof window.openBookmark === "function" && window.__consensioAuthState?.known')
     j.page.evaluate('id => window.openBookmark(id)', first['bookmark'])
-    expect(j.page.locator('#consensusResponse')).to_contain_text('Mock consensus', timeout=15000)
-    expect(j.page.locator('#questionInput')).to_have_attribute('placeholder', 'Ask a follow-up question')
+    expect(j.page.locator('.is-direct .answer-reader-body').first).to_contain_text('mock answer', timeout=15000)
+    expect(j.page.locator('#consensusOutput')).to_be_hidden()
     second = j.run('How tall is it? ' + j.uid)
-    assert second['chat'] == first['chat'] and second['turn'] != first['turn']
-    assert second['bookmark'] == first['bookmark']
+    assert second['bookmark'] != first['bookmark']
     native = j.control('state')
     Path(f'test-results/{j.uid}-state.json').write_text(json.dumps(native, indent=2), encoding='utf-8')
-    turns = native['collections']['chats'][first['chat']]['children']['turns']
-    assert len(turns) == 2
-    assert all(v['data']['status'] == 'completed' for v in turns.values())
-    context_id = turns[second['turn']]['data']['context_version_id']
-    context = native['collections']['chats'][first['chat']]['children']['context_versions'][context_id]['data']
-    assert context['target_turn_id'] == second['turn']
-    assert context['recent_turn_id'] == first['turn']
-    assert context['target_position'] == 2 and context['status'] == 'ready'
-    assert turns[first['turn']]['data'].get('context_version_id') is None
-    assert j.page.evaluate('id => window.bookmarksData.find(b => b.id === id).has_consensus', first['bookmark']) is True
+    assert native['collections'].get('chats', {}) == {}
+    assert set(native['collections']['bookmarks']) == {first['bookmark'], second['bookmark']}
     receipts = [record['data'] for record in native['collections']['usage_runs'].values()]
     assert len(receipts) == 2
-    assert all(r['kind'] == 'regular' and r['status'] == 'consumed' for r in receipts)
-    assert all(len([op for op in r['booked_operations'] if op == 'consensus']) == 1 for r in receipts)
+    assert all(r['status'] == 'consumed' for r in receipts)
+    assert all('consensus' not in r['booked_operations'] for r in receipts)
     budget = j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']
     assert budget['used'] == sum(op['measured'] + op['estimated'] for r in receipts for op in r['booked_operations'].values())
     assert budget['reserved'] == 0
@@ -311,23 +306,31 @@ def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey
 
 
 def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey):
+    """A saved Agent answer is shared, followed and watched; each Watch
+    version binds to the share (the Watch runs the server's pipeline)."""
     j = journey
     j.open()
-    run = j.run('Watch the Eiffel Tower completion year ' + j.uid)
-    # MOCK_LLM suppresses live pending publication by design. Reopening uses
-    # the real saved-bookmark adapter to create the owner-bound pending result.
-    j.page.reload()
-    j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
-    j.page.evaluate('id => window.openBookmark(id)', run['bookmark'])
+    j.page.locator('#attachTrigger').click()
+    j.page.locator('#runModeControl [data-value="agent"]').click()
+    question = 'Watch the Eiffel Tower completion year ' + j.uid
+    j.page.fill('#questionInput', question)
+    j.page.click('#sendButton')
+    j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")',
+                             arg=question, timeout=180000)
+    j.producer_finished()
+    j.settled()
     # Use the real app share adapter/dialog, including its prepared saved result.
-    j.page.locator('#consensusResponse').get_by_text('Share', exact=True).click()
+    j.page.locator('#agentAnswer .agent-share-pill').click()
+    confirm = j.page.locator('#shareConfirmBtn')
+    expect(confirm).to_have_text('Create public link', timeout=15000)
     with j.page.expect_response(lambda r: r.url == j.base + '/api/share' and r.request.method == 'POST') as published:
-        j.page.get_by_role('button', name=re.compile('Create.*link|Create share|Publish', re.I)).click()
+        confirm.click()
     assert published.value.ok, published.value.text()
     share = published.value.json()
     native = j.control('state')
     pending = next(iter(native['global_owned']['pending_results'].values()))['data']
-    assert pending['owner_uid'] == j.uid and 'Mock consensus' in pending['consensus_md']
+    answer = 'Saved partial answer for ' + j.uid
+    assert pending['owner_uid'] == j.uid and answer in pending['consensus_md']
     assert native['global_owned']['shares'][share['share_id']]['data']['owner_uid'] == j.uid
     wid_response = j.request('POST', '/api/watch', {'share_id': share['share_id'],
         'interval': 'daily', 'visibility': 'public', 'email_enabled': True})
@@ -336,7 +339,7 @@ def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey
     assert j.request('DELETE', '/api/share/' + share['share_id'], {}, uid='journey-'+'f'*32).status == 403
     j.page.goto(j.base + share['path'])
     # With a Watch the share renders the Watch page (watch_share.html).
-    expect(j.page.locator('.wp-answer .share-md')).to_contain_text('Mock consensus')
+    expect(j.page.locator('.wp-answer .share-md')).to_contain_text(answer)
     j.page.locator('#shareFollowForm input[type=email]').fill(j.uid + '@example.invalid')
     j.page.locator('#shareFollowForm button[type=submit]').click()
     expect(j.page.locator('#shareFollowDone')).to_contain_text('Check your inbox')
@@ -460,7 +463,7 @@ def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journe
         j.page.reload()
         j.page.wait_for_function('uid => window.__consensioAuthState?.uid === uid', arg=other.uid)
         j.page.evaluate('id => window.openBookmark(id)', control['bookmark'])
-        expect(j.page.locator('#consensusResponse')).to_contain_text('Mock consensus', timeout=15000)
+        expect(j.page.locator('.is-direct .answer-reader-body').first).to_contain_text('mock answer', timeout=15000)
         assert j.request('GET', '/api/my/memory').status == 401
         assert j.request('GET', '/bookmarks/' + control['bookmark']).status == 401
         assert other.request('GET', '/bookmarks/' + control['bookmark']).ok
@@ -477,26 +480,26 @@ def test_settings_follow_the_account_to_another_device(journey, browser, journey
     j = journey
     settings = lambda: j.control('state')['collections']['settings']['app']['data']['values']
     j.open()
-    # A new account receives this browser's choices once (journeys start in Consensus).
+    # A new account receives this browser's choices once (journeys start in Compare).
     j.page.wait_for_function('() => App.userSettings.status().loaded && !App.userSettings.status().pending.length')
-    assert settings()['run_mode'] == 'consensus'
+    assert settings()['run_mode'] == 'compare'
     # A change on this device reaches the account.
     j.page.locator('#attachTrigger').click()
-    j.page.locator('#runModeControl [data-value="compare"]').click()
+    j.page.locator('#runModeControl [data-value="agent"]').click()
     j.page.evaluate('() => App.userSettings.flush()')
-    assert settings()['run_mode'] == 'compare'
+    assert settings()['run_mode'] == 'agent'
     # Another device of the same account starts from it, over its own stored mode.
     device = Journey(browser, journey_server, uid=j.uid)
     try:
         device.open()
-        assert device.page.evaluate("localStorage.getItem('runMode')") in ('consensus', 'compare')
-        device.page.wait_for_function('() => App.runMode.preference() === "compare"')
-        expect(device.page.locator('#runModeSelect')).to_have_value('compare')
+        assert device.page.evaluate("localStorage.getItem('runMode')") in ('compare', 'agent')
+        device.page.wait_for_function('() => App.runMode.preference() === "agent"')
+        expect(device.page.locator('#runModeSelect')).to_have_value('agent')
         # Signing out takes the account's settings out of this browser.
         device.page.evaluate('() => window.__switchE2EUser(null)')
         device.page.wait_for_function("() => localStorage.getItem('runMode') === null")
         assert device.page.evaluate('() => App.runMode.preference()') == 'agent'
-        assert settings()['run_mode'] == 'compare'
+        assert settings()['run_mode'] == 'agent'
     finally:
         device.context.close()
 
@@ -511,12 +514,10 @@ def test_persistence_quota_failure_keeps_answer_visible_and_never_claims_saved(j
     j.page.click('#sendButton')
     j.page.wait_for_function('() => App.runRegistry.visible()?.status === "succeeded"', timeout=60000)
     j.page.wait_for_function('() => App.runRegistry.visible()?.persistence.status === "error"', timeout=30000)
-    expect(j.page.locator('#consensusResponse')).to_contain_text('Mock consensus')
+    expect(j.page.locator('.is-direct .answer-reader-body').first).to_contain_text('mock answer')
     # The notice line names the limit in the chat's own words (Apple-Audit H3).
     expect(j.page.locator('#appToasts')).to_contain_text(re.compile('chats are full|chat storage is full|couldn.t be saved', re.I))
     native = j.control('state')
     assert native['collections'].get('bookmarks', {}) == {}
-    turns = [t['data'] for c in native['collections']['chats'].values() for t in c['children']['turns'].values()]
-    assert len(turns) == 1 and turns[0]['status'] == 'completed'
-    assert 'Mock consensus' in turns[0]['consensus']
-    assert j.page.evaluate('() => App.runRegistry.visible().bookmark.latestMeta?.has_consensus') is not True
+    # A comparison keeps no chat of its own.
+    assert native['collections'].get('chats', {}) == {}

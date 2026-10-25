@@ -20,8 +20,8 @@ function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, 
     ...(live ? ["static/js/agent-live.js"] : []), "static/js/agent-chat.js"], {
     body,
     before(window) {
-      // These cases start from a Consensus preference; Agent is the default.
-      window.localStorage.setItem("runMode", "consensus");
+      // These cases start from a Compare preference; Agent is the default.
+      window.localStorage.setItem("runMode", "compare");
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };
       window.App = {
@@ -49,7 +49,7 @@ function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, 
 
 async function selectAgent(window) {
   // The one mode choice (run-mode.js); agent-chat.js re-renders on its event.
-  window.App.runMode.set("consensus");
+  window.App.runMode.set("compare");
   window.App.runMode.set("agent");
   if (window.App.agentChat.canUse()) await vi.waitFor(() => expect(window.document.getElementById("agentModelDropdown").disabled).toBe(false));
 }
@@ -1099,7 +1099,7 @@ describe("single-model agent chat", () => {
     await selectAgent(window);
     expect(window.App.agentChat.isSelected()).toBe(false);
     expect(window.App.runMode.availability().agent.visible).toBe(false);
-    expect(window.App.runMode.effective()).toBe("consensus");
+    expect(window.App.runMode.effective()).toBe("compare");
     window.App.agentAccess.allowed = true;
     await selectAgent(window);
     expect(window.App.agentChat.isSelected()).toBe(true);
@@ -1125,8 +1125,8 @@ describe("single-model agent chat", () => {
     expect(payload).not.toHaveProperty("usage_run_key");
     expect(window.App.runRegistry.visible().status).toBe("succeeded");
     expect(window.App.runRegistry.getSelectedConversationBasis().executionMode).toBe("agent");
-    // An open Agent chat keeps its family: Compare and Consensus need a new chat.
-    expect(window.App.runMode.availability().consensus.enabled).toBe(false);
+    // An open Agent chat keeps its family: Compare needs a new chat.
+    expect(window.App.runMode.availability().compare.enabled).toBe(false);
     expect(window.App.runMode.availability().compare.reason).toBe("Available in a new chat");
     document.getElementById("questionInput").value = "Follow-up";
     await window.App.agentChat.send();
@@ -1153,7 +1153,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it("restores an agent bookmark independently of the global consensus preference", async () => {
+  it("restores an agent bookmark independently of the global Compare preference", async () => {
     const { window, document, dom } = boot();
     window.App.runRegistry.showSavedView({ type: "bookmark" }, {
       chatId: "a".repeat(32), turnId: "b".repeat(32), question: "Q", consensus: "Saved answer",
@@ -1164,7 +1164,7 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
     window.App.runRegistry.clearVisible();
     expect(window.App.agentChat.isSelected()).toBe(false);
-    expect(window.App.runMode.availability().consensus.enabled).toBe(true);
+    expect(window.App.runMode.availability().compare.enabled).toBe(true);
     expect(window.App.runMode.availability().agent.enabled).toBe(true);
     dom.window.close();
   });
@@ -2311,7 +2311,7 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     expect(d.activeElement).toBe(trigger);
 
     // Outside Agent the comparison chip is its own picker again.
-    w.App.runMode.set('consensus');
+    w.App.runMode.set('compare');
     expect(d.querySelector('.consensus-model').hidden).toBe(false);
     w.App.openModelPicker(consensus);
     const own = d.querySelector('.consensus-model .model-picker-menu');

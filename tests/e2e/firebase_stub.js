@@ -5,8 +5,7 @@
 // Firebase. Das Sentinel-Token akzeptiert das Backend nur mit MOCK_AUTH=1.
 //
 // Muss alle window.*-Vertraege bedienen, die andere Module OHNE Optional-
-// Chaining aufrufen (saveBookmark, saveBookmarkConsensus, recordModelVote,
-// sendFeedback, window.auth.currentUser) - siehe docs/codebase-map.md §8.
+// Chaining aufrufen (saveBookmark, sendFeedback, window.auth.currentUser) - siehe docs/codebase-map.md §8.
 
 const E2E_TOKEN = "e2e-mock-token";
 
@@ -33,9 +32,7 @@ for (const control of [bookmarksToggle, bookmarkSearchTrigger, bookmarkSearchInp
   control.setAttribute("aria-disabled", "false");
 }
 
-window.recordModelVote = () => {};
 window.saveBookmark = () => {};
-window.saveBookmarkConsensus = () => {};
 window.loadBookmarks = async () => {};
 window.deleteBookmark = async () => {};
 window.sendFeedback = async () => ({ ok: true });

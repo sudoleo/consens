@@ -76,8 +76,8 @@
           showPopup
         } = window.App;
 
-        // Grouped run panel lives in static/js/agent-mode.js; the mode choice
-        // (Compare / Consensus / Agent) in static/js/run-mode.js.
+        // View classes and answer previews live in static/js/agent-mode.js;
+        // the mode choice (Agent / Compare) in static/js/run-mode.js.
         const setAgentModeStatus = window.setAgentModeStatus;
         const updateAgentModeUI = window.updateAgentModeUI;
 
@@ -268,7 +268,7 @@
           const hasMessage = !agent || Boolean(String(window.App.quote?.compose?.(questionInput?.value || '') ?? questionInput?.value ?? '').trim())
             || Boolean(window.App.attachments?.messageText?.());
           // A stored Agent choice waits for the account's Agent access instead
-          // of sending as Consensus in the moment before it arrives.
+          // of sending as Compare in the moment before it arrives.
           const mode = window.App.agentChat?.modeState?.();
           const modePending = window.App.runMode?.preference?.() === "agent" && !mode?.family && mode?.pending === true;
           const canStartRun = canAsk && hasMinimumModels && hasMessage && !modePending;
@@ -1136,10 +1136,6 @@
           }
         }
 
-        // Extrahiert aus dem Differences-Text den BestModel-Wert
-        // parseBestModel ist nach static/js/consensus-run.js gewandert (einziger
-        // Aufrufer war window.getConsensus).
-
         // Funktion, um das Popup anzuzeigen
         // showPopup stammt aus app-core.js (window.App), siehe Alias oben.
 
@@ -1157,7 +1153,7 @@
 
           if (!sources || !sources.length) {
             panel.hidden = true;
-            window.App?.consensusPipeline?.renderProvenance?.();
+            window.App?.consensusFooter?.render?.();
             return;
           }
 
@@ -1220,7 +1216,7 @@
 
           // Sichtbar wird das Panel erst ueber den Chip; hier zaehlt nur, dass
           // es Inhalt hat, damit der Chip erscheinen kann.
-          window.App?.consensusPipeline?.renderProvenance?.();
+          window.App?.consensusFooter?.render?.();
         }
 
         // global machen, falls du es anderswo brauchst
@@ -1295,9 +1291,9 @@
         // animateResponseReorder, setModelSelectionState und restoreModelSelections
         // sind nach static/js/model-picker.js ausgelagert. Aliase siehe oben.
 
-        // Grouped run panel: static/js/agent-mode.js (window.setAgentModeStatus,
-        // window.updateAgentModeUI, window.isAgentModeRunning). Mode choice:
-        // App.runMode (static/js/run-mode.js).
+        // View classes: static/js/agent-mode.js (window.setAgentModeStatus,
+        // window.updateAgentModeUI). Mode choice: App.runMode
+        // (static/js/run-mode.js).
 
         // 1. Initialer Aufruf beim Laden der Seite
         window.restoreModelSelections();
@@ -1344,22 +1340,6 @@
         });
 
 
-
-        // --- NEU: Event Listener für Consensus Dropdown ---
-        const consensusSelect = document.getElementById("consensusModelDropdown");
-        if (consensusSelect) {
-          consensusSelect.addEventListener("change", function () {
-            // Eine explizite Modellwahl (change-Event) verlaesst die
-            // Preset-Ebene und speichert die Engine als eigene Wahl;
-            // Preset-Klicks feuern bewusst KEIN change (siehe model-picker.js).
-            window.App.markConsensusPresetCustom({ engine: true });
-            const selectedLabel = getModelOptionLabel(this.options[this.selectedIndex]) || this.value;
-            trackAppEvent("app_consensus_model_changed", { model: selectedLabel });
-
-            // Optional: Fokus entfernen, wie bei den anderen Pickern
-            this.blur();
-          });
-        }
 
         // A search without a match says so in one quiet line (Apple audit
         // H11); an empty list of a new account stays empty on purpose.
@@ -1532,13 +1512,6 @@
 
 
 
-        // consensusGenerated (query-state) lebt jetzt in static/js/query-send.js.
-
-        const consensusLifecycle = window.App.consensusLifecycle;
-
-        // Der frühere "Generate Consensus"-Button ist entfernt - Konsens läuft
-        // automatisch. Lokaler Alias hält die bestehenden Aufrufstellen stabil.
-
         // Query-Send (window.sendQuestion, Cancel, Query-Run-State und die
         // Query-Helfer isDemoQuery/predictSearchIntent/getActiveMode) ist nach
         // static/js/query-send.js ausgelagert. Die Send-Listener unten fragen
@@ -1584,17 +1557,9 @@
           }
         });
 
-        // Globale Variable, um die letzte verarbeitete Frage zu speichern.
-        // Auf window gehoben: consensus-run.js (window.getConsensus) liest sie,
-        // query-send.js (window.sendQuestion) schreibt sie.
+        // Globale Variable, um die letzte verarbeitete Frage zu speichern;
+        // query-send.js (window.sendQuestion) und run-view.js schreiben sie.
         window.App.state.set("lastQuestion", "", "run");
-
-        // Consensus-Run (Request/Payload/Rendering) ist nach
-        // static/js/consensus-run.js ausgelagert: window.getConsensus baut das
-        // /consensus-Payload, faehrt den SSE-Stream und rendert das Ergebnis.
-        // Run-State/Gate/Abort liegen in consensus-lifecycle.js
-        // (window.App.consensusLifecycle), das die Bruecke bereitstellt.
-        window.updateConsensusButtonAvailability();
 
         // Inline-Status statt Browser-alert() fuer den API-Key-Test.
         function setApiKeysStatus(message, tone) {
@@ -1711,12 +1676,11 @@
           document.body.classList.remove("direct-comparison-active");
           const boxIds = (window.App.modelPrefs || []).map(pref => pref.responseId);
 
-          // Konsens unterbinden und den rahmenlosen Bereich wieder ausblenden.
+          // Eine gespeicherte Consensus-Antwort samt Verlauf verlaesst den Schirm.
           window.hideConsensusOutput?.();
-          // Follow-up-Affordance/Chip gehören zum gelöschten Konsens.
+          window.App.consensusFooter?.clear?.();
           window.App.followup?.reset?.();
           window.App.followup?.clearHistory?.();
-          window.App.chatSession?.reset?.();
           window.App.bookmarkSession?.reset?.();
 
           // Lösche den Inhalt aller Modell-Antwortboxen.

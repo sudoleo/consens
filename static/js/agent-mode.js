@@ -1,19 +1,16 @@
 // =====================================================================
 // agent-mode.js
-// Run status of the grouped model run (body classes, answer previews) and the
-// composer controls for the next message. Which mode runs (Compare,
-// Consensus, Agent) is owned by run-mode.js; this module renders the one
-// selector for it and the tools that apply to the chosen mode. The
-// "agent-mode" names here are historical and describe the grouped run, not
-// Agent (Beta). Das fruehere Modell-Panel (#agentModePanel mit Timer und
-// Modell-Chips) ist seit 2026-10-05 entfernt; der gefuehrte Lauf erzaehlt
-// jeden Lauf. Der Status ist modul-privat und wird extern via
-// window.isAgentModeRunning() gelesen.
+// Body classes and answer previews of the view on screen (a Compare run, a
+// saved chat, the empty start screen) and the composer controls for the
+// next message. Which mode runs (Agent, Compare) is owned by run-mode.js;
+// this module renders the one selector for it and the tools that apply to
+// the chosen mode. The "agent-mode" names here are historical: they once
+// meant the grouped Consensus run (removed from the browser 2026-10-25),
+// not Agent (Beta).
 // Exporte: window.setAgentModeStatus, window.updateAgentModeUI,
-// window.projectAgentModeRun, window.isAgentModeRunning.
-// Abhaengigkeiten: window.App.{modelPrefs,
-// getModelOptionLabel,trackAppEvent},
-// window.updateConsensusButtonAvailability.
+// window.projectAgentModeRun.
+// Abhaengigkeiten: window.App.{modelPrefs, getModelOptionLabel,
+// trackAppEvent, runMode, answerReader}.
 // =====================================================================
 
 (function () {
@@ -27,20 +24,21 @@
     return (chat.looksAgent?.() ?? chat.isSelected?.()) === true;
   };
   const runMode = () => window.App.runMode.effective();
-  // The consensus pipeline runs unless the next message is a Compare.
-  const pipelineEnabled = () => window.App.runMode.pipeline();
+  // An Agent choice whose access is still loading runs as nothing yet (Send
+  // waits, agent-chat.js); its start screen is Agent's hero, not Compare's
+  // answer grid, which would flash on every load until access arrives.
+  const agentAwaited = () => {
+    const state = window.App.agentChat?.modeState?.();
+    return window.App.runMode.preference() === "agent" && !state?.family && state?.pending === true;
+  };
+  // Anything but a side-by-side comparison: the next message goes to Agent.
+  const threadMode = () => runMode() !== "compare" || agentAwaited();
 
-  let agentModeStatus = "idle";
   // When a RunContext is selected, the run view is a projection of that frozen
   // run rather than a reflection of the controls that configure the next run.
   let projectedRunContext = null;
-  // Session-only disclosure: every new grouped run starts in the clean view.
+  // Session-only disclosure: every new run starts in the clean view.
   let modelAnswersVisible = false;
-
-  // Der geschaetzte Stream-Fortschritt pro Modell ist mit dem Balken im
-  // gefuehrten Lauf entfallen (siehe consensus-progress.js): waehrend die
-  // Antworten sichtbar streamen, war er eine zweite, geratene Auskunft ueber
-  // dasselbe. Was bleibt, ist die gemessene Zeit pro Modell.
 
   function isTerminalResponseState(state) {
     return state === "complete" || state === "error" || state === "incomplete";
@@ -141,26 +139,8 @@
   });
 
   function getActiveAgentModels() {
-    // The models the answer reader previews. Only a projected run describes
-    // itself here. Without a run -- a saved
-    // bookmark was opened, or the view was cleared -- the chips come from the
-    // controls again; reading `?.config?.agentMode !== false` off nothing was
-    // true for null as well and threw on the very next line, which aborted
-    // the bookmark restore mid-way and left the previous run on screen.
-    if (projectedRunContext && projectedRunContext.config?.agentMode !== false) {
-      return (projectedRunContext.config?.providers || []).map(function (provider) {
-        const pref = window.App.modelPrefs.find(item => item.key === provider.provider);
-        if (!pref) return null;
-        const result = projectedRunContext.modelResults?.[provider.provider] || {};
-        return {
-          pref,
-          label: pref.label,
-          model: String(provider.modelLabel || provider.modelId || pref.label),
-          responseState: String(result.status || "pending"),
-          hasAnswer: Boolean(String(result.text || result.streamText || "").trim())
-        };
-      }).filter(Boolean);
-    }
+    // The models the answer reader previews on the Compare start screen: the
+    // ones the controls have chosen for the next message.
     return window.App.modelPrefs
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => {
@@ -185,10 +165,9 @@
   // accounts with access. renderComposerMode runs on every run status tick;
   // the selector only changes when the mode, the open chat's family or the
   // account changes.
-  const MODE_ORDER = ["agent", "consensus", "compare"];
+  const MODE_ORDER = ["agent", "compare"];
   const MODE_ICONS = {
     agent: "M12 3.5 13.9 10l6.6 2-6.6 2L12 20.5 10.1 14l-6.6-2 6.6-2Z",
-    consensus: "M9 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11ZM15 6.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 1 0 0-11Z",
     compare: "M4 5h6v14H4zM14 5h6v14h-6z",
   };
   function renderModeRows(group, select, mode, available) {
@@ -255,15 +234,17 @@
       select?.value, setting?.value]);
     if (signature === runModeSignature) return;
     // An open Agent chat offers nothing to switch to (its family is fixed on
-    // the server), so the group steps aside instead of three dead rows.
+    // the server), so the group steps aside instead of dead rows.
     // Settings still holds the choice for new chats.
     const control = document.getElementById("runModeControl");
-    if (control) control.hidden = !available.compare.enabled && !available.consensus.enabled;
+    if (control) control.hidden = !available.compare.enabled;
     if (select) {
       for (const option of Array.from(select.options)) {
         const rule = available[option.value];
         const copy = window.App.runMode.copy(option.value);
-        if (option.value === "agent" && !rule.visible) { option.remove(); continue; }
+        // A mode this version does not know (Consensus, retired 2026-10-25)
+        // is no choice.
+        if (!rule || (option.value === "agent" && !rule.visible)) { option.remove(); continue; }
         option.disabled = !rule.enabled;
         option.dataset.description = rule.enabled ? copy.description : rule.reason;
       }
@@ -284,6 +265,9 @@
     }
     // Settings holds the choice for new chats, so no per-chat locks apply.
     if (setting) {
+      for (const option of Array.from(setting.options)) {
+        if (!available[option.value]) option.remove();
+      }
       const agentOption = setting.querySelector('option[value="agent"]');
       if (available.agent.visible && !agentOption) {
         const option = document.createElement("option");
@@ -292,7 +276,7 @@
         setting.appendChild(option);
       } else if (!available.agent.visible && agentOption) agentOption.remove();
       const preference = window.App.runMode.preference();
-      const shown = setting.querySelector(`option[value="${preference}"]`) ? preference : "consensus";
+      const shown = setting.querySelector(`option[value="${preference}"]`) ? preference : "compare";
       if (setting.value !== shown) setting.value = shown;
     }
     runModeSignature = JSON.stringify([mode, window.App.runMode.preference(), available,
@@ -310,10 +294,9 @@
   function renderComposerMode() {
     const beta = isBeta();
     const mode = runMode();
-    const enabled = mode !== "compare";
     renderRunModeControl();
-    // Compare/Consensus use the Reasoning switch row; Agent uses the
-    // reasoning-effort menu entry instead.
+    // Compare uses the Reasoning switch row; Agent uses the reasoning-effort
+    // menu entry instead.
     const reasoningRow = document.getElementById("reasoningToggle")?.closest("label");
     if (reasoningRow) reasoningRow.hidden = beta;
     ["agentReasoningMenuOption", "agentComparisonMenuOption"].forEach(id => {
@@ -438,12 +421,11 @@
     }
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
-    // The result on screen keeps its own mode; say so when the next
-    // message will run differently.
-    // The summary comes translated (directSummary), so its prefix is too.
-    status.textContent = summary
-      ? `${enabled ? `${window.App.t("Shown: Compare result ·")} ` : ""}${summary}.`
-      : "";
+    // The comparison on screen says how far it got. (Its "Shown: Compare
+    // result" prefix for a differing next mode left with Consensus on
+    // 2026-10-25: Agent, the only other mode, has its own composer, where
+    // this bar steps aside.) The summary comes translated (directSummary).
+    status.textContent = summary ? `${summary}.` : "";
     status.title = status.textContent;
     status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
   }
@@ -456,32 +438,33 @@
 
   function updateAgentModeUI() {
     // config.agentMode is the persisted run field for "the consensus
-    // pipeline ran"; the name predates the Compare/Consensus/Agent choice.
+    // pipeline ran"; a projected run in this module is always a Compare run
+    // (false). A saved Consensus answer on screen (firebase.js reveals it
+    // before calling here) keeps its answers behind "Compare answers": an
+    // open saved chat runs its next message as Compare, and the view must
+    // not follow that. Otherwise the view follows the choice for the next
+    // message: Agent's start screen, or Compare's.
+    const savedConsensusShown = !document.body.classList.contains("direct-comparison-active")
+      && document.getElementById("consensusOutput")?.classList.contains("is-visible") === true;
     const enabled = projectedRunContext
       ? projectedRunContext.config?.agentMode !== false
-      : pipelineEnabled();
+      : savedConsensusShown || threadMode();
     const answersRow = document.getElementById("agentModeAnswersRow");
     const answersToggle = document.getElementById("agentModeAnswersToggle");
     const activeModels = getActiveAgentModels();
 
-    // Seit 2026-07-27 haengt die Einzelantworten-Disclosure NICHT mehr am
-    // Agent Mode. Sie ist eine der drei Aufklapp-Flaechen in der Fusszeile
-    // ("Review differences · Compare answers · Sources") und war dort
-    // in zwei von
-    // drei Faellen unsichtbar, obwohl sie das Wichtigste dahinter oeffnet:
-    // worauf die Antwort beruht. Der Footer selbst wird erst zusammen mit
-    // einer fertigen Consensus-Antwort sichtbar; innerhalb dieses Footers ist
-    // der Schalter deshalb immer da. Das vermeidet Sonderfaelle fuer manuell
-    // gestartete Consensuses, Bookmarks und nachtraeglich ausgeschlossene
-    // Modelle.
+    // Die Einzelantworten-Disclosure ist eine der drei Aufklapp-Flaechen in
+    // der Fusszeile einer gespeicherten Consensus-Antwort ("Review
+    // differences · Compare answers · Sources"). Der Footer selbst wird erst
+    // zusammen mit der Antwort sichtbar; innerhalb dieses Footers ist der
+    // Schalter deshalb immer da.
 
     document.body.classList.toggle("agent-mode-enabled", enabled);
-    document.body.classList.toggle("agent-mode-running", enabled && agentModeStatus === "running");
-    window.App.answerReader?.syncPreview?.(pipelineEnabled(), activeModels);
+    window.App.answerReader?.syncPreview?.(threadMode(), activeModels);
     // "direct-comparison-active" beschreibt, was GERADE AUF DEM SCHIRM steht,
-    // der Agent-Mode-Schalter dagegen, was der NAECHSTE Lauf tut. Umschalten
-    // behaelt das angezeigte Ergebnis; erst eine neue Projektion wechselt es.
-    // Hero-Desktop zeigt die Response-Boxen nur ohne Agent Mode; inert/
+    // der Modus dagegen, was die NAECHSTE Nachricht tut. Umschalten behaelt
+    // das angezeigte Ergebnis; erst eine neue Projektion wechselt es.
+    // Hero-Desktop zeigt die Response-Boxen nur in Compare; inert/
     // aria-hidden muessen der CSS-Sichtbarkeit folgen (app-core.js).
     if (typeof window.syncHeroResponseAccess === "function") {
       window.syncHeroResponseAccess();
@@ -510,8 +493,8 @@
       }
     }
 
-    // The mode selector describes the NEXT message, `enabled` above the run
-    // on screen. Controls follow the choice; view and body classes the run.
+    // The mode selector describes the NEXT message, `enabled` the view on
+    // screen. Controls follow the choice; view and body classes the run.
     renderComposerMode();
 
     // Nach dem Layout messen: die Boxen sind in genau diesem Aufruf sichtbar
@@ -520,8 +503,8 @@
   }
 
   // Every change of the mode (selector, Settings, another tab) arrives here.
-  // Switching between Compare and Consensus keeps the result on screen,
-  // including a saved direct comparison; only the next message changes.
+  // Switching keeps the result on screen, including a saved direct
+  // comparison; only the next message changes.
   function onRunModeChange(event) {
     const previous = event?.detail?.previous;
     const next = event?.detail?.mode;
@@ -533,8 +516,6 @@
       }, 340);
     }
     updateAgentModeUI();
-    // The composer placeholder promises a follow-up only while one exists
-    // (consensus-run.js, isArmed); Compare has none.
     window.App?.followup?.render?.();
     if (window.App.runRegistry?.visible?.()) {
       window.App.runRegistry.renderVisible();
@@ -542,55 +523,24 @@
     window.App.attachments?.refreshCompatibility?.();
   }
 
-  // A second argument (an error message) is still passed by callers but no
-  // longer shown: the guided run reports failures itself.
+  // "running": a new set of answers is on its way (the Compare demo), so the
+  // answers start closed and no box keeps an earlier "show full answer".
+  // "idle": the view was cleared. A second argument (an error message) may
+  // still be passed by callers; nothing here shows it.
   function setAgentModeStatus(status) {
+    if (status === "running" || status === "idle") modelAnswersVisible = false;
     if (status === "running") {
-      if (agentModeStatus !== "running") {
-        modelAnswersVisible = false;
-        // Ein neuer Lauf bringt neue Antworten: die Entscheidung, welche
-        // davon ganz aufgeklappt war, gilt fuer die alten.
-        document.querySelectorAll(".response-box[data-answer-open]")
-          .forEach(box => { delete box.dataset.answerOpen; });
-      }
-    } else if (status === "idle") {
-      modelAnswersVisible = false;
+      document.querySelectorAll(".response-box[data-answer-open]")
+        .forEach(box => { delete box.dataset.answerOpen; });
     }
-    agentModeStatus = status;
     updateAgentModeUI();
-    if (typeof window.updateConsensusButtonAvailability === "function") {
-      window.updateConsensusButtonAvailability();
-    }
-    // Der Modellstatus bleibt fuer jeden Lauf zentral. Nur Consensus reicht
-    // ihn an die gefuehrte Pipeline weiter; der Direktvergleich raeumt sie ab.
-    if (pipelineEnabled()) {
-      window.App?.consensusPipeline?.onQueryStatus?.(status);
-    } else {
-      window.App?.consensusPipeline?.dismiss?.();
-    }
   }
 
+  // The Compare run on screen (or none). Another run's answers start closed.
   function projectAgentModeRun(context) {
     const switched = (projectedRunContext?.runId || null) !== (context?.runId || null);
     projectedRunContext = context || null;
-
-    if (!context || context.config?.agentMode === false) {
-      agentModeStatus = "idle";
-      if (switched) modelAnswersVisible = false;
-      updateAgentModeUI();
-      return;
-    }
-
     if (switched) modelAnswersVisible = false;
-    if (context.status === "failed") {
-      agentModeStatus = "error";
-    } else if (context.status === "canceled") {
-      agentModeStatus = "canceled";
-    } else if (context.status === "succeeded" || context.phase === "answers_ready") {
-      agentModeStatus = "complete";
-    } else {
-      agentModeStatus = "running";
-    }
     updateAgentModeUI();
   }
 
@@ -682,12 +632,6 @@
   window.setAgentModeStatus = setAgentModeStatus;
   window.projectAgentModeRun = projectAgentModeRun;
   window.updateAgentModeUI = updateAgentModeUI;
-
-  // Getter fuer den (modul-privaten) Status, damit Query-/Consensus-Code
-  // weiterhin auf den "running"-Zustand pruefen kann.
-  window.isAgentModeRunning = function () {
-    return agentModeStatus === "running";
-  };
 
   window.App = window.App || {};
   window.App.agentMode = {

@@ -103,8 +103,7 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
     die zentralen window.*-Vertraege muessen nach dem Laden existieren."""
     missing = app_page.evaluate(
         """() => [
-          "sendQuestion", "getConsensus", "canGenerateConsensus",
-          "updateConsensusButtonAvailability", "openShareDialog",
+          "sendQuestion", "openShareDialog",
           "injectMarkdown", "updateUserTierUI",
         ].filter((name) => typeof window[name] !== "function")"""
     )
@@ -113,7 +112,10 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
         'known': True, 'uid': 'e2e-mock-user', 'generation': 1,
     }
     assert app_page.evaluate("() => window.App.state.get('userTier')") == 'free'
-    assert app_page.evaluate("() => typeof window.App.consensusLifecycle") == "object"
+    # The Consensus run left the browser on 2026-10-25; a saved answer keeps
+    # its footer (consensus-footer.js).
+    assert app_page.evaluate("() => typeof window.App.consensusFooter") == "object"
+    assert app_page.evaluate("() => typeof window.getConsensus") == "undefined"
     expect(app_page).to_have_title("consens.io")
 
     # Kurze Nachlaufzeit fuer asynchrone Init-Fehler (Tooltips, Usage-Fetch).
@@ -246,42 +248,6 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     input_box.fill("First line")
     input_box.press("Shift+Enter")
     expect(input_box).to_have_value("First line\n")
-
-
-def test_restored_context_keeps_the_composer_open_and_continuable(app_page):
-    """Ein wiederhergestellter Turn stellt keine Zwischenfrage und traegt keine
-    eigene Flaeche am Composer: das Feld laeuft einfach weiter, die naechste
-    Frage ist eine Folgefrage. Die Modellwahl bleibt dabei bedienbar."""
-    app_page.evaluate(
-        """() => window.App.followup.offer(
-          "Saved question",
-          "Saved consensus",
-          { question: "Saved question", consensus: "Saved consensus" }
-        )"""
-    )
-    expect(app_page.locator("#questionInput")).to_be_enabled()
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Ask a follow-up question"
-    )
-    assert app_page.evaluate("() => window.App.followup.isArmed()") is True
-    # Der frueher hier stehende Kontext-Chip samt "New comparison" ist weg:
-    # der Ausstieg lebt in der Sidebar.
-    expect(app_page.locator("#followupChipBar")).to_have_count(0)
-    expect(app_page.locator(".chat-input-container .followup-newrun")).to_have_count(0)
-
-    # Die Modellwahl ist nicht mehr gesperrt: es gibt keine Entscheidung, die
-    # sie stoeren koennte.
-    app_page.locator("#sidebarModelPicker").click()
-    expect(
-        app_page.locator("#consensusModelDropdown").locator("xpath=..").locator(".model-picker-menu")
-    ).to_have_class(re.compile(r"\bis-open\b"))
-    app_page.keyboard.press("Escape")
-
-    app_page.evaluate("() => window.App.followup.markContinuationUnavailable()")
-    expect(app_page.locator("#questionInput")).to_be_visible()
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Start a new chat — the saved context is unavailable"
-    )
 
 
 def _composer_state(page):
@@ -767,12 +733,16 @@ def test_usage_display_is_stable_and_updates_visible_quota_panel(app_page):
     assert box is not None and box["width"] <= 20.5
     expect(app_page.locator("#quotaPercent")).to_have_text("62%")
     # The reader sees the allowance; the token figures are for admins only (Apple-Audit H4).
-    expect(app_page.locator("#quotaDetail")).to_contain_text("A Consensus run uses about")
+    expect(app_page.locator("#quotaDetail")).to_contain_text("A Compare run uses about")
     expect(app_page.locator("#quotaDetail .admin-only")).to_be_hidden()
 
 
 def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     app_page.set_viewport_size({"width": 390, "height": 844})
+    # The empty start screen is Agent's hero (every account has Agent; the
+    # suite starts in Compare, whose start is the answer grid).
+    app_page.evaluate("() => window.App.runMode.set('agent')")
+    app_page.wait_for_function("() => document.body.classList.contains('is-hero')")
     _wait_for_composer_width(app_page)
     page_metrics = app_page.evaluate(
         """() => ({
@@ -797,9 +767,6 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     centers = [control["center"] for control in control_metrics]
     assert max(centers) - min(centers) <= 1, control_metrics
     assert all(control["height"] == 36 for control in control_metrics)
-    # Phones: the models stand between (+) and Send, on their line.
-    models = app_page.locator('.composer-models').bounding_box()
-    assert abs(models['y'] + models['height'] / 2 - centers[0]) <= 1
     assert control_metrics[0]['top'] >= app_page.locator('#questionInput').bounding_box()['y']
 
     sidebar = app_page.locator(".sidebar")
@@ -812,6 +779,17 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     expect(sidebar).to_have_attribute("aria-hidden", "true")
     assert sidebar.evaluate("element => element.inert") is True
 
+    # Compare's model picker fits the phone as well; on phones its models
+    # stand between (+) and Send, on their line.
+    app_page.evaluate("() => window.App.runMode.set('compare')")
+    app_page.wait_for_function("() => document.body.classList.contains('direct-comparison-preview')"
+                               " && !document.body.classList.contains('comparison-layout-changing')"
+                               " && !document.body.classList.contains('composer-gliding')")
+    app_page.evaluate("""() => Promise.all(document.querySelector('.input-section').getAnimations({subtree: true})
+      .filter(a => a.effect.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => null)))""")
+    plus = app_page.locator('#attachTrigger').bounding_box()
+    models = app_page.locator('.composer-models').bounding_box()
+    assert abs(models['y'] + models['height'] / 2 - (plus['y'] + plus['height'] / 2)) <= 1
     app_page.locator(".consensus-model .model-picker-display").click()
     menu_metrics = app_page.locator(".consensus-model .model-picker-menu").evaluate(
         """element => ({
@@ -852,8 +830,8 @@ def test_send_question_streams_all_models(app_page):
     _wait_for_all_final_answers(app_page)
 
 
-def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
-    """Agent Mode off is a terminal fan-out: no guided workflow or judge."""
+def test_compare_stays_a_direct_six_answer_comparison(app_page):
+    """Compare is a terminal fan-out: no guided workflow or judge."""
     consensus_requests = []
     app_page.on(
         "request",
@@ -866,7 +844,6 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
     app_page.locator('#runModeControl [data-value="compare"]').click()
     expect(app_page.locator("#runModeSelect")).to_have_value("compare")
     expect(app_page.locator("#runModeSetting")).to_have_value("compare")
-    assert app_page.evaluate("App.runMode.pipeline()") is False
 
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
@@ -876,7 +853,7 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
         re.compile(r"\bdirect-comparison-active\b")
     )
     expect(app_page.locator("#threadAsk")).to_be_visible()
-    expect(app_page.locator("#consensusRun")).to_be_hidden()
+    expect(app_page.locator("#consensusRun")).to_have_count(0)
     expect(app_page.locator("#consensusOutput")).to_be_hidden()
     expect(app_page.locator("#consensusAnswerBody .cx-claim, #consensusAnswerBody .claim-badge")).to_have_count(0)
     expect(app_page.locator("#differencesCards")).to_be_hidden()
@@ -893,467 +870,6 @@ def test_disabled_agent_mode_stays_in_direct_six_answer_comparison(app_page):
     )
     assert layout["inputBottom"] > layout["responsesTop"]
     assert consensus_requests == []
-
-
-def test_consensus_renders_differences_and_agreement_score(app_page, get_console_errors):
-    """Hoechstes Risiko laut Smoke-Checkliste: Auto-Consensus (per Default an)
-    triggert nach Abschluss aller Antworten und rendert Consensus-Text,
-    Claim-Badges, Widerspruchs-Karte und Agreement-Score. Einen manuellen
-    Consensus-Button gibt es im aktuellen UI nicht mehr."""
-    app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate("() => window.App.runMode.set('consensus')")
-    app_page.evaluate("""() => {
-      const highlights = document.getElementById('consensusHighlightsSelect');
-      highlights.value = 'all'; highlights.dispatchEvent(new Event('change'));
-      const counts = document.getElementById('claimCountsSwitch');
-      counts.checked = true; counts.dispatchEvent(new Event('change'));
-    }""")
-    # Passage-Interaktion explizit unter Touch-Bedingungen pruefen. Die alte
-    # Implementierung brach bei genau diesem Media Query vor dem Binding ab.
-    app_page.evaluate(
-        """() => {
-          const nativeMatchMedia = window.matchMedia.bind(window);
-          window.matchMedia = query => {
-            if (query.includes("(hover: hover)") || query.includes("(pointer: fine)")) {
-              return {
-                matches: false, media: query, onchange: null,
-                addListener() {}, removeListener() {},
-                addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; },
-              };
-            }
-            return nativeMatchMedia(query);
-          };
-        }"""
-    )
-    _send_question(app_page)
-
-    # Agent Mode: determinate Antwortphase -> indeterminate Synthese.
-    # Die rahmenlose Zeile bleibt mobil kompakt und clippt ihren Text nicht.
-    pipeline = app_page.locator("#consensusRun")
-    expect(pipeline).to_be_visible(timeout=10000)
-    expect(pipeline).to_have_attribute("data-stage", "answers")
-    metrics = pipeline.evaluate(
-        """(el) => {
-          const current = el.querySelector('.run-compact');
-          return {
-            height: current.getBoundingClientRect().height,
-            clipped: current.scrollWidth > current.clientWidth,
-          };
-        }"""
-    )
-    assert metrics["height"] <= 34
-    assert metrics["clipped"] is False
-
-    _wait_for_all_final_answers(app_page)
-    expect(pipeline).to_have_attribute("data-stage", "consensus", timeout=20000)
-
-    expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
-
-    verdict = app_page.locator("#consensusVerdict")
-    expect(verdict).to_be_visible(timeout=15000)
-    expect(verdict).to_contain_text("/100")
-
-    # Zwei gepruefte Saetze (der Judge markiert seit dem Satz-Index jeden
-    # pruefbaren Satz, nicht nur die "zentralen"), aber nur EIN Claim-Badge:
-    # auf dem strittigen Satz behaelt der Widerspruch das Wort.
-    claim_badges = app_page.locator("#consensusAnswerBody .claim-badge")
-    expect(claim_badges).to_have_count(1)
-    expect(claim_badges.first).to_be_visible(timeout=15000)
-    expect(claim_badges.first).to_have_text(
-        re.compile(r"^\d+/\d+$")
-    )
-    expect(app_page.locator("#consensusAnswerBody .cx-claim")).to_have_count(2)
-
-    # Der fertige Agent-Mode-Footer zeigt die Einzelantworten-Disclosure.
-    model_answers_toggle = app_page.locator("#agentModeAnswersToggle")
-    expect(model_answers_toggle).to_be_visible(timeout=15000)
-    expect(model_answers_toggle.locator(".consensus-tab-label")).to_have_text("Compare answers")
-    # Wie die beiden anderen Schubladen sagt der Chip, wie viel dahinter liegt.
-    expect(model_answers_toggle.locator(".consensus-tab-count")).to_have_text("6")
-
-    footer_metrics = app_page.locator("#consensusFooterTabs").evaluate(
-        """element => ({
-          display: getComputedStyle(element).display,
-          columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
-          scrollWidth: element.scrollWidth,
-          clientWidth: element.clientWidth,
-          buttonHeights: Array.from(element.querySelectorAll(".consensus-tab:not([hidden])"))
-            .map(button => button.getBoundingClientRect().height),
-        })"""
-    )
-    assert footer_metrics["display"] == "grid"
-    # New V4 consensus has no source list: only Differences and Answers.
-    expect(app_page.locator('#consensusSourcesTab')).to_be_hidden()
-    assert footer_metrics["columns"] == 2
-    assert len(footer_metrics["buttonHeights"]) == 2
-    assert footer_metrics["scrollWidth"] <= footer_metrics["clientWidth"]
-    assert all(56 <= height <= 60 for height in footer_metrics["buttonHeights"])
-
-    # On mobile the same real action controls move into the fixed header;
-    # verdict, evidence navigation and run facts remain ordered in the footer.
-    expect(app_page.locator('#mobileConversationActions #consensusFooterActions')).to_be_visible()
-    expect(app_page.locator('#runProvenance #consensusFooterActions')).to_have_count(0)
-    footer_layout = app_page.locator("#runProvenance").evaluate(
-        """element => {
-          const facts = element.querySelector('.consensus-footer-facts').getBoundingClientRect();
-          const verdict = element.querySelector('#consensusVerdict').getBoundingClientRect();
-          const tabs = element.querySelector('#consensusFooterTabs').getBoundingClientRect();
-          const header = document.querySelector('.app-mobile-header');
-          return {
-            scrollWidth: element.scrollWidth, clientWidth: element.clientWidth,
-            ordered: verdict.bottom <= tabs.top + 1 && tabs.bottom <= facts.top + 1,
-            headerFits: header.scrollWidth <= header.clientWidth,
-          };
-        }"""
-    )
-    assert footer_layout["scrollWidth"] <= footer_layout["clientWidth"]
-    assert footer_layout["ordered"] is True
-    assert footer_layout["headerFits"] is True
-
-    # Desktop: the action nodes return to the original footer, with their
-    # handlers intact. The mobile header applies through 1099px.
-    app_page.set_viewport_size({"width": 1280, "height": 844})
-    _wait_for_composer_width(app_page)
-    expect(app_page.locator('#runProvenance #consensusFooterActions')).to_be_visible()
-    desktop_footer = app_page.locator("#runProvenance").evaluate(
-        """element => {
-          const actions = element.querySelector("#consensusFooterActions").getBoundingClientRect();
-          const verdict = element.querySelector("#consensusVerdict").getBoundingClientRect();
-          const tabs = element.querySelector('#consensusFooterTabs').getBoundingClientRect();
-          const divider = getComputedStyle(element);
-          return {
-            verdictBeforeControls: verdict.bottom <= Math.min(actions.top, tabs.top) + 1,
-            sameControlRow: Math.abs(actions.top + actions.height / 2 - tabs.top - tabs.height / 2) <= 1,
-            noOverlap: tabs.right <= actions.left + 1,
-            hasFooterDivider: parseFloat(divider.borderTopWidth) > 0
-              && divider.borderTopStyle !== 'none'
-              && divider.borderTopColor !== 'rgba(0, 0, 0, 0)',
-          };
-        }"""
-    )
-    assert desktop_footer['verdictBeforeControls'] is True
-    assert desktop_footer['sameControlRow'] is True
-    assert desktop_footer['noOverlap'] is True
-    assert desktop_footer["hasFooterDivider"] is True
-    app_page.set_viewport_size({"width": 390, "height": 844})
-    _wait_for_composer_width(app_page)
-
-    app_page.wait_for_function("""() => {
-      const input = document.querySelector('.input-section').getBoundingClientRect();
-      const reserve = parseFloat(getComputedStyle(document.querySelector('.container')).paddingBottom);
-      return Math.abs(reserve - input.height) <= 1 && Math.abs(innerHeight - input.bottom) <= 1;
-    }""")
-    app_page.evaluate("window.scrollTo({top: document.documentElement.scrollHeight, behavior: 'instant'})")
-    result_gap = app_page.evaluate(
-        """() => {
-          const input = document.querySelector(".input-section");
-          const footer = document.getElementById("runProvenance").getBoundingClientRect();
-          const inputRect = input.getBoundingClientRect();
-          const responses = document.querySelector(".response-section");
-          const container = document.querySelector(".container");
-          return {
-            responsesDisplay: getComputedStyle(responses).display,
-            inputMarginTop: getComputedStyle(input).marginTop,
-            inputPosition: getComputedStyle(input).position,
-            gap: inputRect.top - footer.bottom,
-            bottomGap: window.innerHeight - inputRect.bottom,
-            reserve: parseFloat(getComputedStyle(container).paddingBottom),
-            inputHeight: inputRect.height,
-            scrollable:
-              document.documentElement.scrollHeight - window.innerHeight > 2,
-          };
-        }"""
-    )
-    assert result_gap["responsesDisplay"] == "none"
-    assert result_gap["inputMarginTop"] == "0px"
-    assert result_gap["inputPosition"] == "fixed"
-    assert abs(result_gap["bottomGap"]) <= 1
-    assert abs(result_gap["reserve"] - result_gap["inputHeight"]) <= 1
-    # Der Composer darf den Fuss nie ueberdecken. Dass er unmittelbar an ihm
-    # anschliesst, ist erst pruefbar, wenn die Seite ueberhaupt scrollt: seit
-    # der Fuss zwei statt drei Zeilen hat (2026-07-28), fuellt eine kurze
-    # Mock-Antwort den Viewport nicht mehr aus, und die verbleibende Luft ist
-    # dann keine scrollbare Strecke, sondern schlicht eine kurze Seite.
-    assert result_gap["gap"] >= -2
-    if result_gap["scrollable"]:
-        # The answer keeps the documented 24px reading pause before composer.
-        assert abs(result_gap["gap"] - 24) <= 2
-
-    # Nach der fertigen Antwort bleibt die Eingabe erreichbar. Auf Mobile ist
-    # die Zusatzzeile bewusst eingeklappt, bis das Feld angetippt wird.
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Ask a follow-up question", timeout=15000
-    )
-    expect(app_page.locator("#questionInput")).to_be_visible()
-    expect(app_page.locator("#questionInput")).to_be_enabled()
-    expect(app_page.locator(".chat-input-container .composer-models")).to_be_hidden()
-
-    # Inline-Confidence: der Widerspruch wird im Antworttext selbst markiert
-    # (farbiger Textmarker), nicht nur in einer Karte daneben.
-    marked = app_page.locator("#consensusAnswerBody .cx-claim.is-major").first
-    expect(marked).to_be_visible(timeout=15000)
-    # Seit 2026-08-15 gibt es keine Punkte mehr neben dem Satz: die
-    # angestrichene Passage IST das Steuerelement und muss deshalb selbst fuer
-    # Tastatur und Screenreader erreichbar sein.
-    expect(app_page.locator("#consensusAnswerBody .cx-marker")).to_have_count(0)
-    assert marked.get_attribute("aria-label"), "Markierte Passage braucht ein sprechendes aria-label"
-    assert marked.get_attribute("role") == "button"
-    assert marked.get_attribute("tabindex") == "0"
-    # Claim und Difference treffen im Fixture denselben Satz. Dort steht genau
-    # EIN Steuerelement — und zwar der Widerspruch, nicht das Claim-Badge:
-    # eine Zustimmungsquote wuerde den Streit verharmlosen.
-    assert app_page.evaluate(
-        """() => !document.querySelector("#consensusAnswerBody .claim-badge.has-dissent")"""
-    ), "Strittiger Satz: rote Marke, kein Dissens-Badge daneben"
-
-    # Und die Marke ist wirklich eine Flaeche, keine Unterstreichung: eine
-    # Linie unter dem Satz las sich wie ein Link (User-Befund 2026-08-15).
-    # Seit 2026-10-19 traegt sie nur die Stelle des Streits: im Fixture nennt
-    # der Coverage-Judge "1889"; der Satz bleibt das Steuerelement ohne Flaeche.
-    mark_paint = app_page.evaluate(
-        """() => {
-          const el = document.querySelector("#consensusAnswerBody .cx-claim.is-major");
-          const spot = el.querySelector(".cx-spot");
-          const style = getComputedStyle(spot || el);
-          return {spot: spot && spot.textContent, bg: style.backgroundColor, line: style.textDecorationLine,
-                  sentence: getComputedStyle(el).backgroundColor};
-        }"""
-    )
-    assert mark_paint["spot"] == "1889", mark_paint
-    assert mark_paint["line"] == "none", mark_paint
-    assert mark_paint["bg"] not in ("rgba(0, 0, 0, 0)", "transparent"), mark_paint
-    assert mark_paint["sentence"] in ("rgba(0, 0, 0, 0)", "transparent"), mark_paint
-
-    # Touch: die unstrittige Claim-Passage selbst oeffnet dasselbe Agreement-
-    # Sheet wie ihr sichtbarer Badge. Die Widerspruchspassage oben bleibt
-    # dagegen korrekt mit der Difference-Karte verbunden.
-    # Die Erklaerung liefert die formatierte Hover-Vorschau und der Dialog,
-    # NICHT zusaetzlich ein nativer Browser-Tooltip (bewusste Entscheidung an
-    # Badge und Marker, siehe makeBadge in consensus-insights.js). Geprueft
-    # wird deshalb, dass die Passage bedienbar ist - nicht, dass sie ein
-    # title-Attribut traegt.
-    claim_passage = app_page.locator("#consensusAnswerBody .cx-claim.is-unanimous").first
-    assert "is-interactive" in (claim_passage.get_attribute("class") or "")
-    claim_passage.click()
-    popover = app_page.locator("#claimPopover")
-    expect(popover).to_be_visible()
-    expect(popover).to_have_attribute("aria-modal", "true")
-    expect(popover).to_have_attribute("aria-labelledby", "claimPopoverTitle")
-    expect(app_page.locator("#claimPopover .claim-popover-close")).to_be_focused()
-    assert app_page.evaluate(
-        """() => Array.from(document.body.children)
-          .filter(el => !["claimPopover", "claimSheetBackdrop"].includes(el.id))
-          .every(el => el.inert)"""
-    )
-    app_page.keyboard.press("Escape")
-    expect(popover).to_be_hidden()
-    expect(claim_badges.first).to_be_focused()
-
-    # Der vollstaendige Differences-Ueberblick liegt zugeklappt UNTER der
-    # Antwort; die Karten bleiben erreichbar, sind aber nicht mehr die zweite
-    # Spalte der Primaeransicht.
-    panel = app_page.locator("#consensusDifferencesPanel")
-    expect(panel).to_be_hidden(timeout=15000)
-    assert panel.evaluate("el => el.open") is False, "Differences starten zugeklappt"
-    expect(app_page.locator(".diff-card.is-contradiction").first).to_be_hidden()
-
-    # Differences and Answers share the real Reader dialog. The run must not
-    # fabricate a source list it has no sources for.
-    expect(app_page.locator('#consensusSourcesList .consensus-source-item')).to_have_count(0)
-    reader = app_page.locator('#modelAnswerReader')
-    model_answers_toggle.click()
-    expect(reader).to_be_visible()
-    expect(app_page.locator('#answerReaderTitle')).to_have_text('Model answers')
-    assert reader.bounding_box()['width'] <= 390
-    expect(app_page.locator('.answer-reader-body').first).to_contain_text('mock answer')
-    expect(app_page.locator('#openaiResponse')).to_be_hidden()
-    app_page.keyboard.press('Escape')
-    expect(reader).to_be_hidden()
-    expect(model_answers_toggle).to_be_focused()
-
-    app_page.locator('#consensusDifferencesTab').click()
-    card = app_page.locator('#answerReaderInspector .diff-card.is-contradiction').first
-    expect(card).to_be_visible()
-    # Every difference starts folded (2026-10-23). Its real disclosure opens,
-    # closes and reopens before following the model quote.
-    expect(card).not_to_have_attribute('open', '')
-    card.locator('summary').click()
-    expect(card).to_have_attribute('open', '')
-    card.locator('summary').click()
-    expect(card).not_to_have_attribute('open', '')
-    card.locator('summary').click()
-    expect(card).to_have_attribute('open', '')
-    jump = card.locator('.diff-jump-link').first
-    expect(jump).to_be_visible()
-    jump.click()
-    expect(app_page.locator('.answer-reader-body mark.quote-flash, .answer-reader-body .quote-flash-block').first).to_be_visible()
-    assert app_page.evaluate("() => window.App.runMode.effective()") == 'consensus'
-    app_page.keyboard.press('Escape')
-
-    # Exercise the real Copy action; only the OS clipboard boundary is replaced.
-    app_page.evaluate("""() => {
-      window.__copiedAnswer = null;
-      Object.defineProperty(navigator, 'clipboard', {configurable:true,
-        value:{writeText:async text => {window.__copiedAnswer = text;}}});
-      const legitimateFraction = document.createElement('p');
-      legitimateFraction.textContent = 'A legitimate fraction: 3/7.';
-      App.consensusBodyEl().append(legitimateFraction);
-    }""")
-    badge_labels = claim_badges.all_text_contents()
-    app_page.locator('#consensusFooterActions .consensus-actions-toggle').click()
-    app_page.locator('.consensus-copy-btn').click()
-    app_page.wait_for_function("() => typeof window.__copiedAnswer === 'string'")
-    copied = app_page.evaluate('window.__copiedAnswer')
-    assert 'Mock consensus' in copied and 'A legitimate fraction: 3/7.' in copied
-    assert all(label not in copied for label in badge_labels)
-    assert app_page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-    expect(pipeline).to_be_hidden(timeout=10000)
-
-    run_again = app_page.locator("#runReplayButton")
-    expect(run_again).to_be_visible()
-    expect(run_again.locator(".run-replay-label")).to_have_text("Run again")
-    # Ein Wiederholen ist ein voller zweiter Lauf. Am Knopf muss stehen, was er
-    # kostet, und am Eingabefeld muss es stehen bleiben, bis abgeschickt wird.
-    # Seit dem Tokenkonto ist der Preis ein ungefaehrer Anteil am Tag.
-    app_page.evaluate(
-        """() => window.App.renderUsageDisplay({token_budget: {limit: 660000, used: 0, remaining: 660000,
-          revision: 99, day: '2099-01-01', run_estimates: {compare: 32000, consensus: 55000, deep_think: 150000}}})"""
-    )
-    expect(run_again).to_contain_text("about 8% of today")
-    run_again.click()
-    expect(app_page.locator("body.is-hero")).to_have_count(1)
-    expect(app_page.locator("#questionInput")).to_be_visible()
-    expect(app_page.locator("#questionInput")).to_have_value(QUESTION)
-    expect(app_page.locator("#questionInput")).to_be_focused()
-    expect(app_page.locator("#composerRunNotice")).to_be_visible()
-    expect(app_page.locator("#composerRunNotice")).to_contain_text("complete new run")
-
-    errors = get_console_errors()
-    assert errors == [], f"Konsolen-Fehler im Consensus-Flow: {errors}"
-
-
-def test_followup_keeps_the_previous_answer_and_appends_the_new_question(app_page):
-    """Ein Follow-up darf den fertigen Turn nicht visuell recyceln: die alte
-    Frage/Antwort bleibt stehen, die neue User-Frage beginnt darunter."""
-    app_page.evaluate("() => window.App.runMode.set('consensus')")
-    _send_question(app_page)
-    _wait_for_all_final_answers(app_page)
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Ask a follow-up question", timeout=20000
-    )
-
-    # Erst die Inline-Confidence abwarten, dann vergleichen: die Quote-Badges
-    # gehoeren zum Live-Baum, der Verlauf rendert den reinen Consensus-Text.
-    # Ohne dieses Warten haengt der Vergleich davon ab, ob die Badges vor oder
-    # nach dem Auslesen eingehaengt wurden.
-    expect(app_page.locator("#consensusAnswerBody .claim-badge").first).to_be_attached(
-        timeout=20000
-    )
-    original_answer = app_page.evaluate(
-        """() => {
-          const clone = document.getElementById("consensusAnswerBody").cloneNode(true);
-          clone.querySelectorAll(".claim-badge").forEach(el => el.remove());
-          return clone.textContent.trim();
-        }"""
-    )
-    assert original_answer
-    original_agreement = app_page.locator("#consensusVerdict .verdict-score").evaluate(
-        """element => {
-          const clone = element.cloneNode(true);
-          clone.querySelectorAll('.visually-hidden').forEach(node => node.remove());
-          return clone.textContent.trim();
-        }"""
-    )
-    assert original_agreement
-
-    followup_question = "Which consideration should I prioritize first?"
-    app_page.locator("#questionInput").fill(followup_question)
-    app_page.locator("#sendButton").click()
-
-    archived_turn = app_page.locator("#threadHistory .thread-history-turn").last
-    expect(archived_turn).to_be_visible(timeout=15000)
-    expect(archived_turn.locator(".thread-history-question-text")).to_have_text(QUESTION)
-    archived_answer = archived_turn.locator(".thread-history-answer-body")
-    expect(archived_answer).to_be_visible()
-    archived_answer_text = archived_answer.evaluate(
-        """element => {
-          const clone = element.cloneNode(true);
-          clone.querySelectorAll(".claim-badge").forEach(el => el.remove());
-          return clone.textContent.trim();
-        }"""
-    )
-    assert original_answer in archived_answer_text
-    # Derselbe strukturierte Claim-Support wird auch im archivierten Turn neu
-    # verankert. Das ist zugleich der Rendererpfad für ältere Bookmark-Turns.
-    expect(archived_answer.locator(".claim-badge")).to_have_count(1)
-    expect(archived_answer.locator('.cx-claim.is-major')).to_have_count(1)
-    archived_answer.locator(".claim-badge").first.dispatch_event("click")
-    # In the card a model's logo is the way into its answer.
-    archived_jump = app_page.locator("#claimPopover button.cx-card-logo").first
-    expect(archived_jump).to_be_visible()
-    archived_jump.click()
-    # "View answer" belongs to this archived turn, not to the current live
-    # provider boxes that may already contain a newer exchange.
-    expect(app_page.locator('#modelAnswerReader')).to_be_visible()
-    expect(app_page.locator('.answer-reader-body').first).to_contain_text('mock answer')
-    expect(app_page.locator('#answerReaderTurn')).to_have_value(re.compile(r'^turn:'))
-    expect(app_page.locator(".response-box.jump-flash")).to_have_count(0)
-    app_page.keyboard.press('Escape')
-    archived_agreement = archived_turn.locator(".thread-history-verdict .verdict-score")
-    expect(archived_agreement).to_have_text(original_agreement)
-    assert "…" not in archived_turn.locator(".thread-history-verdict .verdict-detail").text_content()
-    expect(app_page.locator("#threadAskText")).to_have_text(followup_question)
-
-    layout = app_page.evaluate(
-        """() => {
-          const previous = document.querySelector('.thread-history-answer');
-          const current = document.getElementById('threadAsk');
-          return {
-            previousBottom: previous.getBoundingClientRect().bottom,
-            currentTop: current.getBoundingClientRect().top,
-            verdictRight: document.querySelector('.thread-history-verdict')
-              .getBoundingClientRect().right,
-            verdictMainRight: document.querySelector('.thread-history-verdict .verdict-main')
-              .getBoundingClientRect().right,
-            currentAlign: getComputedStyle(current).textAlign,
-            archivedAlign: getComputedStyle(
-              document.querySelector('.thread-history-question')
-            ).textAlign,
-            answerLeft: previous.getBoundingClientRect().left,
-            answerRight: previous.getBoundingClientRect().right,
-            currentTextBox: document.querySelector('#threadAsk .thread-ask-bubble')
-              .getBoundingClientRect(),
-            archivedTextBox: document.querySelector('.thread-history-question .thread-ask-bubble')
-              .getBoundingClientRect(),
-          };
-        }"""
-    )
-    assert layout["previousBottom"] <= layout["currentTop"]
-    assert abs(layout["verdictRight"] - layout["verdictMainRight"]) <= 2
-    # Der Fragenblock steht rechts (die Antwort links: so bleibt sichtbar, wer
-    # spricht), gesetzt wird er aber linksbuendig — rechtsbuendiger
-    # Flattersatz ueber mehrere Zeilen liest sich schlecht (User-Befund
-    # 2026-08-14).
-    assert layout["currentAlign"] == "left"
-    assert layout["archivedAlign"] == "left"
-    for box in (layout["currentTextBox"], layout["archivedTextBox"]):
-        assert abs(box["right"] - layout["answerRight"]) <= 2
-        assert box["left"] > layout["answerLeft"]
-
-    # Turn 3 is the regression boundary: the second exchange used to vanish
-    # when the live render tree was recycled for the next answer.
-    expect(app_page.locator("#questionInput")).to_have_attribute(
-        "placeholder", "Ask a follow-up question", timeout=20000
-    )
-    third_question = "What should I do immediately after that?"
-    app_page.locator("#questionInput").fill(third_question)
-    app_page.locator("#sendButton").click()
-
-    archived_turns = app_page.locator("#threadHistory .thread-history-turn")
-    expect(archived_turns).to_have_count(2, timeout=15000)
-    expect(archived_turns.nth(0).locator(".thread-history-question-text")).to_have_text(QUESTION)
-    expect(archived_turns.nth(1).locator(".thread-history-question-text")).to_have_text(followup_question)
-    expect(app_page.locator("#threadAskText")).to_have_text(third_question)
 
 
 def test_split_claim_uses_visible_dissent_palette_and_neutral_count(app_page):
@@ -1737,56 +1253,27 @@ def test_claim_anchor_with_source_tag_still_marks_its_sentence(app_page):
     expect(app_page.locator("#consensusClaimsFallback")).to_be_hidden()
 
 
-def test_agent_mode_can_reveal_hidden_model_answers_on_mobile(app_page):
-    """On mobile the answers toggle explains and reveals hidden answers."""
-    app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.evaluate("() => window.App.runMode.set('consensus')")
-    _send_question(app_page)
-    _wait_for_all_final_answers(app_page)
-
-    toggle = app_page.locator("#agentModeAnswersToggle")
-    expect(toggle).to_be_visible(timeout=15000)
-    # Der Chip traegt neben dem Label auch die Zahl der Antworten dahinter,
-    # deshalb wird gezielt das Label geprueft.
-    toggle_label = toggle.locator(".consensus-tab-label")
-    expect(toggle_label).to_have_text("Compare answers")
-    expect(toggle.locator(".consensus-tab-count")).to_have_text("6")
-    expect(app_page.locator("#openaiResponse")).to_be_hidden()
-
-    toggle.click()
-    expect(app_page.locator('#modelAnswerReader')).to_be_visible()
-    assert app_page.evaluate("() => window.App.runMode.effective()") == 'consensus'
-    expect(toggle_label).to_have_text("Hide answers")
-    expect(app_page.locator('.answer-reader-body').first).to_contain_text('mock answer')
-    expect(app_page.locator("#openaiResponse")).to_be_hidden()
-
-    app_page.keyboard.press('Escape')
-    expect(app_page.locator('#modelAnswerReader')).to_be_hidden()
-    expect(toggle).to_be_focused()
-    expect(toggle_label).to_have_text("Compare answers")
-    expect(app_page.locator("#openaiResponse")).to_be_hidden()
-
-
 def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
     """Watch-Erstellung: zuerst "What are you waiting for?" als Radioliste mit
     vorausgewaehltem Vorschlag, darunter EINE Zeile mit sicheren Defaults, die
     per "Change" aufklappt (Zeitplan, Alerts, Kanaele inkl. Telegram, Seite)."""
     app_page.route('**/api/my/telegram', lambda route: route.fulfill(
         json={'telegram': {'configured': True, 'connected': False}}))
-    _send_question(app_page)
-    _wait_for_all_final_answers(app_page)
-    expect(app_page.locator("#consensusResponse")).to_contain_text("Mock consensus", timeout=30000)
-
-    # The UI fixture models a finished, published result. Wait for the real
-    # run handoff and update its authoritative context, so later projection
-    # cannot restore the source-free mock final's null result ID.
-    expect(app_page.locator("#consensusWatchButton")).to_be_visible(timeout=30000)
-
-    # Dieser Test prüft nur Client-Validierung/Layout und braucht keinen echten
+    # A saved Consensus answer on screen, revealed the way firebase.js does
+    # it (the browser runs no Consensus since 2026-10-25). Dieser Test prüft
+    # nur Client-Validierung/Layout und braucht keinen echten
     # Firestore-persistierten pending_result.
-    app_page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
-    app_page.evaluate("""() => App.runRegistry.update(App.runRegistry.visible().runId,
-      run => { run.consensus.resultId = 'e2e-watch-validation'; })""")
+    app_page.evaluate("""question => {
+      window.exitHeroMode();
+      window.revealConsensusOutput();
+      window.App.setThreadQuestion?.(question);
+      window.App.state.set('lastQuestion', question, 'run');
+      window.App.consensusBodyEl().innerHTML = '<p>Mock consensus for the watch dialog.</p>';
+      window.updateAgentModeUI();
+      window.App.consensusFooter.render();
+      window.App.state.set('lastShareResultId', 'e2e-watch-validation', 'share');
+    }""", QUESTION)
+    expect(app_page.locator("#consensusWatchButton")).to_be_visible(timeout=30000)
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.click("#consensusWatchButton")
     app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
@@ -2040,32 +1527,6 @@ def test_theme_toggle(app_page):
     expect(app_page.locator("#systemPromptModal")).to_be_hidden()
 
 
-def test_reasoning_switch_keeps_the_selected_consensus_engine(app_page):
-    """Reasoning laesst dieselben gewaehlten Modelle laenger nachdenken: weder
-    die Consensus-Engine noch die gespeicherte Auswahl aendern sich."""
-    initial_model = app_page.evaluate(
-        """() => {
-          window.updateUserTierUI('free', true);
-          const select = document.getElementById("consensusModelDropdown");
-          const initial = Array.from(select.options).find(option => !option.disabled).value;
-          select.value = initial;
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-          return initial;
-        }"""
-    )
-    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == initial_model
-
-    app_page.evaluate("() => document.getElementById('reasoningToggle').click()")
-    assert app_page.evaluate("() => document.getElementById('reasoningToggle').checked") is True
-    assert app_page.evaluate("() => document.getElementById('consensusModelDropdown').value") == initial_model
-    assert app_page.evaluate("() => localStorage.getItem('pref_select_consensus')") == initial_model
-    assert app_page.evaluate("() => typeof window.DEEP_THINK_CONSENSUS_MODEL") == "undefined"
-
-    app_page.evaluate("() => document.getElementById('reasoningToggle').click()")
-    assert app_page.evaluate("() => document.getElementById('reasoningToggle').checked") is False
-    assert app_page.evaluate("() => document.getElementById('consensusModelDropdown').value") == initial_model
-
-
 def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
     """Daily/Open Models sind vollstaendige Model-Sets; High Quality bleibt fuer Free
     sichtbar, oeffnet mit Pro-Badge aber den Kosten-Hinweis statt eines Kaufdialogs."""
@@ -2186,15 +1647,6 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
             includedProgressModels: document.querySelectorAll(
               ".response-section > .response-box:not(.excluded)"
             ).length,
-            canGenerateWithTwoAnswers: (() => {
-              for (const id of ["openaiResponse", "mistralResponse"]) {
-                const box = document.getElementById(id);
-                box.dataset.responseState = "complete";
-                box.dataset.consensusAnswer = id + " answer";
-                box.querySelector(".collapsible-content").textContent = id + " answer";
-              }
-              return window.canGenerateConsensus();
-            })(),
           };
 
           window.clearPendingAttachments();
@@ -2238,7 +1690,6 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
         "disabled": True,
         "responseExcluded": True,
         "includedProgressModels": 5,
-        "canGenerateWithTwoAnswers": True,
     }
     assert result["withBookmarkPreview"] == {
         "checked": True,

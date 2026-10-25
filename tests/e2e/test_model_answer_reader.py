@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
+from test_phase4_frontend import _real_firebase_page, _json, phase4_server  # noqa: F401
 
 
 def reader_screenshot(page, name):
@@ -18,55 +18,88 @@ def reader_screenshot(page, name):
         page.screenshot(path=str(path / f"{name}.png"))
 
 
-def seed_reader(page, direct=False):
-    page.route('**/api/topics/favicon?*', lambda route: route.fulfill(content_type='image/svg+xml',
-        body='<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" rx="5" fill="#526b82"/><path d="M5 6h10v2H5zm0 5h7v2H5z" fill="white"/></svg>'))
-    page.evaluate("""direct => {
-      const registry = window.App.runRegistry;
-      const providers = window.App.modelPrefs.slice(0, 3).map(p => ({
-        provider: p.key, modelLabel: p.key + ' test model'
-      }));
-      const first = providers[0].provider;
-      const second = providers[1].provider;
-      const source = {id:'S1', title:'First turn source', url:'https://example.invalid/first'};
-      const old = {turn_id:'reader-old', question:'What did the first question ask?',
-        consensus:'The first consensus.', sources:[source], model_answers:{
-          [first]:{answer:'Original from the first turn. [S1]', model_label:'First saved model', sources:[source]},
-          [second]:{answer:'Alternative from the first turn.', model_label:'Second saved model'}
-        }};
-      const ctx = registry.create({runId:'reader-test', question:'What changes in the next question?',
-        config:{agentMode:!direct, providers}});
-      ctx.historyTurns = direct ? [] : [old];
-      ctx.status = 'succeeded'; ctx.phase = 'answers_ready';
-      providers.forEach((p, i) => {
-        ctx.modelResults[p.provider] = {
-          status: i === 2 ? 'error' : 'complete',
-          text: i === 2 ? '' : ('## Original answer ' + i + '\\n\\n' + 'A readable paragraph. '.repeat(160)),
-          error: i === 2 ? 'This model timed out.' : null, sources:[]
-        };
-      });
-      if (!direct) Object.assign(ctx.consensus, {status:'complete', text:'The current consensus.',
-        completedTurn:{turn_id:'reader-current', question:ctx.question, consensus:'The current consensus.'}});
-      registry.renderVisible();
-    }""", direct)
+FAVICON = ('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" rx="5" fill="#526b82"/>'
+           '<path d="M5 6h10v2H5zm0 5h7v2H5z" fill="white"/></svg>')
+SAVED_ID = 'reader-saved'
+DIFFERENCES = [
+    {'claim': 'The reported participant total differs', 'type': 'contradiction', 'severity': 'major',
+     'positions': [{'models': ['OpenAI'], 'stance': 'Counts registered participants.', 'quote': '2,000 registered participants'},
+                   {'models': ['Mistral'], 'stance': 'Counts only finishers.', 'quote': '1,800 finishers'}],
+     'verify': 'Check the official results and the registration list.'},
+    {'claim': 'The models emphasise different age groups', 'type': 'emphasis',
+     'positions': [{'models': ['OpenAI'], 'stance': 'Focuses on adult participants.'},
+                   {'models': ['Mistral'], 'stance': 'Includes youth competitions.'}]},
+]
+OFFICIAL = [{'title': 'Official race results', 'url': 'https://example.invalid/results',
+             'snippet': 'A longer excerpt from the official result list.'}]
 
 
-def seed_insights(page):
-    seed_reader(page)
-    page.evaluate("""() => {
-      const ctx = App.runRegistry.visible();
-      const data = {models_compared:['OpenAI','Mistral'], claims:[], differences:[
-        {claim:'The reported participant total differs', type:'contradiction', severity:'major',
-          positions:[{models:['OpenAI'], stance:'Counts registered participants.', quote:'2,000 registered participants'},
-            {models:['Mistral'], stance:'Counts only finishers.', quote:'1,800 finishers'}], verify:'Check the official results and the registration list.'},
-        {claim:'The models emphasise different age groups', type:'emphasis',
-          positions:[{models:['OpenAI'],stance:'Focuses on adult participants.'},{models:['Mistral'],stance:'Includes youth competitions.'}]}
-      ]};
-      ctx.consensus.differencesData = data;
-      ctx.historyTurns[0].differences_data = data;
-      ctx.evidenceSources = [{title:'Official race results',url:'https://example.invalid/results',snippet:'A longer excerpt from the official result list.'}];
-      App.runRegistry.renderVisible();
-    }""")
+def seed_reader(page, direct=False, *, insights=False, question=None, differences=None, agreement=None, sources=None,
+                consensus=None):
+    """A Compare result (direct) or a saved Consensus chat of two turns.
+
+    The browser runs no Consensus since 2026-10-25; a Consensus answer on
+    screen is a saved chat, opened through the real bookmark path."""
+    page.route('**/api/topics/favicon?*', lambda route: route.fulfill(content_type='image/svg+xml', body=FAVICON))
+    if direct:
+        page.evaluate("""() => {
+          const registry = window.App.runRegistry;
+          const providers = window.App.modelPrefs.slice(0, 3).map(p => ({
+            provider: p.key, modelLabel: p.key + ' test model'
+          }));
+          const ctx = registry.create({runId:'reader-test', question:'What changes in the next question?',
+            config:{agentMode:false, providers}});
+          ctx.status = 'succeeded'; ctx.phase = 'answers_ready';
+          providers.forEach((p, i) => {
+            ctx.modelResults[p.provider] = {
+              status: i === 2 ? 'error' : 'complete',
+              text: i === 2 ? '' : ('## Original answer ' + i + '\\n\\n' + 'A readable paragraph. '.repeat(160)),
+              error: i === 2 ? 'This model timed out.' : null, sources:[]
+            };
+          });
+          registry.renderVisible();
+        }""")
+        return
+    first, second = page.evaluate("() => App.modelPrefs.slice(0, 2).map(p => p.key)")
+    source = {'id': 'S1', 'title': 'First turn source', 'url': 'https://example.invalid/first'}
+    data = {'models_compared': ['OpenAI', 'Mistral'], 'claims': [],
+            'differences': DIFFERENCES if differences is None else differences}
+    if agreement:
+        data['agreement'] = agreement
+    old = {'id': 'reader-old', 'position': 1, 'status': 'completed', 'mode': 'Standard', 'execution_mode': 'consensus',
+           'question': 'What did the first question ask?', 'consensus': 'The first consensus.', 'sources': [source],
+           'model_answers': {first: {'answer': 'Original from the first turn. [S1]', 'model_label': 'First saved model', 'sources': [source]},
+                             second: {'answer': 'Alternative from the first turn.', 'model_label': 'Second saved model'}}}
+    current = {'id': 'reader-current', 'position': 2, 'status': 'completed', 'mode': 'Standard', 'execution_mode': 'consensus',
+               'question': question or 'What changes in the next question?', 'consensus': consensus or 'The current consensus.',
+               'sources': (sources if sources is not None else OFFICIAL) if insights else [],
+               'model_answers': {key: {'answer': f'## Original answer {i}\n\n' + 'A readable paragraph. ' * 160,
+                                       'model_label': f'{key} test model'} for i, key in enumerate((first, second))}}
+    if insights:
+        old['differences_data'] = {**data, 'differences': DIFFERENCES}
+        current['differences_data'] = data
+    bookmark = {'id': SAVED_ID, 'query': current['question'], 'title': current['question'], 'mode': 'Standard',
+                'chat_id': 'a' * 32, 'responses': {'consensus': current['consensus']}}
+    page.route(f'**/bookmarks/{SAVED_ID}/conversation*',
+               lambda route: _json(route, {'chat_id': 'a' * 32, 'turns': [old, current], 'has_more': False}))
+    page.route(f'**/bookmarks/{SAVED_ID}', lambda route: _json(route, {'bookmark': bookmark}))
+    page.evaluate("id => window.openBookmark(id)", SAVED_ID)
+    page.wait_for_function("""() => App.followup?.lastExchange?.turn?.turn_id === 'reader-current'
+      && document.getElementById('runProvenance')?.hidden === false""")
+    # An opened chat lands at its newest question (chat-scroll.js); wait
+    # until the page stands, so a menu opened next is not closed by it.
+    page.evaluate("""() => new Promise(resolve => {
+      let last = scrollY, still = 0;
+      const tick = () => {
+        if (Math.abs(scrollY - last) < 1) still += 1; else { still = 0; last = scrollY; }
+        if (still >= 12) resolve(); else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    })""")
+
+
+def seed_insights(page, **options):
+    seed_reader(page, insights=True, **options)
 
 
 @pytest.mark.parametrize('width', [1440, 1920, 2560])
@@ -75,15 +108,12 @@ def test_wide_reader_centering_and_source_cards(browser, phase4_server, width, t
     context, page = _real_firebase_page(browser, phase4_server, init_script=f"localStorage.setItem('theme','{theme}')")
     try:
         page.set_viewport_size({'width':width,'height':1080})
-        seed_insights(page)
-        page.evaluate("""() => {
-          const ctx = App.runRegistry.visible();
-          ctx.evidenceSources = [
-            {title:'Official results · Hannover Triathlon 2026',url:'https://results.example.invalid/race',snippet:'Participant totals, individual results and finishing times by age group.'},
-            {title:'Registration and competition distances',url:'https://race.example.invalid/participants',snippet:'The event programme distinguishes registered competitors from finishers.'},
-            {title:'Race-day report: a full field at the Maschsee',url:'https://news.example.invalid/sport/triathlon'}];
-          App.runRegistry.renderVisible();
-        }""")
+        seed_insights(page, sources=[
+            {'title': 'Official results · Hannover Triathlon 2026', 'url': 'https://results.example.invalid/race',
+             'snippet': 'Participant totals, individual results and finishing times by age group.'},
+            {'title': 'Registration and competition distances', 'url': 'https://race.example.invalid/participants',
+             'snippet': 'The event programme distinguishes registered competitors from finishers.'},
+            {'title': 'Race-day report: a full field at the Maschsee', 'url': 'https://news.example.invalid/sport/triathlon'}])
         page.locator('#consensusSourcesTab').click()
         dialog = page.locator('.answer-reader-dialog')
         chat = page.locator('.container')
@@ -121,12 +151,8 @@ def test_single_difference_and_missing_favicon(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         page.set_viewport_size({'width':390,'height':844})
-        seed_insights(page)
+        seed_insights(page, differences=DIFFERENCES[:1])
         page.route('**/api/topics/favicon?*', lambda route: route.fulfill(status=404, body=''))
-        page.evaluate("""() => {
-          const ctx = App.runRegistry.visible(); ctx.consensus.differencesData.differences.splice(1);
-          App.runRegistry.renderVisible();
-        }""")
         page.locator('#consensusDifferencesTab').click()
         # Even a single finding starts folded and opens on a click.
         card = page.locator('#answerReaderInspector .diff-card')
@@ -150,14 +176,9 @@ def test_detail_panel_survives_resize_and_short_viewports(browser, phase4_server
     context, page = _real_firebase_page(browser, phase4_server,
         init_script=f"localStorage.setItem('theme','{theme}')")
     try:
-        seed_insights(page)
-        page.evaluate("""() => {
-          const ctx = App.runRegistry.visible();
-          ctx.question = 'How do the participant counts differ across competition groups? '.repeat(8);
-          ctx.consensus.differencesData.differences[0].claim =
-            'Availability of participant totals for each competition before and after the race';
-          App.runRegistry.renderVisible();
-        }""")
+        seed_insights(page, question='How do the participant counts differ across competition groups? ' * 8,
+                      differences=[{**DIFFERENCES[0], 'claim': 'Availability of participant totals for each competition before and after the race'},
+                                   DIFFERENCES[1]])
         page.locator('#consensusDifferencesTab').click()
         first = page.locator('#answerReaderInspector .diff-card').first
         expect(first).not_to_have_attribute('open', '')
@@ -189,8 +210,9 @@ def test_detail_panel_survives_resize_and_short_viewports(browser, phase4_server
             assert metrics['rootOverflow'] <= 1 and metrics['contentOverflow'] <= 1
             assert metrics['contentTop'] >= metrics['headerBottom']
             assert metrics['scrollHeight'] >= min(200, height * .4)
-            page.locator('#answerReaderInspector .diff-resolve-btn').first.scroll_into_view_if_needed()
-            expect(page.locator('#answerReaderInspector .diff-resolve-btn').first).to_be_in_viewport()
+            # The open card's last control stays reachable at every size.
+            page.locator('#answerReaderInspector .diff-card[open] .diff-quote-toggle').last.scroll_into_view_if_needed()
+            expect(page.locator('#answerReaderInspector .diff-card[open] .diff-quote-toggle').last).to_be_in_viewport()
             page.evaluate("""() => {
               document.querySelector('#modelAnswerReader').scrollTop = 0;
               document.querySelector('#answerReaderScroll').scrollTop = 0;
@@ -254,7 +276,7 @@ def test_differences_and_sources_share_turn_scoped_sidebar(browser, phase4_serve
     context, page = _real_firebase_page(browser, phase4_server, init_script=f"localStorage.setItem('theme','{theme}')")
     try:
         page.set_viewport_size({'width':width,'height':960})
-        seed_insights(page)
+        seed_insights(page, question='A much longer question with extra context. ' * 24)
         page.locator('#consensusDifferencesTab').click()
         expect(page.locator('#answerReaderTitle')).to_have_text('Differences')
         cards = page.locator('#answerReaderInspector .diff-card')
@@ -266,10 +288,9 @@ def test_differences_and_sources_share_turn_scoped_sidebar(browser, phase4_serve
         cards.first.locator('summary').click()
         expect(cards.first).to_have_attribute('open','')
         expect(cards.nth(1)).not_to_have_attribute('open','')
-        expect(cards.first.locator('.diff-resolve-btn')).to_be_visible()
+        # A saved answer starts no Resolve round (2026-10-25).
+        expect(cards.first.locator('.diff-resolve-btn')).to_have_count(0)
         reader_screenshot(page, f'differences-detail-{width}-{theme}')
-        # Projection may rebuild the live cards; the expanded claim stays open.
-        page.evaluate('App.runRegistry.renderVisible()')
         expect(page.locator('#answerReaderInspector .diff-card').first).to_have_attribute('open','')
         page.locator('#answerReaderSections [data-section="sources"]').click()
         expect(page.locator('#answerReaderTitle')).to_have_text('Sources')
@@ -289,10 +310,8 @@ def test_differences_and_sources_share_turn_scoped_sidebar(browser, phase4_serve
         page.locator('#answerReaderSections [data-section="answers"]').click()
         expect(page.locator('.answer-reader-body')).to_contain_text('Original from the first turn')
         expect(page.locator('#answerReaderQuestion summary')).to_have_attribute('aria-disabled','true')
-        page.evaluate("""() => {
-          const ctx = App.runRegistry.visible(); ctx.question = 'A much longer question with extra context. '.repeat(24);
-          App.runRegistry.renderVisible(); App.answerReader.openLive();
-        }""")
+        # The current turn's long question folds and opens on a click.
+        page.evaluate("() => App.answerReader.openLive()")
         question = page.locator('#answerReaderQuestion')
         expect(question.locator('summary')).to_have_attribute('aria-disabled','false')
         question.locator('summary').click()
@@ -351,11 +370,9 @@ def test_archived_reader_keeps_turn_sources_during_projection(browser, phase4_se
         seed_reader(page)
         page.locator(".thread-history-turn .answer-reader-trigger").click()
         expect(page.locator(".answer-reader-body")).to_contain_text("Original from the first turn")
-        page.evaluate("""() => {
-          const ctx = window.App.runRegistry.visible();
-          ctx.modelResults[ctx.config.providers[0].provider].text = 'New live answer';
-          window.App.runRegistry.renderVisible();
-        }""")
+        # A projection with nothing selected (a model picked in the composer)
+        # leaves the archived turn in the reader.
+        page.evaluate("() => window.App.runRegistry.renderVisible()")
         expect(page.locator("#answerReaderTurn")).to_have_value("turn:reader-old")
         expect(page.locator(".answer-reader-body")).to_contain_text("Original from the first turn")
         expect(page.locator(".answer-reader-sources a")).to_have_attribute("href", "https://example.invalid/first")
@@ -530,7 +547,7 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
 def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_server, width, theme):
     import json
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('theme','{theme}');localStorage.setItem('runMode','consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12');")
+        init_script=f"localStorage.setItem('theme','{theme}');localStorage.setItem('runMode','agent'); localStorage.setItem('consensio.settingsReset','2026-10-12');")
     try:
         page.set_viewport_size({'width':width, 'height':900})
         page.route('**/bookmarks/direct-saved', lambda route: route.fulfill(content_type='application/json', body=json.dumps({
@@ -554,8 +571,8 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
         expect(page.locator('#answerReaderTitle')).to_have_text('Direct comparison')
         expect(page.locator('#answerReaderMode')).to_be_hidden()
         # Opening a saved direct comparison never changes the choice for the next message.
-        assert page.evaluate("localStorage.getItem('runMode')") == 'consensus'
-        expect(page.locator('#runModeSetting')).to_have_value('consensus')
+        assert page.evaluate("localStorage.getItem('runMode')") == 'agent'
+        assert page.evaluate("App.runMode.preference()") == 'agent'
         page.wait_for_timeout(200)
         expect(page.locator('.is-direct .answer-reader-answer')).to_have_count(3)
         reader_screenshot(page, f'saved-direct-{width}-{theme}')
@@ -570,10 +587,10 @@ def test_fresh_agent_mode_session_opens_saved_direct_answers(browser, phase4_ser
         context.close()
 
 
-@pytest.mark.parametrize('agent_mode', [False, True])
-def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, phase4_server, agent_mode):
+# Compare's demo. In Agent the demo plays an Agent turn instead (demo.js).
+def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('runMode','{'consensus' if agent_mode else 'compare'}');localStorage.setItem('consensio.settingsReset','2026-10-12');")
+        init_script="localStorage.setItem('runMode','compare');localStorage.setItem('consensio.settingsReset','2026-10-12');")
     try:
         page.set_viewport_size({'width':1440, 'height':900})
         cdn_dir = os.environ.get('READER_CDN_DIR')
@@ -588,14 +605,6 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
                 page.route(url, serve_library)
                 page.add_script_tag(url=url)
         page.wait_for_function("typeof window.runDemoFlow === 'function'")
-        if agent_mode:
-            # Simulate a registry-updated Daily preset with the newer families.
-            page.evaluate("""() => {
-              const wanted = ['OpenAI','Gemini','DeepSeek','Kimi','GLM','Meta'];
-              CONSENSUS_PRESETS.find(p => p.id === 'fast').models = Object.fromEntries(
-                App.modelPrefs.filter(p => wanted.includes(p.key)).map(p => [p.provider,
-                  Array.from(document.getElementById(p.selectId).options).find(o => !o.disabled && o.value).value]));
-            }""")
         # The visitor's own choice (Open Models, ID balanced) differs from the
         # Daily lineup the demo shows.
         page.evaluate("""() => {
@@ -604,16 +613,15 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
           window.runDemoFlow().then(() => window.__demoFinished = true);
         }""")
         expect(page.locator('#threadAskText')).to_contain_text('heat pump', timeout=30000)
-        if not agent_mode:
-            expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
-            # The first demo answer starts 500 ms after the question; check the
-            # waiting state in one atomic poll instead of four round trips.
-            page.wait_for_function("""() =>
-              document.getElementById('answerReaderStatus')?.textContent.trim() === '0 of 6 ready'
-              && document.querySelectorAll('.is-direct .answer-reader-answer').length === 6
-              && document.querySelectorAll('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton').length === 6
-            """, polling=16, timeout=5000)
-            reader_screenshot(page, 'demo-daily-waiting')
+        expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
+        # The first demo answer starts 500 ms after the question; check the
+        # waiting state in one atomic poll instead of four round trips.
+        page.wait_for_function("""() =>
+          document.getElementById('answerReaderStatus')?.textContent.trim() === '0 of 6 ready'
+          && document.querySelectorAll('.is-direct .answer-reader-answer').length === 6
+          && document.querySelectorAll('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton').length === 6
+        """, polling=16, timeout=5000)
+        reader_screenshot(page, 'demo-daily-waiting')
         page.wait_for_function('() => window.__demoFinished === true', timeout=60000)
         result = page.evaluate("""() => App.modelPrefs.filter(p => !document.getElementById(p.responseId).classList.contains('excluded')).map(p => {
           const box = document.getElementById(p.responseId);
@@ -627,27 +635,20 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
         assert all('<span' not in r['text'] and '<div' not in r['text'] and 'thinking-wrap' not in r['text'] for r in result)
         # The demo shows Daily without making it the visitor's choice.
         assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'balanced'
-        if agent_mode:
-            expect(page.locator('#consensusOutput')).to_be_visible(timeout=30000)
-            # The demo's three differences, and after them its yellow
-            # sentences with a named point of dispute (2026-10-23).
-            expect(page.locator('#differencesCards .diff-card:not(.is-split)')).to_have_count(3, timeout=60000)
-            expect(page.locator('#differencesCards .diff-card.is-split').first).to_be_attached()
-        else:
-            answers = page.locator('.is-direct .answer-reader-body')
-            expect(answers).to_have_count(6)
-            for answer in answers.all():
-                expect(answer).to_be_visible()
-                assert '<span' not in answer.inner_text() and '<div' not in answer.inner_text()
-            expect(page.locator('#answerReaderStatus')).to_have_text('6 of 6 ready')
-            if cdn_dir:
-                assert page.locator('.is-direct .answer-reader-body h4').count() > 0
-                assert page.locator('.is-direct .answer-reader-body li').count() > 10
-                assert page.locator('.is-direct .answer-reader-body ol > li').count() >= 5
-                expect(page.locator('.is-direct .answer-reader-body ul ul')).to_have_count(0)
+        answers = page.locator('.is-direct .answer-reader-body')
+        expect(answers).to_have_count(6)
+        for answer in answers.all():
+            expect(answer).to_be_visible()
+            assert '<span' not in answer.inner_text() and '<div' not in answer.inner_text()
+        expect(page.locator('#answerReaderStatus')).to_have_text('6 of 6 ready')
+        if cdn_dir:
+            assert page.locator('.is-direct .answer-reader-body h4').count() > 0
+            assert page.locator('.is-direct .answer-reader-body li').count() > 10
+            assert page.locator('.is-direct .answer-reader-body ol > li').count() >= 5
+            expect(page.locator('.is-direct .answer-reader-body ul ul')).to_have_count(0)
 
-            expect(page.locator('#consensusOutput')).not_to_be_visible()
-        assert page.evaluate("localStorage.getItem('runMode')") == ('consensus' if agent_mode else 'compare')
-        reader_screenshot(page, f'demo-daily-{agent_mode}')
+        expect(page.locator('#consensusOutput')).not_to_be_visible()
+        assert page.evaluate("localStorage.getItem('runMode')") == 'compare'
+        reader_screenshot(page, 'demo-daily')
     finally:
         context.close()

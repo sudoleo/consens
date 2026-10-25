@@ -39,14 +39,13 @@ def test_usage_countdown_tracks_utc_midnight_and_refreshes_server_state():
 def test_bookmark_writes_and_views_are_bound_to_auth_and_intent_generations():
     firebase = read("static/firebase.js")
     model_save = section(firebase, "async function saveBookmark(", "window.saveBookmark =")
-    consensus_save = section(
-        firebase, "async function saveBookmarkConsensus(", "window.saveBookmarkConsensus ="
-    )
     open_bookmark = section(firebase, "window.openBookmark =", "window.loadAllBookmarkMetadata")
 
-    for save in (model_save, consensus_save):
-        assert "requestUid" in save and "requestGeneration" in save
-        assert save.count("isCurrentAuthenticatedUser(requestUid, requestGeneration)") >= 3
+    # The browser saves model answers only; a consensus bookmark is written
+    # by the server since 2026-10-25.
+    assert "saveBookmarkConsensus" not in firebase
+    assert "requestUid" in model_save and "requestGeneration" in model_save
+    assert model_save.count("isCurrentAuthenticatedUser(requestUid, requestGeneration)") >= 3
     assert "const requestEpoch = ++bookmarkViewEpoch" in open_bookmark
     # After the one (parallel) load and in its failure path; the background
     # check of a remembered chat has its own epoch.
@@ -62,9 +61,6 @@ def test_bookmark_save_failures_are_visible_and_deduplicated():
         "async function saveBookmark(",
     )
     model_save = section(firebase, "async function saveBookmark(", "window.saveBookmark =")
-    consensus_save = section(
-        firebase, "async function saveBookmarkConsensus(", "window.saveBookmarkConsensus ="
-    )
 
     assert "Your saved chats are full" in notice
     assert "Your chat storage is full" in notice
@@ -73,11 +69,9 @@ def test_bookmark_save_failures_are_visible_and_deduplicated():
     # The server's sentence comes as `error` (flat, Apple-Audit H6).
     assert 'window.App?.errorFields?.(data)?.error' in model_save
     assert 'showBookmarkSaveError(res.status, errorDetail, `${bookmarkId}:${question}`)' in model_save
-    assert 'window.App?.errorFields?.(data)?.error' in consensus_save
-    assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in consensus_save
 
 
-def test_bookmark_model_and_consensus_writes_are_serialized_per_saved_run():
+def test_bookmark_model_writes_are_serialized_per_saved_run():
     firebase = read("static/firebase.js")
     queue = section(
         firebase,
@@ -85,15 +79,11 @@ def test_bookmark_model_and_consensus_writes_are_serialized_per_saved_run():
         "function showBookmarkSaveError(",
     )
     model_save = section(firebase, "async function saveBookmark(", "window.saveBookmark =")
-    consensus_save = section(
-        firebase, "async function saveBookmarkConsensus(", "window.saveBookmarkConsensus ="
-    )
 
     assert "bookmarkWriteChains.get(queueKey) || Promise.resolve()" in queue
     assert ".catch(() => undefined)" in queue
     assert "bookmarkWriteChains.delete(queueKey)" in queue
     assert "return enqueueBookmarkWrite(" in model_save
-    assert "return enqueueBookmarkWrite(" in consensus_save
 
 
 def test_share_requests_use_auth_snapshots_abort_controllers_and_view_epochs():

@@ -412,14 +412,7 @@ const DEMO_DATA = demoInPageLanguage({
         verify: "Both camps want both. The test can start this week; the survey is what the quote should be built on."
       }
     ]
-  },
-
-  differences:
-`The consensus answer is partially credible.
-
-All six models agree that the house can work with a heat pump, that a room-by-room heat-loss calculation comes first, and that the heat pump must be sized from it. They contradict each other on the target flow temperature: three would keep most radiators and run at 55 °C, three would replace more of them for 45 °C, and they disagree on how much efficiency that difference is worth. They split again, more mildly, on keeping the gas boiler as a backup.
-
-BestModel: Anthropic`
+  }
 });
 
 // Six authored viewpoints are instantiated for the configured Daily families.
@@ -452,12 +445,6 @@ const DEMO_PHASES = {
   pauseAfterTypingAll: 650
 };
 
-const DEMO_CONSENSUS_DELAY_MS = 4200;
-const DEMO_CONSENSUS_JITTER_MS = 600;
-// The structured contradiction check is synchronous in the local demo. Give
-// its announced UI phase one deliberate beat so "Checking for contradictions"
-// does not flash and disappear between two paints.
-const DEMO_DIFFERENCES_REVIEW_MS = 1100;
 const DEMO_DELAY_BOOST_MS = 1800;
 
 Object.keys(activeDemoData.delays).forEach(key => {
@@ -478,7 +465,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Staffel-Startzeiten + Tempo für das Token-Streaming der Demo-Antworten.
 const DEMO_STREAM_STARTS = { OpenAI: 500, Anthropic: 1150, Gemini: 1800, Mistral: 2450, DeepSeek: 3100, Grok: 3750 };
 const DEMO_RESPONSE_STREAM = { wordsPerTick: 2, tickMs: 55 };
-const DEMO_CONSENSUS_STREAM = { wordsPerTick: 2, tickMs: 46 };
 
 // Läuft hoch, sobald ein neuer Demo-Durchlauf startet, damit alte
 // Streaming-Timer aus einem vorherigen Lauf sauber abbrechen.
@@ -650,66 +636,12 @@ function renderDemoModelResponse(model, outputEl) {
   if (window.injectMarkdown) window.injectMarkdown(outputEl, markdown);
 }
 
-async function renderDemoConsensus(mainP, diffP) {
-  const runId = demoRunId;
-  // Der gefuehrte Lauf kennt bei einer echten Query drei Schritte: Antworten,
-  // Konsens, Differences. Die Demo hat bisher nur Anfang und Ende gemeldet —
-  // dadurch lief nach 6 s der Notausstieg (settleWithoutConsensus) und der
-  // Lauf stand auf "Done", waehrend der Konsenstext noch geschrieben wurde.
-  // Hier meldet die Demo dieselben Uebergaenge wie ein echter Lauf.
-  window.App?.consensusPipeline?.onConsensusStart?.();
-
-  // Konsens-Antwort als Streaming-Response aufbauen, danach sauber rendern,
-  // damit Copy-Buttons und die Inline-Marker auf fertigem Markup sitzen.
-  if (mainP) {
-    await streamDemoInto(mainP, activeDemoData.consensus, runId, DEMO_CONSENSUS_STREAM);
-    if (runId !== demoRunId) return;
-    if (window.injectMarkdown) window.injectMarkdown(mainP, activeDemoData.consensus);
-  }
-
-  // Konsenstext steht: ab hier prueft die Auswertung auf Widersprueche.
-  window.App?.consensusPipeline?.onDifferencesStart?.();
-  await sleep(DEMO_DIFFERENCES_REVIEW_MS);
-  if (runId !== demoRunId) return;
-
-  // Differences exakt wie bei echten Queries: strukturierte Auswertung mit
-  // Verdict-Header, Agreement-Badges und Contradiction-Karten. Nur wenn die
-  // strukturierten Daten fehlen, greift der Legacy-Freitext.
-  // Demo-Daten gehören zu keinem Bookmark: Resolve-Persistenz-Payload leeren,
-  // damit eine Resolve-Runde hier nie ein altes Bookmark überschreibt.
-  window.lastConsensusBookmarkPayload = null;
-  const includedCount = (activeDemoData.differencesData?.models_compared || []).length || 6;
-  const structuredRendered = window.renderConsensusInsights
-    ? window.renderConsensusInsights(activeDemoData.differencesData, includedCount)
-    : false;
-
-  if (!structuredRendered && diffP) {
-    window.App.differencesPanel?.expandForFallback?.();
-    window.applyCredibilityFrame?.(diffP, activeDemoData.differences);
-    const differences = window.colorizeCredibility?.(activeDemoData.differences)
-      ?? activeDemoData.differences;
-    if (window.injectMarkdown) {
-      window.injectMarkdown(diffP, differences);
-    } else {
-      // This only happens while the app's deferred helpers are not available.
-      // Keep the demo readable instead of depending on a CDN global directly.
-      diffP.textContent = differences;
-    }
-  }
-
-  // Demo-Ergebnisse sind reine lokale Produktvorschau. Sie dürfen weder das
-  // Best-answer-Nutzungssignal noch die serverseitige Differences-Telemetrie
-  // beeinflussen; deshalb gibt es hier bewusst keinen Persistenz-/Vote-Aufruf.
-  window.App?.consensusPipeline?.onConsensusEnd?.();
-  showPostDemoLoginPrompt();
-}
-
 /* === DEMO: Agent turn ===================================================
    Agent is where every question starts, so the demo plays an Agent turn on
    the real Agent surfaces: the activity line (agent-activity.js), the
    streamed answer (markdown-stream.js) and the answer check with its marks,
    agreement score and evidence links (agent-review.js). The run is local and
-   scripted from the same fixtures as the Consensus demo: no request, no
+   scripted from the same fixtures as the Compare demo: no request, no
    bookmark, no vote. agent-chat.js keeps the answer panel on screen while the
    demo owns it (App.agentChat.demoView), also for guests without Agent access.
    ======================================================================= */
@@ -730,7 +662,7 @@ const DEMO_AGENT_NOTES = demoInPageLanguage({
 });
 
 const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
-// The Agent writes its own answer: the Consensus fixture without its
+// The Agent writes its own answer: the consensus fixture without its
 // "Consensus:" label ("Konsens:" on a German page), opened by the verdict in bold.
 const DEMO_CONSENSUS_LABEL = /^(?:Consensus|Konsens):\s*/;
 function demoAgentAnswer() {
@@ -850,7 +782,6 @@ function demoAgentCalls({ models, answered, judges }) {
 
 async function runAgentDemoFlow() {
   const App = window.App;
-  App.consensusPipeline?.dismiss?.();
   window.hideConsensusOutput?.();
   const runId = ++demoRunId;
   const live = () => runId === demoRunId;
@@ -1010,23 +941,15 @@ async function runDemoFlow() {
   activeDemoModels = (window.App.modelPrefs || []).filter(pref => daily?.models?.[pref.provider]).map(pref => pref.key);
   activeDemoData = buildDemoDataForModels(activeDemoModels);
   // Agent (the default, also for guests who come from the landing page)
-  // plays an Agent turn; a chosen Compare or Consensus plays that mode.
+  // plays an Agent turn; a chosen Compare plays the six answer windows.
   if (window.App?.runMode?.preference?.() === "agent" && window.App.agentChat?.demoView) {
     return runAgentDemoFlow();
   }
-  const agentModeEnabled = window.App?.runMode?.pipeline?.() === true;
-  // Auch die lokale Demo respektiert den Modus: Consensus baut den Thread
-  // auf, Compare bleibt bei den sechs Antwortfenstern.
-  if (agentModeEnabled) {
-    window.exitHeroMode?.();
-  } else {
-    window.enterDirectComparisonView?.();
-    window.App?.consensusPipeline?.dismiss?.();
-  }
+  window.enterDirectComparisonView?.();
   const runId = ++demoRunId;
   const sendBtn = document.getElementById("sendButton");
   if (sendBtn) sendBtn.disabled = true;
-  // Neue Demo-Runde: Konsens-Bereich zunächst ausblenden.
+  // A saved Consensus answer that was on screen leaves.
   window.hideConsensusOutput?.();
 
   window.App.state.set("currentEvidenceSources", [], "evidence");
@@ -1088,29 +1011,9 @@ async function runDemoFlow() {
 
   if (runId !== demoRunId) return;
 
+  // Compare ends after the six answers.
   window.setAgentModeStatus?.("complete");
-
-  const consensusDiv = document.getElementById("consensusResponse");
-  const mainP = window.App.consensusBodyEl(consensusDiv);
-  const diffP = consensusDiv?.querySelector(".consensus-differences p");
-  // Consensus/Differences gehoeren zum Consensus-Modus. In Compare endet die
-  // Demo nach den sechs Modellantworten.
-  const auto = window.App?.runMode?.pipeline?.() === true;
-
-  if (auto) {
-    window.resetConsensusInsights?.();
-    window.resetCredibilityFrame?.(consensusDiv?.querySelector(".consensus-differences"));
-    // Rahmenlosen Konsens-Bereich sanft einblenden, sobald alle Antworten fertig sind.
-    window.revealConsensusOutput?.();
-    if (mainP) mainP.innerHTML = window.spinnerHTML;
-    if (diffP) diffP.innerHTML = window.spinnerHTML;
-    setTimeout(
-      () => renderDemoConsensus(mainP, diffP),
-      DEMO_CONSENSUS_DELAY_MS + Math.floor(Math.random() * DEMO_CONSENSUS_JITTER_MS)
-    );
-  } else {
-    showPostDemoLoginPrompt();
-  }
+  showPostDemoLoginPrompt();
 
   if (sendBtn) sendBtn.disabled = false;
 }

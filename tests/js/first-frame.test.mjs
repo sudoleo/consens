@@ -77,7 +77,7 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.getElementById("authTopActions").hidden).toBe(false);
     // What an account sees by default (Max, Apple-Audit H3): Agent's chip
     // with what the comparison models do, its greeting and Reasoning; no
-    // Consensus chip, no account placeholders.
+    // Compare chip, no account placeholders.
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
@@ -91,8 +91,8 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.querySelectorAll("#bookmarksContainer .skeleton-bookmark")).toHaveLength(0);
   });
 
-  it("keeps a guest's own choice of Consensus, and gives no Agent while the login cannot load", () => {
-    const chose = paint({ storage: { runMode: "consensus" } }).document;
+  it("keeps a guest's own choice of Compare, and gives no Agent while the login cannot load", () => {
+    const chose = paint({ storage: { runMode: "compare" } }).document;
     expect(chose.documentElement.classList.contains("agent-shell-expected")).toBe(false);
     expect(chose.body.classList.contains("single-agent-active")).toBe(false);
     expect(chose.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
@@ -126,11 +126,12 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.getElementById("loginContainer").hidden).toBe(false);
   });
 
-  it("keeps Consensus for an account this browser saw without Agent, and for an unconfirmed address", () => {
+  it("keeps Compare for an account this browser saw without Agent, and for an unconfirmed address", () => {
     const denied = paint({ storage: { id_token: token("u1"), agentShellExpected: "0" } }).document;
     expect(denied.documentElement.classList.contains("agent-shell-expected")).toBe(false);
     expect(denied.querySelector(".consensus-model").hidden).toBe(false);
-    expect(denied.querySelector(".consensus-model .model-picker-display").textContent).toBe("3 models · Daily");
+    // Compare's chip names how many answer, never a preset.
+    expect(denied.querySelector(".consensus-model .model-picker-display").textContent).toBe("3 models");
     const unverified = paint({ storage: { "firebase:authUser:test-key:[DEFAULT]": JSON.stringify({ uid: "u1", emailVerified: false }) } }).document;
     expect(unverified.body.classList.contains("is-guest")).toBe(false);
     expect(unverified.documentElement.classList.contains("agent-shell-expected")).toBe(false);
@@ -138,7 +139,7 @@ describe("the session a first frame expects (B4)", () => {
 });
 
 describe("the composer's first frame (B1, B2, B13)", () => {
-  it("draws Agent's chip with the remembered words, the count and Reasoning, and no Consensus chip", () => {
+  it("draws Agent's chip with the remembered words, the count and Reasoning, and no Compare chip", () => {
     const look = JSON.stringify({ uid: "u1", agentModel: "Claude Opus 5.5", agentEffort: "High" });
     const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": look,
       pref_check_Grok: "false" } });

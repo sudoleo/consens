@@ -1,6 +1,9 @@
 // Projects the selected RunContext into the one main application DOM.
 // Background callbacks only mutate their context; this adapter is the only
 // place that mirrors run-owned data into compatibility globals and elements.
+// An Agent run is handed to agent-chat.js; everything else is a Compare run
+// (the models' answers side by side). Until 2026-10-25 a run here could also
+// carry a Consensus synthesis; the browser no longer runs one.
 (function () {
   "use strict";
 
@@ -18,10 +21,6 @@
   }
 
   let projectedRunId = null;
-  let projectedPhase = null;
-  let projectedStatus = null;
-  let consensusProjection = null;
-  let historyProjection = null;
   const modelProjections = new Map();
 
   function selectedConfig(context, provider) {
@@ -102,204 +101,29 @@
     output.replaceChildren();
   }
 
-  function setConsensusVisible(visible) {
+  // A comparison has no consensus answer. A saved Consensus answer that was
+  // on screen before leaves with its markers, verdict and footer.
+  function clearConsensus() {
     const output = document.getElementById("consensusOutput");
-    if (!output) return;
-    output.classList.toggle("is-hidden", !visible);
-    output.classList.toggle("is-visible", visible);
-  }
-
-  function renderConsensus(context, force) {
+    if (output) {
+      output.classList.add("is-hidden");
+      output.classList.remove("is-visible");
+    }
     const response = document.getElementById("consensusResponse");
-    const body = window.App.consensusBodyEl?.(response);
-    const differences = response?.querySelector(".consensus-differences p");
-    if (!response || !body || !differences) return;
-    const state = context.consensus;
-    const sourceReferences = state.sourceReferenceMode !== 'none';
-    body.dataset.sourceReferences = sourceReferences ? 'legacy' : 'none';
-    // A saved answer's checklists can be ticked (task-checks.js). The turn
-    // is named after the text is fixed, so this runs before the shortcut.
-    const saved = context.completedBasis;
-    window.App.taskChecks?.scope(body, { chatId: saved?.chatId, turnId: saved?.turnId,
-      checked: saved?.currentTurn?.task_checks });
-    const signature = JSON.stringify([context.runId, state.text || state.streamText || "",
-      state.status === "streaming", state.differencesData, state.differences,
-      state.error, context.evidenceSources, sourceReferences]);
-    if (!force && consensusProjection?.body === body && consensusProjection.signature === signature) return;
-    consensusProjection = { body, signature };
-
     window.resetConsensusInsights?.();
-    window.resetCredibilityFrame?.(response.querySelector(".consensus-differences"));
-    body.classList.remove("is-streaming");
-    differences.classList.remove("is-streaming");
-
-    const text = String(state.text || state.streamText || "");
-    const visible = Boolean(text) || ["pending", "streaming", "differences", "complete", "error"].includes(state.status);
-    setConsensusVisible(visible);
-    if (!visible) {
-      body.replaceChildren();
-      differences.replaceChildren();
-      return;
-    }
-
-    if (text) {
-      window.injectMarkdown?.(body, text, context.evidenceSources);
-      if (state.status === "streaming") body.classList.add("is-streaming");
-      if (state.error?.incomplete) {
-        // R06: a stopped synthesis stays readable but is never presented as
-        // the finished consensus of this run.
-        const note = document.createElement("p");
-        note.className = "response-incomplete-notice";
-        note.setAttribute("role", "note");
-        note.textContent = String(state.error.message || "This answer is incomplete.");
-        body.prepend(note);
-      }
-    } else if (["pending", "streaming"].includes(state.status)) {
-      body.innerHTML = window.consensusSpinnerHTML || window.spinnerHTML || "";
-    } else if (state.error) {
-      body.textContent = String(state.error.message || state.error || "The answer couldn’t be completed. Try again.");
-    } else {
-      body.replaceChildren();
-    }
-
-    if (!state.text) {
-      differences.replaceChildren();
-      return;
-    }
-
-    const successful = Object.values(context.modelResults)
-      .filter(result => result?.status === "complete" && String(result.text || "").trim()).length;
-    let structured = false;
-    if (state.differencesData && typeof state.differencesData === "object") {
-      try {
-        structured = window.renderConsensusInsights?.(state.differencesData, successful, {
-          sources: sourceReferences ? context.evidenceSources || [] : []
-        }) === true;
-      } catch (error) {
-        console.error("Could not render run differences:", error);
-        window.resetConsensusInsights?.();
-      }
-    }
-    if (!structured) {
-      const fallback = String(state.differences || "");
-      if (fallback) {
-        window.App.differencesPanel?.expandForFallback?.();
-        const framed = window.colorizeCredibility ? window.colorizeCredibility(fallback) : fallback;
-        window.injectMarkdown?.(differences, framed, context.evidenceSources);
-      } else {
-        differences.replaceChildren();
-      }
-    }
+    window.resetCredibilityFrame?.(response?.querySelector(".consensus-differences"));
+    window.App.consensusBodyEl?.(response)?.replaceChildren();
+    response?.querySelector(".consensus-differences p")?.replaceChildren();
+    window.App.consensusFooter?.clear?.();
   }
-
 
   function syncCompatibilityState(context) {
     window.App.state.set("lastQuestion", context.question, "run");
     window.App.state.set("currentEvidenceSources", context.evidenceSources || [], "evidence");
-    window.App.state.set("consensusCitationMeta", context.consensus.citationMeta || null, "consensus");
-    window.App.state.set("lastShareResultId", context.consensus.resultId || null, "share");
+    window.App.state.set("consensusCitationMeta", null, "consensus");
+    window.App.state.set("lastShareResultId", null, "share");
     window.lastQuestionAttachmentsMeta = context.attachmentMeta || [];
-    window.lastConsensusBookmarkPayload = context.consensus.bookmarkPayload || null;
     window.App.bookmarkSession?.restore?.(context.bookmark.id);
-
-    window.App.chatSession?.reset?.();
-    const completed = context.completedBasis;
-    if (completed?.chatId && completed?.turnId) {
-      window.App.chatSession?.restoreCompletedChat?.(completed.chatId, completed.turnId);
-    }
-  }
-
-  function syncConversationProjection(context, force) {
-    const followup = window.App.followup;
-    const history = document.getElementById("threadHistory");
-    const signature = JSON.stringify(context.historyTurns || []);
-    // A follow-up's completed turns do not change with its stream. Rebuilding
-    // them per token repeats Markdown/claim rendering and layout measurements,
-    // and also discards any open history drawers and keyboard focus.
-    if (force || historyProjection?.history !== history || historyProjection?.signature !== signature) {
-      followup?.renderStoredTurns?.(context.historyTurns || []);
-      historyProjection = { history, signature };
-    }
-    followup?.reset?.();
-    if (context.status === "succeeded" && context.consensus.completedTurn && context.consensus.text) {
-      followup?.offer?.(context.question, context.consensus.text, context.consensus.completedTurn);
-    }
-  }
-
-  // What the finished run is made of, read from the run itself rather than
-  // from the boxes on screen: the same run may be projected again long after
-  // another view has written over them.
-  function runFacts(context) {
-    const models = Object.values(context.modelResults)
-      .filter(result => result?.status === "complete" && String(result.text || "").trim()).length;
-    if (!models) return null;
-    const finishedAt = Number(context.finishedAt) || Date.now();
-    const startedAt = Number(context.startedAt) || Number(context.createdAt) || finishedAt;
-    return { models, durationMs: Math.max(0, finishedAt - startedAt) };
-  }
-
-  function syncPipeline(context, force) {
-    const pipeline = window.App.consensusPipeline;
-    if (!pipeline) return;
-    // Ein Direktvergleich hat keinen gefuehrten Lauf: sechs Antworten, sonst
-    // nichts. Der Fortschrittsblock kuendigt dort Schritte an, die nie kommen
-    // (Consensus, Widerspruchspruefung), waehrend die Antworten daneben schon
-    // sichtbar streamen.
-    if (context.config?.agentMode === false) {
-      pipeline.dismiss?.();
-      return;
-    }
-    const phaseChanged = force || projectedPhase !== context.phase || projectedStatus !== context.status;
-    if (context.consensus.differencesComplete && ["running", "starting"].includes(context.status)) {
-      if (force) pipeline.dismiss?.();
-      pipeline.onConsensusEnd?.();
-      pipeline.renderProvenance?.();
-      return;
-    }
-    const writing = ["consensus", "differences"].includes(context.phase)
-      && Boolean(String(context.consensus.streamText || context.consensus.text || "").trim());
-    if (!phaseChanged) {
-      if (writing) pipeline.onConsensusText?.();
-      pipeline.renderProvenance?.();
-      return;
-    }
-
-    pipeline.dismiss?.();
-    if (context.status === "running" || context.status === "starting") {
-      pipeline.onPrepare?.(context.startedAt);
-      if (["answers", "consensus", "differences"].includes(context.phase)) {
-        pipeline.onQueryStatus?.("running");
-      }
-      if (["consensus", "differences"].includes(context.phase)) {
-        pipeline.onQueryStatus?.("complete");
-        pipeline.onConsensusStart?.();
-      }
-      if (context.phase === "differences") pipeline.onDifferencesStart?.();
-      if (writing) pipeline.onConsensusText?.();
-    } else if (context.status === "succeeded") {
-      pipeline.setRunFacts?.(runFacts(context));
-      pipeline.onConsensusEnd?.();
-    } else {
-      pipeline.setRunFacts?.(null);
-    }
-  }
-
-  function syncAgentStatus(context, force) {
-    if (context.config?.agentMode === false || typeof window.setAgentModeStatus !== "function") return;
-    if (typeof window.projectAgentModeRun === "function") {
-      window.projectAgentModeRun(context);
-      return;
-    }
-    if (!force && projectedPhase === context.phase && projectedStatus === context.status) return;
-    if (context.status === "failed") {
-      window.setAgentModeStatus("error", context.error?.message || context.consensus?.error?.message || "The answer couldn’t be completed. Try again.");
-    } else if (context.status === "canceled") {
-      window.setAgentModeStatus("canceled");
-    } else if (context.status === "succeeded" || context.phase === "answers_ready") {
-      window.setAgentModeStatus("complete");
-    } else {
-      window.setAgentModeStatus("running");
-    }
   }
 
   // A projection is a one-way DOM write, and several of the surfaces it
@@ -330,29 +154,22 @@
     window.App.agentChat?.render?.();
     if (context?.config?.executionMode === "agent") {
       projectedRunId = null;
-      consensusProjection = null;
-      historyProjection = null;
       modelProjections.clear();
       window.App.agentChat.project(context);
       return;
     }
     if (!context) {
       projectedRunId = null;
-      projectedPhase = null;
-      projectedStatus = null;
-      historyProjection = null;
       modelProjections.clear();
       window.projectAgentModeRun?.(null);
       // Nothing on screen belongs to a run any more: a saved bookmark, or a
       // cleared view. A run still going in the background reports itself in
-      // its sidebar row, never through the guided-run block above the
-      // composer -- that block would otherwise keep counting inside whatever
-      // was opened instead.
-      window.App.consensusPipeline?.detach?.();
+      // its sidebar row. A saved answer draws its own footer (firebase.js).
+      window.App.consensusFooter?.clear?.();
       window.App.syncSendButtonRunning?.();
       return;
     }
-    const forcePipeline = projectedRunId !== context.runId;
+    const switched = projectedRunId !== context.runId;
     projectedRunId = context.runId;
 
     // Only when the run actually disagrees with the tier on screen. Pushing
@@ -363,7 +180,7 @@
     // "tier" (aeltere Antwort, Tab von vor einem Deploy) darf die Stufe auf dem
     // Schirm deshalb nur noch ANHEBEN, nie senken: sonst schaltet ein
     // Plus-Konto beim ersten projizierten Lauf zurueck auf Free und verliert
-    // Anhaenge und Resolve.
+    // Anhaenge.
     const runTier = context.usage?.tier
       ?? (context.usage?.isProUser === true ? "pro" : null);
     if (runTier !== null
@@ -371,45 +188,31 @@
       window.updateUserTierUI?.(runTier, true);
     }
 
-    if (context.config?.agentMode === false) {
-      window.enterDirectComparisonView?.();
-    } else {
-      window.exitHeroMode?.();
-      document.body.classList.remove("direct-comparison-active");
-    }
-
+    window.enterDirectComparisonView?.();
     window.App.setAppTitle?.(context.question);
     // Auch der Direktvergleich zeigt die Frage: er fuehrt keinen Thread, aber
     // ohne sie steht auf dem Schirm nur noch die Antwort auf etwas, das
     // nirgends mehr geschrieben steht.
     window.App.setThreadQuestion?.(context.question);
-    // Consensus never checks a pasted text: the card of an Agent turn must
-    // not stay on this one.
+    // A comparison never checks a pasted text: the card of an Agent turn
+    // must not stay on this one.
     window.App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
     window.App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
-    syncConversationProjection(context, forcePipeline);
-    providers().forEach(provider => renderModel(context, provider, forcePipeline));
+    if (switched) {
+      // A comparison continues nothing: no history above it, and nothing of
+      // a saved answer that was on screen before.
+      window.App.followup?.clearHistory?.();
+      clearConsensus();
+    }
+    window.App.followup?.reset?.();
+    providers().forEach(provider => renderModel(context, provider, switched));
     window.renderEvidenceSources?.(context.evidenceSources || []);
-    renderConsensus(context, forcePipeline);
     syncCompatibilityState(context);
-    if (context.config?.agentMode === false) window.projectAgentModeRun?.(context);
-    else syncAgentStatus(context, forcePipeline);
-    syncPipeline(context, forcePipeline);
-    window.updateAgentModeUI?.();
-    // The controls describe the next run; these body classes describe the
-    // selected result. Re-assert the frozen run mode after the control UI has
-    // synchronized itself from localStorage.
-    document.body.classList.toggle("agent-mode-enabled", context.config?.agentMode !== false);
-    document.body.classList.toggle(
-      "agent-mode-running",
-      context.config?.agentMode !== false && registry.isExecuting(context.runId)
-    );
+    window.projectAgentModeRun?.(context);
     window.syncHeroResponseAccess?.();
     window.App.syncSendButtonRunning?.();
 
     window.App.answerReader?.project?.(context);
-    projectedPhase = context.phase;
-    projectedStatus = context.status;
   }
 
   function statusLabel(context) {
@@ -424,12 +227,8 @@
       return "Working";
     }
     if (context.status === "canceled") return "Stopped";
-    if (context.phase === "answers_ready") return "Answers ready";
     if (context.phase === "prepare") return "Preparing";
     if (context.phase === "answers") return "Models answering";
-    if (context.phase === "consensus") return "Writing consensus";
-    if (context.phase === "differences") return "Checking the answer";
-    if (context.phase === "finalizing") return "Saving result";
     return "Running";
   }
 

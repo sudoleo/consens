@@ -6,6 +6,8 @@ Limit-Pfad meldete danach setAgentModeStatus("error") — was den Block per
 dismiss() wieder wegnahm. Die eigentliche Meldung landete in den
 Antwortboxen, die im Agent Mode (Default seit 2026-07-27) hinter "Compare
 answers" liegen. Ergebnis: eine Sekunde Fortschritt, dann eine leere Seite.
+Seit 2026-10-25 laufen im Browser nur noch Agent und Compare; die Karte
+bleibt der eine Ort der Absage.
 """
 
 from pathlib import Path
@@ -41,9 +43,9 @@ def test_blocked_card_exists_and_is_loaded_before_its_callers():
     blocked = template[template.index('id="runBlocked"'):]
     assert 'role="alert"' in blocked[:200]
 
-    # Vor query-send.js und consensus-run.js, die es benutzen.
+    # Vor query-send.js und agent-chat.js, die es benutzen.
     assert loads_before("usage-limit.js", "query-send.js")
-    assert loads_before("usage-limit.js", "consensus-run.js")
+    assert loads_before("usage-limit.js", "agent-chat.js")
 
 
 def test_blocked_card_sits_where_the_answer_would_be():
@@ -71,10 +73,7 @@ def test_server_error_codes_are_actually_matched():
     chat = read("app/api/routers/chat.py")
     assert '"error_code": "token_budget_exhausted"' in chat
 
-    consensus = read("static/js/consensus-run.js")
-    assert 'error_code === "usage_limit_exceeded"' not in consensus
-    assert "usageLimit?.isLimitError" in consensus
-    assert "usageLimit.show" in consensus
+    assert 'error_code === "usage_limit_exceeded"' not in read("static/js/query-send.js")
 
     # Ein Detektor fuer die ganze App, nicht drei divergierende Kopien.
     usage = read("static/js/usage-limit.js")
@@ -83,19 +82,17 @@ def test_server_error_codes_are_actually_matched():
 
 
 def test_run_is_blocked_before_it_appears_to_start():
-    """Die Vorab-Pruefung liegt VOR onPrepare(). Sonst zeigt der gefuehrte
-    Lauf einen Schritt, den es nicht gibt, und nimmt ihn gleich wieder weg."""
+    """Die Vorab-Pruefung liegt VOR dem Anlegen des Laufs. Sonst zeigt die
+    Seite einen Lauf, den es nicht gibt, und nimmt ihn gleich wieder weg."""
     query = read("static/js/query-send.js")
-    view = read("static/js/run-view.js")
 
     preflight = query.index("usageLimit?.blockIfExhausted")
     admission = query.index("const context = beginContext", preflight)
     assert preflight < admission
-    assert "pipeline.onPrepare?.(context.startedAt)" in view
 
-    # Die Demo kostet nichts und darf nie am Kontingent haengen. Ein echtes
-    # Follow-up mit dem Text "Demo" bleibt dagegen ein normaler, gezaehlter
-    # Kontextlauf und darf den archivierten Turn nicht umgehen.
+    # Die Demo kostet nichts und darf nie am Kontingent haengen. Steht ein
+    # gespeicherter Chat auf dem Schirm, bleibt "Demo" eine normale,
+    # gezaehlte Frage.
     assert "if (isDemoQuery(question) && !registry.getSelectedConversationBasis())" in query
 
     # Der Server bleibt die Autoritaet: der /prepare-Zweig zeigt dieselbe
@@ -103,25 +100,18 @@ def test_run_is_blocked_before_it_appears_to_start():
     assert "usageLimit?.show?.({" in query
 
 
-def test_blocked_follow_up_gets_its_context_back():
-    """Die Karte sagt "nichts wurde gesendet" — dann darf der Lauf auch nichts
-    verbraucht haben. consume() gibt den Follow-up-Kontext beim Absenden aus
-    und ruft dabei reset(); ohne die gemerkte Kopie waere der Chip nach einer
-    Kontingent-Absage weg und die naechste Frage ginge stillschweigend ohne
-    Kontext raus."""
+def test_a_blocked_run_takes_nothing_with_it():
+    """Die Karte sagt "nichts wurde gesendet": dann darf der Lauf auch nichts
+    verbraucht haben. Compare setzt keinen Chat fort (2026-10-25), also gibt
+    es keinen Kontext, der verloren gehen koennte; zurueck kommt der Entwurf."""
     query = read("static/js/query-send.js")
-    registry = read("static/js/run-registry.js")
 
-    # Die Basis wird vor Admission nur gelesen und danach als frozen Context-
-    # Feld behalten. Scheitert der Lauf vor Fan-out, stellt der sichtbare Run
-    # genau diese Basis zusammen mit Draft/Zitat wieder her.
-    assert "const basis = registry.getSelectedConversationBasis();" in query
+    assert "const basis = registry.getSelectedConversationBasis();" not in query
+    assert "previousExchange" not in query
     restore = query.split("function restoreComposerAfterUnsentRun(context)", 1)[1].split(
         "function finishFailed", 1
     )[0]
-    assert "context.previousExchange && context.basis" in restore
-    assert "registry.selectConversationBasis(context.basis);" in restore
-    assert "selectedConversationBasis = null;" in registry
+    assert "input.value = context.metadata.draftQuestion || context.question;" in restore
     assert "if (failedBeforeFanout) restoreComposerAfterUnsentRun(context);" in query
 
 

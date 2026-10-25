@@ -1,9 +1,14 @@
 // =====================================================================
 // run-mode.js
 // The one choice of what consens does with the next message:
-//   compare   · answers side by side, no consensus
-//   consensus · the consensus pipeline with differences and checks
-//   agent     · Agent (Beta): works in steps with research, files and tools
+//   agent   · Agent (Beta): works in steps with research, files and tools
+//   compare · answers side by side
+//
+// Consensus was a third mode until 2026-10-25. The pipeline behind it now
+// runs only on the server (Watches, the API, curated topics); a stored
+// "consensus" choice is dropped and reads as the default, Agent
+// (user-settings.js, user_settings.py). Saved Consensus chats stay
+// readable and belong to the same server family as Compare.
 //
 // This module only owns the preference. It is the single source of truth
 // for the composer selector, the settings panel and every run; the value is
@@ -23,16 +28,15 @@
   "use strict";
 
   const settings = window.App.userSettings;
-  const MODES = Object.freeze(["compare", "consensus", "agent"]);
+  const MODES = Object.freeze(["compare", "agent"]);
   // For people who never chose. Agent is the default since 2026-10-02, for
   // guests too (Max, Apple-Audit H3: a guest sees what an account sees and
   // logs in on Send); an account without Agent access (a refused status
-  // check) still falls back to consensus in effective().
+  // check) falls back to Compare in effective().
   const DEFAULT_MODE = "agent";
 
   const COPY = Object.freeze({
-    compare: Object.freeze({ label: "Compare", description: "Answers side by side, no consensus." }),
-    consensus: Object.freeze({ label: "Consensus", description: "One answer with its differences and checks." }),
+    compare: Object.freeze({ label: "Compare", description: "Answers side by side." }),
     agent: Object.freeze({ label: "Agent", badge: "Beta", description: "Works in steps with research, files and tools." }),
   });
 
@@ -41,7 +45,8 @@
   }
 
   function read() {
-    return settings.get("run_mode") || DEFAULT_MODE;
+    const stored = settings.get("run_mode");
+    return valid(stored) ? stored : DEFAULT_MODE;
   }
 
   function preference() {
@@ -69,20 +74,21 @@
 
   // What the next message will actually do, given the open chat and the
   // account. agent-chat.js reports the open chat's family, access and guest.
+  // The server keeps two chat families: Agent chats, and the family of
+  // Compare results and saved Consensus chats ("consensus"). An open chat
+  // keeps its family, so an Agent choice there runs as Compare.
   function effective() {
     const state = window.App?.agentChat?.modeState?.();
     const pref = read();
     if (state?.family === "agent") return "agent";
     if (pref === "agent") {
-      if (state?.family === "consensus" || !agentOffered(state)) return "consensus";
+      if (state?.family === "consensus" || !agentOffered(state)) return "compare";
       return "agent";
     }
     return pref;
   }
 
-  // Compare and Consensus share one chat family and may alternate per
-  // message; Agent chats are a separate family on the server. This says
-  // which choices the open chat allows and why the others are not offered.
+  // Which choices the open chat allows and why the others are not offered.
   function availability() {
     const state = window.App?.agentChat?.modeState?.() || {};
     const family = state.family || null;
@@ -90,7 +96,6 @@
     const offered = agentOffered(state) || family === "agent";
     return {
       compare: { enabled: family !== "agent", reason: family === "agent" ? newChatReason : "" },
-      consensus: { enabled: family !== "agent", reason: family === "agent" ? newChatReason : "" },
       agent: {
         visible: offered,
         enabled: family !== "consensus" && offered,
@@ -104,7 +109,8 @@
   settings.onChange("run_mode", detail => {
     if (detail.source === "local") return;
     const mode = read();
-    const previous = detail.previous.run_mode || DEFAULT_MODE;
+    const before = detail.previous.run_mode;
+    const previous = valid(before) ? before : DEFAULT_MODE;
     if (mode === previous) return;
     window.dispatchEvent(new CustomEvent("consensio:run-mode-change", { detail: { mode, previous } }));
   });
@@ -118,8 +124,5 @@
     set,
     effective,
     availability,
-    // The consensus pipeline runs for Consensus, and for an Agent choice the
-    // account or open chat cannot honour. Only Compare skips it.
-    pipeline: () => effective() !== "compare",
   });
 })();

@@ -75,7 +75,7 @@ class AgentPreferencesSetting(_Strict):
 
 
 class CompareModelSetting(_Strict):
-    """One model family in Compare/Consensus: included or not, which model."""
+    """One model family in Compare and Agent's comparisons: included or not, which model."""
 
     enabled: Optional[bool] = None
     model: Optional[ModelId] = None
@@ -84,8 +84,10 @@ class CompareModelSetting(_Strict):
 class UserSettings(_Strict):
     """Every account setting. ``None`` means "not chosen": the app default."""
 
-    # Compare / Consensus / Agent for the next message (run-mode.js).
-    run_mode: Optional[Literal["compare", "consensus", "agent"]] = None
+    # Compare / Agent for the next message (run-mode.js). "consensus" was a
+    # mode until 2026-10-25; a stored one no longer validates and is dropped
+    # on read (sanitize_settings), so the account falls back to the default.
+    run_mode: Optional[Literal["compare", "agent"]] = None
     agent_model: Optional[AgentModelSetting] = None
     agent_preferences: Optional[AgentPreferencesSetting] = None
     # Keyed by the family label the app shows (OpenAI, Gemini, ...).

@@ -1081,104 +1081,9 @@ button.cx-card-logo:focus-visible {
   color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
 }
 
-/* --- Resolve-Runde: Button + Ergebnis in der Widerspruchs-Karte ----------- */
+/* --- Resolve-Ergebnis in der Widerspruchs-Karte (gespeicherte Antworten) - */
 .diff-resolve {
   margin-top: 16px;
-}
-
-.diff-resolve-btn {
-  /* Kartenbreiter Abschluss mit ausgerichtetem Icon, Text und Plus-Chip. */
-  display: flex;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  min-height: 40px;
-  padding: 10px 12px;
-  border-radius: var(--radius-2xs);
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
-  background: transparent;
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  font-family: inherit;
-  line-height: var(--line-height-heading);
-  text-align: left;
-  cursor: pointer;
-  white-space: normal;
-  transition: box-shadow var(--dur-state) var(--ease-standard), color var(--dur-state) var(--ease-standard), border-color var(--dur-state) var(--ease-standard), background-color var(--dur-state) var(--ease-standard);
-}
-
-/* Der Button wird nach dem Resolve per [hidden] entfernt. Ohne diese Regel
-   uebersteuert das display:inline-flex oben das UA-[hidden] (display:none),
-   und der Ladezustand des Buttons bliebe sichtbar. */
-.diff-resolve-btn[hidden] {
-  display: none;
-}
-
-.diff-resolve-btn-label {
-  min-width: 0;
-  line-height: 1.4;
-}
-
-.diff-resolve-icon {
-  flex-shrink: 0;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .diff-resolve-btn:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--sidebar-border));
-    color: color-mix(in srgb, var(--accent) 80%, var(--text-color));
-    background: var(--hover);
-  }
-}
-
-.diff-resolve-btn:disabled {
-  opacity: 0.7;
-  cursor: default;
-}
-
-.diff-resolve-btn.is-loading::before {
-  content: "";
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  /* Look and turn: the one spinner (motion.css). */
-}
-
-/* Pro-Teaser: gedämpfter Button mit Pro-Chip für Free-Nutzer.
-   Bewusst kein --sidebar-hover: das ist im Dark Mode fast weiß und
-   würde den Button grell machen. */
-.diff-resolve-btn.is-pro-locked {
-  border-color: color-mix(in srgb, var(--sidebar-border) 85%, transparent);
-  background: color-mix(in srgb, var(--text-color) 5%, transparent);
-  color: color-mix(in srgb, var(--text-color) 68%, var(--sidebar-text-muted));
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .diff-resolve-btn.is-pro-locked:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--text-color) 10%, transparent);
-  }
-}
-
-/* Mockup-Variante des zentralen Pro-Badges: kompakt und leicht eckig. */
-.diff-resolve-pro-chip {
-  display: inline-flex;
-  align-items: center;
-  align-self: center;
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 1px 5px;
-  border-radius: var(--radius-2xs);
-  font-size: var(--font-size-micro);
-  line-height: 1.4;
-  box-shadow: none;
-}
-
-.diff-resolve-btn.is-loading .diff-resolve-icon {
-  display: none;
 }
 
 /* Rail-Notiz statt gefüllter Box: 2px-Linie links trägt die Semantik. */
@@ -1485,8 +1390,7 @@ mark.quote-flash {
 
 @media (prefers-reduced-motion: reduce) {
   mark.quote-flash,
-  .quote-flash-block,
-  .diff-resolve-btn.is-loading::before {
+  .quote-flash-block {
     animation: none;
   }
 }

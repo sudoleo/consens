@@ -7,10 +7,13 @@
 //      Animation beim Ein-/Ausschliessen.
 //   2) Custom-Model-Picker: das eigene, getunte Listbox-Dropdown, das die
 //      nativen <select> ueberlagert (expandedModelPicker ist modul-privat).
-//   3) Consensus-Presets: der Consensus-Picker zeigt primaer die Presets
-//      Daily/Open Models/High Quality (window.CONSENSUS_PRESETS) plus "Custom" fuer
-//      die volle Modell-Liste. Ein Preset setzt die sechs Antwortmodelle und
-//      die Consensus-Engine gemeinsam. High Quality bleibt Pro-only.
+//   3) Presets: der Modell-Chip (#consensusModelDropdown, Name historisch)
+//      zeigt primaer die Presets Daily/Open Models/High Quality
+//      (window.CONSENSUS_PRESETS) plus "Custom" fuer die einzelnen Modelle.
+//      Ein Preset setzt die sechs Modelle fuer Compare und Agents Vergleiche.
+//      Die Consensus-Engine, die es frueher mitsetzte, waehlt seit
+//      2026-10-25 niemand mehr im Browser; ihr Wert bleibt nur der Anker
+//      der Preset-Aufloesung. High Quality bleibt Pro-only.
 //   4) Verknuepfte Picker (linkModelPicker): ein Chip, ein Menue fuer zwei
 //      Selects. Agent nutzt es fuer Chatmodell + Vergleichsmodelle: Uebersicht
 //      mit Abschnitten, jede Zeile fuehrt in die Ebenen ihres eigenen Pickers.
@@ -24,7 +27,6 @@
 // consensus_model, consensus_preset) ueber window.App.userSettings.
 // Abhaengigkeiten: window.App.{modelPrefs, getModelOptionLabel,
 //   getSelectedModelCount, trackAppEvent, userSettings}, window.updateAgentModeUI,
-//   window.updateConsensusButtonAvailability,
 //   window.PRO_DEFAULT_MODELS, window.FREE_DEFAULT_MODELS.
 // Das Wiring (Event-Listener, Init-Aufrufe) lebt weiterhin in initApp und
 // nutzt diese Exporte ueber lokale Aliase (Uebergangsbus, siehe app-core.js).
@@ -142,8 +144,8 @@
 
   // Tier refreshes restore persisted selections after /prepare. A provider
   // disabled by the attachment compatibility gate must stay excluded during
-  // that restore; otherwise progress and consensus wait for an answer whose
-  // request was intentionally never started.
+  // that restore; otherwise the run waits for an answer whose request was
+  // intentionally never started.
   function blockedForRun(pref, checkbox) {
     return runBlockedResponseIds.has(pref.responseId)
       || (!!checkbox?.disabled
@@ -264,9 +266,6 @@
 
     syncSidebarModelCount();
 
-    if (typeof window.updateConsensusButtonAvailability === "function") {
-      window.updateConsensusButtonAvailability();
-    }
     if (typeof window.updateQuestionInputAccess === "function") {
       window.updateQuestionInputAccess();
     }
@@ -318,12 +317,7 @@
     }
   };
 
-  // --- CONSENSUS-PRESETS (Daily/Open Models/High Quality + Custom) ---
-
-  // Zuletzt angezeigtes Preset-/Modell-Label OHNE die Modellanzahl davor.
-  // Der gefuehrte Lauf nennt es rechts im Kopf ("Daily · 6 models"); die Zahl
-  // steht dort schon separat, sie wuerde sich sonst doppeln.
-  let lastPresetDisplayLabel = "";
+  // --- PRESETS (Daily/Open Models/High Quality + Custom) ---
 
   function getConsensusPresets() {
     return Array.isArray(window.CONSENSUS_PRESETS) ? window.CONSENSUS_PRESETS : [];
@@ -521,42 +515,18 @@
     const selectedOption = select.options[select.selectedIndex] || select.options[0];
     const selectedLabel = window.App.getModelOptionLabel(selectedOption);
 
-    // Mit Preset-Ebene zeigt der Trigger den Preset-Namen, solange der
-    // Select-Wert der Preset-Aufloesung entspricht. Weicht der Wert ab
-    // (z. B. eine explizite Modellwahl), bleibt der echte Modellname.
     let displayLabel = selectedLabel;
     let displayTitle = selectedLabel;
     if (state.presets) {
-      const presetId = getActiveConsensusPresetId();
-      if (presetId !== "custom") {
-        const preset = getConsensusPresets().find(entry => entry.id === presetId);
-        const presetValue = resolveConsensusPresetValue(select, presetId);
-        if (preset && presetValue && select.value === presetValue) {
-          displayLabel = preset.label;
-          displayTitle = `${window.App.t(preset.label)} · ${selectedLabel}`;
-        }
-      }
-      // Der Consensus-Trigger ist im rahmenlosen Composer der EINZIGE
-      // Lauf-Schalter. Er sagt deshalb beides: wie viele Modelle antworten
-      // und welche Stufe den Konsens schreibt ("6 models · Daily").
+      // The chip says only who answers: Compare's models side by side, or
+      // the comparisons next to an Agent answer. It never says "Compare":
+      // that word is the mode.
       const count = window.App.getSelectedModelCount?.() || 0;
       const countLabel = count === 1 ? "1 model" : `${count} models`;
-      lastPresetDisplayLabel = displayLabel;
-      // Translated part by part: "{models} · {preset}" has no entry of its own.
-      displayLabel = `${window.App.t(countLabel)} · ${window.App.t(displayLabel)}`;
-      displayTitle = count < 2
-        ? `${countLabel} selected · Choose at least 2 models to run consensus`
-        : `${window.App.t(countLabel)} · ${displayTitle}`;
-      // Without a consensus (Compare, or the comparisons next to an Agent
-      // answer) no preset writes anything, so the chip says only who answers.
-      // It never says "Compare": that word is the mode.
-      if (select.dataset.comparisonOnly === "true") {
-        displayLabel = countLabel;
-        displayTitle = `${countLabel} available for independent comparisons`;
-      } else if (window.App.runMode?.pipeline?.() === false) {
-        displayLabel = countLabel;
-        displayTitle = `${countLabel} answer side by side`;
-      }
+      displayLabel = countLabel;
+      displayTitle = select.dataset.comparisonOnly === "true"
+        ? `${countLabel} available for independent comparisons`
+        : `${countLabel} answer side by side`;
     }
 
     // One chip for two choices (Agent). It says what the comparison models
@@ -944,20 +914,16 @@
   }
 
   // --- Custom: die ganze Aufstellung eines Laufs -------------------------
-  // "Custom" hiess bisher nur "nimm ein anderes Consensus-Modell". Die sechs
-  // antwortenden Modelle — also der eigentliche Lauf — waren im Composer gar
-  // nicht erreichbar; man musste die Antwortboxen finden, die im Agent Mode
-  // verborgen sind. Custom zeigt jetzt beides: wer antwortet (mit Ein-/
-  // Ausschluss und Modellwahl je Provider) und wer daraus den Konsens
-  // schreibt. Jede Zeile fuehrt in ihre eigene Modell-Liste und zurueck.
+  // Custom zeigt, wer antwortet (mit Ein-/Ausschluss und Modellwahl je
+  // Provider). Jede Zeile fuehrt in ihre eigene Modell-Liste und zurueck.
 
   function providerViewId(pref) {
     return "provider:" + pref.key;
   }
 
-  // Views, die eine Modell-Liste zeigen: "engine" und "provider:<key>".
+  // Views, die eine Modell-Liste zeigen: "provider:<key>".
   function isModelListView(view) {
-    return view === "engine" || String(view || "").startsWith("provider:");
+    return String(view || "").startsWith("provider:");
   }
 
   function providerForView(view) {
@@ -1047,38 +1013,10 @@
       const requirement = document.createElement("p");
       requirement.className = "model-picker-requirement";
       requirement.setAttribute("role", "status");
-      requirement.textContent = `Select at least 2 models to ${comparisonOnly ? "compare with" : "run consensus"} · ${selectedCount} selected`;
+      requirement.textContent = `Select at least 2 models to compare with · ${selectedCount} selected`;
       state.menu.appendChild(requirement);
     }
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
-
-    if (select.dataset.comparisonOnly === "true") return;
-
-    appendSectionLabel(state.menu, "Consensus engine");
-    const engine = document.createElement("button");
-    engine.type = "button";
-    engine.className = "model-picker-option model-picker-row-open";
-    const label = document.createElement("span");
-    label.className = "model-picker-option-label model-picker-preset-label";
-    const name = document.createElement("span");
-    name.className = "model-picker-preset-name";
-    name.textContent = "Writes the consensus";
-    const hint = document.createElement("span");
-    hint.className = "model-picker-preset-hint";
-    hint.textContent = currentOptionLabel(select);
-    label.append(name, hint);
-    engine.appendChild(label);
-    const chevron = document.createElement("span");
-    chevron.className = "model-picker-option-chevron";
-    chevron.setAttribute("aria-hidden", "true");
-    engine.appendChild(chevron);
-    engine.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      state.view = "engine";
-      renderCustomModelPicker(select);
-    });
-    state.menu.appendChild(engine);
   }
 
   // Every level change redraws the menu. Focus that was inside stays inside:
@@ -1137,12 +1075,12 @@
       return;
     }
 
-    // Modell-Liste: entweder die eines Providers oder die der Engine. Ohne
-    // Preset-Ebene (die Picker in den Antwortboxen) ist es unveraendert die
-    // Liste des eigenen Selects.
+    // Modell-Liste: die eines Providers. Ohne Preset-Ebene (die Picker in
+    // den Antwortboxen) ist es unveraendert die Liste des eigenen Selects.
     const pref = state.presets ? providerForView(state.view) : null;
     const secondary = state.secondarySelect && state.view === 'secondary';
-    const targetSelect = secondary ? state.secondarySelect : pref ? document.getElementById(pref.selectId) : select;
+    const targetSelect = secondary ? state.secondarySelect : pref ? document.getElementById(pref.selectId)
+      : state.presets ? null : select;
     if (!targetSelect) {
       state.view = "custom";
       renderCustomOverview(select, state);
@@ -1150,8 +1088,8 @@
       return;
     }
 
-    if (state.presets) {
-      renderBackRow(select, state, pref ? pref.label : "Consensus engine", "custom");
+    if (state.presets && pref) {
+      renderBackRow(select, state, pref.label, "custom");
     }
     if (group) renderBackRow(select, state, group.label, 'groups');
     // Linked, reasoning and the flat model list hang off the overview.
@@ -1601,5 +1539,4 @@
   window.App.initCustomModelPicker = initCustomModelPicker;
   window.App.linkModelPicker = linkModelPicker;
   window.App.markConsensusPresetCustom = markConsensusPresetCustom;
-  window.App.currentPresetLabel = () => lastPresetDisplayLabel;
 })();

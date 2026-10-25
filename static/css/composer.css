@@ -38,7 +38,7 @@
   row-gap: 8px;
 }
 
-.chat-input-container > :is(.attachment-bar, .composer-quote, .composer-run-notice, .agent-google-chips) {
+.chat-input-container > :is(.attachment-bar, .composer-quote, .agent-google-chips) {
   order: 0;
   flex: 1 1 100%;
   min-width: 0;
@@ -287,7 +287,7 @@
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .input-section:not(:has(> .composer-mode-bar:not([hidden]))) > .chat-input-container {
     border-radius: var(--composer-pill-radius);
   }
-  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > :is(.composer-run-notice, .agent-google-chips),
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .agent-google-chips,
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .composer-models,
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .demo-chip {
     display: none;

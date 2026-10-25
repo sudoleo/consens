@@ -464,8 +464,36 @@
   }
   userError.kind = kind;
 
+  // A new chat the server would not save, for a reason no retry fixes: the
+  // user has to tidy up, start over or wait. The server sends error_code and
+  // its own text; everything else stays with the generic sentence. Read from
+  // FastAPI's {"detail": {...}} and from main.py's {"error": {...}}, since
+  // production wraps the detail.
+  const CHAT_PERSISTENCE_MESSAGES = {
+    chat_limit_reached:
+      "You’ve reached the maximum number of saved chats. Delete an old chat to start a new one.",
+    turn_limit_reached:
+      "This chat has reached its maximum length. Start a new chat to continue.",
+    chat_rate_limited:
+      "Too many new chats in a short time. Wait a moment and try again."
+  };
+
+  function chatPersistenceErrorMessage(data) {
+    for (const candidate of [data?.detail, data?.error, data]) {
+      if (!isRecord(candidate)) continue;
+      const code = typeof candidate.error_code === "string" ? candidate.error_code.trim() : "";
+      if (code && Object.prototype.hasOwnProperty.call(CHAT_PERSISTENCE_MESSAGES, code)) {
+        return CHAT_PERSISTENCE_MESSAGES[code];
+      }
+    }
+    return "";
+  }
+
   App.userError = userError;
   App.readJson = readJson;
   App.httpError = httpError;
   App.errorFields = errorFields;
+  // agent-chat.js, when /chats refuses a new chat (moved here from the
+  // Consensus chat session, chat-session.js, on 2026-10-25).
+  App.chatPersistenceErrorMessage = chatPersistenceErrorMessage;
 })();

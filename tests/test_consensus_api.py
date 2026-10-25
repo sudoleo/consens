@@ -545,7 +545,9 @@ def test_api_pipeline_runs_the_full_plan_including_deepseek(monkeypatch):
     monkeypatch.setattr(api_consensus_runner, "query_differences", differences)
     result = api_consensus_runner.execute_consensus_pipeline(run)
 
-    assert provider_calls == ["openai", "mistral", "deepseek"]
+    # The providers answer in parallel, so their call order is not fixed;
+    # the answers keep the plan's order (below).
+    assert sorted(provider_calls) == ["deepseek", "mistral", "openai"]
     # The DeepSeek key stays usable for the Consensus engine and the judges too.
     assert consensus_keys[0]["DeepSeek"]
     assert differences_keys[0]["DeepSeek"]

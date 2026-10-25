@@ -328,8 +328,8 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator('#questionInput')).to_be_focused()
         expect(page.locator("#agentAnswer")).to_be_visible()
         expect(page.locator("#consensusOutput")).not_to_be_visible()
-        # An open Agent chat keeps its family; the other modes need a new chat.
-        expect(page.locator('#runModeSelect option[value="consensus"]')).to_be_disabled()
+        # An open Agent chat keeps its family; Compare needs a new chat.
+        expect(page.locator('#runModeSelect option[value="consensus"]')).to_have_count(0)
         expect(page.locator('#runModeSelect option[value="compare"]')).to_be_disabled()
         expect(page.locator("#agentAnswerLabel")).to_have_count(0)
         assert page.locator("#threadAsk").evaluate("el => getComputedStyle(el).display") == "flex"
@@ -383,8 +383,8 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.locator("#newRunButton").click()
         if width < 1100 and page.locator("#toggleSidebarButton").get_attribute("aria-expanded") == "true":
             page.locator("#sidebarToggleInner").click()
-        expect(page.locator('#runModeSelect option[value="consensus"]')).to_be_enabled()
-        _choose_mode(page, "consensus")
+        expect(page.locator('#runModeSelect option[value="compare"]')).to_be_enabled()
+        _choose_mode(page, "compare")
         expect(page.locator("#agentAnswer")).not_to_be_visible()
         # One name in every mode (Apple-Audit H3/B10): the pill keeps its word.
         expect(page.locator("#viewSwitchConsensus")).to_have_text("Chat")
@@ -878,28 +878,32 @@ def test_quota_stream_and_failure_update_existing_percentage(browser, phase4_ser
         context.close()
 
 
-def test_shared_consensus_picker_still_navigates_submenus(browser, phase4_server):
+def test_shared_compare_picker_still_navigates_submenus(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
         page.route("**/usage", lambda route: _json(route, {"tier": "pro", "is_pro": True}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
-        # Agent is the default mode; this checks the Consensus chip.
-        page.evaluate("App.runMode.set('consensus')")
+        # Agent is the default mode; this checks Compare's preset chip. Its
+        # Custom level lists the answering models; a model opens its list
+        # and returns to the overview (the engine row left with Consensus).
+        page.evaluate("App.runMode.set('compare')")
+        first = page.evaluate("() => ({ label: App.modelPrefs[0].label, selectId: App.modelPrefs[0].selectId })")
         picker = page.locator(".consensus-model-inline")
         picker.locator(".model-picker-display").click()
         picker.locator(".model-picker-custom-option").click()
-        picker.locator(".model-picker-row-open").filter(has_text="Writes the consensus").click()
         menu = picker.locator(".model-picker-menu")
-        expect(menu).to_be_visible()
-        option = menu.locator("[data-value]:not(:disabled)").last
-        selected = option.get_attribute("data-value")
+        expect(menu).to_contain_text("Answering models")
+        expect(menu).not_to_contain_text("Writes the consensus")
+        menu.locator(".model-picker-row-open").filter(has_text=first["label"]).click()
+        option = menu.locator('[role="option"]:not(:disabled)').last
+        chosen = option.locator(".model-picker-option-label").inner_text()
         option.click()
-        expect(page.locator("#consensusModelDropdown")).to_have_value(selected)
-        expect(menu).not_to_be_visible()
-        assert page.evaluate("() => localStorage.getItem('pref_consensus_preset')") == "custom"
-        picker.locator(".model-picker-display").click()
         expect(menu).to_be_visible()
+        expect(menu).to_contain_text("Answering models")
+        selected = page.evaluate("id => { const s = document.getElementById(id); return App.getModelOptionLabel(s.options[s.selectedIndex]); }", first["selectId"])
+        assert selected == chosen
+        assert page.evaluate("() => localStorage.getItem('pref_consensus_preset')") == "custom"
         page.keyboard.press("Escape")
         expect(menu).not_to_be_visible()
     finally:

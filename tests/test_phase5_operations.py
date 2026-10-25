@@ -834,11 +834,10 @@ def test_due_brief_query_filters_and_limits_in_firestore():
 def test_phase5_frontend_vote_binding_and_deployment_contracts():
     root = Path(__file__).resolve().parents[1]
     firebase_js = (root / "static" / "firebase.js").read_text(encoding="utf-8")
-    consensus_js = (root / "static" / "js" / "consensus-run.js").read_text(
-        encoding="utf-8"
-    )
-    assert "result_id: resultId" in firebase_js
-    assert "data.result_id" in consensus_js
+    # The browser casts no vote since 2026-10-25: Model Pulse counts the
+    # server's own runs (agent_runs.py, the pipeline for Watches and topics).
+    assert "recordModelVote" not in firebase_js
+    assert not (root / "static" / "js" / "consensus-run.js").exists()
 
     firebase_config = json.loads((root / "firebase.json").read_text(encoding="utf-8"))
     assert firebase_config["firestore"]["indexes"] == "firestore.indexes.json"

@@ -4,22 +4,31 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
+from test_phase4_frontend import _json, _real_firebase_page, phase4_server  # noqa: F401
 from test_model_answer_reader import reader_screenshot, seed_insights
+from test_agent_chat_frontend import CATALOG
 
 
 def seed_long_answer(page):
-    seed_insights(page)
-    page.evaluate("""() => {
-      const ctx = App.runRegistry.visible();
-      const paragraph = 'Viele Rennradfahrer leben in der Region rund um Monaco. '
-        + 'Die Strecken führen über La Turbie, Èze und Menton. '
-        + 'An der Küste und in der Stadt sollte man wegen des Verkehrs vorsichtig sein.';
-      ctx.consensus.text = Array.from({length:18}, () => paragraph).join('\\n\\n');
-      ctx.consensus.completedTurn.consensus = ctx.consensus.text;
-      App.runRegistry.renderVisible();
-      window.scrollTo(0, 0);
-    }""")
+    paragraph = ('Viele Rennradfahrer leben in der Region rund um Monaco. '
+                 'Die Strecken führen über La Turbie, Èze und Menton. '
+                 'An der Küste und in der Stadt sollte man wegen des Verkehrs vorsichtig sein.')
+    seed_insights(page, consensus='\n\n'.join([paragraph] * 18))
+    to_top(page)
+
+
+def to_top(page):
+    """An opened chat holds its newest question in place until the reader
+    scrolls (chat-scroll.js interrupt); scroll to the top as a reader does."""
+    page.evaluate("() => { window.dispatchEvent(new WheelEvent('wheel', {deltaY: -1})); window.scrollTo(0, 0); }")
+    page.wait_for_function("() => scrollY === 0")
+
+
+def with_agent_access(page):
+    """Every signed-in account has Agent (users.py); its start screen is the
+    hero. Without access an account starts in Compare."""
+    page.route('**/user_status', lambda route: _json(route, {'tier': 'free', 'is_pro': False, 'agent_access': True}))
+    page.route('**/agent/models', lambda route: _json(route, CATALOG))
 
 
 # The composer is the raised field (--field = --well, Apple-Audit G8).
@@ -104,6 +113,8 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         assert all(box['width']>=44 and box['height']>=44 for box in bounds)
         assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
         assert bounds[-1]['x']+bounds[-1]['width']<=width
+        # From the top, the thread starts below the islands.
+        to_top(page)
         assert page.locator('.thread-history-turn').first.bounding_box()['y'] >= header.bounding_box()['height']
         # The collapsed composer is a pill of the same material.
         page.wait_for_function("() => document.body.classList.contains('composer-collapsed') && !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
@@ -170,17 +181,8 @@ def test_guest_navigation_fits_and_auth_dialogs_open(browser, phase4_server, wid
         assert all(item['y'] >= 0 and item['y'] + item['height'] <= header.bounding_box()['height'] for item in bounds)
         assert all(item['height'] >= 44 and item['width'] >= 44 for item in bounds)
         reader_screenshot(page, f'mobile-header-guest-{width}')
-        seed_insights(page)
-        expect(header.locator('#consensusShareButton')).to_be_hidden()
-        expect(header.locator('.consensus-actions-toggle')).to_be_visible()
-        # The collapsed composer keeps a long guest hint on its one line.
-        page.wait_for_function("() => document.body.classList.contains('composer-collapsed')")
-        assert page.evaluate("getComputedStyle(document.getElementById('questionInput'), '::placeholder').whiteSpace") == 'nowrap'
-        expect(auth).to_be_visible()
-        bounds=[button.bounding_box() for button in header.locator('button:visible').all()]
-        assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
-        assert bounds[-1]['x']+bounds[-1]['width']<=width
-        reader_screenshot(page, f'mobile-header-guest-answer-{width}')
+        # A guest opens no saved chat and, since 2026-10-25, runs no
+        # Consensus demo: no answer actions join the auth buttons here.
         signup.click()
         expect(page.locator('#loginModal')).to_be_visible()
         expect(page.locator('#loginForm')).to_have_attribute('data-mode', 'register')
@@ -389,7 +391,7 @@ def test_desktop_sidebar_controls_keep_their_original_layout(browser, phase4_ser
 
 
 def test_mobile_actions_keep_dialogs_focus_and_new_chat_behavior(browser, phase4_server):
-    context, page = _real_firebase_page(browser, phase4_server)
+    context, page = _real_firebase_page(browser, phase4_server, before_goto=with_agent_access)
     try:
         page.set_viewport_size({'width':390,'height':820})
         seed_insights(page)
@@ -553,7 +555,7 @@ def test_mobile_composer_rises_with_a_known_keyboard_before_safari_reports_it(br
 
 @pytest.mark.parametrize('width', [320, 375, 390])
 def test_mobile_header_names_the_product_on_the_start_screen(browser, phase4_server, width):
-    context, page = _real_firebase_page(browser, phase4_server)
+    context, page = _real_firebase_page(browser, phase4_server, before_goto=with_agent_access)
     try:
         page.set_viewport_size({'width': width, 'height': 820})
         header = page.locator('.app-mobile-header')
@@ -606,7 +608,7 @@ def test_guest_start_header_keeps_the_mark_beside_the_auth_buttons(browser, phas
 @pytest.mark.parametrize('width,theme', [(320, 'light'), (390, 'dark')])
 def test_iphone_safari_finds_the_page_colour_at_both_bars(browser, phase4_server, width, theme):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script=f"localStorage.setItem('theme','{theme}')")
+        init_script=f"localStorage.setItem('theme','{theme}')", before_goto=with_agent_access)
     try:
         page.set_viewport_size({'width': width, 'height': 820})
         expect(page.locator('body')).to_have_class(re.compile(r'\bis-hero\b'))

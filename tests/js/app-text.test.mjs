@@ -193,3 +193,20 @@ describe("App.words", () => {
     expect(Object.isFrozen(App.words)).toBe(true);
   });
 });
+
+describe("App.chatPersistenceErrorMessage", () => {
+  // A reached limit is no "Please retry": the Agent's chat creation shows
+  // these words instead of the server's (agent-chat.js).
+  it("names a reached limit in every form the server sends it", () => {
+    const { App } = boot();
+    expect(App.chatPersistenceErrorMessage({ detail: { error_code: "chat_limit_reached" } }))
+      .toMatch(/maximum number of saved chats/);
+    expect(App.chatPersistenceErrorMessage({ error_code: "turn_limit_reached" })).toMatch(/maximum length/);
+    // main.py wraps the detail in {error: …}.
+    expect(App.chatPersistenceErrorMessage({
+      error: { error: "At most 200 chats per account", error_code: "chat_limit_reached" },
+    })).toMatch(/maximum number of saved chats/);
+    expect(App.chatPersistenceErrorMessage({ error: "Authentication failed" })).toBe("");
+    expect(App.chatPersistenceErrorMessage(null)).toBe("");
+  });
+});

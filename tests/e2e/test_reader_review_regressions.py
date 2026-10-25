@@ -2,34 +2,39 @@
 import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
-from test_model_answer_reader import seed_insights, seed_reader, reader_screenshot
+from test_model_answer_reader import SAVED_ID, seed_insights, seed_reader, reader_screenshot
 
 
 @pytest.mark.parametrize('kind', ['sources', 'differences'])
-def test_live_inspector_releases_shared_targets_on_followup(browser, phase4_server, kind):
+def test_inspector_releases_shared_targets_when_a_new_run_starts(browser, phase4_server, kind):
+    """A saved Consensus answer's inspector closes when the next message (a
+    comparison) takes the screen; the saved chat reopens with its own
+    evidence, never the comparison's."""
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         seed_insights(page)
         page.evaluate('(kind) => App.answerReader.openPanel(kind)', kind)
         expect(page.locator('.answer-reader-dialog')).to_have_attribute('open', '')
         page.evaluate("""() => {
-          const registry = App.runRegistry, first = registry.visible();
-          const turn = {turn_id:'reader-current',question:first.question,consensus:first.consensus.text,
-            sources:first.evidenceSources,differences_data:first.consensus.differencesData,
-            model_answers:Object.fromEntries(first.config.providers.map(p => [p.provider,
-              {answer:first.modelResults[p.provider].text,model_label:p.modelLabel}]))};
-          const next = registry.create({runId:'review-next',question:'A different next question',
-            config:first.config,basis:{historyTurns:[...first.historyTurns,turn]}});
-          next.modelResults = first.modelResults;
+          const registry = App.runRegistry;
+          const providers = App.modelPrefs.slice(0, 2).map(p => ({provider: p.key, modelLabel: p.key + ' next model'}));
+          const next = registry.create({runId:'review-next', question:'A different next question',
+            config:{agentMode:false, providers}});
+          next.status = 'succeeded'; next.phase = 'answers_ready';
+          providers.forEach(p => { next.modelResults[p.provider] = {status:'complete', text:'A next answer.', sources:[]}; });
           next.evidenceSources = [{title:'Next question source',url:'https://example.invalid/new'}];
           registry.renderVisible();
         }""")
         expect(page.locator('.answer-reader-dialog')).not_to_have_attribute('open', '')
         expect(page.locator('#consensusSourcesPanel #consensusSourcesList')).to_have_count(1)
         expect(page.locator('#consensusDifferencesPanel #differencesCards')).to_have_count(1)
-        # The original turn can still be reopened with its own evidence.
-        page.evaluate("""(kind) => App.answerReader.openPanel(kind, null,
-            document.querySelectorAll('.thread-history-turn')[1])""", kind)
+        # A comparison continues nothing: the saved answer and its turns left.
+        expect(page.locator('#consensusOutput')).to_be_hidden()
+        expect(page.locator('.thread-history-turn')).to_have_count(0)
+        # The saved chat reopens with its own evidence.
+        page.evaluate('id => window.openBookmark(id)', SAVED_ID)
+        page.wait_for_function("() => App.followup?.lastExchange?.turn?.turn_id === 'reader-current'")
+        page.evaluate('(kind) => App.answerReader.openPanel(kind)', kind)
         expect(page.locator('#answerReaderQuestion')).to_contain_text('What changes in the next question?')
         expect(page.locator('#answerReaderInspector')).not_to_contain_text('Next question source')
         expect(page.locator('#answerReaderInspector')).to_contain_text(

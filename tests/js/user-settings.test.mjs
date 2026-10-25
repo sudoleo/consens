@@ -296,7 +296,7 @@ describe("change events", () => {
     };
     tab("runMode", "compare");
     tab("pref_check_Gemini", "false");
-    tab("runMode", "consensus");
+    tab("runMode", "agent");
     expect(events.map(event => [event.names, event.source])).toEqual([[["compare_models"], "tab"], [["run_mode"], "tab"]]);
     expect(heard).toHaveBeenCalledOnce();
     expect(heard.mock.calls[0][0].previous).toEqual({ run_mode: "compare" });
@@ -326,13 +326,13 @@ describe("sync with the account", () => {
   });
 
   it("applies the account's settings over this browser's and announces them", async () => {
-    const server = fakeServer({ settings: { run_mode: "consensus", claim_counts: true }, revision: 3 });
+    const server = fakeServer({ settings: { run_mode: "agent", claim_counts: true }, revision: 3 });
     const { settings, start, events, local } = open({ server, storage: {
       runMode: "compare", "consensio.agreementDisplay.v1": "summary",
       [SYNC_KEY]: JSON.stringify({ owner: UID, pending: [] }),
     } });
     await start();
-    expect(settings.get("run_mode")).toBe("consensus");
+    expect(settings.get("run_mode")).toBe("agent");
     expect(settings.get("claim_counts")).toBe(true);
     // Not on the server: back to the default.
     expect(settings.get("agreement_display")).toBeUndefined();
@@ -388,15 +388,15 @@ describe("sync with the account", () => {
 
   it("lets a newer value of the account win over a change kept from an earlier page", async () => {
     // The earlier page's request reached the account (its answer was lost
-    // with the page), then another device chose consensus.
-    const server = fakeServer({ settings: { run_mode: "consensus" }, revision: 7, fieldRevisions: { run_mode: 7 } });
+    // with the page), then another device chose Agent.
+    const server = fakeServer({ settings: { run_mode: "agent" }, revision: 7, fieldRevisions: { run_mode: 7 } });
     const { settings, start } = open({ server, storage: {
       runMode: "compare",
       [SYNC_KEY]: JSON.stringify({ owner: UID, pending: ["run_mode"], base: 5 }),
     } });
     await start();
     await settings.flush();
-    expect(settings.get("run_mode")).toBe("consensus");
+    expect(settings.get("run_mode")).toBe("agent");
     expect(server.patches()).toEqual([]);
     expect(settings.status().pending).toEqual([]);
   });
@@ -426,11 +426,11 @@ describe("sync with the account", () => {
     await start();
     settings.set("run_mode", "compare");
     settings.set("claim_counts", false);
-    settings.set("run_mode", "consensus");
+    settings.set("run_mode", "agent");
     expect(server.patches()).toEqual([]);
     await vi.advanceTimersByTimeAsync(400);
     await settings.flush();
-    expect(server.patches()).toEqual([{ run_mode: "consensus", claim_counts: false }]);
+    expect(server.patches()).toEqual([{ run_mode: "agent", claim_counts: false }]);
   });
 
   it("keeps a change pending through a failure and sends it again", async () => {
@@ -496,9 +496,9 @@ describe("sync with the account", () => {
     const { settings, start } = open({ server });
     await start(UID);
     expect(settings.get("run_mode")).toBe("compare");
-    server.settings = { run_mode: "consensus" };
+    server.settings = { run_mode: "agent" };
     await start(OTHER);
-    expect(settings.get("run_mode")).toBe("consensus");
+    expect(settings.get("run_mode")).toBe("agent");
     expect(settings.status().uid).toBe(OTHER);
     expect(server.calls.at(-1).auth).toBe("Bearer token-uid-b");
   });
@@ -570,12 +570,12 @@ describe("sync with the account", () => {
     await start(UID);
     settings.set("system_prompt", "A's private instructions");
     await settings.flush();
-    server.settings = { run_mode: "consensus" };
+    server.settings = { run_mode: "agent" };
     await start(OTHER);
     await settings.flush();
     expect(server.patches()).toEqual([{ system_prompt: "A's private instructions" }]);
     expect(settings.get("system_prompt")).toBeUndefined();
-    expect(settings.get("run_mode")).toBe("consensus");
+    expect(settings.get("run_mode")).toBe("agent");
   });
 
   it("fills the settings the account lacks on the first sync of a browser", async () => {
@@ -620,16 +620,16 @@ describe("sync with the account", () => {
     settings.set("run_mode", "compare");
     server.hold();
     const sending = settings.flush();
-    // Meanwhile another tab chose consensus, sent it, saw it confirmed and
+    // Meanwhile another tab chose Agent, sent it, saw it confirmed and
     // cleared the shared pending list -- then this older request lands last.
-    local.setItem("runMode", "consensus");
+    local.setItem("runMode", "agent");
     local.setItem(SYNC_KEY, JSON.stringify({ owner: UID, pending: [], base: 2 }));
     server.release();
     await sending;
     expect(server.settings).toEqual({ run_mode: "compare" });
     await settings.flush();
-    expect(server.patches()).toEqual([{ run_mode: "compare" }, { run_mode: "consensus" }]);
-    expect(server.settings).toEqual({ run_mode: "consensus" });
+    expect(server.patches()).toEqual([{ run_mode: "compare" }, { run_mode: "agent" }]);
+    expect(server.settings).toEqual({ run_mode: "agent" });
     expect(settings.status().pending).toEqual([]);
   });
 
@@ -639,14 +639,14 @@ describe("sync with the account", () => {
     [{ settings: null, revision: "abc" }],
     [{ settings: [], revision: 3 }],
   ])("treats an unreadable answer %j as a failure, not as an empty account", async answer => {
-    const server = fakeServer({ settings: { run_mode: "consensus" }, revision: 2 });
+    const server = fakeServer({ settings: { run_mode: "agent" }, revision: 2 });
     server.answers.push(answer);
     const { settings, start } = open({ server, storage: { runMode: "compare", systemPrompt: "Mine." } });
     expect(await start()).toBe(false);
     expect(settings.get("system_prompt")).toBe("Mine.");
     await vi.advanceTimersByTimeAsync(2000);
     expect(settings.status().loaded).toBe(true);
-    expect(settings.get("run_mode")).toBe("consensus");
+    expect(settings.get("run_mode")).toBe("agent");
   });
 
   it("gives up on a request that hangs and tries again", async () => {

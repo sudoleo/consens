@@ -126,7 +126,7 @@ describe("App.runRegistry", () => {
 
   // Review 2: retitle left a running follow-up its old name; its sidebar
   // row showed it while it ran, and on success it handed the old name on
-  // to the next basis (agent-chat.js / consensus-run.js setCompletedBasis
+  // to the next basis (agent-chat.js setCompletedBasis
   // take context.bookmark.title).
   it("gives a running follow-up the new name, which stays after it", () => {
     const { registry, dom, window } = bootRegistry();
@@ -285,40 +285,6 @@ describe("App.runRegistry", () => {
     expect(controller.signal.aborted).toBe(true);
     expect(registry.snapshot().actions).toEqual([]);
     expect(action.actionId).toMatch(/^action_/);
-    dom.window.close();
-  });
-});
-
-describe("per-run ChatSession factory", () => {
-  it("does not share completed or pending conversation identity", () => {
-    const { window, dom } = loadScripts(["static/js/chat-session.js"]);
-    const first = window.App.createChatSession();
-    const second = window.App.createChatSession();
-    const chatId = "0123456789abcdef0123456789abcdef";
-    const turnId = "abcdef0123456789abcdef0123456789";
-
-    expect(first.restoreCompletedChat(chatId, turnId)).toBe(true);
-    first.beginRun({
-      question: "Follow-up A",
-      mode: "Standard",
-      deepSearch: false,
-      selectedModels: ["model-a", "model-b"],
-      consensusModel: "judge-a",
-      isFollowup: true,
-      prepareSucceeded: true,
-      useOwnKeys: false,
-      usageRunKey: "usage-a",
-      attachments: []
-    });
-
-    expect(first.activeChatId).toBe(chatId);
-    expect(first.pendingChatId).toBe(chatId);
-    expect(first.logicalRun.question).toBe("Follow-up A");
-    expect(second.activeChatId).toBeNull();
-    expect(second.pendingChatId).toBeNull();
-    expect(second.logicalRun).toBeNull();
-    expect(window.App.chatSession).not.toBe(first);
-    expect(window.App.chatSession).not.toBe(second);
     dom.window.close();
   });
 });

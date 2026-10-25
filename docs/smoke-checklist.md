@@ -26,7 +26,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 - [ ] Google Drive: (+) → „Add from Google Drive“ nur im Agent-Modus; echter
       Picker (Google-Konto wählen, Doc/Sheet/Slide/PDF), Chip „Google Drive“,
       Zustimmung vor dem Senden, Datei am gesendeten Turn; Wechsel nach
-      Compare/Consensus entfernt den Drive-Anhang mit Hinweis.
+      Compare entfernt den Drive-Anhang mit Hinweis.
 - [ ] Private Dateien/Dokumente: gespeicherte Version am richtigen Turn,
       Download und bestätigtes Entfernen, lesbare Warnung für Teilinhalt;
       erzeugte DOCX/PDF-Seiten zusätzlich visuell prüfen.
@@ -312,10 +312,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Automatisiert: `test_agent_comparison.py`, `agent-review.test.mjs`,
       `model-answer-reader.test.mjs`, `agent-delegation.test.mjs`.
 - [ ] Sources/Differences: kompakte Quellenlisten, kontrastreiche Titel und
-      Aussagen, Check-details-Chevrons und kleiner Resolve-Button in Light/Dark
-      bei 320/390 px sowie als Desktop-Sidebar. Disclosures per Enter bedienen;
-      Touch-Ziele bleiben 44 px hoch, abgeschlossener Resolve blendet den Button
-      aus. Nach dem letzten Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
+      Aussagen und Check-details-Chevrons in Light/Dark bei 320/390 px sowie
+      als Desktop-Sidebar. Disclosures per Enter bedienen; Touch-Ziele bleiben
+      44 px hoch. Ein gespeichertes Resolve-Ergebnis steht ohne Button in der
+      Karte. Nach dem letzten Ergebnis bleiben 24 px Luft vor dem Composer. Automatisiert:
       `tests/e2e/test_inspector_polish.py`.
 - [ ] Differences-Panel (Agent- und Consensus-Chat, Light/Dark, Desktop-Dock
       und 390 px): kein Untertitel, Frage als eine abgeschnittene Zeile ohne
@@ -347,19 +347,6 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
       Notizen, Modell-Icons 0→6, Writing/Checking, Marken, 45/100) ohne
       Höhensprung der Karte; Reduced Motion zeigt den fertigen Turn.
-- [ ] Consensus-Run: Stepper-Kopf zeigt erledigte/aktive/offene Schritte, Preset
-      und Uhr; schmal (320/390 px) eine Zeile mit vier Segmenten. Modellzeilen
-      zeigen Icon, Balken und `Writing`/`Thinking`/`Waiting`, danach nur die
-      Zeit bzw. `No answer`/`Skipped`/`Canceled`; ausgefallene Modelle sinken
-      nach unten und der Hinweis darunter nennt sie einmal. Empfangene Zeichen
-      stehen im Tooltip, Balken bleiben monoton, neue oder gewechselte Runs
-      zeigen keine fremden Werte. Light/Dark passen; Reduced Motion bleibt
-      statisch. Screenreader lesen nur Phasen-/Abschlusswechsel vor, Skip ist
-      per Tastatur erreichbar. Automatisiert: `test_consensus_live_progress.py`
-      (isolierte Browser-Komponente) und `run-progress-scope.test.mjs`.
-      Neue Chunks zaehlen ruhig hoch, bleiben hoechstens beim empfangenen
-      Wert und stoppen bei Abschluss/Ansichtswechsel. `Skip` veraendert beim
-      Erscheinen keine Balkenbreite oder Zeilenhoehe; Touch-Ziele sind 44 px.
 - [ ] Modellantwort-Sidebar mit sechs Antworten: 520–720 px Dockbreite ab
       1400 px, ruhige einzeilige Kopfzeile und 14-px-Lesetext. Chat und
       Composer bleiben neben der Sidebar sichtbar. Light/Dark, eingeklappte
@@ -483,8 +470,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       bleibt der Hinweis neben der Sources-Anzahl. Ohne Quellen keine leere
       Statuszeile. Keine Legende/Hide-Aktion unter der Antwort.
       Share/Watch/Cite stehen auf Desktop neben der Hauptnavigation; mobil
-      im Header als Icons mit zugänglichen Namen. Run again bleibt erreichbar, ohne sich mit
-      Laufzeit oder Kosten zu überlagern; Cite-Menü sitzt am neuen Host.
+      im Header als Icons mit zugänglichen Namen; Cite-Menü sitzt am neuen Host.
 - [ ] Mobile Navigation bei 320–1099 px: Menü als runde Insel (44 px), rechts
       die Aktionen als Pille (New chat, Watch, „…“ mit Share/Copy/Cite); unter
       den Inseln löst sich gescrollter Text in den Grund auf, ohne Blur, und ist
@@ -499,30 +485,31 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       numerische Score-Anzeige im aktuellen Consensus und in archivierten Turns
       aus; die qualitative Einordnung/Widerspruchswarnung bleibt sichtbar. Nach
       Reload bleibt die Auswahl erhalten.
-- [ ] EIN Moduswähler als erste Gruppe im (+)-Menü (Agent · Beta / Consensus /
-      Compare, Haken am aktuellen) bei 1440/390/320 px, hell und dunkel: kein
-      Moduschip mehr in der Composer-Zeile; jede Option mit einer Zeile
-      Erklärung, Compare und Consensus für alle Stufen, Agent nur mit
-      Agent-Zugang. Settings → Runs → Mode zeigt dieselbe Wahl und bleibt
-      synchron; die Wahl übersteht ein Neuladen und folgt in einem zweiten Tab.
-      Kein Agent-Mode-Schalter mehr im (+)-Menü, in Settings oder unter dem
-      Input. In einem offenen Consensus-Chat ist Agent deaktiviert („Available
-      in a new chat“); in einem Agent-Chat verschwindet die Modusgruppe aus dem
-      (+), „New chat“ bringt sie zurück. Der Composer ist in allen drei Modi
+- [ ] EIN Moduswähler als erste Gruppe im (+)-Menü (Agent · Beta / Compare,
+      Haken am aktuellen; Consensus gibt es seit 2026-10-25 nicht mehr) bei
+      1440/390/320 px, hell und dunkel: kein Moduschip mehr in der
+      Composer-Zeile; jede Option mit einer Zeile Erklärung, Compare für alle
+      Stufen, Agent nur mit Agent-Zugang. Settings → Runs → Mode zeigt dieselbe
+      Wahl (Agent · Beta, Compare) und bleibt synchron; die Wahl übersteht ein
+      Neuladen und folgt in einem zweiten Tab. Ein Konto mit gespeicherter
+      Consensus-Wahl landet in Agent. Kein Agent-Mode-Schalter mehr im (+)-Menü,
+      in Settings oder unter dem Input. In einem offenen Compare-Ergebnis oder
+      gespeicherten Consensus-Chat ist Agent deaktiviert („Available in a new
+      chat“); in einem Agent-Chat verschwindet die Modusgruppe aus dem (+),
+      „New chat“ bringt sie zurück. Der Composer ist in beiden Modi
       derselbe: (+) links (auf dem Startbildschirm unter dem Feld, im
       Desktop-Chat vor dem Feld), Modelle und Senden rechts; auch der Compare-Start mit den
       leeren Antwortkarten zeigt ihn so, samt Werkzeugleiste. Der Modell-Chip
-      sagt nur, wer antwortet („6 models“), nie „Compare“. Direkt nach dem Laden mit gespeicherter Agent-Wahl
-      sendet nichts als Consensus, solange der Agent-Zugang noch lädt.
+      sagt nur, wer antwortet („6 models“), nie „Compare“ und keinen Preset-Namen. Direkt nach dem Laden mit gespeicherter Agent-Wahl
+      sendet nichts als Compare, solange der Agent-Zugang noch lädt.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.
 - [ ] Bei null oder einem ausgewählten Modell ist Senden deaktiviert; Sidebar-
       Zähler und Custom-Picker nennen „choose at least 2“. Ab zwei Modellen startet
-      der Lauf; nur Consensus endet in Consensus + Differences, Compare
-      endet nach den Modellantworten. Mit Anhang und genau
+      der Lauf; Compare endet nach den Modellantworten (kein `/consensus`). Mit Anhang und genau
       OpenAI + stale DeepSeek wird nach dem Attachment-Filter erneut geprüft:
       kein Usage-Run, kein `/prepare`, kein Ein-Modell-Fan-out.
 - [ ] Antworten alle ausgewählten `/ask_*` mit HTTP-/Netzfehler, endet der Lauf
-      sichtbar und in Analytics als Fehler; kein Consensus startet. Nach dem
+      sichtbar und in Analytics als Fehler. Nach dem
       ersten echten Lauf bleiben die in Settings gewählten Markierungsfilter
       aktiv; Antworttext und Quellenlinks bleiben bei „No highlights“ lesbar.
 - [ ] In Compare bleibt die Oberfläche im direkten Vergleich: Frage und
@@ -544,10 +531,6 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       bleiben bei Frage 1. Archivierte Claim-Spruenge oeffnen deren Modell im
       gemeinsamen Leser. Run-/Bookmark-Wechsel und Logout zeigen keine alten
       Reader-Inhalte. Keine gestapelten Vollantworten im Chat-Verlauf.
-- [ ] Mit Agent Mode erscheint die kompakte Pipeline: Zähler folgt den fertigen
-      Modellantworten, danach wird „Consensus & differences“ ohne falsche
-      Prozent-/Zeitprognose aktiv; Abschluss, Fehler und Stop blenden die Zeile
-      wieder aus.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
 - [ ] Der Custom-Picker listet alle zehn Familien (inkl. Kimi, GLM, Muse und Qwen); sind
@@ -611,61 +594,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] „Clear all“ leert alle fünf Felder erst als Entwurf; dauerhaft gelöscht
       wird erst nach „Save memory“.
 
-## Multi-Turn Chat
-- [ ] Frische Frage sendet nach `/prepare` zunächst ohne Chat-Bindung an
-      `/ask_*`; Chat und pending Turn 1 entstehen genau einmal erst bei der
-      automatischen oder manuellen Consensus-Anforderung. Ohne Consensus-
-      Anforderung entsteht kein Turn-1-Orphan. Turn 1 sendet kein Legacy-
-      `context` und keine `context_version_id` an `/ask_*`.
-- [ ] Nach einem completed Turn bleibt das Eingabefeld offen und trägt keine
-      Follow-up-Meldung: die nächste Frage geht ohne Zwischenschritt als
-      Turn 2, Turn 3 und weiter im selben Chat raus; die aktive Chat-Zuordnung
-      bleibt nach jedem completed Turn erhalten. Der einzige Ausstieg ist
-      „New comparison“ in der Sidebar.
-- [ ] Eine aktive Fortsetzung baut vor dem Provider-Fan-out genau einmal
-      `/chats/{chat}/turns/{turn}/context`; alle `/ask_*` und `/consensus`
-      erhalten exakt dieselben `chat_id`, `turn_id`, `context_version_id` und
-      niemals parallel den Legacy-`context`.
-- [ ] Developer-Modus verwendet beim Context-Build denselben von `/prepare`
-      konsumierten `usage_run_key`. Own-Key sendet ausschließlich den Key des
-      gemeinsame OpenRouter-Key als `openrouter_key`; im
-      Netzwerk-Payload stehen keine weiteren Nutzer-Keys und kein Developer-
-      Fallback.
-- [ ] Fehlt im Own-Key-Modus ein Key eines ausgewählten Antwort-Providers oder
-      des Memory-Providers, stoppt der Lauf vor Usage, `/prepare`, Turn-Anlage
-      und Fan-out; Frage und completed Vorgänger bleiben stehen.
-- [ ] Ein kurzzeitiges `202 building` wird begrenzt wiederholt; eine
-      `degraded`-Version startet den normalen Fan-out. Context-Fehler oder Stop
-      lassen den completed Vorgänger sichtbar und beschädigen ihn nicht.
-- [ ] Nach einem mehrdeutigen Abbruch bleiben pending Turn-ID und
-      `client_request_id` beim Retry stabil. Ein serverseitig bereits
-      completed Turn wird ohne neue Provider-/Consensus-/Differences-Aufrufe
-      sowie ohne Bookmark-, Vote-, Completion-Analytics- oder Watch-Nudge-
-      Schreibvorgang wiedergegeben — auch wenn Modell, Tarif oder Keybestand
-      inzwischen geändert wurden. `failed` startet keine Fortsetzung hinter
-      diesem Turn.
-- [ ] Liefert eine aktive Fortsetzung weniger als zwei Modellantworten, sendet
-      der Browser genau eine Dispositionsanfrage: der pending Turn wird ohne
-      aktuelle Modell-/Tierprüfung, Engine-/Credential-Aufruf und ohne neue Usage-Einheit als
-      `insufficient_answers` failed markiert.
-- [ ] Frühere Turns bleiben vollständig sichtbar. Consensus, Agreement,
-      Differences, Sources und Modellantworten gehören jeweils zum richtigen
-      Turn; `[S…]`-Links eines alten Turns öffnen nicht die Quellen des neuen.
-- [ ] Turn 3 und weitere Turns hängen jeweils unterhalb des vollständigen
-      bisherigen Verlaufs an; kein neuer Turn ersetzt Turn 2 oder einen anderen
-      bereits gerenderten Vorgänger.
-- [ ] Ein altes Bookmark ohne `chat_id` bleibt im Legacy-One-Hop-Pfad. Ein
-      Chat-Bookmark lädt dagegen alle completed Turns paginiert und stellt
-      ausschließlich seine letzte completed Chat-/Turn-Basis für ein weiteres
-      Follow-up wieder her. Bei einem absichtlichen Transcript-Fehler bleibt
-      die gespeicherte Chat-Bindung fortsetzbar und die reduzierte Anzeige wird
-      erklärt; ohne nutzbaren Frage-/Consensus-Kontext nennt das Input-Feld den
-      nächsten Lauf ausdrücklich einen neuen Vergleich. Clear und Logout leeren aktive, pending, Context-
-      und Bookmark-Zuordnung vollständig.
-- [ ] Eine Premium-Consensus-Engine bleibt für ein Free-Konto gesperrt, auch
-      mit aktivem Own-Key-Schalter: 403, kein Engine-Call, kein Turn-Write.
+## Multi-Turn Chat (gespeicherte Consensus-Chats)
+Seit 2026-10-25 setzt der Browser keinen Consensus-Chat mehr fort; Folgefragen
+laufen im Agent. Diese Punkte betreffen nur noch gespeicherte Chats und den
+Server.
 - [ ] Kontolöschung entfernt neben Bookmarks/Usage auch alle Chats inklusive
-      Turns, Modellantworten und Context-Versionen — in der Firestore-Konsole
+      Turns, Modellantworten und Context-Versionen. In der Firestore-Konsole
       darf unter `users/{uid}/chats` nichts zurückbleiben.
 - [ ] Einen bereits authentifizierten Bookmark-/Chat-/Share-/Watch-Write während
       der Kontolöschung künstlich verzögern: Nach gesetztem Tombstone wird er
@@ -677,41 +611,28 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       nur die offenen Bereiche auf und der Job wechselt zu `completed`.
 - [ ] Ein Chat-Bookmark mit vielen Turns öffnet sich zügig: pro Seite genau ein
       Chat-Read und eine Query je Turn statt sechs Einzel-Gets pro Turn.
-- [ ] Ein Follow-up-Lauf löst den Kontext genau einmal auf, nicht sechsmal:
-      im Server-Log steht pro Turn ein Context-Resolve, nicht einer je `/ask_*`.
 - [ ] Ein Chat-Bookmark löschen entfernt auch den Chat: unter
       `users/{uid}/chats/{chat}` bleibt nichts zurück. Ein Legacy-Bookmark ohne
       `chat_id` löscht weiterhin nur sich selbst.
-- [ ] Nach einem mehrdeutigen Abbruch zeigt der Replay eines bereits completed
-      Turns die **gespeicherten** Modellantworten in den Antwortboxen; Provider
-      ohne gespeicherte Antwort sind leer und nicht mit der vorherigen Antwort
-      gefüllt. Die Agreement-Zahl zählt die gespeicherten Modelle.
-- [ ] Ein pending Turn, dessen Browser-Bindung durch Reload verloren ging, wird
-      beim nächsten Turn im selben Chat als `abandoned` retired — completed und
-      failed Turns bleiben unangetastet.
-- [ ] Eine Frage mit geschütztem Leerzeichen (aus Word/PDF/Webseite kopiert)
-      als **Follow-up** stellen: der Lauf geht durch. Vor dem NFKC-Fix liefen
-      alle sechs `/ask_*` in 409 und der Lauf brach ohne Antwort ab.
 - [ ] `CHAT_CURSOR_SECRET` ist in Render gesetzt (nicht nur der Fallback
       `WATCH_UNSUBSCRIBE_SECRET`): ein Chat mit mehr als 50 Turns lässt sich aus
       dem Bookmark vollständig nachladen, statt mit 503 abzubrechen.
-- [ ] Free-Konto kann keinen Turn mit einer Premium-Engine anlegen (403
-      `pro_required`) — dieselbe Grenze wie in `/consensus`.
-- [ ] Limits greifen mit ehrlicher Meldung statt „Please retry": bei erreichtem
-      Chat-Limit „…Delete one to start another.", bei erreichter Chat-Länge
-      „…Start a new comparison to continue."
 
-## Consensus (höchstes Risiko)
-- [ ] Presets: Daily/Open Models setzen sichtbar alle sechs Antwortmodelle und die
-      konfigurierte Consensus-Engine; eine manuelle Modellwahl wechselt zu Custom.
+## Gespeicherte Consensus-Chats und Presets
+- [ ] Presets: Daily/Open Models setzen sichtbar alle sechs Modelle (Compare
+      bzw. Agents Vergleichsmodelle); eine manuelle Modellwahl wechselt zu
+      Custom. Custom zeigt keinen Abschnitt „Consensus engine“ mehr.
 - [ ] High Quality zeigt ein Pro-Badge, hat beim Hover/Fokus eine dezente
       Power-Animation, oeffnet fuer Free den Kosten-Erklaerdialog (kein Kauf-,
       kein Zugangs-Request-Button) und setzt fuer Pro das vollstaendige
       Premium-Model-Set. Der Reasoning-Schalter bleibt davon unabhaengig.
-- [ ] Consensus und Differences erscheinen oberhalb der Modellantworten; der
-      Reveal scrollt nur dann sanft zum Ergebnis, wenn es außerhalb des
-      relevanten Viewports liegt.
-- [ ] Consensus manuell generieren → Antwort + Differences erscheinen.
+- [ ] Einen gespeicherten Consensus-Chat (von vor dem 25.10.2026) öffnen:
+      Antwort, Marker, Verdict, Differences (samt gespeicherter
+      Resolve-Ergebnisse, ohne „Resolve with the models“-Knopf), Sources und
+      „Compare answers“ erscheinen wie früher; der Fuss hat kein „Run again“
+      und keine Lauf-Fakten. Share/Watch/Cite funktionieren. Eine neue
+      Nachricht dort läuft als Compare in einem eigenen Chat; Agent zeigt
+      „Available in a new chat“.
 - [ ] Beim Lesen eines Consensus verschwinden der fixierte
       Consensus/Watches-Schalter und der schwebende Burger nach deutlichem
       Herunterscrollen; Aufwärtsscrollen, Seitenanfang oder Tastatur-Navigation
@@ -724,20 +645,15 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       watch“-Sheet bleibt mit offener Tastatur (Fragefeld, „Something
       else…“, Details) „Start watching“ über der Tastatur erreichbar, und
       kein Schritt lässt das Sheet springen.
-- [ ] Auto-Consensus folgt dem Modus: Consensus triggert ihn nach Abschluss;
-      Compare sendet keinen `/consensus`-Request und blendet „Check
-      contradictions“ in Leiste und (+)-Menü aus. Die Demo (`?demo=1`) zeigt
-      in Consensus Konsens und Differences, in Compare nur die Antworten.
+- [ ] Kein Lauf der App sendet `/consensus` oder `/resolve`. Die Demo
+      (`?demo=1`) zeigt in Agent einen Agent-Turn, in Compare nur die
+      Antworten und danach den Login-Hinweis.
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.
 - [ ] Consensus-Insights: Claim-Badges, Difference-Karten, Klick öffnet Popover,
       „Jump to model answer" highlightet die Originalantwort.
 - [ ] Verdict-Semantik: Score 85+/65+/40+/20+/<20 zeigt High/Strong/Partial/
       Low/Very low agreement; Grün beginnt erst bei 65. „No contradictions"
       bzw. disputed/critical/minor bleiben als getrennte Detailaussage sichtbar.
-- [ ] Resolve-Runde: „Resolve with the models"-Button an Widerspruchs-Karten
-      (nur Contradictions mit ≥2 beteiligten Modellen), Klick zeigt Outcome-Badge
-      + Modell-Zeilen, Usage-Counter aktualisiert sich, Fehlerfall reaktiviert
-      den Button.
 - [ ] Share-Dialog: Link erstellen, Liste anzeigen, Link kopieren.
 - [ ] Agent-Antwort teilen: „Share“ neben „Watch“ unter der Antwort und
       „Share“ im „…“-Menü des Chats erzeugen denselben Link; die Seite heißt
@@ -761,14 +677,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       versucht und erst der bestätigte Serverstand markiert den neuen Tag. Ein transienter `/user_status`-Fehler wird durch ein
       erfolgreiches Pro-`/usage` inklusive Badge/Features geheilt.
 
-## Consensus-Lauf (früher „Agent Mode“)
-- [ ] Consensus/Compare wechseln, Timer läuft, Status-Text korrekt;
-      in Compare bleiben sechs direkte Antworten sichtbar und der
-      Consensus-/Differences-/Claims-Pfad unberührt.
-- [ ] Nach der ersten fertigen Modellantwort erscheint dezent „Compare answers“
-      (auch im eingeklappten Mobile-Panel); der Toggle zeigt/versteckt die
-      einzelnen Antwortboxen, ohne Agent Mode auszuschalten, und startet bei
-      einer neuen Frage wieder in der cleanen, verborgenen Ansicht.
+## Gespeicherte Consensus-Antwort (Ansicht)
+- [ ] Unter einer gespeicherten Consensus-Antwort öffnet „Compare answers“
+      die einzelnen Antworten im Leser und schließt sie wieder.
 - [ ] Mobile Consensus: Tipp auf eine unterstrichene Passage öffnet denselben
       Agreement-Dialog wie die Quote; Fokus bleibt im Dialog und kehrt zurück.
 - [ ] Mobile Footer: Score, Aktionen und die drei Detail-Tabs bleiben kompakt,
@@ -821,13 +732,6 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Ausrufezeichen (Favicon-only-Pillen bleiben an ihrer Domain); dasselbe
       gilt für die Quellenverweise auf öffentlichen Share-Seiten.
       „Copy consensus“ liefert Domains in Klammern statt „uci.org+2“.
-- [ ] „Run again“ kehrt zum normalen Composer zurück, übernimmt die vorige
-      Frage, startet aber erst nach einem bewussten Klick auf Senden. Der Knopf
-      beziffert vorher den ungefähren Preis („Run again · about 8% of today“,
-      Tooltip mit Rest in Prozent); ohne bekanntes Konto entfällt der Zusatz. Nach dem Klick
-      steht über dem Eingabefeld, dass Senden einen vollständigen neuen Lauf
-      startet — der Hinweis verschwindet mit dem Absenden oder mit
-      „New comparison“.
 
 - [ ] Anhänge hängen an der Nachricht, nicht am Feld: nach dem Senden ist die
       Anhangleiste des Composers leer und die Chips stehen direkt über der
@@ -1381,17 +1285,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Ein Tokenkonto für alle Modi: Ring im Sidebar-Fuß ist ein ruhiges
   20-px-Glyph ohne Zahl; Hover/Screenreader nennen „62% of today's allowance
   left · resets …“. Panel: eine Hauptzahl, dünner Balken, Reset-Zeile,
-  Detailzeile („409k of 660k tokens · a Consensus run uses about 8%“), Watches
+  Detailzeile („409k of 660k tokens · A Compare run uses about 5%“), Watches
   separat. Hell/Dunkel, Desktop und 320/390 px; bei ≤ 25 % färben sich nur
-  Bogen und Balken amber, leer rot. Ein Compare- oder Consensus-Lauf senkt den
-  Prozentwert nach seinen Antworten bzw. dem Consensus; Agent zeigt dieselbe
+  Bogen und Balken amber, leer rot. Ein Compare-Lauf senkt den
+  Prozentwert nach seinen Antworten; Agent zeigt dieselbe
   Zahl. Reicht das Konto nicht für einen typischen Lauf des Modus, erscheint
   die Absage-Karte vor dem Senden (Reasoning an: Angebot „Send without
   reasoning“, wenn ein normaler Lauf noch passt).
-- [ ] Reasoning-Schalter (Compare/Consensus) mit einem Free-Konto: (+)-Zeile
+- [ ] Reasoning-Schalter (Compare) mit einem Free-Konto: (+)-Zeile
   „Reasoning“ ohne Pro-Badge, Startleiste zeigt „Reasoning On/Off“ ohne
-  „· Pro“; mit Reasoning an laufen dieselben gewählten Modelle und dieselbe
-  Consensus-Engine (keine Modell-Überschrift wechselt), Antworten dürfen
+  „· Pro“; mit Reasoning an laufen dieselben gewählten Modelle (keine
+  Modell-Überschrift wechselt), Antworten dürfen
   länger sein. Ein altes Bookmark mit Modus „Deep Think“ lädt und schaltet
   Reasoning nicht ein.
 - [ ] Auch ein fehlgeschlagener Agent-Run ohne Hauptantwort bleibt als Bookmark

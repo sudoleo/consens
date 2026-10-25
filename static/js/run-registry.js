@@ -219,7 +219,6 @@
         uiReady: false,
         error: null
       },
-      chatSession: spec.chatSession || null,
       usage: cloneValue(spec.usage || null),
       attachments: cloneValue(spec.attachments || []),
       attachmentMeta: cloneValue(spec.attachmentMeta || []),

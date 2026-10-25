@@ -139,13 +139,13 @@ def context(browser):
 
     ctx.route("**/static/firebase.js*", fulfill_firebase_stub)
     ctx.route("**/static/dist/firebase.*.js", fulfill_firebase_stub)
-    # Diese Suiten pruefen den Consensus-/Compare-Pfad; Agent ist seit
-    # 2026-10-02 der Default und hat eigene Dateien (test_agent_*). Einmal pro
-    # Tab setzen, damit ein Test, der den Modus wechselt und neu laedt, seine
-    # Wahl behaelt.
+    # Diese Suiten pruefen den Compare-Pfad (Consensus laeuft seit 2026-10-25
+    # nur noch auf dem Server); Agent ist seit 2026-10-02 der Default und hat
+    # eigene Dateien (test_agent_*). Einmal pro Tab setzen, damit ein Test,
+    # der den Modus wechselt und neu laedt, seine Wahl behaelt.
     ctx.add_init_script(
         "if (!sessionStorage.getItem('e2eRunModeSeeded')) {"
-        " localStorage.setItem('runMode', 'consensus');"
+        " localStorage.setItem('runMode', 'compare');"
         " localStorage.setItem('consensio.settingsReset', '2026-10-12');"
         " sessionStorage.setItem('e2eRunModeSeeded', '1'); }"
     )
@@ -181,7 +181,6 @@ def app_page(app_server, context, console_errors):
     page.goto(f"{app_server}/app", wait_until="domcontentloaded")
     page.wait_for_function(
         "() => window.App && typeof window.sendQuestion === 'function'"
-        " && typeof window.getConsensus === 'function'"
         " && window.App.authState.known && window.App.authState.uid === window.auth?.currentUser?.uid",
         timeout=30000,
     )

@@ -374,19 +374,18 @@ def test_provider_fan_out_drops_interrupted_and_marks_truncated_answers():
     assert answers["mistral"].response == "mistral text"
 
 
-def test_browser_flow_carries_receipts_and_completion_state():
-    """The /ask -> /consensus browser path uses receipts and typed states."""
+def test_browser_flow_carries_completion_state():
+    """Compare, the browser's own run besides Agent, keeps typed answer
+    states. It sends no /consensus since 2026-10-25, so it keeps no answer
+    receipts either; the receipt path stays the server's (Watches, API)."""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "static" / "js"
     query_send = (root / "query-send.js").read_text(encoding="utf-8")
-    consensus = (root / "consensus-run.js").read_text(encoding="utf-8")
     assert "run_id: context.runId" in query_send
-    assert "result.receipt = typeof data.answer_receipt" in query_send
     assert 'const usable = completion === "complete" || completion === "token_limit";' in query_send
     assert 'result.status = usable ? "complete" : "incomplete";' in query_send
-    run_path = consensus.split("window.App.executeConsensusRun =", 1)[1].split("window.getConsensus =", 1)[0]
-    assert "answer_receipts: runReceipts(context)" in run_path
-    assert "answers: Object.fromEntries" not in run_path
+    assert "answer_receipt" not in query_send
+    assert not (root / "consensus-run.js").exists()
 
 
 @pytest.mark.parametrize("body", ["tampered", "legacy_text"])

@@ -39,14 +39,13 @@ def test_app_renders_markdown_and_math_without_jsdelivr(browser, phase4_server):
         context.close()
 
 
-def test_rejected_vote_and_login_tokens_are_handled(browser, phase4_server):
+def test_rejected_login_tokens_are_handled(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.evaluate("""async () => {
             window.auth.currentUser.getIdToken = async () => { throw new Error('offline'); };
-            await window.recordModelVote('OpenAI', 'BestModel', 'result');
             document.getElementById('loginEmail').value = 'test@example.invalid';
             document.getElementById('loginPassword').value = 'test-password';
             document.getElementById('loginButton').click();

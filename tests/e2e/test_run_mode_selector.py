@@ -1,4 +1,8 @@
-"""One mode selector: Compare / Consensus / Agent (run-mode.js + agent-mode.js).
+"""One mode selector: Agent / Compare (run-mode.js + agent-mode.js).
+
+The Consensus mode left the browser on 2026-10-25 (the pipeline runs on the
+server for Watches, the API and topics); a stored "consensus" reads as
+unchosen.
 
 The composer around it is the same in every mode (composer.css).
 
@@ -56,8 +60,21 @@ def test_legacy_agent_mode_switch_is_reset_once(browser, phase4_server, legacy):
         # Every old control is gone; the one selector remains.
         for gone in ("#composerAgentToggle", "#agentModeMenuSwitch", "#agentModeSwitch", "#autoConsensusToggle", "#chatExecutionMode"):
             expect(page.locator(gone)).to_have_count(0)
-        # Signed out, Agent is the stored choice but runs (and shows) as Consensus.
-        expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        # Without access yet, Agent is the choice but runs (and shows) as Compare.
+        expect(page.locator("#runModeSelect")).to_have_value("compare")
+    finally:
+        context.close()
+
+
+def test_a_stored_consensus_choice_reads_as_unchosen(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server,
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
+    try:
+        _signed_in(page, agent_access=True)
+        assert page.evaluate("App.runMode.preference()") == "agent"
+        expect(page.locator("#runModeSelect")).to_have_value("agent")
+        expect(page.locator('#runModeSelect option[value="consensus"]')).to_have_count(0)
+        expect(page.locator('#runModeSetting option[value="consensus"]')).to_have_count(0)
     finally:
         context.close()
 
@@ -65,7 +82,7 @@ def test_legacy_agent_mode_switch_is_reset_once(browser, phase4_server, legacy):
 @pytest.mark.parametrize("width,dark", [(1440, False), (1440, True), (390, False), (320, True)])
 def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'compare'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
@@ -76,14 +93,14 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         # No mode chip in the row: (+) holds the mode, files and options.
         expect(page.locator(".composer-lead .model-picker-display")).to_have_count(0)
         expect(page.locator("#composerSourcesToggle")).to_have_count(0)
-        _shot(page, f"{width}-{'dark' if dark else 'light'}-consensus")
 
-        # The menu lists all three with one-line descriptions, the current one checked.
+        # The menu lists both with one-line descriptions, the current one checked.
         page.locator("#attachTrigger").click()
         expect(control).to_be_visible()
         options = control.locator(".attach-menu-mode")
-        expect(options).to_have_count(3)
-        expect(control.locator('[data-value="consensus"]')).to_have_attribute("aria-pressed", "true")
+        expect(options).to_have_count(2)
+        expect(control.locator('[data-value="consensus"]')).to_have_count(0)
+        expect(control.locator('[data-value="compare"]')).to_have_attribute("aria-pressed", "true")
         expect(control.locator('[data-value="agent"]')).to_contain_text("Beta")
         expect(control.locator('[data-value="compare"] .attach-menu-hint')).to_contain_text("side by side")
         menu = page.locator("#attachMenu").bounding_box()
@@ -91,11 +108,9 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         _shot(page, f"{width}-{'dark' if dark else 'light'}-menu")
         page.keyboard.press("Escape")
 
-        # Compare: nothing to check, so the tool leaves the toolbar and menu.
-        choose(page, "compare")
+        # Compare: the chosen models answer side by side.
         assert page.evaluate("localStorage.getItem('runMode')") == "compare"
-        assert page.evaluate("App.runMode.pipeline()") is False
-        expect(page.locator("#composerModeDescription")).to_contain_text("no consensus")
+        expect(page.locator("#composerModeDescription")).to_contain_text("side by side")
         _shot(page, f"{width}-{'dark' if dark else 'light'}-compare")
         # The chip for the models says who answers, never the mode's name.
         models_chip = page.locator(".consensus-model-inline .model-picker-display-text")
@@ -138,10 +153,10 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         assert page.evaluate("App.agentChat.isSelected()") is True
 
         # Settings mirrors the same choice.
-        page.evaluate("document.getElementById('runModeSetting').value = 'consensus'; document.getElementById('runModeSetting').dispatchEvent(new Event('change'))")
-        expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        page.evaluate("document.getElementById('runModeSetting').value = 'compare'; document.getElementById('runModeSetting').dispatchEvent(new Event('change'))")
+        expect(page.locator("#runModeSelect")).to_have_value("compare")
         assert page.evaluate("App.agentChat.isSelected()") is False
-        expect(models_chip).to_have_text(re.compile(r"^\d+ models? · "))
+        expect(models_chip).to_have_text(re.compile(r"^\d+ models?$"))
 
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []
@@ -154,11 +169,10 @@ def test_without_agent_access_agent_is_not_offered_and_falls_back(browser, phase
         init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     try:
         _signed_in(page, agent_access=False)
-        expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        expect(page.locator("#runModeSelect")).to_have_value("compare")
         expect(page.locator('#runModeSelect option[value="agent"]')).to_have_count(0)
         expect(page.locator('#runModeSetting option[value="agent"]')).to_have_count(0)
-        assert page.evaluate("App.runMode.effective()") == "consensus"
-        assert page.evaluate("App.runMode.pipeline()") is True
+        assert page.evaluate("App.runMode.effective()") == "compare"
         # The stored choice is kept for when access arrives.
         assert page.evaluate("App.runMode.preference()") == "agent"
     finally:
@@ -167,10 +181,11 @@ def test_without_agent_access_agent_is_not_offered_and_falls_back(browser, phase
 
 def test_open_chat_keeps_its_family(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server,
-        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'consensus'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
+        init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'compare'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     try:
         _signed_in(page, agent_access=True)
-        # A Consensus-family chat: Compare/Consensus alternate, Agent needs a new chat.
+        # A saved Consensus chat or Compare result: Compare continues, Agent
+        # needs a new chat.
         page.evaluate("App.agentChat.modeState = () => ({family: 'consensus', canUse: true, pending: false}); App.renderComposerMode()")
         control = page.locator("#runModeControl")
         page.locator("#attachTrigger").click()
@@ -179,7 +194,7 @@ def test_open_chat_keeps_its_family(browser, phase4_server):
         expect(control.locator('[data-value="compare"]')).to_be_enabled()
         page.keyboard.press("Escape")
         page.evaluate("App.runMode.set('agent')")
-        assert page.evaluate("App.runMode.effective()") == "consensus"
+        assert page.evaluate("App.runMode.effective()") == "compare"
         # An Agent-family chat stays Agent whatever the preference says; with
         # nothing to switch to, the selector steps aside.
         page.evaluate("App.agentChat.modeState = () => ({family: 'agent', canUse: true, pending: false}); App.runMode.set('compare')")
@@ -193,7 +208,7 @@ def test_open_chat_keeps_its_family(browser, phase4_server):
         context.close()
 
 
-def test_stored_agent_choice_waits_for_access_instead_of_sending_consensus(browser, phase4_server):
+def test_stored_agent_choice_waits_for_access_instead_of_sending_compare(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
         init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     try:
@@ -210,7 +225,7 @@ def test_stored_agent_choice_waits_for_access_instead_of_sending_consensus(brows
 
 def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser, phase4_server):
     """Apple-Audit B8: a status check that fails for a moment (5xx, network)
-    does not swap Agent for Consensus; it is said in the composer and asked
+    does not swap Agent for Compare; it is said in the composer and asked
     again. Only a refusal (4xx) settles the account without Agent."""
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
         init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
@@ -222,7 +237,7 @@ def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser,
         assert page.evaluate("App.agentChat.modeState().pending") is True
         assert page.evaluate("App.agentChat.looksAgent()") is True
         expect(page.locator("#agentComposerMessage")).to_have_text("Your account could not be reached. Trying again…")
-        # The send waits: nothing goes out as Consensus unseen.
+        # The send waits: nothing goes out as Compare unseen.
         page.locator("#questionInput").fill("A question")
         expect(page.locator("#sendButton")).to_be_disabled()
         # A refusal is an answer: Agent is not available for this session.
@@ -230,8 +245,8 @@ def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser,
         page.locator("#agentComposerAction").click()
         page.wait_for_function("() => window.App.agentAccess?.uid === window.auth?.currentUser?.uid")
         assert page.evaluate("App.agentChat.modeState().pending") is False
-        assert page.evaluate("App.runMode.effective()") == "consensus"
-        expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        assert page.evaluate("App.runMode.effective()") == "compare"
+        expect(page.locator("#runModeSelect")).to_have_value("compare")
         expect(page.locator("#agentComposerNotice")).to_be_hidden()
     finally:
         context.close()
@@ -240,9 +255,9 @@ def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser,
 @pytest.mark.parametrize("width", [1280, 390])
 def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, phase4_server, width):
     """Apple-Audit H3 (Max): a guest's composer is an account's by default.
-    The (+) menu shows Agent chosen with Consensus and Compare beside it;
-    whatever needs an account opens the login dialog with a line that says
-    what for, never a dead click; a chosen Consensus holds."""
+    The (+) menu shows Agent chosen with Compare beside it; whatever needs an
+    account opens the login dialog with a line that says what for, never a
+    dead click; a chosen Compare holds."""
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None, has_touch=width < 700)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -256,7 +271,8 @@ def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, 
         expect(page.locator(".consensus-model")).to_be_hidden()
         expect(page.locator("#agentComposerNotice")).to_be_hidden()
         page.locator("#attachTrigger").click()
-        for value in ("agent", "consensus", "compare"):
+        expect(page.locator('#runModeControl [data-value="consensus"]')).to_have_count(0)
+        for value in ("agent", "compare"):
             row = page.locator(f'#runModeControl [data-value="{value}"]')
             expect(row).to_be_visible()
             expect(row).to_be_enabled()
@@ -291,12 +307,12 @@ def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, 
         asks("Log in to choose your models.", "#agentModelControls .model-picker-display")
 
         # The guest's own choice holds, on this page and the next.
-        choose(page, "consensus")
+        choose(page, "compare")
         expect(chip).to_be_hidden()
-        assert page.evaluate("App.runMode.effective()") == "consensus"
+        assert page.evaluate("App.runMode.effective()") == "compare"
         page.reload()
         page.wait_for_function("() => window.__consensioAuthState?.known === true && !!window.App.agentChat")
-        expect(page.locator("#runModeSelect")).to_have_value("consensus")
+        expect(page.locator("#runModeSelect")).to_have_value("compare")
         expect(page.locator("#agentModelControls")).to_be_hidden()
         assert not page.evaluate("document.body.classList.contains('single-agent-active')")
         assert not errors, errors

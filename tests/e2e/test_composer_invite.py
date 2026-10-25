@@ -118,6 +118,10 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
     asked = []
     try:
         chats = [{"id": f"chat_{index}", "query": f"Question {index}?", "title": f"Topic {index}"} for index in range(4)]
+        # The examples belong to Agent's start screen; an account without
+        # Agent starts in Compare (2026-10-25).
+        page.route("**/user_status", lambda route: _json(route, {"tier": "free", "is_pro": False, "agent_access": True}))
+        page.route("**/agent/models", lambda route: _json(route, AGENT_CATALOG))
         page.route("**/bookmarks?*", lambda route: _json(route, {"bookmarks": chats, "next_cursor": None}))
         page.route("**/api/my/starter-questions", lambda route: (
             asked.append(route.request.method), _json(route, {"status": "success", "questions": PREDICTED})))
@@ -185,7 +189,6 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4
         page.route("**/prepare", lambda route: (
             prepared.append(route.request.post_data_json), _json(route, {"system_prompt": "Prepared prompt"})))
         page.route("**/ask_*", lambda route: _json(route, {"response": "An answer", "sources": []}))
-        page.route("**/consensus", lambda route: _json(route, {}))
         release = _hold_back(page, first)
         # What a guest's Send left behind, then the page the sign-in reloads.
         page.evaluate("""pending => {
@@ -222,11 +225,11 @@ AGENT_CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
      "reasoning_available": True}]}
 
 
-@pytest.mark.parametrize("chose", [None, "consensus"])
+@pytest.mark.parametrize("chose", [None, "compare"])
 def test_a_guest_question_runs_after_the_sign_in_in_the_mode_the_guest_saw(browser, phase4_server, chose):
     """Apple-Audit H3 (Max): a guest sees Agent, so the question sent as a
-    guest goes out in Agent after the sign-in. A guest who chose Consensus
-    gets Consensus, also from an account that kept Agent, and the account
+    guest goes out in Agent after the sign-in. A guest who chose Compare
+    gets Compare, also from an account that kept Agent, and the account
     keeps that choice."""
     context, page = _real_firebase_page(browser, phase4_server, init_script=CAPTURE_EVENTS)
     agent, prepared = [], []
@@ -243,7 +246,6 @@ def test_a_guest_question_runs_after_the_sign_in_in_the_mode_the_guest_saw(brows
         page.route("**/prepare", lambda route: (
             prepared.append(route.request.post_data_json), _json(route, {"system_prompt": "Prepared prompt"})))
         page.route("**/ask_*", lambda route: _json(route, {"response": "An answer", "sources": []}))
-        page.route("**/consensus", lambda route: _json(route, {}))
         account = _route_account_settings(page, {"run_mode": "agent"}, revision=3)
         question = "Is creatine safe for teenagers?"
         # What a guest's Send left behind, then the page the sign-in reloads.
@@ -259,9 +261,9 @@ def test_a_guest_question_runs_after_the_sign_in_in_the_mode_the_guest_saw(brows
         if chose:
             page.wait_for_function("() => window.App.runRegistry.visible()?.config?.executionMode !== 'agent'")
             assert len(prepared) == 1 and not agent
-            assert page.evaluate("App.runMode.preference()") == "consensus"
+            assert page.evaluate("App.runMode.preference()") == "compare"
             page.wait_for_function("() => window.App.userSettings.status().loaded && !window.App.userSettings.status().pending.length")
-            assert account["settings"]["run_mode"] == "consensus"
+            assert account["settings"]["run_mode"] == "compare"
         else:
             for _ in range(50):
                 if agent:
