@@ -341,6 +341,9 @@ die auch bei `cancelled`/`missing` endet („Review stopped“, „Not reviewed�
 Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
+Geplant: ein Arbeitsprotokoll, das live mitschreibt, und Prüfer, die ihm
+während des Laufs folgen ([agent-work-log.md](agent-work-log.md), Entwurf).
+
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
 Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
