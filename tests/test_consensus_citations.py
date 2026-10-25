@@ -7,7 +7,7 @@ import pytest
 from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
 from app.services.llm.consensus_engine import (
     _build_consensus_prompt, _build_differences_prompt, _formatted_quote_finder, _span_finder,
-    parse_differences_payload, query_consensus, stream_consensus,
+    parse_differences_payload, query_consensus,
 )
 
 
@@ -150,19 +150,13 @@ def test_prose_streams_immediately_and_partial_markers_never_leak():
     assert scanner.feed("", final=True) == ""
 
 
-def test_query_and_stream_remove_tags_before_final_or_delta():
+def test_query_removes_tags_before_the_answer():
     raw = "Fact.[S1]\nCode `[S2]`. Next.[S3]"
     kwargs = dict(question="Q", answers={"openai": "A"}, excluded_models=[],
                   consensus_model="OpenAI", api_keys={"OpenRouter": "test"})
     with mock.patch("app.services.llm.consensus_engine._call_engine_text", return_value=raw):
         answer = query_consensus(**kwargs)
-    with mock.patch("app.services.llm.consensus_engine._stream_consensus_engine", return_value=(
-        {"type": "delta", "text": char} for char in raw
-    )):
-        events = list(stream_consensus(**kwargs))
     assert answer == "Fact.\nCode `[S2]`. Next."
-    assert events[-1] == {"type": "final", "text": answer}
-    assert "".join(event["text"] for event in events if event["type"] == "delta") == answer
 
 
 def _parsed(anchor="The rate is 5%."):

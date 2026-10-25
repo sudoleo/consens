@@ -146,23 +146,6 @@ def test_ledger_loads_once_then_reads_only_new_votes(monkeypatch):
 # ------------------------------------------------------------------ writes
 
 
-def test_consensus_vote_stores_who_was_in_the_run():
-    from test_phase5_operations import Database
-
-    db = Database()
-    result_id = "P" * 16
-    db.data[("pending_results", result_id)] = {
-        "owner_uid": "u1", "expires_at": NOW + timedelta(hours=1),
-        "differences_data": {"best_model": "Anthropic"}, "answer_provenance": "developer",
-        "included_models": ["OpenAI: gpt-6-luna", "Anthropic Claude: claude-sonnet-5.5", "Grok: grok-4.7"],
-    }
-    assert persistence_guard.record_model_vote(
-        uid="u1", result_id=result_id, model="Anthropic", vote_type="BestModel", db=db, now=NOW)
-    stored = next(v for (kind, _), v in db.data.items() if kind == "model_votes")
-    assert stored["participants"] == ["openai", "anthropic", "grok"]
-    assert stored["picked"] == "anthropic" and stored["source"] == "consensus"
-
-
 def test_agent_choice_names_the_widest_compared_field():
     review = {"status": "succeeded",
               "comparisons": [{"id": "a", "answers": [{"provider_label": "OpenAI"}, {"provider_label": "Grok"}]},

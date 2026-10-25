@@ -79,11 +79,8 @@ ABANDONED_TURN_MAX_AGE_SECONDS = 30 * 60
 ABANDONED_TURN_SWEEP_LIMIT = 10
 
 CHAT_TITLE_MAX_LENGTH = 120
-# Fallback only. The effective limit is the SAME one /consensus caps the
-# question with (see _question_max_length): a turn whose stored question is
-# longer than that cap could never be completed, because the capped question
-# would no longer match and validate_turn_for_completion would reject every
-# retry with a permanent 409.
+# Fallback only. The effective limit is the SAME one the Consensus pipeline
+# caps the question with (see _question_max_length).
 QUESTION_MAX_LENGTH_FALLBACK = 8_000
 MODE_MAX_LENGTH = 40
 MODEL_NAME_MAX_LENGTH = 120
@@ -94,14 +91,11 @@ CONSENSUS_MAX_LENGTH = MAX_CONSENSUS_CHARS
 DIFFERENCES_MAX_LENGTH = MAX_DIFFERENCES_TEXT_CHARS
 MODEL_LABEL_MAX_LENGTH = 80
 MODEL_ANSWER_MAX_LENGTH_FALLBACK = 40_000
-# An explicit complete-document budget leaves room below Firestore's 1 MiB
-# hard limit. Sources are retained in full; oversized documents are rejected.
-CHAT_DOCUMENT_MAX_BYTES = 750_000
 MODEL_SOURCES_MAX_ITEMS = MAX_SOURCES
 TURN_SOURCES_MAX_ITEMS = MAX_SOURCES
 RESULT_ID_MAX_LENGTH = SHARE_ID_LENGTH
-# Muss zu MAX_RESOLVED_QUESTION_CHARS in chat_context.py passen; hier definiert,
-# weil chat_context von chat_store importiert und nicht umgekehrt.
+# The self-contained question a saved Consensus turn may carry (written by the
+# follow-up memory until 2026-10-25), bounded when it is read back.
 RESOLVED_QUESTION_MAX_LENGTH = 400
 ERROR_CODE_MAX_LENGTH = max(len(code) for code in FAILED_TURN_ERROR_CODES)
 
@@ -208,14 +202,6 @@ class ChatQuotaExceeded(ChatStoreError):
     def __init__(self, message: str, *, error_code: str):
         super().__init__(message)
         self.error_code = error_code
-
-
-class TurnCompletionConflict(TurnStatusConflict):
-    pass
-
-
-class TurnQuestionConflict(TurnStatusConflict):
-    pass
 
 
 def normalize_title(value: object) -> str:
@@ -366,54 +352,6 @@ def _model_answer_char_limit() -> int:
     return max(1, value)
 
 
-def normalize_model_answers(value: object) -> dict[str, dict]:
-    if isinstance(value, dict):
-        entries = [
-            ({**item, "provider": provider} if isinstance(item, dict) else {
-                "provider": provider,
-                "answer": item,
-            })
-            for provider, item in value.items()
-        ]
-    elif isinstance(value, list):
-        entries = list(value)
-    else:
-        raise ValueError("model_answers must be a mapping or list")
-    if len(entries) > MAX_MODEL_ANSWERS:
-        raise ValueError(f"model_answers must contain at most {MAX_MODEL_ANSWERS} items")
-
-    normalized: dict[str, dict] = {}
-    for item in entries:
-        if not isinstance(item, dict):
-            raise ValueError("model answer entries must be objects")
-        provider = normalize_provider(item.get("provider"))
-        if provider in normalized:
-            raise ValueError("model_answers contains a duplicate provider")
-        answer = _bounded_text(
-            item.get("answer"),
-            _model_answer_char_limit(),
-            field_name="answer",
-        )
-        if not answer:
-            continue
-        labels = sanitize_model_labels(
-            {provider: item.get("model_label")},
-            [provider],
-        )
-        normalized[provider] = {
-            "schema_version": MODEL_ANSWER_SCHEMA_VERSION,
-            "provider": provider,
-            "model_label": labels.get(provider, provider)[:MODEL_LABEL_MAX_LENGTH],
-            "answer": answer,
-            "sources": sanitize_sources(item.get("sources")),
-        }
-    return {
-        provider: normalized[provider]
-        for provider in PROVIDER_ORDER
-        if provider in normalized
-    }
-
-
 def normalize_turn_sources(value: object) -> list[dict]:
     return sanitize_sources(value)
 
@@ -441,18 +379,6 @@ def _valid_supplied_score(value: object) -> bool:
     except (TypeError, ValueError, OverflowError):
         return False
     return True
-
-
-def _agreement_score(differences_data: object) -> int | None:
-    if not isinstance(differences_data, dict):
-        return None
-    agreement = differences_data.get("agreement")
-    if not isinstance(agreement, dict):
-        return None
-    score = agreement.get("score")
-    if isinstance(score, bool) or not isinstance(score, int):
-        return None
-    return score if 0 <= score <= 100 else None
 
 
 def normalize_task_checks(value: object) -> list[int]:
@@ -525,9 +451,9 @@ def turn_metadata(turn_id: object, data: object) -> dict:
     context_version_id = source.get("context_version_id")
     if isinstance(context_version_id, str) and _ID_RE.fullmatch(context_version_id):
         result["context_version_id"] = context_version_id
-    # Die selbststehende Lesart einer Folgefrage, geschrieben vom Context-Build
-    # zusammen mit context_version_id. /consensus reicht sie an Synthese und
-    # Judge weiter, damit beide dieselbe Frage sehen wie die sechs Modelle.
+    # Die selbststehende Lesart einer Folgefrage, bis 2026-10-25 vom
+    # Context-Build zusammen mit context_version_id geschrieben; gespeicherte
+    # Consensus-Turns tragen sie noch.
     resolved_question = source.get("resolved_question")
     if isinstance(resolved_question, str) and resolved_question.strip():
         result["resolved_question"] = " ".join(
@@ -791,8 +717,8 @@ class ChatStore:
     def _page_model_answers(self, turns_ref, turns: list[tuple[str, dict]]) -> dict[str, dict]:
         """Model answers for a whole page in a few batched gets (audit C6).
 
-        Answers are only ever written by ``complete_turn``, in the same
-        transaction that records ``included_models``. So the document IDs are
+        Answers were only ever written by the Consensus turn completion (until
+        2026-10-25), in the same transaction that recorded ``included_models``. So the document IDs are
         known up front: one ``get_all`` per chunk replaces one query per turn,
         and pending or failed turns (which never hold answers) cost nothing.
         A completed turn without ``included_models`` keeps the old query.
@@ -836,37 +762,6 @@ class ChatStore:
                     continue
                 answers_by_turn[turn_id][answer["provider"]] = answer
         return answers_by_turn
-
-    def validate_turn_for_completion(
-        self,
-        uid: str,
-        chat_id: str,
-        turn_id: str,
-        *,
-        question: str,
-    ) -> dict:
-        """Read-only owner/path/question check before an expensive consensus.
-
-        Completed turns remain eligible so the consensus endpoint can replay
-        their stored full detail without invoking an engine or writing again.
-        Failed turns are terminal and cannot be completed.
-        """
-        question = normalize_question(question)
-        chat_ref = self._chat_ref(uid, chat_id)
-        turn_ref = self._turn_ref(uid, chat_id, turn_id)
-        if not chat_ref.get().exists:
-            raise ChatNotFound("Chat not found")
-        snapshot = turn_ref.get()
-        if not snapshot.exists:
-            raise ChatNotFound("Chat not found")
-        data = snapshot.to_dict() or {}
-        if data.get("execution_mode") == "agent":
-            raise TurnStatusConflict("Agent turns cannot run consensus")
-        if data.get("question") != question:
-            raise TurnQuestionConflict("Turn question does not match")
-        if data.get("status") not in {TURN_STATUS_PENDING, TURN_STATUS_COMPLETED}:
-            raise TurnStatusConflict("Turn status transition is not allowed")
-        return turn_metadata(snapshot.id, data)
 
     def list_chats(
         self, uid: str, *, limit: int = CHAT_PAGE_SIZE, cursor: str = ""
@@ -1042,118 +937,6 @@ class ChatStore:
         if not snapshot.exists:
             raise ChatStoreError("Turn was not persisted")
         return turn_metadata(snapshot.id, snapshot.to_dict() or {})
-
-    def complete_turn(
-        self,
-        uid: str,
-        chat_id: str,
-        turn_id: str,
-        *,
-        question: str,
-        model_answers: object,
-        consensus: str,
-        differences: str,
-        differences_data: object,
-        sources: object,
-        result_id: object = None,
-    ) -> dict:
-        question = normalize_question(question)
-        normalized_answers = normalize_model_answers(model_answers)
-        for answer in normalized_answers.values():
-            if persistence_guard.estimate_document_bytes(answer) + 256 > CHAT_DOCUMENT_MAX_BYTES:
-                raise ValueError('Model answer document exceeds the storage byte budget')
-        consensus = _bounded_text(
-            consensus,
-            CONSENSUS_MAX_LENGTH,
-            field_name="consensus",
-            required=True,
-        )
-        differences = _bounded_text(
-            differences,
-            DIFFERENCES_MAX_LENGTH,
-            field_name="differences",
-        )
-        differences_data = normalize_turn_differences_data(differences_data)
-        sources = normalize_turn_sources(sources)
-        result_id = normalize_result_id(result_id)
-        included_models = list(normalized_answers)
-        agreement_score = _agreement_score(differences_data)
-
-        chat_ref = self._chat_ref(uid, chat_id)
-        turn_ref = self._turn_ref(uid, chat_id, turn_id)
-        fingerprint = _completion_fingerprint(
-            chat_id=chat_id,
-            turn_id=turn_id,
-            question=question,
-            model_answers=normalized_answers,
-            consensus=consensus,
-            differences=differences,
-            differences_data=differences_data,
-            sources=sources,
-            result_id=result_id,
-        )
-
-        def operation(transaction):
-            persistence_guard.ensure_account_write_allowed(
-                uid=uid,
-                db=self.db,
-                transaction=transaction,
-            )
-            chat_snapshot = chat_ref.get(transaction=transaction)
-            turn_snapshot = turn_ref.get(transaction=transaction)
-            if not chat_snapshot.exists or not turn_snapshot.exists:
-                raise ChatNotFound("Chat not found")
-            if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
-                raise ChatNotFound("Chat not found")
-            turn_data = turn_snapshot.to_dict() or {}
-            if turn_data.get("execution_mode") == "agent":
-                raise TurnStatusConflict("Agent turns cannot be completed by consensus")
-            if turn_data.get("question") != question:
-                raise TurnQuestionConflict("Turn question does not match")
-
-            status = turn_data.get("status")
-            if status == TURN_STATUS_COMPLETED:
-                stored = turn_data.get("completion_fingerprint")
-                if isinstance(stored, str) and hmac.compare_digest(stored, fingerprint):
-                    return
-                raise TurnCompletionConflict("Turn completion conflicts with stored result")
-            if status != TURN_STATUS_PENDING:
-                raise TurnStatusConflict("Turn status transition is not allowed")
-
-            turn_updates = {
-                "status": TURN_STATUS_COMPLETED,
-                "consensus": consensus,
-                "differences": differences,
-                "differences_data": differences_data,
-                "sources": sources,
-                "included_models": included_models,
-                "answer_count": len(normalized_answers),
-                "completion_fingerprint": fingerprint,
-                "completed_at": firestore.SERVER_TIMESTAMP,
-                "updated_at": firestore.SERVER_TIMESTAMP,
-            }
-            if agreement_score is not None:
-                turn_updates["agreement_score"] = agreement_score
-            if result_id is not None:
-                turn_updates["result_id"] = result_id
-            if persistence_guard.estimate_document_bytes({**turn_data, **turn_updates}) > CHAT_DOCUMENT_MAX_BYTES:
-                raise ValueError('Turn document exceeds the storage byte budget')
-            answers_ref = turn_ref.collection("model_answers")
-            for provider, answer in normalized_answers.items():
-                answer_document = {
-                    **answer,
-                    "created_at": firestore.SERVER_TIMESTAMP,
-                    "updated_at": firestore.SERVER_TIMESTAMP,
-                }
-                transaction.set(
-                    answers_ref.document(PROVIDER_DOCUMENT_IDS[provider]),
-                    answer_document,
-                )
-            transaction.update(turn_ref, turn_updates)
-            transaction.update(chat_ref, {"updated_at": firestore.SERVER_TIMESTAMP})
-
-        self._transaction(operation)
-        return self.get_turn(uid, chat_id, turn_id)
 
     def fail_turn(
         self,
@@ -1783,43 +1566,6 @@ def _same_turn_request(
         and existing.get("selected_models") == selected_models
         and existing.get("consensus_model") == consensus_model
     )
-
-
-def _completion_fingerprint(
-    *,
-    chat_id: str,
-    turn_id: str,
-    question: str,
-    model_answers: dict[str, dict],
-    consensus: str,
-    differences: str,
-    differences_data: dict | None,
-    sources: list[dict],
-    result_id: str | None,
-) -> str:
-    payload = {
-        "schema_version": TURN_SCHEMA_VERSION,
-        "chat_id": chat_id,
-        "turn_id": turn_id,
-        "question": question,
-        "model_answers": {
-            PROVIDER_DOCUMENT_IDS[provider]: model_answers[provider]
-            for provider in PROVIDER_ORDER
-            if provider in model_answers
-        },
-        "consensus": consensus,
-        "differences": differences,
-        "differences_data": differences_data,
-        "sources": sources,
-        "result_id": result_id,
-    }
-    canonical = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
 
 
 def _cursor_secret() -> bytes:

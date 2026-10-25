@@ -21,7 +21,7 @@ from app.services.error_alerts import report_server_exception
 from app.services.llm.citations import coerce_text
 from app.services.llm import completion
 from app.services.llm.base import get_date_context
-from app.services.llm.consensus_citations import ConsensusCitationFilter, strip_consensus_source_markers
+from app.services.llm.consensus_citations import strip_consensus_source_markers
 from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
@@ -37,10 +37,8 @@ from app.services.llm import coverage_judge as coverage
 from app.services.llm.consensus_parsing import (
     close_open_json as _close_open_json,
     extract_json_object as _extract_json_object,
-    extract_json_object_inner as _extract_json_object_inner,
-    repair_truncated_json as _repair_truncated_json,
 )
-from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
+from app.services.llm.mock_llm import mock_engine_text, mock_llm_enabled
 from app.services.llm.provider_runtime import (
     AnalysisBudgetExceeded,
     ProviderCancellation,
@@ -266,56 +264,6 @@ def query_engine_json(
     )
 
 
-def _stream_engine_text(
-    provider: str,
-    api_model: str,
-    model_ref: str,
-    api_keys: dict,
-    *,
-    system: str,
-    prompt: str,
-    max_tokens: int,
-    temperature: float | None = None,
-    json_mode: bool = False,
-    effort: str | None = None,
-    json_schema: dict | None = None,
-):
-    """Streamt Engine-Events: {"type": "delta", "text": ...} für Antworttext
-    und {"type": "reasoning"} als Fortschrittsmarker, solange ein
-    Reasoning-Modell noch denkt (hält SSE-Verbindungen aktiv und speist den
-    "Reasoning"-Indikator im Frontend)."""
-    claim_analysis_call()
-    if mock_llm_enabled():
-        # E2E-Suite: siehe _call_engine_text.
-        for text in mock_engine_stream(prompt=prompt, json_mode=json_mode):
-            yield {"type": "delta", "text": text}
-        yield {"type": "completion", "state": completion.COMPLETE}
-        return
-
-    from app.services.llm.streaming import stream_chat_completion_text
-
-    api_key = openrouter_api_key(api_keys)
-    if not api_key:
-        raise _InvalidEngineError("OpenRouter credential is missing")
-    temperature = _effective_temperature(provider, api_model, temperature)
-    response_format = _structured_response_format(json_mode, json_schema)
-    request_config = _engine_request_config(provider, api_model, model_ref, effort=effort)
-    if effort:
-        request_config.setdefault("reasoning", {"effort": effort})
-    yield from stream_chat_completion_text(
-        api_key=api_key,
-        model=api_model,
-        messages=[
-            {"role": "system", "content": system or " "},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=int(max_tokens),
-        temperature=temperature,
-        response_format=response_format,
-        request_config=request_config,
-    )
-
-
 def normalize_excluded_models(excluded_models) -> set:
     if not isinstance(excluded_models, (list, tuple, set)):
         return set()
@@ -435,7 +383,7 @@ def _build_consensus_prompt(
     # Die Lesart ist Modellausgabe ueber vorherige Turn-Inhalte, also selbst
     # nicht vertrauenswuerdig. In den Kontexten der sechs Modelle steht sie im
     # Untrusted-Data-Rahmen; hier bekommt sie ihre eigene Rahmung, zusaetzlich
-    # zur Kappung auf eine Zeile und 400 Zeichen in chat_context.
+    # zur Kappung auf eine Zeile und 400 Zeichen.
     if resolved_question:
         prompt_parts.append(
             "This question is a follow-up in an ongoing conversation. Read it as this "
@@ -478,21 +426,12 @@ JUDGE_PHASE_MAX_CALLS = 8
 # Reasoning-Modelle, die keine Temperatur akzeptieren, wieder heraus.
 CONSENSUS_TEMPERATURE = 0.3
 
-# Freitext für die Differences-Spalte, wenn der Vergleich mangels
-# Konsensantwort gar nicht erst gestartet wird.
-DIFFERENCES_SKIPPED_TEXT = (
-    "The model comparison was skipped because no consensus answer "
-    "could be generated. Please try again."
-)
-
-
 CONSENSUS_INCOMPLETE_TEXT = (
     "Consensus error: the synthesis stopped before it finished and is incomplete."
 )
 
-# The synthesis phase used up its time. Its own text and turn error code: it
-# used to read as "empty response from consensus engine" (audit C3).
-SYNTHESIS_TIME_LIMIT_CODE = "synthesis_time_limit"
+# The synthesis phase used up its time. Its own text: it used to read as
+# "empty response from consensus engine" (audit C3).
 CONSENSUS_TIME_LIMIT_TEXT = (
     "Consensus error: the synthesis took too long and was stopped."
 )
@@ -502,13 +441,6 @@ def is_consensus_error_text(text) -> bool:
     """True, wenn der Konsens-Text ein Fehler (oder leer) ist."""
     stripped = str(text or "").strip()
     return not stripped or stripped.startswith(CONSENSUS_ERROR_PREFIXES)
-
-
-def consensus_failure_code(text) -> str:
-    """Error code of a failed synthesis for the chat turn."""
-    if str(text or "").strip() == CONSENSUS_TIME_LIMIT_TEXT:
-        return SYNTHESIS_TIME_LIMIT_CODE
-    return "consensus_failed"
 
 
 def _analysis_time_spent() -> bool:
@@ -1981,14 +1913,14 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Differences-Engine: Judge-Policy, Attempt-Plan und die beiden Einstiege
-# (query_differences / stream_differences).
+# Differences-Engine: Judge-Policy, Attempt-Plan und der Einstieg
+# query_differences.
 # ---------------------------------------------------------------------------
 
 # Standard-Judges: admin-konfigurierbar je Provider (Firestore-Feld
 # "judge_models", Basis: das günstige Default-Modell des Providers). Alias auf
 # das live in config.py gepflegte dict — apply_judge_models mutiert in-place,
-# damit dieser Verweis (und der Re-Import in resolve_engine) aktuell bleibt.
+# damit dieser Verweis aktuell bleibt.
 # Die Judge-Stufe folgt der gewählten Consensus-Engine (Standard-Engine ->
 # Standard-Judge, Pro-Engine -> Pro-Judge über die bestehenden Engine-Aliasse);
 # die Judge-FAMILIE folgt seit 2026-10-04 der Prioritaetsliste (OpenAI zuerst),
@@ -3953,278 +3885,3 @@ def query_answer_figures(question: str, answer: str, api_keys: dict,
             last_error = safe_exception(exc)
             logging.warning("Answer figures attempt failed category=%s", last_error)
     raise RuntimeError(f"Answer figures failed: {last_error}")
-
-
-# ---------------------------------------------------------------------------
-# Streaming-Varianten: liefern {"type": "delta", "text": ...} Events und am
-# Ende {"type": "final", "text": <Gesamttext>}. Fehler werden - wie bei den
-# nicht-streamenden Varianten - als Fehlertext im final-Event transportiert.
-# ---------------------------------------------------------------------------
-
-def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_prompt: str):
-    resolved = _resolve_engine(consensus_model)
-    if resolved is None:
-        raise _InvalidEngineError(f"Invalid consensus model selected: {consensus_model}")
-    provider, api_model, model_ref = resolved
-    # Bewusst ohne effort-Kappung: die Consensus-Synthese ist das
-    # Kernprodukt, ein Pro-Modell darf hier voll denken.
-    yield from _stream_engine_text(
-        provider, api_model, model_ref, api_keys,
-        system="",
-        prompt=consensus_prompt,
-        max_tokens=cfg.CONSENSUS_MAX_TOKENS,
-        temperature=CONSENSUS_TEMPERATURE,
-    )
-
-
-@analysis_budgeted(max_calls=SYNTHESIS_MAX_CALLS)
-def stream_consensus(
-    question: str,
-    answers: Mapping[str, str],
-    excluded_models: list,
-    consensus_model: str,
-    api_keys: dict,
-    model_sources=None,
-    resolved_question: str = "",
-):
-    consensus_prompt = _build_consensus_prompt(
-        question,
-        answers,
-        excluded_models,
-        model_sources=model_sources,
-        resolved_question=resolved_question,
-    )
-
-    resolved = _resolve_engine(consensus_model)
-    if resolved is None:
-        yield {"type": "final", "text": f"Invalid consensus model selected: {consensus_model}", "error": True}
-        return
-
-    # Versuchsplan wie im nicht-streamenden Pfad: zweimal die gewählte Engine,
-    # danach einmal ein Fallback-Provider mit verfügbarem Key. Deltas eines
-    # gescheiterten Versuchs sind unkritisch: das final-Event ersetzt den
-    # gerenderten Konsens-Inhalt im Frontend vollständig (injectMarkdown).
-    # Fehlerregeln wie dort: nur wiederholbare Fehler bekommen den zweiten
-    # Versuch, 401/402 beenden den Lauf (Audit C10).
-    engine_models = [consensus_model] * CONSENSUS_MAX_ATTEMPTS
-    fallback = _fallback_judge_engine(resolved[0], api_keys)
-    if fallback:
-        # Fallback-Judge ist eine interne Modell-ID und damit selbst ein
-        # gültiger Engine-Wert für _stream_consensus_engine.
-        engine_models.append(fallback[2])
-
-    time_limit = {"type": "final", "text": CONSENSUS_TIME_LIMIT_TEXT, "error": True,
-                  "code": SYNTHESIS_TIME_LIMIT_CODE}
-    last_error = "empty response from consensus engine."
-    shown = False
-    skip_retries_for = set()
-    for engine_model in engine_models:
-        if engine_model in skip_retries_for:
-            continue
-        parts = []
-        citation_filter = ConsensusCitationFilter()
-        state = None
-        if shown:
-            # Deltas of a failed attempt are already visible. Clear them before
-            # the next attempt so two attempts never mix in one text (R06).
-            yield {"type": "reset"}
-            shown = False
-        try:
-            for event in _stream_consensus_engine(engine_model, api_keys, consensus_prompt):
-                if event.get("type") == "reasoning":
-                    yield {"type": "reasoning"}
-                    continue
-                if event.get("type") == "completion":
-                    state = event.get("state")
-                    continue
-                text = citation_filter.feed(event.get("text") or "")
-                parts.append(text)
-                if text:
-                    shown = True
-                    yield {"type": "delta", "text": text}
-        except _InvalidEngineError as e:
-            yield {"type": "final", "text": str(e), "error": True}
-            return
-        except AnalysisBudgetExceeded:
-            yield time_limit
-            return
-        except ProviderCancelled:
-            break
-        except Exception as e:
-            last_error = "provider request failed."
-            logging.warning(
-                "Consensus stream attempt failed engine=%s category=%s",
-                engine_model, safe_exception(e),
-            )
-            if _provider_error_ends_run(e):
-                break
-            if not _provider_error_is_retryable(e):
-                skip_retries_for.add(engine_model)
-            continue
-
-        tail = citation_filter.feed("", final=True)
-        if tail:
-            parts.append(tail)
-            shown = True
-            yield {"type": "delta", "text": tail}
-        final_text = "".join(parts).strip()
-        # Engines without a completion event (test doubles, legacy adapters)
-        # keep the former contract; the OpenRouter transport always sends one.
-        state = state or completion.COMPLETE
-        if final_text and state != completion.COMPLETE:
-            # Keep the visible partial text, but never as a finished synthesis
-            # and without a silent retry that would replace what was shown.
-            yield {"type": "final", "text": final_text, "error": True, "completion": state}
-            return
-        if final_text:
-            yield {"type": "final", "text": final_text}
-            return
-        last_error = "empty response from consensus engine."
-
-    if _analysis_time_spent():
-        yield time_limit
-        return
-    yield {"type": "final", "text": f"Consensus error: {last_error}", "error": True}
-
-
-@analysis_budgeted(max_calls=JUDGE_PHASE_MAX_CALLS)
-def stream_differences(
-    answers: Mapping[str, str],
-    consensus_answer: str,
-    api_keys: dict,
-    differences_model: str,
-    excluded_models: list = None,
-    resolved_question: str = "",
-):
-    context = _build_judge_context(
-        answers, consensus_answer, excluded_models, resolved_question
-    )
-    if context is None:
-        yield {"type": "final", "text": "Error in comparison: no model responses available.", "data": None}
-        return
-
-    output_language = _answer_language(consensus_answer)
-    differences_prompt = _build_differences_prompt_from(context, output_language=output_language)
-    anon_map = context.anon_map
-    answers_by_model = context.answers_by_model
-    sentences = list(context.sentences)
-
-    attempts = _differences_attempts(differences_model, api_keys)
-    if attempts is None:
-        yield {"type": "final", "text": "Invalid model selected for difference comparison.", "data": None}
-        return
-
-    # Beide Judges brauchen nur die fertige, nummerierte Konsensantwort. Der
-    # Coverage-Call laeuft deshalb neben dem gestreamten Differences-Call und
-    # kostet den Nutzer fast keine zusaetzliche Wartezeit.
-    coverage_pool, coverage_future, coverage_stop = _coverage_in_background(
-        context, api_keys, differences_model
-    )
-    try:
-        prose_fallback = None
-        last_error = "empty result from differences engine."
-        skip_retries_for = set()
-        executed_attempts = 0
-        judge_started = time.monotonic()
-        for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
-            attempt_key = (provider, api_model, judge_tier)
-            if is_retry and attempt_key in skip_retries_for:
-                continue
-            executed_attempts += 1
-            attempt_no = executed_attempts
-            attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
-            attempt_started = time.monotonic()
-            parts = []
-            try:
-                with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
-                    for event in _stream_engine_text(
-                        provider, api_model, model_ref, api_keys,
-                        system=_differences_system_prompt(output_language),
-                        prompt=attempt_prompt,
-                        max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                        temperature=DIFFERENCES_TEMPERATURE,
-                        json_mode=True,
-                        effort=_judge_effort(provider, api_model, judge_tier),
-                        json_schema=DIFFERENCES_JSON_SCHEMA,
-                    ):
-                        if event.get("type") == "reasoning":
-                            # Marker, solange der Judge noch denkt: hält die
-                            # SSE-Verbindung aktiv und speist den Frontend-Indikator.
-                            yield {"type": "reasoning"}
-                            continue
-                        if event.get("type") == "completion":
-                            # Truncated judge JSON is handled by the conservative
-                            # repair in parse_differences_payload.
-                            continue
-                        text = event.get("text") or ""
-                        parts.append(text)
-                        # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
-                        # nur die SSE-Verbindung aktiv (auch während der Retries).
-                        yield {"type": "delta", "text": text}
-            except (ProviderCancelled, AnalysisBudgetExceeded):
-                break
-            except _AttemptTimedOut:
-                last_error = "provider request timed out."
-                skip_retries_for.add(attempt_key)
-                logging.warning(
-                    "Differences stream attempt timed out attempt=%d provider=%s model=%s duration_ms=%d",
-                    attempt_no, provider, api_model, int((time.monotonic() - attempt_started) * 1000),
-                )
-                continue
-            except Exception as e:
-                last_error = "provider request failed."
-                if not _provider_error_is_retryable(e):
-                    skip_retries_for.add(attempt_key)
-                logging.warning(
-                    "Differences stream attempt failed attempt=%d provider=%s model=%s "
-                    "duration_ms=%d category=%s",
-                    attempt_no, provider, api_model,
-                    int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
-                )
-                continue
-
-            duration_ms = int((time.monotonic() - attempt_started) * 1000)
-            raw = "".join(parts).strip()
-            if not raw:
-                last_error = "empty result from differences engine."
-                continue
-
-            data, legacy_text = parse_differences_payload(
-                raw, anon_map,
-                consensus_answer=consensus_answer,
-                model_answers=answers_by_model,
-                sentences=sentences,
-            )
-            if data is not None:
-                data["judges"] = {"differences": _judge_metadata(
-                    provider, api_model, judge_tier,
-                    attempts=attempt_no, duration_ms=int((time.monotonic() - judge_started) * 1000),
-                )}
-                coverage_result, coverage_meta = _collect_coverage(
-                    coverage_pool, coverage_future, coverage_stop
-                )
-                covered_text = _apply_coverage(
-                    data, coverage_result, coverage_meta, context, consensus_answer
-                )
-                yield {"type": "final", "text": covered_text or legacy_text, "data": data}
-                return
-            if prose_fallback is None and legacy_text and not _looks_like_json(raw):
-                prose_fallback = legacy_text
-            last_error = "unparsable output from differences engine."
-            logging.warning(
-                f"Differences stream output unparsable on {provider}/{api_model} "
-                f"(attempt {attempt_no}, {duration_ms} ms)"
-            )
-
-        # Der Differences-Judge ist durchgefallen; der Coverage-Lauf wird trotzdem
-        # eingesammelt, damit sein Thread nicht verwaist weiterlaeuft.
-        _collect_coverage(coverage_pool, coverage_future, coverage_stop)
-        if prose_fallback:
-            yield {"type": "final", "text": prose_fallback, "data": None}
-            return
-        yield {"type": "final", "text": f"Error in comparison: {last_error}", "data": None}
-    finally:
-        # Bricht der Client mitten im Stream ab (GeneratorExit), wird der
-        # Nebenlaeufer sonst nie abgeraeumt und sein Worker-Thread bleibt
-        # bis zum Prozessende haengen.
-        coverage_pool.shutdown(wait=False)

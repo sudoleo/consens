@@ -190,8 +190,8 @@ def test_a_missing_bookmark_is_not_created_by_a_title_request():
 
 
 def test_later_saves_of_the_run_keep_the_generated_name():
-    """Model and consensus saves merge the question as title again; the
-    generated name must survive them (persistence_guard checks it)."""
+    """A model save merges the question as title again; the generated name
+    must survive it (persistence_guard checks it)."""
     chat_id = "c" * 32
     bookmark_ref = FakeBookmarkRef("run_bookmark", {
         "query": "First question", "title": "Opening topic", "title_source": "generated",
@@ -200,18 +200,10 @@ def test_later_saves_of_the_run_keep_the_generated_name():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-            return_value={
-                "question": "First question", "consensus": "Consensus", "differences": "",
-                "differences_data": None, "sources": [], "result_id": "",
-            },
-        ),
     ):
-        response = _client().post("/bookmark/consensus", json={
+        response = _client().post("/bookmark", json={
             "id_token": "token", "bookmarkId": "run_bookmark", "question": "First question",
-            "consensusText": "Consensus", "differencesText": "",
+            "response": "An answer", "modelName": "OpenAI", "mode": "Standard",
         })
 
     assert response.status_code == 200
@@ -232,23 +224,15 @@ def test_a_renamed_chat_keeps_its_name_on_the_chat_through_later_saves_and_title
         patch.object(bookmarks_router, "db_firestore", FakeFirestore(bookmark_ref)),
         patch.object(bookmarks_router, "_chat_store", return_value=store),
         patch.object(bookmarks_router, "generate_title", side_effect=AssertionError("no model call")),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-            return_value={
-                "question": "First question", "consensus": "Consensus", "differences": "",
-                "differences_data": None, "sources": [], "result_id": "",
-            },
-        ),
     ):
         client = _client()
         headers = {"Authorization": "Bearer token"}
         renamed = client.patch("/bookmarks/renamed_bookmark/title", headers=headers,
                                json={"title": "  Our   heat pump\nplan  "})
         named = client.post("/bookmarks/renamed_bookmark/title", headers=headers)
-        saved = client.post("/bookmark/consensus", json={
+        saved = client.post("/bookmark", json={
             "id_token": "token", "bookmarkId": "renamed_bookmark", "question": "First question",
-            "consensusText": "Consensus", "differencesText": "",
+            "response": "An answer", "modelName": "OpenAI", "mode": "Standard",
         })
         empty = client.patch("/bookmarks/renamed_bookmark/title", headers=headers, json={"title": "   "})
 

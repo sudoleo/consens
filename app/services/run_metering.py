@@ -1,12 +1,12 @@
 """Measure one Consensus-pipeline operation and book it on the token account.
 
 The transport reports usage (``llm.usage_meter``); this module only binds a
-meter around one logical operation (an ``/ask_*`` answer, the ``/consensus``
-analysis, a Resolve round, an API pipeline run) and books the totals exactly
-once through ``usage_repository.book_operation``. Booking happens when the
-operation ends: normally right before its final event, otherwise when the
-stream is closed (client gone, error). A failed booking never fails the
-user's answer; it is logged as an accounting error instead.
+meter around one logical operation (an ``/ask_*`` answer, an API pipeline
+run) and books the totals exactly once through
+``usage_repository.book_operation``. Booking happens when the operation ends:
+normally right before its final event, otherwise when the stream is closed
+(client gone, error). A failed booking never fails the user's answer; it is
+logged as an accounting error instead.
 """
 
 from __future__ import annotations

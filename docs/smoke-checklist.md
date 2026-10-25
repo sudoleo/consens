@@ -645,7 +645,8 @@ Server.
       watch“-Sheet bleibt mit offener Tastatur (Fragefeld, „Something
       else…“, Details) „Start watching“ über der Tastatur erreichbar, und
       kein Schritt lässt das Sheet springen.
-- [ ] Kein Lauf der App sendet `/consensus` oder `/resolve`. Die Demo
+- [ ] Kein Lauf der App sendet `/consensus` oder `/resolve` (beide gibt es
+      seit 2026-10-25 nicht mehr, ein Aufruf endet mit 404). Die Demo
       (`?demo=1`) zeigt in Agent einen Agent-Turn, in Compare nur die
       Antworten und danach den Login-Hinweis.
 - [ ] Credibility-Frame-Farbe (cred-very … cred-not) wird gesetzt.

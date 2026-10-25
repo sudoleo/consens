@@ -13,7 +13,6 @@ from app.api.routers.admin import (
     normalize_models_document,
 )
 from app.api.routers.chat import (
-    build_engine_api_keys,
     parse_boolean_flag,
     validate_question_word_limit,
 )
@@ -240,29 +239,6 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertTrue(loaded)
         document.get.assert_called_once_with(timeout=5.0, retry=None)
         document.set.assert_not_called()
-
-    def test_engine_developer_keys_use_shared_credentials_source(self):
-        expected = {"OpenRouter": "server-key"}
-        with mock.patch(
-            "app.api.routers.chat.resolve_developer_api_keys",
-            return_value=expected,
-        ) as resolver:
-            resolved = build_engine_api_keys({}, False)
-            self.assertEqual(resolved, expected)
-        resolver.assert_called_once_with()
-
-    def test_engine_own_keys_are_stripped_and_never_use_developer_keys(self):
-        with mock.patch(
-            "app.api.routers.chat.resolve_developer_api_keys",
-        ) as resolver:
-            keys = build_engine_api_keys(
-                {
-                    "openrouter_key": "  user-openrouter  ",
-                },
-                True,
-            )
-        resolver.assert_not_called()
-        self.assertEqual(keys, {"OpenRouter": "user-openrouter"})
 
     def test_admin_models_get_is_read_only_and_preserves_judge_family(self):
         raw = {

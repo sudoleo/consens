@@ -104,7 +104,8 @@ def test_all_server_product_paths_delegate_to_neutral_pipeline():
     chat = source("app/api/routers/chat.py")
     assert "run_consensus_pipeline(" in api
     assert "run_consensus_pipeline(" in watch
-    assert "analyze_provider_answers(" in chat
+    # The browser runs no Consensus since 2026-10-25: /ask_* answers Compare.
+    assert "analyze_provider_answers(" not in chat and "query_consensus" not in chat
     assert "topic_pipeline.execute_topic" in topic
     assert "watch_scheduler" not in topic
     assert "run_consensus_pipeline(" in topic_pipeline

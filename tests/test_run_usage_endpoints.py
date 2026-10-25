@@ -2,7 +2,6 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
-from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
@@ -16,7 +15,6 @@ from app.core.rate_limit import limiter
 from app.services import agent_budget_config, agent_quota
 from app.services.usage_repository import RunKind
 from usage_test_support import make_usage_repository
-import receipt_helpers
 
 
 UID = "run-endpoint-user"
@@ -40,7 +38,6 @@ def run_api(monkeypatch):
     monkeypatch.setattr(users_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setattr(users_router, "is_user_admin", lambda uid: False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    receipt_helpers.install(monkeypatch, chat_router)
 
     # Agent's snapshot repairs query llm_calls, which the fake cannot; the
     # account itself is read from the same fake document.
@@ -53,15 +50,12 @@ def run_api(monkeypatch):
     monkeypatch.setattr(agent_quota, "snapshot", snapshot)
 
     def fake_run_ask(provider, **kwargs):
-        # Mirrors _run_ask: the answer is metered, booked and stored as a receipt.
+        # Mirrors _run_ask: the answer is metered and booked.
         booking = kwargs.get("booking")
         if booking is not None:
             with booking.metering():
                 booking.meter.record(ANSWER_USAGE)
-        result = chat_router._with_receipt(
-            {"text": f"{provider.label} answer", "sources": [], "completion": "complete"},
-            kwargs.get("receipt"),
-        )
+        result = {"text": f"{provider.label} answer", "sources": [], "completion": "complete"}
         extras = {**kwargs["extras"], **(booking.extras() if booking else {})}
         return chat_router.source_response(result, **extras)
 
@@ -224,51 +218,6 @@ def test_repeated_operation_with_a_new_generated_prompt_is_a_conflict(run_api, m
     assert _ledger(db)["used"] == 1_500
 
 
-def test_consensus_books_its_judges_once_and_drops_the_hold(run_api):
-    client, _repository, db = run_api
-    key = "answers-plus-consensus"
-    assert _prepare(client, key).status_code == 200
-    first = _ask(client, "/ask_openai", "openai", key)
-    second = _ask(client, "/ask_mistral", "mistral", key)
-    assert first.status_code == second.status_code == 200
-    payload = {
-        "usage_run_key": key,
-        "question": "What changed?",
-        "consensus_model": "Gemini",
-        "answer_receipts": {
-            "openai": first.json()["answer_receipt"],
-            "mistral": second.json()["answer_receipt"],
-        },
-    }
-
-    def synthesize(*_args, **_kwargs):
-        # The synthesis call reports through the same transport meter.
-        from app.services.llm.usage_meter import current_meter
-        current_meter().record({"prompt_tokens": 4_000, "completion_tokens": 1_000})
-        return "Consensus"
-
-    with patch.object(chat_router, "query_consensus", side_effect=synthesize) as consensus_mock, \
-         patch.object(chat_router, "query_differences", return_value=("Differences", None)), \
-         patch.object(chat_router, "persist_pending_result", return_value=None), \
-         patch.object(chat_router, "record_differences_stats"):
-        response = client.post("/consensus", headers=AUTH, json=payload)
-        repeated = client.post("/consensus", headers=AUTH, json=payload)
-
-    assert response.status_code == 200
-    assert repeated.status_code == 409
-    assert repeated.json()["detail"]["error_code"] == "usage_operation_already_claimed"
-    assert consensus_mock.call_count == 1
-    synthesized = consensus_mock.call_args.args[1]
-    assert synthesized["openai"] == "OpenAI answer"
-    assert synthesized["mistral"] == "Mistral answer"
-    body = response.json()
-    assert body["usage_run_status"] == "consumed"
-    assert body["token_budget"]["used"] == 8_000
-    assert body["token_budget"]["reserved"] == 0
-    ledger = _ledger(db)
-    assert ledger["used"] == 8_000 and ledger["pipeline_runs"] == 1
-
-
 def test_usage_endpoint_reads_the_account_and_release_drops_the_hold(run_api):
     client, repository, db = run_api
     key = "unused-reservation"
@@ -313,7 +262,7 @@ def test_exhausted_firestore_contention_returns_structured_503(run_api, monkeypa
     assert response.json()["detail"]["error_code"] == "usage_storage_busy"
 
 
-def test_free_reasoning_run_passes_prepare_ask_and_consensus_without_pro_gate(run_api):
+def test_free_reasoning_run_passes_prepare_and_ask_without_pro_gate(run_api):
     """Reasoning (wire name deep_search) is open to Free: no 403 anywhere in
     the run, admitted against the Reasoning estimate (key "deep_think")."""
     client, _repository, _db = run_api
@@ -325,19 +274,6 @@ def test_free_reasoning_run_passes_prepare_ask_and_consensus_without_pro_gate(ru
     first = _ask(client, "/ask_openai", "openai", key, deep=True)
     second = _ask(client, "/ask_mistral", "mistral", key, deep=True)
     assert first.status_code == second.status_code == 200
-    payload = {
-        "usage_run_key": key,
-        "question": "What changed?",
-        "consensus_model": "Gemini",
-        "deep_search": True,
-        "answer_receipts": {
-            "openai": first.json()["answer_receipt"],
-            "mistral": second.json()["answer_receipt"],
-        },
-    }
-    with patch.object(chat_router, "query_consensus", return_value="Consensus"),          patch.object(chat_router, "query_differences", return_value=("Differences", None)),          patch.object(chat_router, "persist_pending_result", return_value=None),          patch.object(chat_router, "record_differences_stats"):
-        response = client.post("/consensus", headers=AUTH, json=payload)
-    assert response.status_code == 200
 
 
 def test_reasoning_is_admitted_against_the_reasoning_estimate(run_api, monkeypatch):

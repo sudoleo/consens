@@ -73,14 +73,6 @@ class FeedbackRequest(BaseModel):
         return cleaned
 
 
-class VoteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    id_token: StrictStr | None = Field(default=None, max_length=20_000)
-    model: StrictStr = Field(min_length=1, max_length=40)
-    vote_type: StrictStr = Field(min_length=1, max_length=40)
-    result_id: StrictStr = Field(min_length=16, max_length=64)
-
 SITEMAP_URLS = (
     {"loc": f"{SITE_URL}/", "lastmod": "2026-06-03", "changefreq": "weekly", "priority": "1.0"},
     {"loc": f"{SITE_URL}/ai-model-comparison", "lastmod": "2026-06-03", "changefreq": "monthly", "priority": "0.8"},
@@ -686,53 +678,6 @@ def submit_feedback(request: Request, payload: FeedbackRequest):
         raise HTTPException(status_code=500, detail="Error when saving the feedback.")
     
     return {"status": "success", "message": "Feedback has been successfully submitted."}
-
-ALLOWED_VOTE_TYPES = {"BestModel"}
-
-@router.post("/vote")
-@limiter.limit("3/minute")
-def record_vote(request: Request, payload: VoteRequest):
-    data = payload.model_dump()
-    id_token = extract_id_token(request, data)
-    model = data.get("model")
-    vote_type = data.get("vote_type")
-    result_id = data.get("result_id")
-
-    if not id_token or not model or not vote_type:
-        raise HTTPException(status_code=400, detail="Missing required fields: id_token, model or vote_type.")
-    if vote_type not in ALLOWED_VOTE_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid vote type provided.")
-    model = cfg.LEADERBOARD_MODEL_ALIASES.get(model, model)
-    if model not in cfg.VALID_LEADERBOARD_MODELS:
-         logging.warning("Invalid vote model rejected")
-         raise HTTPException(status_code=400, detail="Invalid model name.")
-
-    try:
-        uid = verify_user_token(id_token)
-    except AuthenticationUnavailable:
-        raise auth_unavailable_error() from None
-    except Exception:
-        raise HTTPException(status_code=401, detail="Authentication failed")
-
-    try:
-        created = persistence_guard.record_model_vote(
-            uid=uid,
-            result_id=result_id,
-            model=model,
-            vote_type=vote_type,
-            db=db_firestore,
-        )
-        return {
-            "status": "success",
-            "recorded": created,
-            "message": f"{vote_type} vote recorded for {model}" if created else "Vote already recorded",
-        }
-    except persistence_guard.PersistenceLimitError as exc:
-        raise HTTPException(status_code=409, detail=exc.message) from None
-    except Exception as exc:
-        logging.error("vote update failed category=%s", safe_exception(exc))
-        raise HTTPException(status_code=500, detail="Internal error")
-
 
 def is_valid(key):
     return key is not None and len(key) > 10

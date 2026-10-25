@@ -17,7 +17,6 @@ from starlette.requests import ClientDisconnect
 
 import app.core.config as cfg
 from app.core.observability import record_metric, safe_exception
-from app.core.openrouter_contract import provider_routing
 from app.services.llm.citations import (
     coerce_text,
     is_search_result,
@@ -34,7 +33,6 @@ from app.services.llm.engines import (
     _ProviderResponseError,
     _error,
     _log_model_selection,
-    _merge_nested_config,
     _raise_provider_http_status,
     build_provider_payload,
     openrouter_headers,
@@ -192,16 +190,6 @@ def iter_sse_with_keepalive(
             next_keepalive = time.monotonic() + interval_seconds
     finally:
         cancellation.cancel()
-
-
-def keepalive_streaming_response(source) -> ProviderStreamingResponse:
-    cancellation = ProviderCancellation()
-    return ProviderStreamingResponse(
-        iter_sse_with_keepalive(source, cancellation=cancellation, lead=SSE_PADDING),
-        media_type="text/event-stream",
-        headers=dict(SSE_HEADERS),
-        cancellation=cancellation,
-    )
 
 
 def iter_sse_events(response: requests.Response) -> Iterator[Tuple[Optional[str], str]]:
@@ -418,7 +406,7 @@ def _stream_openrouter_chat_completion(
         return
     result = parse_openrouter_response(answer, annotations, provider)
     # Partial text stays visible, but it is never a normal success: the typed
-    # state travels with the answer to /consensus, storage and the UI (R06).
+    # state travels with the answer to storage and the UI (R06).
     result["completion"] = state
     if state != completion.COMPLETE:
         result["finish_reason"] = str(finish_reason or "")[:40]
@@ -457,50 +445,6 @@ def stream_model_query(
     except Exception as exc:
         raise_if_provider_cancelled()
         yield {"type": "final", "result": _error(label, exc)}
-
-
-def stream_chat_completion_text(
-    *,
-    api_key: str,
-    model: str,
-    messages: list,
-    max_tokens: int,
-    temperature: float | None = None,
-    response_format: dict | None = None,
-    reasoning_effort: str | None = None,
-    request_config: dict | None = None,
-) -> Iterator[StreamEvent]:
-    """Stream text for Consensus/Differences through the same transport."""
-    payload = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": int(max_tokens),
-        "provider": provider_routing(),
-    }
-    if temperature is not None:
-        payload["temperature"] = temperature
-    if response_format is not None:
-        payload["response_format"] = response_format
-    if reasoning_effort is not None:
-        payload["reasoning"] = {"effort": reasoning_effort}
-    _merge_nested_config(payload, request_config)
-    finish_reason = None
-    terminated = False
-    for event in _iter_openrouter_chunks(api_key=api_key, payload=payload):
-        event_type = event.get("type")
-        if event_type in {"delta", "reasoning"}:
-            yield event
-        elif event_type == "finish":
-            finish_reason = event.get("reason")
-        elif event_type == "done":
-            terminated = True
-    # Consensus/Differences decide on this terminal event: text without a
-    # confirmed normal end must not become a finished synthesis.
-    yield {
-        "type": "completion",
-        "state": completion.completion_state(finish_reason, terminated=terminated),
-        "finish_reason": str(finish_reason or "")[:40],
-    }
 
 
 def streaming_model_response(

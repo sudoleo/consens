@@ -54,18 +54,15 @@ DEFAULT_LIMITS = {
     # (bis zu 80 Saetze x 8 Familien). Das ist mehr Ausgabe als beim
     # Differences-Judge, aber auf einem guenstigen Standard-Judge.
     "coverage_max_tokens": 12288,
-    # Serverseitige Eingabe-Caps fuer /consensus: Antworten/Frage kommen vom
-    # Client und muessen begrenzt werden, bevor sie in den Engine-Prompt
-    # fliessen (Kosten-/Abuse-Schutz). Grosszuegig gewaehlt, damit legitime
-    # Reasoning-Antworten (8192 Output-Tokens) nie gekappt werden.
+    # Eingabe-Caps der Consensus-Pipeline: Antworten/Frage werden begrenzt,
+    # bevor sie in den Engine-Prompt fliessen (Kosten-/Abuse-Schutz).
+    # Grosszuegig gewaehlt, damit legitime Reasoning-Antworten (8192
+    # Output-Tokens) nie gekappt werden.
     "consensus_max_answer_chars": 40_000,
     "consensus_max_question_chars": 8_000,
-    # Serverseitige Caps fuer den Follow-up-Kontext (previous_question +
-    # previous_consensus kommen vom Client). Bewusst enger als die
-    # /consensus-Caps: der Kontext geht bei jeder Follow-up-Frage in alle
-    # /ask_*-Prompts gleichzeitig ein (Kostenkontrolle).
+    # Die vorherige Frage, die ein Compare-Bookmark mitspeichert
+    # (previousQuestion kommt vom Client).
     "followup_max_question_chars": 4_000,
-    "followup_max_consensus_chars": 12_000,
     # Qualitätsfilter für index_eligible von Share-Snapshots (Etappe 3):
     # steuert nur die Eligibility-Anzeige, indexed setzt weiterhin der Admin.
     "share_min_consensus_chars": 600,
@@ -463,12 +460,12 @@ MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
     provider: [] for provider in DEFAULT_MODEL_BY_PROVIDER
 }
 
-# Standard-Judges der Differences-/Resolve-Engine je Provider (Pro-Judges
+# Standard-Judges der Differences-Engine je Provider (Pro-Judges
 # loesen weiterhin ueber die "<Familie>-Pro"-Aliasse auf, siehe
 # consensus_engine._judge_engine). Vom Admin ueber Firestore (Feld
 # "judge_models") umstellbar; ungueltige Werte fallen je Provider auf die
 # Basis zurueck (siehe apply_judge_models). WICHTIG: das dict wird in-place
-# mutiert, damit Modul-Aliasse (consensus_engine, resolve_engine) live bleiben.
+# mutiert, damit der Modul-Alias in consensus_engine live bleibt.
 # OpenAI-Standard-Judge ist Luna (Max-Entscheidung 2026-10-04/07), nicht das
 # guenstige Basis-Antwortmodell.
 _BASE_DIFFERENCES_JUDGE_BY_PROVIDER = {**DEFAULT_MODEL_BY_PROVIDER, "openai": OPENAI_LUNA_MODEL}
@@ -628,9 +625,9 @@ _BASE_PRO_JUDGE_BY_PROVIDER = {
 }
 PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
-# Modell, das die Chat-Memory laengerer Unterhaltungen fortschreibt
-# (app/services/chat_context.py). Die FAMILIE bleibt die der Consensus-Engine
-# des Turns; der eine OpenRouter-Key gilt fuer alle Familien. Das Modell
+# Kleines Modell je Familie fuer Chat-Titel (app/services/chat_titles.py; bis
+# 2026-10-25 auch fuer die Chat-Memory der Consensus-Folgefragen). Der eine
+# OpenRouter-Key gilt fuer alle Familien. Das Modell
 # INNERHALB der Familie ist vom Admin ueber Firestore (Feld
 # "chat_memory_models") umstellbar. Basis sind bewusst die guenstigen
 # Standardmodelle: die Aufgabe ist strukturierte Extraktion nach JSON-Schema,
@@ -1370,7 +1367,7 @@ def is_valid_judge_model(provider: str, model_id) -> bool:
 def apply_judge_models(overrides: dict | None) -> None:
     """Setzt den Standard-Differences-Judge je Provider. Ungueltige/fehlende
     Werte fallen je Provider auf die Basis zurueck. Mutiert das dict in-place
-    (Modul-Aliasse in consensus_engine/resolve_engine bleiben live)."""
+    (der Modul-Alias in consensus_engine bleibt live)."""
     data = overrides if isinstance(overrides, dict) else {}
     for provider, base in _BASE_DIFFERENCES_JUDGE_BY_PROVIDER.items():
         chosen = canonical_model_id(str(data.get(provider) or "").strip(), provider)
@@ -1859,10 +1856,6 @@ def get_consensus_question_char_limit() -> int:
 
 def get_followup_question_char_limit() -> int:
     return LIMITS["followup_max_question_chars"]
-
-
-def get_followup_consensus_char_limit() -> int:
-    return LIMITS["followup_max_consensus_chars"]
 
 
 def get_watch_active_limit(tier) -> int:

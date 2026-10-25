@@ -258,10 +258,7 @@
       model: providerConfig.modelId,
       id_token: idToken,
       useOwnKeys: context.config.useOwnKeys,
-      usage_run_key: context.usage.key,
-      // Binds the server-stored answer (receipt) to this logical run, also
-      // for own-key runs that have no usage key.
-      run_id: context.runId
+      usage_run_key: context.usage.key
     };
     if (context.attachments.length) payload.attachments = context.attachments;
     if (context.config.useOwnKeys) payload.openrouter_key = context.credentials.openrouterKey || "";

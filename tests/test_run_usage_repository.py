@@ -291,22 +291,7 @@ def test_get_run_is_read_only_and_reports_consumed_status(usage_repo):
     assert db.documents == before
 
 
-def test_consumed_run_context_binding_is_idempotent_and_target_specific(usage_repo):
-    repo, db = usage_repo
-    consumed(repo, "binder", "bind-me")
-    before_ledger = deepcopy(ledger(db, "binder"))
-
-    repo.bind_context_target("binder", "bind-me", "chat-context\0chat-a\0turn-a", now=UTC_NOON)
-    first_documents = {path: dict(data) for path, data in db.documents.items()}
-    repo.bind_context_target("binder", "bind-me", "chat-context\0chat-a\0turn-a", now=UTC_NOON)
-
-    assert db.documents == first_documents
-    assert ledger(db, "binder") == before_ledger
-    with pytest.raises(UsageRunConflict):
-        repo.bind_context_target("binder", "bind-me", "chat-context\0chat-b\0turn-b", now=UTC_NOON)
-
-
-@pytest.mark.parametrize("operation", ["reserve", "consume", "claim", "bind", "book"])
+@pytest.mark.parametrize("operation", ["reserve", "consume", "claim", "book"])
 def test_pending_account_deletion_fences_every_usage_mutation(usage_repo, operation):
     repo, db = usage_repo
     uid = "deleting-usage-owner"
@@ -315,7 +300,7 @@ def test_pending_account_deletion_fences_every_usage_mutation(usage_repo, operat
 
     if operation != "reserve":
         repo.reserve(uid, key, RunKind.REGULAR, ADMISSION, request_fingerprint=run_fingerprint, now=UTC_NOON)
-    if operation in {"claim", "bind", "book"}:
+    if operation in {"claim", "book"}:
         repo.consume(uid, key)
 
     db.documents[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, uid)] = {"status": "pending"}
@@ -328,15 +313,13 @@ def test_pending_account_deletion_fences_every_usage_mutation(usage_repo, operat
             repo.consume(uid, key)
         elif operation == "claim":
             repo.claim_operation(uid, key, "ask:openai", canonical_request_fingerprint({"model": "gpt"}), now=UTC_NOON)
-        elif operation == "book":
-            repo.book_operation(uid, key, "ask:openai", measured=1, estimated=0, now=UTC_NOON)
         else:
-            repo.bind_context_target(uid, key, "chat-context\0chat-a\0turn-a", now=UTC_NOON)
+            repo.book_operation(uid, key, "ask:openai", measured=1, estimated=0, now=UTC_NOON)
 
     assert db.documents == before
 
 
-def test_expired_run_cannot_be_read_or_bound_to_new_context(usage_repo):
+def test_expired_run_cannot_be_read(usage_repo):
     repo, db = usage_repo
     consumed(repo, "expired", "old-run")
     expired_at = UTC_NOON + timedelta(days=1)
@@ -344,8 +327,6 @@ def test_expired_run_cannot_be_read_or_bound_to_new_context(usage_repo):
 
     with pytest.raises(UsageRunExpired):
         repo.get_run("expired", "old-run", now=expired_at)
-    with pytest.raises(UsageRunExpired):
-        repo.bind_context_target("expired", "old-run", "chat-context\0chat-a\0turn-a", now=expired_at)
 
     assert db.documents == before
 

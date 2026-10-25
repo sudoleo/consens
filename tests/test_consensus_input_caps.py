@@ -1,32 +1,6 @@
 import unittest
 
 import app.core.config as cfg
-from app.api.routers.chat import cap_engine_text
-
-
-class CapEngineTextTests(unittest.TestCase):
-    def test_short_text_passes_unchanged(self):
-        self.assertEqual(cap_engine_text("hello", 100), "hello")
-
-    def test_none_and_non_strings_pass_through(self):
-        self.assertIsNone(cap_engine_text(None, 100))
-        self.assertEqual(cap_engine_text(123, 100), 123)
-        self.assertEqual(cap_engine_text(["a"], 100), ["a"])
-
-    def test_oversized_text_is_truncated(self):
-        capped = cap_engine_text("a" * 500, 100)
-        self.assertEqual(len(capped), 100)
-
-    def test_truncation_keeps_detectable_cap_even_at_whitespace(self):
-        text = "word " * 100
-        capped = cap_engine_text(text, 100)
-        self.assertEqual(len(capped), 100)
-        self.assertTrue(capped.endswith(" "))
-
-    def test_empty_string_stays_falsy(self):
-        # Wichtig für die Missing-Parameter-Validierung in /consensus:
-        # Kappen darf aus einem leeren Wert keinen truthy Wert machen.
-        self.assertEqual(cap_engine_text("", 100), "")
 
 
 class ConsensusInputLimitTests(unittest.TestCase):

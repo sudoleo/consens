@@ -541,10 +541,10 @@ def test_paused_or_empty_profile_still_gets_the_non_persistence_boundary(monkeyp
     assert "Persistent Memory is managed only" in paused
 
 
-def test_conversation_context_wraps_around_the_profile(monkeypatch):
-    # Der Kontext ist der Datenteil und steht vorn; das Profil bleibt bei der
-    # Anweisung ganz hinten. Andersherum laese ein Modell die stehende
-    # Praeferenz als Gespraechsinhalt der letzten Runde.
+def test_a_sent_conversation_context_stays_out_and_the_profile_keeps_its_place(monkeypatch):
+    # Seit 2026-10-25 setzt /ask_* keinen Chat fort (Compare ist ein eigener
+    # Chat); ein mitgeschickter Kontext erreicht den Prompt nicht. Das Profil
+    # bleibt bei der Anweisung vor der Memory-Grenze.
     prompt = run_ask(
         monkeypatch,
         {"role": "Anaesthetist"},
@@ -555,7 +555,7 @@ def test_conversation_context_wraps_around_the_profile(monkeypatch):
             }
         },
     )
-    assert prompt.index("Previous question") < prompt.index("ABOUT THE USER")
+    assert "Previous question" not in prompt and "It depends on weight." not in prompt
     assert prompt.index("END OF USER PROFILE.") < prompt.index("Persistent Memory")
 
 

@@ -163,17 +163,6 @@ def _neutral_user_memory_profile():
 
 
 @pytest.fixture(autouse=True)
-def _clear_resolved_chat_context_cache():
-    """Der /ask_*-Kontext-Cache ist prozessweit und lebt 120 s — ohne Reset
-    koennte ein Test den aufgeloesten Kontext des naechsten beantworten."""
-    from app.api.routers import chat as chat_router
-
-    chat_router.resolved_context_cache.clear()
-    yield
-    chat_router.resolved_context_cache.clear()
-
-
-@pytest.fixture(autouse=True)
 def _clear_rendered_topic_pages():
     """Gerenderte Topic-Seiten und der Hub leben 120 s im Prozess (Audit I12)
     -- ohne Reset saehe ein Test die Seite aus dem Speicher des vorigen."""

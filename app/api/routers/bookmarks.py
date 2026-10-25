@@ -8,7 +8,7 @@ import json
 import logging
 import unicodedata
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Literal
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
@@ -40,7 +40,6 @@ from app.services.chat_store import (
     format_cursor_timestamp,
     parse_cursor_timestamp,
 )
-from app.services.share_snapshots import sanitize_differences_data
 from app.services.chat_titles import generate_title
 from app.services import starter_questions
 
@@ -51,16 +50,14 @@ BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
 CHAT_ID_RE = re.compile(r"[0-9a-f]{32}")
 BookmarkModelName = Literal.__getitem__(tuple(cfg.PROVIDER_LABEL_BY_ID.values()))
 
-# Bookmark-Persistenz ist ein interner Fan-out des Produkt-Flows: Ein Lauf
-# schreibt je nach Preset bis zu sechs Modell-Snapshots plus einen
-# autoritativen Consensus-Snapshot. Das vorgelagerte slowapi-Limit bleibt als
+# Bookmark-Persistenz ist ein interner Fan-out des Produkt-Flows: Ein
+# Compare-Lauf schreibt je nach Preset bis zu sechs Modell-Snapshots. Das vorgelagerte slowapi-Limit bleibt als
 # grosszuegiger Schutz gegen unautorisierte Request-Fluten bestehen; nach der
 # Token-Pruefung begrenzt dieses Budget den tatsaechlichen Kontoinhaber. So
 # sperren weder ein gemeinsamer Proxy/NAT noch andere Nutzer einen laufenden
 # Daily-, Open-Models- oder High-Quality-Save mitten im Snapshot.
 BOOKMARK_UID_RATE_LIMITS = {
     "model_save": 120,
-    "consensus_save": 60,
 }
 # Titel laufen auf dem Projekt-Key ohne Tokenbuchung. Der Browser fragt einmal
 # pro Bookmark und Sitzung; ein leeres Modellergebnis lässt erneutes Fragen zu,
@@ -91,33 +88,6 @@ class BookmarkModelRequest(BaseModel):
     # Request and bookmark byte budgets bound storage without dropping sources.
     sources: list[dict] | None = None
     attachments: list[dict] | None = Field(default=None, max_length=10)
-
-
-class BookmarkConsensusRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    id_token: StrictStr | None = Field(default=None, max_length=20_000)
-    question: StrictStr = Field(min_length=1, max_length=8_000)
-    # These fields were part of the old client-owned bookmark snapshot. The
-    # handler deliberately ignores them and materializes the result from the
-    # owner-bound pending result/completed turn instead. Validating ignored
-    # copies made persistence less reliable than the authoritative source: the
-    # UI and share snapshot both support 50 sources, while this legacy copy was
-    # capped at 24 and rejected otherwise valid runs with HTTP 422. Keep the
-    # names for deployed/cached clients, but never let their shape veto a save.
-    consensusText: Any = None
-    differencesText: Any = None
-    differencesData: Any = None
-    sources: Any = None
-    resultId: StrictStr | None = Field(default=None, max_length=64)
-    consensusModel: Any = None
-    modelLabels: Any = None
-    modelResponses: Any = None
-    bookmarkId: StrictStr | None = Field(default=None, max_length=100)
-    chatId: StrictStr | None = Field(default=None, max_length=32)
-    turnId: StrictStr | None = Field(default=None, max_length=32)
-    previousQuestion: StrictStr = Field(default="", max_length=4_000)
-    previousTurn: dict | None = None
 
 
 class BookmarkDeleteRequest(BaseModel):
@@ -225,16 +195,6 @@ def _chat_binding(data):
     return {"chat_id": chat_id, "turn_id": turn_id}
 
 
-def _sanitize_model_responses(raw):
-    if not isinstance(raw, dict):
-        return None
-    limit = cfg.get_consensus_answer_char_limit()
-    return {
-        provider: str(raw.get(provider) or "").strip()[:limit]
-        for provider in share_snapshots.PROVIDER_ORDER
-    }
-
-
 def _model_provenance(included_models) -> tuple[list[str], dict[str, str]]:
     """Recover canonical providers/labels from a server-owned model list."""
     providers = []
@@ -301,32 +261,6 @@ def _completed_turn_payload(uid: str, chat_binding: dict | None) -> dict | None:
     }
 
 
-def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dict | None):
-    """Materialize consensus fields from an owner-bound completed server run."""
-    if result_id:
-        pending = share_snapshots.get_pending_result(uid, result_id, db=db_firestore)
-        if pending:
-            return {
-                "question": str(pending.get("question") or ""),
-                "consensus": str(pending.get("consensus_md") or ""),
-                "differences": str(pending.get("differences_text") or ""),
-                "differences_data": pending.get("differences_data"),
-                "sources": pending.get("sources"),
-                "included_models": pending.get("included_models"),
-                "consensus_model": str(pending.get("consensus_model") or ""),
-                "model_responses": pending.get("model_responses"),
-                "vote_subject_id": str(pending.get("vote_subject_id") or result_id),
-                "result_id": result_id,
-            }
-    turn = _completed_turn_payload(uid, chat_binding)
-    if turn is not None:
-        return turn
-    raise HTTPException(
-        status_code=409,
-        detail="Consensus bookmarks require an owned completed run.",
-    )
-
-
 def _stored_chat_binding(bookmark: dict) -> dict | None:
     """The chat turn a saved bookmark points at; None for a legacy bookmark."""
     chat_id = str(bookmark.get("chat_id") or "")
@@ -352,39 +286,6 @@ def _same_consensus(turn_text, bookmark_text) -> bool:
 
 def _chat_store():
     return ChatStore(db_firestore)
-
-
-def _same_question(stored, requested) -> bool:
-    """Compare the run's question with the one the browser sends to save it.
-
-    A chat turn stores the NFKC-normalized question (``chat_store``), while the
-    pending share result keeps the raw text. Comparing the two forms literally
-    rejected perfectly valid saves -- one non-breaking space in a follow-up was
-    enough to make the answer appear while its bookmark failed.
-    """
-    def normalized(value):
-        return unicodedata.normalize("NFKC", str(value or "")).strip()
-
-    return normalized(stored) == normalized(requested)
-
-
-def _sanitize_previous_turn(raw):
-    if not isinstance(raw, dict):
-        return None
-    question = _clean_previous_question(raw.get("question"))
-    consensus = str(raw.get("consensus") or "").strip()[:cfg.get_followup_consensus_char_limit()]
-    if not question or not consensus:
-        return None
-    turn = {
-        "question": question,
-        "consensus": consensus,
-        "differences": str(raw.get("differences") or "").strip()[:50_000],
-        "sources": share_snapshots.sanitize_sources(raw.get("sources")),
-    }
-    differences_data = share_snapshots.sanitize_differences_data(raw.get("differences_data"))
-    if differences_data is not None:
-        turn["differences_data"] = differences_data
-    return turn
 
 
 def _bookmark_uid(request: Request):
@@ -984,156 +885,6 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
         raise HTTPException(status_code=status, detail=exc.message) from None
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error saving bookmark")
-
-
-def persist_authoritative_consensus_bookmark(
-    uid: str,
-    data: dict,
-    authoritative: dict,
-) -> dict:
-    """Persist one trusted consensus snapshot and return the merged bookmark.
-
-    Both ``/consensus`` and the compatibility save endpoint use this function.
-    The former already owns the completed engine output; the latter first
-    resolves the same output through a pending result or completed chat turn.
-    Keeping the mutation in one place prevents the two paths from drifting.
-    """
-    question = data.get("question")
-    result_id = str(data.get("resultId") or "").strip()
-    previous_question = _clean_previous_question(data.get("previousQuestion"))
-    previous_turn = _sanitize_previous_turn(data.get("previousTurn"))
-    chat_binding = _chat_binding(data)
-    # Provider answers and provenance are server-owned. Client copies are kept
-    # in the request schema only for cached clients and are never persisted.
-    model_responses = None
-
-    if not question:
-        raise HTTPException(status_code=400, detail="Missing required fields.")
-    if not _same_question(authoritative["question"], question):
-        raise HTTPException(status_code=409, detail="Bookmark question does not match the completed run.")
-    consensusText = authoritative["consensus"][:100_000]
-    differencesText = authoritative["differences"][:50_000]
-    differencesData = authoritative.get("differences_data")
-    sources = share_snapshots.sanitize_sources(authoritative.get("sources"))
-    model_responses = _sanitize_model_responses(
-        authoritative.get("model_responses") or {}
-    )
-    included_providers, authoritative_labels = _model_provenance(
-        authoritative.get("included_models")
-    )
-    consensus_model = str(authoritative.get("consensus_model") or "").strip()[:80]
-    authoritative_labels.update(authoritative.get("model_labels") or {})
-    result_id = authoritative.get("result_id") or result_id
-
-    doc_id = _bookmark_document_id(question, data.get("bookmarkId"))
-
-    dataToMerge = {
-        "query": question,
-        "previous_question": previous_question,
-        # Agent Mode persists only this authoritative consensus snapshot; the
-        # former per-model writes (which also supplied the timestamp) were
-        # removed by the multi-run migration. Firestore order_by("timestamp")
-        # excludes documents where the field is missing, so a successful new
-        # bookmark otherwise exists only until the browser refreshes.
-        "timestamp": firestore.SERVER_TIMESTAMP,
-        "responses": {
-            "consensus": consensusText,
-            "differences": differencesText
-        }
-    }
-    title = _stable_bookmark_title(uid, question, previous_question, chat_binding)
-    if title:
-        dataToMerge["title"] = title
-    if model_responses is not None:
-        # Every provider key is present, including empty strings. That clears
-        # stale answers when a later turn in the same chat used fewer models.
-        dataToMerge["responses"].update(model_responses)
-    if chat_binding:
-        dataToMerge.update(chat_binding)
-    if previous_turn is not None:
-        dataToMerge["previous_turn"] = previous_turn
-    else:
-        dataToMerge["previous_turn"] = {}
-
-    # Strukturierte Differences whitelisten/kappen (gleiche Validierung wie beim
-    # Share-Snapshot) und mitspeichern, damit das Bookmark Verdict, Karten und
-    # Modellvergleiche wie eine echte Query rendern kann.
-    sanitized_diff_data = sanitize_differences_data(differencesData)
-    if sanitized_diff_data is not None:
-        dataToMerge["responses"]["differences_data"] = sanitized_diff_data
-
-    if sources is not None:
-        dataToMerge["sources"] = sources
-
-    if previous_question:
-        # Das Live-Pending-Result des Follow-ups kennt nur die aktuelle Frage.
-        # Ein Bookmark-Share muss spaeter serverseitig neu aufgebaut werden und
-        # darf keinen alten Result-Verweis wiederverwenden.
-        dataToMerge["share_result_id"] = ""
-    elif result_id:
-        dataToMerge["share_result_id"] = result_id
-    dataToMerge["vote_subject_id"] = str(
-        authoritative.get("vote_subject_id") or result_id or ""
-    )
-    dataToMerge["included_providers"] = included_providers
-    dataToMerge["consensus_model"] = consensus_model
-    clean_labels = share_snapshots.sanitize_model_labels(
-        authoritative_labels, included_providers
-    )
-    dataToMerge["model_labels"] = clean_labels
-    
-    try:
-        doc_ref = (
-            db_firestore
-            .collection("users")
-            .document(uid)
-            .collection("bookmarks")
-            .document(doc_id)
-        )
-        bookmark = persistence_guard.write_bookmark(
-            uid=uid, doc_ref=doc_ref, patch=dataToMerge, db=db_firestore
-        )
-        bookmark["id"] = doc_id
-        return bookmark
-    except persistence_guard.PersistenceLimitError as exc:
-        status = 413 if exc.code in {"bookmark_too_large", "bookmark_storage_limit"} else 429
-        raise HTTPException(status_code=status, detail=exc.message) from None
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logging.error(
-            "Error saving consensus bookmark category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=500, detail="Error saving consensus") from exc
-
-
-@router.post("/bookmark/consensus")
-@limiter.limit("120/minute")
-def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest):
-    data = payload.model_dump()
-    id_token = extract_id_token(request, data)
-    question = data.get("question")
-    result_id = str(data.get("resultId") or "").strip()
-    chat_binding = _chat_binding(data)
-
-    if not id_token or not question:
-        raise HTTPException(status_code=400, detail="Missing required fields.")
-
-    try:
-        uid = verify_user_token(id_token)
-    except AuthenticationUnavailable:
-        raise auth_unavailable_error() from None
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail="Authentication failed") from exc
-    _enforce_bookmark_uid_rate_limit(uid, "consensus_save")
-
-    authoritative = _authoritative_consensus_payload(uid, result_id, chat_binding)
-    bookmark = persist_authoritative_consensus_bookmark(uid, data, authoritative)
-    return {
-        "status": "success",
-        "message": "Consensus and differences saved.",
-        "bookmark": bookmark,
-    }
 
 
 AGENT_SHARE_UNAVAILABLE = "This answer can’t be shared any more. Open the chat again and share it from there."

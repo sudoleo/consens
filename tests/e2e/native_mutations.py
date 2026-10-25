@@ -32,12 +32,12 @@ CASES = {
     "WP-07-atomicity-charge": ("app.services.usage_repository", "FirestoreUsageRepository._transaction", [
         ("return run(transaction)", "return _audit_unprotected_operation(self, uid, operation)")],
         "test_usage_transactions.py::test_native_distinct_bookings_preserve_both_charges"),
-    "WP-08": ("app.services.chat_store", "ChatStore.complete_turn", [
+    "WP-08": ("app.services.chat_store", "ChatStore.fail_turn", [
         ('if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:', 'if False:')],
         "test_chat_lifecycle_transactions.py::test_native_deleting_tombstone_fences_writes_before_physical_purge"),
-    "WP-08-terminal": ("app.services.chat_store", "ChatStore.complete_turn", [
+    "WP-08-terminal": ("app.services.chat_store", "ChatStore.fail_turn", [
         ("if status != TURN_STATUS_PENDING:", "if False:")],
-        "test_chat_lifecycle_transactions.py::test_native_terminal_failure_rejects_completion_and_remains_failed"),
+        "test_chat_lifecycle_transactions.py::test_native_terminal_failure_rejects_another_outcome_and_remains_failed"),
     "WP-09": ("app.services.account_deletion", "FirestoreAccountDeletion.cleanup_uid", [
         ('("answer_receipts", lambda: self._delete_query("answer_receipts", "owner_uid", uid))', '("answer_receipts", lambda: None)')],
         "test_account_deletion_transactions.py::test_native_account_repeats_success_after_lost_checkpoint"),

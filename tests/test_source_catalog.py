@@ -205,12 +205,13 @@ def test_persistence_sanitizer_retains_case_sensitive_paths_aliases_and_all_cita
     assert all(f'href="#src-{index}"' in html for index in (79, 80, 81))
 
 
-def test_chat_model_and_turn_normalization_roundtrip_entire_source_catalog():
-    from app.services.chat_store import normalize_model_answers, normalize_turn_sources, model_answer_metadata
+def test_stored_model_answer_and_turn_normalization_roundtrip_entire_source_catalog():
+    from app.services.chat_store import model_answer_metadata, normalize_turn_sources, sanitize_sources
 
     sources = [source(f"S{i}", f"https://example.test/{i}") for i in range(1, 101)]
-    normalized = normalize_model_answers({"OpenAI": {"answer": "Last reference [S100]", "sources": sources}})
-    stored = normalized["OpenAI"]
+    # A model answer as a saved Consensus turn stores it (written until 2026-10-25).
+    stored = {"schema_version": 1, "provider": "OpenAI", "model_label": "OpenAI",
+              "answer": "Last reference [S100]", "sources": sanitize_sources(sources)}
     assert len(stored["sources"]) == 100
     restored = model_answer_metadata(stored)
     assert restored["sources"] == stored["sources"]

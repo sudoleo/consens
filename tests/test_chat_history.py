@@ -19,10 +19,7 @@ from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
 AUTH_OWNER = {"Authorization": "Bearer owner-token"}
 AUTH_OTHER = {"Authorization": "Bearer other-token"}
-# Eine echte Engine aus ALLOWED_CONSENSUS_MODELS. Frueher stand hier der
-# Fantasiestring "GPT Consensus" - der Endpoint nahm ihn an, weil er nur die
-# Laenge prueft. Seit die Turn-Anlage dieselbe Allowlist wie /consensus
-# durchsetzt, muss die Fixture ein Modell verwenden, das es wirklich gibt.
+# Eine echte Engine aus ALLOWED_CONSENSUS_MODELS.
 TURN_PAYLOAD = {
     "question": "What changed?",
     "mode": "regular",
@@ -396,11 +393,6 @@ def chat_api(monkeypatch):
         raise RuntimeError("invalid token")
 
     monkeypatch.setattr(chat_history_router, "verify_user_token", verify)
-    # Ohne diesen Stub liefe das Tier-Gate der Turn-Anlage gegen das ECHTE
-    # Firestore (is_user_pro haengt am Client aus app.core.security, nicht am
-    # gepatchten db_firestore dieses Moduls). Default ist Free; ein Test, der
-    # Pro braucht, patcht die Funktion selbst.
-    monkeypatch.setattr(chat_history_router, "is_user_pro", lambda uid: False)
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(chat_history_router.router)
@@ -415,14 +407,56 @@ def create_chat(client, *, title=None, headers=AUTH_OWNER):
     return response.json()["chat"]
 
 
+UIDS = {AUTH_OWNER["Authorization"]: "owner-uid", AUTH_OTHER["Authorization"]: "other-uid"}
+
+
 def create_turn(client, chat_id, payload=None, *, headers=AUTH_OWNER):
-    response = client.post(
-        f"/chats/{chat_id}/turns",
-        json=payload or TURN_PAYLOAD,
-        headers=headers,
-    )
-    assert response.status_code == 201
-    return response.json()["turn"]
+    """A Consensus turn as it is stored. Since 2026-10-25 no route creates one
+    (the browser runs no Consensus chat); the store method stays the Agent's."""
+    store = chat_store.ChatStore(chat_history_router.db_firestore)
+    return store.create_turn(UIDS[headers["Authorization"]], chat_id, **(payload or TURN_PAYLOAD))
+
+
+def complete_turn(store, uid, chat_id, turn_id, *, question, model_answers, consensus,
+                  differences="", differences_data=None, sources=None, result_id=None):
+    """Writes a completed Consensus turn in the shape the retired completion
+    left (until 2026-10-25): one document per family, the result on the turn."""
+    turn_ref = store._turn_ref(uid, chat_id, turn_id)
+    included = []
+    for name, item in model_answers.items():
+        provider = chat_store.normalize_provider(name)
+        answer = str(item.get("answer") or "").strip()
+        if not answer:
+            continue
+        included.append(provider)
+        turn_ref.collection("model_answers").document(chat_store.PROVIDER_DOCUMENT_IDS[provider]).set({
+            "schema_version": chat_store.MODEL_ANSWER_SCHEMA_VERSION,
+            "provider": provider,
+            "model_label": str(item.get("model_label") or provider),
+            "answer": answer,
+            "sources": chat_store.sanitize_sources(item.get("sources")),
+            "created_at": chat_store.firestore.SERVER_TIMESTAMP,
+            "updated_at": chat_store.firestore.SERVER_TIMESTAMP,
+        })
+    included = [provider for provider in chat_store.PROVIDER_ORDER if provider in included]
+    updates = {
+        "status": "completed",
+        "consensus": consensus,
+        "differences": differences,
+        "differences_data": chat_store.normalize_turn_differences_data(differences_data),
+        "sources": chat_store.normalize_turn_sources(sources),
+        "included_models": included,
+        "answer_count": len(included),
+        "completed_at": chat_store.firestore.SERVER_TIMESTAMP,
+        "updated_at": chat_store.firestore.SERVER_TIMESTAMP,
+    }
+    score = ((updates["differences_data"] or {}).get("agreement") or {}).get("score")
+    if isinstance(score, int) and not isinstance(score, bool) and 0 <= score <= 100:
+        updates["agreement_score"] = score
+    if result_id:
+        updates["result_id"] = result_id
+    turn_ref.update(updates)
+    return store.get_turn(uid, chat_id, turn_id)
 
 
 def completion_payload(question=TURN_PAYLOAD["question"], providers=PROVIDERS):
@@ -478,9 +512,6 @@ def test_all_chat_endpoints_require_verified_authentication(chat_api):
         client.post("/chats", json={}),
         client.get("/chats"),
         client.get("/chats/" + "a" * 32),
-        client.post("/chats/" + "a" * 32 + "/turns", json=TURN_PAYLOAD),
-        client.get("/chats/" + "a" * 32 + "/turns"),
-        client.get("/chats/" + "a" * 32 + "/turns/" + "b" * 32),
         client.put("/chats/" + "a" * 32 + "/turns/" + "b" * 32 + "/task-checks", json={"checked": [0]}),
         client.get("/chats", headers={"Authorization": "Bearer invalid"}),
     )
@@ -518,14 +549,12 @@ def test_chat_detail_is_owner_scoped_and_list_is_compact(chat_api):
 
     owner_detail = client.get(f"/chats/{first['id']}", headers=AUTH_OWNER)
     foreign_detail = client.get(f"/chats/{first['id']}", headers=AUTH_OTHER)
-    foreign_turns = client.get(f"/chats/{first['id']}/turns", headers=AUTH_OTHER)
     listed = client.get("/chats", headers=AUTH_OWNER)
 
     assert owner_detail.status_code == 200
     assert owner_detail.headers["cache-control"] == "private, no-store"
     assert owner_detail.json()["chat"]["schema_version"] == 1
     assert foreign_detail.status_code == 404
-    assert foreign_turns.status_code == 404
     assert [item["id"] for item in listed.json()["chats"]] == [second["id"], first["id"]]
     assert "schema_version" not in listed.json()["chats"][0]
     assert "turns" not in listed.json()["chats"][0]
@@ -693,17 +722,12 @@ def test_turn_client_request_id_rejects_changed_payload(chat_api):
     chat = create_chat(client)
     payload = {**TURN_PAYLOAD, "client_request_id": "request-123"}
     original = create_turn(client, chat["id"], payload)
-    conflict = client.post(
-        f"/chats/{chat['id']}/turns",
-        headers=AUTH_OWNER,
-        json={
+    with pytest.raises(chat_store.ChatIdempotencyConflict):
+        create_turn(client, chat["id"], {
             **payload,
             "question": "A changed question must not reuse the original turn",
-        },
-    )
+        })
 
-    assert conflict.status_code == 409
-    assert conflict.json() == {"detail": "Idempotency conflict"}
     assert database.turns("owner-uid", chat["id"])[original["id"]]["question"] == (
         TURN_PAYLOAD["question"]
     )
@@ -742,84 +766,17 @@ def test_turn_list_is_sorted_bounded_and_cursor_paginated(chat_api):
         for index in range(3)
     ]
 
-    first_page = client.get(f"/chats/{chat['id']}/turns?limit=2", headers=AUTH_OWNER)
-    cursor = first_page.json()["next_cursor"]
-    second_page = client.get(
-        f"/chats/{chat['id']}/turns?limit=2&cursor={cursor}", headers=AUTH_OWNER
+    store = chat_store.ChatStore(_database)
+    first_page = store.list_turns("owner-uid", chat["id"], limit=2)
+    second_page = store.list_turns(
+        "owner-uid", chat["id"], limit=2, cursor=first_page["next_cursor"]
     )
-    over_limit = client.get(f"/chats/{chat['id']}/turns?limit=101", headers=AUTH_OWNER)
 
-    assert [item["id"] for item in first_page.json()["turns"]] == [
+    assert [item["id"] for item in first_page["turns"]] == [
         turns[0]["id"], turns[1]["id"]
     ]
-    assert [item["id"] for item in second_page.json()["turns"]] == [turns[2]["id"]]
-    assert second_page.json()["has_more"] is False
-    assert over_limit.status_code == 422
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {**TURN_PAYLOAD, "question": "   "},
-        {**TURN_PAYLOAD, "mode": "x" * 41},
-        {**TURN_PAYLOAD, "deep_search": "false"},
-        {**TURN_PAYLOAD, "selected_models": []},
-        {**TURN_PAYLOAD, "selected_models": [f"model-{index}" for index in range(9)]},
-        {**TURN_PAYLOAD, "consensus_model": ""},
-        # Kein Modell ausserhalb der Allowlist: der Turn haelt die Engine fest,
-        # mit der spaeter der Memory-Call laeuft.
-        {**TURN_PAYLOAD, "consensus_model": "GPT Consensus"},
-        {**TURN_PAYLOAD, "consensus_model": "gpt-5-turbo-unlimited"},
-        {**TURN_PAYLOAD, "client_request_id": "contains spaces"},
-        {**TURN_PAYLOAD, "api_key": "sk-do-not-store"},
-        {**TURN_PAYLOAD, "id_token": "firebase-token-do-not-store"},
-    ],
-)
-def test_invalid_or_secret_bearing_turn_payloads_are_not_stored(chat_api, payload):
-    client, database = chat_api
-    chat = create_chat(client)
-    response = client.post(
-        f"/chats/{chat['id']}/turns", json=payload, headers=AUTH_OWNER
-    )
-    assert response.status_code == 422
-    assert database.turns("owner-uid", chat["id"]) == {}
-    assert database.chats("owner-uid")[chat["id"]]["turn_count"] == 0
-
-
-def test_premium_engine_needs_pro_at_turn_creation_like_at_consensus(
-    chat_api, monkeypatch
-):
-    """Das Tier-Gate von /consensus gilt schon beim Anlegen des Turns.
-
-    Der Turn ist die Quelle, aus der _memory_credentials spaeter die Engine
-    liest. Ohne dieses Gate koennte ein Free-Konto eine Premium-Engine im
-    Dokument hinterlegen, die dann - sobald die Admin-Zuordnung
-    chat_memory_models fuer diese Familie leer ist - den Kompressions-Call auf
-    dem Developer-Key faehrt.
-    """
-    client, database = chat_api
-    chat = create_chat(client)
-    premium = {**TURN_PAYLOAD, "consensus_model": "Anthropic-Pro"}
-
-    blocked = client.post(
-        f"/chats/{chat['id']}/turns", json=premium, headers=AUTH_OWNER
-    )
-    assert blocked.status_code == 403
-    assert blocked.json()["detail"]["error_code"] == "pro_required"
-    # Kein halb angelegter Turn und kein hochgezaehlter Chat.
-    assert database.turns("owner-uid", chat["id"]) == {}
-    assert database.chats("owner-uid")[chat["id"]]["turn_count"] == 0
-
-    # Free-Engines bleiben fuer dasselbe Konto offen.
-    create_turn(client, chat["id"])
-
-    # Mit Pro geht die Premium-Engine durch.
-    monkeypatch.setattr(chat_history_router, "is_user_pro", lambda uid: True)
-    allowed = client.post(
-        f"/chats/{chat['id']}/turns", json=premium, headers=AUTH_OWNER
-    )
-    assert allowed.status_code == 201
-    assert allowed.json()["turn"]["consensus_model"] == "Anthropic-Pro"
+    assert [item["id"] for item in second_page["turns"]] == [turns[2]["id"]]
+    assert second_page["has_more"] is False
 
 
 def test_unknown_and_foreign_chat_are_indistinguishable_for_turn_creation(chat_api):
@@ -837,263 +794,6 @@ def test_unknown_and_foreign_chat_are_indistinguishable_for_turn_creation(chat_a
 
     assert unknown.status_code == foreign.status_code == malformed.status_code == 404
     assert unknown.json() == foreign.json()
-
-
-def test_completion_preflight_is_owner_bound_read_only_and_skips_answers(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    store = chat_store.ChatStore(database)
-    database.read_log.clear()
-
-    validated = store.validate_turn_for_completion(
-        "owner-uid",
-        chat["id"],
-        turn["id"],
-        question=TURN_PAYLOAD["question"],
-    )
-
-    assert validated["status"] == "pending"
-    assert database.turns("owner-uid", chat["id"])[turn["id"]]["status"] == "pending"
-    assert not any("model_answers" in path for path in database.read_log)
-    with pytest.raises(chat_store.ChatNotFound):
-        store.validate_turn_for_completion(
-            "other-uid",
-            chat["id"],
-            turn["id"],
-            question=TURN_PAYLOAD["question"],
-        )
-    with pytest.raises(chat_store.TurnQuestionConflict):
-        store.validate_turn_for_completion(
-            "owner-uid",
-            chat["id"],
-            turn["id"],
-            question="Different question",
-        )
-
-
-def test_complete_turn_atomically_persists_six_separate_answer_documents(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    store = chat_store.ChatStore(database)
-    chat_before = dict(database.chats("owner-uid")[chat["id"]])
-
-    completed = store.complete_turn(
-        "owner-uid", chat["id"], turn["id"], **completion_payload()
-    )
-
-    stored_turn = database.turns("owner-uid", chat["id"])[turn["id"]]
-    stored_answers = database.model_answers("owner-uid", chat["id"], turn["id"])
-    stored_chat = database.chats("owner-uid")[chat["id"]]
-    assert completed["status"] == "completed"
-    assert completed["answer_count"] == 6
-    assert completed["agreement_score"] == 83
-    assert completed["included_models"] == list(PROVIDERS)
-    assert set(completed["model_answers"]) == set(PROVIDERS)
-    assert set(stored_answers) == {
-        chat_store.PROVIDER_DOCUMENT_IDS[provider] for provider in PROVIDERS
-    }
-    assert all(
-        set(answer) == {
-            "schema_version", "provider", "model_label", "answer", "sources",
-            "created_at", "updated_at",
-        }
-        for answer in stored_answers.values()
-    )
-    assert all("api_key" not in answer for answer in stored_answers.values())
-    assert all("raw_attachment" not in answer for answer in stored_answers.values())
-    assert "model_answers" not in stored_turn
-    assert not any(provider in stored_turn for provider in PROVIDERS)
-    assert stored_turn["completion_fingerprint"]
-    assert stored_turn["result_id"] == "AbCdEf0123456789"
-    assert stored_turn["sources"] == [{
-        "id": "S1", "title": "Turn source", "url": "https://example.test/turn",
-        "provider": "OpenAI",
-    }]
-    assert "secret" not in stored_turn["differences_data"]["claims"][0]
-    assert "api_key" not in stored_turn["differences_data"]
-    assert stored_chat["turn_count"] == chat_before["turn_count"] == 1
-    assert stored_chat["latest_question"] == chat_before["latest_question"]
-    assert stored_chat["updated_at"] > chat_before["updated_at"]
-    committed_paths = database.transaction_commits[-1]
-    assert len(committed_paths) == 8
-    assert committed_paths[-2:] == [
-        ("users", "owner-uid", "chats", chat["id"], "turns", turn["id"]),
-        ("users", "owner-uid", "chats", chat["id"]),
-    ]
-
-
-def test_complete_turn_skips_empty_answers_and_derives_count_server_side(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    payload = completion_payload(providers=("OpenAI", "Gemini", "Grok"))
-    payload["model_answers"]["Gemini"]["answer"] = "   "
-    payload["model_answers"]["Grok"]["answer"] = None
-    payload["differences_data"] = {"agreement": {"level": "unknown"}}
-
-    completed = chat_store.ChatStore(database).complete_turn(
-        "owner-uid", chat["id"], turn["id"], **payload
-    )
-
-    assert completed["answer_count"] == 1
-    assert completed["included_models"] == ["OpenAI"]
-    assert "agreement_score" not in completed
-    assert "score" not in completed["differences_data"]["agreement"]
-    assert set(database.model_answers("owner-uid", chat["id"], turn["id"])) == {
-        "openai"
-    }
-
-
-def test_complete_turn_rejects_unknown_or_too_many_providers_before_writes(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    store = chat_store.ChatStore(database)
-    before = len(database.write_log)
-
-    unknown = completion_payload(providers=("OpenAI",))
-    unknown["model_answers"]["Untrusted/Path"] = {"answer": "unsafe"}
-    with pytest.raises(ValueError, match="supported provider"):
-        store.complete_turn("owner-uid", chat["id"], turn["id"], **unknown)
-    with pytest.raises(ValueError, match="at most 6"):
-        store.complete_turn(
-            "owner-uid",
-            chat["id"],
-            turn["id"],
-            **{
-                **completion_payload(),
-                "model_answers": [
-                    {"provider": provider, "answer": "ok"} for provider in PROVIDERS
-                ] + [{"provider": "OpenAI", "answer": "duplicate"}],
-            },
-        )
-
-    assert len(database.write_log) == before
-    assert database.turns("owner-uid", chat["id"])[turn["id"]]["status"] == "pending"
-    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
-
-
-def test_completion_limits_text_metadata_but_preserves_all_sources(chat_api, monkeypatch):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    monkeypatch.setattr(chat_store.cfg, "get_consensus_answer_char_limit", lambda: 12)
-    payload = completion_payload(providers=("OpenAI",))
-    payload["model_answers"]["OpenAI"].update({
-        "answer": "a" * 100,
-        "model_label": "unsafe,label" + "x" * 200,
-        "sources": [
-            {
-                "id": f"S{index}", "title": "t" * 500,
-                "url": f"https://example.test/{index}", "provider": "p" * 100,
-            }
-            for index in range(80)
-        ],
-    })
-    payload["consensus"] = "c" * (chat_store.CONSENSUS_MAX_LENGTH + 10)
-    payload["differences"] = "d" * (chat_store.DIFFERENCES_MAX_LENGTH + 10)
-
-    chat_store.ChatStore(database).complete_turn(
-        "owner-uid", chat["id"], turn["id"], **payload
-    )
-
-    answer = database.model_answers("owner-uid", chat["id"], turn["id"])["openai"]
-    stored_turn = database.turns("owner-uid", chat["id"])[turn["id"]]
-    assert answer["answer"] == "a" * 12
-    assert answer["model_label"] == "OpenAI"
-    assert len(answer["sources"]) == 80
-    assert len(answer["sources"][0]["title"]) == 300
-    assert len(answer["sources"][0]["provider"]) == 40
-    assert len(stored_turn["consensus"]) == chat_store.CONSENSUS_MAX_LENGTH
-    assert len(stored_turn["differences"]) == chat_store.DIFFERENCES_MAX_LENGTH
-
-
-@pytest.mark.parametrize("target", ["turn", "model_answer"])
-def test_completion_rejects_oversized_source_documents_without_partial_writes(chat_api, target):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    payload = completion_payload(providers=("OpenAI",))
-    sources = [{"id": f"S{index}", "url": f"https://example.test/{index}/" + "x" * 1900,
-                "title": "t" * 300} for index in range(1, 401)]
-    if target == "turn":
-        payload["sources"] = sources
-    else:
-        payload["model_answers"]["OpenAI"]["sources"] = sources
-    before = copy.deepcopy(database.turns("owner-uid", chat["id"])[turn["id"]])
-    with pytest.raises(ValueError, match="storage byte budget"):
-        chat_store.ChatStore(database).complete_turn("owner-uid", chat["id"], turn["id"], **payload)
-    assert database.turns("owner-uid", chat["id"])[turn["id"]] == before
-    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
-
-
-def test_completion_retry_is_idempotent_but_changed_payload_conflicts(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    store = chat_store.ChatStore(database)
-    payload = completion_payload(providers=("OpenAI", "Gemini"))
-    first = store.complete_turn("owner-uid", chat["id"], turn["id"], **payload)
-    writes_after_first = len(database.write_log)
-    reordered = dict(payload)
-    reordered["model_answers"] = {
-        "Gemini": {
-            **payload["model_answers"]["Gemini"],
-            "api_key": "a-different-ignored-secret",
-        },
-        "OpenAI": payload["model_answers"]["OpenAI"],
-    }
-
-    second = store.complete_turn(
-        "owner-uid", chat["id"], turn["id"], **reordered
-    )
-    assert second == first
-    assert len(database.write_log) == writes_after_first
-
-    with pytest.raises(chat_store.TurnCompletionConflict):
-        store.complete_turn(
-            "owner-uid", chat["id"], turn["id"],
-            **{**payload, "consensus": "Different conclusion"},
-        )
-    assert len(database.write_log) == writes_after_first
-
-
-def test_completion_rejects_question_mismatch_failed_turn_and_invalid_result_id(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    mismatch_turn = create_turn(client, chat["id"])
-    failed_turn = create_turn(
-        client, chat["id"], {**TURN_PAYLOAD, "question": "Second turn"}
-    )
-    invalid_result_turn = create_turn(
-        client, chat["id"], {**TURN_PAYLOAD, "question": "Third turn"}
-    )
-    store = chat_store.ChatStore(database)
-
-    with pytest.raises(chat_store.TurnQuestionConflict):
-        store.complete_turn(
-            "owner-uid", chat["id"], mismatch_turn["id"],
-            **completion_payload(question="Different question"),
-        )
-    store.fail_turn(
-        "owner-uid", chat["id"], failed_turn["id"], error_code="cancelled"
-    )
-    with pytest.raises(chat_store.TurnStatusConflict):
-        store.complete_turn(
-            "owner-uid", chat["id"], failed_turn["id"],
-            **completion_payload(question="Second turn"),
-        )
-    with pytest.raises(ValueError, match="valid result identifier"):
-        store.complete_turn(
-            "owner-uid", chat["id"], invalid_result_turn["id"],
-            **completion_payload(question="Third turn") | {"result_id": "../secret"},
-        )
-    assert all(
-        item["status"] in {"pending", "failed"}
-        for item in database.turns("owner-uid", chat["id"]).values()
-    )
 
 
 def test_fail_turn_is_allowlisted_idempotent_and_terminal(chat_api):
@@ -1130,7 +830,8 @@ def test_fail_turn_is_allowlisted_idempotent_and_terminal(chat_api):
             error_code="provider stacktrace and sk-secret",
         )
 
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], completed["id"],
         **completion_payload(question="Completed question"),
     )
@@ -1140,62 +841,25 @@ def test_fail_turn_is_allowlisted_idempotent_and_terminal(chat_api):
         )
 
 
-def test_completion_transaction_failure_leaves_no_partial_state(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    turn = create_turn(client, chat["id"])
-    chat_before = dict(database.chats("owner-uid")[chat["id"]])
-    database.fail_transaction_after_staged_writes = 3
-
-    with pytest.raises(RuntimeError, match="injected transaction failure"):
-        chat_store.ChatStore(database).complete_turn(
-            "owner-uid", chat["id"], turn["id"], **completion_payload()
-        )
-
-    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
-    assert database.turns("owner-uid", chat["id"])[turn["id"]]["status"] == "pending"
-    assert database.chats("owner-uid")[chat["id"]] == chat_before
-
-
 def test_turn_detail_is_owner_scoped_whitelisted_and_reads_six_known_docs(chat_api):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
-    chat_store.ChatStore(database).complete_turn(
+    complete_turn(
+        chat_store.ChatStore(database),
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
+    store = chat_store.ChatStore(database)
     database.read_log.clear()
 
-    owner = client.get(
-        f"/chats/{chat['id']}/turns/{turn['id']}", headers=AUTH_OWNER
-    )
-    foreign_turn = client.get(
-        f"/chats/{chat['id']}/turns/{turn['id']}", headers=AUTH_OTHER
-    )
-    unknown_turn = client.get(
-        f"/chats/{chat['id']}/turns/{'f' * 32}", headers=AUTH_OWNER
-    )
-    foreign_chat = client.get(
-        f"/chats/{chat['id']}/turns/{'f' * 32}", headers=AUTH_OTHER
-    )
-    malformed = client.get(
-        f"/chats/{chat['id']}/turns/not-a-valid-id", headers=AUTH_OWNER
-    )
+    returned = store.get_turn("owner-uid", chat["id"], turn["id"])
 
-    assert owner.status_code == 200
-    assert owner.headers["cache-control"] == "private, no-store"
-    returned = owner.json()["turn"]
-    assert "completion_fingerprint" not in returned
     assert set(returned["model_answers"]) == set(PROVIDERS)
     assert all("api_key" not in answer for answer in returned["model_answers"].values())
-    assert (
-        foreign_turn.status_code
-        == unknown_turn.status_code
-        == foreign_chat.status_code
-        == malformed.status_code
-        == 404
-    )
-    assert foreign_turn.json() == unknown_turn.json() == foreign_chat.json() == malformed.json()
+    for uid, turn_id in (("other-uid", turn["id"]), ("owner-uid", "f" * 32),
+                         ("other-uid", "f" * 32), ("owner-uid", "not-a-valid-id")):
+        with pytest.raises(chat_store.ChatNotFound):
+            store.get_turn(uid, chat["id"], turn_id)
     answer_reads = [path for path in database.read_log if "model_answers" in path]
     assert len(answer_reads) == 6
     assert {path[-1] for path in answer_reads} == {
@@ -1211,14 +875,15 @@ def test_turn_list_stays_compact_after_completion_and_failure(chat_api):
         client, chat["id"], {**TURN_PAYLOAD, "question": "Failed question"}
     )
     store = chat_store.ChatStore(database)
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], completed["id"], **completion_payload()
     )
     store.fail_turn(
         "owner-uid", chat["id"], failed["id"], error_code="consensus_failed"
     )
 
-    listed = client.get(f"/chats/{chat['id']}/turns", headers=AUTH_OWNER).json()["turns"]
+    listed = store.list_turns("owner-uid", chat["id"])["turns"]
     completed_meta, failed_meta = listed
     assert completed_meta["answer_count"] == 6
     assert completed_meta["agreement_score"] == 83
@@ -1233,10 +898,8 @@ def test_turn_list_stays_compact_after_completion_and_failure(chat_api):
 
 
 # ---------------------------------------------------------------------------
-# Question-Limit: /consensus kappt die Frage auf
-# cfg.get_consensus_question_char_limit(). Wird ein Turn mit einer laengeren
-# Frage angelegt, kann er NIE abgeschlossen werden — die gekappte Frage passt
-# dann nicht mehr, und jeder Retry scheitert dauerhaft an 409.
+# Question-Limit: ein Turn haelt hoechstens die Frage, die auch die
+# Consensus-Pipeline annimmt (cfg.get_consensus_question_char_limit()).
 # ---------------------------------------------------------------------------
 
 
@@ -1250,34 +913,10 @@ def test_turn_rejects_a_question_the_consensus_cap_would_truncate(chat_api):
     limit = cfg.get_consensus_question_char_limit()
     payload = {**TURN_PAYLOAD, "question": "q" * (limit + 1)}
 
-    response = client.post(f"/chats/{chat['id']}/turns", json=payload, headers=AUTH_OWNER)
+    with pytest.raises(ValueError):
+        create_turn(client, chat["id"], payload)
 
-    assert response.status_code == 422
     assert database.turns("owner-uid", chat["id"]) == {}
-
-
-def test_longest_accepted_question_still_validates_after_the_consensus_cap(chat_api):
-    client, database = chat_api
-    chat = create_chat(client)
-    limit = cfg.get_consensus_question_char_limit()
-    question = "q" * limit
-    turn = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": question})
-
-    # Exactly what /consensus does to the question before it validates the turn.
-    capped = question[:limit].rstrip()
-    validated = chat_store.ChatStore(database).validate_turn_for_completion(
-        "owner-uid", chat["id"], turn["id"], question=capped
-    )
-
-    assert validated["id"] == turn["id"]
-    assert validated["status"] == "pending"
-
-
-# ---------------------------------------------------------------------------
-# Read-Amplification: ein Turn-Detail darf nicht sechs Einzel-Gets auf
-# model_answers kosten, und eine Detail-Seite darf den Chat nicht pro Turn neu
-# pruefen.
-# ---------------------------------------------------------------------------
 
 
 def test_get_turn_reads_model_answers_with_one_query(chat_api):
@@ -1285,7 +924,8 @@ def test_get_turn_reads_model_answers_with_one_query(chat_api):
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
     store = chat_store.ChatStore(database)
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], turn["id"], **completion_payload(providers=("OpenAI",))
     )
     database.read_log.clear()
@@ -1306,7 +946,8 @@ def test_model_answer_under_a_foreign_document_id_is_ignored(chat_api):
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
     store = chat_store.ChatStore(database)
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], turn["id"], **completion_payload(providers=("OpenAI",))
     )
     # Same payload, wrong document id: the provider must not be trusted over
@@ -1331,7 +972,8 @@ def test_list_turn_details_checks_the_chat_once_for_the_whole_page(chat_api):
             client, chat["id"], {**TURN_PAYLOAD, "question": f"Question {index}"}
         )
         if index != 1:
-            store.complete_turn(
+            complete_turn(
+        store,
                 "owner-uid",
                 chat["id"],
                 turn["id"],
@@ -1360,7 +1002,8 @@ def test_list_turn_details_batches_model_answers_instead_of_one_query_per_turn(c
             client, chat["id"], {**TURN_PAYLOAD, "question": f"Question {index}"}
         )
         if index != 2:
-            store.complete_turn(
+            complete_turn(
+        store,
                 "owner-uid",
                 chat["id"],
                 turn["id"],
@@ -1401,7 +1044,8 @@ def test_list_turn_details_keeps_the_query_for_turns_without_included_models(cha
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
     store = chat_store.ChatStore(database)
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], turn["id"], **completion_payload(providers=("OpenAI",))
     )
     turn_path = ("users", "owner-uid", "chats", chat["id"], "turns", turn["id"])
@@ -1453,7 +1097,8 @@ def test_delete_all_chats_removes_every_nested_level(chat_api):
     store = chat_store.ChatStore(database)
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
     version_path = (
@@ -1511,7 +1156,7 @@ def test_delete_all_chats_is_idempotent(chat_api):
     store = chat_store.ChatStore(database)
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
-    store.complete_turn("owner-uid", chat["id"], turn["id"], **completion_payload())
+    complete_turn(store, "owner-uid", chat["id"], turn["id"], **completion_payload())
 
     store.delete_all_chats("owner-uid")
     store.delete_all_chats("owner-uid")
@@ -1529,7 +1174,8 @@ def test_delete_chat_removes_the_whole_tree(chat_api):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
-    chat_store.ChatStore(database).complete_turn(
+    complete_turn(
+        chat_store.ChatStore(database),
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
     version_path = (
@@ -1598,7 +1244,7 @@ def test_deleting_chat_state_rejects_a_late_turn_before_it_can_write(chat_api):
     assert database.documents == before
 
 
-def test_deleting_chat_state_rejects_late_completion_and_failure_writes(chat_api):
+def test_deleting_chat_state_rejects_late_failure_writes(chat_api):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
@@ -1607,10 +1253,6 @@ def test_deleting_chat_state_rejects_late_completion_and_failure_writes(chat_api
     before = copy.deepcopy(database.documents)
     store = chat_store.ChatStore(database)
 
-    with pytest.raises(chat_store.ChatNotFound):
-        store.complete_turn(
-            "owner-uid", chat["id"], turn["id"], **completion_payload()
-        )
     with pytest.raises(chat_store.ChatNotFound):
         store.fail_turn(
             "owner-uid",
@@ -1623,7 +1265,7 @@ def test_deleting_chat_state_rejects_late_completion_and_failure_writes(chat_api
     assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
 
 
-def test_account_deletion_tombstone_fences_late_chat_completion(chat_api):
+def test_account_deletion_tombstone_fences_late_turn_failure(chat_api):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
@@ -1633,12 +1275,11 @@ def test_account_deletion_tombstone_fences_late_chat_completion(chat_api):
     before = copy.deepcopy(database.documents)
 
     with pytest.raises(chat_store.persistence_guard.AccountDeletionInProgress):
-        chat_store.ChatStore(database).complete_turn(
-            "owner-uid", chat["id"], turn["id"], **completion_payload()
+        chat_store.ChatStore(database).fail_turn(
+            "owner-uid", chat["id"], turn["id"], error_code="consensus_failed"
         )
 
     assert database.documents == before
-    assert database.model_answers("owner-uid", chat["id"], turn["id"]) == {}
 
 
 def test_account_deletion_tombstone_fences_late_chat_and_turn_creation(chat_api):
@@ -1710,7 +1351,8 @@ def _completed_chat(client, database, turns=2):
     turn_ids = []
     for index in range(turns):
         turn = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": f"Q{index}?"})
-        store.complete_turn(
+        complete_turn(
+        store,
             "owner-uid", chat["id"], turn["id"],
             **completion_payload(question=f"Q{index}?"),
         )
@@ -1803,14 +1445,10 @@ def test_queued_chat_deletion_cannot_be_revived_by_late_writes(chat_api, monkeyp
     assert store.delete_chat("owner-uid", chat["id"]) is False
     before = copy.deepcopy(database.documents)
 
-    late = client.post(f"/chats/{chat['id']}/turns", json=TURN_PAYLOAD, headers=AUTH_OWNER)
-    assert late.status_code == 404
-    from app.services.chat_context import ChatContextNotFound, FirestoreChatContextRepository
-    with pytest.raises(ChatContextNotFound):
-        FirestoreChatContextRepository(database).claim_version(
-            "owner-uid", chat["id"], turn_ids[0], "e" * 32, {},
-            now=datetime.now(timezone.utc),
-        )
+    with pytest.raises(chat_store.ChatNotFound):
+        create_turn(client, chat["id"])
+    with pytest.raises(chat_store.ChatNotFound):
+        store.fail_turn("owner-uid", chat["id"], turn_ids[0], error_code="consensus_failed")
     assert database.documents == before
 
 
@@ -1897,7 +1535,8 @@ def test_sweep_never_touches_completed_or_failed_turns(chat_api):
     chat = create_chat(client)
     store = chat_store.ChatStore(database)
     done = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Done"})
-    store.complete_turn(
+    complete_turn(
+        store,
         "owner-uid", chat["id"], done["id"], **completion_payload(question="Done")
     )
     broken = create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Broken"})
@@ -2015,14 +1654,10 @@ def test_turns_per_chat_are_capped_without_corrupting_the_counter(
 
     create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "One"})
     create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Two"})
-    blocked = client.post(
-        f"/chats/{chat['id']}/turns",
-        json={**TURN_PAYLOAD, "question": "Three"},
-        headers=AUTH_OWNER,
-    )
+    with pytest.raises(chat_store.ChatQuotaExceeded) as blocked:
+        create_turn(client, chat["id"], {**TURN_PAYLOAD, "question": "Three"})
 
-    assert blocked.status_code == 403
-    assert blocked.json()["detail"]["error_code"] == "turn_limit_reached"
+    assert blocked.value.error_code == "turn_limit_reached"
     # Die abgelehnte Anlage darf weder einen Turn noch einen Zaehlerstand
     # hinterlassen - sonst waere der Chat danach dauerhaft inkonsistent.
     assert len(database.turns("owner-uid", chat["id"])) == 2
@@ -2051,52 +1686,6 @@ def test_write_endpoints_are_rate_limited_per_account_not_only_per_ip(
 
     # Lesende Endpoints haengen nicht am Schreib-Budget.
     assert client.get("/chats", headers=AUTH_OWNER).status_code == 200
-
-
-def test_context_uid_budget_is_charged_on_post_not_turn_get(chat_api, monkeypatch):
-    client, _database = chat_api
-    operations = []
-
-    def uid_for(_request, operation=""):
-        operations.append(operation)
-        return "owner-uid"
-
-    class Store:
-        def get_turn(self, uid, chat_id, turn_id):
-            return {"id": turn_id, "status": "pending"}
-
-    class Repository:
-        def load_target_and_predecessors(self, uid, chat_id, turn_id):
-            return {"status": "completed"}, []
-
-    class ContextService:
-        def __init__(self, repository):
-            self.repository = repository
-
-        def build_for_turn(self, uid, chat_id, turn_id, compressor=None, **_kwargs):
-            return {"id": "context-version"}
-
-    monkeypatch.setattr(chat_history_router, "_chat_uid", uid_for)
-    monkeypatch.setattr(chat_history_router, "_store", lambda: Store())
-    monkeypatch.setattr(
-        chat_history_router, "_context_repository", lambda: Repository()
-    )
-    monkeypatch.setattr(chat_history_router, "ChatContextService", ContextService)
-
-    chat_id = "a" * 32
-    turn_id = "b" * 32
-    get_response = client.get(
-        f"/chats/{chat_id}/turns/{turn_id}", headers=AUTH_OWNER
-    )
-    post_response = client.post(
-        f"/chats/{chat_id}/turns/{turn_id}/context",
-        json={},
-        headers=AUTH_OWNER,
-    )
-
-    assert get_response.status_code == 200
-    assert post_response.status_code == 200
-    assert operations == ["", "build_context"]
 
 
 def test_creating_a_turn_retires_an_abandoned_predecessor(chat_api):
@@ -2169,8 +1758,8 @@ def test_turn_keeps_the_attachment_meta_of_its_own_question(chat_api):
     assert stored[with_file["id"]]["attachments"][0]["name"] == "chart.png"
     assert "attachments" not in stored[without_file["id"]]
 
-    page = client.get(f"/chats/{chat['id']}/turns", headers=AUTH_OWNER)
-    listed = {turn["id"]: turn for turn in page.json()["turns"]}
+    page = chat_store.ChatStore(database).list_turns("owner-uid", chat["id"])
+    listed = {turn["id"]: turn for turn in page["turns"]}
     assert listed[with_file["id"]]["attachments"][1]["mime"] == "text/plain"
 
 
@@ -2207,8 +1796,8 @@ def test_turn_attachments_never_carry_file_data_or_unknown_types(chat_api):
 def test_turn_attachment_meta_survives_completion(chat_api):
     """Die Antwort ueberschreibt die Frage nicht.
 
-    complete_turn schreibt in dasselbe Dokument; ein set() statt update()
-    haette den Anhang der Frage still mitgeloescht.
+    Die Antwort steht in demselben Dokument wie die Frage und ihr Anhang;
+    gelesen wird beides zusammen.
     """
     client, database = chat_api
     chat = create_chat(client)
@@ -2220,13 +1809,12 @@ def test_turn_attachment_meta_survives_completion(chat_api):
             "attachments": [{"name": "chart.png", "mime": "image/png", "size": 2048}],
         },
     )
-    chat_store.ChatStore(database).complete_turn(
+    complete_turn(
+        chat_store.ChatStore(database),
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
 
-    detail = client.get(
-        f"/chats/{chat['id']}/turns/{turn['id']}", headers=AUTH_OWNER
-    ).json()["turn"]
+    detail = chat_store.ChatStore(database).get_turn("owner-uid", chat["id"], turn["id"])
     assert detail["attachments"] == [
         {"name": "chart.png", "mime": "image/png", "size": 2048}
     ]
@@ -2242,7 +1830,8 @@ def test_task_checks_are_kept_on_a_completed_turn_and_read_back(chat_api):
     pending = client.put(url, json={"checked": [0]}, headers=AUTH_OWNER)
     assert pending.status_code == 409
 
-    chat_store.ChatStore(database).complete_turn(
+    complete_turn(
+        chat_store.ChatStore(database),
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
     chat_before = dict(database.chats("owner-uid")[chat["id"]])
@@ -2257,7 +1846,7 @@ def test_task_checks_are_kept_on_a_completed_turn_and_read_back(chat_api):
     assert stored["updated_at"] == updated_before
     assert database.chats("owner-uid")[chat["id"]] == chat_before
 
-    detail = client.get(f"/chats/{chat['id']}/turns/{turn['id']}", headers=AUTH_OWNER).json()["turn"]
+    detail = chat_store.ChatStore(database).get_turn("owner-uid", chat["id"], turn["id"])
     assert detail["task_checks"] == [0, 3]
     page = chat_store.ChatStore(database).list_turn_details("owner-uid", chat["id"])
     assert page["turns"][0]["task_checks"] == [0, 3]
@@ -2282,7 +1871,8 @@ def test_task_checks_reject_anything_but_item_positions(chat_api, body):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
-    chat_store.ChatStore(database).complete_turn(
+    complete_turn(
+        chat_store.ChatStore(database),
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
     response = client.put(
@@ -2296,7 +1886,8 @@ def test_task_checks_of_a_foreign_or_unknown_turn_are_404(chat_api):
     client, database = chat_api
     chat = create_chat(client)
     turn = create_turn(client, chat["id"])
-    chat_store.ChatStore(database).complete_turn(
+    complete_turn(
+        chat_store.ChatStore(database),
         "owner-uid", chat["id"], turn["id"], **completion_payload()
     )
     body = {"checked": [1]}

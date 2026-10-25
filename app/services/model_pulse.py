@@ -87,14 +87,6 @@ def participation(participants, picked) -> dict | None:
     return {"participants": families, "picked": pick, "pulse_version": PULSE_VERSION}
 
 
-def consensus_participants(pending: dict) -> list[str]:
-    """The families a Consensus judge compared, from the pending result."""
-    included = pending.get("included_models") or []
-    if not included:
-        included = (pending.get("differences_data") or {}).get("models_compared") or []
-    return [str(item) for item in included]
-
-
 # ---------------------------------------------------------------- the ledger
 
 

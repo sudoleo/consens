@@ -17,7 +17,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from firebase_admin import firestore
 
-from app.api.routers import pages as pages_router
 from app.api.routers import topics as topics_router
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
@@ -286,7 +285,7 @@ def test_account_deletion_tombstone_fences_normal_bookmark_delete():
     assert db.data == before
 
 
-@pytest.mark.parametrize("operation", ["bookmark", "feedback", "vote"])
+@pytest.mark.parametrize("operation", ["bookmark", "feedback"])
 def test_account_deletion_tombstone_fences_owner_persistence(operation):
     db = Database()
     db.data[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, "u1")] = {
@@ -304,27 +303,10 @@ def test_account_deletion_tombstone_fences_owner_persistence(operation):
             persistence_guard.write_bookmark(
                 uid="u1", doc_ref=ref, patch={"query": "private"}, db=db
             )
-        elif operation == "feedback":
+        else:
             persistence_guard.create_feedback(
                 uid="u1",
                 feedback={"message": "private", "uid": "u1", "timestamp": now},
-                db=db,
-                now=now,
-            )
-        else:
-            result_id = "R" * 16
-            db.data[("pending_results", result_id)] = {
-                "owner_uid": "u1",
-                "expires_at": now + timedelta(hours=1),
-                "differences_data": {"best_model": "OpenAI"},
-                "answer_provenance": "developer",
-            }
-            before = dict(db.data)
-            persistence_guard.record_model_vote(
-                uid="u1",
-                result_id=result_id,
-                model="OpenAI",
-                vote_type="BestModel",
                 db=db,
                 now=now,
             )
@@ -349,88 +331,6 @@ def test_feedback_cooldown_and_daily_limit_are_persistent(monkeypatch):
             uid="u1", feedback={"message": "two", "uid": "u1", "timestamp": now}, db=db,
             now=now + timedelta(minutes=1),
         )
-
-
-def test_vote_is_run_bound_and_exactly_once():
-    db = Database()
-    now = datetime(2026, 8, 11, tzinfo=timezone.utc)
-    result_id = "R" * 16
-    db.data[("pending_results", result_id)] = {
-        "owner_uid": "u1",
-        "expires_at": now + timedelta(hours=1),
-        "differences_data": {"best_model": "OpenAI"},
-        "answer_provenance": "developer",
-    }
-    assert persistence_guard.record_model_vote(
-        uid="u1", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
-    ) is True
-    assert persistence_guard.record_model_vote(
-        uid="u1", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
-    ) is False
-    assert db.data[("leaderboard", "OpenAI")]["BestModel"] == 1
-    with pytest.raises(persistence_guard.PersistenceLimitError):
-        persistence_guard.record_model_vote(
-            uid="u2", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
-        )
-
-
-@pytest.mark.parametrize("provenance", ["byok", None])
-def test_byok_and_unverified_results_never_count_for_model_rankings(provenance):
-    """R09: only results built from server-verified developer answers vote."""
-    db = Database()
-    now = datetime(2026, 8, 11, tzinfo=timezone.utc)
-    result_id = "B" * 16
-    pending = {
-        "owner_uid": "u1",
-        "expires_at": now + timedelta(hours=1),
-        "differences_data": {"best_model": "OpenAI"},
-    }
-    if provenance:
-        pending["answer_provenance"] = provenance
-    db.data[("pending_results", result_id)] = pending
-    with pytest.raises(persistence_guard.PersistenceLimitError) as error:
-        persistence_guard.record_model_vote(
-            uid="u1", result_id=result_id, model="OpenAI", vote_type="BestModel", db=db, now=now
-        )
-    assert error.value.code == "vote_not_eligible"
-    assert ("leaderboard", "OpenAI") not in db.data
-
-
-@pytest.mark.parametrize(
-    "expires_at",
-    [
-        None,
-        datetime(2026, 8, 11, 1, 0),
-        datetime(2026, 8, 10, 23, 59, tzinfo=timezone.utc),
-    ],
-    ids=["missing", "naive", "expired"],
-)
-def test_vote_expiry_is_fail_closed(expires_at):
-    db = Database()
-    now = datetime(2026, 8, 11, tzinfo=timezone.utc)
-    result_id = "E" * 16
-    pending = {
-        "owner_uid": "u1",
-        "differences_data": {"best_model": "OpenAI"},
-    }
-    if expires_at is not None:
-        pending["expires_at"] = expires_at
-    db.data[("pending_results", result_id)] = pending
-
-    with pytest.raises(
-        persistence_guard.PersistenceLimitError, match="Completed result not found"
-    ):
-        persistence_guard.record_model_vote(
-            uid="u1",
-            result_id=result_id,
-            model="OpenAI",
-            vote_type="BestModel",
-            db=db,
-            now=now,
-        )
-
-    assert not any(path[0] == persistence_guard.VOTES_COLLECTION for path in db.data)
-    assert ("leaderboard", "OpenAI") not in db.data
 
 
 def test_follow_confirmation_has_persistent_resend_and_recipient_budgets(monkeypatch):
@@ -577,33 +477,6 @@ def test_favicon_unexpected_failure_returns_private_fallback_without_raw_log(
     assert response.headers["cache-control"] == "no-store"
     assert "RuntimeError" in caplog.text
     assert secret not in caplog.text
-
-
-def test_invalid_vote_model_never_reaches_logs(caplog):
-    app = FastAPI()
-    app.state.limiter = limiter
-    limiter.reset()
-    app.include_router(pages_router.router)
-    client_model = "owner@example.test|sk-secret-9f3c"
-    client_token = "id-token-private-7a4d"
-
-    with caplog.at_level("WARNING"):
-        response = TestClient(app).post(
-            "/vote",
-            json={
-                "id_token": client_token,
-                "model": client_model,
-                "vote_type": "BestModel",
-                "result_id": "r" * 16,
-            },
-        )
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid model name."
-    assert "Invalid vote model rejected" in caplog.text
-    assert "owner@example.test" not in caplog.text
-    assert "sk-secret-9f3c" not in caplog.text
-    assert client_token not in caplog.text
 
 
 def test_correlation_header_metrics_and_log_redaction(caplog, monkeypatch):

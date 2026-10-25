@@ -121,7 +121,7 @@ def test_reload_and_activation_rollback_include_reasoning_policy():
         assert cfg.get_reasoning_policy()["profile"] == "economy"
 
 
-def test_stream_and_json_engine_send_same_capped_policy():
+def test_json_engine_sends_the_capped_policy():
     cfg.apply_reasoning_policy({"profile": "economy", "models": {}})
     response = mock.Mock(status_code=200)
     response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
@@ -131,9 +131,6 @@ def test_stream_and_json_engine_send_same_capped_policy():
         with mock.patch.object(engine, "cancellable_post_json", return_value=response.json.return_value) as post:
             assert engine._call_engine_text(*args, **kwargs) == "ok"
             assert post.call_args.kwargs["json"]["reasoning"] == {"effort": "low"}
-        with mock.patch("app.services.llm.streaming.stream_chat_completion_text", return_value=iter([])) as stream:
-            list(engine._stream_engine_text(*args, **kwargs))
-            assert stream.call_args.kwargs["request_config"]["reasoning"] == {"effort": "low"}
 
 
 def _load(document):

@@ -181,8 +181,6 @@ def test_conversation_cannot_switch_pipeline(store):
     with pytest.raises(TurnStatusConflict):
         ChatStore(store.db).create_turn(UID, chat_id, question="Q", mode="Standard", deep_search=False,
             selected_models=["DeepSeek"], consensus_model="OpenAI")
-    with pytest.raises(TurnStatusConflict):
-        store.validate_turn_for_completion(UID, chat_id, turn["id"], question=turn["question"])
 
 
 def test_client_makes_one_tool_free_request_and_reads_final_usage_chunk(monkeypatch):

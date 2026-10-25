@@ -236,18 +236,12 @@ def _mock_engine_output(prompt: str, json_mode: bool) -> str:
             return json.dumps({"goal_suggestions": [
                 "It is officially announced", "A firm date is published",
             ]})
-        if '"current_question"' in prompt:
-            # Frage-Aufloesung vor dem Fan-out (chat_context.ChatMemoryCompressor).
-            return json.dumps({
-                "depends_on_previous_turn": True,
-                "resolved_question": "Mock resolved follow-up question.",
-            })
         if '"counter_quotes"' in prompt:
             return _build_mock_coverage_json(prompt)
         if '"differences"' in prompt:
             return _build_mock_differences_json(prompt)
-        # Fremder Structured-Output-Call (z. B. Resolve-Runde): neutrales,
-        # schema-kompatibles Minimal-JSON statt Differences-Payload.
+        # Fremder Structured-Output-Call: neutrales, schema-kompatibles
+        # Minimal-JSON statt Differences-Payload.
         return json.dumps({"decision": "maintain", "position": "Mock position.", "reason": "Mock reason."})
     return MOCK_CONSENSUS_TEXT
 
@@ -259,12 +253,3 @@ def mock_engine_text(prompt: str, json_mode: bool) -> str:
     return text
 
 
-def mock_engine_stream(prompt: str, json_mode: bool):
-    """Ersatz fuer consensus_engine._stream_engine_text (yieldet Text-Chunks)."""
-    text = _mock_engine_output(prompt, json_mode)
-    _record_usage(prompt, text)
-    delay = _delay_seconds()
-    for chunk in _chunks(text, size=24):
-        if delay:
-            time.sleep(delay)
-        yield chunk

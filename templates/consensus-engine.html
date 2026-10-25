@@ -126,9 +126,9 @@
 
         <div class="ce-flow-diagram lp-reveal" aria-label="Technical flow diagram for the Consensus Engine and Differences Engine">
           <div class="ce-flow-entry">
-            <span class="ce-flow-kicker">POST /consensus</span>
-            <strong>Question, included model answers, excluded models, sources, and selected engine</strong>
-            <p>The backend authenticates the user, checks tier and usage rules, caps client-sent text, and requires at least two included model answers.</p>
+            <span class="ce-flow-kicker">Server pipeline</span>
+            <strong>Question, the model answers the server collected, excluded models, sources, and selected engine</strong>
+            <p>The pipeline runs on the server for Watches, the API and Topics. It caps every answer and requires at least two included model answers.</p>
           </div>
 
           <div class="ce-flow-lanes">
@@ -137,7 +137,7 @@
                 <span>1</span>
                 <div>
                   <h3 id="consensus-flow-title">Consensus Engine</h3>
-                  <p><code>stream_consensus()</code></p>
+                  <p><code>query_consensus()</code></p>
                 </div>
               </div>
               <ol class="ce-flow-nodes">
@@ -150,7 +150,7 @@
                   <span>The dropdown value maps to a provider model, including standard, direct model IDs, or Pro aliases.</span>
                 </li>
                 <li>
-                  <b>Stream the synthesis</b>
+                  <b>Write the synthesis</b>
                   <span>The selected engine writes the user-facing answer. Provider failures are retried twice, then a fallback family is tried when a key is available.</span>
                 </li>
                 <li>
@@ -165,7 +165,7 @@
                 <span>2</span>
                 <div>
                   <h3 id="differences-flow-title">Differences Engine</h3>
-                  <p><code>stream_differences()</code></p>
+                  <p><code>query_differences()</code></p>
                 </div>
               </div>
               <ol class="ce-flow-nodes">

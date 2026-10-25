@@ -71,8 +71,6 @@ def source_response(result: Any, **extra: Any) -> Dict[str, Any]:
         "response": result_text(result),
         "sources": result_sources(result),
     }
-    if isinstance(result, dict) and result.get("answer_receipt"):
-        payload["answer_receipt"] = str(result["answer_receipt"])
     if isinstance(result, dict) and result.get("completion"):
         # Typed completion state (app.services.llm.completion). Partial text
         # is delivered, but labelled; clients must not treat it as complete.

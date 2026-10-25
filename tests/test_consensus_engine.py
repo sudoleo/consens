@@ -4,17 +4,13 @@ import re
 import unittest
 from unittest import mock
 
-import app.core.config as cfg
 from app.services.llm.consensus_engine import (
     CONSENSUS_TEMPERATURE,
     CONSENSUS_TIME_LIMIT_TEXT,
-    SYNTHESIS_TIME_LIMIT_CODE,
     _build_consensus_prompt,
     _effective_temperature,
     _engine_request_config,
-    consensus_failure_code,
     query_consensus,
-    stream_consensus,
 )
 from app.services.llm.engines import _ProviderHTTPStatusError
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
@@ -307,76 +303,6 @@ class QueryConsensusFallbackTests(unittest.TestCase):
         result, patched = self._query(engine, {"OpenRouter": "sk-or"})
         self.assertEqual(patched.call_count, 1)
         self.assertEqual(result, CONSENSUS_TIME_LIMIT_TEXT)
-        self.assertEqual(consensus_failure_code(result), SYNTHESIS_TIME_LIMIT_CODE)
-        self.assertEqual(consensus_failure_code("Consensus error: provider request failed."), "consensus_failed")
-
-
-class StreamConsensusFallbackTests(unittest.TestCase):
-    def _events(self, fake_engine):
-        with mock.patch(
-            "app.services.llm.consensus_engine._stream_consensus_engine",
-            side_effect=fake_engine,
-        ):
-            return list(stream_consensus(
-                "Q?", {"openai": "a", "mistral": "b"},
-                excluded_models=[],
-                consensus_model="OpenAI",
-                api_keys={"OpenRouter": "sk-or"},
-            ))
-
-    def test_stream_skips_the_retry_of_a_rejected_request_and_stops_on_a_dead_key(self):
-        """Audit C10, streaming path."""
-        for status, expected in ((400, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL]), (401, ["OpenAI"]),
-                                 (402, ["OpenAI", cfg.DEFAULT_GEMINI_MODEL])):
-            with self.subTest(status=status):
-                calls = []
-
-                def fake_engine(engine_model, api_keys, prompt):
-                    calls.append(engine_model)
-                    if engine_model == "OpenAI":
-                        raise _ProviderHTTPStatusError(status)
-                    yield {"type": "delta", "text": "rescued."}
-
-                events = self._events(fake_engine)
-                self.assertEqual(calls, expected)
-                self.assertEqual(events[-1].get("error", False), status == 401)
-
-    def test_stream_out_of_time_ends_with_its_own_text_and_code(self):
-        """Audit C3, streaming path: shown deltas are replaced by the final."""
-        def fake_engine(engine_model, api_keys, prompt):
-            yield {"type": "delta", "text": "Half a synthesis"}
-            raise AnalysisBudgetExceeded("analysis deadline exceeded")
-
-        events = self._events(fake_engine)
-        self.assertEqual(events[-1], {
-            "type": "final", "text": CONSENSUS_TIME_LIMIT_TEXT, "error": True,
-            "code": SYNTHESIS_TIME_LIMIT_CODE,
-        })
-
-    def test_fallback_engine_delivers_final_answer(self):
-        calls = []
-
-        def fake_engine(engine_model, api_keys, prompt):
-            calls.append(engine_model)
-            if len(calls) <= 2:
-                raise RuntimeError("503 - UNAVAILABLE")
-            yield {"type": "delta", "text": "rescued "}
-            yield {"type": "delta", "text": "answer."}
-
-        with mock.patch(
-            "app.services.llm.consensus_engine._stream_consensus_engine",
-            side_effect=fake_engine,
-        ):
-            events = list(stream_consensus(
-                "Q?", {"openai": "a", "mistral": "b"},
-                excluded_models=[],
-                consensus_model="OpenAI",
-                api_keys={"OpenRouter": "sk-or"},
-            ))
-
-        self.assertEqual(events[-1], {"type": "final", "text": "rescued answer."})
-        # The common key can route the fallback to an independent model family.
-        self.assertEqual(calls, ["OpenAI", "OpenAI", cfg.DEFAULT_GEMINI_MODEL])
 
 
 if __name__ == "__main__":

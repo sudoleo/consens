@@ -29,7 +29,6 @@ INTERRUPTED = "interrupted"
 ERROR = "error"
 CANCELLED = "cancelled"
 STATES = frozenset({COMPLETE, TOKEN_LIMIT, INTERRUPTED, ERROR, CANCELLED})
-INCOMPLETE_STATES = frozenset({TOKEN_LIMIT, INTERRUPTED})
 
 _COMPLETE_REASONS = frozenset({"stop", "end_turn", "stop_sequence", "eos"})
 _TOKEN_LIMIT_REASONS = frozenset({"length", "max_tokens", "max_output_tokens"})
@@ -65,25 +64,3 @@ def completion_state(finish_reason: Any, *, terminated: bool) -> str:
     if reason in _COMPLETE_REASONS:
         return COMPLETE
     return COMPLETE if terminated else INTERRUPTED
-
-
-def result_completion(result: Any) -> str:
-    """Completion state of an engine result dict (``complete`` by default for
-    successful results produced before this field existed, e.g. fixtures)."""
-    if isinstance(result, dict):
-        state = result.get("completion")
-        if state in STATES:
-            return state
-        if result.get("error"):
-            return ERROR
-    return COMPLETE
-
-
-def incomplete_message(state: Optional[str], subject: str = "The answer") -> str:
-    if state == TOKEN_LIMIT:
-        return f"{subject} stopped at the output limit and is incomplete."
-    if state == INTERRUPTED:
-        return f"{subject} was interrupted before it finished and is incomplete."
-    if state == CANCELLED:
-        return f"{subject} was cancelled."
-    return f"{subject} could not be completed."

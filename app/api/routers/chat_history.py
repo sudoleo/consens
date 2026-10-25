@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import Literal
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
-from app.core import config as cfg
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import (
     db_firestore,
     extract_id_token,
-    is_user_pro,
     verify_user_token,
     AuthenticationUnavailable,
     auth_unavailable_error,
@@ -23,8 +19,6 @@ from app.services.chat_store import (
     CHAT_PAGE_SIZE,
     CHAT_PAGE_SIZE_MAX,
     MAX_TASK_ITEMS,
-    TURN_PAGE_SIZE,
-    TURN_PAGE_SIZE_MAX,
     ChatCursorUnavailable,
     ChatIdempotencyConflict,
     ChatNotFound,
@@ -33,33 +27,8 @@ from app.services.chat_store import (
     ChatStoreError,
     InvalidChatCursor,
     TurnStatusConflict,
-    normalize_client_request_id,
-    normalize_mode,
-    normalize_model_name,
-    normalize_question,
-    normalize_selected_models,
     normalize_task_checks,
     normalize_title,
-)
-from app.services.chat_context import (
-    ChatContextBuildInProgress,
-    ChatContextConflict,
-    ChatContextError,
-    ChatContextNotFound,
-    ChatContextService,
-    ChatMemoryCompressor,
-    FirestoreChatContextRepository,
-)
-from app.services.llm.attachments import normalize_attachment_meta
-from app.services.llm.consensus_engine import resolve_consensus_engine_model
-from app.services.llm.credentials import (
-    openrouter_api_key,
-    resolve_developer_api_keys,
-)
-from app.services.run_metering import OperationBooking
-from app.services.usage_repository import (
-    FirestoreUsageRepository,
-    RunStatus,
 )
 
 
@@ -69,6 +38,10 @@ router = APIRouter()
 # threadpool. The Firestore client is blocking; declaring these `async def`
 # would execute those blocking reads and transactions directly ON the event
 # loop and stall every concurrent request for their whole duration.
+#
+# Since 2026-10-25 the browser runs no Consensus chat: the routes that created
+# Consensus turns and built their follow-up memory are gone. The Agent writes
+# its turns through /agent; a saved Consensus chat is read from its bookmark.
 
 
 class ChatCreateRequest(BaseModel):
@@ -85,63 +58,6 @@ class ChatCreateRequest(BaseModel):
         return normalize_title(value) or None
 
 
-class TurnCreateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    question: str
-    mode: str
-    # Kept wire name of the Reasoning switch (formerly Deep Think).
-    deep_search: StrictBool
-    selected_models: list[str]
-    consensus_model: str
-    client_request_id: str | None = None
-    # Nur Metadaten (Name/Typ/Größe). Die Dateien selbst gehen mit dem Lauf an
-    # die Modelle und werden nirgends gespeichert; was bleibt, ist die
-    # Information, dass an DIESER Frage eine Datei hing.
-    # max_length ist nur die Absurditaetsgrenze; auf die tatsaechlich erlaubte
-    # Anzahl kuerzt die Normalisierung. Ein Anhang zu viel darf die Anlage des
-    # Turns nicht scheitern lassen - der Lauf haengt daran.
-    attachments: list[dict] | None = Field(default=None, max_length=10)
-
-    @field_validator("attachments")
-    @classmethod
-    def validate_attachments(cls, value):
-        return normalize_attachment_meta(value)
-
-    @field_validator("question")
-    @classmethod
-    def validate_question(cls, value):
-        return normalize_question(value)
-
-    @field_validator("mode")
-    @classmethod
-    def validate_mode(cls, value):
-        return normalize_mode(value)
-
-    @field_validator("selected_models")
-    @classmethod
-    def validate_selected_models(cls, value):
-        return normalize_selected_models(value)
-
-    @field_validator("consensus_model")
-    @classmethod
-    def validate_consensus_model(cls, value):
-        # Dieselbe Allowlist, die /consensus spaeter prueft. Ohne sie landete
-        # ein beliebiger Modell-String im Turn-Dokument -- und der Memory-Build
-        # liest die Engine genau von dort (_memory_credentials), nicht aus dem
-        # Request. Die Familie dieser Engine bestimmt, welcher Key den
-        # Kompressions-Call bezahlt.
-        model = normalize_model_name(value, field_name="consensus_model")
-        if model not in cfg.ALLOWED_CONSENSUS_MODELS:
-            raise ValueError("consensus_model is not an allowed consensus engine")
-        return model
-
-    @field_validator("client_request_id")
-    @classmethod
-    def validate_client_request_id(cls, value):
-        return normalize_client_request_id(value)
-
-
 class TaskChecksRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -154,28 +70,6 @@ class TaskChecksRequest(BaseModel):
         return normalize_task_checks(value)
 
 
-class ContextBuildRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    useOwnKeys: StrictBool = False
-    usage_run_key: str | None = None
-    openrouter_key: str | None = None
-
-    @field_validator("usage_run_key", "openrouter_key")
-    @classmethod
-    def validate_optional_key(cls, value):
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError("key must be a string")
-        value = value.strip()
-        if not value:
-            return None
-        if len(value.encode("utf-8")) > 512:
-            raise ValueError("key is too long")
-        return value
-
-
 # Schreibende Chat-Operationen zusaetzlich pro KONTO begrenzen. Der
 # slowapi-Limiter am Endpoint zaehlt pro IP; das ist hier die falsche Achse:
 # ueber IPv6 (ein /64 liefert praktisch beliebig viele Adressen) laesst sich ein
@@ -184,8 +78,6 @@ class ContextBuildRequest(BaseModel):
 # ist das Konto die einzige Achse, die den Missbrauch wirklich deckelt.
 CHAT_UID_RATE_LIMITS = {
     "create_chat": 20,
-    "create_turn": 40,
-    "build_context": 30,
     "delete_chat": 30,
     "task_checks": 60,
 }
@@ -221,60 +113,6 @@ def _chat_uid(request: Request, operation: str = "") -> str:
 
 def _store() -> ChatStore:
     return ChatStore(db_firestore)
-
-
-def _context_repository() -> FirestoreChatContextRepository:
-    return FirestoreChatContextRepository(db_firestore)
-
-
-def _memory_credentials(
-    uid: str,
-    target: dict,
-    payload: ContextBuildRequest,
-    *,
-    chat_id: str,
-    turn_id: str,
-) -> tuple[ChatMemoryCompressor | None, str, str, str]:
-    engine_model = str(target.get("consensus_model") or "").strip()
-    config = resolve_consensus_engine_model(engine_model)
-    if not config or not config.provider:
-        return None, "unsupported_memory_engine", "", engine_model
-    provider = cfg.PROVIDER_LABEL_BY_ID.get(config.provider, "")
-    if not provider:
-        return None, "unsupported_memory_engine", "", engine_model
-
-    if payload.useOwnKeys:
-        if not payload.openrouter_key:
-            return None, "own_key_missing", provider, engine_model
-        # BYOK is always an OpenRouter key, regardless of the selected model
-        # family. A missing BYOK can never fall back to an operator credential.
-        api_keys = {"OpenRouter": payload.openrouter_key}
-    else:
-        if not payload.usage_run_key:
-            return None, "usage_run_required", provider, engine_model
-        try:
-            usage_repository = FirestoreUsageRepository(db_firestore)
-            usage = usage_repository.get_run(uid, payload.usage_run_key)
-            if usage.status is not RunStatus.CONSUMED:
-                return None, "usage_run_not_consumed", provider, engine_model
-            usage_repository.bind_context_target(
-                uid,
-                payload.usage_run_key,
-                f"chat-context\0{chat_id}\0{turn_id}",
-            )
-        except Exception:
-            return None, "usage_run_unavailable", provider, engine_model
-        api_keys = resolve_developer_api_keys()
-
-    if not openrouter_api_key(api_keys):
-        return None, "memory_credentials_missing", provider, engine_model
-
-    # Die Familie bleibt die der Consensus-Engine. Welches Modell dieser
-    # Familie die Memory fortschreibt, entscheidet der Admin (Firestore
-    # "chat_memory_models"); ohne gueltige Wahl bleibt es bei der Engine des
-    # Turns.
-    memory_model = cfg.get_chat_memory_model(config.provider) or engine_model
-    return ChatMemoryCompressor(memory_model, api_keys), "", provider, memory_model
 
 
 def _raise_store_error(exc: Exception, *, operation: str, uid: str) -> None:
@@ -367,43 +205,6 @@ def delete_chat(request: Request, chat_id: str):
         _raise_store_error(exc, operation="delete chat", uid=uid)
 
 
-@router.post("/chats/{chat_id}/turns", status_code=201)
-@limiter.limit("30/minute")
-def create_turn(request: Request, chat_id: str, payload: TurnCreateRequest):
-    uid = _chat_uid(request, "create_turn")
-    # Dasselbe Tier-Gate wie in /consensus, hier gespiegelt. Der Turn haelt die
-    # Engine fest, mit der spaeter der Memory-Call laeuft; ohne diese Pruefung
-    # koennte ein Free-Konto eine Premium-Engine im Dokument hinterlegen und
-    # sie auf dem Developer-Key kompressieren lassen, sobald die
-    # Admin-Zuordnung fuer diese Familie einmal leer ist.
-    if cfg.is_premium_consensus_model(payload.consensus_model) and not is_user_pro(uid):
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "Premium consensus engines are reserved for Pro users.",
-                "error_code": "pro_required",
-            },
-        )
-    try:
-        turn = _store().create_turn(uid, chat_id, **payload.model_dump())
-        return {"status": "success", "turn": turn}
-    except Exception as exc:
-        _raise_store_error(exc, operation="create turn", uid=uid)
-
-
-@router.get("/chats/{chat_id}/turns/{turn_id}")
-@limiter.limit("60/minute")
-def get_turn(request: Request, chat_id: str, turn_id: str):
-    uid = _chat_uid(request)
-    try:
-        return {
-            "status": "success",
-            "turn": _store().get_turn(uid, chat_id, turn_id),
-        }
-    except Exception as exc:
-        _raise_store_error(exc, operation="get turn", uid=uid)
-
-
 @router.put("/chats/{chat_id}/turns/{turn_id}/task-checks")
 @limiter.limit("60/minute")
 def set_task_checks(
@@ -419,93 +220,3 @@ def set_task_checks(
         return {"status": "success", "checked": checked}
     except Exception as exc:
         _raise_store_error(exc, operation="set task checks", uid=uid)
-
-
-@router.post("/chats/{chat_id}/turns/{turn_id}/context")
-@limiter.limit("20/minute")
-def build_turn_context(
-    request: Request,
-    chat_id: str,
-    turn_id: str,
-    payload: ContextBuildRequest,
-):
-    uid = _chat_uid(request, "build_context")
-    repository = _context_repository()
-    service = ChatContextService(repository)
-    try:
-        target, _predecessors = repository.load_target_and_predecessors(
-            uid, chat_id, turn_id
-        )
-        if target.get("execution_mode") == "agent" or target.get("mode") == "Agent":
-            raise ChatContextConflict("Agent context does not use the consensus compressor")
-        if target.get("status") == "completed":
-            context = service.build_for_turn(
-                uid,
-                chat_id,
-                turn_id,
-                compressor=None,
-            )
-            return {"status": "success", "context": context}
-        compressor, degraded_reason, provider, engine_model = _memory_credentials(
-            uid,
-            target,
-            payload,
-            chat_id=chat_id,
-            turn_id=turn_id,
-        )
-        # The memory call is part of the run that funds it: measured in the
-        # transport and booked on the shared token account (own keys: never).
-        booking = (OperationBooking(FirestoreUsageRepository(db_firestore), uid, payload.usage_run_key,
-                                    f"context:{turn_id[:32]}", skip_empty=True)
-                   if compressor is not None and not payload.useOwnKeys and payload.usage_run_key else None)
-        try:
-            with (booking.metering() if booking is not None else contextlib.nullcontext()):
-                context = service.build_for_turn(
-                    uid,
-                    chat_id,
-                    turn_id,
-                    compressor=compressor,
-                    degraded_reason=degraded_reason,
-                    engine_provider=provider,
-                    engine_model=engine_model,
-                )
-        finally:
-            if booking is not None:
-                booking.finish()
-        return {"status": "success", "context": context}
-    except ChatContextBuildInProgress:
-        return JSONResponse(
-            status_code=202,
-            content={"status": "building", "retry_after_seconds": 2},
-            headers={"Retry-After": "2"},
-        )
-    except ChatContextNotFound as exc:
-        raise HTTPException(status_code=404, detail="Chat not found") from exc
-    except ChatContextConflict as exc:
-        raise HTTPException(status_code=409, detail="Chat context conflict") from exc
-    except ChatContextError as exc:
-        logging.error(
-            "build chat context failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
-    except Exception as exc:
-        logging.error(
-            "build chat context failed category=%s", safe_exception(exc)
-        )
-        raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
-
-
-@router.get("/chats/{chat_id}/turns")
-@limiter.limit("60/minute")
-def list_turns(
-    request: Request,
-    chat_id: str,
-    cursor: str = Query(default="", max_length=512),
-    limit: int = Query(default=TURN_PAGE_SIZE, ge=1, le=TURN_PAGE_SIZE_MAX),
-):
-    uid = _chat_uid(request)
-    try:
-        result = _store().list_turns(uid, chat_id, cursor=cursor, limit=limit)
-        return {"status": "success", **result}
-    except Exception as exc:
-        _raise_store_error(exc, operation="list turns", uid=uid)

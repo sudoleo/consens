@@ -160,29 +160,6 @@ class StalledJudgeTests(unittest.TestCase):
         self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
         self.assertEqual([item["claim"] for item in data["differences"]], ["Capital"])
 
-    def test_the_streamed_judge_falls_back_too(self):
-        calls = []
-        payload = json.dumps(ParallelPassTests.payload(self.CAPITAL))
-
-        def fake_stream(provider, *args, **kwargs):
-            calls.append(provider)
-            if provider == "openai":
-                yield {"type": "reasoning"}
-                wait_for_stop()
-            yield {"type": "delta", "text": payload}
-
-        answer = ParallelPassTests.ANSWER
-        with mock.patch.object(engine, "_stream_engine_text", side_effect=fake_stream), \
-                mock.patch.object(engine, "_call_engine_text", return_value="{}"):
-            events = list(engine.stream_differences({"openai": answer, "gemini": answer}, "Paris is the capital.",
-                                                    {"OpenRouter": "sk-or"}, differences_model="OpenAI"))
-        final = events[-1]
-        self.assertEqual(final["type"], "final")
-        # Luna once (its retry is skipped), then the next family of the plan.
-        self.assertEqual(calls.count("openai"), 1)
-        self.assertEqual(len(calls), 2)
-        self.assertNotEqual(final["data"]["judges"]["differences"]["provider"], "OpenAI")
-
     def test_a_user_stop_is_no_timeout(self):
         calls = []
         parent = engine.ProviderCancellation()
@@ -308,21 +285,6 @@ class SecondPassSurfacesTests(unittest.TestCase):
                                            "judges": {"differences": {"provider": "OpenAI", "model": "m", "tier": "standard",
                                                                       "passes": 2, "second_pass_added": 3}}})
         self.assertEqual((doc["judges"]["differences"]["passes"], doc["judges"]["differences"]["second_pass_added"]), (2, 3))
-
-    def test_streamed_judge_also_gets_the_answer_language_by_name(self):
-        systems = []
-        payload = json.dumps({"differences": [], "best_model": ""})
-
-        def fake_stream(provider, *args, **kwargs):
-            systems.append(kwargs.get("system"))
-            yield {"type": "delta", "text": payload}
-
-        english = ("The evidence does not show that the drug is safe for the heart, and the risk of a stroke is "
-                   "higher for people who take it with other drugs or have kidney problems.")
-        with mock.patch.object(engine, "_stream_engine_text", side_effect=fake_stream):
-            list(engine.stream_differences({"openai": english, "mistral": english}, english,
-                                           {"OpenRouter": "sk-or"}, differences_model="OpenAI"))
-        self.assertIn("English", systems[0])
 
 
 class BoundedBudgetTests(unittest.TestCase):

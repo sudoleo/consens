@@ -1,6 +1,5 @@
 import base64
 import json
-import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -15,7 +14,7 @@ from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
-from test_chat_history import FakeChatDatabase, FakeTransaction as ChatFakeTransaction
+from test_chat_history import FakeChatDatabase, FakeTransaction as ChatFakeTransaction, complete_turn
 
 
 class FakeSnapshot:
@@ -130,13 +129,9 @@ class FakeBookmarkDatabase:
 def test_bookmark_write_budget_is_scoped_to_the_authenticated_uid():
     with patch.object(bookmarks_router.api_uid_limiter, "check") as check:
         bookmarks_router._enforce_bookmark_uid_rate_limit("owner-1", "model_save")
-        bookmarks_router._enforce_bookmark_uid_rate_limit("owner-2", "consensus_save")
 
     assert check.call_args_list[0].args == (
         "owner-1", "bookmark:model_save", 120,
-    )
-    assert check.call_args_list[1].args == (
-        "owner-2", "bookmark:consensus_save", 60,
     )
 
 
@@ -190,136 +185,6 @@ def test_last_grok_model_write_is_persisted_under_the_owner_budget():
     assert response.status_code == 200
     assert response.json()["bookmark"]["responses"]["Grok"] == "Grok finished last."
     check_budget.assert_called_once_with("uid-1", "bookmark:model_save", 120)
-
-
-def test_consensus_save_returns_complete_merged_bookmark():
-    bookmark_id = "V2h5Pw__"
-    bookmark_ref = FakeBookmarkRef(
-        bookmark_id,
-        {
-            "query": "Why?",
-            "mode": "Normal",
-            "responses": {"OpenAI": "Existing model answer"},
-        },
-    )
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(bookmarks_router.firestore, "SERVER_TIMESTAMP", "server-time"),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-                return_value={
-                    "question": "Why?",
-                    "consensus": "Merged consensus",
-                    "differences": "Merged differences",
-                    "differences_data": None,
-                    "sources": [],
-                    "included_models": ["Gemini: Gemini-Pro"],
-                    "consensus_model": "Gemini-Pro",
-                    "model_responses": {"Gemini": "Authoritative answer"},
-                    "vote_subject_id": "authoritative-run-1",
-                    "result_id": "N" * 16,
-                },
-        ),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "question": "Why?",
-                "consensusText": "Merged consensus",
-                "differencesText": "Merged differences",
-                "resultId": "N" * 16,
-                "consensusModel": "Gemini-Pro",
-                "modelLabels": {"OpenAI": "GPT-5.4 mini"},
-            },
-        )
-
-    assert response.status_code == 200
-    bookmark = response.json()["bookmark"]
-    assert bookmark["id"] == bookmark_id
-    assert bookmark["query"] == "Why?"
-    assert bookmark["responses"]["Gemini"] == "Authoritative answer"
-    assert bookmark["responses"]["OpenAI"] == ""
-    assert bookmark["responses"]["consensus"] == "Merged consensus"
-    assert bookmark["responses"]["differences"] == "Merged differences"
-    # Agent Mode no longer performs model bookmark writes. The consensus save
-    # must therefore make a brand-new document eligible for the timestamp-
-    # ordered sidebar query on its own.
-    assert bookmark["timestamp"] == "server-time"
-    assert bookmark["share_result_id"] == "N" * 16
-    assert bookmark["consensus_model"] == "Gemini-Pro"
-    assert bookmark["model_labels"] == {"Gemini": "Gemini-Pro"}
-
-
-def test_consensus_save_ignores_large_legacy_client_snapshot():
-    """Ignored browser copies must never veto an authoritative run.
-
-    The evidence merger and authoritative snapshot both allow 50 sources. The
-    former request schema allowed only 24, producing the observed intermittent
-    422 before the handler could read the server-owned pending result.
-    """
-    bookmark_id = "source_heavy_run"
-    bookmark_ref = FakeBookmarkRef(bookmark_id, {"responses": {}})
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    limiter.reset()
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-            return_value={
-                "question": "Who wins?",
-                "consensus": "Authoritative consensus",
-                "differences": "Authoritative differences",
-                "differences_data": None,
-                "sources": [
-                    {"id": f"S{i}", "url": f"https://source-{i}.example"}
-                    for i in range(1, 51)
-                ],
-                "included_models": ["OpenAI: GPT", "Gemini: Gemini"],
-                "model_responses": {"OpenAI": "a", "Gemini": "b"},
-                "result_id": "R" * 16,
-            },
-        ),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": bookmark_id,
-                "question": "Who wins?",
-                "resultId": "R" * 16,
-                # Deliberately malformed/oversized legacy copies. None of them
-                # is trusted or persisted by this endpoint.
-                "consensusText": {"not": "text"},
-                "differencesText": ["not", "text"],
-                "differencesData": "not-an-object",
-                "sources": [
-                    {"id": f"S{i}", "url": f"https://client-{i}.example"}
-                    for i in range(1, 51)
-                ],
-                "consensusModel": 123,
-                "modelLabels": {"Mistral": None},
-                "modelResponses": ["not", "a", "mapping"],
-            },
-        )
-
-    assert response.status_code == 200
-    bookmark = response.json()["bookmark"]
-    assert bookmark["responses"]["consensus"] == "Authoritative consensus"
-    assert len(bookmark["sources"]) == 50
 
 
 def test_direct_comparison_model_save_accepts_full_evidence_budget():
@@ -386,330 +251,19 @@ def test_direct_comparison_saves_model_version_with_answer(label, expected):
     assert bookmark_ref.data["model_labels"] == saved["model_labels"]
 
 
-def test_followup_bookmark_keeps_complete_previous_turn_for_restore():
-    current = "What should I prioritize first?"
-    previous = "How should I plan the migration?"
-    bookmark_id = "V2hhdCBzaG91bGQgSSBwcmlvcml0aXplIGZpcnN0Pw__"
-    bookmark_ref = FakeBookmarkRef(bookmark_id, {"query": current, "responses": {}})
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-            return_value={
-                "question": current,
-                "consensus": "Follow-up consensus",
-                "differences": "No material differences",
-                "differences_data": None,
-                "sources": [],
-                "result_id": "",
-            },
-        ),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "question": current,
-                "previousQuestion": previous,
-                "previousTurn": {
-                    "question": previous,
-                    "consensus": "Original consensus",
-                    "differences": "Original differences",
-                    "differences_data": {
-                        "agreement": {"score": 82, "model_count": 6},
-                        "claims": [],
-                        "differences": [],
-                        "best_model": None,
-                        "models_compared": [],
-                    },
-                },
-                "consensusText": "Follow-up consensus",
-                "differencesText": "No material differences",
-                "resultId": "R" * 16,
-            },
-        )
-
-    assert response.status_code == 200
-    bookmark = response.json()["bookmark"]
-    assert bookmark["query"] == current
-    assert bookmark["previous_question"] == previous
-    assert bookmark["previous_turn"]["question"] == previous
-    assert bookmark["previous_turn"]["consensus"] == "Original consensus"
-    assert bookmark["previous_turn"]["differences_data"]["agreement"]["score"] == 82
-    assert bookmark["share_result_id"] == ""
-    meta = bookmarks_router._bookmark_meta(bookmark_id, bookmark)
-    assert meta["query"] == current
-
-
-def test_followup_consensus_updates_one_stable_chat_bookmark():
-    bookmark_id = "stable_chat_bookmark"
-    chat_id = "c" * 32
-    turn_id = "2" * 32
-    bookmark_ref = FakeBookmarkRef(
-        bookmark_id,
-        {
-            "query": "First question",
-            "responses": {"DeepSeek": "stale answer", "consensus": "First consensus"},
-        },
-    )
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-            return_value={
-                "question": "Second question",
-                "consensus": "Second consensus",
-                "differences": "Second differences",
-                "differences_data": None,
-                "sources": [],
-                "model_responses": {"OpenAI": "new answer", "Gemini": "other answer"},
-                "result_id": "",
-            },
-        ),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": bookmark_id,
-                "chatId": chat_id,
-                "turnId": turn_id,
-                "question": "Second question",
-                "previousQuestion": "First question",
-                "consensusText": "Second consensus",
-                "differencesText": "Second differences",
-                "modelResponses": {
-                    "OpenAI": "new answer",
-                    "Gemini": "other answer",
-                },
-            },
-        )
-
-    assert response.status_code == 200
-    bookmark = response.json()["bookmark"]
-    assert bookmark["id"] == bookmark_id
-    assert bookmark["query"] == "Second question"
-    assert bookmark["chat_id"] == chat_id
-    assert bookmark["turn_id"] == turn_id
-    assert bookmark["responses"]["OpenAI"] == "new answer"
-    assert bookmark["responses"]["Gemini"] == "other answer"
-    assert bookmark["responses"]["DeepSeek"] == ""
-    assert bookmark["responses"]["consensus"] == "Second consensus"
-
-
-def test_bookmark_name_stays_the_first_question_of_the_conversation():
-    """Der Sidebar-Name gehoert der ERSTEN Frage; `query` wandert weiter."""
-    bookmark_id = "stable_chat_bookmark"
-    chat_id = "c" * 32
-    turn_id = "2" * 32
-    bookmark_ref = FakeBookmarkRef(bookmark_id, {"responses": {}})
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    limiter.reset()
-    app.include_router(bookmarks_router.router)
-
-    class FakeChatStore:
-        def get_chat(self, uid, requested_chat_id):
-            assert (uid, requested_chat_id) == ("uid-1", chat_id)
-            return {"id": chat_id, "title": "First question"}
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()),
-        patch.object(
-            bookmarks_router,
-            "_authoritative_consensus_payload",
-            side_effect=[
-                {
-                    "question": "First question", "consensus": "First consensus",
-                    "differences": "First differences", "differences_data": None,
-                    "sources": [], "result_id": "",
-                },
-                {
-                    "question": "Second question", "consensus": "Second consensus",
-                    "differences": "Second differences", "differences_data": None,
-                    "sources": [], "result_id": "",
-                },
-            ],
-        ),
-    ):
-        client = TestClient(app)
-        opening = client.post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": bookmark_id,
-                "chatId": chat_id,
-                "turnId": turn_id,
-                "question": "First question",
-                "consensusText": "First consensus",
-                "differencesText": "First differences",
-            },
-        )
-        followup = client.post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": bookmark_id,
-                "chatId": chat_id,
-                "turnId": turn_id,
-                "question": "Second question",
-                "previousQuestion": "First question",
-                "consensusText": "Second consensus",
-                "differencesText": "Second differences",
-            },
-        )
-
-    assert opening.json()["bookmark"]["title"] == "First question"
-    assert followup.status_code == 200
-    bookmark = followup.json()["bookmark"]
-    assert bookmark["title"] == "First question"
-    assert bookmark["query"] == "Second question"
-    assert bookmarks_router._bookmark_meta(bookmark_id, bookmark)["title"] == (
-        "First question"
-    )
-
-
 def test_a_legacy_bookmark_without_a_title_falls_back_to_its_question():
     meta = bookmarks_router._bookmark_meta("legacy_id", {"query": "Only question"})
     assert meta["title"] == "Only question"
 
 
-def test_a_follow_up_saves_although_the_turn_stored_a_normalized_question():
-    """Der Chat-Turn speichert NFKC-normalisiert, der Browser schickt den Rohtext.
-
-    Ein einziges geschuetztes Leerzeichen in einer Folgefrage liess den Lauf
-    sichtbar durchlaufen, waehrend sein Bookmark mit 409 scheiterte.
-    """
-    raw_question = "Und was kostet das?"
-    stored_question = unicodedata.normalize("NFKC", raw_question)
-    assert raw_question != stored_question
-
-    chat_id = "c" * 32
-    turn_id = "2" * 32
-
-    class FakeChatStore:
-        def get_turn(self, uid, requested_chat_id, requested_turn_id):
-            return {
-                "status": "completed",
-                "question": stored_question,
-                "consensus": "Antwort",
-                "differences": "",
-                "differences_data": None,
-                "sources": [],
-                "model_answers": {"OpenAI": {"answer": "a", "model_label": "GPT"}},
-                "included_models": ["OpenAI: GPT"],
-                "consensus_model": "gpt-5",
-                "result_id": "",
-            }
-
-        def get_chat(self, uid, requested_chat_id):
-            return {"id": requested_chat_id, "title": "Erste Frage"}
-
-    bookmark_ref = FakeBookmarkRef("stable_chat_bookmark", {"responses": {}})
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    limiter.reset()
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": "stable_chat_bookmark",
-                "chatId": chat_id,
-                "turnId": turn_id,
-                "question": raw_question,
-                "previousQuestion": "Erste Frage",
-                "consensusText": "Antwort",
-                "differencesText": "",
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json()["bookmark"]["query"] == raw_question
-
-
-def test_a_follow_up_bookmark_may_rest_on_its_own_run_snapshot():
-    """Ohne persistierten Chat-Turn ist die result_id der einzige Beleg.
-
-    Der Browser schickt sie deshalb auch bei einer Folgefrage mit. Der
-    Share-Verweis bleibt trotzdem leer -- ein Follow-up-Share wird spaeter
-    serverseitig neu gebaut.
-    """
-    result_id = "R" * 16
-    bookmark_ref = FakeBookmarkRef("followup_on_result", {"responses": {}})
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    limiter.reset()
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-        patch.object(
-            bookmarks_router.share_snapshots,
-            "get_pending_result",
-            return_value={
-                "question": "Zweite Frage",
-                "consensus_md": "Zweiter Konsens",
-                "differences_text": "",
-                "differences_data": None,
-                "sources": [],
-                "included_models": ["OpenAI: GPT"],
-                "consensus_model": "gpt-5",
-                "model_responses": {"OpenAI": "a"},
-                "vote_subject_id": result_id,
-            },
-        ),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": "followup_on_result",
-                "resultId": result_id,
-                "question": "Zweite Frage",
-                "previousQuestion": "Erste Frage",
-                "consensusText": "Zweiter Konsens",
-                "differencesText": "",
-            },
-        )
-
-    assert response.status_code == 200
-    bookmark = response.json()["bookmark"]
-    assert bookmark["responses"]["consensus"] == "Zweiter Konsens"
-    assert bookmark["previous_question"] == "Erste Frage"
-    assert bookmark["share_result_id"] == ""
-
-
 def test_the_browser_writes_no_consensus_bookmark_since_the_pipeline_left_it():
-    """Seit 2026-10-25 startet der Browser keinen Consensus mehr; das
-    Bookmark eines Agent-Turns schreibt der Server (agent_runs.py) und der
-    Browser uebernimmt nur dessen Meta."""
+    """Seit 2026-10-25 startet der Browser keinen Consensus mehr, und
+    POST /bookmark/consensus ist weg; das Bookmark eines Agent-Turns schreibt
+    der Server (agent_runs.py) und der Browser uebernimmt nur dessen Meta."""
+    paths = {(route.path, method) for route in bookmarks_router.router.routes
+             for method in getattr(route, "methods", set())}
+    assert ("/bookmark/consensus", "POST") not in paths
+    assert ("/bookmark/consensus/share-result", "POST") in paths
     root = Path(__file__).resolve().parents[1]
     scripts = "\n".join(
         path.read_text(encoding="utf-8")
@@ -719,36 +273,6 @@ def test_the_browser_writes_no_consensus_bookmark_since_the_pipeline_left_it():
     assert "saveBookmarkConsensus" not in scripts
     agent = (root / "static" / "js" / "agent-chat.js").read_text(encoding="utf-8")
     assert "window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, conversation);" in agent
-
-
-def test_a_consensus_bookmark_without_a_completed_run_is_rejected():
-    bookmark_id = "legacy_followup"
-    bookmark_ref = FakeBookmarkRef(
-        bookmark_id, {"query": "First", "title": "First", "responses": {}}
-    )
-    fake_db = FakeFirestore(bookmark_ref)
-    app = FastAPI()
-    app.state.limiter = limiter
-    limiter.reset()
-    app.include_router(bookmarks_router.router)
-
-    with (
-        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
-        patch.object(bookmarks_router, "db_firestore", fake_db),
-    ):
-        response = TestClient(app).post(
-            "/bookmark/consensus",
-            json={
-                "id_token": "token",
-                "bookmarkId": bookmark_id,
-                "question": "Second",
-                "previousQuestion": "First",
-                "consensusText": "Second consensus",
-                "differencesText": "Second differences",
-            },
-        )
-
-    assert response.status_code == 409
 
 
 def test_completed_turn_is_the_authoritative_source_for_model_provenance():
@@ -780,8 +304,8 @@ def test_completed_turn_is_the_authoritative_source_for_model_provenance():
             }
 
     with patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()):
-        payload = bookmarks_router._authoritative_consensus_payload(
-            "uid-1", "", {"chat_id": chat_id, "turn_id": turn_id},
+        payload = bookmarks_router._completed_turn_payload(
+            "uid-1", {"chat_id": chat_id, "turn_id": turn_id},
         )
 
     assert payload["model_responses"] == {"OpenAI": "A server-owned answer."}
@@ -1133,8 +657,8 @@ def test_a_model_save_cannot_put_a_forged_question_or_sources_on_a_share():
         deep_search=False, selected_models=["OpenAI", "Gemini"],
         consensus_model="Gemini",
     )
-    store.complete_turn(
-        "uid-1", chat["id"], turn["id"],
+    complete_turn(
+        store, "uid-1", chat["id"], turn["id"],
         question=question,
         model_answers={
             "OpenAI": {"answer": "Scattering.", "model_label": "GPT-6 Luna"},
@@ -1161,11 +685,14 @@ def test_a_model_save_cannot_put_a_forged_question_or_sources_on_a_share():
         patch.object(share_snapshots, "db_firestore", database),
         patch.object(share_snapshots, "schedule_share_cleanup"),
     ):
-        saved = client.post("/bookmark/consensus", json={
-            "id_token": "token", "bookmarkId": bookmark_id, "question": question,
-            "chatId": chat["id"], "turnId": turn["id"],
-        })
-        assert saved.status_code == 200, saved.text
+        # The consensus bookmark as the server saved it with the run (until
+        # 2026-10-25 through POST /bookmark/consensus).
+        database.documents[("users", "uid-1", "bookmarks", bookmark_id)] = {
+            "query": question, "title": question,
+            "responses": {"consensus": "Short wavelengths scatter most. [S1]",
+                          "differences": "No material differences."},
+            "chat_id": chat["id"], "turn_id": turn["id"], "share_result_id": "",
+        }
         forged = client.post("/bookmark", json={
             "id_token": "token", "bookmarkId": bookmark_id,
             "question": "Which bank login do I need to verify my account?",

@@ -190,7 +190,6 @@ class ConsumerCoverageTests(unittest.TestCase):
             CANONICAL_MODEL_NAMES,
             normalize_model_name,
         )
-        from app.services.llm.resolve_engine import PROVIDER_BY_LABEL
 
         self.assertEqual(set(ASK_PROVIDERS), set(cfg.PROVIDERS))
         post_paths = {
@@ -201,9 +200,6 @@ class ConsumerCoverageTests(unittest.TestCase):
         self.assertLessEqual(
             {provider.ask_endpoint for provider in cfg.PROVIDERS.values()},
             post_paths,
-        )
-        self.assertEqual(
-            set(PROVIDER_BY_LABEL), set(cfg.PROVIDER_LABEL_BY_ID.values())
         )
         for provider, label in cfg.PROVIDER_LABEL_BY_ID.items():
             with self.subTest(provider=provider):

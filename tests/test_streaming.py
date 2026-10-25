@@ -12,7 +12,6 @@ from app.services.llm.streaming import (
     _stream_openrouter_chat_completion,
     iter_sse_events,
     iter_sse_with_keepalive,
-    keepalive_streaming_response,
     sse_pack,
     stream_model_query,
     streaming_model_response,
@@ -24,11 +23,7 @@ from app.services.llm.provider_runtime import (
     current_provider_cancellation,
     managed_provider_resource,
 )
-from app.services.llm.consensus_engine import (
-    is_consensus_error_text,
-    stream_consensus,
-    stream_differences,
-)
+from app.services.llm.consensus_engine import is_consensus_error_text
 
 
 class FakeSSEResponse:
@@ -140,35 +135,6 @@ class ProviderCancellationTests(unittest.TestCase):
 
         self.assertTrue(closed.wait(timeout=1))
         self.assertTrue(producer_stopped.wait(timeout=1))
-
-    def test_real_asgi_disconnect_stops_consensus_before_followup_work(self):
-        entered = threading.Event()
-        closed = threading.Event()
-        released = threading.Event()
-        producer_stopped = threading.Event()
-        followup_work = threading.Event()
-
-        class BlockingResponse:
-            def close(self):
-                closed.set()
-                released.set()
-
-        def source():
-            try:
-                with managed_provider_resource(BlockingResponse()):
-                    entered.set()
-                    released.wait(timeout=2)
-                    yield "event: delta\ndata: {}\n\n"
-                    followup_work.set()
-            finally:
-                producer_stopped.set()
-
-        response = keepalive_streaming_response(source())
-        anyio.run(self._disconnect_response, response, entered)
-
-        self.assertTrue(closed.wait(timeout=1))
-        self.assertTrue(producer_stopped.wait(timeout=1))
-        self.assertFalse(followup_work.is_set())
 
     def test_parallel_streams_keep_their_own_cancellation(self):
         """Sechs gleichzeitige /ask-Streams duerfen sich nicht vermischen.
@@ -502,110 +468,6 @@ class OpenRouterStreamTests(unittest.TestCase):
         # [DONE] alone (no finish_reason) also confirms a normal end.
         events, _, _ = self._run([{"choices": [{"delta": {"content": "Done."}}]}])
         self.assertEqual(events[-1]["result"]["completion"], "complete")
-
-    def test_text_stream_reports_its_completion_state(self):
-        from app.services.llm.streaming import stream_chat_completion_text
-        fake = FakeOpenRouterHTTP([
-            {"choices": [{"delta": {"content": "Partial"}, "finish_reason": "length"}]},
-        ])
-        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
-            events = list(stream_chat_completion_text(
-                api_key="k", model="m", messages=[], max_tokens=10,
-            ))
-        self.assertEqual(events[-1]["type"], "completion")
-        self.assertEqual(events[-1]["state"], "token_limit")
-
-
-class ConsensusStreamTests(unittest.TestCase):
-    def test_invalid_consensus_engine(self):
-        events = list(stream_consensus(
-            "Q?", {"openai": "a", "mistral": "b"},
-            excluded_models=[],
-            consensus_model="DoesNotExist",
-            api_keys={},
-        ))
-        self.assertEqual(events[-1]["type"], "final")
-        self.assertEqual(events[-1]["text"], "Invalid consensus model selected: DoesNotExist")
-
-    def test_differences_without_answers(self):
-        events = list(stream_differences(
-            {},
-            consensus_answer="c",
-            api_keys={},
-            differences_model="OpenAI",
-            excluded_models=[],
-        ))
-        self.assertEqual(events, [{"type": "final", "text": "Error in comparison: no model responses available.", "data": None}])
-
-    def test_invalid_differences_engine(self):
-        events = list(stream_differences(
-            {"openai": "answer one", "mistral": "answer two"},
-            consensus_answer="c",
-            api_keys={},
-            differences_model="DoesNotExist",
-            excluded_models=[],
-        ))
-        self.assertEqual(events[-1]["type"], "final")
-        self.assertEqual(events[-1]["text"], "Invalid model selected for difference comparison.")
-
-    def test_invalid_engine_final_is_flagged_as_error(self):
-        events = list(stream_consensus(
-            "Q?", {"openai": "a", "mistral": "b"},
-            excluded_models=[],
-            consensus_model="DoesNotExist",
-            api_keys={},
-        ))
-        self.assertTrue(events[-1].get("error"))
-
-
-class ConsensusRetryTests(unittest.TestCase):
-    def _run(self, fake_engine):
-        with mock.patch(
-            "app.services.llm.consensus_engine._stream_consensus_engine",
-            side_effect=fake_engine,
-        ) as patched:
-            events = list(stream_consensus(
-                "Q?", {"openai": "a", "mistral": "b"},
-                excluded_models=[],
-                consensus_model="OpenAI",
-                api_keys={"OpenRouter": "sk-or-test"},
-            ))
-        return events, patched.call_count
-
-    def test_transient_failure_is_retried(self):
-        calls = []
-
-        def fake_engine(consensus_model, api_keys, prompt):
-            calls.append(1)
-            if len(calls) == 1:
-                yield {"type": "delta", "text": "partial "}
-                raise RuntimeError("503 - UNAVAILABLE")
-            yield {"type": "reasoning"}
-            yield {"type": "delta", "text": "Recovered "}
-            yield {"type": "delta", "text": "answer."}
-
-        events, call_count = self._run(fake_engine)
-        self.assertEqual(call_count, 2)
-        self.assertEqual(events[-1], {"type": "final", "text": "Recovered answer."})
-
-    def test_persistent_failure_yields_error_final(self):
-        def fake_engine(consensus_model, api_keys, prompt):
-            raise RuntimeError("503 - UNAVAILABLE")
-            yield  # pragma: no cover - macht die Funktion zum Generator
-
-        events, call_count = self._run(fake_engine)
-        self.assertEqual(call_count, 3)
-        self.assertEqual(events[-1]["text"], "Consensus error: provider request failed.")
-        self.assertTrue(events[-1]["error"])
-
-    def test_empty_stream_counts_as_failure(self):
-        def fake_engine(consensus_model, api_keys, prompt):
-            return iter(())
-
-        events, call_count = self._run(fake_engine)
-        self.assertEqual(call_count, 3)
-        self.assertEqual(events[-1]["text"], "Consensus error: empty response from consensus engine.")
-        self.assertTrue(events[-1]["error"])
 
 
 class ConsensusErrorTextTests(unittest.TestCase):

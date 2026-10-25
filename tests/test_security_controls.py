@@ -68,14 +68,8 @@ def test_validation_errors_stay_422_and_never_echo_the_submitted_value():
 
     client = TestClient(main.app)
     response = client.post(
-        "/chats/" + "a" * 32 + "/turns",
-        json={
-            "question": "Test",
-            "mode": "x" * 41,  # ValueError aus normalize_mode
-            "deep_search": False,
-            "selected_models": ["OpenAI"],
-            "consensus_model": "OpenAI",
-        },
+        "/chats",
+        json={"title": "x" * 121},  # ValueError aus normalize_title
         headers={"Authorization": "Bearer not-a-real-token"},
     )
 
@@ -89,7 +83,7 @@ def test_validation_errors_stay_422_and_never_echo_the_submitted_value():
     # Weder das rohe Exception-Objekt noch der eingesendete Wert gehen zurueck.
     body = response.text
     assert "ctx" not in body
-    assert "x" * 41 not in body
+    assert "x" * 121 not in body
 
 
 def _client_with_registered_http_handler():

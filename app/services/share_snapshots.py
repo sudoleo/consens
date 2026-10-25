@@ -1,8 +1,9 @@
 """Share-Snapshots: serverseitige Persistenz von Konsens-Ergebnissen.
 
 Ablauf:
-  1. /consensus persistiert das fertige Ergebnis als ``pending_results/{result_id}``
-     (24h TTL) und liefert die ``result_id`` im Final-Event mit.
+  1. Der Server legt das fertige Ergebnis als ``pending_results/{result_id}``
+     ab (24h TTL), gebaut aus einem gespeicherten Turn: eine Agent-Antwort
+     oder ein gespeicherter Consensus-Chat (``bookmarks.py``, share-result).
   2. POST /api/share kopiert das Pending-Ergebnis serverseitig nach
      ``shares/{share_id}`` – der Client kann keinen eigenen Inhalt publizieren.
 
@@ -792,31 +793,6 @@ def save_pending_result(payload, db=None, result_id=None):
 
     _run_transaction(db, persist)
     return result_id
-
-
-def persist_pending_result(uid, question, consensus_md, differences_data,
-                           differences_text, model_sources, included_providers,
-                           model_labels, consensus_model, model_responses=None,
-                           db=None, answer_provenance=None):
-    """Best-effort-Persistenz aus /consensus heraus: Fehler dürfen den
-    Konsens-Stream nie beeinträchtigen, daher wird hier alles geschluckt."""
-    try:
-        payload = build_pending_result(
-            uid, question, consensus_md, differences_data, differences_text,
-            model_sources, included_providers, model_labels, consensus_model,
-            model_responses, answer_provenance=answer_provenance,
-        )
-        if payload is None:
-            return None
-        return save_pending_result(payload, db=db)
-    except persistence_guard.AccountDeletionInProgress:
-        logging.info("pending result skipped because account deletion is active")
-        return None
-    except Exception as exc:
-        logging.error(
-            "persist_pending_result failed category=%s", safe_exception(exc)
-        )
-        return None
 
 
 def pending_result_is_available(uid, result_id, db=None):

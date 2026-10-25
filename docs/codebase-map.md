@@ -20,9 +20,17 @@ API v1 und kuratierte Topics.
   „Compare answers“, auch wenn die nächste Nachricht als Compare läuft
   (`agent-mode.js` `updateAgentModeUI`: sichtbares `#consensusOutput` ohne
   `direct-comparison-active`). Ohne Ergebnis sagen Share/Watch „Nothing to
-  share yet“/„Nothing to watch yet“. Die Server-Endpunkte `/consensus`,
-  `/resolve`, `/bookmark/consensus` und die Consensus-Turn-Routen unter
-  `/chats` ruft die App nicht mehr auf.
+  share yet“/„Nothing to watch yet“.
+- Server aufgeräumt (ebenfalls 2026-10-25): entfernt sind `/consensus`,
+  `/resolve`, `POST /vote`, `POST /bookmark/consensus` und die Turn-/Context-
+  Routen unter `/chats` (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`,
+  `POST …/context`), dazu `chat_context.py` (Chat-Memory der Folgefragen),
+  `llm/resolve_engine.py`, die Antwortbelege (`answer_receipts.py` löscht nur
+  noch abgelaufene), `ChatStore.complete_turn`, die Streaming-Varianten der
+  Engine (`stream_consensus`/`stream_differences`) und `run_id` im
+  Compare-Payload. `/ask_*` ignoriert Kontextfelder (`context`, Chat-/Turn-IDs).
+  Es bleiben `POST/GET/DELETE /chats`, `GET /chats/{id}`, `PUT …/task-checks`
+  und `POST /bookmark/consensus/share-result` (Teilen gespeicherter Chats).
 - Details: „Modus: Agent und Compare“ und „Gespeicherte Consensus-Chats“ in §4.
 
 Google als Quelle (03.10.2026): Google ist in Consens eine **Quelle von Belegen,
@@ -390,9 +398,9 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, nur Admins, seit 2026-10-25, siehe „Audit statt Vergleich“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. das Feld `memory` an `compare_models`/`check_text` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). |
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
-| `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail, Turns und neuen Context-Versionen bereits unsichtbar bzw. gesperrt), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Consensus-Turns werden serverseitig über `/consensus`, Agent-Turns über `/agent` finalisiert. |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback` und `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Best-answer-Votes schreibt seit 2026-10-25 nur noch der Agent (`persistence_guard.write_agent_vote`, einmal pro Turn); `POST /vote` des Browser-Consensus ist entfernt. |
+| `chat.py` | Kern-LLM-Flow für Compare: `/prepare` und die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`). Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. Eine Frage an `/ask_*` setzt keinen Chat fort: Kontextfelder (`context`, `chat_id`/`turn_id`/`context_version_id`) werden ignoriert. `/consensus` und `/resolve` sind seit 2026-10-25 entfernt; den Consensus fährt nur noch der Server (`consensus_pipeline`). |
+| `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Mailbox-Setup-Pfad: Der Admin-SDK-Reset-Link (`continueUrl = {PUBLIC_SITE_URL}/app?setup=1`, damit Firebases „Passwort gespeichert“-Seite zurück in den vorausgefüllten Login führt) geht in einer EIGENEN SMTP-Mail raus (`registration.send_own_setup_email` → `mailer.build_account_setup_message` „Finish setting up …“ bzw. für Konten mit mindestens einem Login `build_existing_account_message` „You already have an account“ mit Login-Knopf + optionalem Reset; „Send the link again“ vor dem ersten Login bekommt wieder die Setup-Mail, `needs_password_setup`). Grund: Firebases Vorlage sagt „Reset your password“ und ist in diesem Projekt gesperrt. Ohne SMTP oder bei Fehlern geht wie früher Firebases `PASSWORD_RESET`-Mail raus (lehnt Firebase die Continue-URL mit 400 ab, ohne sie). Die HTTP-Antwort bleibt in allen Fällen identisch. Neben dem IP-Limit (3/min) gehen pro Adresse höchstens 5 Setup-Mails je Stunde raus (prozesslokal über `api_uid_limiter`, Schlüssel = SHA-256 der Adresse); darüber antwortet `/register` gleich und versendet nichts, damit niemand über viele IPs ein fremdes Postfach flutet. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig; es läuft bei jedem Login und Seitenaufruf und ist deshalb nur gegen Fluten begrenzt (30/min pro IP). |
 | `firebase_auth_proxy.py` | Same-Origin-Proxy für Firebases Sign-in-Helfer: `GET/HEAD/POST /__/auth/*` und `GET /__/firebase/init.json` werden transparent an `https://<FIREBASE_PROJECT_ID>.firebaseapp.com` (überschreibbar per `FIREBASE_AUTH_PROXY_UPSTREAM`) weitergereicht (Firebase „redirect best practices“, Proxy-Option). Weitergereicht werden nur Request-Zeile, Content-Negotiation-Header und der Handler-Body, nie Cookies/Authorization; zurück nur Inhalts-/Cache-Header, kein `Set-Cookie`. `CustomSecurityMiddleware` lässt auf diesen Pfaden die App-CSP weg und setzt `X-Frame-Options: SAMEORIGIN` (das `/__/auth/iframe` rahmt die App selbst). Wirksam erst, wenn `FIREBASE_AUTH_DOMAIN` den App-Host nennt (siehe §7). Ohne Projekt-ID 404, Upstream-Fehler neutral 502. Unter `/__/auth/` nur schlichte Helfernamen (Segmente aus `[A-Za-z0-9_.-]`, kein `.`/`..`), sonst 404: Der Server dekodiert `%2F`, httpx löst Punkt-Segmente auf, `..%2F` holte sonst jede Seite der Hosting-Site ohne CSP. |
@@ -1737,8 +1745,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
      geht allen sechs Modellen **identisch** voran und ist damit ein gemeinsamer
      Bias: je mehr davon, desto ähnlicher die Antworten und desto höher der
      Agreement-Score, ohne dass die Modelle sich einiger wären. Dieselbe
-     Überlegung hat `differences_data` aus dem Chat-Kontext entfernt (§
-     `chat_context.py`).
+     Überlegung hatte `differences_data` aus dem Chat-Kontext der
+     Consensus-Folgefragen entfernt (`chat_context.py`, bis 2026-10-25).
   2. **Form statt Inhalt.** Der Rahmen (`ABOUT THE USER … END OF USER PROFILE.`)
      sagt ausdrücklich, dass das Profil beeinflusst, WIE geantwortet wird, nie
      WAS wahr ist: „the question and the evidence win".
@@ -1747,9 +1755,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
      `engines.py` direkt und sehen das Profil nie — eine Watch-Baseline muss mit
      der Welt driften, nicht mit dem Profil ihres Besitzers. Judge/Differences
      und Share-Snapshots bekommen es ebenfalls nicht.
-  Reihenfolge im Prompt: Basisanweisung → Profil → darum herum der Chat-Kontext
-  (`build_chat_context_system_prompt` legt Kontext nach vorn, Anweisung nach
-  hinten). Das Profil steht damit bei der stehenden Anweisung, nicht im
+  Reihenfolge im Prompt: Basisanweisung → Profil (der Chat-Kontext der
+  Consensus-Folgefragen davor ist am 2026-10-25 entfallen). Das Profil steht damit bei der stehenden Anweisung, nicht im
   Datenteil. `use_memory: false` im Request überspringt es für genau einen Lauf.
   Jeder eingeloggte interaktive `/ask_*`-Lauf erhält außerdem unabhängig vom
   Profil-Schalter eine kurze Read-only-Grenze: Antwortmodelle dürfen weder
@@ -5871,7 +5878,10 @@ Chat. `chat-session.js` (`App.createChatSession`, `App.chatSession`) und der
 Follow-up-Kontext in `followup` (`offer`/`consume`/`isArmed`) sind entfallen.
 Was unten zum Consensus-Pfad steht (`/chats/{id}/turns`, `/context`,
 `context_version_id` an `/ask_*`/`/consensus`, Legacy-`context`), beschreibt
-den Server, der diese Endpunkte weiter anbietet, und die Daten alter Chats.
+den Pfad bis zu diesem Datum. Server-Endpunkte, `chat_context.py` und die
+Kontextfelder an `/ask_*` sind seitdem entfernt; gespeicherte Turns behalten
+ihre Felder (`context_version_id`, `resolved_question`), und die Chat-Kaskade
+löscht `context_versions` weiter mit.
 
 Nach jedem erfolgreichen Consensus konnte derselbe owner-gebundene Chat um eine
 weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
@@ -5962,21 +5972,19 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   zur späteren History-Migration bewusst im Legacy-Pfad: `context` enthält
   genau das letzte `{previous_question, previous_consensus}`-Paar. Dieser Pfad
   erzeugt keinen irreführenden Chat, dessen Historie mit Turn 2 beginnt.
-- Backend-Legacy: `normalize_followup_context` (`chat.py`) validiert und kappt beide
-  Texte serverseitig (`followup_max_question_chars` /
-  `followup_max_consensus_chars` in `LIMITS`). `/prepare` verarbeitet den
-  Kontext bewusst gar nicht; die **Injektion
-  passiert ausschließlich in `handle_ask`** via `build_followup_system_prompt`
-  (`base.py`), damit der Kontextblock nie doppelt im Prompt steht und auch den
-  `/prepare`-Fallback-Pfad des Frontends überlebt.
+- Backend-Legacy (bis 2026-10-25): `normalize_followup_context` (`chat.py`)
+  und `build_followup_system_prompt` (`base.py`) injizierten das Paar in
+  `handle_ask`. Beide sind entfernt; `/ask_*` ignoriert ein mitgeschicktes
+  `context` (`tests/test_ask_system_prompt.py`).
 
 ### Consensus & Differences
 
 > **Seit 2026-10-25 startet der Browser keinen Consensus mehr.** Pipeline,
 > Judges und Persistenz unten gelten weiter für den Server: Watches, API v1
-> und kuratierte Topics rufen `consensus_pipeline.run_consensus_pipeline`, und
-> die Endpunkte `/consensus`, `/resolve` und `/bookmark/consensus` bestehen
-> fort. Was unten den Browser betrifft (`executeConsensusRun`,
+> und kuratierte Topics rufen `consensus_pipeline.run_consensus_pipeline`. Die
+> Endpunkte `/consensus`, `/resolve`, `/vote` und `/bookmark/consensus` samt
+> Antwortbelegen und Streaming-Engine sind seit demselben Tag entfernt; was
+> unten sie beschreibt, ist Geschichte. Was unten den Browser betrifft (`executeConsensusRun`,
 > `consensus-run.js`, `getConsensus`, `chat-session.js`, Recovery,
 > Bookmark-Dual-Write, Best-Model-Vote, Watch-Nudge nach dem Lauf), beschreibt
 > den entfernten Pfad bis zu diesem Datum; gespeicherte Consensus-Chats
@@ -5992,31 +6000,17 @@ Synthese (`completion.usable_as_input`): `complete` wird normal verwendet,
 `token_limit` als deutlich markierte gekürzte Antwort (`TRUNCATION_NOTE`,
 häufig bei Reasoning-Modellen am 4096-Token-Budget), `interrupted`/`error`/
 `cancelled` nie; das Frontend kennzeichnet gekürzte Antworten sichtbar und
-unterbrochene als `incomplete` (`run-view.js`, Answer Reader), speichert
-diese nicht per Bookmark als fertig und gibt sie nie an die Synthese. Eine
-`/ask`-Antwort ohne gespeicherten Beleg wird im Browser sofort als nicht
-verwendbar markiert. Lehnt `/consensus` Belege ab (400/409/503), wird der
-wartende Chat-Turn auf `failed` gesetzt. `stream_chat_completion_text` endet mit einem
-`completion`-Event; `stream_consensus` meldet eine abgeschnittene Synthese als
-`final` mit `error` + `completion`, ohne stillen Retry, und sendet vor einem
-Retry nach Fehler `consensus.reset` (Versuche mischen nie). `/consensus`
-liefert `consensus_completion`; eine unvollständige Synthese erzeugt weder
-Share-Result noch Chat-Completion (Turn → `failed`/`consensus_incomplete`).
+unterbrochene als `incomplete` (`run-view.js`, Answer Reader) und speichert
+diese nicht per Bookmark als fertig. `query_consensus` meldet eine
+abgeschnittene Synthese als Fehlertext (`CONSENSUS_INCOMPLETE_TEXT`).
 `provider_transport.fan_out_provider_answers` (API/Watch/Topics) wendet
-dieselbe Regel an.
-**Antwortbelege (R09):** Jede erfolgreiche `/ask_*`-Antwort wird in
-`answer_receipts/{id}` gespeichert (`services/answer_receipts.py`: UID,
-Run-Bindung aus `usage_run_key` bzw. `run_id`, Frage-Hash, Familie, konkretes
-Modell, Text, SHA-256, Quellen, `completion`, `provenance`
-`developer|byok`, 24 h TTL, Retention-Sweep und Kontolöschung). Die Antwort
-enthält `answer_receipt`. `/consensus` akzeptiert Modellantworten nur als
-`answer_receipts: {familie: id}`; Freitext in `answers`/`answer_<familie>`
-wird mit 400 `answer_receipts_required` abgelehnt, fremde, abgelaufene,
-veränderte oder run-/frage-/familienfremde Belege mit 409. Text, Quellen und
-Modelllabel stammen aus dem Beleg. Enthält ein Ergebnis eine BYOK-Antwort,
-trägt `pending_results.answer_provenance="byok"`; solche (und ältere
-Ergebnisse ohne Provenienz) zählen weder für `differences_stats` noch für
-Votes/Leaderboard (`persistence_guard.record_model_vote` → `vote_not_eligible`).
+dieselbe Eingaberegel an (`tests/test_result_integrity.py`).
+**Antwortbelege (R09, bis 2026-10-25):** `/ask_*` speicherte jede Antwort als
+Beleg in `answer_receipts/{id}`, und `/consensus` nahm Modellantworten nur
+über diese Belege an. Mit `/consensus` sind Belege und `run_id` entfallen;
+`answer_receipts.cleanup_expired` löscht die letzten im Retention-Sweep, die
+Kontolöschung räumt die Collection weiter ab. `pending_results.answer_provenance`
+alter Ergebnisse bleibt lesbar.
 
 **SSE-Abschluss und Browserdiagnose (2026-09-12):** `markdown-stream.js`
 beendet den Reader mit dem autoritativen `final`-/`error`-Event; ein späterer
@@ -6082,7 +6076,7 @@ Differences liefert dafür kein `factual_check`, `consensus_anchor_validated`
 oder `positions[].quote_models` mehr; der Satz „Whether an event happened …
 are factual questions“ blieb als eigene Regel im Differences-Prompt.
 Anfragen alter offener Seiten mit `check_sources` werden angenommen und
-ignoriert (`AgentRequest`, `/consensus`). Gespeicherte `source_verification`-
+ignoriert (`AgentRequest`). Gespeicherte `source_verification`-
 Felder älterer Chats, Bookmarks und Shares liest niemand mehr; die
 Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
 `source_check_workers`) entfernt `scripts/purge_source_checks.py` einmalig
@@ -6108,11 +6102,11 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   sowie `scored_claims`/`thin_claims`/`total_claims` und den Null-Score.
   Watch/Topic-Verläufe akzeptieren fehlende Scores; daraus entstehen weder
   künstliche Nullpunkte noch numerische Drift-Alarme.
-- Analyse-Budget pro Phase (Audit C3): Der Browser-SSE-Producer und
-  `consensus_pipeline.analyze_provider_answers` laufen in
+- Analyse-Budget pro Phase (Audit C3): `consensus_pipeline.analyze_provider_answers`
+  läuft in
   `llm/provider_runtime.py::analysis_run_scope` (`@analysis_run`). Der Lauf
-  trägt die gemeinsame Cancellation; Synthese (`query/stream_consensus`) und
-  Judges (`query/stream_differences`, beide Judges samt Coverage-Thread) sind
+  trägt die gemeinsame Cancellation; Synthese (`query_consensus`) und
+  Judges (`query_differences`, beide Judges samt Coverage-Thread) sind
   Phasen mit je eigenem threadsicherem `AnalysisBudget` (`@analysis_budgeted`
   mit `max_calls`): je `ANALYSIS_TIMEOUT_SECONDS` (Default 180 s, 10–600) und
   so viele Calls, wie der längste Versuchsplan braucht —
@@ -6136,7 +6130,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   rückwirkend erstattet werden.
 - Jeder Judge-Versuch hat seit 2026-10-15 eine eigene Zeitgrenze
   `JUDGE_ATTEMPT_SECONDS` (90 s): Coverage samt Repair, Differences in
-  `query_differences.run_pass` (beide Pässe) und in `stream_differences`,
+  `query_differences.run_pass` (beide Pässe),
   außerdem der Visual-Judge der Watch-/Topic-Bilder (`pick_watch_visual`; Prod
   2026-10-15: zwei hängende Luna-Versuche à 120 s Lese-Timeout hielten die
   Bildsuche eines Topics vier Minuten auf, bevor die nächste Familie in rund
@@ -6153,7 +6147,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Innerhalb dieser Grenze startet `_hedged_judge_call` seit 2026-10-18 nach
   `JUDGE_HEDGE_SECONDS` (15 s) eine identische zweite Anfrage an dasselbe
   Modell, wenn die erste noch läuft (Coverage-Fenster, Coverage-Repair,
-  Differences in `run_pass`; nicht `stream_differences`). Die erste Antwort
+  Differences in `run_pass`). Die erste Antwort
   gewinnt, die andere wird über ihre eigene, verknüpfte Cancellation beendet;
   die erste Anfrage bleibt im aufrufenden Thread (sonst unverändertes
   Verhalten), das Duplikat läuft im Thread `<Aufrufer>-judge-hedge`. Ein
@@ -6221,8 +6215,9 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   idempotent und erzeugt keine zweite Usage-Einheit. `getConsensus` delegiert
   für einen aktiven Registry-Run dorthin; sein DOM-basierter Pfad ist nur noch
   Legacy/Demo.
-- **Chat-Turn-Persistenz und Context-Verdrahtung (Sessions 5–6, im Browser bis
-  2026-10-25):** Nach
+- **Chat-Turn-Persistenz und Context-Verdrahtung (Sessions 5–6, bis
+  2026-10-25; Turn-/Context-Routen, `/consensus`, `chat_context.py` und
+  `ChatStore.complete_turn` seitdem entfernt):** Nach
   erfolgreichem `/prepare` legt `query-send.js` den logischen Run fest. Nur bei
   einer aktiven Fortsetzung erzeugt die private ChatSession des Contexts den
   pending Turn bereits
@@ -6325,7 +6320,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   paginiert aus `ChatStore`. Ein altes Bookmark ohne Chat-Bindung bleibt im
   Legacy-Ein-Turn-Kontextpfad und erzeugt keinen irreführenden Chat, dessen
   Historie mit Turn 2 beginnt.
-- **Multi-Turn-Context (Session 4 Backend, seit Session 5 im Browser aktiv):**
+- **Multi-Turn-Context (Session 4 bis 2026-10-25, mit `chat_context.py` entfernt):**
   `POST /chats/{chat_id}/turns/{turn_id}/context` liest ausschließlich frühere
   owner-gebundene completed Turns. Bei Zielposition 2 bleibt der jüngste
   completed Turn als begrenzter Wortlaut-Kontext erhalten; ab Zielposition 3
@@ -6373,8 +6368,9 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   immer `"Standard"`. Ein altes Firestore-Feld `deep_think_model` und die alten
   `free_/pro_deep_search_max_*`-Limits werden ignoriert
   (`pro_deep_search_max_tokens` wird einmalig zu `reasoning_max_tokens`).
-- Backend (`chat.py::consensus` → `consensus_pipeline.py` →
-  `consensus_engine.py`): validiert (mind. **2**
+- Backend bis 2026-10-25 (`chat.py::consensus` → `consensus_pipeline.py` →
+  `consensus_engine.py`; der Endpoint ist entfernt, die Pipeline ruft
+  `query_consensus`/`query_differences`): validiert (mind. **2**
   eingeschlossene Antworten), kappt Frage/Antworten serverseitig
   (`cap_engine_text`, Limits `consensus_max_answer_chars` /
   `consensus_max_question_chars` — Kosten-/Abuse-Schutz, da die Texte vom
@@ -6474,9 +6470,10 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   einem neutralen HTTP 500 (mit `x-correlation-id`). Aufbau, Dedup und Budgets
   der Alerts: „Kritische Fehler-Alerts (Telegram)“ unten.
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
-  (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`) über OpenRouter
-  Chat Completions. Strukturierte Aufgaben senden in Streaming- und
-  Non-Streaming-Pfaden das jeweilige JSON-Schema als
+  (`_resolve_engine`/`_call_engine_text`) über OpenRouter
+  Chat Completions (die Streaming-Variante `_stream_engine_text` ist mit
+  `/consensus` am 2026-10-25 entfallen). Strukturierte Aufgaben senden das
+  jeweilige JSON-Schema als
   `response_format=json_schema` mit `strict=true`; der gemeinsame Parser
   validiert danach weiterhin die Pflichtfelder `differences` und
   `best_model` und repariert begrenzt abgeschnittenes JSON. Die Belegliste
@@ -6568,7 +6565,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Coverage-Judge sichtbar, aber eine einzelne Stimme belegt nichts. Dieselbe
   Schwelle filtert sie aus der Opinion-Map.
   alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
-- Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei
+- Consensus-Fehlerpfad: `query_consensus` versucht es bei
   wiederholbaren Provider-Fehlern (429, 5xx, Timeout, ...) ein zweites Mal
   (`CONSENSUS_MAX_ATTEMPTS`), danach einmal auf einer Fallback-Familie.
   400/402/403/404 überspringen den zweiten Versuch und gehen direkt zum Fallback
@@ -6587,7 +6584,9 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
 - Bei erfolgreichem Lauf eines verifizierten Nutzers wird das Ergebnis als
   `pending_result` für das Share-Feature persistiert (→ `result_id`).
 
-### Resolve-Runde
+### Resolve-Runde (entfernt 2026-10-25)
+`POST /resolve` und `llm/resolve_engine.py` sind seit 2026-10-25 entfernt;
+gespeicherte Ergebnisse (`diff.resolution`) zeigt die App weiter. Bis dahin galt:
 `POST /resolve` (`chat.py` → `resolve_engine.py`) konfrontiert die
 dissentierenden Modelle eines Widerspruchs (Karte aus `differences_data`)
 gezielt mit der Gegenposition: pro beteiligtem Modell ein paralleler Call auf
@@ -6755,8 +6754,9 @@ nach einem Lauf und der Consensus-Teil der Demo) ist entfernt. Was bleibt:
 - Fortgesetzt wird er nicht: Agent ist dort „Available in a new chat“, eine
   Compare-Nachricht beginnt einen eigenen Chat.
 - Die Server-Endpunkte des alten Browser-Pfads (`/consensus`, `/resolve`,
-  `/bookmark/consensus`, `POST /chats` + Turns/Context der Consensus-Familie)
-  bestehen weiter, werden aber von der App nicht mehr aufgerufen.
+  `/vote`, `POST /bookmark/consensus`, Turns/Context der Consensus-Familie
+  unter `/chats`) sind seit 2026-10-25 entfernt. Es bleiben `POST /chats`
+  (Agent-Chats), `PUT …/task-checks` und `/bookmark/consensus/share-result`.
 - `config.agentMode`/`autoConsensus` bleiben die persistierten Laufsfelder
   („die Pipeline lief“): ein Compare-Lauf traegt `false`, ein Agent-Lauf
   `agentMode: true` (fuer `firebase.js::finalizeRegistryRunBookmark`).
@@ -7232,7 +7232,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Ohne Konto läuft weiterhin nichts, was Modellkosten erzeugt (Agent bleibt
   `require_agent_access`).
 - Eigene API-Keys sind ein eingeloggtes Feature: `/check_keys`, `/ask_*` mit
-  User-Key und `/consensus` mit `useOwnKeys` verlangen ein verifiziertes Token.
+  User-Key verlangen ein verifiziertes Token.
 - **Unvertrauenswürdige Request-Größen sind vor teurer Arbeit begrenzt:** Das
   ASGI-Bodylimit verwirft sowohl zu großes `Content-Length` als auch erst beim
   chunked Lesen anwachsende Bodies mit 413, bevor FastAPI JSON/Form parst.
@@ -7273,8 +7273,8 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   auf den Pro-Wert.
 - `get_user_tier(uid)` ist die einzige Quelle für die Stufe; die Limit-Getter in
   `config.py` nehmen jetzt `tier` statt `is_pro` (ein Bool bleibt erlaubt:
-  `True` → Pro, `False` → Free). `/user_status`, `/usage`, `/prepare`, `/ask_*`,
-  `/consensus` und `/resolve` liefern zusätzlich zu `is_pro_user` das Feld
+  `True` → Pro, `False` → Free). `/user_status`, `/usage`, `/prepare` und
+  `/ask_*` liefern zusätzlich zu `is_pro_user` das Feld
   `tier`; das Frontend hält es in `window.userTier` plus den abgeleiteten
   `window.isUserPro` / `window.isUserPlus` (`app-state.js`,
   `App.normalizeTier`).
@@ -7303,9 +7303,9 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   `ask:<provider>`/`consensus`/`resolve`, Chat-Kontext-Bindung, 12
   Transaktions-Retries, strukturierte 503 bei Erschöpfung). Run-Zähler,
   Run-Limits und das Deep-Think-Teilkontingent sind entfallen. `/prepare`
-  admittiert und konsumiert sofort; Fan-out und `/consensus` bestätigen den
-  Consume nur noch und claimen ihre Operation. `/resolve` erzeugt einen eigenen
-  Lauf. `/usage` und `/user_status` liefern `token_budget`;
+  admittiert und konsumiert sofort; der Fan-out bestätigt den Consume nur noch
+  und claimt seine Operation (`/consensus` und `/resolve` gibt es seit
+  2026-10-25 nicht mehr). `/usage` und `/user_status` liefern `token_budget`;
   `/usage/run/release` gibt nur nicht konsumierte Läufe (samt Hold) frei.
   Bookmark-, Feedback- und Vote-Grenzen liegen ebenfalls persistent in
   Firestore (`persistence_guard.py`); es gibt keinen prozesslokalen Abuse-
@@ -7598,7 +7598,10 @@ keinen Abgleich.
   PNG-Regionen, Ampelfarben und semantische Zeichenaufrufe werden gemeinsam
   geprüft (`tests/test_og_image.py`), damit ein gültiges, aber leeres PNG nicht
   genügt.
-- `/consensus` legt ein `pending_results`-Dokument an → `result_id`.
+- Ein `pending_results`-Dokument (→ `result_id`) baut der Server aus einem
+  gespeicherten Turn: eine Agent-Antwort (`/agent/chats/…/share-result`) oder
+  ein gespeicherter Consensus-Chat (`/bookmark/consensus/share-result`); bis
+  2026-10-25 legte es auch `/consensus` an.
 - Die Consensus-API publiziert dagegen direkt aus ihrem 30-Tage-Run-Snapshot;
   `source_api_run_id` bleibt serverintern und wird nie Teil der Public-Payload.
 - Consensus-Bookmarks speichern diese ID mit, solange sie gültig ist. Bei
@@ -8025,7 +8028,7 @@ app/core/
   sourcemaps.py              VLQ-Decoder: Browser-Bundle-Koordinate -> static/js/<datei>.js:<zeile>:<spalte>
 app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
-  chat_history.py            Owner-gebundene Chat-/Turn-API inkl. vollständigem Turn-Detail
+  chat_history.py            Owner-gebundene Chat-API (Anlage, Liste, Detail, Löschen) und Task-Checks
 app/services/
   prompt_config.py           DB-Einstellungen (Zeitzone, Delegation) mit Code-Prompts, Validierung, Transaktionsrevisionen und 30-s-Cache
   prompt_catalog.py          Schreibgeschützter Katalog aller Systemprompts aus dem Code für den Admin
@@ -8036,18 +8039,17 @@ app/services/llm/
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Gemeinsamer OpenRouter-Payload und query_model
   streaming.py               OpenRouter-SSE-Streamer, SSE-Helfer, Response-Adapter
-  consensus_engine.py        query/stream_consensus + query/stream_differences, strukturierter Engine-Dispatch
+  consensus_engine.py        query_consensus + query_differences, strukturierter Engine-Dispatch
   consensus_parsing.py       JSON-Extraktion und abgesicherte Truncation-Reparatur
   consensus_scoring.py       Deterministischer Agreement-Score und Schwellen
   coverage_judge.py          Schema/Prompt/Parsing des Coverage-Judges (rein, ohne LLM-Call)
-  resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result), Text vor Suchergebnissen (presearch_end)
   attachments.py             Attachment-Validierung/Aufbereitung
   usage_meter.py             Token-Meter der Transportschicht (ContextVar; Usage je OpenRouter-Request, Schaetzung bei fehlender Usage)
   provider_dispatch.py       Klassifikator "Request nie beim Provider angekommen" (Connect-Fehler, Abbruch vor Dispatch) -> kostenlos statt Schaetzung
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
-  chat_store.py              Firestore-Pfade, Turn-Lifecycle/Antwortdokumente, atomare Finalisierung, Idempotenz, Cursor + Allowlists, Loesch-Kaskade
+  chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Agent-Prompt samt Kartenhinweis; startet nie eine Watch
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
@@ -8058,7 +8060,6 @@ app/services/
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
-  chat_context.py            Owner-gebundene Context-Versionen, strukturierte Memory, Frage-Auflösung vor dem Fan-out, Budgets, Lease/Idempotenz, Fallback-Rendering + Provider-Cache
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
   agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
@@ -8067,7 +8068,7 @@ app/services/
   agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
-  persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + run-gebundene Votes
+  persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + Agent-Votes (einmal pro Turn)
   registration.py            Nicht-enumerierender Firebase-Mailbox-Setup-Pfad
   follow_challenges.py       Gehashte persistente Resend-/Empfänger-/Globalbudgets für Double-Opt-in
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
@@ -8105,7 +8106,7 @@ app/services/
 Wichtige Verträge im Backend:
 - Provider-Label-Set überall identisch: `OpenAI, Mistral, Anthropic, Gemini,
   DeepSeek, Grok` (Claude→Anthropic). `normalize_model_name` vereinheitlicht.
-- `/consensus` braucht **mind. 2** nicht-ausgeschlossene Antworten.
+- Die Consensus-Pipeline braucht **mind. 2** nicht-ausgeschlossene Antworten.
 - `*-Pro`-Consensus-Engines und Premium-Modelle sind Pro-gated.
 
 ---
@@ -8285,7 +8286,7 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     seine begrenzte Ausführungsgültigkeit hinaus abgespielt werden. Provider-/LLM-Aufrufe finden immer
     außerhalb der Transaktion und erst nach Consume plus erfolgreichem
     Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
-    `/ask_*`, `/consensus` und `/resolve` bündeln Run-Bindung, gegebenenfalls
+    `/ask_*` bündeln Run-Bindung, gegebenenfalls
     Admission/Consume und Operations-Claim in `authorize_operation`: zwei
     Dokument-Reads (Account-Tombstone, Run) für vorbereitete Läufe; nur ein
     Legacy-Direktaufruf ohne `/prepare` liest zusätzlich das Kontodokument und
@@ -8433,9 +8434,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   Checkbox in diese Liste aufgenommen werden. Das frühere Feld
   `deep_think_model` (Deep-Think-Engine) wird seit 2026-10-02 beim Lesen
   ignoriert, beim Admin-Speichern verworfen und nicht mehr geschrieben.
-  `judge_models`/`judge_models_pro` setzen Standard- bzw. Pro-Differences-/
-  Resolve-Judge je Provider (`apply_judge_models`/`apply_pro_judge_models` in
-  config.py, in-place — consensus_engine/resolve_engine aliasen dieselben
+  `judge_models`/`judge_models_pro` setzen Standard- bzw. Pro-Differences-Judge
+  je Provider (`apply_judge_models`/`apply_pro_judge_models` in
+  config.py, in-place — consensus_engine aliast dieselben
   dicts; entfernte Legacy-Aliasse sind ausgeschlossen; Fallbacks kommen nur aus
   der jeweiligen konfigurierten Providerliste; Judges laufen mit gekappter
   Denktiefe: OpenAI/Gemini `low`, Mistral wegen dessen API-Vertrag `none`).
@@ -8465,10 +8466,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `app_config/seo_weekly_review`.
 - `pending_results` — kurzlebige Consensus-Ergebnisse fürs Sharing (TTL/Cleanup),
   mit `answer_provenance` (`developer|byok`) für die Ranking-Berechtigung.
-- `answer_receipts/{receipt_id}` — serverseitige `/ask_*`-Antwortbelege
-  (Owner, Run-Bindung, Frage-Hash, Familie, konkretes Modell, Text, Digest,
-  Quellen, Abschlusszustand, Provenienz); 24 h `expires_at`, Retention-Sweep,
-  Kontolöschung. Einzige Quelle für Modellantworten in `/consensus`.
+- `answer_receipts/{receipt_id}` — die `/ask_*`-Antwortbelege des bis
+  2026-10-25 bestehenden `/consensus`; es entstehen keine neuen. 24 h
+  `expires_at`, Retention-Sweep (`answer_receipts.cleanup_expired`) und
+  Kontolöschung räumen die letzten ab.
 - `persistence_usage/{kind-sha256(uid)}` — transaktionale, restart- und
   multi-worker-feste Bookmark-Anzahl/-Bytes sowie Feedback-Cooldown/-Tageszahl;
   weder UID noch E-Mail stehen im Dokumentpfad. `model_votes/{sha256(uid:result)}`
@@ -10102,20 +10103,16 @@ zählen nicht):
   `asyncio.to_thread` aus. Einzelne SDK-Calls dürfen nicht direkt in einem
   `async def` landen. `test_router_event_loop_contract.py` schützt dies.
 - **Usage-Key ist ein Backend-/Frontend-Vertrag.** Ein frischer logischer Lauf
-  nutzt denselben `usage_run_key` in `/prepare`, allen `/ask_*` und
-  `/consensus`; Resolve nutzt einen eigenen Key. Run-Typ (`regular` oder
+  nutzt denselben `usage_run_key` in `/prepare` und allen `/ask_*`. Run-Typ (`regular` oder
   `deep_think` = Reasoning an) und Limits werden ausschließlich serverseitig bestimmt. Niemals
   clientseitige Kosten, Modellanzahl oder Float-Inkremente übernehmen; niemals
   Provider-Aufrufe in die Firestore-Transaktionsfunktion verschieben. Vor jeder
   Developer-Key-Operation muss nach Consume der passende einmalige Claim
-  (`ask:<provider>`, `consensus`, `resolve`) erfolgreich sein; ein bereits
-  belegter Claim ist kein Retry-Ticket und wird vor externer Arbeit abgewiesen. Der
-  Chat-Context-Endpoint darf im Developer-Modus nur einen bereits konsumierten
-  Run verwenden und bindet dessen Hash-Metadaten vor dem LLM-Call einmalig an
-  genau einen Chat/Turn; diese Bindung verändert keine Usage-Zähler.
+  (`ask:<provider>`) erfolgreich sein; ein bereits belegter Claim ist kein
+  Retry-Ticket und wird vor externer Arbeit abgewiesen.
 - **Own-Key-Vertrag:** Die App bietet genau ein optionales `openrouterKey`-Feld in
-  `localStorage`. Im Own-Key-Modus senden alle Registry-`/ask_*`-Flows,
-  `/consensus` und `/resolve` ausschließlich `openrouter_key`; `/prepare` trägt
+  `localStorage`. Im Own-Key-Modus senden alle Registry-`/ask_*`-Flows
+  ausschließlich `openrouter_key`; `/prepare` trägt
   weiterhin keine Provider-Key-Felder. Die Modell-/Antwortboxen folgen der
   Registry; die historischen Endpoint-Namen
   bleiben unverändert.

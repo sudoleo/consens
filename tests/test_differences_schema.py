@@ -14,7 +14,6 @@ from app.services.llm.consensus_engine import (
     _judge_effort,
     _provider_error_is_retryable,
     _resolve_differences_engine,
-    _stream_engine_text,
     compute_agreement_score,
     DIFFERENCES_JSON_SCHEMA,
     parse_differences_payload,
@@ -574,37 +573,6 @@ class JudgePolicyTests(unittest.TestCase):
 
         assert_strict_object_schema(DIFFERENCES_JSON_SCHEMA)
 
-    def test_streaming_differences_judge_uses_same_json_schema(self):
-        captured = {}
-
-        def fake_stream(**kwargs):
-            captured.update(kwargs)
-            yield {"type": "delta", "text": "{}"}
-
-        with mock.patch(
-            "app.services.llm.streaming.stream_chat_completion_text",
-            side_effect=fake_stream,
-        ):
-            events = list(_stream_engine_text(
-                "gemini",
-                cfg.openrouter_model_id(cfg.DEFAULT_GEMINI_MODEL, "gemini"),
-                cfg.DEFAULT_GEMINI_MODEL,
-                self.ALL_KEYS,
-                system="system",
-                prompt="prompt",
-                max_tokens=2048,
-                json_mode=True,
-                effort="low",
-                json_schema=DIFFERENCES_JSON_SCHEMA,
-            ))
-
-        self.assertEqual(events, [{"type": "delta", "text": "{}"}])
-        self.assertEqual(captured["response_format"]["type"], "json_schema")
-        self.assertEqual(
-            captured["response_format"]["json_schema"]["schema"],
-            DIFFERENCES_JSON_SCHEMA,
-        )
-
     def test_one_openrouter_key_makes_every_judge_family_available(self):
         (provider, _, _), _tier = _resolve_differences_engine("Mistral", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
@@ -716,33 +684,6 @@ class JudgeMetadataTests(unittest.TestCase):
         self.assertEqual(providers, ["openai", "gemini"])
         self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
         self.assertEqual(data["judges"]["differences"]["attempts"], 2)
-
-    def test_stream_differences_reports_judge(self):
-        from app.services.llm.consensus_engine import stream_differences
-        payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
-        efforts = []
-
-        def fake_stream(provider, *args, **kwargs):
-            efforts.append((provider, kwargs.get("effort")))
-            # _stream_engine_text liefert Event-Dicts; Reasoning-Marker
-            # dürfen das Parsen des JSON-Ergebnisses nicht stören.
-            yield {"type": "reasoning"}
-            yield {"type": "delta", "text": payload}
-
-        with mock.patch(
-            "app.services.llm.consensus_engine._stream_engine_text",
-            side_effect=fake_stream,
-        ):
-            events = list(stream_differences(
-                {"openai": "answer one", "mistral": "answer two"},
-                "the consensus", {"OpenRouter": "sk-or"},
-                differences_model="OpenAI",
-                excluded_models=[],
-            ))
-        final = events[-1]
-        self.assertEqual(final["type"], "final")
-        self.assertEqual(final["data"]["judges"]["differences"]["provider"], "OpenAI")
-        self.assertEqual(efforts, [("openai", "low")])
 
 
 FOUR_MODELS = ["OpenAI", "Gemini", "Grok", "Mistral"]
