@@ -625,6 +625,48 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
         _raise_store_error(exc, operation="read agent sessions", uid=uid)
 
 
+def _require_work_log_access(uid):
+    """The work log (agent_work_log.py) is written in audit mode, which only
+    admins have; so is its view."""
+    require_agent_access(uid)
+    try:
+        admin = is_user_admin(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(status_code=503, detail="Account tier is temporarily unavailable. Please retry.") from None
+    if not admin:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+@router.get("/agent/chats/{chat_id}/turns/{turn_id}/work-log")
+@limiter.limit("120/minute")
+def agent_work_log(request: Request, chat_id: str, turn_id: str,
+                   after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)):
+    """The turn's work log in order, after entry ``after`` (live: poll with
+    the last ``seq``). Long contents come shortened (``ref``); the entry
+    endpoint below returns one whole."""
+    uid = _chat_uid(request)
+    _require_work_log_access(uid)
+    try:
+        data = AgentRunStore(db_firestore).read_work_log(uid, chat_id, turn_id, after=after, limit=limit)
+        return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
+    except Exception as exc:
+        _raise_store_error(exc, operation="read agent work log", uid=uid)
+
+
+@router.get("/agent/chats/{chat_id}/turns/{turn_id}/work-log/{seq}")
+@limiter.limit("120/minute")
+def agent_work_log_entry(request: Request, chat_id: str, turn_id: str, seq: int):
+    uid = _chat_uid(request)
+    _require_work_log_access(uid)
+    if not 1 <= seq <= 999_999:
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        data = AgentRunStore(db_firestore).work_log_entry(uid, chat_id, turn_id, seq)
+        return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
+    except Exception as exc:
+        _raise_store_error(exc, operation="read agent work log entry", uid=uid)
+
+
 @router.get("/agent/chats/{chat_id}/live")
 @limiter.limit("120/minute")
 def agent_live_events(request: Request, chat_id: str,

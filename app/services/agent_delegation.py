@@ -415,6 +415,43 @@ class DelegationLoop(AgentLoop):
             if memory_tools:
                 self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
                                              argument_limit=max(self.registry.argument_limit, 24_000))
+        # The live work log (agent_work_log.py, docs/agent-work-log.md), in
+        # audit mode only for now: what the agent sees and does, written by
+        # the app. Saved once the run owns the turn (its first claimed step).
+        self.work_log = None
+        if audit:
+            from app.services.agent_work_log import WorkLog
+            self.work_log = WorkLog(self.store, self.uid, self.chat_id, self.turn_id, ready=lambda: self.claimed)
+
+    def _log_actor(self, step, worker=None):
+        """Who a model step or tool result is in the work log: the agent, one
+        of its delegated workers, or nobody (reviewers, judges and the app's
+        page fetches are not the agent's work)."""
+        if self.work_log is None:
+            return None
+        if worker is not None:
+            return f"worker:{worker.id}" if getattr(worker, "kind", None) is None else None
+        if step.startswith("completion:"):
+            return "agent"
+        parts = step.split(":")
+        if len(parts) == 3 and parts[0] == "agent" and parts[1] in self.workers:
+            return f"worker:{parts[1]}"
+        return None
+
+    def _log_start(self):
+        """The work log's first entry: the request as the run received it.
+        Never fails the run (like every recording of the log)."""
+        try:
+            question = next((m["content"] for m in reversed(self.answer_conversation) if m["role"] == "user"), "")
+            content = {
+                "question": question, "model": self.model.settings(),
+                "preferences": self.comparison.preferences.model_dump() if self.comparison is not None else None,
+                "files": self.file_context.selection() if self.file_context else [],
+                "policy": self.policy.snapshot()}
+        except Exception as exc:
+            logging.warning("Agent work log start incomplete category=%s", safe_exception(exc))
+            content = {"error": "The run's settings could not be recorded."}
+        self.work_log.add("start", content=content)
 
     def _app_context(self, text):
         """``text`` joins the app context of this message's question
@@ -842,7 +879,12 @@ class DelegationLoop(AgentLoop):
                 reason = getattr(exc, "code", None) or "invalid_arguments"
         finally:
             publish(status)
-        return {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
+        message = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
+        # The app's own calls (the review of the fixed answer) are not the agent's work.
+        log_actor = self._log_actor(value.step_id) if registry is not self.app_registry else None
+        if log_actor:
+            self.work_log.tool(log_actor, value.step_id, call, message)
+        return message
 
     def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
                          clamp_floor=None, server_tools=(), answer_output=0):
@@ -992,6 +1034,9 @@ class DelegationLoop(AgentLoop):
         like a routing step; the answer on top may overdraw the allowance
         (_admit_chat_step)."""
         self._check(cancellation)
+        # The caller's conversation, before this step adds its file block or
+        # notes (work log: what is the conversation, what only this request).
+        conversation = messages
         if answer_output and not self.policy.account_budget_only:
             # Bounded runs keep their hard limits whole: no overdraft.
             model, answer_output = replace(model, max_output_tokens=max(model.max_output_tokens, answer_output)), 0
@@ -1110,6 +1155,12 @@ class DelegationLoop(AgentLoop):
                         text="Web search was skipped for this step: available tokens do not cover the search and its follow-up response. Continuing with existing sources.")
                 yield self.status(step, "started", status="working", settings=model.settings(),
                                   clear_response=step != "completion:0" and not self.comparison)
+            log_actor = self._log_actor(step, worker)
+            if log_actor:
+                # Exactly what this request carries, as far as not yet logged:
+                # before this message's question is the chat's history.
+                self.work_log.context(log_actor, conversation, messages, step=step,
+                                      own_from=self.turn_start if worker is None else 0)
             if self.mock_answer is not None:
                 value.text, value.finish_reason = self.mock_answer, "stop"
                 if publish_text:
@@ -1222,6 +1273,11 @@ class DelegationLoop(AgentLoop):
                 with self.condition:
                     self.unsettled[step] = (value, status)
                 self._settle_step(step, value, status)
+                log_actor = self._log_actor(step, worker)
+                if log_actor:
+                    # What the step thought, wrote, called and found, also
+                    # when it failed or was stopped.
+                    self.work_log.step(log_actor, step, model, value, status)
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
@@ -1621,6 +1677,8 @@ class DelegationLoop(AgentLoop):
         published = getattr(value, "published", "")
         if not published:
             return
+        if self.work_log is not None:
+            self.work_log.app("retract", published, step=value.step_id)
         self.completion.text = ""
         value.published = ""
         if self.comparison:
@@ -1676,6 +1734,12 @@ class DelegationLoop(AgentLoop):
             if not (isinstance(content, dict) and ("error" in content or content.get("status") == "refused")):
                 return True
         return False
+
+    def _lock_memory(self, reason, step):
+        """Outside content is in view: memory can no longer change this message."""
+        if not self.memory_locked and self.work_log is not None:
+            self.work_log.app("memory_locked", reason, step=step)
+        self.memory_locked = True
 
     def _research_unchecked(self):
         """The agent searched the web for this message and has neither
@@ -1744,6 +1808,10 @@ class DelegationLoop(AgentLoop):
         yield from self._show_answer(value)
         # Saved with the turn also when a check fails afterwards.
         self.completion.text = value.text
+        if self.work_log is not None:
+            from app.services.agent_comparison import answer_hash
+            self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
+                              step=value.step_id)
         if comparison.comparisons:
             comparison.freeze_for_synthesis()
             comparison.capture(value.text)
@@ -1854,6 +1922,8 @@ class DelegationLoop(AgentLoop):
         watcher.start()
         try:
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
+                if self.work_log is not None:
+                    self._log_start()
                 if self.mock_answer is not None and self.answer_conversation:
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
                     if self.watch_tools:
@@ -1916,7 +1986,7 @@ class DelegationLoop(AgentLoop):
                         # Audit mode searches in every step: web pages are in
                         # view from here on, also for this step's own calls,
                         # so memory locks as after read_source.
-                        self.memory_locked = True
+                        self._lock_memory("web_search", value.step_id)
                     # A step that wrote its answer and then only saved a
                     # memory or prepared a Watch: the text stands as the answer.
                     answered_with_tools = False
@@ -1968,7 +2038,7 @@ class DelegationLoop(AgentLoop):
                         self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
                         yield from self._events()
                         if self._brought_outside_content(value, results):
-                            self.memory_locked = True
+                            self._lock_memory("outside_content", value.step_id)
                         if answered_with_tools and not self._side_results_accepted(value, results):
                             # The text may say what a refused tool did not do (a
                             # memory not saved, no Watch card): the next step
@@ -2054,6 +2124,13 @@ class DelegationLoop(AgentLoop):
             for step, (value, step_status) in list(self.unsettled.items()):
                 self._settle_step(step, value, step_status)
             self.completion.usage = self.costs.total()
+            if self.work_log is not None:
+                # The log's last entry, saved before finish_run: a write after
+                # it finds the turn no longer pending (save_work_log).
+                self.work_log.add("end", content={
+                    "status": status, "finish_reason": self.completion.finish_reason, "answer": self.completion.text,
+                    "failure": getattr(self.completion, "failure", None), "usage": self.completion.usage})
+                self.work_log.close()
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:
                 self.store.finish_run(self.uid, self.chat_id, self.turn_id, completion=self.completion,

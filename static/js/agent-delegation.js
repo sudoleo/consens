@@ -133,7 +133,7 @@
     ownerGeneration = App.authState?.generation;
     for (const view of views.values()) view.controller.abort();
     views.clear(); current = null;
-    if (sidebar) { sidebar.hidden = true; sidebar._rows?.clear(); sidebar.querySelector(".agent-session-list")?.replaceChildren(); }
+    if (sidebar) { sidebar.hidden = true; clearRows(); App.agentWorkLog?.reset(sidebar._workLog); }
     if (scrim) scrim.hidden = true;
     if (inline) inline.remove();
     inline = null;
@@ -335,6 +335,11 @@
     const status = node("p", "agent-sidebar-status"); status.setAttribute("role", "status");
     const list = node("div", "agent-session-list");
     sidebar._list = list;
+    // The work log (agent-work-log.js, admins): the list's last child, so it
+    // scrolls with the rows; rows are inserted before it.
+    sidebar._workLog = node("div", "agent-work-log-host admin-only");
+    sidebar._workLog.hidden = true;
+    list.append(sidebar._workLog);
     sidebar.append(header, overview, status, list);
     sidebar.setAttribute('role', 'complementary');
     sidebar.addEventListener("keydown", event => {
@@ -356,6 +361,12 @@
     list.addEventListener("scroll", () => { if (current) prefs(current); }, { passive: true });
     sidebar._rows = new Map();
     document.body.append(sidebar);
+  }
+  // The rows go; the work log section stays the list's last child.
+  function clearRows() {
+    if (!sidebar) return;
+    sidebar._rows?.clear();
+    sidebar._list.replaceChildren(...(sidebar._workLog ? [sidebar._workLog] : []));
   }
   // The panel leaves the way it came (Apple audit C5): it slides and fades
   // out, the sheet's scrim with it, and is hidden only then. Asked to show
@@ -579,7 +590,7 @@
       inline?.remove(); inline = node("span", "agent-inline-models"); inlineHost.append(inline);
       inline.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
     }
-    const inlineSignature = JSON.stringify([view.key, view.closed, (view.seed || []).length,
+    const inlineSignature = JSON.stringify([view.key, view.closed, (view.seed || []).length, Boolean(view.workLog),
       [...view.agents.values()].map(a => [a.id, a.title, a.status, a.model?.model, a.model?.label])]);
     if (inline && inline.dataset.signature !== inlineSignature) {
       inline.dataset.signature = inlineSignature;
@@ -644,7 +655,7 @@
       for (const [key, button] of inline._buttons) {
         if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
-      inline._toggle.hidden = !view.agents.size && !(view.seed || []).length;
+      inline._toggle.hidden = !view.agents.size && !(view.seed || []).length && !view.workLog;
       const activityLabel = `Activity · ${rowsFor(view).length}`;
       inline._toggle.setAttribute("aria-label", activityLabel);
       inline._toggle.title = activityLabel;
@@ -652,7 +663,9 @@
     }
     // A running turn of a chat whose panel is open shows it before its first
     // call arrives ("Starting…"), so a follow-up never closes it in between.
-    const panelVisible = !view.closed && (view.agents.size > 0 || view.running);
+    // A turn with a work log keeps its panel also without any model call
+    // (audit mode with the answer check off).
+    const panelVisible = !view.closed && (view.agents.size > 0 || view.running || Boolean(view.workLog));
     setPanelVisible(panelVisible);
     const sheet = panelVisible && !wide();
     if (sheet) scrim.hidden = false;
@@ -710,11 +723,14 @@
           prefs(view);
         });
         row = { root, summary, title, role, state, usage, body };
-        sidebar._rows.set(agent.id, row); sidebar.querySelector(".agent-session-list").append(root);
+        sidebar._rows.set(agent.id, row); sidebar._list.insertBefore(root, sidebar._workLog);
       }
       row.root.dataset.status = agent.status;
-      // The check row belongs at the end; answer rows that arrive later go above it.
-      if (agent.kind === "check" && row.root.nextElementSibling) row.root.parentElement.append(row.root);
+      // The check row belongs at the end (before the work log); answer rows
+      // that arrive later go above it.
+      if (agent.kind === "check" && row.root.nextElementSibling !== sidebar._workLog) {
+        sidebar._list.insertBefore(row.root, sidebar._workLog);
+      }
       setText(row.title, agent.model?.label || agent.title);
       setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'audit' ? 'Reviewer'
         : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
@@ -738,6 +754,7 @@
       row.root.open = view.expanded.has(agent.id);
       if (row.root.open) { if (agent.kind !== "check") loadDetail(view, agent.id); renderDetail(row, view, agent); }
     }
+    App.agentWorkLog?.render(sidebar._workLog, view);
   }
   // A follow-up moves the live turn into the history (agent-chat.js
   // liveTurn.take): its icons go with it as they are and from then on open
@@ -763,7 +780,8 @@
         && sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving")) {
       if (current) prefs(current);
       current = null; inline?.remove(); inline = null;
-      sidebar._rows.clear(); sidebar._list.replaceChildren();
+      clearRows();
+      App.agentWorkLog?.render(sidebar._workLog, null);
       setText(sidebar.querySelector(".agent-sidebar-progress"), "Starting…");
       setText(sidebar.querySelector(".agent-sidebar-usage"), "");
       sidebar.querySelector(".agent-sidebar-segments")?.replaceChildren();
@@ -778,10 +796,12 @@
     const wasRunning = view.running;
     if (changed) {
       if (current) prefs(current);
-      current = view; ensure(); sidebar._rows.clear(); sidebar.querySelector(".agent-session-list").replaceChildren();
+      current = view; ensure(); clearRows();
     }
     mergeUsage(view, spec.usage);
     if (Array.isArray(spec.models)) view.seed = spec.models;
+    // The turn has a work log (admins, audit mode): once known, it stays.
+    if (spec.workLog) view.workLog = true;
     if (wasRunning && !spec.running) { stopClock(view); view.settling = true; }
     view.running = !!spec.running && !view.ended;
     if (!view.running) view.progress.clear();
@@ -825,7 +845,7 @@
       views.set("demo", view);
     }
     if (current !== view) {
-      current = view; ensure(); sidebar._rows.clear(); sidebar.querySelector(".agent-session-list").replaceChildren();
+      current = view; ensure(); clearRows();
     }
     for (const agent of spec.agents || []) {
       if (!demoAgent.test(agent?.id || "")) continue;

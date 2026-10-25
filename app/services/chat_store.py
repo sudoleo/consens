@@ -595,6 +595,10 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal"):
             if field in source:
                 result[field] = source[field]
+        # The turn has a work log (agent_work_log, audit mode): its view
+        # loads it through its own endpoint.
+        if source.get("work_log_expires_at"):
+            result["agent_work_log"] = {"incomplete": bool(source.get("work_log_incomplete"))}
     if "consensus" in source:
         if source.get("execution_mode") != "agent":
             result["consensus"] = _bounded_text(
@@ -1608,6 +1612,7 @@ class ChatStore:
         return self.db.collection(CHAT_DELETION_JOBS_COLLECTION).document(key)
 
     def _delete_chat_tree(self, chat_ref) -> None:
+        from app.services.agent_work_log import delete_turn_log
         # Deepest level first: an interrupted run can simply be repeated and
         # never leaves a level that is no longer reachable from its parent.
         for turn_ref in _child_documents(chat_ref.collection("turns")):
@@ -1617,6 +1622,10 @@ class ChatStore:
                 agent_ref.delete()
             for event_ref in _child_documents(turn_ref.collection("agent_events")):
                 event_ref.delete()
+            # The agent's work log, full of user content: its stored content
+            # first, then its entries (agent_work_log; nothing to do and no
+            # object store call for a turn without one).
+            delete_turn_log(turn_ref)
             for answer_ref in _child_documents(turn_ref.collection("model_answers")):
                 answer_ref.delete()
             turn_ref.delete()

@@ -196,6 +196,37 @@
 .agent-session-task > summary { cursor: pointer; padding: 8px 0; color: var(--ink-3); }
 .agent-session-detail .agent-message-body { font-size: var(--font-size-xs); line-height: 1.7; white-space: normal; }
 .agent-session-detail .agent-message-body p { white-space: normal; }
+/* The work log (agent-work-log.js, admins): the list's last section. Each
+   entry is one quiet line; its content opens below it. */
+.agent-work-log-host { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.agent-work-log > summary {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+  border-radius: var(--radius-sm); font-weight: 600;
+}
+.agent-work-log-count { color: var(--ink-3); font-weight: 400; font-variant-numeric: tabular-nums; }
+.agent-work-log-status { margin: 4px 10px 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-work-log-list { margin: 0; padding: 0 0 0 4px; list-style: none; }
+.agent-work-log-entry > details > summary {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding: 5px 6px; cursor: pointer;
+  border-radius: var(--radius-2xs); font-size: var(--font-size-xs); line-height: 1.5;
+}
+.agent-work-log-seq, .agent-work-log-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.agent-work-log-time { margin-left: auto; }
+.agent-work-log-kind { color: var(--ink-2); }
+.agent-work-log-name { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+.agent-work-log-data { padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); }
+.agent-work-log-data.is-untrusted { border-style: dashed; }
+.agent-work-log-content {
+  margin: 2px 0 8px 6px; padding: 8px; max-height: 360px; overflow: auto; white-space: pre-wrap;
+  overflow-wrap: anywhere; border-radius: var(--radius-2xs); background: var(--raise);
+  font-family: var(--font-mono); font-size: var(--font-size-xs); line-height: 1.5;
+}
+.agent-work-log-note { margin: 0 0 6px 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-work-log-more { margin: 0 0 10px 6px; font-size: var(--font-size-xs); }
+.agent-work-log :is(summary, .agent-work-log-more):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-work-log > summary:hover, .agent-work-log-entry > details > summary:hover { background-color: var(--hover); }
+}
 @media (min-width: 1200px) {
   body.single-agent-active:not(.answer-reader-docked) .container { transition: width var(--dur-layer) var(--ease-standard), max-width var(--dur-layer) var(--ease-standard), margin-left var(--dur-layer) var(--ease-standard); }
   /* Activity overlays the shell without changing the reading column. */

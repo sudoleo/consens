@@ -631,5 +631,21 @@
   "Read the notes": "Anmerkungen lesen",
   "1 model objects": "1 Modell hat einen Einwand",
   "{count} models object": "{count} Modelle haben einen Einwand",
-  "Other notes": "Weitere Anmerkungen"
+  "Other notes": "Weitere Anmerkungen",
+  "Work log": "Arbeitsprotokoll",
+  "Step": "Schritt",
+  "End": "Ende",
+  "App": "App",
+  "User": "Nutzer",
+  "Web": "Web",
+  "Google": "Google",
+  "Worker": "Worker",
+  "Show all": "Alles zeigen",
+  "Shortened: {shown} of {total} characters.": "Gekürzt: {shown} von {total} Zeichen.",
+  "Shortened: the full content could not be stored.": "Gekürzt: Der vollständige Inhalt konnte nicht gespeichert werden.",
+  "The work log couldn’t be loaded. Try again.": "Das Arbeitsprotokoll konnte nicht geladen werden. Versuch es erneut.",
+  "This entry couldn’t be loaded. Try again.": "Dieser Eintrag konnte nicht geladen werden. Versuch es erneut.",
+  "No work log for this response.": "Zu dieser Antwort gibt es kein Arbeitsprotokoll.",
+  "Waiting for the first entries…": "Warte auf die ersten Einträge…",
+  "Some entries could not be saved; the log is incomplete.": "Einige Einträge konnten nicht gespeichert werden; das Protokoll ist unvollständig."
 }

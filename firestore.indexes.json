@@ -81,6 +81,8 @@
     { "collectionGroup": "versions", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     { "collectionGroup": "files", "fieldPath": "parts", "indexes": [] },
     { "collectionGroup": "files", "fieldPath": "expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
-    { "collectionGroup": "files", "fieldPath": "processing_until", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] }
+    { "collectionGroup": "files", "fieldPath": "processing_until", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
+    { "collectionGroup": "work_log", "fieldPath": "content", "indexes": [] },
+    { "collectionGroup": "turns", "fieldPath": "work_log_expires_at", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] }
   ]
 }

@@ -341,8 +341,10 @@ die auch bei `cancelled`/`missing` endet („Review stopped“, „Not reviewed�
 Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
-Geplant: ein Arbeitsprotokoll, das live mitschreibt, und Prüfer, die ihm
-während des Laufs folgen ([agent-work-log.md](agent-work-log.md), Entwurf).
+**Arbeitsprotokoll** (seit 2026-10-25): Im Audit-Modus schreibt die App live
+mit, was der Agent sieht und tut (`agent_work_log.py`), Admins sehen es in der
+Seitenleiste unter „Work log“. Die Prüfer lesen es noch nicht; dass sie ihm
+während des Laufs folgen, ist Etappe 2 ([agent-work-log.md](agent-work-log.md)).
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'

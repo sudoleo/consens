@@ -31,6 +31,7 @@ def _cleanup_steps():
     """(detail key, callable) pairs; imports stay lazy to keep startup light."""
     from app.services.answer_receipts import cleanup_expired as cleanup_answer_receipts
     from app.services.agent_files import cleanup_expired_files
+    from app.services.agent_work_log import cleanup_expired_work_logs
     from app.services.agent_documents import cleanup_expired_documents
     from app.services.google_connections import cleanup_google_data
     from app.services.chat_store import resume_chat_deletions
@@ -42,6 +43,7 @@ def _cleanup_steps():
         ("expired_answer_receipts_deleted", cleanup_answer_receipts),
         ("revoked_shares_deleted", cleanup_revoked_shares),
         ("files_deleted", cleanup_expired_files),
+        ("work_logs_deleted", cleanup_expired_work_logs),
         ("documents_deleted", cleanup_expired_documents),
         ("google_records_deleted", cleanup_google_data),
         ("chat_deletions_completed", resume_chat_deletions),

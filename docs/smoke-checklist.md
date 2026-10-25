@@ -89,6 +89,11 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       archivierter Chat sehen gleich aus. Stop während „Reviewing the
       answer…“: die Antwort bleibt ohne „may be incomplete“, nach Reload steht
       „Review stopped“. Answer check zusätzlich Off → keine Prüfer.
+      Arbeitsprotokoll: Seitenleiste öffnen, unten „Work log“ aufklappen:
+      Start, Kontext (System, Frage), Schritte mit Reasoning und Suchtreffern,
+      Werkzeuge, „answer_fixed“, Ende; während des Laufs kommen Einträge
+      nach. Ein langer Eintrag lädt über „Show all“ ganz. Nicht-Admin oder
+      Audit aus: kein Abschnitt.
       Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
       `agent-review.test.mjs`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›

@@ -264,6 +264,69 @@ class AgentSessionStore:
             tx.update(turn_ref, {"agent_review": review, "assistant_response": text})
         self._agent_transaction(uid, operation)
 
+    def save_work_log(self, uid, chat_id, turn_id, entries, *, expires_at, incomplete=False):
+        """Append work log entries of the run (agent_work_log.WorkLog).
+
+        Its own transaction, never behind the account lock: no model step
+        waits for the log. It reads neither the root receipt nor anything
+        else a claim, settlement or session update writes in a hurry: a
+        server transaction locks what it reads, so a log write must never
+        make those wait. The fence: the account is not being deleted, the
+        chat is active and the turn still runs (``pending``; finish_run ends
+        that, so nothing is written after the run). The turn carries the
+        log's expiry for retention and, once an entry was lost,
+        ``work_log_incomplete``."""
+        turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
+        def operation(tx):
+            tombstone, *snapshots = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), turn_ref, chat_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            turn, chat = (snapshot.to_dict() for snapshot in snapshots)
+            if not turn or turn.get("status") != "pending" or (chat or {}).get("status") != "active":
+                raise TurnStatusConflict("Agent work log is closed")
+            for entry in entries:
+                tx.set(turn_ref.collection("work_log").document(f"{entry['seq']:06d}"), entry)
+            patch = {}
+            if turn.get("work_log_expires_at") is None:
+                patch["work_log_expires_at"] = expires_at
+            if incomplete and not turn.get("work_log_incomplete"):
+                patch["work_log_incomplete"] = True
+            if patch:
+                tx.update(turn_ref, patch)
+        self._transaction(operation)
+
+    def _work_log_turn(self, uid, chat_id, turn_id):
+        """The turn's own stored fields (not its client view), owner-bound by
+        path, of an active chat."""
+        chat, turn = self._chat_ref(uid, chat_id).get(), self._turn_ref(uid, chat_id, turn_id).get()
+        if not chat.exists or (chat.to_dict() or {}).get("status") != "active" or not turn.exists:
+            raise ChatNotFound("Chat not found")
+        return turn.to_dict() or {}
+
+    def read_work_log(self, uid, chat_id, turn_id, *, after=0, limit=100):
+        """The turn's work log entries after ``after``, in order."""
+        turn = self._work_log_turn(uid, chat_id, turn_id)
+        query = (self._turn_ref(uid, chat_id, turn_id).collection("work_log").order_by("seq")
+                 .start_after({"seq": after}).limit(limit + 1))
+        entries = [snapshot.to_dict() for snapshot in query.stream()]
+        return {"entries": entries[:limit], "has_more": len(entries) > limit,
+                "incomplete": bool(turn.get("work_log_incomplete")), "status": turn.get("status")}
+
+    def work_log_entry(self, uid, chat_id, turn_id, seq):
+        """One entry with its whole content (agent_work_log.entry_content)."""
+        from app.services.agent_work_log import entry_content
+        self._work_log_turn(uid, chat_id, turn_id)
+        snapshot = self._turn_ref(uid, chat_id, turn_id).collection("work_log").document(f"{seq:06d}").get()
+        if not snapshot.exists:
+            raise ChatNotFound("Work log entry not found")
+        entry = snapshot.to_dict()
+        from app.services.agent_files import FileUnavailable
+        try:
+            return {**entry, "content": entry_content(entry)}
+        except FileUnavailable:
+            # The object store no longer holds it (expired, or not configured
+            # here): the saved beginning is all there is.
+            return {**entry, "content_unavailable": True}
+
     @staticmethod
     def _delegated_settlement(data, step, status, usage):
         if not (data.get("policy") or {}).get("delegation"):

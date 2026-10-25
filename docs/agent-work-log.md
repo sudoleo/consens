@@ -1,7 +1,9 @@
 # Arbeitsprotokoll und gleichzeitige Prüfung
 
-Entwurf vom 2026-10-25, zur Freigabe durch Max. Gilt zuerst nur im Audit-Modus
-(„Audit instead of comparison“, Admins, [agent-mode.md](agent-mode.md)).
+Vom 2026-10-25, von Max freigegeben. Etappe 1 (das Protokoll) ist umgesetzt
+(`app/services/agent_work_log.py`), Etappe 2 (die Prüfer lesen es) noch
+nicht. Gilt zuerst nur im Audit-Modus („Audit instead of comparison“, Admins,
+[agent-mode.md](agent-mode.md)).
 
 ## Ziel
 
@@ -29,14 +31,17 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 
 | Eintrag | Woher im Code | Inhalt |
 |---|---|---|
-| `start` | Beginn von `DelegationLoop.run` | Frage, Verlauf, App-Kontext, Memory-Block, Dateikatalog und Auszüge, Einstellungen, Modell. Der Systemprompt einmal je Lauf. |
-| `step` | Ende jedes `_step` (Agent und Worker) | Modell, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`), Abschlussgrund, Verbrauch |
+| `start` | Beginn von `DelegationLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
+| `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App und Nachrichten von Workern, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
+| `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`), Abschlussgrund, Verbrauch |
 | `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Fehler |
-| `app` | Eingriffe der App | Hinweise an den Agenten („App rule: …“), Zurücknahme (`_retract`), Memory-Sperre, Nachrichten von Workern, Antwort fixiert (`capture`), Stop, Fehler |
-| `end` | Ende des Laufs | Status, Antwort, Gesamtverbrauch |
+| `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`), Antwort fixiert (`answer_fixed`) |
+| `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
 Worker (`start_agent`) schreiben in dasselbe Protokoll, mit ihrer ID als
-Absender.
+Absender (`worker:<id>`). Nie im Protokoll: die Prüfer, die Judges und die
+Seitenabrufe der App für `read_source` (`DelegationLoop._log_actor`); ihr
+Ergebnis steht als `tool`-Eintrag darin.
 
 ### Was nicht hineinkommt
 
@@ -44,35 +49,63 @@ Absender.
   heute nie gespeichert.
 - Binärdaten von Dateien: wie heute nur im Speicher, im Protokoll stehen Datei-ID
   und die Auszüge, die der Agent bekam.
-- Zugangsdaten und Tokens: kommen im Kontext nicht vor; ein Test stellt das
-  sicher.
+- Zugangsdaten und Tokens: Sie stehen nie im Kontext eines Modells (der
+  API-Schlüssel geht nur in den Header der Anfrage), also auch nicht im
+  Protokoll.
 - Suchanfragen: Die Websuche läuft beim Anbieter, die App sieht nur die
   Treffer. Liefert OpenRouter die Anfragen später mit, kommen sie dazu.
 
 ### Form eines Eintrags
 
 ```json
-{"seq": 12, "at": "2026-10-25T18:20:31Z", "actor": "agent", "kind": "tool",
- "name": "read_source", "data": "google", "content": "…", "ref": null, "chars": 18234}
+{"seq": 12, "at": "2026-10-25T18:20:31+00:00", "actor": "agent", "kind": "tool",
+ "name": "read_source", "data": "web", "step": "completion:3", "format": "text",
+ "chars": 18234, "content": "…die ersten 2.000 Zeichen…", "ref": "work-log/…/000012"}
 ```
 
 - `seq`: fortlaufend je Turn, vergeben unter einer Sperre, auch bei Workern.
 - `data`: woher der Inhalt stammt (`user`, `web`, `file`, `google`, `memory`,
-  `agent`, `app`). Fremdinhalt (`web`, `file`, `google`) wird den Prüfern als
-  Daten gekennzeichnet gezeigt.
-- `content` bis 16 KB direkt im Eintrag, größer im Objektspeicher (`ref`).
+  `agent` für Modellausgaben, `app`). Inhalt aus `web`, `file`, `google` und
+  `agent` ist für jeden späteren Leser Daten, nie Anweisung
+  (`UNTRUSTED_DATA`). Im Kontext entscheidet die Herkunft, nicht der Text
+  (`context_data`): `user` sind nur Nachrichten des Nutzers vor der Frage
+  dieses Laufs und die Frage selbst; was der Lauf danach als Nutzernachricht
+  anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
+  Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`).
+- `format`: `text`, oder `json` für `start`, `step`, `app` mit Daten und `end`.
+- `content` bis 16.000 Zeichen direkt im Eintrag. Länger: ganz im
+  Objektspeicher (`ref`), im Eintrag die ersten 2.000 Zeichen. Ohne
+  Objektspeicher bleibt er auf 16.000 Zeichen gekürzt (`truncated`).
 
 ### Speicher, Löschung, Aufbewahrung
 
-- Firestore: `users/{uid}/chats/{chat}/turns/{turn}/work_log/{seq}`. Geschrieben
-  über einen Schreib-Thread wie `AgentJournal`: geordnet, gebündelt, ohne den
-  Agenten aufzuhalten.
+- Firestore: `users/{uid}/chats/{chat}/turns/{turn}/work_log/{seq:06d}`.
+  Ein Schreib-Thread speichert geordnet, bis zu 50 Einträge je Transaktion
+  (`AgentSessionStore.save_work_log`), ohne die Kontosperre, auf die
+  Modellaufrufe warten. Die Transaktion liest weder den Root-Beleg noch
+  sonst etwas, das Belegung, Abrechnung oder Sitzungen eilig schreiben (eine
+  Server-Transaktion sperrt, was sie liest), nur Löschmarke, Turn und Chat:
+  Sie schreibt, solange der Turn läuft (`pending`), der Chat aktiv ist und
+  das Konto nicht gelöscht wird. Der Schreib-Thread beginnt erst nach dem
+  ersten belegten Schritt des Laufs; ein Lauf ohne Modellaufruf hat kein
+  Protokoll. Drei Versuche je Bündel; danach sind die Einträge verloren,
+  schon abgelegte Inhalte werden wieder entfernt, und der Turn trägt
+  `work_log_incomplete`. Am Laufende wartet der Lauf höchstens 20 s auf den
+  Rest; was dann noch fehlt, ist verloren, und dem Protokoll fehlt der
+  `end`-Eintrag, was die Ansicht als unvollständig zeigt.
 - Große Inhalte: `PrivateObjects` aus `agent_files.py` (privater Bucket, lokal
-  ein Ordner), Schlüssel `work-log/{uid}/{chat}/{turn}/{seq}`.
-- Löschen: `chat_store._delete_chat_tree` nimmt `work_log` und die Objekte
-  mit, die Kontolöschung über `delete_all_chats` damit auch.
-- Aufbewahrung: Inhalte 30 Tage wie Dateien, danach entfernt sie die stündliche
-  Wartung. Die Befunde der Prüfer bleiben bei der Antwort.
+  ein Ordner, ein Client je Konfiguration), Schlüssel
+  `work-log/{uid}/{chat}/{turn}/{seq}`.
+- Löschen: `chat_store._delete_chat_tree` ruft je Turn
+  `agent_work_log.delete_turn_log`: erst die Inhalte, die Einträge mit `ref`
+  nennen, dann die Einträge. Ein Turn ohne Protokoll kostet eine leere
+  Abfrage und keinen Aufruf des Objektspeichers. Die Kontolöschung läuft über
+  `delete_all_chats` mit.
+- Aufbewahrung: Der Turn trägt `work_log_expires_at` (30 Tage nach dem
+  Start); die stündliche Wartung (`cleanup_expired_work_logs`, Index auf der
+  Collection-Group `turns`) entfernt danach Einträge und Inhalte. Die Befunde
+  der Prüfer bleiben bei der Antwort. Die Inhalte sind von der Indizierung
+  ausgenommen (`firestore.indexes.json`).
 - Google-Daten: Chats mit Google-Daten laufen schon heute für jedes Modell über
   `restricted_model` (ZDR, keine Datensammlung) und ohne Websuche. Das gilt
   unverändert auch für die Prüfer.
@@ -109,30 +142,42 @@ der Cache halten sie im Rahmen; gemessen wird Verbrauch je Prüfer und Turn.
 
 ## Fehler
 
-- Kann ein Eintrag nicht geschrieben werden, läuft der Agent weiter; die
-  Prüfung gilt dann als unvollständig und sagt das.
+- Kann ein Eintrag nicht geschrieben werden, läuft der Agent weiter; das
+  Protokoll gilt dann als unvollständig (`work_log_incomplete`), und die
+  Ansicht sagt das. In Etappe 2 sagt es auch die Prüfung.
 - Fällt ein Prüfer aus, fehlen nur seine Befunde.
 - Stop beendet die Prüfer, die fixierte Antwort bleibt.
 
 ## Anzeige
 
-- Seitenleiste: „Protokoll“ für Admins, die Einträge in Reihenfolge, Fremdinhalt
-  eingeklappt.
-- Prüfer-Sitzungen zeigen ihre Befunde je Runde, Notes zeigt alle Befunde.
+- Seitenleiste: Abschnitt „Work log“ am Ende der Sitzungsliste, nur für
+  Admins und nur bei Turns mit Protokoll (`agent_work_log` am Turn, im
+  laufenden Turn die Audit-Einstellung). Lädt erst beim Öffnen, folgt einem
+  laufenden Turn alle 3 s und lädt nach dessen Ende die letzten Einträge.
+  Jede Zeile: Nummer, Absender, Art, Name, Herkunft (Fremdinhalt gestrichelt
+  umrandet), Uhrzeit; der Inhalt öffnet sich auf Klick, ein langer ganz über
+  „Show all“. Endpunkte: `GET /agent/chats/{chat}/turns/{turn}/work-log` und
+  `.../work-log/{seq}`, beide nur für Admins.
+- Etappe 2: Prüfer-Sitzungen zeigen ihre Befunde je Runde, Notes zeigt alle
+  Befunde.
 
 ## Etappen
 
-1. **Protokoll schreiben:** Einträge, Speicher, Löschung, Aufbewahrung,
-   Ansicht für Admins. An den Prüfern ändert sich noch nichts.
+1. **Protokoll schreiben** (umgesetzt 2026-10-25): Einträge, Speicher,
+   Löschung, Aufbewahrung, Ansicht für Admins. An den Prüfern ändert sich
+   noch nichts.
 2. **Prüfer lesen das Protokoll:** Runden während des Laufs, Schlussrunde mit
    der Antwort, Befunde zum Ablauf. Ersetzt `agent_audit.review_input`.
 3. **Später, je mit eigener Entscheidung:** Befunde gehen an den Agenten, der
    darauf antwortet; automatische Abgleiche (zitierte URLs und Zitate gegen das
    Protokoll); Einträge für VM, Befehle und Dateien.
 
-## Entscheidungen
+## Entscheidungen (Max, 2026-10-25)
 
 - **Memory geht an die Prüfer**, wie alles, was der Agent sieht. Heute sehen
   Vergleichsmodelle Memory nicht.
 - **Aufbewahrung 30 Tage** für die Inhalte, Befunde bleiben.
 - **Live-Befunde gehen noch nicht an den Agenten** (Etappe 3).
+- **Keine Rollen:** Alle Prüfer sind gleich und prüfen unabhängig.
+
+Tests: `tests/test_agent_work_log.py`, `tests/js/agent-work-log.test.mjs`.

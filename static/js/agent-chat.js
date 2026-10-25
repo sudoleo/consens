@@ -524,7 +524,7 @@
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {
         chatId: basis.chatId, turnId: basis.turnId || basis.currentTurn?.id,
         usage: basis.currentTurn?.agent_usage, running: basis.currentTurn?.status === "pending",
-        models: reviewModels(basis.currentTurn?.agent_review) } : null);
+        models: reviewModels(basis.currentTurn?.agent_review), workLog: Boolean(basis.currentTurn?.agent_work_log) } : null);
     }
     if (!agent || (!context && !basis)) {
       markLiveTurn(null);
@@ -907,9 +907,12 @@
     const delegated = context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation;
     // Before the server named the new turn, a chat whose activity panel is
     // open keeps it open, waiting (agent-delegation.js, Apple audit A9).
+    // Audit mode writes a work log (admins only, agent-work-log.js).
+    const workLog = Boolean(state.completedTurn?.agent_work_log)
+      || (context.config.agentPreferences?.audit === "on" && document.body.classList.contains("viewer-is-admin"));
     App.agentDelegation?.project(delegated ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
-      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running }
+      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running, workLog }
       : running ? { chatId: context.metadata.chatId || context.basis?.chatId, running: true } : null);
   }
   // A refusal's sentence (the server's {error, code}), or one of ours; never
