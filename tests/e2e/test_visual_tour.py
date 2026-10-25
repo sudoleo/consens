@@ -218,7 +218,14 @@ AUDIT_JS = r"""
 SETTLE_JS = """async () => {
   await document.fonts.ready;
   const finite = document.getAnimations().filter(a => a.effect?.getTiming?.().iterations !== Infinity);
-  await Promise.race([Promise.all(finite.map(a => a.finished.catch(() => null))), new Promise(r => setTimeout(r, 2500))]);
+  // Site icons come through the favicon proxy: an image still loading looked
+  // like a pill without its icon.
+  const loading = [...document.images].filter(img => {
+    if (img.complete) return false;
+    const r = img.getBoundingClientRect();
+    return r.bottom > 0 && r.top < innerHeight && r.width > 0;
+  }).map(img => new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); }));
+  await Promise.race([Promise.all([...finite.map(a => a.finished.catch(() => null)), ...loading]), new Promise(r => setTimeout(r, 2500))]);
 }"""
 
 
@@ -366,11 +373,155 @@ def _app_start(browser, server, view, shoot):
         context.close()
 
 
+AGENT_CHAT, AGENT_TURN = "a" * 32, "b" * 32
+SUBSIDY = "The subsidy covers up to 70 percent of the installation cost."
+RUNNING = "Running costs land around 1,100 to 1,400 euros a year at current tariffs, compared with about 1,900 euros for gas."
+AGENT_TEXT = (
+    "For a 1978 house with radiators, a heat pump is usually worth it once the flow temperature "
+    "can stay at or below 55 °C on a cold day.\n\n"
+    "## What decides it\n\n"
+    "Rooms that stay warm today can keep their radiators; the rest need larger ones.\n\n"
+    "Running costs land around **1,100 to 1,400 euros a year** at current tariffs, compared with about 1,900 euros for gas.\n\n"
+    "- Check the flow temperature on a cold day first\n"
+    "- Get a room-by-room heat load calculation\n"
+    "- Ask about the federal subsidy before you sign\n\n"
+    + SUBSIDY + "\n\n"
+    "See the [subsidy terms](https://example.org/subsidy) and the [heat load guide](https://example.org/heat-load)."
+)
+AGENT_MODELS = (
+    ("openai", "OpenAI", "openai/gpt-6-luna", "GPT-6 Luna"),
+    ("anthropic", "Claude", "anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5"),
+    ("gemini", "Gemini", "google/gemini-3.5-flash", "Gemini 3.5 Flash"),
+    ("deepseek", "DeepSeek", "deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"),
+    ("grok", "Grok", "x-ai/grok-4.3", "Grok 4.3"),
+    ("kimi", "Kimi", "moonshotai/kimi-k2.6", "Kimi K2.6"),
+)
+
+
+def _agent_turn():
+    """Eine gespeicherte Agent-Antwort mit allem, was der Bereich zeigt: zwei
+    strittige Stellen (Widerspruch rot, geteilt bernstein), Quellen, Vergleich
+    mit sechs Modellen und ein Verlauf aus Schritten und Suche."""
+    import hashlib
+
+    from app.services.chat_store import turn_detail
+
+    digest = hashlib.sha256(AGENT_TEXT.encode()).hexdigest()
+    labels = [label for _p, label, _m, _n in AGENT_MODELS]
+    answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
+                "text": "### Short answer\n\nWorth it once the flow temperature stays at or below **55 °C**.\n\n"
+                        "- Check the radiators room by room\n- Ask about the subsidy first",
+                "sources": []} for p, label, model, name in AGENT_MODELS]
+    claims = [
+        {"anchor": AGENT_TEXT.split("\n\n")[0], "agree": labels, "dissent": [], "coverage": "supported"},
+        {"anchor": RUNNING, "agree": labels[:4], "coverage": "split",
+         "dissent": [{"model": "Grok", "quote": "closer to 1,700 euros", "target": "1,100 to 1,400 euros a year"}]},
+        {"anchor": SUBSIDY, "agree": labels[:3], "coverage": "split",
+         "dissent": [{"model": "DeepSeek", "quote": "usually 30 percent", "target": "up to 70 percent"}]},
+    ]
+    differences = [{"claim": "How much of the installation the subsidy covers", "consensus_anchor": SUBSIDY,
+                    "type": "contradiction", "severity": "major", "positions": [
+                        {"models": labels[:3], "stance": "Up to 70 percent with every bonus.", "quote": "up to 70 percent of the cost"},
+                        {"models": labels[3:5], "stance": "Usually 30 percent; 70 only for low incomes.", "quote": "usually 30 percent"}]}]
+    review = {"status": "succeeded", "answer_version": 1, "answer_hash": digest,
+              "versions": [{"id": 1, "text": AGENT_TEXT, "hash": digest, "status": "succeeded"}],
+              "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Is a heat pump worth it for a 1978 house?",
+                               "reason": "Running costs and subsidy differ between sources", "status": "succeeded", "answers": answers}],
+              "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+                          "differences_data": {"models_compared": labels, "claims": claims, "differences": differences,
+                                               "agreement": {"score": 58, "coverage_status": "sufficient"}}}]}
+    activity = [
+        {"version": 1, "id": "p1", "kind": "progress", "text": "Looking up flow temperatures for radiators from the 1970s."},
+        {"version": 1, "id": "search", "kind": "tool", "name": "web_search", "status": "succeeded",
+         "sources": [{"url": "https://example.org/heat-load", "title": "Heat load guide"},
+                     {"url": "https://example.org/subsidy", "title": "Subsidy terms"},
+                     {"url": "https://example.org/tariffs", "title": "Heat pump tariffs 2026"}]},
+        {"version": 1, "id": "p2", "kind": "progress", "text": "The sources disagree on the subsidy; comparing six models."},
+        {"version": 1, "id": "read", "kind": "tool", "name": "read_source", "status": "succeeded",
+         "host": "example.org", "read": "completed", "sources": [{"url": "https://example.org/subsidy", "title": "Subsidy terms"}]},
+    ]
+    agents = [{"id": f"{i + 10:032x}", "seq": i + 1, "status": "completed", "kind": "comparison", "title": a["model"]["label"],
+               "model": a["model"], "duration_ms": 3100, "comparison_id": "c1"} for i, a in enumerate(answers)]
+    turn = turn_detail(AGENT_TURN, {
+        "execution_mode": "agent", "status": "completed", "question": "Is a heat pump worth it for our 1978 house?",
+        "assistant_response": AGENT_TEXT, "agent_review": review, "agent_activity": activity,
+        "created_at": "2026-10-24T09:00:00Z", "completed_at": "2026-10-24T09:01:47Z",
+        "agent_settings": {"model_id": agent_model_options()["default_model_id"], "policy": {"delegation": True}}}, {})
+    return turn, agents
+
+
+def _app_agent(browser, server, view, shoot):
+    width = view[0]
+    phone = width < 768
+    turn, agents = _agent_turn()
+    base = f"**/agent/chats/{AGENT_CHAT}/turns/{AGENT_TURN}/agents"
+    context, page = _open(browser, server, view, routes={
+        base: lambda route: _json(route, {"agents": agents, "status": "succeeded"}),
+        base + "/*": lambda route: _json(route, {"agent": {"assignment": {"goal": "Compare"}}, "messages": [], "has_more": False}),
+        f"**/agent/chats/{AGENT_CHAT}/files": lambda route: _json(route, {"files": []}),
+        f"**/agent/chats/{AGENT_CHAT}/actions": lambda route: _json(route, {"actions": [], "evidence": []}),
+    })
+    try:
+        # The tests' shortcut to a saved turn; opening a chat also writes its
+        # question above the answer (run-view.js, agent-chat.js).
+        page.evaluate("""turn => {
+          App.runRegistry.showSavedView({type: 'bookmark'}, {chatId: 'a'.repeat(32), turnId: turn.id, executionMode: 'agent',
+            question: turn.question, consensus: turn.consensus, currentTurn: turn});
+          window.exitHeroMode();
+          App.setThreadQuestion(turn.question);
+        }""", turn)
+        _soft_wait(page, "() => !!document.querySelector('#agentAnswerBody .cx-claim.is-major')")
+        page.mouse.move(0, 0)
+        shoot(page, "antwort")
+
+        details = page.locator("#agentAnswerActivity details")
+        details.locator(".agent-activity-title").click()
+        _soft_wait(page, """() => {
+          const host = document.getElementById('agentAnswerActivity');
+          return host.querySelector('details[open]') && host.getAnimations({subtree: true}).every(a => a.playState !== 'running');
+        }""")
+        shoot(page, "zeitleiste")
+        details.locator(".agent-activity-title").click()
+        _soft_wait(page, "() => !document.querySelector('#agentAnswerActivity details[open]')")
+
+        mark = page.locator("#agentAnswerBody .cx-claim.is-major").first
+        mark.evaluate("el => el.scrollIntoView({block: 'center'})")
+        if phone:
+            mark.tap()
+            _soft_wait(page, "() => !document.getElementById('claimPopover').hidden")
+            shoot(page, "karte-blatt")
+            page.locator("#claimPopover .claim-popover-close").tap()
+            _soft_wait(page, "() => document.getElementById('claimPopover').hidden")
+        else:
+            mark.hover()
+            _soft_wait(page, "() => !!document.querySelector('.insight-preview:not([hidden])')")
+            shoot(page, "karte-hover")
+            page.mouse.move(0, 0)
+            page.wait_for_timeout(600)
+            amber = page.locator("#agentAnswerBody .cx-claim.is-split").first
+            amber.hover()
+            _soft_wait(page, "() => !!document.querySelector('.insight-preview:not([hidden])')")
+            shoot(page, "karte-hover-geteilt")
+            page.mouse.move(0, 0)
+            page.wait_for_timeout(600)
+            mark.click()
+            _soft_wait(page, "() => !document.getElementById('claimPopover').hidden")
+            shoot(page, "karte-klick")
+            page.keyboard.press("Escape")
+            _soft_wait(page, "() => document.getElementById('claimPopover').hidden")
+            page.mouse.move(0, 0)
+
+        page.locator("#agentAnswer .agent-evidence-link").first.evaluate("el => el.scrollIntoView({block: 'center'})")
+        shoot(page, "fuss")
+    finally:
+        context.close()
+
+
 AREAS = {
     "app-start": _app_start,
     # Die uebrigen Bereiche bekommen ihre Zustaende in dem Lauf, der sie als
     # Erster braucht (siehe Liste in der Aufgabe consens-visual-polish).
-    "app-agent": None,
+    "app-agent": _app_agent,
     "app-compare": None,
     "app-chrome": None,
     "watches": None,
