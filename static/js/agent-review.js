@@ -519,10 +519,11 @@
     body.classList.add('has-provisional-marks');
   }
   // --- Audit instead of comparison (admins, since 2026-10-25) ----------------
-  // The comparison models reviewed the finished answer (agent_audit.py): their
-  // marks show once every reviewer is done, through the shared markers
-  // (renderStoredAuditMarks), and "Notes" opens their reviews in the reader.
-  // No score and no Differences: unmarked text means no objection.
+  // The comparison models followed the agent's work log and reviewed the
+  // fixed answer (agent_audit.py): their marks show once every reviewer is
+  // done, through the shared markers (renderStoredAuditMarks), and "Notes"
+  // opens their reviews in the reader, with their notes on the work (log
+  // entries). No score and no Differences: unmarked text means no objection.
   // Done: every reviewer ended, the notes can be read. Ended: also stopped
   // or never started; nothing is reviewing any more.
   const AUDIT_DONE = new Set(['succeeded', 'partial', 'failed']);
@@ -560,6 +561,54 @@
     const label = reviewer.provider_label || reviewer.provider;
     return auditMarks(audit).filter(item => item.model === label);
   }
+  // The notes on the agent's work (``process``): the log entry each concerns;
+  // ``live``: from a round while the agent worked (its final round failed).
+  function auditWork(audit, reviewer) {
+    const label = reviewer?.provider_label || reviewer?.provider;
+    return (audit?.process || []).filter(item => item && (!reviewer || item.model === label));
+  }
+  function auditNote(item) {
+    const entry = node('li', 'agent-audit-note');
+    entry.dataset.kind = item.kind;
+    entry.append(node('span', 'agent-audit-kind', AUDIT_KINDS[item.kind] || 'Doubtful'));
+    if (item.entry) {
+      // Which entry of the work log: its number, kind and name.
+      const ref = node('span', 'agent-audit-entry');
+      const kind = App.agentWorkLog?.KINDS?.[item.entry_kind] || item.entry_kind;
+      ref.append(node('span', 'agent-audit-entry-seq', `#${item.entry}`));
+      if (kind) ref.append(node('span', '', kind));
+      if (item.entry_name) {
+        const name = node('code', '', String(item.entry_name));
+        name.setAttribute('data-i18n-skip', '');
+        ref.append(name);
+      }
+      if (item.live) ref.append(node('span', 'agent-audit-live', 'During the run'));
+      entry.append(ref);
+    }
+    if (item.quote) {
+      const quote = node('q', 'agent-audit-quote', String(item.quote));
+      quote.setAttribute('data-i18n-skip', '');
+      entry.append(quote);
+    }
+    const text = node('p', 'agent-audit-text', String(item.note || ''));
+    text.setAttribute('data-i18n-skip', '');
+    entry.append(text);
+    try {
+      const url = new URL(String(item.source || ''));
+      if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+        const link = node('a', 'agent-audit-source', url.hostname.replace(/^www\./, ''));
+        link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        link.setAttribute('data-i18n-skip', '');
+        entry.append(link);
+      }
+    } catch (_) { /* No source. */ }
+    return entry;
+  }
+  function auditList(items) {
+    const list = node('ul', 'agent-audit-notes');
+    for (const item of items) list.append(auditNote(item));
+    return list;
+  }
   function auditStatus(review) {
     const reviewers = review.audit.reviewers || [];
     const done = reviewers.filter(r => r.status === 'completed').length;
@@ -584,34 +633,21 @@
         || node('span', 'model-mark-fallback', String(name).slice(0, 1)), node('span', '', name));
       head.lastChild.setAttribute('data-i18n-skip', '');
       section.append(head);
+      const work = auditWork(audit, reviewer);
       if (reviewer.status !== 'completed') {
-        section.append(node('p', 'agent-review-note', `No review: ${auditReason(reviewer.failure)}.`));
+        // Its final round failed: the notes of its rounds during the run stand.
+        section.append(node('p', 'agent-review-note', work.length
+          ? `No final review: ${auditReason(reviewer.failure)}.` : `No review: ${auditReason(reviewer.failure)}.`));
+        if (work.length) section.append(auditList(work));
         panel.append(section);
         continue;
       }
       const notes = auditNotes(audit, reviewer);
-      if (!notes.length) section.append(node('p', 'agent-review-note', 'No objections.'));
-      const list = node('ul', 'agent-audit-notes');
-      for (const item of notes) {
-        const entry = node('li', 'agent-audit-note');
-        entry.dataset.kind = item.kind;
-        entry.append(node('span', 'agent-audit-kind', AUDIT_KINDS[item.kind] || 'Doubtful'));
-        const quote = node('q', 'agent-audit-quote', String(item.quote || ''));
-        const text = node('p', 'agent-audit-text', String(item.note || ''));
-        quote.setAttribute('data-i18n-skip', ''); text.setAttribute('data-i18n-skip', '');
-        entry.append(quote, text);
-        try {
-          const url = new URL(String(item.source || ''));
-          if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
-            const link = node('a', 'agent-audit-source', url.hostname.replace(/^www\./, ''));
-            link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
-            link.setAttribute('data-i18n-skip', '');
-            entry.append(link);
-          }
-        } catch (_) { /* No source. */ }
-        list.append(entry);
+      if (!notes.length && !work.length) section.append(node('p', 'agent-review-note', 'No objections.'));
+      if (notes.length) section.append(auditList(notes));
+      if (work.length) {
+        section.append(node('h5', 'agent-audit-work-head', 'On the work'), auditList(work));
       }
-      if (notes.length) section.append(list);
       panel.append(section);
     }
     return panel;
@@ -632,8 +668,8 @@
     const audit = review.audit, reviewers = audit.reviewers || [];
     host.hidden = !reviewers.length;
     host._activityReview = review;
-    const marks = auditMarks(audit).length;
-    const signature = JSON.stringify(['audit', review.status, review.answer_hash, reviewers, marks]);
+    const marks = auditMarks(audit).length, work = auditWork(audit).length;
+    const signature = JSON.stringify(['audit', review.status, review.answer_hash, reviewers, marks, work]);
     if (host._activitySignature === signature) return;
     host._activitySignature = signature;
     host.replaceChildren();
@@ -648,9 +684,17 @@
     if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
     const missing = reviewers.filter(r => done && r.status !== 'completed').map(r => r.model?.label || r.provider_label);
     if (missing.length) card.append(node('p', '', `No review: ${missing.join(', ')}`));
-    card.append(node('p', 'agent-activity-check', !ended ? 'Waiting for the reviews.'
-      : review.status !== 'succeeded' && review.status !== 'partial' ? auditStatus(review)
-      : marks === 0 ? 'No objections.' : marks === 1 ? '1 marked passage' : `${marks} marked passages`));
+    const found = [marks === 1 ? '1 marked passage' : marks ? `${marks} marked passages` : '',
+      work === 1 ? '1 note on the work' : work ? `${work} notes on the work` : ''].filter(Boolean);
+    const outcome = review.status !== 'succeeded' && review.status !== 'partial' ? auditStatus(review)
+      : found.length ? '' : 'No objections.';
+    const check = node('p', 'agent-activity-check', !ended ? 'Waiting for the reviews.' : outcome);
+    // Each count its own element: one phrase per element for the translation.
+    if (ended && !outcome) for (const [index, text] of found.entries()) {
+      if (index) check.append(document.createTextNode(' · '));
+      check.append(node('span', '', text));
+    }
+    card.append(check);
     if (done) {
       const actions = node('div', 'agent-activity-insight-actions');
       const button = node('button', 'consensus-tab', 'Read the notes'); button.type = 'button';
@@ -695,7 +739,7 @@
       window.linkifyAgentSources?.(body, turnSources);
     });
     body._markSignature = null;
-    const marks = auditMarks(review.audit).length;
+    const marks = auditMarks(review.audit).length + auditWork(review.audit).length;
     const links = [...(done ? [['differences', 'Notes', marks]] : []), ...(turnSources.length ? [['sources', 'Sources', turnSources.length]] : [])];
     for (const [section, label, count] of links) {
       const button = evidenceButton(section, label, count);

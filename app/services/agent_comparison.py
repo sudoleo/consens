@@ -87,7 +87,7 @@ class AgentPreferences(BaseModel):
     # Audit instead of comparison (since 2026-10-25, admin accounts only;
     # the route turns it off for everyone else): no comparison tools, the
     # agent answers itself with its own search, and the comparison models
-    # review the finished answer (agent_audit.py). Depth, answer start and
+    # follow its work and review its fixed answer (agent_audit.py). Depth, answer start and
     # Agent freedom only steer comparisons, so they do nothing in this mode.
     audit: AgentAudit = "off"
 
@@ -270,7 +270,7 @@ COMPARISON_FAILURES = {
 }
 
 # Helper calls that research the web themselves: comparison answers and, in
-# audit mode, the reviewers of the finished answer (agent_audit.py). Judges
+# audit mode, the reviewers of the agent's work (agent_audit.py). Judges
 # only read. Searching calls retry an answer that ended without a word, do
 # not reserve their search up front and show their reasoning as a live line.
 SEARCHING_KINDS = frozenset({"comparison", "audit"})
@@ -623,8 +623,8 @@ class ComparisonTools:
         # Coverage windows of the answer while it streams (answer_progress).
         self.prefetch = None
         # Audit instead of comparison (AgentPreferences.audit): no comparison
-        # tools; with the answer check on, the comparison models review the
-        # finished answer (agent_audit.AnswerAudit), which the app runs itself.
+        # tools; with the answer check on, the comparison models follow the
+        # agent's work log and review its fixed answer (agent_audit.AnswerAudit).
         self.audit_mode = self.preferences.audit == "on"
         self.auditor = None
         if self.audit_mode:
@@ -938,68 +938,72 @@ class ComparisonTools:
             self.finalized = False
             self.checkpoint()
 
-    def call(self, model, messages, *, title, kind, comparison_id=None, budget=None, file_ids=None, cancellation=None,
-             slots=None, partial=None, search_rounds=1, accept=None, context=None):
-        """One helper call (a comparison answer, a judge, a reviewer).
+    def worker_request(self, worker, model, messages, *, cancellation, slots, budget=None, searching=False,
+                       search_rounds=1, one_off=True, keep_truncated=False):
+        """One paid request of ``worker`` at its next step index
+        (``agent:{id}:{n}``), within ``slots``. An answer that ended without a
+        word (ModelEmptyAnswer) is chance, not a limit: a searching call gets
+        one more paid attempt on the worker's session. Returns the completed
+        value; raises ModelOutputLimit or ValueError for one that did not
+        complete. ``keep_truncated``: an answer cut at its output limit is
+        still paid, usable evidence (a comparison answer, marked
+        ``truncated``); JSON (judges, reviewers) is worthless when cut off.
+        ``one_off=False``: a later request continues this one (a reviewer's
+        next round), so its prompt is cached for it."""
+        loop = self.loop
+        with bind_provider_cancellation(cancellation), bind_analysis_budget(budget or loop.budget):
+            while not slots.acquire(timeout=.1):
+                loop._check(cancellation)
+            try:
+                for attempt in range(2 if searching else 1):
+                    step = f"agent:{worker.id}:{worker.calls}"
+                    worker.calls += 1
+                    generator = loop._step(model, messages, step, ToolRegistry(), cancellation, worker=worker,
+                                           searches_enabled=searching, search_rounds=search_rounds,
+                                           retry_empty=attempt == 0 and searching,
+                                           completion=loop.worker_completion(worker, one_off=one_off))
+                    try:
+                        while True:
+                            next(generator)
+                    except StopIteration as done:
+                        value = done.value
+                    if not getattr(value, "empty_answer", False):
+                        break
+                    logging.warning("Agent helper answer ended empty, retrying model=%s", model.model)
+            finally:
+                slots.release()
+        truncated = keep_truncated and value.finish_reason in {"length", "max_tokens"}
+        if value.tool_calls or not value.text.strip() or (value.finish_reason != "stop" and not truncated):
+            raise ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
+                else ValueError("Model response did not complete")
+        value.truncated = truncated
+        return value
 
-        ``accept(value)``: whether the finished text is usable, before the
-        call counts as completed. It returns the text the agent panel shows
-        and raises ValueError for an unusable one, which ends the call as
-        failed (a reviewer's unreadable review, agent_audit).
-        ``context``: the session's saved assignment context instead of the
-        whole last message (a reviewer's would repeat the conversation and
-        the answer in every session)."""
+    def call(self, model, messages, *, title, kind, comparison_id=None, budget=None, file_ids=None, cancellation=None,
+             slots=None, partial=None, search_rounds=1):
+        """One helper call (a comparison answer, a judge) on a session of its own."""
         from app.services.agent_delegation import Worker
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = kind
         worker.file_ids = file_ids or []
         loop = self.loop
         loop._publish(worker, patch={"title": title, "kind": kind, "comparison_id": comparison_id,
-            "assignment": {"goal": title, "context": messages[-1]["content"] if context is None else context},
-            "model": model.settings(), "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
+            "assignment": {"goal": title, "context": messages[-1]["content"]}, "model": model.settings(),
+            "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
         cancellation = cancellation or loop.cancellation
-        slots = slots or self.judge_slots
         try:
-            with bind_provider_cancellation(cancellation), bind_analysis_budget(budget or loop.budget):
-                while not slots.acquire(timeout=.1):
-                    loop._check(cancellation)
-                try:
-                    # Comparison answers search (see SEARCH_ROUNDS): without
-                    # current world knowledge, independent answers agree on the
-                    # same outdated facts. Judges only read the answers.
-                    # An answer that ended without a word (ModelEmptyAnswer)
-                    # is chance, not a limit: it gets one more paid attempt.
-                    # No later request continues an answer or a judge; the
-                    # retry re-sends the same prompt on the worker's session.
-                    searching = kind in SEARCHING_KINDS
-                    for attempt in range(2 if searching else 1):
-                        generator = loop._step(model, messages, f"agent:{worker.id}:{attempt}", ToolRegistry(),
-                                               cancellation, worker=worker, searches_enabled=searching,
-                                               search_rounds=search_rounds, retry_empty=attempt == 0 and searching,
-                                               completion=loop.worker_completion(worker, one_off=True))
-                        try:
-                            while True:
-                                next(generator)
-                        except StopIteration as done:
-                            value = done.value
-                        if not getattr(value, "empty_answer", False):
-                            break
-                        logging.warning("Agent comparison answer ended empty, retrying model=%s", model.model)
-                finally:
-                    slots.release()
-            # A comparison answer that reached its output limit is still paid,
-            # usable evidence: keep it and mark it. Judges return JSON, which is
-            # worthless when cut off, so they still need a clean stop.
-            truncated = kind == "comparison" and value.finish_reason in {"length", "max_tokens"}
-            if value.tool_calls or not value.text.strip() or (value.finish_reason != "stop" and not truncated):
-                raise ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
-                    else ValueError("Model response did not complete")
-            value.truncated = truncated
-            shown = accept(value) if accept is not None else value.text
+            # Comparison answers search (see SEARCH_ROUNDS): without current
+            # world knowledge, independent answers agree on the same outdated
+            # facts. Judges only read the answers. No later request continues
+            # an answer or a judge (one_off).
+            value = self.worker_request(worker, model, messages, cancellation=cancellation,
+                                        slots=slots or self.judge_slots, budget=budget,
+                                        searching=kind in SEARCHING_KINDS, search_rounds=search_rounds,
+                                        keep_truncated=kind == "comparison")
             # Both go to the journal as one write; the answer is used at once.
             loop._state(worker, "completed", sources=value.sources, finish_reason=value.finish_reason)
-            loop._publish(worker, text=shown[:loop.policy.result_chars], kind="result", sender=worker.id,
-                          recipient="orchestrator", patch={"result_truncated": len(shown) > loop.policy.result_chars},
+            loop._publish(worker, text=value.text[:loop.policy.result_chars], kind="result", sender=worker.id,
+                          recipient="orchestrator", patch={"result_truncated": len(value.text) > loop.policy.result_chars},
                           wait=False)
             return value
         except BaseException as exc:
@@ -1015,12 +1019,7 @@ class ComparisonTools:
                                   patch={"partial": True, "result_truncated": len(text) > limit}, wait=False)
                 except Exception:
                     logging.warning("Agent comparison could not publish a partial answer")
-            if kind == "audit":
-                # A reviewer: why its marks are missing (agent_audit.review_failure).
-                from app.services.agent_audit import review_failure
-                failure = review_failure(exc, cancellation)
-                message = failure["error"]
-            elif getattr(cancellation, "cutoff", False):
+            if getattr(cancellation, "cutoff", False):
                 message = COMPARISON_FAILURES["late_cutoff"] + (
                     " The answer and its check use the other answers." if self.preferences.judges == "on"
                     else " The answer uses the other answers.")

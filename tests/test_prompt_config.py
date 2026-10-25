@@ -197,7 +197,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     reviewer = texts["audit_reviewer"]
     assert reviewer.startswith("You are an independent reviewer")
     assert prompt_catalog.DATE_PLACEHOLDER in reviewer and "Current date:" not in reviewer
-    assert "up to 3 search rounds" in reviewer and '"marks"' in reviewer
+    assert "up to 2 search rounds in a round" in reviewer and "up to 3 in the final round" in reviewer
+    assert '"marks"' in reviewer and '"entry"' in reviewer
 
 
 def test_code_prompts_fit_the_prepare_round_trip():

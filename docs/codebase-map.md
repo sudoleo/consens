@@ -5557,13 +5557,20 @@ Request-Identität auf `off`). Mit `on` schickt die Route
 Agent-Prompts, `ComparisonTools.audit_mode` bietet keine Vergleichstools an,
 und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
 streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
-Nach der Antwort fixiert `capture` die Version, `_finish_review` ruft das
-App-Tool `audit_answer`, und `AnswerAudit.run` lässt jedes Vergleichsmodell
-als Prüfer (`ComparisonTools.call`, Art `audit`, `SEARCHING_KINDS`) die ganze
-Antwort mit eigener Websuche prüfen; `place_marks` legt ihre Zitate je Satz
-als Claims ab (`review.mode = "audit"`, `review.audit.reviewers/claims/
-unplaced/issues`, `dissent[].mark` je Markierung; mehrdeutige oder zu lange
-Zitate bleiben `unplaced`). Die Judges laufen nicht. Ein Fehler kostet nur
+Ab dem Start des Laufs folgt jedes Vergleichsmodell dem Arbeitsprotokoll
+(`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
+Thread, eine Sitzung Art `audit`, Runden über
+`ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde je
+neuem Schritt mit Tool-Aufrufen (`work_goes_on`, `round_message`), Befunde
+mit `entry`. Nach der Antwort fixiert `capture` die Version, `_finish_review`
+ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`:
+Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
+seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
+ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
+`review.audit.reviewers/claims/unplaced/process/issues`, `dissent[].mark` je
+Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
+`unplaced`); scheitert die Schlussrunde eines Prüfers, gelten seine
+Live-Befunde (`live`). Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 `REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
@@ -5577,9 +5584,10 @@ Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
 `window.renderStoredAuditMarks`. Details: `docs/agent-mode.md`, „Audit statt
 Vergleich“.
 
-**Arbeitsprotokoll** (Etappe 1 von `docs/agent-work-log.md`, seit
-2026-10-25): Im Audit-Modus hält `DelegationLoop.work_log`
-(`agent_work_log.WorkLog`) live fest, was der Agent sieht und tut. Die Hooks:
+**Arbeitsprotokoll** (`docs/agent-work-log.md`, seit 2026-10-25): Im
+Audit-Modus hält `DelegationLoop.work_log` (`agent_work_log.WorkLog`) live
+fest, was der Agent sieht und tut; die Prüfer lesen es aus dem Speicher
+(`last`, `entries_after`, `wait_for`, `wake`). Die Hooks:
 `run` (start, end), `_step` (`context`: das Gespräch des Akteurs nach
 Position samt Verlauf, dazu was nur die Anfrage trägt; `step` im finally nach
 der Abrechnung), `_execute` (`tool`, nicht für `app_registry`), `_retract`,
@@ -8104,7 +8112,7 @@ app/services/
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
-  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle die fertige Antwort mit eigener Websuche prüfen (review_system_prompt, review_input, parse_review: quote/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text) und legt sie je Satz als Claims zusammen; Fehler kosten nur Marken (Frist, Stop, Speicherbudget)
+  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget)
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
@@ -9975,7 +9983,7 @@ zählen nicht):
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`, `window.renderStoredAuditMarks` (Marken
   eines Agent-Audits, consensus-insights.js → agent-review.js; seit 2026-10-25),
-  `App.agentWorkLog.render(host, view)` und `.reset(host)` (Arbeitsprotokoll,
+  `App.agentWorkLog.render(host, view)`, `.reset(host)` und `.KINDS` (Arbeitsprotokoll,
   agent-work-log.js → agent-delegation.js, das den Host als letztes Kind von
   `.agent-session-list` hält und beim Kontowechsel `reset` ruft; `view.workLog`
   aus `project({workLog})`; seit 2026-10-25).

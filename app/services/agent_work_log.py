@@ -175,6 +175,9 @@ class WorkLog:
         # Per actor: how much of its conversation is in the log, the tool
         # results logged when they returned, the request additions logged.
         self._cursors, self._logged, self._extras = {}, {}, {}
+        # Every entry in order with its whole content, for the reviewers who
+        # follow the log while the agent works (agent_audit.ReviewerSession).
+        self._entries = []
         self._thread = None
         self._closing = False
         # Set when an entry could not be saved; the writer says so on the turn.
@@ -196,6 +199,7 @@ class WorkLog:
                 if step:
                     entry["step"] = str(step)[:80]
                 self._pending.append((entry, text))
+                self._entries.append((entry, text))
                 self._start()
                 self._condition.notify_all()
                 return self._seq
@@ -291,6 +295,31 @@ class WorkLog:
     def app(self, name, content="", *, step=None):
         """An intervention of the app itself."""
         return self.add("app", name=name, step=step, content=content)
+
+    # --- Reading while it grows (the reviewers) -------------------------------
+
+    @property
+    def last(self):
+        """The number of the newest entry (0 before the first)."""
+        with self._condition:
+            return self._seq
+
+    def entries_after(self, seq):
+        """``[(entry, whole content)]`` of every entry after number ``seq``."""
+        with self._condition:
+            return list(self._entries[seq:])
+
+    def wait_for(self, seq, timeout):
+        """Until an entry after number ``seq`` exists, ``wake`` is called or
+        ``timeout`` passes (also once closed: a reader never spins)."""
+        with self._condition:
+            if self._seq <= seq:
+                self._condition.wait(timeout)
+
+    def wake(self):
+        """Everyone waiting in ``wait_for`` looks again."""
+        with self._condition:
+            self._condition.notify_all()
 
     def close(self, timeout=CLOSE_SECONDS):
         """No more entries; wait (at most ``timeout``) for the writer."""

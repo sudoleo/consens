@@ -562,20 +562,25 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it("shows a reviewer of the finished answer with its notes and never its whole task (Agent audit)", async () => {
+  it("shows a reviewer's notes of each round and its final notes, never its whole task (Agent audit)", async () => {
     const reviewer = { ...agent(1, "completed"), kind: "audit", title: "Review · Haiku" };
+    const round = "- **doubtful** · #4: The lookup is unchecked.";
     const notes = "- **wrong** · “14 euros”: The top costs 36.10 euros.";
     const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
       ? { agent: { assignment: { goal: "Review · Haiku", context: '{"latest_message":"Q","answer":"A long answer"}' } },
-          messages: [{ id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "result", text: notes }] }
+          messages: [{ id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "round", text: round },
+                     { id: "m2", seq: 2, sender: agentId, recipient: "orchestrator", kind: "result", text: notes }] }
       : { agents: [reviewer], status: "succeeded" } }));
     receive(w, reviewer);
     w.App.agentDelegation.project({ chatId, turnId });
     await settle();
     expect(d.querySelector(".agent-session-role").textContent).toBe("Reviewer");
     d.querySelector(".agent-session summary").click();
-    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail h3")?.textContent).toBe("Notes"));
+    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail h3")?.textContent).toBe("Notes during the run"));
+    expect([...d.querySelectorAll(".agent-session-detail h3")].map(h => h.textContent)).toEqual(
+      ["Notes during the run", "Final notes"]);
     const detail = d.querySelector(".agent-session-detail").textContent;
+    expect(detail).toContain("The lookup is unchecked.");
     expect(detail).toContain("The top costs 36.10 euros.");
     expect(detail).not.toMatch(/→|Orchestrator|Goal|Context|A long answer/);
     dom.window.close();

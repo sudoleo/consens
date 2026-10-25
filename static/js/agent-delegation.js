@@ -63,7 +63,7 @@
     // Ended mid-answer: its text is kept and shown, marked incomplete.
     if (agent.kind === "comparison" && agent.partial && ended.has(agent.status)) return "Incomplete";
     if (agent.kind === "comparison" && agent.status === "failed") return "No answer";
-    // A reviewer of the finished answer (Agent audit).
+    // A reviewer of the agent's work and answer (Agent audit).
     if (agent.kind === "audit" && agent.status === "failed") return "No review";
     return labels[agent.status] || "Waiting";
   }
@@ -516,9 +516,10 @@
         if (message.kind === "result") item.append(node("h3", "", "Answer"));
         if (message.kind === "partial") item.append(node("h3", "", "Incomplete answer · not used"));
       } else if (agent.kind === "audit") {
-        // A reviewer has one reply too: its notes, or why none arrived.
+        // A reviewer's notes of each round while the agent works, then its
+        // final list; or why none arrived.
         if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
-        item.append(node("h3", "", "Notes"));
+        item.append(node("h3", "", message.kind === "round" ? "Notes during the run" : "Final notes"));
       } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);

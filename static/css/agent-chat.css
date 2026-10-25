@@ -458,6 +458,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-audit-text { margin: 0; color: var(--ink); }
 .agent-audit-source { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.2em; justify-self: start; }
 .agent-audit-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* A note on the work: the log entry it concerns (#12 · Tool · read_source). */
+.agent-audit-work-head { margin: 14px 0 6px; font-size: var(--font-size-xs); font-weight: 550; color: var(--ink-3); }
+.agent-audit-entry { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-audit-entry-seq { font-variant-numeric: tabular-nums; }
+.agent-audit-entry code { color: var(--ink-2); overflow-wrap: anywhere; }
+.agent-audit-live { color: var(--ink-3); font-style: italic; }
 .agent-review :is(select, button):focus-visible, .agent-evidence-context > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 @media (max-width: 400px) {
   .agent-model-picker .model-picker-display-text::before { content: ''; }

@@ -60,9 +60,10 @@ _ENTRIES = (
      "appended as for the agent; the memory rules without comparisons (agent_memory.without_comparisons).",
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent_audit")),
     ("audit_reviewer", "Agent audit: reviewers",
-     "System prompt of each comparison model reviewing the finished answer in audit mode, with up to three search "
-     "rounds. The user message is JSON with the earlier conversation, the latest message and the answer; the "
-     "message's files go along. The date line is filled in per request.",
+     "System prompt of each comparison model in audit mode: it follows the agent's work log in rounds (each user "
+     "message holds the new entries as JSON, up to two search rounds each) and reviews the fixed answer in a final "
+     "round (the rest of the log and the answer, up to three search rounds); the message's files go along. The "
+     "date line is filled in per request.",
      "agent_audit.py:review_system_prompt()", _reviewer),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "

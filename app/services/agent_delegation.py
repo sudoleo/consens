@@ -1924,6 +1924,9 @@ class DelegationLoop(AgentLoop):
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
                 if self.work_log is not None:
                     self._log_start()
+                    if self.comparison is not None and self.comparison.auditor is not None:
+                        # The reviewers follow the log from here on (agent_audit).
+                        self.comparison.auditor.follow(self.work_log)
                 if self.mock_answer is not None and self.answer_conversation:
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
                     if self.watch_tools:

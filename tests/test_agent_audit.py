@@ -1,8 +1,9 @@
 """Audit instead of comparison (AgentPreferences.audit, admin accounts only):
 the agent answers itself with its own search and gets no comparison tools;
-the comparison models then review the finished answer, mark passages with a
-note, and the app places their quotes on the answer's sentences. Without the
-setting everything runs as before (test_agent_comparison, test_agent_answer_mode).
+the comparison models follow its work log in rounds and review the fixed
+answer in a final round, marking passages and log entries with a note; the
+app places their quotes on the answer's sentences. Without the setting
+everything runs as before (test_agent_comparison, test_agent_answer_mode).
 """
 import json
 import threading
@@ -11,9 +12,11 @@ import time
 import pytest
 
 from app.services import agent_audit, agent_memory, prompt_defaults
-from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS, locate_quote, parse_review,
-                                      place_marks, review_input)
-from app.services.agent_comparison import AUDIT_OFF_PROMPT, AgentPreferences, comparison_selection, preference_prompt
+from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS, locate_quote,
+                                      parse_review, place_marks, review_entry, round_message, work_goes_on)
+from app.services.agent_comparison import (AUDIT_OFF_PROMPT, AgentPreferences, JudgeArgs, comparison_selection,
+                                           preference_prompt)
+from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
@@ -52,15 +55,19 @@ REVIEWS = {
 
 
 class Audit:
-    """A scripted audit-mode turn: every agent step (completion:N) answers at
-    once, after its own search; every other call is a reviewer, replying with
-    ``reviews[family]`` (a text, an exception or "wait": until it is stopped)."""
+    """A scripted audit-mode turn: the agent's first ``tool_steps`` steps
+    (completion:N) call the tool ``lookup``, the next one answers, each after
+    its own search. Every other call is a reviewer: its final round replies
+    with ``reviews[family]``, a live round with ``live[family]`` (a text, an
+    exception or "wait": until it is stopped)."""
 
-    def __init__(self, reviews=None, *, answer=ANSWER, search=True):
+    def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None):
         self.reviews = dict(REVIEWS if reviews is None else reviews)
+        self.live = dict(live or {})
         self.answer = answer
         self.search = search
-        self.calls, self.offered, self.searches, self.prompts = [], [], {}, {}
+        self.tool_steps = tool_steps
+        self.calls, self.offered, self.searches, self.prompts, self.rounds = [], [], {}, {}, {}
         self.loop = None
 
     def factory(self):
@@ -78,6 +85,12 @@ class Audit:
                     if script.search:
                         self.sources = [{"url": "https://www.toureiffel.paris/en", "title": "Official site"}]
                         self._results_at = 0
+                    index = int(self.step_id.split(":")[1])
+                    if index < script.tool_steps:
+                        self.tool_calls = [{"id": f"call_{index}", "type": "function",
+                                            "function": {"name": "lookup", "arguments": "{}"}}]
+                        self.finish_reason = "tool_calls"
+                        return
                     for start in range(0, len(script.answer), 60):
                         chunk = script.answer[start:start + 60]
                         self.text += chunk
@@ -85,9 +98,11 @@ class Audit:
                     self.finish_reason = "stop"
                     return
                 family = model.model.split("/")[0]
-                script.prompts[family] = messages
+                final = messages[-1]["content"].startswith("Final round.")
+                script.rounds.setdefault(family, []).append("final" if final else "live")
+                script.prompts[family] = list(messages)
                 script.searches[family] = kwargs.get("native_searches")
-                reply = script.reviews.get(family, json.dumps({"marks": []}))
+                reply = (script.reviews if final else script.live).get(family, json.dumps({"marks": []}))
                 if reply == "wait":
                     stop = current_provider_cancellation()
                     while not stop.cancelled:
@@ -95,9 +110,22 @@ class Audit:
                     raise ProviderCancelled("stopped")
                 if isinstance(reply, BaseException):
                     raise reply
+                if callable(reply):
+                    reply = reply(messages)
                 self.text, self.finish_reason = reply, "stop"
                 yield {"type": "delta", "text": self.text}
         return Completion()
+
+
+def lookup(script):
+    """The agent's tool in a scripted turn: it returns once both reviewers
+    had a live round, so the answer is never fixed before."""
+    def run(args, *, cancellation):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not all("live" in script.rounds.get(f, []) for f in ("anthropic", "openai")):
+            time.sleep(.01)
+        return {"text": "The tower is 330 metres tall."}
+    return ReadOnlyTool("lookup", "Look something up.", JudgeArgs, run)
 
 
 def audit_loop(store, script, *, judges="on", audit="on", messages=None, memory=None):
@@ -111,12 +139,29 @@ def audit_loop(store, script, *, judges="on", audit="on", messages=None, memory=
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(audit=audit, judges=judges), memory=memory)
+    if script.tool_steps:
+        loop.registry = ToolRegistry([*loop.registry.tools.values(), lookup(script)],
+                                     argument_limit=loop.registry.argument_limit)
     script.loop = loop
     return loop
 
 
 def saved(store, loop):
     return store.get_turn(UID, loop.chat_id, loop.turn_id)
+
+
+def round_entries(message):
+    """The log entries of a round's user message, and the fixed answer of the final round."""
+    text = message["content"]
+    log, _, answer = text.partition("\n\nThe fixed answer:\n")
+    entries = json.loads(log[log.index("\n") + 1:])["entries"]
+    return entries, (json.loads(answer)["answer"] if answer else None)
+
+
+def entry_of(messages, kind, name=None):
+    """The number of the newest entry of ``kind`` the reviewer has read."""
+    entries = [e for m in messages if m["role"] == "user" for e in round_entries(m)[0]]
+    return [e["seq"] for e in entries if e["kind"] == kind and name in (None, e.get("name"))][-1]
 
 
 def by_anchor(review):
@@ -171,6 +216,9 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
     assert review["audit"]["unplaced"] == [{"model": "OpenAI", "kind": "wrong", "note": "Not in the answer.",
                                             "source": "https://example.org/height", "mark": 5,
                                             "quote": "The Eiffel Tower is 400 metres tall"}]
+    assert review["audit"]["process"] == []
+    # An answer written in one step: only the final round, no live round.
+    assert script.rounds == {"anthropic": ["final"], "openai": ["final"]}
     # The agent's own search put pages in view: memory is locked for the turn.
     assert loop.memory_locked is True
     # A reviewer's session saves what it reads, not a copy of it.
@@ -181,7 +229,7 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
         assert agent["assignment"]["context"] == agent_audit.REVIEW_ASSIGNMENT
 
 
-def test_the_reviewers_read_the_conversation_the_latest_message_and_the_whole_answer(store):
+def test_the_reviewers_read_the_work_log_and_the_whole_answer(store):
     script = Audit()
     loop = audit_loop(store, script, messages=[
         {"role": "system", "content": "Answer."}, {"role": "user", "content": "Paris trip?"},
@@ -189,10 +237,94 @@ def test_the_reviewers_read_the_conversation_the_latest_message_and_the_whole_an
     list(loop.run())
     system, user = script.prompts["openai"]
     assert system["content"].startswith("You are an independent reviewer") and "Current date:" in system["content"]
-    task = json.loads(user["content"])
-    assert task == {"conversation": [{"role": "user", "content": "Paris trip?"},
-                                     {"role": "assistant", "content": "Yes, go in spring."}],
-                    "latest_message": "And the tower?", "answer": ANSWER}
+    assert user["content"].startswith("Final round.")
+    entries, answer = round_entries(user)
+    assert answer == ANSWER
+    # What the agent received, by origin, its step and what the app did.
+    context = [(e["name"], e["data"], e["content"]) for e in entries if e["kind"] == "context"][:4]
+    assert [(name, data) for name, data, _ in context] == [
+        ("system", "app"), ("user", "user"), ("assistant", "agent"), ("user", "user")]
+    assert [content for _, _, content in context[1:]] == ["Paris trip?", "Yes, go in spring.", "And the tower?"]
+    assert context[0][2].startswith("Answer.")
+    [step] = [e for e in entries if e["kind"] == "step"]
+    assert step["actor"] == "agent" and step["content"]["text"] == ANSWER and "usage" not in step["content"]
+    assert [e["seq"] for e in entries] == list(range(1, len(entries) + 1))
+    assert [e["name"] for e in entries if e["kind"] == "app"][-1] == "answer_fixed"
+
+
+def test_the_reviewers_follow_the_work_in_rounds_and_mark_its_entries(store):
+    def live_mark(note):
+        return lambda messages: json.dumps({"marks": [
+            {"entry": entry_of(messages, "step"), "kind": "wrong", "note": note},
+            # Unknown entries and quotes while the agent works name nothing.
+            {"entry": 999, "kind": "doubtful", "note": "Unknown."},
+            {"quote": "The Eiffel Tower", "kind": "doubtful", "note": "No answer yet."}]})
+
+    def final_marks(messages):
+        marks = json.loads(REVIEWS["anthropic"])["marks"]
+        return json.dumps({"marks": [*marks, {"entry": f"#{entry_of(messages, 'tool', 'lookup')}", "kind": "missing",
+                                               "note": "The lookup names no source."}]})
+    script = Audit({"anthropic": final_marks, "openai": RuntimeError("provider down")}, tool_steps=1,
+                   live={"anthropic": live_mark("Not checked."), "openai": live_mark("Unchecked lookup.")})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    turn = saved(store, loop)
+    review = turn["agent_review"]
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert script.rounds == {"anthropic": ["live", "final"], "openai": ["live", "final"]}
+    # One conversation per reviewer: the live round, its reply, the final round.
+    system, live, reply, final = script.prompts["anthropic"]
+    assert [m["role"] for m in (system, live, reply, final)] == ["system", "user", "assistant", "user"]
+    assert live["content"].startswith("Round 1.") and final["content"].startswith("Final round.")
+    live_entries, _ = round_entries(live)
+    final_entries, answer = round_entries(final)
+    assert answer == ANSWER and final_entries[0]["seq"] == live_entries[-1]["seq"] + 1
+    assert any(e["kind"] == "step" and e["content"]["tool_calls"] for e in live_entries)
+    # Search per round: two while the agent works, three in the final round.
+    assert script.searches["anthropic"] == REVIEW_SEARCH_ROUNDS
+    # Anthropic's final list counts; OpenAI's final round failed, its live marks stand.
+    assert review["status"] == "partial"
+    assert [(r["provider"], r["status"], r.get("marks"), r.get("live_marks"), r["rounds"])
+            for r in review["audit"]["reviewers"]] == [("anthropic", "completed", 3, None, 1),
+                                                     ("openai", "failed", None, 1, 1)]
+    step = entry_of(script.prompts["openai"][:2], "step")
+    tool = entry_of(script.prompts["anthropic"], "tool", "lookup")
+    assert [(p["model"], p["entry"], p["entry_kind"], p["entry_name"], p["kind"], p["mark"], p.get("live"))
+            for p in review["audit"]["process"]] == [
+        ("Anthropic", tool, "tool", "lookup", "incomplete", 3, None),
+        ("OpenAI", step, "step", loop.model.model, "doubtful", 4, True)]
+    assert len(review["audit"]["claims"]) == 2 and review["audit"]["unplaced"] == []
+    # The panel shows each round: the live round's marks, then the final list.
+    sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
+    assert len(sessions) == 2
+    kinds = {}
+    for session in sessions:
+        messages = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=session["id"])["messages"]
+        kinds[session["title"]] = [m["kind"] for m in messages if m["kind"] in {"round", "result"}]
+    assert sorted(kinds.values()) == [["round"], ["round", "result"]]
+
+
+def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store, monkeypatch):
+    seen = []
+
+    def live(messages):
+        seen.append(messages[-1]["content"])
+        if len(seen) == 1:
+            raise RuntimeError("provider down")
+        return json.dumps({"marks": []})
+    script = Audit(tool_steps=1, live={"anthropic": live})
+    # The lookup waits for a live round of both; the second may start later.
+    loop = audit_loop(store, script)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    # The failed round's entries go into the next one, in a new session.
+    assert len(seen) == 2 and round_entries({"content": seen[0]})[0][0]["seq"] == 1
+    assert round_entries({"content": seen[1]})[0][0]["seq"] == 1
+    assert seen[1].startswith("Round 1.")
+    sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                if a.get("kind") == "audit" and a["title"].endswith("Haiku 4.5")]
+    assert sorted(a["status"] for a in sessions) == ["completed", "failed"]
 
 
 def test_a_failed_or_unreadable_review_costs_only_its_marks(store):
@@ -405,6 +537,23 @@ def test_a_review_is_read_tolerantly_and_a_wrong_needs_a_source():
     assert len(parse_review(json.dumps({"marks": marks}))) == agent_audit.MAX_MARKS
 
 
+def test_a_mark_on_the_work_needs_an_entry_the_reviewer_has_read():
+    text = json.dumps({"marks": [
+        {"entry": 12, "kind": "doubtful", "note": "Known."},
+        {"entry": "#13", "quote": "Q", "kind": "doubtful", "note": "Written with a hash."},
+        {"entry": 99, "kind": "doubtful", "note": "Never read."},
+        {"entry": True, "kind": "doubtful", "note": "Not a number."},
+        {"entry": "12a", "kind": "doubtful", "note": "Not a number either."}]})
+    assert parse_review(text, known={12, 13}) == [
+        {"entry": 12, "kind": "doubtful", "note": "Known."},
+        {"quote": "Q", "entry": 13, "kind": "doubtful", "note": "Written with a hash."}]
+    # While the agent works there is no answer to quote.
+    assert parse_review(text, known={12, 13}, final=False) == [
+        {"entry": 12, "kind": "doubtful", "note": "Known."},
+        {"entry": 13, "kind": "doubtful", "note": "Written with a hash."}]
+    assert parse_review(json.dumps({"marks": [{"quote": "Q", "kind": "doubtful", "note": "n"}]}), final=False) == []
+
+
 @pytest.mark.parametrize("quote,expected", [
     ("tickets to the top cost 14 euros", "Tickets to the top cost 14 euros."),
     ("“Gustave Eiffel did not design it alone”", "**Gustave Eiffel** did not design it alone"),
@@ -422,18 +571,35 @@ def test_quotes_the_answer_does_not_hold_or_holds_twice_stay_unplaced():
     assert locate_quote(ANSWER, "is") is None
     # "Eiffel" stands twice: which one the reviewer meant is unknown.
     assert locate_quote(ANSWER, "Eiffel") is None
-    claims, unplaced = place_marks("# Heading words here\n\nOne plain sentence stands here.", [
-        ("OpenAI", [{"quote": "Heading words here", "kind": "doubtful", "note": "A heading."}])])
-    assert claims == [] and unplaced[0]["quote"] == "Heading words here"
+    claims, unplaced, process = place_marks("# Heading words here\n\nOne plain sentence stands here.", [
+        ("OpenAI", [{"quote": "Heading words here", "kind": "doubtful", "note": "A heading."}], False)])
+    assert claims == [] and process == [] and unplaced[0]["quote"] == "Heading words here"
+
+
+def test_a_mark_on_the_work_names_its_entry_also_with_an_unplaced_quote():
+    claims, unplaced, process = place_marks("One plain sentence stands here.", [
+        ("OpenAI", [{"entry": 4, "kind": "doubtful", "note": "The step skipped the file."},
+                    {"entry": 6, "quote": "Not in the answer", "kind": "incomplete", "note": "Missing."},
+                    {"entry": 6, "quote": "One plain sentence", "kind": "doubtful", "note": "On the answer."}], True)],
+        {4: ("step", "gpt-5.4-mini"), 6: ("tool", "read_source")})
+    assert unplaced == []
+    assert process == [
+        {"model": "OpenAI", "kind": "doubtful", "note": "The step skipped the file.", "entry": 4, "mark": 1,
+         "entry_kind": "step", "entry_name": "gpt-5.4-mini", "live": True},
+        {"model": "OpenAI", "kind": "incomplete", "note": "Missing.", "entry": 6, "mark": 2,
+         "quote": "Not in the answer", "entry_kind": "tool", "entry_name": "read_source", "live": True}]
+    # A quote the answer holds marks its sentence, with the entry it came from.
+    [claim] = claims
+    assert claim["anchor"] == "One plain sentence stands here." and claim["dissent"][0]["entry"] == 6
 
 
 def test_a_mark_over_up_to_three_sentences_is_one_mark_and_longer_quotes_stay_unplaced():
     text = " ".join(f"Sentence number {n} says something." for n in range(1, 7))
     two = "Sentence number 2 says something. Sentence number 3"
-    claims, unplaced = place_marks(text, [("OpenAI", [
+    claims, unplaced, _ = place_marks(text, [("OpenAI", [
         {"quote": two, "kind": "doubtful", "note": "Two sentences."},
         {"quote": text, "kind": "doubtful", "note": "All of it."},
-        {"quote": "Sentence number 1 ... number 5 says something.", "kind": "wrong", "note": "Five."}])])
+        {"quote": "Sentence number 1 ... number 5 says something.", "kind": "wrong", "note": "Five."}], False)])
     assert [(c["anchor"], [d["mark"] for d in c["dissent"]]) for c in claims] == [
         ("Sentence number 2 says something.", [1]), ("Sentence number 3 says something.", [1])]
     assert [(item["mark"], item["note"]) for item in unplaced] == [(2, "All of it."), (3, "Five.")]
@@ -456,19 +622,51 @@ def test_a_source_is_read_with_its_own_parentheses(value, expected):
 def test_over_the_storage_budget_marks_keep_their_sentences_with_shorter_notes():
     audit = {"claims": [{"anchor": "A.", "dissent": [{"model": "OpenAI", "kind": "doubtful", "note": "n" * 600,
                                                       "target": "A", "mark": 1}]}],
-             "unplaced": [{"model": "OpenAI", "kind": "doubtful", "note": "x", "quote": "q" * 400, "mark": 2}]}
+             "unplaced": [{"model": "OpenAI", "kind": "doubtful", "note": "x", "quote": "q" * 400, "mark": 2}],
+             "process": [{"model": "OpenAI", "kind": "doubtful", "note": "p" * 600, "entry": 3, "mark": 3}]}
     agent_audit.trim_marks(audit)
     [item] = audit["claims"][0]["dissent"]
     assert "target" not in item and len(item["note"]) == agent_audit.TRIMMED_NOTE_CHARS and item["mark"] == 1
     assert len(audit["unplaced"][0]["quote"]) == 200
+    assert len(audit["process"][0]["note"]) == agent_audit.TRIMMED_NOTE_CHARS and audit["process"][0]["entry"] == 3
 
 
-def test_the_review_input_keeps_the_newest_history_within_its_budget(monkeypatch):
-    monkeypatch.setattr(agent_audit, "REVIEW_HISTORY_CHARS", 10)
-    task = json.loads(review_input([{"role": "user", "content": "x" * 20}, {"role": "assistant", "content": "short"},
-                                    {"role": "user", "content": "Latest?"}], "The answer."))
-    assert task == {"conversation": [{"role": "assistant", "content": "short"}], "earlier_messages_omitted": True,
-                    "latest_message": "Latest?", "answer": "The answer."}
+# --- What a reviewer reads ----------------------------------------------------------
+
+def test_a_log_entry_is_read_structured_and_shortened():
+    step = {"seq": 4, "actor": "agent", "kind": "step", "name": "m", "data": "agent", "format": "json"}
+    content = json.dumps({"text": "t" * 50, "tool_calls": [], "usage": {"cost": 1}})
+    assert review_entry(step, content, 10) == {
+        "seq": 4, "actor": "agent", "kind": "step", "name": "m", "data": "agent",
+        "content": {"text": "t" * 10 + "\n… [shortened: 50 characters in total]", "tool_calls": []}}
+    # The agent's instructions (with the user's memory at their end) are read whole up to their own limit.
+    system = {"seq": 2, "actor": "agent", "kind": "context", "name": "system", "data": "app", "format": "text"}
+    assert review_entry(system, "s" * 20_000)["content"] == "s" * 20_000
+    assert review_entry({**system, "name": "user"}, "s" * 20_000)["content"].endswith("[shortened: 20000 characters in total]")
+    broken = {**step, "format": "json"}
+    assert review_entry(broken, "{not json")["content"] == "{not json"
+
+
+def test_a_round_message_carries_new_entries_and_in_the_end_the_answer():
+    entries = [({"seq": 1, "actor": "app", "kind": "start", "data": "app", "format": "text"}, "x" * 3000)]
+    live = round_message(2, entries)
+    assert live.startswith("Round 2.") and "The fixed answer" not in live
+    assert round_entries({"content": live}) == ([{"seq": 1, "actor": "app", "kind": "start", "data": "app",
+                                                  "content": "x" * 3000}], None)
+    # A long session reads further entries in short.
+    tight, _ = round_entries({"content": round_message(3, entries, chars_so_far=agent_audit.SESSION_CHARS + 1)})
+    assert tight[0]["content"].startswith("x" * agent_audit.TIGHT_ENTRY_CHARS + "\n…")
+    final = round_message(3, [], answer="The answer.")
+    assert final.startswith("Final round.") and round_entries({"content": final}) == ([], "The answer.")
+
+
+def test_only_a_step_that_calls_a_tool_starts_a_live_round():
+    def step(content, kind="step"):
+        return ({"kind": kind}, content)
+    assert work_goes_on([step(json.dumps({"tool_calls": [{"name": "read_source"}]}))])
+    assert not work_goes_on([step(json.dumps({"tool_calls": [], "text": "The answer."}))])
+    assert not work_goes_on([step(json.dumps({"tool_calls": [{"name": "x"}]}), kind="tool"), step("not json")])
+    assert not work_goes_on([])
 
 
 # --- The route ---------------------------------------------------------------------

@@ -647,5 +647,12 @@
   "This entry couldn’t be loaded. Try again.": "Dieser Eintrag konnte nicht geladen werden. Versuch es erneut.",
   "No work log for this response.": "Zu dieser Antwort gibt es kein Arbeitsprotokoll.",
   "Waiting for the first entries…": "Warte auf die ersten Einträge…",
-  "Some entries could not be saved; the log is incomplete.": "Einige Einträge konnten nicht gespeichert werden; das Protokoll ist unvollständig."
+  "Some entries could not be saved; the log is incomplete.": "Einige Einträge konnten nicht gespeichert werden; das Protokoll ist unvollständig.",
+  "During the run": "Während der Arbeit",
+  "No final review: {0}.": "Keine abschließende Prüfung: {0}.",
+  "On the work": "Zur Arbeit",
+  "1 note on the work": "1 Anmerkung zur Arbeit",
+  "{work} notes on the work": "{work} Anmerkungen zur Arbeit",
+  "Notes during the run": "Anmerkungen während der Arbeit",
+  "Final notes": "Abschließende Anmerkungen"
 }

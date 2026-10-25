@@ -231,5 +231,5 @@
     detach(host);
     if (host) host.hidden = true;
   }
-  App.agentWorkLog = { render, reset };
+  App.agentWorkLog = { render, reset, KINDS };
 })();

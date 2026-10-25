@@ -946,6 +946,35 @@ it('counts and lists a mark over several sentences once', () => {
   expect(details.textContent).toContain('1 marked passage');
   dom.window.close();
 });
+it('lists the notes on the work with their log entry, also those of a failed final round', () => {
+  const {window: w, document: d, dom} = setup();
+  w.App.agentWorkLog = { KINDS: { step: 'Step', tool: 'Tool' } };
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = auditReview();
+  review.audit.process = [
+    { model: 'OpenAI', kind: 'doubtful', note: 'The lookup names no source.', entry: 9, entry_kind: 'tool',
+      entry_name: 'read_source', mark: 3 },
+    { model: 'Gemini', kind: 'wrong', note: 'The step skipped the file.', entry: 4, entry_kind: 'step',
+      entry_name: 'openai/gpt', mark: 4, live: true }];
+  w.App.agentReview.render(body, review);
+  const buttons = [...d.querySelectorAll('.agent-evidence-link')];
+  expect(buttons[0].getAttribute('aria-label')).toBe('Notes 4');
+  buttons[0].click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const [openai, , gemini] = panel.querySelectorAll('.agent-audit-reviewer');
+  expect(openai.querySelector('.agent-audit-work-head').textContent).toBe('On the work');
+  const work = openai.querySelectorAll('.agent-audit-notes')[1];
+  expect(work.querySelector('.agent-audit-entry').textContent).toBe('#9Toolread_source');
+  expect(work.textContent).toContain('The lookup names no source.');
+  // Its final round failed: its notes from the run stand, marked as such.
+  expect(gemini.textContent).toContain('No final review: its review could not be read.');
+  expect(gemini.querySelector('.agent-audit-live').textContent).toBe('During the run');
+  expect(gemini.textContent).toContain('The step skipped the file.');
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
+  expect(details.querySelector('.agent-activity-check').textContent).toBe('2 marked passages · 2 notes on the work');
+  dom.window.close();
+});
 it('ends the review in the disclosure when it was stopped or never started, and keeps the answer complete', () => {
   const {window: w, document: d, dom} = setup();
   for (const [status, text] of [['cancelled', 'Review stopped'], ['missing', 'Not reviewed']]) {

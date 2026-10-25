@@ -94,8 +94,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Werkzeuge, „answer_fixed“, Ende; während des Laufs kommen Einträge
       nach. Ein langer Eintrag lädt über „Show all“ ganz. Nicht-Admin oder
       Audit aus: kein Abschnitt.
+      Live-Prüfung: eine Frage, für die der Agent eine Quelle liest oder ein
+      Werkzeug ruft. Die Prüfer-Sitzungen zeigen schon während des Laufs
+      „Notes during the run“, am Ende „Final notes“. Notes zeigt Befunde zur
+      Arbeit unter „On the work“ mit „#Nummer“, Art und Name des Eintrags,
+      die Nummer passt zum Work log. Eine Antwort ohne Werkzeug hat nur die
+      Schlussrunde.
       Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
-      `agent-review.test.mjs`.
+      `agent-review.test.mjs`, `agent-delegation.test.mjs`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,

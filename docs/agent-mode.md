@@ -262,25 +262,34 @@ Schritts), wie nach `read_source`: Seiten könnten sonst `update_memory`
 steuern. Der Memory-Prompt sagt deshalb „call update_memory first, before you
 search“.
 
-**Die Vergleichsmodelle prüfen.** Ist die Antwort fertig, fixiert sie
-`capture` als Version, und die App ruft `audit_answer` (`app_tools`, nie dem
-Modell angeboten; Aktivität „Reviewing the answer…“ / „Reviewed the answer“).
-`AnswerAudit.run` fragt alle gewählten Vergleichsmodelle parallel
-(`ComparisonTools.call`, Art `audit`, eigene Websuche mit
-`REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht). Jeder Prüfer bekommt
-`review_system_prompt()` und als JSON den bisherigen Verlauf (neueste
-Nachrichten bis `REVIEW_HISTORY_CHARS`), die letzte Nachricht und die ganze
-Antwort. Er antwortet mit `{"marks": [{quote, kind, note, source}]}`:
-`wrong`, `doubtful` oder `incomplete`, das Zitat wörtlich aus der Antwort und
-so lang, dass es nur einmal darin steht, die Anmerkung in der Sprache der
-Antwort. `parse_review` liest tolerant (Fence, Text drumherum, Synonyme),
-höchstens `MAX_MARKS` je Prüfer; `wrong` braucht eine http(s)-Quelle, sonst
-wird es `doubtful` (jede URL zählt, Max' Entscheidung). `source_url` liest
-auch einen Markdown-Link und entfernt nur Klammern, die sich schließen
-(`…/Mercury_(planet)` bleibt ganz). Keine lesbare Liste: der Prüfer scheitert
-mit `review_unreadable`. Die Sitzung eines Prüfers speichert als Auftrag nur
-`REVIEW_ASSIGNMENT`, keine Kopie von Verlauf und Antwort
-(`ComparisonTools.call(context=…)`).
+**Die Vergleichsmodelle prüfen, während der Agent arbeitet.** Ab dem Start
+des Laufs folgt jedes gewählte Vergleichsmodell dem Arbeitsprotokoll
+(`AnswerAudit.follow`, `ReviewerSession`, ein Thread und eine Sitzung je
+Prüfer; Einzelheiten in [agent-work-log.md](agent-work-log.md)). Hat das
+Protokoll einen neuen Schritt mit Tool-Aufrufen, beginnt eine Live-Runde mit
+den neuen Einträgen als JSON (höchstens `MAX_LIVE_ROUNDS` = 6, eigene
+Websuche mit `LIVE_SEARCH_ROUNDS` = 2); ihre Befunde nennen den Eintrag
+(`entry`). Ist die Antwort fertig, fixiert sie `capture` als Version, und
+die App ruft `audit_answer` (`app_tools`, nie dem Modell angeboten; Aktivität
+„Reviewing the answer…“ / „Reviewed the answer“): `AnswerAudit.run` gibt jedem
+Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort
+(`REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
+auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Die
+Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
+note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
+aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer
+eines gelesenen Eintrags, die Anmerkung in der Sprache der Nachricht.
+`parse_review` liest tolerant (Fence, Text drumherum, Synonyme, „#12“),
+höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde; `wrong`
+braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt, Max'
+Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
+Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
+lesbare Liste: die Runde scheitert mit `review_unreadable`. Eine gescheiterte
+Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge, nach
+`MAX_ROUND_FAILURES` = 2 keine Live-Runden mehr); scheitert die Schlussrunde,
+gelten die Befunde der Live-Runden. Die Sitzung eines Prüfers speichert als
+Auftrag nur `REVIEW_ASSIGNMENT`; im Agent-Panel steht je Runde eine Nachricht
+(`round`, dann `result`).
 
 **Zitate finden.** `place_marks` sucht jedes Zitat mit dem Locator von
 `check_text` (`_search_form`/`_anchor_form`/`_locate_in`: Groß/klein,
@@ -294,9 +303,12 @@ legt die Markierungen aller Prüfer je Satz zu einem Claim zusammen: `anchor`,
 und listet sie einmal). In `audit.unplaced` stehen, mit Zitat, Markierungen
 ohne Fundstelle, mit Worten, die mehrfach in der Antwort stehen (welche
 Stelle gemeint ist, bleibt offen), außerhalb der Sätze (Überschrift, Code)
-oder über mehr als `MAX_MARK_SENTENCES` Sätze. Gespeichert wird alles in der
-Review: `mode: "audit"`, `audit.reviewers[]` (Status, Anzahl,
-`failure.code`), erst am Ende `audit.claims`/`audit.unplaced`,
+oder über mehr als `MAX_MARK_SENTENCES` Sätze, sofern sie keinen Eintrag
+nennen. Befunde zur Arbeit stehen in `audit.process` mit `entry`,
+`entry_kind`, `entry_name` und `live` (aus einer Live-Runde, weil die
+Schlussrunde ausfiel). Gespeichert wird alles in der Review: `mode: "audit"`,
+`audit.reviewers[]` (Status, `rounds`, Anzahl, `live_marks`,
+`failure.code`), erst am Ende `audit.claims`/`audit.unplaced`/`audit.process`,
 `audit.issues`. Status `succeeded` (alle Prüfer), `partial` (einige),
 `failed` (keiner), `cancelled` (Stop).
 
@@ -335,24 +347,29 @@ Quote, kein Score. Die Highlight-Einstellung zeigt unter „Disagreements &
 issues“ (Standard) und „All“ jede Marke, unter „Contradictions“ und
 „Critical“ nur `wrong`. Nicht platzierte Anmerkungen stehen unter der Antwort
 („Other notes“). Die Leiste bietet **Notes** (Leser mit den Anmerkungen je
-Prüfer, Ausfällen samt Grund und „Unmarked text means no objection, not
-confirmed.“) und Sources; die Aktivität zeigt eine Karte „Review · n models“,
-die auch bei `cancelled`/`missing` endet („Review stopped“, „Not reviewed“).
+Prüfer, darunter „On the work“ die Befunde zur Arbeit mit `#seq`, Art und
+Name des Eintrags, Live-Befunde als „During the run“, Ausfällen samt Grund
+und „Unmarked text means no objection, not confirmed.“) und Sources; die
+Aktivität zeigt eine Karte „Review · n models“ mit markierten Stellen und
+Befunden zur Arbeit, die auch bei `cancelled`/`missing` endet („Review
+stopped“, „Not reviewed“).
 Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
 **Arbeitsprotokoll** (seit 2026-10-25): Im Audit-Modus schreibt die App live
 mit, was der Agent sieht und tut (`agent_work_log.py`), Admins sehen es in der
-Seitenleiste unter „Work log“. Die Prüfer lesen es noch nicht; dass sie ihm
-während des Laufs folgen, ist Etappe 2 ([agent-work-log.md](agent-work-log.md)).
+Seitenleiste unter „Work log“, und die Prüfer folgen ihm
+([agent-work-log.md](agent-work-log.md)). Befunde gehen noch nicht an den
+Agenten.
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
 Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
 `prepare_settings_change` kennt die Einstellung nicht.
 
-Tests: `tests/test_agent_audit.py` (Turn, Prüfer, Fristen, Stop, Speichern,
-Memory-Sperre, Zitate, Quellen, Prompts, Route), `tests/js/audit-marks.test.mjs`, die Audit-Fälle in
+Tests: `tests/test_agent_audit.py` (Turn, Live-Runden, Schlussrunde,
+Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
+Prompts, Route), `tests/js/audit-marks.test.mjs`, die Audit-Fälle in
 `tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
 `model-answer-reader.test.mjs` und `agent-preferences.test.mjs`.
 
