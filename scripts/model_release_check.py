@@ -169,15 +169,31 @@ class Config:
         return uses
 
     def presets(self) -> dict[str, dict]:
-        definitions = {preset["id"]: preset for preset in self.cfg.CONSENSUS_PRESET_DEFINITIONS}
+        """``answers`` as the app serves them, ``stored`` as the document has them.
+
+        The stored answers run through the app's own normalization with the
+        production lists, premium set and defaults, so a migration such as
+        gpt-oss leaving Open Models (2026-10-22, no Firestore write) does not
+        read as a seventh model."""
+        cfg = self.cfg
+        definitions = {preset["id"]: preset for preset in cfg.CONSENSUS_PRESET_DEFINITIONS}
         stored = self.prod.get("preset_models") or {}
+        allowed = {}
+        for family, provider in cfg.PROVIDERS.items():
+            models = (set(cfg.canonical_model_ids(self.prod[family], family))
+                      if family in self.prod else set(provider.models))
+            allowed[family] = models - cfg.PROVIDER_DEPRECATED_MODELS.get(family, set()) - cfg.REMOVED_MODEL_IDS
         result = {}
         for preset_id, definition in definitions.items():
             supplied = stored.get(preset_id) if isinstance(stored.get(preset_id), dict) else {}
             result[preset_id] = {
                 "label": definition["label"],
                 "pro_only": bool(definition["pro_only"]),
-                "answers": dict(self.cfg._preset_answer_mapping(supplied)),
+                "stored": dict(cfg._preset_answer_mapping(supplied)),
+                "answers": cfg._normalize_preset_answers(
+                    preset_id, supplied, allowed_sets=allowed,
+                    premium_models=self.premium, defaults=self.defaults,
+                ),
                 "consensus": str(supplied.get("consensus") or ""),
             }
         return result
@@ -222,15 +238,20 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
         if len(answers) < conf.cfg.MAX_RUN_FAMILIES:
             findings.append((f"{preset_id}:families:{len(answers)}",
                              f"{label}: nur {len(answers)} von {conf.cfg.MAX_RUN_FAMILIES} Familien belegt"))
+        # What the document stores and the app silently replaces.
+        for family, model in preset["stored"].items():
+            if model not in (conf.prod.get(family) or []):
+                findings.append((f"{preset_id}:{family}:not-allowed:{model}",
+                                 f"{label}/{family}: {model} fehlt in der {family}-Modellliste (App ersetzt es still)"))
+            if not preset["pro_only"] and model in conf.premium:
+                findings.append((f"{preset_id}:{family}:premium:{model}",
+                                 f"{label}/{family}: Premium-Modell {model} in einem Free-Preset (App ersetzt es still)"))
         slots = [(family, model, conf.openrouter_id(model, family)) for family, model in answers.items()]
         if preset["consensus"]:
             family, engine_id = conf.engine(preset["consensus"])
             slots.append((family or "?", preset["consensus"], engine_id))
         for index, (family, model, openrouter_id) in enumerate(slots):
             role = "Engine" if index == len(answers) else family
-            if index < len(answers) and model not in (conf.prod.get(family) or []):
-                findings.append((f"{preset_id}:{family}:not-allowed:{model}",
-                                 f"{label}/{role}: {model} fehlt in der {family}-Modellliste (App ersetzt es still)"))
             if openrouter_id not in catalog:
                 findings.append((f"{preset_id}:{role}:gone:{openrouter_id}",
                                  f"{label}/{role}: {openrouter_id} gibt es bei OpenRouter nicht mehr"))
@@ -240,7 +261,7 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
                     and not catalog[openrouter_id].get("hugging_face_id")):
                 findings.append((f"{preset_id}:{role}:closed:{openrouter_id}",
                                  f"{label}/{role}: {openrouter_id} hat keine offenen Gewichte (kein Hugging-Face-Eintrag)"))
-            if not preset["pro_only"] and (model in conf.premium or model.endswith("-Pro")):
+            if index == len(answers) and not preset["pro_only"] and (model in conf.premium or model.endswith("-Pro")):
                 findings.append((f"{preset_id}:{role}:premium:{model}",
                                  f"{label}/{role}: Premium-Modell {model} in einem Free-Preset (App ersetzt es still)"))
             newer(f"{preset_id}:{role}", f"{label}/{role}", openrouter_id, not preset["pro_only"])

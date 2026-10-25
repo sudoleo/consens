@@ -158,6 +158,36 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(normalized["deepseek"], [current, cfg.DEEPSEEK_PRO_MODEL])
         self.assertEqual(normalized["defaults"]["deepseek"], current)
 
+    def test_kimi_k3_migrates_to_k31_pro(self):
+        """Seit 2026-10-25: K3.1 Pro kostet auf der Moonshot-Route 2/10 $
+        statt 3/15 $ und suchte mit "low" jedes Mal. Gespeicherte Auswahlen
+        und die Prod-Liste mit K3 laufen auf K3.1 Pro, das Premium bleibt."""
+        legacy, current = "kimi-k3", "kimi-k3.1-pro"
+        self.assertEqual(cfg.KIMI_PRO_MODEL, current)
+        self.assertEqual(cfg.canonical_model_id(legacy, "kimi"), current)
+        self.assertEqual(cfg.canonical_model_id(legacy), current)
+        self.assertNotIn(legacy, cfg.PROVIDERS["kimi"].models)
+        self.assertIn(current, cfg.PROVIDERS["kimi"].models)
+        self.assertIn(current, cfg.PREMIUM_MODELS)
+        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Kimi-Pro"], ("kimi", current))
+        self.assertEqual(cfg.get_model_label(current), "Kimi K3.1 Pro")
+        request = build_provider_payload(
+            "kimi", question="payload dry run", system_prompt="system",
+            model_override=legacy, max_output_tokens=123,
+        )
+        self.assertEqual(request["internal_model"], current)
+        self.assertEqual(request["api_model"], "moonshotai/kimi-k3.1-pro")
+        self.assertEqual(request["payload"]["reasoning"], {"effort": "low"})
+        self.assertEqual(request["payload"]["provider"]["only"], ["moonshotai"])
+        normalized = normalize_models_document({
+            "kimi": [cfg.KIMI_BASE_MODEL, legacy],
+            "premium": [legacy],
+            "defaults": {"kimi": cfg.KIMI_BASE_MODEL},
+        })
+        self.assertEqual(normalized["kimi"], [cfg.KIMI_BASE_MODEL, current])
+        self.assertIn(current, normalized["premium"])
+        self.assertNotIn(legacy, normalized["premium"])
+
     def test_mistral_defaults_use_supported_reasoning_models(self):
         default_request = build_provider_payload(
             "mistral",

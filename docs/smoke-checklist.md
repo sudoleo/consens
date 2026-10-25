@@ -197,7 +197,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Consensus/Hilfsaufrufe wechseln, Modell-Ausnahme setzen und entfernen.
       Geschützte Modelle einblenden; reine Vorschau markiert nichts als geändert.
       Save und Reload erhalten die Policy; Reload vor Save verwirft Änderungen.
-      Mistral zeigt im Sparprofil `none`, Kimi K3 bleibt aktiviert, Muse bleibt `low`.
+      Mistral zeigt im Sparprofil `none`, Kimi K3.1 Pro und Muse bleiben `low`.
 - [ ] `/admin` authentifiziert, wechselt alle Tabs und lädt/speichert Models,
       Limits, API, Shares, Watches, Topics und SEO mit dem externen
       `admin.js`/`admin-api.js`; Formular-Submit lädt die Seite nicht neu.

@@ -1035,9 +1035,7 @@ def _reasoning_admin_meta(data: dict) -> dict:
             if model in (cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL):
                 note = "Savings uses none (minimal thinking); this model supports none/high, not low. Keep existing for demanding reasoning tasks."
             if not supported:
-                if model == cfg.KIMI_PRO_MODEL:
-                    note = "Required reasoning stays enabled; no verified low cap."
-                elif reasoning and (reasoning.get("enabled") is False or reasoning.get("effort") == "none"):
+                if reasoning and (reasoning.get("enabled") is False or reasoning.get("effort") == "none"):
                     note = "Already off; preserved."
                 elif reasoning and reasoning.get("effort") == "low":
                     note = "Already low; no verified further reduction."

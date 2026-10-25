@@ -16,7 +16,7 @@ guess for newly added models:
 | Mistral Small / Medium 3.5 | `effort: none` | Supported none/high control; none means minimal thinking |
 | Grok 4.7 (Grok-Pro alias; until 2026-10-11 the Grok 4.3 reasoning variant) | `effort: low` | Reduce its high default |
 | GLM 5.3 Flash / 5.3, Muse Glimmer / Spark | Existing low | Already reduced; Muse cannot disable reasoning |
-| Kimi K2.6 / K3 | Existing disabled / enabled | Preserve the verified search and Moonshot routing contracts |
+| Kimi K2.6 / K3.1 Pro | Existing disabled / low | Preserve the verified search and Moonshot routing contracts |
 | All other models | Existing behavior | No verified savings rule; provider default is not synonymous with off |
 
 The cap preserves explicit disabled/none/minimal/low settings. It applies to

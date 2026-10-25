@@ -672,11 +672,12 @@ class ModelConfigurationTests(unittest.TestCase):
         )
 
     def test_kimi_search_keeps_moonshot_route_and_model_reasoning(self):
-        for model, deep, thinking in (
-            (cfg.KIMI_BASE_MODEL, False, False),
-            (cfg.KIMI_PRO_MODEL, False, True),
+        for model, deep, reasoning in (
+            (cfg.KIMI_BASE_MODEL, False, {"enabled": False}),
+            (cfg.KIMI_PRO_MODEL, False, {"effort": "low"}),
             # Reasoning keeps Kimi's explicit model policy (no model swap).
-            (cfg.KIMI_BASE_MODEL, True, False),
+            (cfg.KIMI_BASE_MODEL, True, {"enabled": False}),
+            (cfg.KIMI_PRO_MODEL, True, {"effort": "low"}),
         ):
             with self.subTest(model=model, deep=deep):
                 payload = build_provider_payload(
@@ -687,7 +688,7 @@ class ModelConfigurationTests(unittest.TestCase):
                     "sort": "throughput", "data_collection": "deny",
                     "only": ["moonshotai"], "allow_fallbacks": False,
                 })
-                self.assertEqual(payload["reasoning"], {"enabled": thinking})
+                self.assertEqual(payload["reasoning"], reasoning)
                 self.assertEqual(payload["max_tokens"], 4096)
                 self.assertEqual(payload["tools"][0]["type"], "openrouter:web_search")
                 self.assertEqual(payload["tools"][0]["parameters"]["max_uses"], 1)

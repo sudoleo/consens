@@ -698,7 +698,7 @@ def test_agent_history_never_queries_empty_model_answers(store, monkeypatch):
     assert len(store.list_turns(UID, chat_id)["turns"]) == 1
 
 
-@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3", "openai/gpt-4o"])
+@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3.1-pro", "openai/gpt-4o"])
 def test_configured_default_uses_its_own_prices_context_and_routing(monkeypatch, model_id):
     from app.core import config as cfg
     from decimal import Decimal

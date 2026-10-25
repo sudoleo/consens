@@ -38,7 +38,7 @@ def model_document():
     ("openai", cfg.OPENAI_PRO_MODEL, {"effort": "low"}),
     ("grok", cfg.GROK_PRO_MODEL, {"effort": "low"}),
     ("meta", cfg.MUSE_BASE_MODEL, {"effort": "low"}),
-    ("kimi", cfg.KIMI_PRO_MODEL, {"enabled": True}),
+    ("kimi", cfg.KIMI_PRO_MODEL, {"effort": "low"}),
     ("kimi", cfg.KIMI_BASE_MODEL, {"enabled": False}),
     ("glm", cfg.GLM_BASE_MODEL, {"effort": "low"}),
 ])

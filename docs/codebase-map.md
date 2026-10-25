@@ -8748,12 +8748,16 @@ Picker. Die Modellmenge einer Familie heißt nur noch `PROVIDERS[key].models`
 Firestore-Load mutiert die Menge in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
 Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6 sendet
-`reasoning.enabled=false`, K3 zwingend `reasoning.enabled=true` (auch mit Reasoning-Schalter;
-explizite Modell-Policies gewinnen dort).
+`reasoning.enabled=false`, K3.1 Pro (Kimi-Pro seit 2026-10-25) `reasoning.effort=low`
+(auch mit Reasoning-Schalter; explizite Modell-Policies gewinnen dort).
 Beide Kimi-Modelle begrenzen OpenRouter auf `provider.only=["moonshotai"]`
 mit `allow_fallbacks=false`; die Standard-Felder `sort`/`data_collection` bleiben beim Merge erhalten.
-Live-Diagnose: automatische Routen lieferten kaputte Tool-Ausgaben; K3 suchte
-auf der Moonshot-Route erst mit aktiviertem Reasoning. Suche bleibt modellgesteuert
+Live-Diagnose: automatische Routen lieferten kaputte Tool-Ausgaben; das
+frühere K3 suchte auf der Moonshot-Route erst mit aktiviertem Reasoning. K3.1 Pro
+suchte in der Live-Probe mit `low` jedes Mal; `enabled=true` heißt dort Aufwand
+`max` und ließ 2 von 6 Antworten am Output-Limit leer. Moonshot berechnet K3.1 Pro
+mit 2/10 $ je Mio. statt 3/15 $ für K3; gespeicherte K3-Auswahlen und die
+Prod-Liste migrieren ohne Firestore-Write (`KIMI_MODEL_MIGRATIONS`). Suche bleibt modellgesteuert
 über `openrouter:web_search`, ohne gemeinsame Quellen oder neue Transport-Retries.
 Die Modellkonfiguration gilt auch für Consensus-Aufrufe; Ausgabe-/Suchbudgets
 bleiben unverändert. GLM 5.3 Flash/5.3 sendet `reasoning.effort=low`.
@@ -8856,7 +8860,11 @@ gpt-oss-120b bleibt wählbar und liest nur Text: `ProviderConfig.text_only_model
 nimmt einzelne Modelle einer sonst anhangfähigen Familie von Anhängen aus.
 `scripts/model_release_check.py` (lokaler geplanter Task
 `consens-model-release-check`, alle 3 Tage) prüft das Dokument nur lesend
-(`.get()`): neue OpenRouter-Modelle, verschwundene konfigurierte IDs,
+(`.get()`). Presets liest es so, wie die App sie ausliefert
+(`_normalize_preset_answers` mit Prod-Listen, Premium und Defaults; das
+gespeicherte gpt-oss in Open Models zählt also nicht als siebtes Modell), nur
+„fehlt in der Liste“ und „Premium in Free“ prüft es am gespeicherten Wert. Es meldet
+neue OpenRouter-Modelle, verschwundene konfigurierte IDs,
 Preset-Befunde (Modell nicht in der Familienliste, Premium in Daily/Open Models,
 neueres Modell derselben Reihe, identische Presets) und je eine Live-Probe (App-Routing) der
 genutzten Modelle. Zustand liegt neben dem Task

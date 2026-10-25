@@ -180,7 +180,15 @@ DEFAULT_GROK_MODEL = GROK_BASE_MODEL
 OPENAI_PRO_MODEL = "gpt-5.5"
 GROK_PRO_MODEL = "grok-4.7"
 KIMI_BASE_MODEL = "kimi-k2.6"
-KIMI_PRO_MODEL = "kimi-k3"
+# Seit 2026-10-25 K3.1 Pro statt K3: auf der Moonshot-Route, die Kimi faehrt,
+# kostet es 2/10 $ je Mio. Token statt 3/15 $. Live-Probe mit Suche je 6
+# Antworten: mit "low" suchte es jedes Mal und brauchte fuer die kurze
+# Zinsfrage 19 s (K3 mit dem bisherigen enabled=true 26 s); mit enabled=true
+# (Moonshot denkt dann auf "max") blieben 2 von 6 Antworten leer, weil das
+# Denken das Output-Limit aufbrauchte. Gespeicherte K3-Auswahlen migrieren
+# hierher (KIMI_MODEL_MIGRATIONS).
+KIMI_PRO_MODEL = "kimi-k3.1-pro"
+KIMI_K3_MODEL = "kimi-k3"  # alte ID, migriert
 GLM_BASE_MODEL = "glm-5.3-flash"
 GLM_PRO_MODEL = "glm-5.3"
 # Meta Superintelligence Labs fuehrt seine Modelle bei OpenRouter unter
@@ -752,6 +760,9 @@ def canonical_model_ids(models, provider: str) -> list[str]:
 # V4 Flash -> V4.1 Flash (2026-10-15, Begruendung bei DEEPSEEK_FLASH_MODEL).
 DEEPSEEK_MODEL_MIGRATIONS = {DEEPSEEK_V4_FLASH_MODEL: DEEPSEEK_FLASH_MODEL}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner", *DEEPSEEK_MODEL_MIGRATIONS}
+# K3 -> K3.1 Pro (2026-10-25, Begruendung bei KIMI_PRO_MODEL).
+KIMI_MODEL_MIGRATIONS = {KIMI_K3_MODEL: KIMI_PRO_MODEL}
+DEPRECATED_KIMI_MODELS = set(KIMI_MODEL_MIGRATIONS)
 
 # Familienspezifische Hygiene. Jede Familie ohne Eintrag braucht keine: der
 # generische Lade-/Initialisierungspfad fragt hier nach, statt pro Familie
@@ -759,11 +770,13 @@ DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner", *DEEPSEEK_MO
 PROVIDER_MODEL_MIGRATIONS: dict[str, dict[str, str]] = {
     "grok": GROK_MODEL_MIGRATIONS,
     "deepseek": DEEPSEEK_MODEL_MIGRATIONS,
+    "kimi": KIMI_MODEL_MIGRATIONS,
 }
 PROVIDER_DEPRECATED_MODELS: dict[str, set[str]] = {
     "mistral": DEPRECATED_MISTRAL_MODELS,
     "deepseek": DEPRECATED_DEEPSEEK_MODELS,
     "grok": DEPRECATED_GROK_MODELS,
+    "kimi": DEPRECATED_KIMI_MODELS,
 }
 
 def ensure_default_models_allowed():
@@ -818,7 +831,8 @@ MODEL_LABEL_OVERRIDES = {
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4.1 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
     KIMI_BASE_MODEL: "Kimi K2.6",
-    KIMI_PRO_MODEL: "Kimi K3",
+    KIMI_PRO_MODEL: "Kimi K3.1 Pro",
+    KIMI_K3_MODEL: "Kimi K3",
     GLM_BASE_MODEL: "GLM 5.3 Flash",
     GLM_PRO_MODEL: "GLM 5.3",
     MUSE_BASE_MODEL: "Muse Glimmer 30B",
@@ -840,10 +854,12 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
         "provider": {"only": ["moonshotai"], "allow_fallbacks": False},
         "reasoning": {"enabled": False},
     },
-    # K3 requires thinking. Disabling it prevented search in the same route.
+    # K3 needed thinking: disabling it prevented search in the same route.
+    # K3.1 Pro searched every time on "low"; enabled=true means "max" there
+    # and emptied 2 of 6 answers at the output limit (probe 2026-10-25).
     KIMI_PRO_MODEL: {
         "provider": {"only": ["moonshotai"], "allow_fallbacks": False},
-        "reasoning": {"enabled": True},
+        "reasoning": {"effort": "low"},
     },
     GLM_BASE_MODEL: {"reasoning": {"effort": "low"}},
     GLM_PRO_MODEL: {"reasoning": {"effort": "low"}},
