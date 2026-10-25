@@ -335,6 +335,10 @@ html.agent-shell-expected :is(.models-section, .models-section + .sidebar-separa
 body:not(.single-agent-active) #agentAnswer, body:not(.single-agent-active) #agentReviewNotice { display: none; }
 body.single-agent-active #agentAnswer:not([hidden]) { display: block; }
 body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
+/* Consensus insets question and answer by 6px (shell.css); an Agent answer
+   starts on the column's edge, so its question ends on the other one, where
+   the composer ends. */
+body.single-agent-active .thread-ask { margin-inline: 0; }
 .attach-menu :is(button, label)[hidden] { display: none; }
 .attach-menu-item:disabled { opacity: .5; cursor: default; }
 #agentReasoningMenuOption .attach-menu-toggle-icon { flex: 0 0 16px; }

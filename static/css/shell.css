@@ -3238,7 +3238,7 @@ body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-sectio
 }
 
 .thread-history-turn.is-agent-turn > .thread-history-question {
-  margin: 10px 6px 18px;
+  margin: 10px 0 18px;
 }
 
 .thread-history-turn.is-agent-turn > .thread-history-answer {
