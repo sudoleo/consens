@@ -183,10 +183,10 @@
     }, 0);
     const counter = document.getElementById("sidebarModelCount");
     if (counter) {
-      const providerLabel = count === 1 ? "provider" : "providers";
+      // Whole sentences, so the German page finds each (docs/i18n.md).
       counter.textContent = count >= 2
-        ? `${count} ${providerLabel} selected`
-        : `${count} ${providerLabel} · choose at least 2`;
+        ? `${count} providers selected`
+        : (count === 1 ? "1 provider · choose at least 2" : `${count} providers · choose at least 2`);
       counter.classList.toggle("is-invalid", count < 2);
     }
     document.getElementById("sidebarModelPicker")?.classList.toggle("is-invalid", count < 2);
@@ -987,10 +987,9 @@
     toggle.dataset.focusKey = `toggle:${pref.key}`;
     toggle.setAttribute("role", "checkbox");
     toggle.setAttribute("aria-checked", String(included));
-    toggle.setAttribute(
-      "aria-label",
-      included ? "Exclude " + pref.label : "Include " + pref.label
-    );
+    // A checkbox keeps its name, aria-checked says the state; the title
+    // tells what a click does (a11y audit K8).
+    toggle.setAttribute("aria-label", pref.label);
     const capped = !included && capBlocksInclusion(pref);
     toggle.title = included
       ? pref.label + " answers this run — click to leave it out"
@@ -1285,7 +1284,9 @@
     if (state.menu.classList.contains("is-open")) window.App.popover?.closed(state.menu);
     state.menu.classList.remove("is-open");
     state.host.classList.remove("is-expanded", "is-open");
-    state.host.setAttribute("aria-expanded", "false");
+    // Only a host that is itself the trigger says open or closed; a plain
+    // wrapper may not carry aria-expanded (axe aria-allowed-attr).
+    if (!state.displayButton) state.host.setAttribute("aria-expanded", "false");
 
     if (state.displayButton) {
       state.displayButton.setAttribute("aria-expanded", "false");
@@ -1395,7 +1396,7 @@
       window.App.popover?.opened(state.menu, { trigger: state.displayButton || state.host });
     }
     state.host.classList.add("is-expanded", "is-open");
-    state.host.setAttribute("aria-expanded", "true");
+    if (!state.displayButton) state.host.setAttribute("aria-expanded", "true");
     state.menu.classList.add("is-open");
 
     if (state.displayButton) {

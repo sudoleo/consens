@@ -40,6 +40,9 @@
     if (!tip) {
       tip = document.createElement("div");
       tip.className = "global-tooltip";
+      // Faded out it is still in the page: hidden from screen readers until
+      // it shows (an empty, nameless tooltip; a11y audit P6).
+      tip.setAttribute("aria-hidden", "true");
       document.body.appendChild(tip);
     }
     tip.id = tip.id || "appTooltip";
@@ -104,6 +107,7 @@
     const parent = host(element);
     if (node.parentElement !== parent) parent.append(node);
     node.textContent = text;
+    node.removeAttribute("aria-hidden");
     node.classList.add("visible");
     place(element);
     target = element;
@@ -125,6 +129,7 @@
     }
     target = null;
     tip?.classList.remove("visible");
+    tip?.setAttribute("aria-hidden", "true");
     lastHiddenAt = Date.now();
   }
 

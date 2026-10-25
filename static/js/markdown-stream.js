@@ -127,6 +127,15 @@ function syncTaskBoxes(el) {
   if (el?.querySelector?.(".md-task-box")) window.App?.taskChecks?.apply?.(el);
 }
 
+// A model's headings stand under the chat's h1 and the turn's h2 "Answer":
+// a screen reader hears its "# Title" as level 3. The look stays with the
+// tag (a11y audit B3).
+function nestModelHeadings(root) {
+  root.querySelectorAll?.("h1, h2, h3, h4, h5, h6").forEach(heading => {
+    heading.setAttribute("aria-level", String(Math.min(6, Number(heading.tagName[1]) + 2)));
+  });
+}
+
 // Markdown -> sanitized nodes of this document, parsed once: DOMPurify hands
 // over its own DOM instead of a string that would be parsed again for the
 // media check and once more for the page (Apple audit D4).
@@ -158,6 +167,7 @@ function renderMarkdownFragment(md) {
     neutralizeRemoteMedia(fragment);
     const adopted = fragment.ownerDocument === document ? fragment : document.adoptNode(fragment);
     enhanceTaskLists(adopted);
+    nestModelHeadings(adopted);
     return adopted;
   } catch (error) {
     reportMarkdownFallback("render error");

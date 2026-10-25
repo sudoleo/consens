@@ -392,3 +392,34 @@ def test_scripts_do_not_find_elements_by_their_visible_label():
         for match in re.finditer(r"\[(?:data-(?:short|label|tooltip|ghost|compact|description)|aria-label|title|placeholder|alt)=[\"'][A-Z]", source):
             offenders.append(f"{path.name}:{source.count(chr(10), 0, match.start()) + 1}")
     assert not offenders, "a translated attribute is no selector (docs/i18n.md): " + ", ".join(offenders)
+
+
+# ---------------------------------------------------------------------------
+# Language of content (a11y audit L1)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text,expected", [
+    ("Photosynthesis turns light into chemical energy. It happens in the chloroplasts of the leaf,"
+     " and it is the reason that plants are green.", "en"),
+    ("Die Photosynthese wandelt Licht in chemische Energie um. Sie findet in den Chloroplasten statt,"
+     " und sie ist der Grund, dass die Pflanzen grün sind.", "de"),
+    # Too short to tell, another language, or mixed: the page's lang holds.
+    ("Is ibuprofen safe?", None),
+    ("La photosynthèse transforme la lumière en énergie chimique dans les chloroplastes de la feuille.", None),
+    ("¿Es seguro tomar ibuprofeno con medicamentos para la presión? Es una pregunta que muchos hacen y es"
+     " importante saber la respuesta.", None),
+    ("The answer is ja, und das ist nicht falsch, but it is not the whole story and it depends on the"
+     " dose, sagt der Arzt, die man nimmt.", None),
+])
+def test_content_language_is_named_only_when_clear(text, expected):
+    assert i18n.content_language(text) == expected
+
+
+def test_content_in_a_skipped_region_keeps_its_words(small_catalog):
+    # A model's heading "Settings" stays as it is on a German page; the frame
+    # around the answer is translated (share.html, partials/check_page.html).
+    page = ('<html lang="en"><body><h2>Settings</h2>'
+            '<div class="share-md" data-i18n-skip lang="en"><h2>Settings</h2></div></body></html>')
+    assert i18n.translate_html(page, "de") == (
+        '<html lang="de"><body><h2>Einstellungen</h2>'
+        '<div class="share-md" data-i18n-skip lang="en"><h2>Settings</h2></div></body></html>')

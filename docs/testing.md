@@ -195,6 +195,11 @@ venv\Scripts\python.exe -m pip install -r requirements-e2e.txt
 venv\Scripts\python.exe -m playwright install chromium
 ```
 
+`tests/e2e/test_a11y_axe.py` (Barrierefreiheit, seit 2026-10-25) holt axe-core
+aus `node_modules` (devDependency, kommt mit `npm ci`) und lädt es als
+Init-Skript, damit die CSP der Seiten es nicht blockt. Es scheitert nur an
+`serious`/`critical` und wartet vor jedem Scan auf laufende Übergänge.
+
 ### Python-Version und venv
 
 Die Python-Version steht an genau einer Stelle: `.python-version` (derzeit

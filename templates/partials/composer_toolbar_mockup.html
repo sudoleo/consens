@@ -1,15 +1,16 @@
-{# Shared, non-interactive preview of the /app starting toolbar. #}
+{# Shared, non-interactive preview of the /app starting toolbar. Its tools read
+   as their words; a plain span may not carry an aria-label (axe). #}
 {# The mode lives in the (+) menu, as in /app; the field's row shows (+), the models and Send. #}
 <div class="lp-composer-tools" role="group" aria-label="Composer preview: reasoning on auto, attachments and six comparison models">
-  <span class="lp-composer-tool" title="Reasoning auto · the model decides how long to think" aria-label="Reasoning auto">
+  <span class="lp-composer-tool" title="Reasoning auto · the model decides how long to think">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
     <span class="lp-composer-tool-label">Reasoning</span><span class="lp-composer-state lp-composer-tool-label">Auto</span>
   </span>
-  <span class="lp-composer-tool" title="Attachments" aria-label="Attachments">
+  <span class="lp-composer-tool" title="Attachments">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 7-7a4 4 0 0 1 5.7 5.7L10.5 20.9a6 6 0 0 1-8.5-8.5L12 2.5M6 14l9-9" transform="translate(1 1) scale(.85)"/></svg>
     <span class="lp-composer-tool-label">Attach</span>
   </span>
-  <span class="lp-composer-models" aria-label="Comparison model providers">
+  <span class="lp-composer-models" role="group" aria-label="Comparison model providers">
     {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Mistral', 'mistral.png', false), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] %}
     <span class="lp-composer-model" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
     {% endfor %}

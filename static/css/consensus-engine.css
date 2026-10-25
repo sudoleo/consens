@@ -594,6 +594,12 @@
   color: var(--text-primary);
 }
 
+/* Dark: the secondary grey on a mark's tint came to 4.19:1; one step up
+   holds 5.7:1 there (axe, tests/e2e/test_a11y_axe.py). */
+.dark-mode .ce-answer .cx-claim {
+  color: var(--ink-2);
+}
+
 /* The differences panel sits inside the answer panel now; it brings its own
    separator, so it needs neither the glass frame nor extra side padding. */
 .ce-answer .consensus-differences {

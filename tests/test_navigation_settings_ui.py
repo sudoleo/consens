@@ -107,7 +107,8 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     template = read("templates/index.html")
     assert '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' in template
     assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in template
-    assert 'class="demo-chip demo-action send-glow" aria-label="Start interactive demo" hidden>' in template
+    # Its name is the words it shows (WCAG 2.5.3, tests/e2e/test_a11y_axe.py).
+    assert 'class="demo-chip demo-action send-glow" hidden>' in template
     assert template.index('class="demo-chip demo-action') < template.index('id="sendButton"')
     assert 'container?.querySelector(".demo-chip")' in demo
     # The demo takes the send slot while it is offered (one filled control),

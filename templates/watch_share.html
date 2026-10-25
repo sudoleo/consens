@@ -94,7 +94,7 @@
       <p>Several AI models answer this question independently on every check; a judge model compares the result with the previous one and only reports what moved. AI can be wrong, so check the sources. <a href="/consensus-engine">How it works</a></p>
       <p><a class="wp-cta" href="/app/watches?create=1">Watch your own question &rarr;</a></p>
       {% if not is_private %}<div class="share-report">
-        <button type="button" id="shareReportToggle" class="share-report-toggle">Report this page</button>
+        <button type="button" id="shareReportToggle" class="share-report-toggle" aria-expanded="false" aria-controls="shareReportForm">Report this page</button>
         <form id="shareReportForm" class="share-report-form" hidden>
           <label for="shareReportReason" class="visually-hidden" hidden>Reason</label>
           <select id="shareReportReason">
@@ -106,7 +106,7 @@
           </select>
           <button type="submit">Send report</button>
         </form>
-        <p id="shareReportDone" hidden>Thanks – this page has been reported for review.</p>
+        <p id="shareReportDone" role="status" tabindex="-1" hidden>Thanks – this page has been reported for review.</p>
       </div>{% endif %}
     </footer>
   </main>
@@ -125,10 +125,18 @@
         line = document.createElement("p");
         line.className = "share-form-error";
         line.setAttribute("role", "alert");
+        line.id = form.id + "Error";
         form.append(line);
       }
       line.textContent = message || "";
       line.hidden = !message;
+      // The address field names its error, so it is read again on return to
+      // the field (a11y audit P7).
+      const field = form.querySelector("input[type=email]");
+      if (field) {
+        if (message) field.setAttribute("aria-describedby", line.id);
+        else field.removeAttribute("aria-describedby");
+      }
     }
 
     {% if can_follow %}
@@ -170,6 +178,7 @@
       if (!toggle || !form || !done) return;
       toggle.addEventListener("click", function () {
         form.hidden = !form.hidden;
+        toggle.setAttribute("aria-expanded", String(!form.hidden));
       });
       form.addEventListener("submit", function (event) {
         event.preventDefault();
@@ -186,6 +195,8 @@
           form.hidden = true;
           toggle.hidden = true;
           done.hidden = false;
+          // The button in focus is gone: the thanks takes the focus and is read.
+          done.focus();
         }).catch(function () {
           submitBtn.disabled = false;
           formError(form, "Reporting failed. Please try again later.");

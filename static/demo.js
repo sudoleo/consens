@@ -1270,7 +1270,8 @@ function toggleSettingsCollapse(contentId, arrowId) {
   // The initial closed state comes from a template CSS class. Inspect the
   // effective value so the first click opens it even before an inline value
   // has ever been written.
-  if (window.getComputedStyle(content).display === "none") {
+  const opening = window.getComputedStyle(content).display === "none";
+  if (opening) {
     content.style.display = "block";
     if (arrow) arrow.classList.add("rotated");
     if (arrow) arrow.innerHTML = "&#9650;";
@@ -1279,6 +1280,8 @@ function toggleSettingsCollapse(contentId, arrowId) {
     if (arrow) arrow.classList.remove("rotated");
     if (arrow) arrow.innerHTML = "&#9660;";
   }
+  // The header is a role=button: screen readers hear open or closed from it.
+  document.querySelector(`[aria-controls="${contentId}"]`)?.setAttribute("aria-expanded", String(opening));
 }
 
 window.toggleSettingsCollapse = toggleSettingsCollapse;

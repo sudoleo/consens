@@ -1468,6 +1468,9 @@ class SharePageRouteTests(unittest.TestCase):
     def setUp(self):
         # get_share_cached cached sonst das Dokument des vorherigen Tests
         snapshots.invalidate_share_cache()
+        # Die Seite erlaubt 30 Abrufe pro Minute; die Klasse als Ganzes ruft
+        # sie oefter ab.
+        limiter.reset()
         self.related_shares_patch = patch.object(
             share_router.snapshots, "list_related_shares", return_value=[]
         )
@@ -1526,6 +1529,33 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('content="noindex, follow"', body)
         self.assertIn("Ask your own question", body)
         self.assertNotIn("user-1", body)  # owner_uid darf nie im HTML landen
+
+    def test_question_and_answer_carry_their_language_and_stay_untranslated(self):
+        # A German page translates the frame; the English answer keeps its
+        # words and says it is English, so a screen reader switches voice
+        # (a11y audit L1). Too little text to tell names no language.
+        doc = self._share_doc(
+            question="Is it safe to take ibuprofen with blood pressure medication?",
+            consensus_md="It is usually fine for a few days, but it can raise blood pressure and it"
+                         " interacts with some of the drugs that are used for it. Ask a pharmacist. [S1]",
+        )
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            body = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
+        self.assertRegex(body, r'<h1 id="shareQuestion" class="share-question[^"]*" data-i18n-skip lang="en">')
+        self.assertIn('<div class="share-md" data-i18n-skip lang="en">', body)
+
+        snapshots.invalidate_share_cache()
+        short = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=short):
+            body = self.client.get("/s/%s-%s" % (short["slug"], self.share_id)).text
+        self.assertIn('<div class="share-md" data-i18n-skip>', body)
+
+    def test_report_toggle_says_whether_its_form_is_open(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            body = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
+        self.assertIn('id="shareReportToggle" class="share-report-toggle" aria-expanded="false" aria-controls="shareReportForm"', body)
+        self.assertIn('<p id="shareReportDone" role="status" tabindex="-1" hidden>', body)
 
     def test_active_share_preserves_latex_and_loads_katex_renderer(self):
         doc = self._share_doc(

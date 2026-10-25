@@ -9762,6 +9762,12 @@ ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
   Nutzerinhalt trägt `data-i18n-skip` (Markdown-Container setzen es selbst),
   Namen `translate="no"`; mehrdeutige Wörter per `data-i18n-context`
   (`agent freedom|Free`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
+  Auf Share-, Watch- und Topic-Seiten tragen Frage (`#shareQuestion`) und
+  Antwort (`.share-md`) seit 2026-10-25 `data-i18n-skip` und, wenn klar,
+  `lang` (a11y-Audit L1): Topics `"en"`, Shares und Watches
+  `i18n.content_language(Frage + Antwort)` (nur `en`/`de` nach Funktionswörtern,
+  sonst nichts). Vorher übersetzte der Server Antwortzeilen mit, die zufällig
+  einem Schlüssel glichen („Sources“ → „Quellen“).
 - **Prüfung:** `scripts/i18n.py missing|check` (Vorlagen, Skripte,
   Server-Sätze; seit 2026-10-23 auch Sätze, die Wörter im `${…}` wählen
   und so keinen Eintrag als Ganzes haben, `composed_gaps`; seit 2026-10-24

@@ -368,6 +368,13 @@
       reasoningButton.disabled = beta && !loading && (!effort || effort.disabled || effort.dataset.available !== "true");
       reasoningButton.setAttribute("role", beta ? "button" : "switch");
       reasoningButton.setAttribute("aria-checked", String(reasoningOn));
+      // A switch says On or Off as its state. As the Agent's menu button the
+      // word is the chosen level, and the name is what it shows ("Reasoning
+      // Auto"), so speech input finds it by its words (WCAG 2.5.3).
+      if (buttonId === "composerReasoningToggle") {
+        if (beta) reasoningButton.removeAttribute("aria-label");
+        else reasoningButton.setAttribute("aria-label", "Reasoning");
+      }
       reasoningButton.title = reasoningOn ? "Reasoning on · Models think longer before they answer"
         : "Reasoning off · Models think longer before they answer";
       // One write, and only of a change: the label is in the first frame

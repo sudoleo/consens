@@ -365,8 +365,11 @@
     <!-- Kopf des aktiven Turns: die gestellte Frage. Wird von window.App.setThreadQuestion
          (app-core.js) gefüllt, sobald ein Lauf startet oder ein Bookmark lädt.
          Lange Nachrichten klappen auf acht Zeilen ein; "Show more" in der
-         Blase klappt auf. -->
+         Blase klappt auf. Die unsichtbare Ueberschrift gliedert den Chat fuer
+         Screenreader in Nachricht und Antwort; sie wandert mit in den Verlauf
+         (agent-chat.js liveTurn, consensus-run.js buildHistoryTurn). -->
     <div id="threadAsk" class="thread-ask" hidden>
+      <h2 class="visually-hidden">Your message</h2>
       <div class="thread-ask-bubble">
         <div class="thread-ask-text" id="threadAskText"></div>
         <button type="button" id="threadAskMore" class="thread-ask-more" aria-expanded="false">Show more</button>
@@ -386,6 +389,7 @@
          body.thread-message-pending; gefuellt von
          window.App.setPendingThreadQuestion (app-core.js). -->
     <div id="threadPendingAsk" class="thread-ask thread-ask-pending" hidden>
+      <h2 class="visually-hidden">Your message</h2>
       <div class="thread-ask-bubble">
         <div class="thread-ask-text" id="threadPendingAskText"></div>
         <button type="button" class="thread-ask-more" aria-expanded="false">Show more</button>
@@ -586,7 +590,7 @@
                while the field is empty, once per browser (demo.js). In the
                template, not added by the module, so the first frame already
                decides between it and Send (app-bootstrap.js). -->
-          <button type="button" class="demo-chip demo-action send-glow" aria-label="Start interactive demo" hidden><span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span><span class="demo-chip-label demo-chip-label-full">Try the demo</span><span class="demo-chip-label demo-chip-label-short">Demo</span></button>
+          <button type="button" class="demo-chip demo-action send-glow" hidden><span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span><span class="demo-chip-label demo-chip-label-full">Try the demo</span><span class="demo-chip-label demo-chip-label-short">Demo</span></button>
           <!-- Pfeil nach oben im gefuellten Kreis: der Senden-Knopf ist das
                einzige massive Element im Composer (Stil in shell.css). Ein
                leeres Feld sendet nichts: disabled ab dem ersten Bild, app-init.js
@@ -602,7 +606,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
             <span class="composer-tool-label">Reasoning</span><span id="composerReasoningState" class="composer-agent-state composer-tool-label">Off</span>
           </button>
-          <button type="button" id="composerAttachButton" class="composer-agent-toggle composer-tool" aria-label="Add attachment" title="Add attachment">
+          <button type="button" id="composerAttachButton" class="composer-agent-toggle composer-tool" aria-label="Attach a file" title="Add attachment">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
             <span class="composer-tool-label">Attach</span>
           </button>
@@ -782,6 +786,7 @@
     </div>
 
     <section id="agentAnswer" class="agent-answer" aria-label="Agent answer" hidden>
+        <h2 class="visually-hidden">Answer</h2>
         <div id="agentAnswerActivity" class="agent-answer-activity"></div>
         <div id="agentAnswerBody" class="consensus-answer-body markdown-content"></div>
         <div id="agentAnswerResources"></div>
@@ -1433,12 +1438,12 @@
               </div>
 
               <div class="settings-section" data-settings-keywords="api key schlüssel openrouter token testen test speichern save">
-                <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea">
+                <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea" aria-expanded="false">
                   <div>
                     <h4>OpenRouter API key</h4>
                     <p>Manage and test your OpenRouter credential.</p>
                   </div>
-                  <span id="apiArrow" class="arrow">&#9660;</span>
+                  <span id="apiArrow" class="arrow" aria-hidden="true">&#9660;</span>
                 </div>
 
                 <div id="apiSettingsArea" class="settings-collapsible-area u-display-none">

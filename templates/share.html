@@ -55,9 +55,11 @@
       <!-- Lange Fragen kommen schon auf drei Zeilen eingeklappt an (nur mit
            Skript, @media (scripting: enabled)); check-page.js zeigt den Link
            auf der dritten Zeile, wenn wirklich etwas abgeschnitten ist. So
-           klappt nichts nach dem ersten Bild zusammen (Apple-Audit I2). -->
+           klappt nichts nach dem ersten Bild zusammen (Apple-Audit I2).
+           Frage und Antwort sind Inhalt: nie uebersetzt, in ihrer eigenen
+           Sprache (content_lang aus der Route, a11y-Audit L1). -->
       <div class="wp-question-wrap">
-        <h1 id="shareQuestion" class="share-question is-clamped{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
+        <h1 id="shareQuestion" class="share-question is-clamped{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ question }}</h1>
         <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
       </div>
       <div class="share-meta">
@@ -190,7 +192,7 @@
       <div id="consensusView" class="share-view">
         <section class="legal-panel">
           <h2>{% if is_agent %}Answer{% else %}Consensus answer{% endif %}</h2>
-          <div class="share-md">{{ consensus_html | safe }}</div>
+          <div class="share-md" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ consensus_html | safe }}</div>
         </section>
         {% if has_differences_view and contradiction_count %}
         <button type="button" id="diffTeaser" class="share-diff-teaser" data-umami-event="share_diff_teaser_click">
@@ -263,6 +265,8 @@
                 aria-controls="shareCitationText" aria-expanded="true" hidden>Show full citation</button>
         <div class="links">
           <button type="button" id="copyCitationBtn" class="button-secondary" data-umami-event="share_page_copy_citation">Copy citation</button>
+          {#- A button's new name is not always read; this line is (a11y audit P7). -#}
+          <span id="copyCitationStatus" class="visually-hidden" role="status"></span>
           <a href="/app" class="button-primary">Ask your own question</a>
         </div>
       </section>
@@ -319,7 +323,7 @@
       </section>
 
       {% if not is_private %}<div class="share-report">
-        <button type="button" id="shareReportToggle" class="share-report-toggle">Report this page</button>
+        <button type="button" id="shareReportToggle" class="share-report-toggle" aria-expanded="false" aria-controls="shareReportForm">Report this page</button>
         <form id="shareReportForm" class="share-report-form" hidden>
           <label for="shareReportReason" class="visually-hidden" hidden>Reason</label>
           <select id="shareReportReason">
@@ -331,7 +335,7 @@
           </select>
           <button type="submit">Send report</button>
         </form>
-        <p id="shareReportDone" hidden>Thanks – this page has been reported for review.</p>
+        <p id="shareReportDone" role="status" tabindex="-1" hidden>Thanks – this page has been reported for review.</p>
       </div>{% endif %}
     </div>
   </main>
@@ -369,7 +373,15 @@
       if (teaser) {
         teaser.addEventListener("click", function () {
           differencesBtn.click();
-          differencesView.scrollIntoView({ behavior: "smooth", block: "start" });
+          // The teaser goes with its view: the focus moves on to where it
+          // leads instead of falling back to the page (a11y audit K7).
+          const heading = differencesView.querySelector("h2");
+          if (heading) {
+            heading.tabIndex = -1;
+            heading.focus({ preventScroll: true });
+          }
+          const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          differencesView.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
         });
       }
     })();
@@ -399,6 +411,7 @@
 
       toggle.addEventListener("click", function () {
         form.hidden = !form.hidden;
+        toggle.setAttribute("aria-expanded", String(!form.hidden));
       });
 
       form.addEventListener("submit", function (event) {
@@ -416,6 +429,8 @@
           form.hidden = true;
           toggle.hidden = true;
           done.hidden = false;
+          // The button in focus is gone: the thanks takes the focus and is read.
+          done.focus();
         }).catch(function () {
           submitBtn.disabled = false;
           formError(form, "Reporting failed. Please try again later.");
@@ -450,12 +465,17 @@
     (function () {
       const btn = document.getElementById("copyCitationBtn");
       const textEl = document.getElementById("shareCitationText");
+      const status = document.getElementById("copyCitationStatus");
       if (!btn || !textEl) return;
       btn.addEventListener("click", function () {
         const citation = textEl.textContent.trim();
         function done() {
           btn.textContent = "Copied!";
-          setTimeout(function () { btn.textContent = "Copy citation"; }, 2000);
+          if (status) status.textContent = "Copied!";
+          setTimeout(function () {
+            btn.textContent = "Copy citation";
+            if (status) status.textContent = "";
+          }, 2000);
         }
         if (navigator.clipboard) {
           navigator.clipboard.writeText(citation).then(done);

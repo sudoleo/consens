@@ -242,7 +242,7 @@
               if (accessible) {
                 mark.setAttribute("role", "button");
                 mark.tabIndex = 0;
-                mark.setAttribute("aria-label", passageLabel(group.spans, control.el.getAttribute("aria-label")));
+                mark.setAttribute("aria-label", passageLabel(group.spans, control.el.claimLabel ?? control.el.getAttribute("aria-label")));
               }
               if (!mark.dataset.cxKeyboard) {
                 mark.dataset.cxKeyboard = "1";
@@ -1221,7 +1221,12 @@
             badge.appendChild(ratio);
             badge.setAttribute("aria-haspopup", "dialog");
             // Tastatur/Screenreader: sprechendes Label statt nacktem "4/6".
-            badge.setAttribute("aria-label", claimBadgeLabel(claim, modelsCompared));
+            // Die sichtbare Quote steht vorn, damit Spracheingabe den Knopf
+            // ueber das findet, was sie sieht (WCAG 2.5.3).
+            const badgeLabel = claimBadgeLabel(claim, modelsCompared);
+            badge.setAttribute("aria-label", coverage === "thin" ? badgeLabel : ratio.textContent + ": " + badgeLabel);
+            // Die Marke traegt das Urteil ohne die Quote, die nur hier steht.
+            badge.claimLabel = badgeLabel;
             badge.addEventListener("click", function (event) {
               event.stopPropagation();
               openClaimPopover(claim, badge, modelsCompared, answerNavigation, options);

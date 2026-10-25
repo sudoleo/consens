@@ -56,8 +56,11 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         for preview in previews.all():
             bar = preview.locator('.lp-composer-tools')
             # The mode lives in the (+) menu (as in /app), so the lip starts
-            # with Reasoning.
-            expect(bar.locator('.lp-composer-tool').nth(0)).to_have_attribute('aria-label', 'Reasoning auto')
+            # with Reasoning. Its words are its name (a plain span may not
+            # carry an aria-label, test_a11y_axe.py).
+            expect(bar.locator('.lp-composer-tool').nth(0)).to_have_attribute(
+                'title', 'Reasoning auto · the model decides how long to think')
+            assert bar.locator('.lp-composer-tool').nth(0).get_attribute('aria-label') is None
             expect(bar.locator('.lp-composer-tool')).to_have_count(2)
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
             expect(bar.locator('img')).to_have_count(6)

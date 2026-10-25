@@ -1,5 +1,5 @@
 """Landmarks, Sprungmarke und Fertig-Ansage in /app
-(docs/a11y-audit-2026-10-23.md, B2 und B4).
+(docs/a11y-audit-2026-10-23.md, B2, B3 und B4).
 
 Vor der Eingabe lagen bei voller Chatliste rund 80 Tab-Stopps; die
 Sprungmarke ist deshalb der erste und landet in der Frage. Das Ende eines
@@ -61,3 +61,5 @@ def test_a_finished_run_is_announced(app_page):
 
     expect(status).to_have_text("Answer ready", timeout=45000)
     expect(app_page.locator("#appHeading")).to_have_text("When was the Eiffel Tower completed?")
+    # Under the chat's h1 each message has its own heading (B3).
+    expect(app_page.locator("#threadAsk > h2")).to_have_text("Your message")

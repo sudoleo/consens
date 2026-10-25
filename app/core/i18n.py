@@ -1002,3 +1002,36 @@ def alternate_links(path: str, site_url: str) -> str:
     lines.append(f'<link rel="alternate" hreflang="x-default" href="{site_url}{path}">')
     return "\n  ".join(lines)
 
+
+# ---------------------------------------------------------------------------
+# Language of content
+# ---------------------------------------------------------------------------
+
+# Short words each language uses all the time and the other (and its
+# neighbours) hardly ever. Shared ones ("in", "was", "so") and those of close
+# languages ("is"/"die" Dutch, "es" Spanish, "den" Danish) are left out.
+_FUNCTION_WORDS = {
+    "en": frozenset("the and of to that it for with are this be on not you have or by from at they which".split()),
+    "de": frozenset("der das und ist nicht zu mit von für auf ein eine sich dem im auch sie ich werden wird bei oder sind".split()),
+}
+_CONTENT_WORD = re.compile(r"[^\W\d_]+")
+# Enough of them to tell, and that many times more than of the other language.
+CONTENT_LANGUAGE_MIN_HITS = 5
+CONTENT_LANGUAGE_MARGIN = 3
+
+
+def content_language(text: str) -> str | None:
+    """The language a question or a model's answer is written in, when it is clear.
+
+    Content keeps its language while the frame around it is translated (an
+    English Topic on a German page). Its container says so (``lang``), and a
+    screen reader reads it in the right voice (a11y audit L1). ``None`` for
+    short text, other languages and anything mixed: the page's ``lang`` holds.
+    """
+    words = _CONTENT_WORD.findall(str(text or "")[:4000].lower())
+    hits = sorted(((sum(word in vocabulary for word in words), language)
+                   for language, vocabulary in _FUNCTION_WORDS.items()), reverse=True)
+    (top, best), (runner_up, _) = hits[0], hits[1]
+    if top >= CONTENT_LANGUAGE_MIN_HITS and top >= CONTENT_LANGUAGE_MARGIN * runner_up:
+        return best
+    return None

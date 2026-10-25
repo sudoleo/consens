@@ -485,7 +485,9 @@
       usageEl.className = "agent-usage admin-only";
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
-      preview.setAttribute('aria-relevant', 'additions text');
+      // A line that changes swaps its text node, an addition: "text" as well
+      // read every change twice (a11y audit B5).
+      preview.setAttribute('aria-relevant', 'additions');
       preview.setAttribute('aria-label', 'Progress updates');
       const history = document.createElement('div'); history.className = 'agent-activity-history';
       // One timeline: the agent's notes and its steps in order, then what the

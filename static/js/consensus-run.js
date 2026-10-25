@@ -318,7 +318,15 @@
       const questionBubble = document.createElement("div");
       questionBubble.className = "thread-ask-bubble";
       questionBubble.append(questionText);
-      question.append(questionBubble);
+      // Screen readers find each message and answer by heading, as in the
+      // live turn (#threadAsk, #agentAnswer in index.html).
+      const turnHeading = text => {
+        const heading = document.createElement("h2");
+        heading.className = "visually-hidden";
+        heading.textContent = text;
+        return heading;
+      };
+      question.append(turnHeading("Your message"), questionBubble);
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
       // Verlauf rutscht.
@@ -346,9 +354,12 @@
       const answer = document.createElement("div");
       answer.className = agentTurn ? "thread-history-answer agent-answer" : "thread-history-answer";
       let agentResources = null;
-      if (!agentTurn) {
+      if (agentTurn) answer.append(turnHeading("Answer"));
+      else {
         const answerLabel = document.createElement("div");
         answerLabel.className = "thread-history-answer-label";
+        answerLabel.setAttribute("role", "heading");
+        answerLabel.setAttribute("aria-level", "2");
         answerLabel.textContent = "Consensus answer";
         answer.append(answerLabel);
       }

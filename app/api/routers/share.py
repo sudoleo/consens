@@ -16,7 +16,7 @@ from app.core.security import (
     verify_user_token, extract_id_token, is_user_admin,
     AuthenticationUnavailable, auth_unavailable_error,
 )
-from app.core import seo_entity
+from app.core import i18n, seo_entity
 from app.core.site import SITE_URL
 from app.services import check_page, og_image, source_links
 from app.services import share_snapshots as snapshots
@@ -898,6 +898,8 @@ def share_page(request: Request, slug_id: str):
         "is_private": is_private,
         "question": payload["question"],
         "consensus_html": consensus_html,
+        # The language question and answer are in, for their containers.
+        "content_lang": i18n.content_language(f'{payload["question"]}\n{payload["consensus_md"]}'),
         # Old judge texts say "Model C"; the page names the families (L15).
         "differences": check_page.named_differences(differences),
         # The same cards as in the app: "A vs B", the answer's side first.

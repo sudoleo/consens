@@ -541,6 +541,8 @@ async def topic_page(
         "state_more_href": state_more_href,
         "key_links": source_links.key_links(source_list, answer_md),
         "answer_html": answer_html,
+        # Topics are written in English, also on a German page (docs/i18n.md).
+        "content_lang": "en",
         "sources": source_list,
         "page_history": history,
         "selected_version": {

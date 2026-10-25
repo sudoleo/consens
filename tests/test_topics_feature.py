@@ -1137,7 +1137,10 @@ def test_topic_page_leads_with_the_state_line_and_the_answer(monkeypatch):
     assert text.index("wp-state") < text.index("wpAnswerHeading") < text.index("wp-history")
     assert "Topic started" in text
     assert "<span>How the 3 models compared</span> &middot; <span>1 contradiction</span>" in text
-    assert "<h1 id=\"shareQuestion\" class=\"wp-question share-question\">GPT-6</h1>" in text
+    # Title and answer are English content: never translated, marked as English
+    # for a screen reader on a German page (a11y audit L1).
+    assert "<h1 id=\"shareQuestion\" class=\"wp-question share-question\" data-i18n-skip lang=\"en\">GPT-6</h1>" in text
+    assert '<div class="share-md" data-i18n-skip lang="en">' in text
     assert "What is the current evidence about GPT-6?" in text
 
     # An older version says it is one, and links back to the standing answer.

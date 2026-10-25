@@ -93,13 +93,16 @@
         <div id="heroField" class="lp-prompt lp-hero-prompt">
           <a id="heroAskField" class="lp-hero-ask-link" href="/app?focus=1"
              data-umami-event="landing_hero_open_app"
-             aria-label="Open the app and ask your own question">
+             aria-labelledby="heroAskLabel heroAskText">
           <!-- Every question here is one where a single confident answer is not
                enough: the models plausibly disagree AND being wrong costs the
                reader something. list[0] is what reduced-motion users see, and
                it is also the question the demo behind this field actually runs
-               (static/demo.js), so the field and the demo tell one story. -->
-          <span class="lp-prompt-text" data-type-loop="Can a heat pump heat our 1978 house with the original radiators?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?"></span>
+               (static/demo.js), so the field and the demo tell one story.
+               The link's name is what it does, then the question it shows:
+               speech input finds it by the words on screen (WCAG 2.5.3). -->
+          <span id="heroAskText" class="lp-prompt-text" data-type-loop="Can a heat pump heat our 1978 house with the original radiators?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?"></span>
+          <span id="heroAskLabel" hidden>Open the app and ask your own question</span>
           </a>
           <span class="lp-hero-prompt-bar">
             <span class="lp-attach" aria-hidden="true">
@@ -306,12 +309,12 @@
                   <p><span class="cx-claim is-unanimous">Get a room-by-room heat-loss calculation before anyone quotes a heat pump size</span><button class="claim-badge" type="button"
                       data-claim-anchor="Get a room-by-room heat-loss calculation before anyone quotes a heat pump size"
                       data-claim-agree="ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok"
-                      aria-label="All 6 models that address this agree — open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></p>
+                      aria-label="6/6: All 6 models that address this agree — open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></p>
                   <p><span class="cx-claim is-split">Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones</span><button class="claim-badge has-dissent" type="button"
                       data-claim-anchor="Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones."
                       data-claim-agree="ChatGPT, Claude, Gemini, Grok"
                       data-claim-dissent="Mistral: replace the radiators in every room you use daily | DeepSeek: replace the radiators in the rooms you heat most"
-                      aria-label="4 of 6 models support this — open details"><span class="claim-ratio" aria-hidden="true">4/6</span></button></p>
+                      aria-label="4/6: 4 of 6 models support this — open details"><span class="claim-ratio" aria-hidden="true">4/6</span></button></p>
                 </div>
               </div>
             </div>
@@ -359,7 +362,7 @@
             <div class="lp-step-visual">
               <div class="lp-excerpt">
                 <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
-                  <p><span class="cx-claim is-major is-interactive" role="button" tabindex="0" data-diff-open="lpDiffFlow" aria-haspopup="dialog" aria-label="The models contradict each other here. Open details">Three models would keep most radiators and run at 55 °C, three would replace more of them to run at 45 °C or below.</span></p>
+                  <p><span class="cx-claim is-major is-interactive" role="button" tabindex="0" data-diff-open="lpDiffFlow" aria-haspopup="dialog" aria-describedby="lpMarkFlowVerdict">Three models would keep most radiators and run at 55 °C, three would replace more of them to run at 45 °C or below.</span></p><p id="lpMarkFlowVerdict" hidden>The models contradict each other here. Open details</p>
                 </div>
                 <div class="differences-cards">
                   <details class="diff-card is-contradiction is-major" id="lpDiffFlow" open>
@@ -626,14 +629,14 @@
     <section class="lp-section lp-section--white">
       <!-- The page ends where it began: the same field, now empty and waiting
            for the reader's own question, with the same light on its send
-           control. It opens the app, not the demo. -->
+           control. It opens the app, not the demo. Its name is the words it
+           shows, ending in "Ask the agent" (WCAG 2.5.3). -->
       <div class="lp-shell lp-final">
         <div class="lp-head lp-reveal">
           <h2 class="lp-h2">Ask the agent. Keep watching the answer.</h2>
         </div>
         <div class="lp-hero-composer lp-final-composer lp-composer-preview lp-reveal">
-          <a class="lp-prompt lp-hero-prompt" href="/app?focus=1" data-umami-event="landing_final_open_app"
-             aria-label="Open the app and ask the agent your own question">
+          <a class="lp-prompt lp-hero-prompt" href="/app?focus=1" data-umami-event="landing_final_open_app">
             <span class="lp-prompt-text is-placeholder">What would you want a second opinion on?</span>
             <span class="lp-hero-prompt-bar">
               <span class="lp-attach" aria-hidden="true">
@@ -683,9 +686,11 @@
       }
 
       // Hero prompt: cycle a few example questions, typed in with a cursor.
-      // It loops gently only while in view, so it stays unobtrusive. Scenes 01
-      // and 02 do NOT type on a timer: their playhead is the scroll position
-      // (static/js/landing-scenes.js).
+      // It types only while in view, so it stays unobtrusive, and only once
+      // through: then the first question stays, the one the demo behind the
+      // field runs. Nothing on the page moves for ever (WCAG 2.2.2, a11y
+      // audit P5). Scenes 01 and 02 do NOT type on a timer: their playhead is
+      // the scroll position (static/js/landing-scenes.js).
       document.querySelectorAll(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]").forEach(typeTarget => {
         const list = (typeTarget.dataset.typeLoop || typeTarget.dataset.typeText || "")
           .split("|").map(s => s.trim()).filter(Boolean);
@@ -696,15 +701,16 @@
           typeTarget.textContent = list[0] || "";
         } else {
           const sleep = ms => new Promise(r => window.setTimeout(r, ms));
-          let running = false, visible = false, q = 0;
+          let running = false, visible = false, finished = false, q = 0;
           const loop = async () => {
-            if (running) return;
+            if (running || finished) return;
             running = true;
             typeTarget.classList.add("is-typing");
             while (visible) {
               const text = list[q % list.length];
               for (let i = 1; i <= text.length && visible; i++) { typeTarget.textContent = text.slice(0, i); await sleep(48 + Math.random() * 28); }
               if (!visible) break;
+              if (list.length === 1 || q >= list.length) { finished = true; break; }
               await sleep(2000);
               for (let i = text.length; i >= 0 && visible; i--) { typeTarget.textContent = text.slice(0, i); await sleep(24); }
               await sleep(450);

@@ -24,9 +24,11 @@
   {#- A long question arrives folded to three lines (with script: the clamp
       lives in @media (scripting: enabled)), so nothing the reader has started
       on folds up after the first paint (Apple-Audit I2). The link sits on
-      the third line instead of under it: showing it moves nothing. -#}
+      the third line instead of under it: showing it moves nothing.
+      The question and the answer are content: never translated, and in
+      their own language (content_lang from the route, a11y audit L1). -#}
   <div class="wp-question-wrap">
-    <h1 id="shareQuestion" class="wp-question share-question{% if clamp %} is-clamped{% endif %}{% if heading | length > 120 %} is-long{% endif %}{% if heading | length > 260 %} is-very-long{% endif %}">{{ heading }}</h1>
+    <h1 id="shareQuestion" class="wp-question share-question{% if clamp %} is-clamped{% endif %}{% if heading | length > 120 %} is-long{% endif %}{% if heading | length > 260 %} is-very-long{% endif %}" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ heading }}</h1>
     {% if clamp %}<button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>{% endif %}
   </div>
   {% if subheading %}<p class="wp-subheading">{{ subheading }}</p>{% endif %}
@@ -112,7 +114,7 @@
 {% set folded = sources | length > 5 %}
 <section class="wp-answer" aria-labelledby="wpAnswerHeading">
   <h2 id="wpAnswerHeading" class="{{ heading_class }}">{{ label }}</h2>
-  <div class="share-md">{{ answer_html | safe }}</div>
+  <div class="share-md" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ answer_html | safe }}</div>
   {% if sources %}
   <h3 class="wp-label wp-sources-label">Sources</h3>
   <ol id="shareSources" class="share-sources{% if folded %} is-collapsed is-short{% endif %}">

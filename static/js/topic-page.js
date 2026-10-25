@@ -13,10 +13,12 @@
     var status = document.getElementById("topicFollowStatus");
     if (!form || !status) return;
     var button = form.querySelector("button");
+    var field = form.querySelector("input[type=email]");
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       button.disabled = true;
       status.classList.remove("is-error");
+      field.removeAttribute("aria-describedby");
       status.textContent = "Sending confirmation…";
       status.hidden = false;
       fetch("/api/topics/" + encodeURIComponent(form.dataset.slug) + "/follow", {
@@ -32,6 +34,8 @@
       }).catch(function (error) {
         status.textContent = error.message;
         status.classList.add("is-error");
+        // The field names its error, read again on return to it (a11y audit P7).
+        field.setAttribute("aria-describedby", status.id);
       }).then(function () {
         button.disabled = false;
       });

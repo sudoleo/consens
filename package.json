@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "3.0.4",
+    "axe-core": "4.14.0",
     "dompurify": "3.4.17",
     "esbuild": "^0.28.2",
     "firebase": "10.14.1",

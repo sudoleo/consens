@@ -1,7 +1,7 @@
 <footer class="site-footer footer lp-footer">
   <div class="site-footer-inner footer-inner lp-footer-inner">
     <span>{{ public_footer_note | default('&copy; 2026 consens.io') | safe }}</span>
-    <div class="site-footer-links footer-links lp-footer-links">
+    <nav class="site-footer-links footer-links lp-footer-links" aria-label="Footer">
       <a href="/app">App</a>
       <a href="/topics">Topics</a>
       <a href="/questions">Questions</a>
@@ -19,6 +19,6 @@
       {% else %}
       <a href="?lang=de" hreflang="de" lang="de" translate="no">Deutsch</a>
       {% endif %}
-    </div>
+    </nav>
   </div>
 </footer>
