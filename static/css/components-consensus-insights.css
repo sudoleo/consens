@@ -340,6 +340,12 @@
   filter: grayscale(1);
 }
 
+/* Dunkel werden farbige Marken in Graustufen zu dunkel fuer ihren Chip
+   (DeepSeek 2,2:1): eine Stufe heller, bis der Zeiger die Farbe holt. */
+.dark-mode .cx-card-logo > img {
+  filter: grayscale(1) brightness(1.4);
+}
+
 .dark-mode .cx-card-logo > img:is(.chatgpt-logo, .grok-logo, .mono-logo) {
   filter: grayscale(1) invert(1) brightness(0.92);
 }
