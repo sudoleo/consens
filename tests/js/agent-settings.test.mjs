@@ -58,7 +58,7 @@ function boot({ storage = {}, pick = { model_id: "sonnet", reasoning_effort: "me
 
 describe("Agent settings card", () => {
   it("shows each change as now -> new with the note, under the answer", () => {
-    const { render, card, rows, body } = boot();
+    const { render, card, rows, body } = boot({ storage: { "consensio.agentModel.v1": JSON.stringify({ model_id: "sonnet", reasoning_effort: "medium" }) } });
     render({ settings: { agent_model: { model_id: "sonnet", reasoning_effort: "medium" },
       agent_preferences: { depth: "quick" }, consensus_preset: "balanced", claim_counts: true },
     notes: { agent_model: "Max is available on Pro; Medium is the highest level for this account." } });
@@ -153,6 +153,25 @@ describe("Agent settings card", () => {
     const { render, rows } = boot({ storage: { "consensio.agentModel.v1": JSON.stringify({ model_id: "opus", reasoning_effort: "default" }) } });
     render({ settings: { agent_model: { model_id: "sonnet", reasoning_effort: "medium" } }, notes: {} });
     expect(rows()).toEqual(["Chat model in new chats: Claude Opus 4.8 → Claude Sonnet 5.5"]);
+  });
+
+  it("compares new chats by model and level, as the server does", () => {
+    // agent_settings.py prepares the pick when new chats would start with
+    // another model or level; none stored is the default model on Auto.
+    const proposal = { settings: { agent_model: { model_id: "sonnet", reasoning_effort: "medium" } }, notes: {} };
+    const level = boot({ storage: { "consensio.agentModel.v1": JSON.stringify({ model_id: "sonnet", reasoning_effort: "default" }) } });
+    level.render(proposal);
+    expect(level.rows()).toEqual(["Reasoning in new chats: Auto → Medium"]);
+    expect(level.card().querySelector(".agent-settings-apply").hidden).toBe(false);
+    const none = boot();
+    none.render(proposal);
+    expect(none.rows()).toEqual(["Chat model in new chats: Default → Claude Sonnet 5.5"]);
+    none.card().querySelector(".agent-settings-apply").click();
+    expect(none.window.App.agentChat.applyPick).toHaveBeenCalledWith({ model_id: "sonnet", reasoning_effort: "medium" });
+    // Both already start with it: in place.
+    const same = boot({ storage: { "consensio.agentModel.v1": JSON.stringify({ model_id: "sonnet", reasoning_effort: "medium" }) } });
+    same.render(proposal);
+    expect(same.card().dataset.state).toBe("applied");
   });
 
   it("goes with its answer: another turn, no proposal or Dismiss removes it", () => {

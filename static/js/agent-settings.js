@@ -101,14 +101,18 @@
     for (const [name, value] of Object.entries(proposal.settings)) {
       if (name === 'agent_model') {
         // This chat's next message first; when it already runs the change,
-        // what new chats start with (the account's pick).
+        // what new chats start with: the account's pick, model and level,
+        // none being the default model on Auto (agent_settings.py compares
+        // the same and prepares the pick when either differs).
         const now = App.agentChat?.pick?.() || {};
         const account = App.userSettings.get('agent_model') || {};
         const effort = value.reasoning_effort || 'default';
         const chatDiffers = now.model_id !== value.model_id || (now.reasoning_effort || 'default') !== effort;
-        if (chatDiffers || !account.model_id || account.model_id === value.model_id) {
+        if (chatDiffers) {
           add('Chat model', modelLabel(now.model_id), modelLabel(value.model_id));
           add('Reasoning', EFFORTS[now.reasoning_effort || 'default'], EFFORTS[effort]);
+        } else if (account.model_id === value.model_id) {
+          add('Reasoning in new chats', EFFORTS[account.reasoning_effort || 'default'], EFFORTS[effort]);
         } else {
           add('Chat model in new chats', modelLabel(account.model_id), modelLabel(value.model_id));
         }

@@ -507,6 +507,8 @@
   "Apply": "Übernehmen",
   "Dismiss": "Schließen",
   "Settings in place": "Einstellungen gesetzt",
+  "Chat model in new chats": "Chatmodell in neuen Chats",
+  "Reasoning in new chats": "Nachdenken in neuen Chats",
   "Default": "Standard",
   "These settings are already in place.": "Diese Einstellungen sind bereits gesetzt.",
   "Some settings could not be applied. Change them in Settings.": "Einige Einstellungen konnten nicht übernommen werden. Ändere sie in den Einstellungen.",
