@@ -258,8 +258,9 @@ class SpritesBackend(VMBackend):
         try:
             ws = self._open(url)
         except InvalidStatus as exc:
-            logging.warning("Agent VM request refused operation=exec status=%s", exc.response.status_code)
-            raise VMUnavailable(f"exec: HTTP {exc.response.status_code}") from None
+            status = exc.response.status_code
+            logging.warning("Agent VM request refused operation=exec status=%s", status)
+            raise VMUnavailable(f"exec: HTTP {status}") from None
         except (OSError, TimeoutError) as exc:
             logging.warning("Agent VM request failed operation=exec category=%s", safe_exception(exc))
             raise VMUnavailable("exec: no connection") from None

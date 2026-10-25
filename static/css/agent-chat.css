@@ -638,11 +638,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm[open] > summary .agent-vm-target { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-vm-meta { flex: none; padding-left: .25em; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-vm-meta:empty { display: none; }
+/* The app's one chevron (foundation.css --chevron-mask): right while folded, down when open. */
 .agent-vm.has-output > summary::after {
-  content: ""; flex: none; align-self: center; width: .38em; height: .38em; margin: 0 .15em 0 .1em;
-  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3); transform: rotate(-45deg);
+  content: ""; flex: none; align-self: center; width: 1em; height: 1em; color: var(--ink-3); background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
 }
-.agent-vm.has-output[open] > summary::after { transform: rotate(45deg); }
+.agent-vm.has-output[open] > summary::after { transform: none; }
 .agent-vm-output {
   box-sizing: border-box; max-height: 15em; margin: 6px 0 0; padding: 8px 10px; overflow: auto;
   border-radius: 8px; background: color-mix(in srgb, var(--agent-ink) 5%, transparent);
