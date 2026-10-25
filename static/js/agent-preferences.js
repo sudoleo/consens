@@ -1,7 +1,8 @@
 // Agent · Beta settings: how deep the comparison models answer, when the
 // answer starts (quorum), how freely Agent picks its models (autonomy),
 // whether the judges check the answer (judges, "Answer check") and, for
-// admins, audit instead of comparison (audit, agent_audit.py). An
+// admins, audit instead of comparison (audit, agent_audit.py) and the
+// agent's own Linux VM (vm, agent_vm_tools.py). An
 // account setting ("agent_preferences", user-settings.js) sent with every
 // Agent message; a running turn keeps the values it started with.
 (function () {
@@ -10,12 +11,13 @@
   const settings = App.userSettings;
   // quorum "all" since 2026-10-07: a model that answers after the answer has
   // started no longer reaches its check.
-  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "off" });
+  const DEFAULTS = Object.freeze({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "off",
+    vm: "off" });
   const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"],
-    judges: ["on", "off"], audit: ["off", "on"] };
-  // The audit row is .admin-only in the page; the server runs audit for admins only.
+    judges: ["on", "off"], audit: ["off", "on"], vm: ["off", "on"] };
+  // The audit and VM rows are .admin-only in the page; the server runs them for admins only.
   const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect",
-    judges: "agentJudgesSelect", audit: "agentAuditSelect" };
+    judges: "agentJudgesSelect", audit: "agentAuditSelect", vm: "agentVmSelect" };
 
   // Only what the user chose is stored, so a later change of a default
   // reaches everyone who never touched that setting.

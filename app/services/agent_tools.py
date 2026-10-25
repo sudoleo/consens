@@ -55,6 +55,9 @@ class ReadOnlyTool:
     # Optional activity(arguments, result) -> extra fields of the tool's trace
     # event (result is None while it runs), e.g. the host read_source opens.
     activity: Optional[Callable] = None
+    # The tool reports while it runs: execute(..., report=fields) updates its
+    # running trace event with ``fields`` (a VM command's output so far).
+    reports: bool = False
 
     def schema(self):
         if (not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.name)

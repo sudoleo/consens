@@ -406,6 +406,12 @@ class FileContext:
         """User selection first, then visual files the model opened, at most five."""
         return list(dict.fromkeys([*self.file_ids, *self.read_ids]))[:5]
 
+    def attachment(self, file_id):
+        """``(metadata, bytes)`` of one file of this chat, downloaded once per
+        turn (the Agent VM's input folder, agent_vm_tools.py)."""
+        data = self.files.get(self.uid, self.chat_id, file_id)
+        return data, self._raw(file_id, data)
+
     def _raw(self, file_id, data):
         """The file's bytes for this turn, downloaded on first use.
 

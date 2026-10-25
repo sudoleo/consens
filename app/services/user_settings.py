@@ -23,7 +23,7 @@ from firebase_admin import firestore
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.services import persistence_guard
-from app.services.agent_comparison import AgentAudit, AgentAutonomy, AgentDepth, AgentJudges, AgentQuorum
+from app.services.agent_comparison import AgentAudit, AgentAutonomy, AgentDepth, AgentJudges, AgentQuorum, AgentVM
 from app.services.llm.agent_client import REASONING_EFFORT_PATTERN
 
 
@@ -63,7 +63,7 @@ class AgentModelSetting(_Strict):
 
 
 class AgentPreferencesSetting(_Strict):
-    """Agent depth, answer start, model choice, answer check and audit; only the fields chosen."""
+    """Agent depth, answer start, model choice, answer check, audit and VM; only the fields chosen."""
 
     depth: Optional[AgentDepth] = None
     quorum: Optional[AgentQuorum] = None
@@ -72,6 +72,8 @@ class AgentPreferencesSetting(_Strict):
     # Audit instead of comparison: shown to admins only, and only an admin's
     # message runs with it (routers/agent.py effective_preferences).
     audit: Optional[AgentAudit] = None
+    # Agent VM: shown to admins only, and only an admin's message runs with it.
+    vm: Optional[AgentVM] = None
 
 
 class CompareModelSetting(_Strict):

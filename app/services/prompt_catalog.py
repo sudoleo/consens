@@ -30,6 +30,11 @@ def _reviewer():
     return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, review_system_prompt(DEFAULT_TIMEZONE), count=1)
 
 
+def _vm():
+    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    return AGENT_VM_PROMPT
+
+
 def _delegation(name):
     from app.services import agent_delegation_config
     return agent_delegation_config.PROMPTS[name]
@@ -65,6 +70,11 @@ _ENTRIES = (
      "round (the rest of the log and the answer, up to three search rounds); the message's files go along. The "
      "date line is filled in per request.",
      "agent_audit.py:review_system_prompt()", _reviewer),
+    ("agent_vm", "Agent: Linux VM",
+     "Appended to \"Agent: instructions\" or \"Agent: audit mode instructions\" before the memory instructions when "
+     "an admin switched on Agent VM (agent_vm_tools.py) and the chat has no Google data: the agent's own VM with "
+     "vm_exec, vm_read_file and vm_write_file.",
+     "prompt_defaults.py:AGENT_VM_PROMPT", _vm),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "
      "personal instructions replace it.",

@@ -4998,8 +4998,9 @@ die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 `agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum,
 Agent freedom (`autonomy`: `guided`/`free`), Answer check (`judges`:
 `on`/`off`, `#agentJudgesSelect`) und für Admins Audit instead of comparison
-(`audit`: `off`/`on`, `#agentAuditSelect` in einer `.admin-only`-Zeile; Details
-in `docs/agent-mode.md`) als
+(`audit`: `off`/`on`, `#agentAuditSelect`) und Agent VM (`vm`: `off`/`on`,
+`#agentVmSelect`), je in einer `.admin-only`-Zeile (Details in
+`docs/agent-mode.md`), als
 Kontoeinstellung `agent_preferences` (nur gewählte Felder), gibt den Reiter `agentSettingsSection` über
 `App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
 `agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
@@ -5520,6 +5521,31 @@ Admins, Turn eines aktiven Chats). Anzeige: `agent-work-log.js`
 (`App.agentWorkLog.render`, `reset` beim Kontowechsel) als letzter Abschnitt
 der Sitzungsliste in der Seitenleiste, `.admin-only`, lädt erst beim Öffnen,
 folgt laufenden Turns nur, solange der Abschnitt sichtbar ist.
+
+### Agent VM (Agent, Admins, seit 2026-10-25)
+
+Einstellung `agent_preferences.vm` (`off`/`on`), wie `audit` nur für Admins
+wirksam (`routers/agent.py::ADMIN_PREFERENCES`). Mit `on` registriert
+`DelegationLoop` auf Account-Turns ohne Google-Daten `agent_vm_tools.VMTools`
+(`vm_exec`, `vm_read_file`, `vm_write_file`) und hängt `AGENT_VM_PROMPT` vor
+dem Memory-Block an; in beiden Modi. Eine VM pro Chat (Fly.io Sprites über
+`agent_vm.SpritesBackend`, Token `SPRITES_TOKEN` nur im Backend), angelegt
+beim ersten VM-Aufruf, über Nachrichten wiederverwendet. Der erste Aufruf
+einer Nachricht schreibt das Chat-Feld `agent_vm`, ruft `ensure` (anlegen,
+Egress nur zu den Standardzielen des Anbieters), legt den Checkpoint der
+Nachricht an und kopiert ihre Anhänge nach `/home/sprite/input`. Befehle
+laufen unter einem Limit (60 s, höchstens 300 s, nie über `answer_time_left`)
+mit VM-seitigem `timeout`; Ausgaben gehen gekürzt (Ende bleibt) an das Modell.
+Jeder Aufruf ist ein Tool-Event mit `command`/`path`, live `output`
+(`ReadOnlyTool.reports`, `_execute` übergibt `report`), am Ende `exit_code`,
+`duration_ms`, `timed_out` oder `outcome`; im Audit-Modus steht das Ergebnis
+als `tool`-Eintrag mit Herkunft `vm` im Arbeitsprotokoll. Der Turn speichert
+`agent_vm` (`checkpoint`, `calls`, `commands`, `seconds`; `finish_run`,
+`turn_detail`). VM-Werkzeuge sind `REPEATABLE_TOOLS`, `vm_exec`/`vm_read_file`
+sperren Memory. Ein Ausfall (`VMUnavailable`) schaltet die VM für die
+Nachricht ab, die Antwort läuft weiter. Anzeige: `agent-activity.js` `vmView`
+(kompakter Block, offen während der Befehl läuft, danach eingeklappt;
+Befehl/Ausgabe in `<code>`/`<pre>`). Details: `docs/agent-mode.md`, „Agent VM“.
 
 ### Eingefügten Text prüfen (Agent, seit 2026-10-09)
 „Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist
@@ -7366,8 +7392,8 @@ verlässt, macht den Datensatz nicht unlesbar; gespeicherte Altwerte, die nicht
 mehr validieren, fallen je Einstellung weg.
 
 Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
-`agent_preferences` (`depth`/`quorum`/`autonomy`/`judges`/`audit`, nur gewählte; `audit` wirkt nur für
-Admins, `routers/agent.py::effective_preferences`),
+`agent_preferences` (`depth`/`quorum`/`autonomy`/`judges`/`audit`/`vm`, nur gewählte; `audit` und `vm`
+wirken nur für Admins, `routers/agent.py::effective_preferences`),
 `compare_models` (`{Familienlabel: {enabled, model}}`),
 `consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
 / 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die
@@ -8057,6 +8083,8 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget)
+  agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES "defaults"), vm_name je Chat, delete_chat_vm für die Chat-Löschung; ein Anbieterwechsel betrifft nur diese Datei
+  agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file (Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
@@ -8153,7 +8181,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     Metadaten, absteigend nach `updated_at`, höchstens 50 Dokumente pro Seite.
     `chat_state/quota` hält den transaktionell serialisierten `active_count`;
     Altbestände initialisieren ihn beim ersten Schreibzugriff aus dem begrenzten
-    Owner-Bestand. Create und das Setzen von `status=deleting` erhöhen bzw.
+    Owner-Bestand. Seit 2026-10-25 optional `agent_vm` (`{provider, name,
+    created_at}`): die Agent-VM des Chats, geschrieben vor ihrem Anlegen
+    (`agent_vm_tools.VMSession._record`); `_purge_chat` löscht sie zuerst
+    (`agent_vm.delete_chat_vm`, ein Fehler hält den Lösch-Job). Create und das Setzen von `status=deleting` erhöhen bzw.
     verringern ihn in derselben Transaktion. Erst danach löscht die idempotente
     Kaskade Turns, Modellantworten, Context-Versionen und zuletzt den Chat.
     Bei erreichtem Limit (`MAX_CHATS_PER_OWNER`, 403 `chat_limit_reached`)
@@ -8695,6 +8726,8 @@ alte Gemini-ADC-JSON ist entfernt.
   `FIRESTORE_EMULATOR_HOST` sowie die in `app/core/e2e_profile.py` fest
   allowgelisteten Demo-Projekt-ID. Das Profil ist in Produktion verboten und
   in der normalen `.env` deaktiviert.
+- Agent VM: `SPRITES_TOKEN` (Fly.io Sprites, nur im Backend, nie in einer
+  VM); ohne ihn melden die VM-Werkzeuge „not available“ (`agent_vm.backend`).
 - Der serverseitige LLM-Key ist ausschließlich `OPENROUTER_API_KEY`.
   App-Consensus, Consensus-API und Benchmark lösen ihn über
   `llm.credentials.resolve_developer_api_keys` mit identischer

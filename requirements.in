@@ -19,6 +19,7 @@ requests
 urllib3
 openai
 tiktoken  # agent admission; pulls in regex
+websockets  # Agent VM: live command output from Sprites (agent_vm.py)
 
 # Firebase and Google Cloud
 firebase-admin

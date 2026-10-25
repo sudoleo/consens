@@ -129,6 +129,9 @@ def test_agent_preferences_change_field_by_field(repository):
     # null still resets the whole setting to the app default.
     assert "agent_preferences" not in repository.update(UID, {"agent_preferences": None})[0]
     assert repository.update(UID, {"agent_preferences": {"quorum": "fast"}})[0]["agent_preferences"] == {"quorum": "fast"}
+    # The admin settings are stored like the others (the route decides who runs them).
+    values = repository.update(UID, {"agent_preferences": {"audit": "on", "vm": "on"}})[0]
+    assert values["agent_preferences"] == {"quorum": "fast", "audit": "on", "vm": "on"}
 
 
 def test_update_drops_a_stored_value_that_no_longer_validates(repository, database):

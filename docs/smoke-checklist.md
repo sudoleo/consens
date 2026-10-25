@@ -102,6 +102,20 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Schlussrunde.
       Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
       `agent-review.test.mjs`, `agent-delegation.test.mjs`.
+- [ ] Agent VM (2026-10-25, Admin-Konto, echter Provider, `SPRITES_TOKEN`
+      gesetzt): Settings › Agent · Beta › Agent VM auf On (die Zeile fehlt für
+      Nicht-Admins). Mit einer CSV im Anhang: „Rechne den Mittelwert der
+      zweiten Spalte mit Python aus.“ In den Fortschrittszeilen erscheint
+      `$ …` mit der Ausgabe, die während des Befehls nachläuft; fertig klappt
+      der Block ein und nennt rechts Exit-Code (nur ≠ 0) und Dauer (ab 1 s).
+      `ls ~/input` zeigt den Anhang. Eine zweite Nachricht im selben Chat
+      findet die Dateien der ersten wieder; die Admin-Verbrauchszeile nennt
+      „VM …s“. `curl https://example.com` scheitert an der DNS-Sperre,
+      `pip install` klappt. Stop während eines langen Befehls (`sleep 120`):
+      der Befehl endet auch in der VM. Ohne `SPRITES_TOKEN`: „VM not
+      available“, die Antwort kommt trotzdem. Chat löschen: die Sprite ist im
+      Sprites-Dashboard weg. Chat mit Gmail/Kalender: keine VM-Werkzeuge.
+      Automatisiert: `test_agent_vm.py`, `agent-vm-activity.test.mjs`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,

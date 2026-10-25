@@ -163,13 +163,14 @@
   // defaults were never chosen.
   const AGENT_PREFERENCES_LEGACY_KEY = "consensio.agentPreferences.v1";
   const AGENT_PREFERENCES_LEGACY_DEFAULTS = { depth: "auto", quorum: "balanced", autonomy: "guided" };
-  // audit (Audit instead of comparison) is for admin accounts only (agent-preferences.js).
+  // audit (Audit instead of comparison) and vm (Agent VM) are for admin accounts only (agent-preferences.js).
   const AGENT_CHOICES = {
     depth: ["auto", "quick", "full"],
     quorum: ["balanced", "fast", "all"],
     autonomy: ["guided", "free"],
     judges: ["on", "off"],
     audit: ["off", "on"],
+    vm: ["off", "on"],
   };
 
   function chosenAgentPreferences(value, unchosen) {

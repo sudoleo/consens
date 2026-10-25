@@ -68,6 +68,7 @@ AgentQuorum = Literal["balanced", "fast", "all"]
 AgentAutonomy = Literal["guided", "free"]
 AgentJudges = Literal["on", "off"]
 AgentAudit = Literal["off", "on"]
+AgentVM = Literal["off", "on"]
 
 
 class AgentPreferences(BaseModel):
@@ -90,6 +91,10 @@ class AgentPreferences(BaseModel):
     # follow its work and review its fixed answer (agent_audit.py). Depth, answer start and
     # Agent freedom only steer comparisons, so they do nothing in this mode.
     audit: AgentAudit = "off"
+    # Agent VM (since 2026-10-25, admin accounts only; the route turns it off
+    # for everyone else): the agent gets its own Linux VM for the chat, with
+    # shell commands and files (agent_vm_tools.py), in either mode.
+    vm: AgentVM = "off"
 
 
 def stored_preferences(value):

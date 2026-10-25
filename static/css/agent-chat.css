@@ -616,6 +616,41 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    row instead of on a line of prose. */
 .agent-activity-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .agent-activity-sources .src-ref { top: 0; margin: 0; }
+/* A call in the agent's VM (agent-activity.js vmView): one line with the
+   command or file and how it ended, its output below in a tinted field,
+   open while it runs. Monochrome like the rest of the trace. */
+.agent-vm { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
+.agent-progress > .agent-vm { margin: 0 0 16px; }
+.agent-progress > .agent-vm:last-child { margin-bottom: 0; }
+.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; min-width: 0; list-style: none; cursor: default; }
+.agent-vm > summary::-webkit-details-marker { display: none; }
+.agent-vm.has-output > summary { cursor: pointer; }
+.agent-vm-verb { flex: none; }
+.agent-vm-verb[hidden] { display: none; }
+/* Plain mono text, not the inline-code pill: the output field below is the
+   only tinted surface. */
+.agent-vm .agent-vm-target {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0; border-radius: 0; background: none; color: inherit;
+  font-family: var(--font-mono); font-size: .9em;
+}
+.agent-vm[data-tool="vm_exec"] .agent-vm-target::before { content: "$ "; color: var(--ink-3); }
+.agent-vm[open] > summary .agent-vm-target { white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-vm-meta { flex: none; padding-left: .25em; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+.agent-vm-meta:empty { display: none; }
+.agent-vm.has-output > summary::after {
+  content: ""; flex: none; align-self: center; width: .38em; height: .38em; margin: 0 .15em 0 .1em;
+  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3); transform: rotate(-45deg);
+}
+.agent-vm.has-output[open] > summary::after { transform: rotate(45deg); }
+.agent-vm-output {
+  box-sizing: border-box; max-height: 15em; margin: 6px 0 0; padding: 8px 10px; overflow: auto;
+  border-radius: 8px; background: color-mix(in srgb, var(--agent-ink) 5%, transparent);
+  color: var(--ink-2); font: var(--font-size-xs)/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* Live, a running command shows the last lines of its output. */
+.agent-progress .agent-vm-output { max-height: 9.3em; }
+.agent-vm-output[hidden] { display: none; }
 /* The end of the history: how the notes came about and the model it ran on,
    in the quietest ink, one line each. */
 .agent-activity-note, .agent-activity-run-details, .agent-usage { margin: 16px 0 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }

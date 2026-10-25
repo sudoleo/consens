@@ -518,7 +518,7 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # which would invalidate a completed review even on trailing newlines.
         # Agent output is already bounded at generation/storage time.
         result["assistant_response"] = result["consensus"] = text if isinstance(text, str) else ""
-        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal"):
+        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal", "agent_vm"):
             if field in source:
                 result[field] = source[field]
         # The turn has a work log (agent_work_log, audit mode): its view
@@ -1387,7 +1387,13 @@ class ChatStore:
 
     def _purge_chat(self, uid: str, chat_id: str) -> None:
         from app.services.agent_files import AgentFiles
+        from app.services.agent_vm import delete_chat_vm
         AgentFiles(self.db).cleanup_chat(uid, chat_id)
+        # The chat's Agent VM holds its files and the agent's work: deleted
+        # first, and a provider failure keeps the deletion job retrying.
+        snapshot = self._chat_ref(uid, chat_id).get()
+        if snapshot.exists:
+            delete_chat_vm(uid, chat_id, (snapshot.to_dict() or {}).get("agent_vm"))
         self._delete_chat_tree(self._chat_ref(uid, chat_id))
 
     def _deletion_job_ref(self, uid: str, chat_id: str):

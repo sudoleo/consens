@@ -10,7 +10,8 @@ function boot(allowed) {
       <select id="agentQuorumSelect"><option value="balanced">B</option><option value="fast">F</option><option value="all">A</option></select>
       <select id="agentAutonomySelect"><option value="guided">G</option><option value="free">F</option></select>
       <select id="agentJudgesSelect"><option value="on">On</option><option value="off">Off</option></select>
-      <select id="agentAuditSelect"><option value="off">Off</option><option value="on">On</option></select>`,
+      <select id="agentAuditSelect"><option value="off">Off</option><option value="on">On</option></select>
+      <select id="agentVmSelect"><option value="off">Off</option><option value="on">On</option></select>`,
     before(window) {
       window.App = { agentChat: { canUse: () => allowed }, settingsTabs: { setTabAvailable: vi.fn() } };
     },
@@ -23,7 +24,7 @@ function boot(allowed) {
 it("saves every choice, restores them and ignores unknown stored values", () => {
   const { window: w, document: d } = boot(true);
   // Since 2026-10-07 the answer waits for every model by default.
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "off" });
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "off", vm: "off" });
   const depth = d.getElementById("agentDepthSelect");
   depth.value = "full"; depth.dispatchEvent(new w.Event("change"));
   // Only the explicit choice is stored, so a later default still applies.
@@ -38,13 +39,17 @@ it("saves every choice, restores them and ignores unknown stored values", () => 
   // Audit instead of comparison (admins): the comparison models review the answer.
   const audit = d.getElementById("agentAuditSelect");
   audit.value = "on"; audit.dispatchEvent(new w.Event("change"));
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on" });
+  // Agent VM (admins): the agent's own Linux VM.
+  const vm = d.getElementById("agentVmSelect");
+  vm.value = "on"; vm.dispatchEvent(new w.Event("change"));
+  expect(w.App.agentPreferences.get())
+    .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on", vm: "on" });
   expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2")))
-    .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on" });
+    .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on", vm: "on" });
   // Unknown stored values fall back to the defaults.
-  w.localStorage.setItem("consensio.agentPreferences.v2", JSON.stringify({ depth: "deep", quorum: "fast", judges: "maybe", audit: "yes" }));
+  w.localStorage.setItem("consensio.agentPreferences.v2", JSON.stringify({ depth: "deep", quorum: "fast", judges: "maybe", audit: "yes", vm: "maybe" }));
   w.App.agentPreferences.sync();
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "fast", autonomy: "guided", judges: "on", audit: "off" });
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "fast", autonomy: "guided", judges: "on", audit: "off", vm: "off" });
   expect(depth.value).toBe("auto");
   expect(quorum.value).toBe("fast");
   expect(autonomy.value).toBe("guided");
@@ -58,7 +63,7 @@ it("moves v1 settings over without pinning the old defaults", () => {
   // default of that time, not a choice; "free" was chosen.
   w.localStorage.removeItem("consensio.agentPreferences.v2");
   w.localStorage.setItem("consensio.agentPreferences.v1", JSON.stringify({ depth: "auto", quorum: "balanced", autonomy: "free" }));
-  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "free", judges: "on", audit: "off" });
+  expect(w.App.agentPreferences.get()).toEqual({ depth: "auto", quorum: "all", autonomy: "free", judges: "on", audit: "off", vm: "off" });
   expect(w.localStorage.getItem("consensio.agentPreferences.v1")).toBe(null);
   expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2"))).toEqual({ autonomy: "free" });
   // A real v1 choice of a faster start survives.

@@ -7,9 +7,10 @@
   "use strict";
   const App = window.App = window.App || {};
   const KINDS = { start: 'Start', context: 'Context', step: 'Step', tool: 'Tool', app: 'App', end: 'End' };
-  const DATA = { user: 'User', web: 'Web', file: 'File', google: 'Google', memory: 'Memory', agent: 'Model', app: 'App' };
+  const DATA = { user: 'User', web: 'Web', file: 'File', google: 'Google', memory: 'Memory', agent: 'Model', vm: 'VM',
+    app: 'App' };
   // Content from outside the user and the app: data, never instructions.
-  const UNTRUSTED = new Set(['web', 'file', 'google', 'agent']);
+  const UNTRUSTED = new Set(['web', 'file', 'google', 'agent', 'vm']);
   const POLL_MS = 3000;
   const PAGE = 200;
   const logs = new Map();

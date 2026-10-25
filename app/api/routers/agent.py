@@ -88,11 +88,16 @@ def require_reasoning_access(uid, reasoning_effort):
         raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
 
 
+# Agent settings for admin accounts only: Audit instead of comparison
+# (agent_audit.py) and Agent VM (agent_vm_tools.py).
+ADMIN_PREFERENCES = ("audit", "vm")
+
+
 def effective_preferences(uid, preferences):
-    """The Agent settings this message runs with. Audit instead of comparison
-    (agent_audit.py) is for admin accounts only; any other account runs as
-    before, also when its saved settings still say "on" (a former admin)."""
-    if preferences.audit != "on":
+    """The Agent settings this message runs with. Any account other than an
+    admin's runs ADMIN_PREFERENCES as before, also when its saved settings
+    still say "on" (a former admin)."""
+    if all(getattr(preferences, name) != "on" for name in ADMIN_PREFERENCES):
         return preferences
     try:
         admin = is_user_admin(uid)
@@ -100,7 +105,7 @@ def effective_preferences(uid, preferences):
         raise HTTPException(
             status_code=503, detail="Account tier is temporarily unavailable. Please retry."
         ) from None
-    return preferences if admin else preferences.model_copy(update={"audit": "off"})
+    return preferences if admin else preferences.model_copy(update=dict.fromkeys(ADMIN_PREFERENCES, "off"))
 
 
 def _memory_snapshot(uid):

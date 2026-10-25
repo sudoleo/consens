@@ -34,7 +34,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 | `start` | Beginn von `DelegationLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
 | `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App und Nachrichten von Workern, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
 | `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`), Abschlussgrund, Verbrauch |
-| `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Fehler |
+| `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler |
 | `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`), Antwort fixiert (`answer_fixed`) |
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
@@ -65,9 +65,9 @@ Ergebnis steht als `tool`-Eintrag darin.
 
 - `seq`: fortlaufend je Turn, vergeben unter einer Sperre, auch bei Workern.
 - `data`: woher der Inhalt stammt (`user`, `web`, `file`, `google`, `memory`,
-  `agent` für Modellausgaben, `app`). Inhalt aus `web`, `file`, `google` und
-  `agent` ist für jeden späteren Leser Daten, nie Anweisung
-  (`UNTRUSTED_DATA`). Im Kontext entscheidet die Herkunft, nicht der Text
+  `agent` für Modellausgaben, `vm` für das, was die eigene VM des Agenten
+  zurückgab, `app`). Inhalt aus `web`, `file`, `google`, `agent` und `vm` ist
+  für jeden späteren Leser Daten, nie Anweisung (`UNTRUSTED_DATA`). Im Kontext entscheidet die Herkunft, nicht der Text
   (`context_data`): `user` sind nur Nachrichten des Nutzers vor der Frage
   dieses Laufs und die Frage selbst; was der Lauf danach als Nutzernachricht
   anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
@@ -209,7 +209,10 @@ Agent-Panel.
    `agent_audit.review_input` ersetzt.
 3. **Später, je mit eigener Entscheidung:** Befunde gehen an den Agenten, der
    darauf antwortet; automatische Abgleiche (zitierte URLs und Zitate gegen das
-   Protokoll); Einträge für VM, Befehle und Dateien.
+   Protokoll); eigene Einträge für die laufende Ausgabe eines Befehls. Seit
+   2026-10-25 stehen Befehle und Dateien der Agent-VM ([agent-mode.md](agent-mode.md),
+   „Agent VM“) als `tool`-Einträge mit Herkunft `vm` im Protokoll, sobald sie
+   fertig sind.
 
 ## Entscheidungen (Max, 2026-10-25)
 

@@ -75,14 +75,20 @@ RATE_LIMIT_RETRY_MIN_TURN_SECONDS = 60
 # Pace of the reasoning excerpts a step that may answer shows while it thinks.
 THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
-REPEATABLE_TOOLS = frozenset({"wait_agents"})
+# A VM call's result depends on the VM's state, which every command may
+# change: running the tests again after an edit is progress. The turn's step
+# and time limits bound them (agent_vm_tools.py).
+REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file"})
 # Tools that bring outside content into the agent's context: model answers
 # and their source excerpts, pages, emails, calendars, files. Once one of them
 # returned in a message, its memory can no longer change (memory_locked): a
 # page could otherwise steer update_memory, whose evidence check only proves
 # that some words of the user are quoted (review 2026-10-14).
+# A VM command's output and a file read in the VM are outside content too
+# (the user's files, downloaded packages, programs' output).
 MEMORY_LOCKING_TOOLS = frozenset({"compare_models", "check_text", "read_source", "calendar_read",
-                                  "gmail_read", "import_gmail_attachment", "read_file", "read_document"})
+                                  "gmail_read", "import_gmail_attachment", "read_file", "read_document",
+                                  "vm_exec", "vm_read_file"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800
@@ -405,6 +411,18 @@ class DelegationLoop(AgentLoop):
             self.settings_tools = agent_settings.SettingsTools(self, google_data=bool(google_selection or google_data))
             self.messages[0]["content"] += "\n\n" + agent_settings.ORCHESTRATOR_PROMPT
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
+                                         argument_limit=max(self.registry.argument_limit, 24_000))
+        # The agent's own Linux VM (Agent VM, admins; agent_vm_tools.py): on
+        # account-mode turns, never with Google data (it would leave the
+        # allowed providers). A setting, so the prompt stays cacheable.
+        self.vm_tools = None
+        if (self.comparison is not None and self.policy.account_budget_only and not google_selection
+                and not google_data and agent_preferences is not None and agent_preferences.vm == "on"):
+            from app.services.agent_vm_tools import VMTools
+            from app.services.prompt_defaults import AGENT_VM_PROMPT
+            self.vm_tools = VMTools(self)
+            self.messages[0]["content"] += "\n\n" + AGENT_VM_PROMPT
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.vm_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
@@ -822,6 +840,14 @@ class DelegationLoop(AgentLoop):
                     except Exception:
                         logging.warning("Agent tool activity fields failed tool=%s", tool.name)
                 self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status, **extra))
+        def report(fields):
+            # A running tool's own update of its event; display only, so a
+            # full queue drops it instead of failing the tool.
+            try:
+                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, "running",
+                                                         **fields))
+            except queue.Full:
+                pass
         try:
             tool, args = registry.validate(call)
             self._check(cancellation)
@@ -831,7 +857,8 @@ class DelegationLoop(AgentLoop):
                     self.outgoing.put_nowait(self.activity({"step_id": value.step_id,
                         "id": f"{call['id']}/progress", "kind": "progress", "text": update}))
             publish("running")
-            result = tool.execute(args, cancellation=cancellation)
+            result = (tool.execute(args, cancellation=cancellation, report=report) if tool.reports
+                      else tool.execute(args, cancellation=cancellation))
             # Memory changes riding along on compare_models/check_text: no
             # extra model step, applied after the tool unless it was refused
             # (a refused call comes again with its decision; applied before,
@@ -2130,12 +2157,18 @@ class DelegationLoop(AgentLoop):
             for step, (value, step_status) in list(self.unsettled.items()):
                 self._settle_step(step, value, step_status)
             self.completion.usage = self.costs.total()
+            if self.vm_tools is not None:
+                # Saved with the turn (agent_runs.finish_run): its checkpoint
+                # and the commands' summed run time.
+                self.completion.vm = self.vm_tools.session.summary()
+                self.vm_tools.session.close()
             if self.work_log is not None:
                 # The log's last entry, saved before finish_run: a write after
                 # it finds the turn no longer pending (save_work_log).
                 self.work_log.add("end", content={
                     "status": status, "finish_reason": self.completion.finish_reason, "answer": self.completion.text,
-                    "failure": getattr(self.completion, "failure", None), "usage": self.completion.usage})
+                    "failure": getattr(self.completion, "failure", None), "usage": self.completion.usage,
+                    "vm": getattr(self.completion, "vm", None)})
                 self.work_log.close()
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:

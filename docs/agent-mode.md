@@ -168,8 +168,9 @@ unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte; v1
 speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
 Standardwerte weg; siehe codebase-map §4 „Kontoeinstellungen“) legt vier Werte fest, die jede
 Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
-einfriert (Teil der Request-Identität bei Recovery; seit 2026-10-25 kommt für
-Admins **Audit instead of comparison** dazu, siehe „Audit statt Vergleich“): **Answer depth**
+einfriert (Teil der Request-Identität bei Recovery; seit 2026-10-25 kommen für
+Admins **Audit instead of comparison** und **Agent VM** dazu, siehe „Audit statt
+Vergleich“ und „Agent VM“): **Answer depth**
 (`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
 Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
 (Standard seit 2026-10-07 `all`, „After every model“: wartet auf jedes Modell,
@@ -374,6 +375,120 @@ Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
 Prompts, Route), `tests/js/audit-marks.test.mjs`, die Audit-Fälle in
 `tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
 `model-answer-reader.test.mjs` und `agent-preferences.test.mjs`.
+
+### Agent VM (seit 2026-10-25, nur Admins)
+
+Einstellungen → Agent · Beta → **Agent VM** (`AgentPreferences.vm`: `off` =
+Standard, `on`; Zeile `.admin-only`, `#agentVmSelect`). Wie bei Audit nimmt der
+Server `on` nur von Admins an (`routers/agent.py::ADMIN_PREFERENCES`,
+`effective_preferences`); jedes andere Konto läuft wie bisher, der Turn friert
+den wirksamen Wert ein. Ohne Einstellung ändert sich nichts. Die VM ist die
+Grundlage dafür, dass Prüfer später die ganze Arbeit des Agenten live prüfen;
+sie gilt in beiden Modi (mit Vergleich und im Audit-Modus).
+
+**Was der Agent bekommt.** Eine eigene Linux-VM pro Chat (Fly.io Sprites,
+Ubuntu, bash, sudo) mit drei Werkzeugen (`agent_vm_tools.py`, nur auf
+Account-Turns, nie in Chats mit Google-Daten, wie `read_source`):
+`vm_exec` (`command`, `cwd`, Standard `/home/sprite`, `timeout_seconds`,
+Standard 60, höchstens `EXEC_TIMEOUT_MAX` = 300; Ergebnis `stdout`, `stderr`,
+`exit_code`, `duration_ms`, `timed_out`, `cwd`), `vm_read_file` (`path`,
+`offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, Binärdateien nur als
+Hinweis) und `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
+Ordner an). Der Prompt `AGENT_VM_PROMPT` (prompt_defaults.py, im Admin als
+„Agent: Linux VM“) steht vor dem Memory-Block, damit der Systemprompt im Chat
+cachebar bleibt. Ausgaben an das Modell behalten je Strom das Ende
+(`MODEL_STREAM_CHARS` = 12.000), die Kürzung steht als
+`[… N earlier bytes of stdout omitted …]` im Text; Farbcodes fallen weg, von
+einer per `\r` überschriebenen Zeile (Fortschrittsbalken) bleibt der letzte
+Stand. Ein Befehl läuft nie länger als sein Limit und nie länger, als die
+Antwort noch Zeit lässt (`answer_time_left`; unter `MIN_COMMAND_SECONDS` = 15
+startet er nicht, „Not enough time…“). Die Grenze setzt die VM selbst
+(`timeout --kill-after=5 … bash -lc`), sie gilt also auch ohne Verbindung.
+VM-Aufrufe zählen zu den Grenzen der Nachricht (24 Schritte, Zeit), nicht zur
+Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
+Änderung sind Fortschritt). `vm_exec` und `vm_read_file` bringen Fremdinhalt
+und sperren Memory wie `read_file` (`MEMORY_LOCKING_TOOLS`).
+
+**Lebenszyklus.** Eine VM pro Chat, Name `vm_name(uid, chat)` (stabil, ohne
+Konto-ID). Erst der erste VM-Aufruf einer Nachricht weckt sie
+(`VMSession.ready`): Der Chat bekommt `agent_vm: {provider, name, created_at}`
+in einer Transaktion mit Kontosperre und aktivem Chat, bevor der Anbieter sie
+anlegt (so findet die Löschung sie immer); dann `ensure` (anlegen, falls es sie
+nicht gibt, und die Egress-Regeln setzen), der Checkpoint der Nachricht
+(Kommentar `consens.io message <turn>`, also der Stand, bevor diese Nachricht
+etwas änderte; scheitert er, geht es ohne weiter) und die Anhänge dieser
+Nachricht nach `/home/sprite/input` (`FileContext.attachment`, gleiche Namen
+werden zu `name (2).ext`; das erste Ergebnis nennt sie dem Agenten). Wird der
+Chat beim Anlegen gelöscht, löscht der Lauf die VM selbst
+(`_still_active`). Eine Nachricht ohne VM-Aufruf weckt die VM nicht und legt
+keinen Checkpoint an. Der Turn speichert `agent_vm: {provider, checkpoint,
+calls, commands, seconds}` (Summe der Befehlslaufzeiten; `unavailable: true`,
+wenn die VM ausfiel). Noch keine Wiederherstellung in der Oberfläche; die
+Sprite pausiert nach etwa 30 s Leerlauf ohne Rechenkosten.
+
+**Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
+dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von
+`agent_vm.py`, Gmail und Kalender bleiben Backend-Werkzeuge mit Bestätigung.
+Ausgehend erreicht die VM nur die Standardziele des Anbieters
+(`EGRESS_RULES = [{"include": "defaults"}]`: GitHub, npm, PyPI, Docker Hub,
+große KI-APIs), damit eine gelesene Seite die Dateien des Chats nicht an einen
+beliebigen Server schicken lässt. Bekanntes Restrisiko: Über den
+Management-Socket in der VM (`/.sprite/api.sock`, Tasks API) kann ein Befehl
+die Sprite bis zu einer Stunde je Task wach halten (Kosten); hingenommen, weil
+nur Admins die VM haben.
+
+**Anbieter-Schnittstelle** (`agent_vm.py`): `VMBackend` mit `ensure`, `exec`,
+`read_file`, `write_file`, `checkpoint`, `delete`, `close`; `SpritesBackend`
+spricht REST über `httpx` (Sprite, Dateien `fs/read`/`fs/write`,
+Netzwerkregeln, Checkpoints als NDJSON, die ID per Kommentar aus der Liste)
+und Befehle über das exec-WebSocket (`websockets`, Frames `0x01` stdout,
+`0x02` stderr, `0x03` Exit-Code). Das HTTP-exec streamt dieselben Frames ohne
+Längen und hängt an unveränderten Chunk-Grenzen (warnt auch Sprites' JS-SDK),
+deshalb das WebSocket. Stop schließt den Socket und beendet den Befehl in der
+VM (`exec/{session}/kill`). Ein Wechsel zu E2B betrifft nur diese Datei.
+
+**Fehler kosten Werkzeuge, nie die Antwort.** Jeder Ausfall des Anbieters ist
+`VMUnavailable`; der Agent bekommt einmal `VM_UNAVAILABLE` („The VM is not
+available right now. Continue without it…“), danach ist die VM für diese
+Nachricht aus, ohne weitere Anfragen. Die Aktivität zeigt ruhig „VM not
+available“, nie die Fehlermeldung des Anbieters.
+
+**Arbeitsprotokoll und Anzeige.** Jeder VM-Aufruf ist ein Tool-Event seines
+Werkzeugs (live und mit `agent_activity` gespeichert): beim Start `command`/
+`cwd` bzw. `path`, während er läuft etwa jede Sekunde das Ende der Ausgabe
+(`output`, beide Ströme in Ankunftsreihenfolge, `VIEW_CHARS` = 2.000,
+`output_truncated`; `ReadOnlyTool.reports`, `DelegationLoop._execute`
+übergibt `report`), am Ende `exit_code`, `duration_ms`, `timed_out` oder
+`outcome` (`unavailable`, `no_time`). Die Updates eines Events ergänzen sich
+(Server `completion.event`, Browser `receive`). Im Audit-Modus steht das
+Ergebnis, das das Modell bekam, als `tool`-Eintrag mit Herkunft `vm` im
+Arbeitsprotokoll (Fremdinhalt, `UNTRUSTED_DATA`); die Prüfer lesen es live
+mit, ihr Prompt nennt `vm` und Befehlsergebnisse, und der `end`-Eintrag
+trägt die Summe. `agent-activity.js` zeigt jeden Aufruf kompakt wie ein
+Terminal (`vmView`): `$ Befehl` bzw. „Read the file“/„Wrote the file“ mit
+Pfad, rechts Exit-Code (nur ≠ 0), „Timed out“ und Dauer (ab 1 s), darunter
+die Ausgabe in einem getönten Feld, offen, solange der Befehl läuft, danach
+eingeklappt (eine Wahl des Lesers bleibt). Befehl und Ausgabe stehen in
+`<code>`/`<pre>` und werden nie übersetzt. Live erscheint der Block in den
+Fortschrittszeilen, danach in der Zeitleiste; die Admin-Verbrauchszeile nennt
+„VM 12s“. Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
+
+**Löschung.** `chat_store._purge_chat` löscht die VM, die der Chat nennt
+(`agent_vm.delete_chat_vm`), vor dem Rest des Chats; scheitert der Anbieter,
+bleibt der Lösch-Job und versucht es erneut. Ein Chat ohne VM fragt den
+Anbieter nie. Die Kontolöschung läuft über denselben Weg.
+
+Voraussetzung live: `SPRITES_TOKEN` im Backend (lokal in `.env`, auf Render
+als Umgebungsvariable). Ohne Token sagt das erste VM-Werkzeug „not
+available“. Vor einer Öffnung für alle: Fly.io als Auftragsverarbeiter in die
+Datenschutzerklärung.
+
+Tests: `tests/test_agent_vm.py` (Fake-VM für Turn, Wiederverwendung,
+Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
+`SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket),
+`tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
+`agent-preferences.test.mjs`, `test_user_settings.py` und
+`test_prompt_config.py`.
 
 ### Agent freedom: geführt oder frei
 

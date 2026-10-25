@@ -33,6 +33,11 @@
     import_gmail_attachment: ['Email attachment', 'Importing an email attachment…', 'Imported an email attachment'],
     prepare_gmail_draft: ['Email draft', 'Drafting an email for your review…', 'Email draft ready for review'],
     update_memory: ['Memory', 'Updating memory…', 'Updated memory'],
+    // The agent's own VM (agent_vm_tools.py); each call also shows as a
+    // compact block of its own (vmView).
+    vm_exec: ['Command', 'Running a command…', 'Ran a command'],
+    vm_read_file: ['Read file', 'Reading a file…', 'Read a file'],
+    vm_write_file: ['Write file', 'Writing a file…', 'Wrote a file'],
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
@@ -431,6 +436,71 @@
     return link;
   }
 
+  // A call in the agent's own VM (agent_vm_tools.py), compact like a
+  // terminal: the command (or the file) and how it ended on one line, its
+  // output below, open while it runs and folded once it is done, unless the
+  // reader opened or closed it. Command, path and output are data: they sit
+  // in <code> and <pre>, which stay untranslated, and the line's own words go
+  // through App.t (the line is data-i18n-skip).
+  const vmTools = new Set(['vm_exec', 'vm_read_file', 'vm_write_file']);
+  const vmVerbs = { vm_read_file: ['Reading the file', 'Read the file'],
+    vm_write_file: ['Writing the file', 'Wrote the file'] };
+  const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left' };
+  function vmMeta(item) {
+    if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
+    if (item.status === 'running') return item.name === 'vm_exec' ? App.t('Running…') : '';
+    if (item.status === 'cancelled') return App.t('Stopped');
+    if (item.status === 'failed') return App.t('Failed');
+    const parts = [];
+    if (item.timed_out) parts.push(App.t('Timed out'));
+    else if (Number.isInteger(item.exit_code) && item.exit_code !== 0) parts.push(App.t('Exit {code}', { code: item.exit_code }));
+    // A quick command needs no clock ("0s" says nothing).
+    if (Number.isFinite(item.duration_ms) && item.duration_ms >= 1000) parts.push(App.format.duration(item.duration_ms));
+    return parts.join(' · ');
+  }
+  function vmView(className) {
+    const details = document.createElement('details');
+    details.className = className;
+    const summary = document.createElement('summary');
+    summary.className = 'agent-vm-head';
+    summary.dataset.i18nSkip = '';
+    const verb = document.createElement('span'); verb.className = 'agent-vm-verb';
+    const target = document.createElement('code'); target.className = 'agent-vm-target'; target.translate = false;
+    const meta = document.createElement('span'); meta.className = 'agent-vm-meta';
+    summary.append(verb, target, meta);
+    const output = document.createElement('pre'); output.className = 'agent-vm-output'; output.translate = false;
+    output.hidden = true;
+    details.append(summary, output);
+    summary.addEventListener('click', event => {
+      if (!details.classList.contains('has-output')) { event.preventDefault(); return; }
+      details.dataset.chosen = '';
+    });
+    // Opened later, the output shows its end, where a command says how it went.
+    details.addEventListener('toggle', () => { if (details.open) output.scrollTop = output.scrollHeight; });
+    return details;
+  }
+  function updateVm(details, item) {
+    const signature = JSON.stringify([item.status, item.command, item.path, item.output, item.output_truncated,
+      item.exit_code, item.duration_ms, item.timed_out, item.outcome]);
+    if (details.dataset.signature === signature) return;
+    details.dataset.signature = signature;
+    details.dataset.status = item.status;
+    details.dataset.tool = item.name;
+    const [verb, target, meta] = details.firstElementChild.children;
+    const verbs = vmVerbs[item.name];
+    verb.hidden = !verbs;
+    verb.textContent = verbs ? App.t(verbs[item.status === 'running' ? 0 : 1]) : '';
+    target.textContent = String((item.name === 'vm_exec' ? item.command : item.path) || '');
+    meta.textContent = vmMeta(item);
+    const output = details.lastElementChild;
+    const text = String(item.output || '');
+    output.textContent = text && item.output_truncated ? `…\n${text}` : text;
+    output.hidden = !text;
+    details.classList.toggle('has-output', Boolean(text));
+    if (!('chosen' in details.dataset)) details.open = item.status === 'running' && Boolean(text);
+    if (details.open) output.scrollTop = output.scrollHeight;
+  }
+
   function render(host, spec) {
     const restore = host?._agentActivity && App.chatScroll?.preserveAbove(host, host.nextElementSibling);
     offscreenUpdate = !!restore;
@@ -454,7 +524,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlights = [], reconnecting = false } = {}) {
+    highlights = [], reconnecting = false, vm = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -562,6 +632,7 @@
     const paragraphs = events.flatMap(item => progress.includes(item)
       ? [{id:item.id, text:item.text, kind:'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
+        : tools.includes(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
         : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && item === activeTool},
           // The one place where the run waits on the user: say so, and link to the card.
@@ -604,7 +675,8 @@
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
-        p = document.createElement(item.kind === 'progress' ? 'p' : 'div'); view.previewNodes.set(item.id, p);
+        p = item.kind === 'vm' ? vmView('agent-vm') : document.createElement(item.kind === 'progress' ? 'p' : 'div');
+        view.previewNodes.set(item.id, p);
         if (item.kind === 'review') {
           const jump = document.createElement('button');
           jump.type = 'button'; jump.className = 'agent-progress-review-jump';
@@ -617,7 +689,8 @@
         previewChanged = true;
         if (!view.details.open) reveal(p);
       }
-      if (item.kind === 'review') {
+      if (item.kind === 'review' || item.kind === 'vm') {
+        if (item.kind === 'vm') updateVm(p, item.item);
         const position = view.preview.children[previewIds.size - 1];
         if (position !== p) view.preview.insertBefore(p, position || null);
         continue;
@@ -656,13 +729,16 @@
       ids.add(item.id);
       let node = view.nodes.get(item.id);
       if (!node) {
-        node = document.createElement(item.kind === 'progress' ? 'p' : 'div');
-        node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
+        node = item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
+          : document.createElement(item.kind === 'progress' ? 'p' : 'div');
+        if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
         view.content.appendChild(node);
         if (item.kind === 'progress' && view.details.open && running) reveal(node);
       }
-      if (item.kind === "tool") {
+      if (item.kind === "tool" && vmTools.has(item.name)) {
+        updateVm(node, item);
+      } else if (item.kind === "tool") {
         const signature = JSON.stringify([item, textOnly]);
         if (node.dataset.signature !== signature) {
           node.dataset.signature = signature;
@@ -736,7 +812,10 @@
     const cost = !Number.isFinite(dollars) ? ""
       : usage.cost_complete === false ? ` · ${App.t("at least {amount} {kind} · cost incomplete", { amount, kind })}`
       : ` · ${amount} ${kind}`;
-    view.usageEl.textContent = tokens + cost;
+    // The commands' summed run time in the agent's VM (agent_vm_tools.py).
+    const vmTime = Number.isFinite(vm?.seconds) && vm.commands > 0
+      ? ` · ${App.t("VM {time}", { time: App.format.duration(vm.seconds * 1000) })}` : "";
+    view.usageEl.textContent = tokens + cost + vmTime;
     view.usageEl.title = measured ? `${number(usage.input_tokens)} input · ${number(usage.output_tokens)} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;
     // A history the reader opened stays open while it is on screen: closing
@@ -752,7 +831,8 @@
       || (turn?.status === "failed" ? "failed" : "succeeded");
     render(host, { events, usage: turn?.agent_usage, status, truncated: turn?.agent_reasoning_truncated,
       finishReason: turn?.agent_finish_reason, elapsedMs:savedDuration(turn),
-      review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings });
+      review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings,
+      vm: turn?.agent_vm });
   }
   App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration };
 })();

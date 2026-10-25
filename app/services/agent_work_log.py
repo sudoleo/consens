@@ -53,10 +53,10 @@ CLOSE_SECONDS = 20
 OBJECT_PREFIX = "work-log"
 KINDS = ("start", "context", "step", "tool", "app", "end")
 # Where an entry's content comes from. Content from outside the user and the
-# app (web, file, google, agent: model output) is data for every later
-# reader, never instructions.
-DATA_CLASSES = ("user", "web", "file", "google", "memory", "agent", "app")
-UNTRUSTED_DATA = frozenset({"web", "file", "google", "agent"})
+# app (web, file, google, agent: model output, vm: what the agent's own VM
+# returned) is data for every later reader, never instructions.
+DATA_CLASSES = ("user", "web", "file", "google", "memory", "agent", "vm", "app")
+UNTRUSTED_DATA = frozenset({"web", "file", "google", "agent", "vm"})
 TOOL_DATA = {
     "read_source": "web",
     "read_file": "file", "read_document": "file", "create_document": "file", "revise_document": "file",
@@ -65,6 +65,7 @@ TOOL_DATA = {
     "update_memory": "memory",
     "start_agent": "agent", "send_agent": "agent", "wait_agents": "agent", "review_agent": "agent",
     "stop_agent": "agent", "report_to_orchestrator": "agent",
+    "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm",
 }
 
 

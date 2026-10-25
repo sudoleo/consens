@@ -424,6 +424,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                          "agent_finish_reason": completion.finish_reason,
                          "agent_reasoning_truncated": completion.reasoning_truncated,
                          "sources": agent_sources(completion, review)}
+                if getattr(completion, "vm", None):
+                    # The Agent VM's summary (agent_vm_tools.VMSession.summary):
+                    # the message's checkpoint and the commands' run time.
+                    patch["agent_vm"] = completion.vm
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])
