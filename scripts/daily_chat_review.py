@@ -146,8 +146,10 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
         ended = [s for s in judges if s.get("settled_at")]
         if ended:
             flow["slowest_judge_seconds"] = max(seconds(s["created_at"], s["settled_at"]) for s in ended)
+    # Named for what it mostly is: review 2026-10-25 read "judge_calls_stopped"
+    # as checks cut short by the token budget and proposed a fix for it.
     if stopped_judges:
-        flow["judge_calls_stopped"] = stopped_judges
+        flow["judge_hedges_stopped"] = stopped_judges
     usage = turn.get("agent_usage") or {}
     flow["cost_usd"] = round((usage.get("estimated_cost_nano_usd") or 0) / 1e9, 3)
     flow["web_searches"] = usage.get("web_search_requests") or 0
@@ -261,6 +263,9 @@ def cmd_collect(args) -> int:
         "median_total_seconds": statistics.median(totals) if totals else None,
         "cost_usd": round(sum(e["flow"]["cost_usd"] for _, e in turns), 3),
         "server_warnings": render_warnings(since, now),
+        # The log has no account, so own accounts count too (review 2026-10-25
+        # pinned 3 of the operator's refused turns on an external user's run).
+        "server_warnings_scope": "all accounts, own included; not tied to the turns below",
         "turn_list": shown,
     }
     sys.stdout.reconfigure(encoding="utf-8")
