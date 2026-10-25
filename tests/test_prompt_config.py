@@ -197,6 +197,12 @@ def test_code_prompts_fit_the_prepare_round_trip():
         assert len(text.encode("utf-8")) <= prompt_config.MAX_PROMPT_BYTES
 
 
+def test_agent_counts_consens_io_among_the_ai_options():
+    # Chat review 2026-10-25: asked which AI suits a trip with live data, the
+    # answer named only other services, although consens.io searches live.
+    assert "consens.io is one of the options: judge it by the same standard" in AGENT_SYSTEM_PROMPT
+
+
 @pytest.mark.parametrize("token,status", [(None, 401), ("invalid", 401), ("member", 403)])
 @pytest.mark.parametrize("method", ["GET", "PUT"])
 def test_admin_access_is_checked_before_config_reads_or_writes(client, config_store, token, status, method):

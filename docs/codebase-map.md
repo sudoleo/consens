@@ -4317,7 +4317,8 @@ beides in guided und free. Urteile (Meinung, Bewertung, Kritik, Empfehlung)
 werden seit 2026-10-22 immer verglichen, auch zu angehängten Dateien und bei
 „deine Meinung“; nur auf ausdrücklichen Wunsch ohne Vergleich. Sonst mit begründeten Annahmen weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
 Beraterstimme, keine Superlative, Uneinigkeit nur wo sie die Entscheidung ändert,
-Quellenauszüge, `checked_text`, Antwort ohne Vergleich) stehen im Abschnitt
+Quellenauszüge, `checked_text`, Antwort ohne Vergleich, bei „welche KI passt?“
+consens.io als eine Option nach gleichem Maßstab, seit 2026-10-25) stehen im Abschnitt
 „WRITING THE ANSWER“ (`AGENT_ANSWER_SECTION`), weil der Agent die Antwort selbst
 als letzte Nachricht seiner Tool-Schleife schreibt (unten). Die Judges startet
 der Server selbst (`_finish_merged` → `_finish_review`), außer der Nutzer hat
@@ -8343,6 +8344,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `MAX_PROMPT_CHARS`/`MAX_PROMPT_BYTES` (10.000 Zeichen / 28.000 UTF-8-Bytes)
   bleiben als Obergrenze der Code-Prompts (Test), damit der Datumsblock beim
   `/prepare`→`/ask_*`-Roundtrip mit dessen 12.000-Zeichen-/32.000-Byte-Limit passt.
+  Der Agent-Prompt steht damit seit 2026-10-25 bei 9.963 Zeichen: Neues dort
+  braucht Platz an anderer Stelle oder einen eigenen Abschnitt wie `WATCHES`.
   `prompt_catalog.py` listet die angezeigten Prompts als eine Liste
   `{key, label, used_for, source, text}` (`agent`: Agent-Steuerung samt Schreibregeln, `comparison`: Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
   `answers`/`consensus`: Consensus-Einzelantworten/-Endantwort,
@@ -8867,8 +8870,9 @@ letzten Lauf (eigene Konten per E-Mail-Marker `maxl.plack`/`ml.plack`/`nodon`
 Antwortanfang, Ablauf aus den Receipts (Vergleichsdauer, langsamstes Modell,
 Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, langsamster Judge-Call,
 Kosten; gestoppte Judge-Calls, meist Hedge-Verlierer, getrennt als
-`judge_calls_stopped` und nicht in der Prüfdauer) und Prüfstatus, dazu
-gezählte Warnungen aus dem Render-Log. `collect` gibt JSON aus und merkt sich
+`judge_hedges_stopped` und nicht in der Prüfdauer) und Prüfstatus, dazu
+gezählte Warnungen aus dem Render-Log (alle Konten, auch eigene; das Log kennt
+kein Konto, `server_warnings_scope` sagt das im JSON). `collect` gibt JSON aus und merkt sich
 den Stand in `pending.json`, `save` übernimmt ihn nach `state.json` (beides
 unter `~/.claude/scheduled-tasks/consens-chat-review/`). Der Task schreibt
 daraus einen kurzen Bericht mit Vorschlägen, die Max bestätigen muss; beide
