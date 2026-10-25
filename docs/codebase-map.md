@@ -5570,7 +5570,10 @@ ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
 `review.audit.reviewers/claims/unplaced/process/issues`, `dissent[].mark` je
 Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
 `unplaced`); scheitert die Schlussrunde eines Prüfers, gelten seine
-Live-Befunde (`live`). Die Judges laufen nicht. Ein Fehler kostet nur
+Live-Befunde (`live`). Runden passen in den Platz des Prüfergesprächs
+(`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
+`_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
+Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 `REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet

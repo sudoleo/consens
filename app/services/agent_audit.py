@@ -64,14 +64,26 @@ REVIEW_SEARCH_ROUNDS = 3
 # after which a reviewer stops following (each costs its session).
 MAX_LIVE_ROUNDS = 6
 MAX_ROUND_FAILURES = 2
-# How much of one log entry a reviewer reads: the agent's instructions (with
-# the user's memory at their end) whole, other entries up to ENTRY_CHARS; once
-# a session holds SESSION_CHARS, new entries up to TIGHT_ENTRY_CHARS. The
-# whole log stays in the work log.
+# How much of one log entry a reviewer reads (its JSON, all texts in it): the
+# agent's instructions (with the user's memory at their end) up to
+# SYSTEM_ENTRY_CHARS, other entries up to ENTRY_CHARS, lists up to
+# ENTRY_ITEMS items. A round that does not fit the room left in the
+# reviewer's conversation reads its entries shorter (TIGHT_ENTRY_CHARS, then
+# MIN_ENTRY_CHARS). The whole log stays in the work log.
 SYSTEM_ENTRY_CHARS = 60_000
 ENTRY_CHARS = 12_000
-SESSION_CHARS = 400_000
 TIGHT_ENTRY_CHARS = 1_500
+MIN_ENTRY_CHARS = 300
+ENTRY_ITEMS = 20
+# How much a reviewer's conversation may hold (session_budget): SESSION_SHARE
+# of its model's context window after the reply, at CHARS_PER_TOKEN (JSON in
+# JSON and the input estimate's margin; the rest is room for search results),
+# at most SESSION_CHARS for cost. Live rounds stop at LIVE_SHARE of it, so
+# the final round has room.
+CHARS_PER_TOKEN = 3
+SESSION_SHARE = .6
+LIVE_SHARE = .75
+SESSION_CHARS = 400_000
 # What one review may hold; longer fields are shortened, further marks dropped.
 MAX_MARKS = 20
 QUOTE_CHARS = 400
@@ -158,22 +170,51 @@ def review_system_prompt(reference_timezone=None):
 
 # --- What a reviewer reads ----------------------------------------------------
 
-def _shorten(value, limit):
-    """``value`` with every text in it at most ``limit`` characters, saying so."""
+def _shorten(value, limit, items=ENTRY_ITEMS):
+    """``value`` with every text in it at most ``limit`` characters and every
+    list at most ``items`` items, saying so."""
     if isinstance(value, str):
         if len(value) <= limit:
             return value
         return value[:limit] + f"\n… [shortened: {len(value)} characters in total]"
     if isinstance(value, list):
-        return [_shorten(item, limit) for item in value]
+        kept = [_shorten(item, limit, items) for item in value[:items]]
+        return kept + ([f"… [{len(value) - items} more items]"] if len(value) > items else [])
     if isinstance(value, dict):
-        return {key: _shorten(item, limit) for key, item in value.items()}
+        return {key: _shorten(item, limit, items) for key, item in value.items()}
     return value
 
 
+def _dumps(value):
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _fit(content, limit):
+    """``content`` within about ``limit`` characters: a text shortened to it,
+    structured content with its texts shortened further as needed (halving,
+    down to 80 characters each), else its JSON text cut."""
+    if isinstance(content, str):
+        return _shorten(content, limit)
+    per = limit
+    while per >= 80:
+        fitted = _shorten(content, per)
+        if len(_dumps(fitted)) <= limit:
+            return fitted
+        per //= 2
+    text = _dumps(content)
+    return text[:limit] + f"\n… [shortened: {len(text)} characters in total]"
+
+
+def session_budget(model):
+    """Characters a reviewer's conversation on ``model`` may hold."""
+    room = max(0, model.context_length - model.max_output_tokens)
+    return min(SESSION_CHARS, int(room * SESSION_SHARE * CHARS_PER_TOKEN))
+
+
 def review_entry(entry, text, limit=ENTRY_CHARS):
-    """One log entry as a reviewer reads it (JSON-ready). A step's or the
-    run's structured content stays structured, without its token usage."""
+    """One log entry as a reviewer reads it (JSON-ready), its content within
+    ``limit``. A step's or the run's structured content stays structured,
+    without its token usage."""
     item = {key: entry[key] for key in ("seq", "actor", "kind", "name", "data") if entry.get(key)}
     if entry.get("kind") == "context" and entry.get("name") == "system":
         limit = max(limit, SYSTEM_ENTRY_CHARS) if limit >= ENTRY_CHARS else limit
@@ -185,19 +226,28 @@ def review_entry(entry, text, limit=ENTRY_CHARS):
             content = text
         if isinstance(content, dict):
             content = {key: value for key, value in content.items() if key != "usage"}
-    item["content"] = _shorten(content, limit)
+    item["content"] = _fit(content, limit)
     return item
 
 
-def round_message(number, entries, *, chars_so_far=0, answer=None):
+def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None):
     """The user message of one round: the new log entries (as JSON, data) and,
     in the final round, the fixed answer."""
-    limit = TIGHT_ENTRY_CHARS if chars_so_far > SESSION_CHARS else ENTRY_CHARS
-    log = json.dumps({"entries": [review_entry(entry, text, limit) for entry, text in entries]}, ensure_ascii=False)
+    log = _dumps({"entries": [review_entry(entry, text, limit) for entry, text in entries]})
     if answer is None:
         return f"Round {number}. New entries of the work log; the agent is still working:\n{log}"
     return ("Final round. The agent's answer is fixed. New entries of the work log since your last round:\n"
-            f"{log}\n\nThe fixed answer:\n" + json.dumps({"answer": answer}, ensure_ascii=False))
+            f"{log}\n\nThe fixed answer:\n" + _dumps({"answer": answer}))
+
+
+def fitted_round(number, entries, room, *, answer=None):
+    """The round's message within ``room`` characters, its entries read
+    shorter as needed; None when even the shortest does not fit."""
+    for limit in (ENTRY_CHARS, TIGHT_ENTRY_CHARS, MIN_ENTRY_CHARS):
+        message = round_message(number, entries, limit=limit, answer=answer)
+        if len(message) <= room:
+            return message
+    return None
 
 
 def work_goes_on(entries):
@@ -342,12 +392,19 @@ class ReviewCancellation(ProviderCancellation):
     deadline = False
 
 
+class ReviewTooLong(ValueError):
+    """The work and the answer do not fit the reviewer's context."""
+
+
 def review_failure(error, cancellation=None):
     """Why a reviewer left no marks, as {code, error} (agent panel, review)."""
     from app.services.agent_comparison import COMPARISON_FAILURES
     from app.services.agent_provider_limits import agent_failure
     if isinstance(error, ReviewUnreadable):
         return {"code": "review_unreadable", "error": "Its review could not be read, so its marks are missing."}
+    if isinstance(error, ReviewTooLong):
+        return {"code": "context_limit",
+                "error": "The work and the answer did not fit its context, so its marks are missing."}
     if isinstance(error, ProviderCancelled):
         if getattr(cancellation, "deadline", False):
             return {"code": "no_time",
@@ -517,8 +574,14 @@ class ReviewerSession:
         self.loop = audit.tools.loop
         self.messages = [{"role": "system", "content": review_system_prompt()}]
         self.chars = len(self.messages[0]["content"])
+        self.budget = session_budget(model)
         self.cursor = 0
+        # The last entry of a failed live round: its entries come again with
+        # the next round, which waits for new work (or the final round).
+        self.tried = 0
         self.live_rounds = self.failures = 0
+        # False once a live round no longer fits: the final round still comes.
+        self.following = True
         self.worker = None
         # Marks of the live rounds (kept if the final round fails) and the
         # final round's complete list.
@@ -542,10 +605,9 @@ class ReviewerSession:
                     self._final(audit.final_answer)
                     return
                 seen = log.last
-                pending = log.entries_after(self.cursor)
-                if (self.live_rounds < MAX_LIVE_ROUNDS and self.failures < MAX_ROUND_FAILURES
-                        and work_goes_on(pending)):
-                    self._round(pending)
+                if (self.following and self.live_rounds < MAX_LIVE_ROUNDS and self.failures < MAX_ROUND_FAILURES
+                        and work_goes_on(log.entries_after(max(self.cursor, self.tried)))):
+                    self._round(log.entries_after(self.cursor))
                     continue
                 log.wait_for(seen, .5)
         except ProviderCancelled:
@@ -554,19 +616,43 @@ class ReviewerSession:
         except Exception as exc:
             logging.warning("Agent reviewer stopped category=%s", safe_exception(exc))
             self._set(status="failed", failure={"code": "review_unavailable"})
+        finally:
+            self._close()
+
+    def _close(self):
+        """A session still waiting for its next round ends with the reviewer
+        (a stop, the deadline, the run's end before the answer)."""
+        worker, self.worker = self.worker, None
+        if worker is None or worker.state in {"completed", "failed", "stopped"}:
+            return
+        if self.cancellation.deadline:
+            failure = review_failure(ProviderCancelled("deadline"), self.cancellation)
+            self.loop._terminal(worker, "failed", failure["error"], failure)
+        elif self.audit.final_answer is None and not self.loop.cancellation.cancelled:
+            self.loop._terminal(worker, "stopped", "The run ended before the answer was fixed.",
+                                {"code": "run_ended"})
+        else:
+            self.loop._terminal(worker, "stopped", "The run was stopped.", {"code": "stopped"})
 
     # --- Rounds ---------------------------------------------------------------
 
     def _round(self, entries):
         number = self.live_rounds + 1
-        message = round_message(number, entries, chars_so_far=self.chars)
+        message = fitted_round(number, entries, self.budget * LIVE_SHARE - self.chars)
+        if message is None:
+            # The conversation is as full as live rounds may make it.
+            self.following = False
+            return
+        # Every entry up to this round's last one: the reviewer has read it.
+        known = set(range(1, entries[-1][0]["seq"] + 1))
         try:
-            value, marks = self._request(message, final=False, known={entry["seq"] for entry, _ in entries})
+            value, marks = self._request(message, final=False, known=known)
         except ProviderCancelled:
             raise
         except Exception:
             # The entries go into the next round again.
             self.failures += 1
+            self.tried = entries[-1][0]["seq"]
             return
         self.cursor = entries[-1][0]["seq"]
         self.live_rounds += 1
@@ -577,11 +663,23 @@ class ReviewerSession:
         self.loop._state(self.worker, "waiting")
 
     def _final(self, answer):
-        entries = self.audit.work_log.entries_after(self.cursor)
-        known = {entry["seq"] for entry, _ in self.audit.work_log.entries_after(0)}
-        message = round_message(self.live_rounds + 1, entries, chars_so_far=self.chars, answer=answer)
+        log = self.audit.work_log
+        known = {entry["seq"] for entry, _ in log.entries_after(0)}
+        message = fitted_round(self.live_rounds + 1, log.entries_after(self.cursor), self.budget - self.chars,
+                               answer=answer)
+        if message is None and self.cursor:
+            # The conversation is full: the final round starts over with the
+            # whole log, read shorter, in a new session.
+            worker, self.worker = self.worker, None
+            if worker is not None and worker.state not in {"completed", "failed", "stopped"}:
+                self.loop._state(worker, "completed")
+            self.messages = [self.messages[0]]
+            self.chars, self.cursor = len(self.messages[0]["content"]), 0
+            message = fitted_round(1, log.entries_after(0), self.budget - self.chars, answer=answer)
         self._set(status="running")
         try:
+            if message is None:
+                raise ReviewTooLong("The work and the answer do not fit the reviewer's context.")
             value, marks = self._request(message, final=True, known=known)
         except BaseException as exc:
             failure = review_failure(exc, self.cancellation)
@@ -613,6 +711,9 @@ class ReviewerSession:
         except BaseException as exc:
             self.messages.pop()
             failure = review_failure(exc, self.cancellation)
+            if not final and not isinstance(exc, ProviderCancelled):
+                # The reviewer goes on: the next round opens a new session.
+                failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
             worker, self.worker = self.worker, None
             self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
                                 failure["error"], failure)
@@ -761,6 +862,8 @@ class AnswerAudit:
         left = loop._hard_stop_left() if callable(getattr(loop, "_hard_stop_left", None)) else None
         if left is not None and left - REVIEW_TIME_MARGIN < REVIEW_MIN_SECONDS:
             # No final round fits: the marks of the live rounds are all there is.
+            for session in self.sessions.values():
+                session.cancellation.deadline = True
             self._stop()
             with tools.lock:
                 for state in self.reviewers.values():

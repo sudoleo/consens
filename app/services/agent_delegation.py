@@ -1243,7 +1243,10 @@ class DelegationLoop(AgentLoop):
             raise
         except Exception as exc:
             value.record_rejection(exc, model)
-            self.cooldowns.record(model, self.api_key, exc)
+            # A reviewer's 429 (audit mode, alongside the agent) costs its
+            # round, never the agent's next step on the same model.
+            if getattr(worker, "kind", None) != "audit":
+                self.cooldowns.record(model, self.api_key, exc)
             if not (retry_rate_limit and claimed and _free_rate_limit(exc, value)):
                 raise
             # Refused before writing anything, settled at zero cost like a

@@ -285,9 +285,11 @@ braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt, Max'
 Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
 Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
 lesbare Liste: die Runde scheitert mit `review_unreadable`. Eine gescheiterte
-Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge, nach
-`MAX_ROUND_FAILURES` = 2 keine Live-Runden mehr); scheitert die Schlussrunde,
-gelten die Befunde der Live-Runden. Die Sitzung eines Prüfers speichert als
+Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge mit der
+nächsten Runde, nach `MAX_ROUND_FAILURES` = 2 keine Live-Runden mehr), auch
+ein 429 (sperrt das Modell nicht für den Agenten); scheitert die
+Schlussrunde, gelten die Befunde der Live-Runden. Wie viel ein Prüfer liest,
+hängt am Kontextfenster seines Modells (`session_budget`, `fitted_round`). Die Sitzung eines Prüfers speichert als
 Auftrag nur `REVIEW_ASSIGNMENT`; im Agent-Panel steht je Runde eine Nachricht
 (`round`, dann `result`).
 

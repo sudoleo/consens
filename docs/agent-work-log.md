@@ -122,8 +122,15 @@ Einträgen als JSON (`round_message`, `review_entry`); der Anfang kommt aus dem
 Prompt-Cache, bezahlt wird im Wesentlichen nur das Neue. Die Prüfer lesen aus
 dem Speicher des Laufs, nicht aus Firestore. Gekürzt mit Hinweis: der
 Systemprompt des Agenten (mit Memory) über 60.000 Zeichen, jeder andere
-Eintrag über 12.000, und sobald eine Sitzung 400.000 Zeichen trägt, jeder
-neue über 1.500. Strukturierte Einträge bleiben JSON, ohne Verbrauch.
+Eintrag über 12.000 (sein ganzes JSON, Listen bis 20 Einträge; `_fit`).
+Strukturierte Einträge bleiben JSON, ohne Verbrauch. Das Gespräch eines
+Prüfers fasst 60 % des Kontextfensters seines Modells nach der Antwort, zu 3
+Zeichen je Token, höchstens 400.000 Zeichen (`session_budget`); der Rest
+bleibt für Suchtreffer. Passt eine Runde nicht in den verbleibenden Platz,
+liest sie ihre Einträge kürzer (1.500, dann 300 Zeichen, `fitted_round`).
+Live-Runden enden bei 75 % des Platzes. Passt die Schlussrunde nicht mehr,
+beginnt sie in einer neuen Sitzung mit dem ganzen Protokoll, kürzer gelesen;
+passt auch das nicht, fehlen die Schlussbefunde (`context_limit`).
 
 **Auftrag (ein Prompt für alle, `review_system_prompt`):** Prüfe
 unvoreingenommen, ob der Agent die Bitte des Nutzers richtig erfüllt, ob seine
@@ -139,7 +146,8 @@ Höchstens 6 Live-Runden je Prüfer und Turn. Ein Schritt ohne Tool-Aufruf ist
 meist die Antwort: Eine Antwort in einem Schritt hat nur die Schlussrunde. Die
 Schlussrunde beginnt, wenn die Antwort fixiert ist (`answer_fixed`), mit dem
 Rest des Protokolls und der Antwort, und ist kurz, weil der Prüfer den Weg
-dorthin schon kennt. Der Agent hält dafür 240 s vor dem harten Stopp frei.
+dorthin schon kennt. Läuft beim Fixieren noch eine Live-Runde, endet sie
+zuerst. Der Agent hält dafür 240 s vor dem harten Stopp frei.
 
 **Was sie liefern:** Befunde (`wrong`, `doubtful`, `incomplete`, Anmerkung,
 Quelle). Ein Befund verweist auf einen Protokolleintrag (`entry`, jede Runde,
@@ -162,9 +170,16 @@ Agent-Panel.
   Ansicht sagt das. Die Prüfer lesen aus dem Speicher und sehen es trotzdem
   ganz.
 - Scheitert eine Live-Runde, endet ihre Sitzung (ein gescheiterter Schritt
-  beendet eine Sitzung für immer); die nächste Runde öffnet eine neue und
-  bekommt die Einträge noch einmal. Nach 2 gescheiterten Runden folgt der
+  beendet eine Sitzung für immer). Die nächste Runde wartet auf neue Arbeit,
+  öffnet eine neue Sitzung und bekommt die Einträge noch einmal; kommt keine,
+  stehen sie in der Schlussrunde. Nach 2 gescheiterten Runden folgt der
   Prüfer nicht mehr live, die Schlussrunde bekommt er trotzdem.
+- Ein Rate-Limit (429) eines Prüfers kostet nur seine Runde: Es sperrt das
+  Modell nicht für den Agenten (`ProviderCooldowns` zählt Prüfer-Schritte
+  nicht), auch wenn Agent und Prüfer dasselbe Modell nutzen.
+- Eine Sitzung, die zwischen zwei Runden wartet, endet mit dem Prüfer: bei
+  Stop „stopped“, bei der Frist „failed“ (`no_time`), wenn der Lauf vor der
+  Antwort endet „stopped“ (`run_ended`).
 - Fällt ein Prüfer in der Schlussrunde aus, gelten seine Live-Befunde; ohne
   solche fehlen nur seine Befunde.
 - Stop beendet die Prüfer, die fixierte Antwort bleibt.

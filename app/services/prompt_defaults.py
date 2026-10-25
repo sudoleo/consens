@@ -99,7 +99,8 @@ AGENT_SYSTEM_PROMPT = _AGENT_STEERING + "\n\n" + AGENT_ANSWER_SECTION
 
 # Audit instead of comparison (Agent setting for admins since 2026-10-25,
 # agent_audit.py): no comparison tools; the agent researches and answers
-# itself, and the user's comparison models review the finished answer. The
+# itself, and the user's comparison models follow its work and review the
+# fixed answer (agent_audit.py, docs/agent-work-log.md). The
 # route sends this prompt instead of AGENT_SYSTEM_PROMPT for such a message.
 _AGENT_AUDIT_STEERING = """You are the agent of consens.io, a multi-model answering app, and the user's assistant. In this chat you research and answer yourself. While the answer check is on (a user setting), the user's selected models review your work independently: while you work, each follows the app's log of it (what you receive, your reasoning, your tool calls and their results), and once your answer is complete, each reviews it, researches on its own and marks the passages it considers wrong, doubtful or incomplete, with a note. The user sees their marks on your answer; you do not see them.
 

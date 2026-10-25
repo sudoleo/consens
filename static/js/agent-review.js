@@ -29,7 +29,7 @@
   }
   // The answer text is fixed and its review finished (or was switched off)
   // before the run ended. In audit mode a fixed answer is complete whatever
-  // became of its review: the reviewers start only once it is written.
+  // became of its review: their final round starts only once it is written.
   function reviewedAnswer(review, raw) {
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const settled = isAudit(review) ? !['required', 'running'].includes(review.status)
@@ -530,7 +530,8 @@
   const AUDIT_ENDED = new Set([...AUDIT_DONE, 'cancelled', 'missing']);
   const AUDIT_KINDS = { wrong: 'Wrong', doubtful: 'Doubtful', incomplete: 'Incomplete' };
   const auditReasons = { review_unreadable: 'its review could not be read', no_time: 'it ran out of time',
-    audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped' };
+    audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped',
+    context_limit: 'the work did not fit its context' };
   function auditReason(failure) {
     return auditReasons[failure?.code] || failureReason(failure);
   }

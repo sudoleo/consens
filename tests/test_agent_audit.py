@@ -61,8 +61,9 @@ class Audit:
     with ``reviews[family]``, a live round with ``live[family]`` (a text, an
     exception or "wait": until it is stopped)."""
 
-    def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None):
+    def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None, on_lookup=None):
         self.reviews = dict(REVIEWS if reviews is None else reviews)
+        self.on_lookup = on_lookup
         self.live = dict(live or {})
         self.answer = answer
         self.search = search
@@ -118,12 +119,18 @@ class Audit:
 
 
 def lookup(script):
-    """The agent's tool in a scripted turn: it returns once both reviewers
-    had a live round, so the answer is never fixed before."""
+    """The agent's tool in a scripted turn: its n-th call returns once both
+    reviewers started n live rounds, so each step has its round."""
+    calls = []
+
     def run(args, *, cancellation):
+        calls.append(args)
         deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and not all("live" in script.rounds.get(f, []) for f in ("anthropic", "openai")):
+        while time.monotonic() < deadline and not all(
+                script.rounds.get(f, []).count("live") >= len(calls) for f in ("anthropic", "openai")):
             time.sleep(.01)
+        if script.on_lookup:
+            script.on_lookup(len(calls))
         return {"text": "The tower is 330 metres tall."}
     return ReadOnlyTool("lookup", "Look something up.", JudgeArgs, run)
 
@@ -304,7 +311,7 @@ def test_the_reviewers_follow_the_work_in_rounds_and_mark_its_entries(store):
     assert sorted(kinds.values()) == [["round"], ["round", "result"]]
 
 
-def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store, monkeypatch):
+def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):
     seen = []
 
     def live(messages):
@@ -312,19 +319,112 @@ def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(stor
         if len(seen) == 1:
             raise RuntimeError("provider down")
         return json.dumps({"marks": []})
-    script = Audit(tool_steps=1, live={"anthropic": live})
-    # The lookup waits for a live round of both; the second may start later.
+    script = Audit(tool_steps=2, live={"anthropic": live})
     loop = audit_loop(store, script)
     list(loop.run())
     review = saved(store, loop)["agent_review"]
     assert review["status"] == "succeeded"
-    # The failed round's entries go into the next one, in a new session.
-    assert len(seen) == 2 and round_entries({"content": seen[0]})[0][0]["seq"] == 1
-    assert round_entries({"content": seen[1]})[0][0]["seq"] == 1
-    assert seen[1].startswith("Round 1.")
-    sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
-                if a.get("kind") == "audit" and a["title"].endswith("Haiku 4.5")]
-    assert sorted(a["status"] for a in sessions) == ["completed", "failed"]
+    # No retry of the same entries at once: the next round waits for new
+    # work, and the failed round's entries go into it, in a new session.
+    assert script.rounds["anthropic"] == ["live", "live", "final"]
+    assert [m.split(".")[0] for m in seen] == ["Round 1", "Round 1"]
+    first, again = (round_entries({"content": m})[0] for m in seen)
+    assert again[0]["seq"] == first[0]["seq"] == 1 and len(again) > len(first)
+    views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+    statuses = sorted(a["status"] for a in views if a.get("kind") == "audit")
+    assert statuses == ["completed", "completed", "failed"]
+    failed = next(a for a in views if a.get("kind") == "audit" and a["status"] == "failed")
+    notes = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=failed["id"])["messages"]
+    assert [m["text"] for m in notes if m["kind"] == "failure"] == [
+        "This round failed. The reviewer goes on in a new session."]
+
+
+def test_a_live_mark_may_name_any_entry_read_so_far(store):
+    marks = []
+
+    def live(messages):
+        # Each round marks the agent's first step, read in round 1.
+        first = entry_of(messages[:2], "step")
+        marks.append(first)
+        return json.dumps({"marks": [{"entry": first, "kind": "doubtful", "note": f"Round {len(marks)}."}]})
+    script = Audit({"openai": RuntimeError("provider down")}, tool_steps=2, live={"openai": live})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert len(marks) == 2 and marks[0] == marks[1]
+    assert [(p["model"], p["entry"], p["note"], p.get("live")) for p in review["audit"]["process"]] == [
+        ("OpenAI", marks[0], "Round 1.", True), ("OpenAI", marks[0], "Round 2.", True)]
+
+
+class RateLimited(RuntimeError):
+    status_code = 429
+    retry_after = 60
+
+
+def test_a_reviewers_rate_limit_never_blocks_the_agent_on_the_same_model(store):
+    # The agent and the Anthropic reviewer run the same model.
+    script = Audit(tool_steps=1, live={"anthropic": RateLimited("busy")})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0", "completion:1"]
+    loop.cooldowns.check(loop.model, loop.api_key)
+
+
+def test_a_session_between_rounds_ends_with_the_run(store):
+    def stop(_):
+        auditor = script.loop.comparison.auditor
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not all(
+                s.live_rounds and s.worker and s.worker.state == "waiting" for s in auditor.sessions.values()):
+            time.sleep(.01)
+        script.loop.cancellation.cancel()
+    script = Audit(tool_steps=1, on_lookup=stop)
+    loop = audit_loop(store, script)
+    with pytest.raises(ProviderCancelled):
+        list(loop.run())
+    views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+    sessions = [a for a in views if a.get("kind") == "audit"]
+    assert len(sessions) == 2 and {a["status"] for a in sessions} == {"stopped"}
+
+
+def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store, monkeypatch):
+    step = {"seq": 4, "actor": "agent", "kind": "step", "name": "m", "data": "agent", "format": "json"}
+    excerpts = [{"url": f"https://example.org/{i}", "content": "e" * 4000} for i in range(40)]
+    item = review_entry(step, json.dumps({"text": "t", "search_excerpts": excerpts}))
+    assert len(json.dumps(item["content"])) <= agent_audit.ENTRY_CHARS
+    assert item["content"]["search_excerpts"][-1] == "… [20 more items]"
+    # A 128k model holds about 200k characters of review; the cap is for cost.
+    model = type("Model", (), {"context_length": 128_000, "max_output_tokens": 16_000})
+    assert agent_audit.session_budget(model) == 201_600
+    model.context_length = 2_000_000
+    assert agent_audit.session_budget(model) == agent_audit.SESSION_CHARS
+    # A conversation too full for the final round: it starts over with the
+    # whole log, read shorter, in a new session.
+    monkeypatch.setattr(agent_audit, "session_budget", lambda model: 60_000)
+    script = Audit(tool_steps=1, live={"anthropic": json.dumps({"marks": []}), "openai": json.dumps({"marks": []})})
+    loop = audit_loop(store, script)
+    sessions = {}
+
+    def fill(_):
+        for provider, session in loop.comparison.auditor.sessions.items():
+            sessions[provider] = session
+    script.on_lookup = fill
+    original = agent_audit.ReviewerSession._final
+
+    def full(self, answer):
+        self.chars = self.budget - 100
+        return original(self, answer)
+    monkeypatch.setattr(agent_audit.ReviewerSession, "_final", full)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    system, final = script.prompts["anthropic"]
+    entries, answer = round_entries(final)
+    assert answer == ANSWER and entries[0]["seq"] == 1
+    views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+    assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 4
 
 
 def test_a_failed_or_unreadable_review_costs_only_its_marks(store):
@@ -635,10 +735,10 @@ def test_over_the_storage_budget_marks_keep_their_sentences_with_shorter_notes()
 
 def test_a_log_entry_is_read_structured_and_shortened():
     step = {"seq": 4, "actor": "agent", "kind": "step", "name": "m", "data": "agent", "format": "json"}
-    content = json.dumps({"text": "t" * 50, "tool_calls": [], "usage": {"cost": 1}})
-    assert review_entry(step, content, 10) == {
+    content = json.dumps({"text": "t" * 500, "tool_calls": [], "usage": {"cost": 1}})
+    assert review_entry(step, content, 300) == {
         "seq": 4, "actor": "agent", "kind": "step", "name": "m", "data": "agent",
-        "content": {"text": "t" * 10 + "\n… [shortened: 50 characters in total]", "tool_calls": []}}
+        "content": {"text": "t" * 150 + "\n… [shortened: 500 characters in total]", "tool_calls": []}}
     # The agent's instructions (with the user's memory at their end) are read whole up to their own limit.
     system = {"seq": 2, "actor": "agent", "kind": "context", "name": "system", "data": "app", "format": "text"}
     assert review_entry(system, "s" * 20_000)["content"] == "s" * 20_000
@@ -653,9 +753,10 @@ def test_a_round_message_carries_new_entries_and_in_the_end_the_answer():
     assert live.startswith("Round 2.") and "The fixed answer" not in live
     assert round_entries({"content": live}) == ([{"seq": 1, "actor": "app", "kind": "start", "data": "app",
                                                   "content": "x" * 3000}], None)
-    # A long session reads further entries in short.
-    tight, _ = round_entries({"content": round_message(3, entries, chars_so_far=agent_audit.SESSION_CHARS + 1)})
-    assert tight[0]["content"].startswith("x" * agent_audit.TIGHT_ENTRY_CHARS + "\n…")
+    # A round without room reads its entries shorter, or not at all.
+    tight, _ = round_entries({"content": agent_audit.fitted_round(3, entries, 2500)})
+    assert tight[0]["content"].startswith("x" * agent_audit.TIGHT_ENTRY_CHARS + "\n… [shortened")
+    assert agent_audit.fitted_round(3, entries, 200) is None
     final = round_message(3, [], answer="The answer.")
     assert final.startswith("Final round.") and round_entries({"content": final}) == ([], "The answer.")
 
