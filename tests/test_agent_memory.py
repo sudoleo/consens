@@ -425,6 +425,10 @@ def test_a_malformed_memory_field_never_rejects_the_comparison(store):
     assert memory(MUNICH, "check_text")[0]["text"] == "Lives in Munich."
     # An item that is no object stays a change, which apply refuses visibly.
     assert memory(["Lives in Munich."]) == [{"op": "", "id": "", "text": "", "evidence": ""}]
+    # A field of the wrong type is no field: the change stays, apply refuses it.
+    odd = {"op": None, "id": 7, "text": "Lives in Munich.", "evidence": ["I moved to Munich"]}
+    assert memory(odd) == memory(odd, "check_text") == [
+        {"op": "", "id": "", "text": "Lives in Munich.", "evidence": ""}]
     # End to end: one object instead of a list is saved, and the answer is checked.
     script = MemoryScript(memory=MUNICH)
     loop = memory_loop(store, script, snapshot=snapshot)

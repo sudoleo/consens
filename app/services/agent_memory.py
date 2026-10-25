@@ -827,7 +827,9 @@ def _memory_changes(value):
     A schema error here rejects the whole comparison call, and three rejected rounds
     ended a turn whose comparisons were paid (review 2026-10-12): ``null`` or
     unreadable text is no change, one object is one change, and an item that
-    is no object stays a change that ``apply`` refuses visibly."""
+    is no object stays a change that ``apply`` refuses visibly. So does a
+    field that is no text (``op: null``, a numeric id, evidence as a list):
+    it is dropped, not a schema error."""
     if isinstance(value, str):
         try:
             value = json.loads(value)
@@ -837,7 +839,8 @@ def _memory_changes(value):
         value = [value]
     if not isinstance(value, list):
         return []
-    return [item if isinstance(item, dict) else {} for item in value]
+    return [{key: field for key, field in item.items() if isinstance(field, str)} if isinstance(item, dict) else {}
+            for item in value]
 
 
 def memory_field():
