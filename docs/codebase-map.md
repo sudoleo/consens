@@ -1266,7 +1266,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   auf `body` sind seit 2026-10-20 nur noch Aliasse auf `--raise`,
   `--raise-hover`, `--raise-selected`.
   Der Consensus-/Watches-Umschalter ist in Threads und Direktvergleichen
-  ausgeblendet; auf Start- und Watch-Ansicht bleibt er sichtbar. Sein aktives
+  ausgeblendet; auf Start- und Watch-Ansicht bleibt er sichtbar, auch auf dem
+  Compare-Start (`.direct-comparison-preview`, seit 2026-10-26; vorher fehlte
+  im Compare-Modus am Desktop jeder Weg zu den Watches). Sein aktives
   Segment ist in Light weiss mit dezenter Kontur. Seit 2026-10-20 steht er in
   beiden Ansichten an derselben Stelle (`left: calc(50vw +
   --app-sidebar-offset / 2)` ab 1100 px, Apple-Audit J4), weil auch die

@@ -126,9 +126,11 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         # (+) keeps its place whichever mode is chosen.
         def lead():
             # One measurement once motion has settled (switching modes moves
-            # the whole composer).
+            # the whole composer). Only motion in time: the phone's starter
+            # row fades with its scroll (composer.css) and never finishes.
             return page.evaluate("""async () => {
-              await Promise.all(document.getAnimations().map(a => a.finished.catch(() => null)));
+              await Promise.all(document.getAnimations().filter(a => a.timeline === document.timeline)
+                .map(a => a.finished.catch(() => null)));
               const box = document.querySelector('.chat-input-container').getBoundingClientRect();
               const plus = document.getElementById('attachTrigger').getBoundingClientRect();
               return [Math.round(plus.x - box.x), Math.round(plus.y - box.y)];

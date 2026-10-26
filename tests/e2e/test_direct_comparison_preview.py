@@ -12,8 +12,11 @@ from test_run_mode_selector import choose, _signed_in
 
 def settle(page):
     page.wait_for_function("() => !document.body.classList.contains('comparison-layout-changing')")
+    # Only motion in time settles: the phone's starter row fades with its own
+    # scroll (composer.css, scroll timeline), and such an animation never
+    # finishes; waiting for it hung the nightly suite (2026-10-25).
     page.locator('.input-section').evaluate(
-        "el => Promise.all(el.getAnimations({subtree:true}).filter(a => "
+        "el => Promise.all(el.getAnimations({subtree:true}).filter(a => a.timeline === document.timeline && "
         "a.effect.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})))")
 
 
@@ -49,6 +52,11 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
             assert second['x'] > first['x'] + first['width']
             sidebar = page.locator('.sidebar').bounding_box()
             assert first['x'] >= sidebar['x'] + sidebar['width'] + 23
+            # Compare's start is a start screen: the way to Watches stays,
+            # above the heading (it was hidden here until 2026-10-26).
+            expect(page.locator('#viewSwitchWatches')).to_be_visible()
+            switch = page.locator('#viewSwitch').bounding_box()
+            assert switch['y'] + switch['height'] < page.locator('#answerReaderPreviewIntro h2').bounding_box()['y']
         elif width < 760:
             assert second['y'] >= first['y'] + first['height']
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')

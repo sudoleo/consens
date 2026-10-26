@@ -948,9 +948,12 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
 /* The view switch draws its own surface and sliding thumb
    (components-watch.css); nothing here may paint the active button. */
 /* Conversations (including direct comparisons) keep the header clear.
-   Watches retains its navigation even when a conversation is underneath. */
-body:not(.is-hero):not(:has(#watchDashboard:not([hidden]))) .view-switch,
-body.direct-comparison-active:not(:has(#watchDashboard:not([hidden]))) .view-switch {
+   Watches retains its navigation even when a conversation is underneath.
+   Compare's start (the empty answer grid) is a start screen like the hero
+   and keeps it: without the switch Compare had no way to Watches on a
+   desktop. */
+body:not(.is-hero, .direct-comparison-preview):not(:has(#watchDashboard:not([hidden]))) .view-switch,
+body.direct-comparison-active:not(.direct-comparison-preview):not(:has(#watchDashboard:not([hidden]))) .view-switch {
   display: none;
 }
 

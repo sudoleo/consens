@@ -489,6 +489,11 @@ body.direct-comparison-active .consensus-section { display: none; }
 /* Before sending, use the same provider identities and document grid as the
    result. Quiet rules suggest the answer space without implying a request. */
 .answer-reader-preview-intro { padding: 12px 0 30px; }
+/* From 1100 px the view switch stands over the top of Compare's start
+   (shell.css): the heading begins below it, not against its edge. */
+@media (min-width: 1100px) {
+  .answer-reader-preview-intro { padding-top: 36px; }
+}
 .answer-reader-preview-intro h2 {
   margin: 0 0 10px;
   text-align: left;

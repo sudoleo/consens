@@ -153,8 +153,15 @@ getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
   Firebase-Bundle als auch die Source-URL durch `firebase_stub.js`. Der Stub
   setzt wie `/user_status` auch `App.agentAccess` (Agent offen); fehlt das,
   bleibt eine gespeicherte Agent-Wahl „pending“ und `#sendButton` gesperrt.
-  Das `app_page`-Profil startet einmal pro Tab im Modus Consensus, weil es den
-  Consensus-/Compare-Pfad prüft; Agent-Flows haben eigene `test_agent_*`-Dateien.
+  Das `app_page`-Profil startet einmal pro Tab im Modus Compare (seit
+  2026-10-25; Consensus läuft nur noch auf dem Server), sein Start ist also das
+  leere Antwortraster; Agent-Flows haben eigene `test_agent_*`-Dateien.
+- Wer auf ruhende Bewegung wartet (`getAnimations()` mit `finished` oder
+  `playState`), nimmt nur Animationen mit `a.timeline === document.timeline`.
+  Scroll-gesteuerte Animationen (der Auslauf der Beispielfragen auf dem Handy,
+  `composer.css`) laufen, solange ihr Element da ist, und werden nie fertig;
+  ein `page.evaluate` darauf hat kein Timeout und hielt die Nacht-Suite bis zum
+  Job-Limit an (2026-10-25).
 - Dummy-Eigenkeys passieren lokale Key-Prüfungen, lösen mit `MOCK_LLM=1` aber
   keine Provideraufrufe aus.
 - marked, DOMPurify und KaTeX kommen aus den lokalen versionierten
