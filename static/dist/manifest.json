@@ -1,5 +1,5 @@
 {
-  "sources": "b67ff2b6ab82",
+  "sources": "eb1f7735768c",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -232,20 +232,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.f8fe256137fb.js",
+      "src": "/static/dist/app.b881ce263b30.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.b8e5dee8e9f6.css",
-    "landing": "/static/dist/landing.eb3446c802f7.css",
-    "public": "/static/dist/public.bf46ce901a7d.css"
+    "app": "/static/dist/app.b0b2a7fa9071.css",
+    "landing": "/static/dist/landing.6bc0531268a9.css",
+    "public": "/static/dist/public.adf933346c0c.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "fb7789e92b76",
+      "hash": "5335e1b6b40e",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -287,7 +287,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "c0dffe532926",
+      "hash": "e632c2f76105",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -303,7 +303,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "b1bdddc6abec",
+      "hash": "451b45efe61e",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -316,10 +316,10 @@
     }
   },
   "previous_assets": [
+    "app.b8e5dee8e9f6.css",
     "app.6d136b645ccb.css",
-    "app.5ea8d098d771.css",
+    "app.f8fe256137fb.js",
     "app.95416a790e7d.js",
-    "app.527795ddae9b.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.99e97f468456.js",
@@ -328,9 +328,9 @@
     "firebase.2843caf9c31e.js",
     "head.3a27721aa53c.js",
     "head.c4cf052b46ca.js",
+    "landing.eb3446c802f7.css",
     "landing.acdc8eee5d68.css",
-    "landing.8c739fa8c5ff.css",
-    "public.eb56f3c3e51f.css",
-    "public.1e13224bde99.css"
+    "public.bf46ce901a7d.css",
+    "public.eb56f3c3e51f.css"
   ]
 }
