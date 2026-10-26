@@ -51,7 +51,8 @@
     return get().audit === "on" && document.body.classList.contains("viewer-can-audit");
   }
   function auditChanged() {
-    document.getElementById("agentSettingsSection")?.classList.toggle("is-audit", auditing());
+    // Also when set from code (the Agent's settings card): the select follows.
+    sync();
     window.syncCustomModelPickers?.();
     window.updateQuestionInputAccess?.();
   }

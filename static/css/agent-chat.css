@@ -344,7 +344,7 @@
 }
 /* Messages typed while a response runs (agent-chat.js steer): one quiet,
    tinted line each above the field, what happens to it on the right. */
-.agent-queue { display: grid; gap: 6px; margin: 0 0 8px; min-width: 0; }
+.agent-queue { display: grid; gap: 6px; margin: 0 0 8px; min-width: 0; text-align: left; }
 .agent-queue[hidden] { display: none; }
 .agent-queue-item {
   display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 6px 4px 14px; box-sizing: border-box;
@@ -352,7 +352,7 @@
 }
 .agent-queue-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-queue-state { flex: none; padding-right: 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-queue-item[data-state="sending"] .agent-queue-state { animation: agent-queue-pulse 1.2s var(--ease-standard) infinite alternate; }
+.agent-queue-item[data-state="sending"] .agent-queue-state { animation: agent-queue-pulse var(--dur-beat) var(--ease-standard) infinite alternate; }
 @keyframes agent-queue-pulse { to { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .agent-queue-item[data-state="sending"] .agent-queue-state { animation: none; } }
 .agent-queue-remove {

@@ -1410,7 +1410,7 @@
         remove.className = "agent-queue-remove";
         remove.setAttribute("aria-label", "Remove waiting message");
         remove.title = "Remove waiting message";
-        remove.innerHTML = window.App?.closeIcon?.() || "×";
+        remove.innerHTML = window.App?.closeIcon?.() || "";
         remove.addEventListener("click", () => {
           const index = queue.indexOf(item);
           if (index >= 0) queue.splice(index, 1);
