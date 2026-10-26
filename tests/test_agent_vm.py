@@ -565,6 +565,33 @@ def test_only_an_admins_message_gets_the_vm(api, monkeypatch, admin):
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
 
 
+def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, monkeypatch):
+    # VM with GitHub and pictures, a file in the chat, Memory and workers at
+    # once: a bound of 20 tools failed every message of such a chat
+    # ("Invalid tool registry", 422).
+    from app.services.agent_files import AgentFiles, FileContext
+    from app.services.agent_memory import MemorySnapshot
+    monkeypatch.setenv("AGENT_GITHUB_TOKEN", "test")
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: True)
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    upload = files.upload(UID, chat_id, {"name": "data.csv", "data": base64.b64encode(b"a\n1\n").decode()})
+    chat, turn = pending(store, chat_id=chat_id)
+    config = {**defaults(), "enabled": True, "max_searches": 0}
+    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+        model=resolve_agent_model("claude-haiku-4-5"),
+        messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
+        delegation_config=config, completion_factory=Agent().factory,
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        agent_preferences=AgentPreferences(audit="off", judges="off", vm="on"),
+        file_context=FileContext(files, UID, chat_id, [upload["id"]]),
+        memory=MemorySnapshot(available=True, enabled=True, auto=True))
+    assert {"start_agent", "compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",
+            "github_import", "update_plan"} <= set(loop.registry.tools)
+
+
 # --- Deletion -----------------------------------------------------------------------
 
 def test_deleting_the_chat_deletes_its_vm(store, fake_vm):

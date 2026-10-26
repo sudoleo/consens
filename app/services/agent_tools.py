@@ -92,6 +92,13 @@ def _decode_stringified(arguments, value, unique):
     return decoded
 
 
+# A bound against a runaway registry, far below the providers' own limits
+# (OpenAI and Gemini take 128). An admin's largest message (workers, files,
+# Memory, VM with GitHub and pictures) offers 27 tools; 20 failed every
+# message of such a chat (2026-10-26, tests/test_agent_vm.py).
+MAX_TOOLS = 40
+
+
 class ToolRegistry:
     def __init__(self, tools=(), *, argument_limit=2048):
         self.default_argument_limit = argument_limit
@@ -99,7 +106,7 @@ class ToolRegistry:
         # tool is still validated against its own limit below.
         self.argument_limit = max([argument_limit, *(t.argument_limit or 0 for t in tools)])
         self.tools = {tool.name: tool for tool in tools}
-        if len(self.tools) != len(tools) or len(tools) > 20:
+        if len(self.tools) != len(tools) or len(tools) > MAX_TOOLS:
             raise ValueError("Invalid tool registry")
         self.schemas = [tool.schema() for tool in tools]
 
