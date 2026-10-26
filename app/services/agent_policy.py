@@ -29,17 +29,24 @@ class AgentPolicy:
     turn_steps: Optional[int] = None
     turn_seconds: Optional[int] = None
     turn_identical_calls: Optional[int] = None
+    # A turn that works in the agent's VM (agent_vm_tools.py) is a long run
+    # from its first VM call on: these replace turn_steps and turn_seconds.
+    vm_turn_steps: Optional[int] = None
+    vm_turn_seconds: Optional[int] = None
 
     @classmethod
     def for_chat(cls, config):
         # Chat has one spending limit: the atomic, account-wide token ledger.
         # Keep the bounded policy for legacy callers and the Consensus pipeline.
         # Per turn: at most four comparisons, 24 orchestrator routing steps,
-        # 15 minutes until the wrap-up, and an identical tool call twice.
+        # 15 minutes until the wrap-up, and an identical tool call twice. A
+        # turn working in its VM gets 200 steps and two hours; the ledger and
+        # the model's context window end it earlier (DelegationLoop._long_run_limit).
         return replace(cls.from_config({**config, "enabled": True}),
                        account_budget_only=True, context_chars=120_000,
                        turn_comparisons=4, turn_steps=24, turn_seconds=900, turn_identical_calls=2,
-                       version="agent-account-budget-2026-10-05-v3")
+                       vm_turn_steps=200, vm_turn_seconds=7200,
+                       version="agent-account-budget-2026-10-26-v4")
 
     @classmethod
     def from_config(cls, config):
@@ -51,7 +58,8 @@ class AgentPolicy:
         if not self.account_budget_only:
             # Bounded runs have their own hard limits; their snapshot (also
             # the "Shared run limits" prompt line) stays as before.
-            for key in ("turn_comparisons", "turn_steps", "turn_seconds", "turn_identical_calls"):
+            for key in ("turn_comparisons", "turn_steps", "turn_seconds", "turn_identical_calls",
+                        "vm_turn_steps", "vm_turn_seconds"):
                 data.pop(key)
         if self.account_budget_only:
             for key in ("seconds", "max_calls", "max_tools", "max_tokens", "max_cost_nano_usd",

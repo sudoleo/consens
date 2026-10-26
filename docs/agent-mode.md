@@ -421,7 +421,9 @@ startet er nicht, „Not enough time…“). Die Grenze setzt die VM selbst
 Login-Umgebung (PATH mit `/.sprite/bin` und `~/.local/bin`) lädt still vorweg
 (`SHELL_PRELUDE`): Die `.bashrc` der Sprite warnt sonst in jedem Befehl über
 `bind`; die Ausgabe des Befehls selbst bleibt ungefiltert.
-VM-Aufrufe zählen zu den Grenzen der Nachricht (24 Schritte, Zeit), nicht zur
+Ab dem ersten VM-Start einer Nachricht ist sie ein langer Lauf mit eigenen
+Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
+unter „Tageskontingent“); VM-Aufrufe zählen nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
 Änderung sind Fortschritt). `vm_exec` und `vm_read_file` bringen Fremdinhalt
 und sperren Memory wie `read_file` (`MEMORY_LOCKING_TOOLS`).
@@ -513,6 +515,8 @@ Datenschutzerklärung.
 Tests: `tests/test_agent_vm.py` (Fake-VM für Turn, Wiederverwendung,
 Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
 `SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket),
+`tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
+Fensterende, Kompaktierung, Aktivitätsgröße),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
 `agent-preferences.test.mjs`, `test_user_settings.py` und
 `test_prompt_config.py`.
@@ -1564,6 +1568,7 @@ sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 | Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („write the answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
 | Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
 | Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. Seit 2026-10-08 kommt der Wrap-up früher, wenn bis zum harten Stopp weniger als `ANSWER_RESERVE_SECONDS` der Denkstufe bleibt (max 10 min, high 6 min, low 2,5 min); ebenso endet dann das Warten auf Nachzügler. |
+| Lange VM-Läufe (`vm_turn_steps`, `vm_turn_seconds`) | 200 Schritte, 2 h | Ersetzen `turn_steps` und `turn_seconds`, sobald die VM in der Nachricht einmal lief (`_long_run`, seit 2026-10-26; Wrap-up und harter Stopp wie dort). |
 | Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
 
 Wrap-up: Gibt es einen Vergleich mit mindestens zwei Antworten (oder schon eine
@@ -1573,6 +1578,47 @@ einem letzten Schritt ohne aufrufbare Tools (`_merged_wrap_up`, siehe
 regulär. Sonst, auch in einem Turn ohne Vergleich, endet er mit
 `AnalysisBudgetExceeded` (`run_limit`, „… The available results have been saved;
 send a follow-up message to continue.“); gespeicherte Vergleiche bleiben erhalten.
+
+**Lange VM-Läufe (seit 2026-10-26).** Arbeitet der Agent in seiner VM
+(`VMSession.started`, auch wenn die VM danach ausfällt), gelten
+`vm_turn_steps` = 200 und `vm_turn_seconds` = 2 h (Vorschlag, Konstanten in
+`AgentPolicy.for_chat`). Die eigentliche Grenze bleibt das Tageskonto, das auch
+gecachte Tokens voll zählt: Vor jedem Schritt prüft `_long_run_limit`, ob es
+noch zwei Schritte im heutigen Umfang plus Antwort trägt
+(`remaining_tokens`, ein Firestore-Lesezugriff je Schritt, nur in langen
+Läufen) und ob das Gespräch samt Antwort unter 80 % des Modellfensters bleibt
+(`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
+`TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
+ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
+have, without tool calls.“), statt abzubrechen; sie bleibt wie jede Antwort
+ohne Vergleich ungeprüft. Ein Render-Deploy beendet laufende Läufe weiterhin
+nach `AGENT_SHUTDOWN_GRACE_SECONDS`; der Live-Puffer hält einen Lauf bis 3 h
+(`ACTIVE_TTL_SECONDS`).
+
+**Kompaktierung** (`agent_compaction.py`, nur in langen Läufen, vor jedem
+Schritt in `_compact`): Übersteigt der eigene Teil des Gesprächs (ab der Frage
+dieser Nachricht) `COMPACT_ABOVE_CHARS` = 150.000 Zeichen, werden ältere
+Ergebnisse von `vm_exec` und `vm_read_file` zu einem Stummel: Exit-Code,
+Dauer, `cwd`, die letzten 600 Zeichen je Strom bzw. Pfad und Zeilenbereich,
+die Anhangsliste, und `compacted` mit dem Hinweis, den Befehl erneut
+auszuführen oder die Datei neu zu lesen. Die neuesten Ergebnisse bleiben ganz,
+bis sie `KEEP_RECENT_CHARS` = 40.000 erreichen, der neueste Stapel immer;
+Ergebnisse unter 2.000 Zeichen und andere Werkzeuge (Vergleiche, Dateien)
+bleiben unberührt. Prompt-Cache: Jede Änderung einer älteren Nachricht
+schreibt den Cache ab dort neu, deshalb schneidet die App nur oberhalb der Marke
+und nur, wenn es mindestens `MIN_GAIN_CHARS` = 30.000 Zeichen spart; danach
+bleibt der Präfix stabil, bis das Gespräch wieder an der Marke ist. Nur
+Tool-Ergebnisse ändern sich, Anzahl und Reihenfolge der Nachrichten bleiben;
+Assistant-Nachrichten (Reasoning-Signaturen, Tool-Argumente) gehen unverändert
+zurück. Deshalb bleiben große `vm_write_file`-Inhalte in den Argumenten
+stehen. Das Arbeitsprotokoll behält die vollen Ergebnisse und vermerkt den
+Schnitt (`app`-Eintrag `compacted`).
+
+Die gespeicherte Aktivität eines Turns bleibt unter `ACTIVITY_MAX_CHARS` =
+600.000 Zeichen JSON (`agent_runs.bounded_activity`, 1 MiB je Turn-Dokument):
+Zuerst verlieren die ältesten Events ihre VM-Ausgabe (`output_truncated`),
+danach werden lange Texte gekürzt; Events und Reihenfolge bleiben.
+
 Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 
 | Grenze | Standard |

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+import json
 import re
 
 from firebase_admin import firestore
@@ -34,6 +35,11 @@ HISTORY_OMITTED_NOTE = ("Earlier messages of this chat are not included: the cha
                         "If the user refers to something you cannot see, say so.")
 OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
+# The saved activity of one turn, as JSON, within the turn document's 1 MiB
+# next to the answer and its review. Only a long VM run comes near it (one
+# event per command, each with its output's end).
+ACTIVITY_MAX_CHARS = 600_000
+ACTIVITY_SHORT_CHARS = 200
 
 
 class ConversationTooLong(ValueError):
@@ -53,6 +59,31 @@ def history_start(sizes, budget):
         return 0
     stepped = -(-cut // HISTORY_STEP_TURNS) * HISTORY_STEP_TURNS
     return stepped if stepped < len(sizes) else cut
+
+
+def bounded_activity(activity):
+    """``activity`` as saved: within ACTIVITY_MAX_CHARS characters of JSON.
+    The oldest events lose their VM output first (``output_truncated``), then
+    their long texts are shortened; the events themselves and their order stay."""
+    limit = ACTIVITY_MAX_CHARS
+    size = len(json.dumps(activity, ensure_ascii=False, default=str))
+    if size <= limit:
+        return activity
+    events = [dict(event) for event in activity]
+    for shorten in (False, True):
+        for event in events:
+            if size <= limit:
+                return events
+            before = len(json.dumps(event, ensure_ascii=False, default=str))
+            if not shorten and event.get("output"):
+                event["output"], event["output_truncated"] = "", True
+            elif shorten:
+                for key in ("text", "command"):
+                    value = event.get(key)
+                    if isinstance(value, str) and len(value) > ACTIVITY_SHORT_CHARS:
+                        event[key] = value[:ACTIVITY_SHORT_CHARS - 1] + "…"
+            size -= before - len(json.dumps(event, ensure_ascii=False, default=str))
+    return events
 
 
 def agent_sources(completion, review=None):
@@ -352,7 +383,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if (turn.to_dict() or {}).get("status") == "pending":
                     patch = {"status": "completed" if status == "succeeded" else "failed",
                              "updated_at": firestore.SERVER_TIMESTAMP}
-                    patch.update(agent_activity=completion.activity, agent_usage=usage,
+                    patch.update(agent_activity=bounded_activity(completion.activity), agent_usage=usage,
                                  agent_finish_reason=completion.finish_reason,
                                  agent_reasoning_truncated=completion.reasoning_truncated,
                                  sources=agent_sources(completion))
@@ -420,7 +451,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             chat_data, turn_data = chat.to_dict() or {}, turn.to_dict() or {}
             if chat.exists and turn.exists and chat_data.get("status") == "active" and turn_data.get("status") == "pending":
                 patch = {"status": "completed" if status == "succeeded" else "failed", "updated_at": firestore.SERVER_TIMESTAMP,
-                         "agent_activity": completion.activity, "agent_usage": completion.usage,
+                         "agent_activity": bounded_activity(completion.activity), "agent_usage": completion.usage,
                          "agent_finish_reason": completion.finish_reason,
                          "agent_reasoning_truncated": completion.reasoning_truncated,
                          "sources": agent_sources(completion, review)}

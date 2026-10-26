@@ -100,6 +100,15 @@ TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress.
                      "The available results have been saved; send a follow-up message to continue.")
 TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress. "
                       "The available results have been saved.")
+# A long VM run (AgentPolicy.vm_turn_*) ends with its answer while there is
+# still room for it: before the day's allowance cannot hold one more step and
+# the answer, and before its conversation fills this share of the model's
+# window (DelegationLoop._long_run_limit).
+LONG_RUN_CONTEXT_SHARE = .8
+TURN_ALLOWANCE_LIMIT = ("This response ended because today's token allowance is nearly used up. "
+                        "The available results have been saved.")
+TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
+                      "The available results have been saved; send a follow-up message to continue.")
 # Pause before the one retry of a session update after a short database
 # outage (_journal_write; a worker's end record, audit A12).
 TERMINAL_RETRY_SECONDS = .5
@@ -491,19 +500,37 @@ class DelegationLoop(AgentLoop):
         if cancellation:
             cancellation.raise_if_cancelled()
         self.budget.check()
-        if (self.policy.account_budget_only and self.policy.turn_seconds
-                and self._turn_elapsed() >= self.policy.turn_seconds + TURN_WRAP_UP_SECONDS):
+        seconds = self._turn_seconds()
+        if (self.policy.account_budget_only and seconds
+                and self._turn_elapsed() >= seconds + TURN_WRAP_UP_SECONDS):
             # Hard stop, also inside a step; the watcher cancels running calls.
             raise AnalysisBudgetExceeded(TURN_TIME_LIMIT)
 
     def _turn_elapsed(self):
         return self.clock() - self.turn_started
 
+    def _long_run(self):
+        """Whether this turn works in its VM: from the VM's first start in
+        this message on it has the long-run limits (AgentPolicy.vm_turn_*)
+        and its old command output is compacted (_compact)."""
+        return self.vm_tools is not None and self.vm_tools.session.started
+
+    def _turn_seconds(self):
+        if self.policy.vm_turn_seconds and self._long_run():
+            return self.policy.vm_turn_seconds
+        return self.policy.turn_seconds
+
+    def _turn_steps(self):
+        if self.policy.vm_turn_steps and self._long_run():
+            return self.policy.vm_turn_steps
+        return self.policy.turn_steps
+
     def _hard_stop_left(self):
         """Seconds until the turn's hard stop in _check, or None without one."""
-        if not (self.policy.account_budget_only and self.policy.turn_seconds):
+        seconds = self._turn_seconds()
+        if not (self.policy.account_budget_only and seconds):
             return None
-        return self.policy.turn_seconds + TURN_WRAP_UP_SECONDS - self._turn_elapsed()
+        return seconds + TURN_WRAP_UP_SECONDS - self._turn_elapsed()
 
     def _answer_reserve(self):
         """ANSWER_RESERVE_SECONDS for the chat model's effective reasoning."""
@@ -534,14 +561,54 @@ class DelegationLoop(AgentLoop):
         policy = self.policy
         if not policy.account_budget_only:
             return None
-        if policy.turn_seconds and (self._turn_elapsed() >= policy.turn_seconds or self.answer_time_left() <= 0):
+        seconds, steps = self._turn_seconds(), self._turn_steps()
+        if seconds and (self._turn_elapsed() >= seconds or self.answer_time_left() <= 0):
             # Also when the answer at the chosen reasoning level would no
             # longer fit before the hard stop (TURN_WRAP_UP_SECONDS is less
             # than a "max" answer and its checks need).
             return TURN_TIME_LIMIT
-        if policy.turn_steps and self.routing_steps >= policy.turn_steps:
+        if steps and self.routing_steps >= steps:
             return TURN_STEP_LIMIT
+        return self._long_run_limit() if self._long_run() else None
+
+    def _long_run_limit(self):
+        """A long VM run ends with its answer while the day's allowance still
+        holds one more step and the answer, and before its conversation
+        fills LONG_RUN_CONTEXT_SHARE of the model's window, instead of
+        failing at the next admission without one."""
+        from app.services import agent_quota
+        from app.services.agent_tokens import input_estimate
+        model = self.routing_lighter or self.model
+        answer = answer_output_limit(model)
+        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        if inputs + answer > model.context_length * LONG_RUN_CONTEXT_SHARE:
+            return TURN_CONTEXT_LIMIT
+        try:
+            remaining = agent_quota.remaining_tokens(self.store.db, self.uid)
+        except Exception as exc:
+            # The next admission reads the ledger again and refuses then.
+            logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
+            return None
+        if remaining < 2 * inputs + routing_output_limit(model) + answer:
+            return TURN_ALLOWANCE_LIMIT
         return None
+
+    def _compact(self):
+        """Older VM output of a long run leaves the conversation once it is
+        large (agent_compaction.py): stubs replace those tool results in
+        place, and the work log says which."""
+        if not self._long_run():
+            return
+        from app.services import agent_compaction
+        cut = agent_compaction.compact(self.messages, self.turn_start)
+        if cut is None:
+            return
+        for index, message in cut.replacements:
+            self.messages[index] = message
+        logging.info("Agent long run compacted results=%s chars_before=%s chars_after=%s",
+                     len(cut.replacements), cut.before, cut.after)
+        if self.work_log is not None:
+            self.work_log.app("compacted", cut.summary())
 
     def _identical_call(self, call):
         """No-progress guard: the same tool with the same arguments.
@@ -1891,19 +1958,20 @@ class DelegationLoop(AgentLoop):
         tools listed but not callable (tool_choice none, prompt cache kept),
         writes the answer from the comparisons it has."""
         comparison = self.comparison
-        # In audit mode the agent's own research carries the answer.
-        usable = (comparison.text or comparison.audit_mode
-                  or any(len(c["answers"]) >= 2 for c in comparison.comparisons))
+        compared = any(len(c["answers"]) >= 2 for c in comparison.comparisons)
+        # In audit mode the agent's own research carries the answer, in a
+        # long VM run its own work.
+        usable = comparison.text or comparison.audit_mode or compared or self._long_run()
         if not usable or not self._workers_ready():
             raise AnalysisBudgetExceeded(reason)
-        logging.info("Agent turn limit reached; the agent writes the answer from existing comparisons")
+        logging.info("Agent turn limit reached; the agent writes the answer from what it has")
         if not comparison.text:
             self._close_open_calls()
             self.messages.append({"role": "user", "content":
-                "App rule: this message has reached its limit. Write the answer now from what you have, without "
-                "tool calls." if comparison.audit_mode else
                 "App rule: this message has reached its limit. Write the answer now from the comparisons you have, "
-                "without tool calls; the app checks it."})
+                "without tool calls; the app checks it." if compared and not comparison.audit_mode else
+                "App rule: this message has reached its limit. Write the answer now from what you have, without "
+                "tool calls."})
             index = next(steps, None)
             if index is None:
                 raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
@@ -1967,6 +2035,8 @@ class DelegationLoop(AgentLoop):
                 value = None
                 for index in steps:
                     self._check()
+                    # Before the limits: they measure what the next step sends.
+                    self._compact()
                     limit = self._turn_limit()
                     if limit:
                         # The wrap-up takes this unused step index: model

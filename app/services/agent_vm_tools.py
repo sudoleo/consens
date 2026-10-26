@@ -220,6 +220,9 @@ class VMSession:
         self._lock = threading.Lock()
         self.backend = None
         self.state = "idle"
+        # Set once the VM was ready in this message, also if it fails later:
+        # the turn is a long run from then on (DelegationLoop._long_run).
+        self.started = False
         self.checkpoint = None
         self.inputs, self.skipped = [], []
         self.calls = self.commands = 0
@@ -249,6 +252,7 @@ class VMSession:
                     logging.warning("Agent VM checkpoint unavailable")
                 self._copy_inputs(cancellation)
                 self.state = "ready"
+                self.started = True
             except ProviderCancelled:
                 raise
             except Exception as exc:

@@ -4721,7 +4721,9 @@ bestehende Fallback-Judges bleiben identisch; zusätzliche Erinnerungsrunden sin
 nicht nötig. Drei aufeinanderfolgende Tool-Batches ohne einen gültig ausgeführten
 Toolcall brechen als Protokollstillstand ab; gültige Arbeit begrenzen nur die
 weichen Schutzgrenzen pro Turn (4 Vergleiche, 24 Schritte, 15 min, keine
-identischen Wiederholungen; siehe oben bei `AgentPolicy.for_chat`), die nach
+identischen Wiederholungen; in einem Turn mit VM-Arbeit 200 Schritte und 2 h,
+Wrap-up vor Tageskonto- und Fensterende, alte VM-Ausgabe kompaktiert; siehe
+oben bei `AgentPolicy.for_chat`), die nach
 Möglichkeit noch eine geprüfte Antwort liefern. Ungeprüfte Antworten werden nie erfolgreich
 abgeschlossen. Ohne Vergleich
 ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
@@ -8124,6 +8126,7 @@ app/services/
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget)
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES "defaults"), vm_name je Chat, delete_chat_vm für die Chat-Löschung; ein Anbieterwechsel betrifft nur diese Datei
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_share_file (Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge
+  agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
