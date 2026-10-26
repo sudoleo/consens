@@ -1,5 +1,5 @@
 {
-  "sources": "9de6c96a2968",
+  "sources": "392afc394b96",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -60,6 +60,7 @@
     "static/js/agent-chat.js",
     "static/js/agent-delegation.js",
     "static/js/agent-drive.js",
+    "static/js/agent-github.js",
     "static/js/agent-google.js",
     "static/js/agent-live.js",
     "static/js/agent-memory.js",
@@ -232,20 +233,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.efe94dd5cbd3.js",
+      "src": "/static/dist/app.551c6e71e1e2.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.ae5f9979ad1b.css",
+    "app": "/static/dist/app.0ded349f0f9d.css",
     "landing": "/static/dist/landing.6bc0531268a9.css",
     "public": "/static/dist/public.adf933346c0c.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "4470b6c39ec7",
+      "hash": "e60bfbeb32c7",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -316,10 +317,10 @@
     }
   },
   "previous_assets": [
+    "app.ae5f9979ad1b.css",
     "app.b0b2a7fa9071.css",
-    "app.b8e5dee8e9f6.css",
+    "app.efe94dd5cbd3.js",
     "app.6022ef08f632.js",
-    "app.453e9403fa17.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.99e97f468456.js",
