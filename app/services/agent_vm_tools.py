@@ -1,5 +1,5 @@
-"""The agent's VM tools: vm_exec, vm_read_file, vm_write_file and
-vm_share_file (agent_vm.py).
+"""The agent's VM tools: vm_exec, vm_read_file, vm_write_file, vm_edit_file
+and vm_share_file (agent_vm.py).
 
 Admins only (AgentPreferences.vm, routers/agent.py effective_preferences),
 never in chats with Google data, in turns with comparison or audit tools on
@@ -18,6 +18,10 @@ result is the call's ``tool`` entry in the work log, which the reviewers
 follow live. The turn keeps the summary (``agent_vm``: checkpoint, commands,
 seconds). A failing VM costs its tools, never the answer: the agent gets one
 short message and works on without the VM for the rest of the message.
+
+vm_edit_file (since 2026-10-26) replaces exact text in a file, like Claude
+Code's Edit: old_string must occur once (or replace_all), the bytes around it
+stay as they were, and the agent sees the changed lines again.
 
 vm_share_file gives the user a file of the VM (since 2026-10-26): it is
 copied into the chat's private file store (AgentFiles, kind ``vm_file``, the
@@ -70,6 +74,9 @@ _IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jp
                 (b"GIF87a", "image/gif"), (b"GIF89a", "image/gif"))
 WRITE_CHARS = 100_000
 TOOL_ARGUMENT_CHARS = WRITE_CHARS + 4_000
+# vm_edit_file: the lines around the first change the agent sees again.
+EDIT_CONTEXT_LINES = 3
+EDIT_SNIPPET_CHARS = 2_000
 
 # What the agent reads when the VM fails or has no time; the activity says
 # the same calmly (agent-activity.js, ``outcome``).
@@ -98,6 +105,15 @@ class VmWriteFileArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     path: str = Field(min_length=1, max_length=1024)
     content: str = Field(max_length=WRITE_CHARS)
+
+
+class VmEditFileArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    path: str = Field(min_length=1, max_length=1024)
+    old_string: str = Field(min_length=1, max_length=WRITE_CHARS, description="Exact text to replace, "
+                            "including whitespace and indentation; it must occur exactly once unless replace_all.")
+    new_string: str = Field(max_length=WRITE_CHARS, description="The text that replaces it.")
+    replace_all: bool = Field(default=False, description="Replace every occurrence of old_string.")
 
 
 class VmShareFileArgs(BaseModel):
@@ -169,6 +185,21 @@ def file_mime(raw, name):
         return "application/pdf"
     guessed = mimetypes.guess_type(name)[0]
     return guessed if guessed and not guessed.startswith("image/") else "application/octet-stream"
+
+
+def edit_snippet(edited, at, new):
+    """The first change in ``edited`` (the bytes ``new`` at offset ``at``)
+    with EDIT_CONTEXT_LINES around it, numbered like ``cat -n``."""
+    first = edited[:at].count(b"\n") + 1
+    lines = edited.decode("utf-8", "replace").split("\n")
+    if len(lines) > 1 and not lines[-1]:
+        lines.pop()  # The file's last line break starts no line.
+    start = max(1, first - EDIT_CONTEXT_LINES)
+    end = min(len(lines), first + new.count(b"\n") + EDIT_CONTEXT_LINES)
+    snippet = "".join(f"{number:>6}\t{lines[number - 1]}\n" for number in range(start, end + 1))
+    if len(snippet) > EDIT_SNIPPET_CHARS:
+        snippet = snippet[:EDIT_SNIPPET_CHARS - 1] + "…"
+    return {"snippet": snippet, "first_line": start, "last_line": end}
 
 
 def _safe_name(name, used):
@@ -344,7 +375,7 @@ class VMSession:
 
 
 class VMTools:
-    """The four VM tools of one message, around its VMSession."""
+    """The five VM tools of one message, around its VMSession."""
 
     def __init__(self, loop, factory=None, files=None):
         self.loop = loop
@@ -363,6 +394,10 @@ class VMTools:
                          activity=self._path_activity, reports=True),
             ReadOnlyTool("vm_write_file", "Write a text file in your VM (creates folders, replaces the file).",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
+                         activity=self._path_activity, reports=True),
+            ReadOnlyTool("vm_edit_file", "Change a text file in your VM by replacing exact text: old_string must "
+                         "occur exactly once (or set replace_all). Returns the changed lines.",
+                         VmEditFileArgs, self.edit, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
             ReadOnlyTool("vm_share_file", "Give the user a file from your VM (up to 5 MB): it appears under your "
                          "answer, a picture as a picture, any other file as a download.",
@@ -485,6 +520,40 @@ class VMTools:
             self.session.name, path, args.content.encode("utf-8")))
         report({"bytes": size})
         return self.session.announce({"path": path, "bytes": size})
+
+    def edit(self, args, *, cancellation, report=None):
+        """Exact replacement on the file's bytes: everything else, line
+        endings and encoding included, stays as it was."""
+        report = report or (lambda fields: None)
+        path = vm_path(args.path)
+        if args.old_string == args.new_string:
+            raise ValueError("old_string and new_string are the same: there is nothing to change.")
+        self._start(cancellation)
+        try:
+            raw, complete = self._provider("edit", lambda: self.session.backend.read_file(
+                self.session.name, path, limit=READ_BYTES))
+        except agent_vm.VMFileMissing:
+            raise ValueError(f"No file at {path}. Create it with vm_write_file.") from None
+        if not complete:
+            raise ValueError(f"{path} is larger than {READ_BYTES // (1024 * 1024)} MB: change it with vm_exec "
+                             "(sed, python).")
+        if b"\x00" in raw[:8192]:
+            raise ValueError(f"{path} is a binary file: change it with vm_exec.")
+        old, new = args.old_string.encode("utf-8"), args.new_string.encode("utf-8")
+        found = raw.count(old)
+        if not found:
+            raise ValueError(f"old_string was not found in {path}. It must match the file exactly, including "
+                             "whitespace and indentation: read the lines again with vm_read_file.")
+        if found > 1 and not args.replace_all:
+            raise ValueError(f"old_string occurs {found} times in {path}. Add surrounding lines to make it "
+                             "unique, or set replace_all to replace every occurrence.")
+        at = raw.index(old)
+        edited = raw.replace(old, new) if args.replace_all else raw.replace(old, new, 1)
+        size = self._provider("edit", lambda: self.session.backend.write_file(self.session.name, path, edited))
+        replaced = found if args.replace_all else 1
+        report({"bytes": size, "replacements": replaced})
+        return self.session.announce({"path": path, "replacements": replaced, "bytes": size,
+                                      **edit_snippet(edited, at, new)})
 
     def share(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)

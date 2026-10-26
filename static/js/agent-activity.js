@@ -38,6 +38,7 @@
     vm_exec: ['Command', 'Running a command…', 'Ran a command'],
     vm_read_file: ['Read file', 'Reading a file…', 'Read a file'],
     vm_write_file: ['Write file', 'Writing a file…', 'Wrote a file'],
+    vm_edit_file: ['Edit file', 'Editing a file…', 'Edited a file'],
     vm_share_file: ['Share file', 'Sharing a file…', 'Shared a file'],
   };
   // Tools whose success leaves an external write waiting for the user.
@@ -443,9 +444,10 @@
   // reader opened or closed it. Command, path and output are data: they sit
   // in <code> and <pre>, which stay untranslated, and the line's own words go
   // through App.t (the line is data-i18n-skip).
-  const vmTools = new Set(['vm_exec', 'vm_read_file', 'vm_write_file', 'vm_share_file']);
+  const vmTools = new Set(['vm_exec', 'vm_read_file', 'vm_write_file', 'vm_edit_file', 'vm_share_file']);
   const vmVerbs = { vm_read_file: ['Reading the file', 'Read the file'],
-    vm_write_file: ['Writing the file', 'Wrote the file'], vm_share_file: ['Sharing the file', 'Shared the file'] };
+    vm_write_file: ['Writing the file', 'Wrote the file'], vm_edit_file: ['Editing the file', 'Edited the file'],
+    vm_share_file: ['Sharing the file', 'Shared the file'] };
   const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);

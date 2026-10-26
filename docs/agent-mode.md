@@ -390,14 +390,23 @@ Grundlage dafür, dass Prüfer später die ganze Arbeit des Agenten live prüfen
 sie gilt in beiden Modi (mit Vergleich und im Audit-Modus).
 
 **Was der Agent bekommt.** Eine eigene Linux-VM pro Chat (Fly.io Sprites,
-Ubuntu, bash, sudo) mit vier Werkzeugen (`agent_vm_tools.py`, nur auf
+Ubuntu, bash, sudo) mit fünf Werkzeugen (`agent_vm_tools.py`, nur auf
 Account-Turns, nie in Chats mit Google-Daten, wie `read_source`):
 `vm_exec` (`command`, `cwd`, Standard `/home/sprite`, `timeout_seconds`,
 Standard 60, höchstens `EXEC_TIMEOUT_MAX` = 300; Ergebnis `stdout`, `stderr`,
 `exit_code`, `duration_ms`, `timed_out`, `cwd`), `vm_read_file` (`path`,
 `offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, Binärdateien nur als
 Hinweis), `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
-Ordner an) und seit 2026-10-26 `vm_share_file` (`path`, optional `name`):
+Ordner an), seit 2026-10-26 `vm_edit_file` (`path`, `old_string`,
+`new_string`, optional `replace_all`; wie Claude Codes Edit: Der Text muss
+genau einmal vorkommen, sonst sagt der Fehler, wie oft, oder `replace_all`
+ersetzt alle; ersetzt wird auf den Bytes, Zeilenenden und Nicht-UTF-8 bleiben
+unverändert; Dateien über 2 MB und Binärdateien nur per `vm_exec`; das
+Ergebnis nennt `replacements`, `bytes` und die geänderten Zeilen mit drei
+Zeilen Umgebung wie `cat -n` (`snippet`, `first_line`, `last_line`, höchstens
+2.000 Zeichen), der Prompt empfiehlt es statt die Datei ganz neu zu
+schreiben, was auch den Kontext langer Läufe klein hält) und seit 2026-10-26
+`vm_share_file` (`path`, optional `name`):
 Es kopiert eine Datei bis 5 MB in die private Dateiablage des Chats
 (`kind: "vm_file"` mit `turn_id`, zählt zum Speicher des Kontos, 30 Tage
 wie jede Datei), meldet sie per `resources`, und die App zeigt sie unter der
@@ -425,8 +434,9 @@ Ab dem ersten VM-Start einer Nachricht ist sie ein langer Lauf mit eigenen
 Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
 unter „Tageskontingent“); VM-Aufrufe zählen nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
-Änderung sind Fortschritt). `vm_exec` und `vm_read_file` bringen Fremdinhalt
-und sperren Memory wie `read_file` (`MEMORY_LOCKING_TOOLS`).
+Änderung sind Fortschritt). `vm_exec`, `vm_read_file` und `vm_edit_file` (zeigt
+Dateizeilen) bringen Fremdinhalt und sperren Memory wie `read_file`
+(`MEMORY_LOCKING_TOOLS`).
 
 **Lebenszyklus.** Eine VM pro Chat, Name `vm_name(uid, chat)` (stabil, ohne
 Konto-ID). Erst der erste VM-Aufruf einer Nachricht weckt sie
@@ -507,7 +517,7 @@ Ergebnis, das das Modell bekam, als `tool`-Eintrag mit Herkunft `vm` im
 Arbeitsprotokoll (Fremdinhalt, `UNTRUSTED_DATA`); die Prüfer lesen es live
 mit, ihr Prompt nennt `vm` und Befehlsergebnisse, und der `end`-Eintrag
 trägt die Summe. `agent-activity.js` zeigt jeden Aufruf kompakt wie ein
-Terminal (`vmView`): `$ Befehl` bzw. „Read the file“/„Wrote the file“ mit
+Terminal (`vmView`): `$ Befehl` bzw. „Read the file“/„Wrote the file“/„Edited the file“ mit
 Pfad, rechts Exit-Code (nur ≠ 0), „Timed out“ und Dauer (ab 1 s), darunter
 die Ausgabe in einem getönten Feld, offen, solange der Befehl läuft, danach
 eingeklappt (eine Wahl des Lesers bleibt). Befehl und Ausgabe stehen in

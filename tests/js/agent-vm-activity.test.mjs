@@ -70,10 +70,15 @@ describe("VM calls in the activity", () => {
       path: "/home/sprite/stats.py", bytes: 9 });
     activity.receive(events, { version: 1, kind: "tool", id: "s:2/tool", name: "vm_exec", status: "failed",
       command: "ls", outcome: "unavailable" });
+    activity.receive(events, { version: 1, kind: "tool", id: "s:3/tool", name: "vm_edit_file", status: "succeeded",
+      path: "/home/sprite/calc.py" });
     activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
-    const [write, failed] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    const [write, failed, edit] = host.querySelectorAll(".agent-activity-content .agent-vm");
     expect(write.querySelector(".agent-vm-verb").textContent).toBe("Wrote the file");
     expect(write.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/stats.py");
+    // An exact replacement (vm_edit_file, 2026-10-26) says so with its file.
+    expect(edit.querySelector(".agent-vm-verb").textContent).toBe("Edited the file");
+    expect(edit.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/calc.py");
     // Nothing to open without output.
     expect(write.classList.contains("has-output")).toBe(false);
     expect(failed.querySelector(".agent-vm-meta").textContent).toBe("VM not available");

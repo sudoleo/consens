@@ -73,7 +73,7 @@ _ENTRIES = (
     ("agent_vm", "Agent: Linux VM",
      "Appended to \"Agent: instructions\" or \"Agent: audit mode instructions\" before the memory instructions when "
      "an admin switched on Agent VM (agent_vm_tools.py) and the chat has no Google data: the agent's own VM with "
-     "vm_exec, vm_read_file, vm_write_file and vm_share_file.",
+     "vm_exec, vm_read_file, vm_write_file, vm_edit_file and vm_share_file.",
      "prompt_defaults.py:AGENT_VM_PROMPT", _vm),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "

@@ -65,7 +65,7 @@ TOOL_DATA = {
     "update_memory": "memory",
     "start_agent": "agent", "send_agent": "agent", "wait_agents": "agent", "review_agent": "agent",
     "stop_agent": "agent", "report_to_orchestrator": "agent",
-    "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_share_file": "vm",
+    "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
 }
 
 

@@ -424,6 +424,62 @@ def test_reading_a_missing_or_long_file(store, fake_vm):
     assert page["total_lines"] == 1000 and page["more"] == "More lines follow: read on with offset=5."
 
 
+def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm):
+    """vm_edit_file (2026-10-26), like Claude Code's Edit: the agent changes a
+    file without writing it whole again, and sees the changed lines."""
+    source = "".join(f"line {n}\n" for n in range(1, 11)).replace("line 5\n", "total = a - b\n")
+    script = Agent([[("vm_edit_file", {"path": "calc.py", "old_string": "total = a - b",
+                                       "new_string": "total = a + b\nprint(total)"})]])
+    loop = vm_loop(store, script)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    files = fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]
+    files["/home/sprite/calc.py"] = source.encode()
+    events = list(loop.run())
+    assert "vm_edit_file" in script.offered[0]
+    assert "vm_edit_file changes part of a file" in prompt_defaults.AGENT_VM_PROMPT
+    assert files["/home/sprite/calc.py"].decode() == source.replace("total = a - b\n", "total = a + b\nprint(total)\n")
+    [result] = results(loop)
+    assert result["path"] == "/home/sprite/calc.py" and result["replacements"] == 1
+    assert result["first_line"] == 2 and result["last_line"] == 9
+    assert result["snippet"].splitlines() == ["     2\tline 2", "     3\tline 3", "     4\tline 4",
+                                              "     5\ttotal = a + b", "     6\tprint(total)", "     7\tline 6",
+                                              "     8\tline 7", "     9\tline 8"]
+    # The activity names the file; the lines it shows again are file content: memory locks.
+    edit = next(e for e in tool_events(events, "vm_edit_file") if e["status"] == "succeeded")
+    assert edit["path"] == "/home/sprite/calc.py" and loop.memory_locked is True
+    entry = next(e for e, _ in loop.work_log.entries_after(0) if e["kind"] == "tool" and e["name"] == "vm_edit_file")
+    assert entry["data"] == "vm"
+
+
+def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
+    loop = vm_loop(store, Agent())
+    tools, cancellation = loop.vm_tools, ProviderCancellation()
+
+    def edit(**kwargs):
+        args = agent_vm_tools.VmEditFileArgs(path=kwargs.pop("path", "a.txt"), **kwargs)
+        try:
+            return tools.edit(args, cancellation=cancellation)
+        except ValueError as exc:
+            return {"error": str(exc)}
+    # The same text on both sides changes nothing and never wakes the VM.
+    assert "nothing to change" in edit(old_string="x", new_string="x")["error"] and fake_vm.calls == []
+    tools.session.ready(cancellation)
+    files = fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]
+    assert edit(path="none.txt", old_string="a", new_string="b")["error"] == (
+        "No file at /home/sprite/none.txt. Create it with vm_write_file.")
+    # Windows line endings and bytes that are no UTF-8 stay exactly as they were.
+    files["/home/sprite/a.txt"] = b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
+    assert "was not found" in edit(old_string="x = 2", new_string="x = 3")["error"]
+    assert "occurs 2 times" in edit(old_string="= 1", new_string="= 2")["error"]
+    assert files["/home/sprite/a.txt"] == b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
+    done = edit(old_string="= 1", new_string="= 2", replace_all=True)
+    assert done["replacements"] == 2 and files["/home/sprite/a.txt"] == b"x = 2\r\ny = 2\r\n\xff\xfe raw\r\n"
+    files["/home/sprite/b.bin"] = b"\x00\x01binary"
+    assert "binary file" in edit(path="b.bin", old_string="binary", new_string="text")["error"]
+    with pytest.raises(ValueError):
+        agent_vm_tools.VmEditFileArgs(path="a.txt", old_string="", new_string="b")
+
+
 def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, fake_vm, tmp_path, monkeypatch):
     """vm_share_file (2026-10-26): the file goes into the chat's private store
     as the turn's ``vm_file``; a picture only by its bytes, never by its name."""
