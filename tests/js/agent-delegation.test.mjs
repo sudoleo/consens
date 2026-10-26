@@ -586,6 +586,45 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  // A reviewer goes on in a new session after a failed round
+  // (agent_audit.ReviewerSession): one row per reviewer, never a third one
+  // beside the two chosen (2026-10-26).
+  it("shows a reviewer that went on in a new session as one row", async () => {
+    const second = "b".repeat(32), other = "e".repeat(32);
+    const reviewer = (id, status, at, usage) => ({ ...agent(1, status, id), kind: "audit", title: "Review · Qwen",
+      model: { model: "qwen/qwen3.8-27b", label: "Qwen3.8 27B" }, created_at: at, usage, duration_ms: 8000 });
+    const failed = { ...reviewer(agentId, "failed", "2026-10-26T08:00:00Z", null), failure: { code: "review_unavailable" } };
+    const back = reviewer(second, "waiting", "2026-10-26T08:00:20Z", { input_tokens: 1000, output_tokens: 200, complete: true });
+    const luna = { ...reviewer(other, "working", "2026-10-26T08:00:00Z", { input_tokens: 50000, output_tokens: 2000, complete: true }),
+      title: "Review · GPT-6 Luna", model: { model: "openai/gpt-6-luna", label: "GPT-6 Luna" } };
+    const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
+      ? { agent: { assignment: { goal: "Review · Qwen" } }, messages: [{ id: "m1", seq: 3, sender: agentId, recipient: "orchestrator",
+          kind: "failure", text: "This round failed. The reviewer goes on in a new session." }] }
+      : url.includes(second)
+        ? { agent: { assignment: { goal: "Review · Qwen" } }, messages: [{ id: "m2", seq: 9, sender: second, recipient: "orchestrator",
+            kind: "round", text: "- **doubtful** · #4: Unchecked." }] }
+        : { agents: [failed, luna, back], status: "running" } }));
+    for (const session of [failed, luna, back]) receive(w, session);
+    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    d.querySelector(".agent-sidebar-toggle").click();
+    await settle();
+    const rows = [...d.querySelectorAll(".agent-session")];
+    expect(rows.map(row => row.querySelector("strong").textContent)).toEqual(["Qwen3.8 27B", "GPT-6 Luna"]);
+    expect(d.querySelector(".agent-sidebar-progress").textContent).toBe("0 of 2 done");
+    // The session at work speaks for the reviewer; the failed one is history.
+    expect(rows[0].querySelector(".agent-session-state").textContent).toMatch(/^Waiting · /);
+    expect(rows[0].querySelector(".agent-session-tokens").textContent).toBe("1,200+ tokens");
+    rows[0].querySelector("summary").click();
+    await vi.waitFor(() => expect(rows[0].querySelector(".agent-session-detail h3")?.textContent).toBe("Notes during the run"));
+    const detail = rows[0].querySelector(".agent-session-detail").textContent;
+    expect(detail.indexOf("This round failed.")).toBeLessThan(detail.indexOf("Unchecked."));
+    // The icon of the later session opens the reviewer's one row.
+    const icon = [...d.querySelectorAll(".agent-inline-model")].find(button => button.dataset.agentId === second);
+    icon.click();
+    expect(d.activeElement).toBe(rows[0].querySelector("summary"));
+    dom.window.close();
+  });
+
   it("keeps the text of a comparison model stopped mid-answer, marked as incomplete", async () => {
     const stopped = { ...agent(1, "stopped"), kind: "comparison", title: "Comparison 1 · Haiku", partial: true };
     const note = "It was still writing when the answer was finished. The answer and its check use the other answers.";

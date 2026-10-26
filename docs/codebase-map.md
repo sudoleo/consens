@@ -5145,7 +5145,11 @@ Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
-Seitenleiste behält jeden Aufruf.
+Seitenleiste behält jeden Aufruf. Ausnahme Audit-Prüfer (seit 2026-10-26):
+Die Sitzungen eines Prüfers (neue nach gescheiterter Runde oder vollem
+Gespräch) bilden eine Zeile unter der ID seiner ersten (`reviewerRows`;
+Zustand der arbeitenden bzw. letzten Sitzung, Tokens und `span` über alle,
+`rowDetail` legt ihre Nachrichten nach `seq` zusammen).
 Der Kopf mit Titel, Stop/Schließen und die Übersicht bleiben außerhalb des
 Scrollbereichs sichtbar. Die Übersicht (`.agent-sidebar-overview`) nennt
 `n of m done` (plus `· k without result` für `failed`/`stopped`) und rechts den

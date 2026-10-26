@@ -52,12 +52,62 @@
     const ends = agents.map((agent, index) => starts[index] + elapsed(view, agent));
     return Math.max(...ends) - Math.min(...starts);
   }
+  // A reviewer of the agent's work (audit) goes on in a new session after a
+  // failed round or a full conversation (agent_audit.ReviewerSession): ONE
+  // row per reviewer, under its first session's id. Its state is that of the
+  // session at work, else of the last one; tokens and time cover them all.
+  // Until 2026-10-26 a reviewer back after a failed round read as a third
+  // reviewer beside the two chosen.
+  function reviewerRows(view) {
+    const groups = new Map();
+    for (const agent of view.agents.values()) {
+      if (agent.kind !== "audit") continue;
+      const key = agent.model?.model || agent.title;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(agent);
+    }
+    const rows = new Map();
+    for (const sessions of groups.values()) {
+      if (sessions.length === 1) { rows.set(sessions[0].id, sessions[0]); continue; }
+      sessions.sort((a, b) => (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0));
+      const latest = sessions.find(agent => activeStates.has(agent.status)) || sessions.at(-1);
+      const metered = sessions.filter(agent => measured(agent.usage));
+      const row = { ...latest, id: sessions[0].id, sessions: sessions.map(agent => agent.id), progressId: latest.id,
+        sources: sessions.flatMap(agent => agent.sources || []),
+        usage: metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),
+          output_tokens: metered.reduce((n, a) => n + a.usage.output_tokens, 0),
+          complete: metered.length === sessions.length && metered.every(a => a.usage.complete !== false) } : null,
+        // The span is live already: no anchor of its own to count on.
+        duration_ms: span(view, sessions), runtimeAnchor: undefined,
+        duration_incomplete: sessions.some(agent => agent.duration_incomplete) };
+      for (const agent of sessions) rows.set(agent.id, agent === sessions[0] ? row : null);
+    }
+    return rows;
+  }
   function rowsFor(view) {
     const check = checkRow(view);
-    return [...[...view.agents.values()].filter(agent => agent.kind !== "judge"), ...(check ? [check] : [])];
+    const reviewers = reviewerRows(view);
+    const rows = [...view.agents.values()].filter(agent => agent.kind !== "judge")
+      .map(agent => reviewers.has(agent.id) ? reviewers.get(agent.id) : agent).filter(Boolean);
+    return [...rows, ...(check ? [check] : [])];
   }
   function findRow(view, id) {
-    return id === CHECK_ID ? checkRow(view) : view.agents.get(id);
+    if (id === CHECK_ID) return checkRow(view);
+    const agent = view.agents.get(id);
+    return agent?.kind === "audit" ? reviewerRows(view).get(id) || agent : agent;
+  }
+  // A row's sessions: one, or a reviewer's in order.
+  function loadRow(view, agent) {
+    for (const id of agent.sessions || [agent.id]) loadDetail(view, id);
+  }
+  function rowDetail(view, agent) {
+    if (!agent.sessions) return view.details.get(agent.id);
+    const parts = agent.sessions.map(id => view.details.get(id));
+    if (parts.some(part => !part)) return undefined;
+    const messages = new Map(parts.flatMap(part => [...part.messages]));
+    return { assignment: parts[0].assignment, messages, loading: parts.some(part => part.loading),
+      loadedSeq: Math.min(...parts.map(part => part.loadedSeq)), hasMore: parts.some(part => part.hasMore),
+      error: parts.find(part => part.error)?.error || "", retry: agent.sessions.find((id, i) => parts[i].hasMore || parts[i].error) };
   }
   function stateLabel(agent) {
     // Ended mid-answer: its text is kept and shown, marked incomplete.
@@ -417,7 +467,9 @@
     current.closed = false;
     current.manual = true;
     prefs(current); rememberChatPanel(current); render();
-    const row = sidebar._rows.get(agentId);
+    // A reviewer's later session is shown in its first one's row.
+    const grouped = [...reviewerRows(current).values()].find(entry => entry?.sessions?.includes(agentId));
+    const row = sidebar._rows.get(grouped?.id || agentId);
     (row?.summary || sidebar.querySelector(".agent-sidebar-close")).focus({ preventScroll: true });
     if (row) { reveal(row.root); point(row.summary); }
   }
@@ -472,7 +524,7 @@
             : 'Results are marked in the answer and listed under Review.'));
       return;
     }
-    const detail = view.details.get(agent.id);
+    const detail = rowDetail(view, agent);
     const loading = !detail || (detail.loading && detail.loadedSeq < 0);
     row.body.setAttribute('aria-busy', String(Boolean(detail?.loading || loading)));
     if (loading) {
@@ -541,7 +593,7 @@
     if (detail.hasMore || detail.error) {
       const more = node("button", "agent-load-more", detail.error ? "Retry" : "Load more messages");
       more.type = "button";
-      more.addEventListener("click", () => loadDetail(view, agent.id, true));
+      more.addEventListener("click", () => loadDetail(view, detail.retry || agent.id, true));
       row.body.append(more);
     }
   }
@@ -714,8 +766,9 @@
           if (current !== view || view.uid !== uid() || !window.document?.body || !root.isConnected) return;
           if (root.open) {
             view.expanded.add(agent.id);
-            if (agent.kind !== "check") loadDetail(view, agent.id);
-            renderDetail(row, view, findRow(view, agent.id));
+            const shown = findRow(view, agent.id);
+            if (shown && shown.kind !== "check") loadRow(view, shown);
+            renderDetail(row, view, shown);
             // Opened by the reader (click, key or a model icon), not restored:
             // bring its start into view. The heading then sticks while reading.
             if (document.activeElement === summary) reveal(root);
@@ -736,10 +789,12 @@
       setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'audit' ? 'Reviewer'
         : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
-      setText(row.state, `${stateLabel(agent)} · ${agent.duration_incomplete ? '≥ ' : ''}${App.format.duration(elapsed(view, agent))}`);
+      // The state through App.t first: the line glued to the time matches no
+      // entry ("No review · 8 Sek." stayed half English, 2026-10-26).
+      setText(row.state, `${App.t(stateLabel(agent))} · ${agent.duration_incomplete ? '≥ ' : ''}${App.format.duration(elapsed(view, agent))}`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
-      const progress = pending ? view.progress.get(agent.id) : null;
+      const progress = pending ? view.progress.get(agent.progressId || agent.id) : null;
       const loading = pending && progress?.streaming !== false;
       const usage = measured(progress?.usage) ? progress.usage : agent.usage;
       const chars = loading && progress?.chars > 0 && !measured(progress.usage);
@@ -753,7 +808,7 @@
       // number, not in a travelling bar: the panel stays still while it works.
       row.usage.classList.toggle('is-loading', loading);
       row.root.open = view.expanded.has(agent.id);
-      if (row.root.open) { if (agent.kind !== "check") loadDetail(view, agent.id); renderDetail(row, view, agent); }
+      if (row.root.open) { if (agent.kind !== "check") loadRow(view, agent); renderDetail(row, view, agent); }
     }
     App.agentWorkLog?.render(sidebar._workLog, view);
   }
