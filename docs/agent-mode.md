@@ -442,7 +442,24 @@ Chat beim Anlegen gelöscht, löscht der Lauf die VM selbst
 (`_still_active`). Eine Nachricht ohne VM-Aufruf weckt die VM nicht und legt
 keinen Checkpoint an. Der Turn speichert `agent_vm: {provider, checkpoint,
 calls, commands, seconds}` (Summe der Befehlslaufzeiten; `unavailable: true`,
-wenn die VM ausfiel). Noch keine Wiederherstellung in der Oberfläche; die
+wenn die VM ausfiel).
+
+**Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
+erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM
+lief, speichert deshalb `agent_work_record` (`agent_compaction.work_record`,
+nicht an den Browser): eine Zeile je Tool-Aufruf des Agenten, von der App aus
+Aufruf und Ergebnis geschrieben, ohne Modell (kostet nichts, erfindet nichts),
+etwa `2. vm_exec $ pytest -q -> exit 1, 2.0 s: 1 failed, 2 passed`, höchstens
+`RECORD_CHARS` = 6.000 Zeichen (bei mehr die ersten fünf und die letzten
+Aufrufe, dazwischen „[… N more calls …]“). `AgentRunStore.messages` setzt es
+hinter die Antwort dieses Turns als eigene Nachricht mit dem Kopf „[consens.io
+work record of the response above, written by the app, not by the user …]“,
+byte-gleich wie gespeichert, sodass die nächste Nachricht weiter den gecachten
+Präfix der vorigen liest. Es ist nie Nutzertext: `is_work_record` lässt es aus
+`answer_conversation` heraus (Memory-Belege, Links für `read_source`,
+Adressen für Gmail, Vergleichskontext), im Arbeitsprotokoll hat es die
+Herkunft `vm`. Auch ein Turn, der scheiterte oder gestoppt wurde, speichert
+es; ein Turn, dessen VM nie startete, nicht. Noch keine Wiederherstellung in der Oberfläche; die
 Sprite pausiert nach etwa 30 s Leerlauf ohne Rechenkosten.
 
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus

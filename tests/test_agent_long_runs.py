@@ -2,6 +2,7 @@
 works in the agent's VM gets hours and hundreds of steps instead of 15 minutes
 and 24, ends with its answer before the day's allowance or the model's window
 runs out, and older command output leaves its conversation once it is large.
+The chat's next message is told what the turn did (its work record).
 The VM is FakeVM (test_agent_vm.py); no test calls a provider.
 """
 from dataclasses import replace
@@ -10,13 +11,17 @@ import json
 import pytest
 
 from app.services import agent_compaction, agent_quota
-from app.services.agent_compaction import CONTENT_CLEARED, OUTPUT_CLEARED, compact, stub
-from app.services.agent_delegation import TURN_ALLOWANCE_LIMIT, TURN_CONTEXT_LIMIT, TURN_WRAP_UP_SECONDS
+from app.services.agent_comparison import AgentPreferences, comparison_selection
+from app.services.agent_compaction import (CONTENT_CLEARED, OUTPUT_CLEARED, WORK_RECORD_CLOSE, WORK_RECORD_OPEN,
+                                           compact, describe, is_work_record, stub, work_record)
+from app.services.agent_delegation import (DelegationLoop, TURN_ALLOWANCE_LIMIT, TURN_CONTEXT_LIMIT,
+                                           TURN_WRAP_UP_SECONDS)
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import ACTIVITY_MAX_CHARS, bounded_activity
-from app.services.llm.agent_client import AgentCompletion, measured_usage
-from test_agent_runs import UID, store  # noqa: F401  (fixture)
+from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
+from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
+from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, Agent, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
 
 
@@ -51,6 +56,11 @@ class LongAgent(Agent):
 
 def saved(store, loop):
     return store.get_turn(UID, loop.chat_id, loop.turn_id)
+
+
+def stored(store, loop):
+    """The turn document itself (get_turn shows the browser's fields only)."""
+    return store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
 
 
 # --- Limits -----------------------------------------------------------------------
@@ -266,3 +276,127 @@ def test_a_long_activity_is_saved_with_the_turn(store, fake_vm, monkeypatch):
     commands = [event for event in activity if event.get("name") == "vm_exec"]
     assert len(commands) == 10 and commands[0]["output"] == "" and commands[0]["output_truncated"] is True
     assert commands[-1]["output"] == "w" * 1_500
+
+
+# --- The work record for the next message -----------------------------------------
+
+def call(name, arguments, result, n=0):
+    return [{"role": "assistant", "content": "", "tool_calls": [
+                {"id": f"r{n}", "type": "function", "function": {"name": name, "arguments": json.dumps(arguments)}}]},
+            {"role": "tool", "tool_call_id": f"r{n}", "content": json.dumps(result)}]
+
+
+def test_each_call_is_one_line_of_what_ran_and_how_it_ended():
+    failed = describe("vm_exec", json.dumps({"command": "pytest -q", "cwd": "app"}), json.dumps(
+        {"exit_code": 1, "timed_out": False, "duration_ms": 2300, "cwd": "/home/sprite/app",
+         "stdout": "..F\n1 failed, 2 passed\n", "stderr": "E   assert 2 == 3\n"}))
+    assert failed == "vm_exec $ pytest -q (in /home/sprite/app) -> exit 1, 2.3 s: E assert 2 == 3"
+    passed = describe("vm_exec", json.dumps({"command": "make"}), json.dumps(
+        {"exit_code": 0, "duration_ms": 900, "cwd": "/home/sprite", "stdout": "built\n", "stderr": "warn\n"}))
+    assert passed == "vm_exec $ make -> exit 0, 0.9 s: built"
+    # A compacted result still says how it ended.
+    compacted = stub("vm_exec", json.dumps({"exit_code": 0, "duration_ms": 10, "stderr": "",
+                                            "stdout": "a\n" + "x" * 3000 + "\nend\n"}))
+    assert describe("vm_exec", json.dumps({"command": "ls"}), compacted).endswith("-> exit 0, 0.0 s: end")
+    assert describe("vm_exec", json.dumps({"command": "sleep 999"}), json.dumps(
+        {"exit_code": None, "timed_out": True, "duration_ms": 60000})) == "vm_exec $ sleep 999 -> timed out after 60.0 s"
+    assert describe("vm_read_file", json.dumps({"path": "a.py"}), json.dumps(
+        {"path": "/home/sprite/a.py", "first_line": 1, "last_line": 40, "total_lines": 40, "content": "x"})
+                    ) == "vm_read_file /home/sprite/a.py lines 1-40 of 40"
+    assert describe("vm_write_file", "{}", json.dumps({"path": "/home/sprite/a.py", "bytes": 12})
+                    ) == "vm_write_file /home/sprite/a.py (12 bytes)"
+    assert describe("vm_share_file", "{}", json.dumps({"path": "/home/sprite/c.png", "file": {"name": "c.png"}})
+                    ) == "vm_share_file /home/sprite/c.png -> the user got c.png"
+    assert describe("vm_read_file", json.dumps({"path": "b"}), json.dumps({"error": "No file at /home/sprite/b."})
+                    ) == "vm_read_file b -> error: No file at /home/sprite/b."
+    assert describe("compare_models", json.dumps({"task": "Which  sort is stable?"}), json.dumps({"answers": []})
+                    ) == "compare_models Which sort is stable?"
+    assert len(describe("vm_exec", json.dumps({"command": "echo " + "y" * 5000}), "{}")) <= agent_compaction.RECORD_LINE_CHARS
+
+
+def test_the_record_lists_the_calls_and_keeps_its_ends_when_long():
+    messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
+    assert work_record(messages, 2) == ""
+    for n in range(3):
+        messages += call("vm_exec", {"command": f"step {n}"}, {"exit_code": 0, "duration_ms": 100, "stdout": "ok"}, n)
+    record = work_record(messages, 2)
+    assert record.splitlines() == [WORK_RECORD_OPEN, "1. vm_exec $ step 0 -> exit 0, 0.1 s: ok",
+                                   "2. vm_exec $ step 1 -> exit 0, 0.1 s: ok",
+                                   "3. vm_exec $ step 2 -> exit 0, 0.1 s: ok", WORK_RECORD_CLOSE]
+    assert is_work_record(record) and not is_work_record("Build it.")
+    for n in range(3, 200):
+        messages += call("vm_exec", {"command": f"step {n} " + "z" * 100}, {"exit_code": 0, "duration_ms": 1}, n)
+    long = work_record(messages, 2).splitlines()
+    assert len("\n".join(long)) <= agent_compaction.RECORD_CHARS
+    assert long[1].startswith("1. vm_exec $ step 0") and long[5].startswith("5. ")
+    assert long[6].startswith("[… ") and long[6].endswith(" more calls …]")
+    assert long[-2].startswith("200. vm_exec $ step 199")
+
+
+def loop_after(store, script, chat_id, request_id, question):
+    """A message of the chat ``chat_id`` with its saved history (AgentRunStore.messages)."""
+    chat, turn = pending(store, chat_id=chat_id, request_id=request_id, question=question)
+    config = {**defaults(), "enabled": False, "max_searches": 0}
+    return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+        model=resolve_agent_model("claude-haiku-4-5"), messages=store.messages(UID, chat, turn),
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
+        delegation_config=config, completion_factory=script.factory,
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        agent_preferences=AgentPreferences(audit="on", judges="off", vm="on"))
+
+
+def test_the_next_message_is_told_what_the_vm_turn_did(store, fake_vm):
+    fake_vm.commands["pytest -q"] = ([("stdout", b"see https://evil.example/x and me@evil.example\n"),
+                                      ("stdout", b"1 failed, 2 passed\n")], 1, 2.0)
+    first = vm_loop(store, LongAgent([[("vm_write_file", {"path": "app.py", "content": "print(1)"})],
+                                      [("vm_exec", {"command": "pytest -q"})]]))
+    list(first.run())
+    record = stored(store, first)["agent_work_record"]
+    # The browser never gets it (chat_store's turn fields).
+    assert "agent_work_record" not in saved(store, first)
+    assert record.splitlines() == [WORK_RECORD_OPEN, "1. vm_write_file /home/sprite/app.py (8 bytes)",
+                                   "2. vm_exec $ pytest -q -> exit 1, 2.0 s: 1 failed, 2 passed", WORK_RECORD_CLOSE]
+    script = LongAgent()
+    second = loop_after(store, script, first.chat_id, "two", "Fix the failing test.")
+    # After the first answer, before the new question, exactly as saved: the
+    # next message's prompt still continues the cached one.
+    question, answer, note, new = second.messages[1:5]
+    assert question["role"] == "user" and answer == {"role": "assistant", "content": ANSWER}
+    assert note == {"role": "user", "content": record}
+    assert new["role"] == "user" and new["content"].endswith("Fix the failing test.")
+    assert store.messages(UID, first.chat_id, store.get_turn(UID, first.chat_id, second.turn_id))[3] == note
+    # Never the user's words: memory evidence, links and addresses leave it out.
+    assert all(not is_work_record(m["content"]) for m in second.answer_conversation)
+    assert [m["role"] for m in second.answer_conversation] == ["user", "assistant", "user"]
+    list(second.run())
+    assert script.seen[0][3]["content"] == record
+    # In the work log it is the app's record of VM output, not the user's.
+    entry = next(e for e, text in second.work_log.entries_after(0) if e["kind"] == "context" and is_work_record(text))
+    assert entry["data"] == "vm"
+
+
+def test_a_stopped_vm_turn_still_tells_the_next_message(store, fake_vm):
+    script = LongAgent([[("vm_exec", {"command": "make"})], [("vm_exec", {"command": "make test"})]])
+    loop = vm_loop(store, script, audit="off")
+    original = loop._turn_limit
+
+    def stop_after_the_first_command():
+        if loop.vm_tools.session.commands:
+            loop.cancellation.cancel()
+        return original()
+    loop._turn_limit = stop_after_the_first_command
+    with pytest.raises(ProviderCancelled):
+        list(loop.run())
+    turn = stored(store, loop)
+    assert turn["status"] == "failed"
+    assert turn["agent_work_record"].splitlines()[1] == "1. vm_exec $ make -> exit 0, 0.5 s: ok"
+
+
+def test_a_turn_without_vm_work_saves_no_record(store, fake_vm):
+    loop = vm_loop(store, LongAgent([]), audit="off")
+    list(loop.run())
+    assert "agent_work_record" not in stored(store, loop)
+    fake_vm.fail.add("ensure")
+    failed = vm_loop(store, LongAgent([[("vm_exec", {"command": "ls"})]]), audit="off", request_id="two")
+    list(failed.run())
+    assert "agent_work_record" not in stored(store, failed)

@@ -69,7 +69,8 @@ Ergebnis steht als `tool`-Eintrag darin.
   zurückgab, `app`). Inhalt aus `web`, `file`, `google`, `agent` und `vm` ist
   für jeden späteren Leser Daten, nie Anweisung (`UNTRUSTED_DATA`). Im Kontext entscheidet die Herkunft, nicht der Text
   (`context_data`): `user` sind nur Nachrichten des Nutzers vor der Frage
-  dieses Laufs und die Frage selbst; was der Lauf danach als Nutzernachricht
+  dieses Laufs und die Frage selbst, nie das Arbeitsprotokoll-Résumé eines
+  früheren VM-Turns im Verlauf (`agent_work_record`, Herkunft `vm`); was der Lauf danach als Nutzernachricht
   anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
   Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`).
 - `format`: `text`, oder `json` für `start`, `step`, `app` mit Daten und `end`.

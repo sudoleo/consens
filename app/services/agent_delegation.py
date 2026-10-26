@@ -233,9 +233,14 @@ class DelegationLoop(AgentLoop):
         # transcripts or private continuation data are appended to messages:
         # the user's own words for memory evidence and readable links. The
         # app context block is not the user's text.
+        # The work records of earlier VM turns are the app's, not the user's
+        # (agent_compaction.is_work_record): VM output must never pass for
+        # the user's words, links or addresses.
+        from app.services.agent_compaction import is_work_record
         from app.services.agent_runs import strip_app_context
         self.answer_conversation = [{"role": message["role"], "content": strip_app_context(message["content"])}
-                                    for message in self.messages if message["role"] in {"user", "assistant"}]
+                                    for message in self.messages if message["role"] in {"user", "assistant"}
+                                    and not is_work_record(message["content"])]
         # Everything up to this message's question; later steps only append.
         self.turn_start = len(self.messages)
         from app.services.agent_memory import MemorySnapshot, MemoryTools
@@ -2232,6 +2237,10 @@ class DelegationLoop(AgentLoop):
                 # and the commands' summed run time.
                 self.completion.vm = self.vm_tools.session.summary()
                 self.vm_tools.session.close()
+                if self._long_run():
+                    # What the next message is told this one did (agent_compaction).
+                    from app.services.agent_compaction import work_record
+                    self.completion.work_record = work_record(self.messages, self.turn_start)
             if self.work_log is not None:
                 # The log's last entry, saved before finish_run: a write after
                 # it finds the turn no longer pending (save_work_log).

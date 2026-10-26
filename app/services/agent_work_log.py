@@ -121,14 +121,19 @@ def context_data(actor, index, own_from, message, text):
 
     Messages before ``own_from`` are the chat as the run received it: the
     user's questions (with the app's context block) and the agent's earlier
-    answers. Later user-role messages are never the user's words: the app
-    adds its hints, and workers report to the agent. A worker's user-role
-    messages are the agent's (its assignment and later messages)."""
+    answers, and after an answer of a VM turn its work record (the app's,
+    from VM output: ``vm``). Later user-role messages are never the user's
+    words: the app adds its hints, and workers report to the agent. A
+    worker's user-role messages are the agent's (its assignment and later
+    messages)."""
+    from app.services.agent_compaction import is_work_record
     role = message.get("role")
     if role in {"system", "tool"}:
         return "app"
     if role == "assistant" or actor != "agent":
         return "agent"
+    if is_work_record(text):
+        return "vm"
     if index < own_from:
         return "user"
     return "agent" if text.startswith("Worker messages") else "app"

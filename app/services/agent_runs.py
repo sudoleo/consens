@@ -199,7 +199,12 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
         (history_start) and tells the model so in this message's app context;
-        it used to stop every further message with an error instead."""
+        it used to stop every further message with an error instead.
+
+        A turn that worked in its VM is followed by its work record
+        (``agent_work_record``, agent_compaction.work_record) as an app
+        message, exactly as saved: what the agent did there, which question
+        and answer alone do not say."""
         config = config or prompt_config.get_config()
         system_prompt = config["prompts"]["agent"]
         messages = [{"role": "system", "content": system_prompt}]
@@ -221,15 +226,19 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # an interrupted answer or its review completed successfully.
                     answer = ("[This previous turn did not finish successfully. The saved response below may be incomplete or unreviewed.]\n\n" + answer
                               if answer else "[This previous turn did not finish successfully. No assistant answer was saved.]")
-                earlier.append((question, answer, turn.get("sources") or []))
+                record = turn.get("agent_work_record")
+                earlier.append((question, answer, turn.get("sources") or [],
+                                record if isinstance(record, str) else ""))
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break
-        start = history_start([len(question) + len(answer) for question, answer, _ in earlier],
+        start = history_start([len(question) + len(answer) + len(record) for question, answer, _, record in earlier],
                               CONTEXT_CHAR_LIMIT - len(system_prompt) - len(target["question"]))
-        for question, answer, saved in earlier[start:]:
+        for question, answer, saved, record in earlier[start:]:
             messages.extend([{"role": "user", "content": question},
                              {"role": "assistant", "content": answer}])
+            if record:
+                messages.append({"role": "user", "content": record})
             if sources is not None:
                 sources.extend(source for source in saved if isinstance(source, dict))
         context = context or get_agent_turn_context(model, config)
@@ -459,6 +468,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # The Agent VM's summary (agent_vm_tools.VMSession.summary):
                     # the message's checkpoint and the commands' run time.
                     patch["agent_vm"] = completion.vm
+                if getattr(completion, "work_record", None):
+                    # What the next message is told this one did (messages).
+                    patch["agent_work_record"] = completion.work_record
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])
