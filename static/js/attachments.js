@@ -829,6 +829,9 @@
       },
       messageMeta: messageMeta,
       messageText: messageText,
+      // A stored Agent file in the viewer: picture, PDF or text, with
+      // download and removal ({ fileId, name, mime, size }).
+      openStored: openAttachmentViewer,
       renderMessageAttachments: renderMessageAttachments,
       markError: markError,
       refreshCompatibility: syncAttachmentCompatibility,

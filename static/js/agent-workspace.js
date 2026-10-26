@@ -8,9 +8,10 @@
 //   download and removal in the preview.
 // - #agentAnswerResources (after the live answer) and one resources row per
 //   archived Agent turn (renderTurnResources) show the documents created or
-//   revised in that turn (one card per document_id), mail attachments the
-//   agent fetched in it, per-file upload progress, and a note when a file of
-//   the turn was only partly readable.
+//   revised in that turn (one card per document_id), the files the agent
+//   shared from its VM (pictures as pictures), mail attachments the agent
+//   fetched in it, per-file upload progress, and a note when a file of the
+//   turn was only partly readable.
 //
 // refresh(chatId, force) is cheap to call on every render: without force it
 // only re-projects the cached list (for example when the turn changes). A
@@ -32,6 +33,11 @@
   let lastStart = -Infinity, timer = null, retryTimer = null, inflight = null, waiting = null, rendered = '';
   let revision = 0, retried = false;
   const uploads = new Map(); // chatId -> [{name, mime, size, state, message}]
+  // Pictures the agent shared from its VM, loaded once per file as a data:
+  // URL (the CSP's img-src allows data:, not blob:). fileId -> { url, load }
+  const pictures = new Map();
+  // Shown as pictures; any other file is a row with its download.
+  const PICTURE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
   const openState = { versions: new Set() };
   let confirmKey = '';
 
@@ -379,6 +385,53 @@
     }
     return wrap;
   }
+  function readDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Preview is not available in this browser.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+  function picture(chatId, file) {
+    let entry = pictures.get(file.id);
+    if (!entry) {
+      entry = { url: '' };
+      entry.load = request(`/agent/chats/${chatId}/files/${file.id}`).then(response => response.blob()).then(readDataUrl)
+        .then(url => { entry.url = url; return url; });
+      // A failed load (chat changed, file removed) may be tried again later.
+      entry.load.catch(() => { if (pictures.get(file.id) === entry) pictures.delete(file.id); });
+      pictures.set(file.id, entry);
+    }
+    return entry;
+  }
+  // A picture the agent shared from its VM, under the answer at its width;
+  // a click opens it in the file viewer (attachments.js) with download and
+  // removal. Its name, download and removal sit in the caption.
+  function pictureCard(chatId, file, scope) {
+    const key = `${scope}:file:${file.id}`;
+    const figure = node('figure', 'agent-vm-picture'); figure.dataset.filesKey = key;
+    const open = node('button', 'agent-vm-picture-open'); open.type = 'button';
+    open.setAttribute('aria-label', `Open ${file.name}`);
+    const img = node('img'); img.alt = file.name; img.decoding = 'async';
+    open.append(img);
+    const entry = picture(chatId, file);
+    if (entry.url) img.src = entry.url;
+    else {
+      figure.classList.add('is-loading');
+      entry.load.then(url => { img.src = url; figure.classList.remove('is-loading'); },
+        () => { figure.classList.remove('is-loading'); figure.classList.add('is-failed'); });
+    }
+    open.addEventListener('click', () => App.attachments?.openStored?.({ fileId: file.id, name: file.name, mime: file.mime, size: file.size }));
+    const caption = node('figcaption', 'agent-vm-picture-caption');
+    caption.append(node('span', 'agent-file-name', file.name), downloadChip(chatId, file, '', false),
+      overflow(key, `More actions for ${file.name}`, [{ label: 'Remove…', danger: true, run: () => askToRemove(key) }]));
+    figure.append(open, caption);
+    if (confirmKey === key) {
+      figure.append(confirmation(key, `Remove ${file.name}? The agent can no longer use it in this chat.`, 'Remove file', [file]));
+    }
+    return figure;
+  }
   function uploadRows(list) {
     const box = node('div', 'agent-uploads');
     box.setAttribute('aria-live', 'polite');
@@ -420,8 +473,9 @@
     for (const row of historyRows()) { row.replaceChildren(); row.hidden = true; }
     rendered = '';
   }
-  // What one turn produced: its documents (versions up to this turn) and the
-  // mail attachments the agent fetched in it. Uploads are on the message.
+  // What one turn produced: its documents (versions up to this turn), the
+  // files the agent shared from its VM and the mail attachments it fetched.
+  // Uploads are on the message.
   function turnResources(box, chatId, files, turnId, scope, live) {
     if (!turnId) return;
     for (const group of groupDocuments(files)) {
@@ -430,10 +484,18 @@
       const card = documentCard(chatId, group, { upTo: mine[0].number, turnId: live ? turnId : '', compact: !live, scope });
       if (card) box.append(card);
     }
-    const mail = files.filter(file => file.kind === 'mail_attachment' && file.turn_id === turnId);
-    if (mail.length) {
+    const shared = files.filter(file => file.kind === 'vm_file' && file.turn_id === turnId);
+    const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
+    if (shown.length) {
+      const gallery = node('div', 'agent-vm-pictures');
+      for (const file of shown) gallery.append(pictureCard(chatId, file, scope));
+      box.append(gallery);
+    }
+    const rows = [...shared.filter(file => !shown.includes(file)),
+      ...files.filter(file => file.kind === 'mail_attachment' && file.turn_id === turnId)];
+    if (rows.length) {
       const list = node('div', 'agent-files-list');
-      for (const file of mail) list.append(fileRow(chatId, file, scope));
+      for (const file of rows) list.append(fileRow(chatId, file, scope));
       box.append(list);
     }
   }
@@ -515,6 +577,7 @@
     clearTimeout(timer); timer = null; clearTimeout(retryTimer); retryTimer = null;
     waiting?.resolve(); waiting = null;
     lastStart = -Infinity; data = null; error = ''; revision++; confirmKey = ''; retried = false;
+    pictures.clear();
   }
   function knownEmpty(chatId) {
     // A chat created for the run in progress has no files yet; skip that GET.

@@ -112,6 +112,37 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // vm_share_file (2026-10-26): a picture under the answer, any other file a row.
+  it('shows the pictures the agent shared from its VM under the answer, other files as rows', async () => {
+    const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
+      turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', origin: { source: 'vm', path: '/tmp/chart.png' } };
+    const TABLE = { ...PICTURE, id: 'f'.repeat(32), name: 'table.csv', mime: 'text/csv', size: 900 };
+    const EARLIER = { ...PICTURE, id: '9'.repeat(32), name: 'earlier.png', turn_id: TURN_ONE };
+    const files = [PICTURE, TABLE, EARLIER];
+    const { window, document, dom } = boot({ files });
+    window.fetch = vi.fn(async url => url.endsWith(PICTURE.id)
+      ? { ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } : reply(files));
+    window.App.attachments = { openStored: vi.fn() };
+    await window.App.agentWorkspace.refresh(CHAT);
+    const resources = document.getElementById('agentAnswerResources');
+    const figures = resources.querySelectorAll('.agent-vm-picture');
+    expect(figures).toHaveLength(1);
+    const img = figures[0].querySelector('img');
+    await vi.waitFor(() => expect(img.getAttribute('src')).toMatch(/^data:image\/png;base64,/));
+    expect(img.alt).toBe('chart.png');
+    expect(figures[0].querySelector('.agent-files-icon-btn').getAttribute('aria-label')).toBe('Download chart.png');
+    figures[0].querySelector('.agent-vm-picture-open').click();
+    expect(window.App.attachments.openStored).toHaveBeenCalledWith({ fileId: PICTURE.id, name: 'chart.png', mime: 'image/png', size: 17000 });
+    // Any other file is a row with its download; an earlier turn's file is not here.
+    expect([...resources.querySelectorAll('.agent-file-row .agent-file-name')].map(el => el.textContent)).toEqual(['table.csv']);
+    expect(resources.textContent).not.toContain('earlier.png');
+    // A picture loads once, also when the list is drawn again.
+    await window.App.agentWorkspace.refresh(CHAT, true);
+    expect(document.querySelector('.agent-vm-picture img').getAttribute('src')).toMatch(/^data:image\/png/);
+    expect(window.fetch.mock.calls.filter(([url]) => url.endsWith(PICTURE.id))).toHaveLength(1);
+    dom.window.close();
+  });
+
   it('describes Gmail imports of the turn by subject and sender instead of message IDs', async () => {
     const { window, document, dom } = boot({ files: [MAIL, { ...MAIL, id: 'e'.repeat(32), origin_subject: undefined, origin_from: undefined,
       origin: { message_id: 'ff', part_id: '1' } }, { ...MAIL, id: '9'.repeat(32), name: 'older.pdf', turn_id: TURN_ONE }] });

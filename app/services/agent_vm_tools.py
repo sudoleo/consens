@@ -1,4 +1,5 @@
-"""The agent's VM tools: vm_exec, vm_read_file, vm_write_file (agent_vm.py).
+"""The agent's VM tools: vm_exec, vm_read_file, vm_write_file and
+vm_share_file (agent_vm.py).
 
 Admins only (AgentPreferences.vm, routers/agent.py effective_preferences),
 never in chats with Google data, in turns with comparison or audit tools on
@@ -17,11 +18,19 @@ result is the call's ``tool`` entry in the work log, which the reviewers
 follow live. The turn keeps the summary (``agent_vm``: checkpoint, commands,
 seconds). A failing VM costs its tools, never the answer: the agent gets one
 short message and works on without the VM for the rest of the message.
+
+vm_share_file gives the user a file of the VM (since 2026-10-26): it is
+copied into the chat's private file store (AgentFiles, kind ``vm_file``, the
+turn's id) and shown under the answer, a picture as a picture, anything else
+as a download (agent-workspace.js). The VM has no public address; nothing of
+it is ever a link.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import logging
+import mimetypes
 import posixpath
 import re
 import threading
@@ -52,6 +61,13 @@ COMMAND_VIEW_CHARS = 2_000
 REPORT_SECONDS = 1.0
 READ_BYTES = 2 * 1024 * 1024
 READ_CHARS = 16_000
+# A shared file goes into the chat's file store, which takes up to 5 MB a file
+# (AgentFiles.save).
+SHARE_BYTES = 5 * 1024 * 1024
+# Pictures the chat shows as pictures, known by their bytes only: a name
+# never makes a file an image (agent-workspace.js shows these inline).
+_IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
+                (b"GIF87a", "image/gif"), (b"GIF89a", "image/gif"))
 WRITE_CHARS = 100_000
 TOOL_ARGUMENT_CHARS = WRITE_CHARS + 4_000
 
@@ -82,6 +98,12 @@ class VmWriteFileArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     path: str = Field(min_length=1, max_length=1024)
     content: str = Field(max_length=WRITE_CHARS)
+
+
+class VmShareFileArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    path: str = Field(min_length=1, max_length=1024)
+    name: str = Field(default="", max_length=120, description="File name the user sees; default the file's own name.")
 
 
 class _VMOff(ValueError):
@@ -133,6 +155,20 @@ def tail(raw, total, limit):
 def model_text(raw, total, stream):
     text, omitted = tail(raw, total, MODEL_STREAM_CHARS)
     return f"[… {omitted:,} earlier bytes of {stream} omitted …]\n{text}" if omitted else text
+
+
+def file_mime(raw, name):
+    """The type a shared file is stored with: pictures and PDFs by their
+    bytes, other files by their name, never an image by its name alone."""
+    for magic, mime in _IMAGE_MAGIC:
+        if raw.startswith(magic):
+            return mime
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "image/webp"
+    if raw.startswith(b"%PDF-"):
+        return "application/pdf"
+    guessed = mimetypes.guess_type(name)[0]
+    return guessed if guessed and not guessed.startswith("image/") else "application/octet-stream"
 
 
 def _safe_name(name, used):
@@ -304,11 +340,15 @@ class VMSession:
 
 
 class VMTools:
-    """The three VM tools of one message, around its VMSession."""
+    """The four VM tools of one message, around its VMSession."""
 
-    def __init__(self, loop, factory=None):
+    def __init__(self, loop, factory=None, files=None):
         self.loop = loop
         self.session = VMSession(loop, factory)
+        self._files = files
+        # Shared in this message: (path, sha256) -> file, so sharing the same
+        # file again gives the same download.
+        self.shared = {}
 
     def tools(self):
         return [
@@ -320,7 +360,22 @@ class VMTools:
             ReadOnlyTool("vm_write_file", "Write a text file in your VM (creates folders, replaces the file).",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
+            ReadOnlyTool("vm_share_file", "Give the user a file from your VM (up to 5 MB): it appears under your "
+                         "answer, a picture as a picture, any other file as a download.",
+                         VmShareFileArgs, self.share, activity=self._path_activity, reports=True),
         ]
+
+    @property
+    def files(self):
+        """The chat's file store, the one its uploads and documents use."""
+        if self._files is None:
+            context = self.loop.file_context
+            if context is not None:
+                self._files = context.files
+            else:
+                from app.services.agent_files import AgentFiles
+                self._files = AgentFiles(self.loop.store.db)
+        return self._files
 
     def _start(self, cancellation):
         with self.session._lock:
@@ -426,6 +481,42 @@ class VMTools:
             self.session.name, path, args.content.encode("utf-8")))
         report({"bytes": size})
         return self.session.announce({"path": path, "bytes": size})
+
+    def share(self, args, *, cancellation, report=None):
+        report = report or (lambda fields: None)
+        path = vm_path(args.path)
+        self._start(cancellation)
+        try:
+            raw, complete = self._provider("share", lambda: self.session.backend.read_file(
+                self.session.name, path, limit=SHARE_BYTES + 1))
+        except agent_vm.VMFileMissing:
+            raise ValueError(f"No file at {path}.") from None
+        report({"bytes": len(raw)})
+        if not raw:
+            raise ValueError(f"{path} is empty.")
+        if not complete or len(raw) > SHARE_BYTES:
+            raise ValueError(f"{path} is larger than {SHARE_BYTES // (1024 * 1024)} MB. Share a smaller file "
+                             "(compress, split or shrink it).")
+        key = (path, hashlib.sha256(raw).hexdigest())
+        if key not in self.shared:
+            name = posixpath.basename(args.name.strip() or path) or "file"
+            mime = file_mime(raw, name)
+            # The agent made it: nothing for the store to read out. The bytes
+            # are served as a download only (routers/agent_files.py).
+            meta = self.files.save(self.loop.uid, self.loop.chat_id, raw=raw, name=name, mime=mime,
+                                   extraction={"status": "ready", "parts": [], "warnings": []},
+                                   cancellation=cancellation,
+                                   extra={"kind": "vm_file", "turn_id": self.loop.turn_id,
+                                          "origin": {"source": "vm", "path": path}})
+            self.shared[key] = {field: meta[field] for field in ("id", "name", "mime", "size")}
+            outgoing = getattr(self.loop, "outgoing", None)
+            if outgoing is not None:
+                outgoing.put_nowait({"type": "resources", "files": [meta]})
+        file = self.shared[key]
+        return self.session.announce({"path": path, "file": file,
+                                      "shown_as": "picture" if file["mime"].startswith("image/") else "download",
+                                      "note": "The user sees it under your answer. Name it there; never write a "
+                                              "link or address for it."})
 
     # --- Activity fields (DelegationLoop._execute) -----------------------------
 

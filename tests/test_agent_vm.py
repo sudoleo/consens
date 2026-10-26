@@ -424,6 +424,48 @@ def test_reading_a_missing_or_long_file(store, fake_vm):
     assert page["total_lines"] == 1000 and page["more"] == "More lines follow: read on with offset=5."
 
 
+def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, fake_vm, tmp_path, monkeypatch):
+    """vm_share_file (2026-10-26): the file goes into the chat's private store
+    as the turn's ``vm_file``; a picture only by its bytes, never by its name."""
+    from app.services.agent_files import AgentFiles, FileContext
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+    script = Agent([[("vm_share_file", {"path": "/tmp/chart.png"}),
+                     ("vm_share_file", {"path": "notes.txt", "name": "Results.txt"})],
+                    [("vm_share_file", {"path": "/tmp/chart.png"}), ("vm_share_file", {"path": "/tmp/fake.png"}),
+                     ("vm_share_file", {"path": "big.bin"}), ("vm_share_file", {"path": "/nope"})]])
+    loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[agent_vm.vm_name(UID, chat_id)]["files"].update({
+        "/tmp/chart.png": png, "/home/sprite/notes.txt": b"mean 42\n", "/tmp/fake.png": b"<svg onload=alert(1)>",
+        "/home/sprite/big.bin": b"x" * (agent_vm_tools.SHARE_BYTES + 1)})
+    events = list(loop.run())
+    chart, notes, again, fake, big, missing = results(loop)
+    assert "vm_share_file" in script.offered[0]
+    assert chart["shown_as"] == "picture" and chart["file"]["mime"] == "image/png" and chart["file"]["name"] == "chart.png"
+    assert notes["shown_as"] == "download" and notes["file"]["name"] == "Results.txt"
+    assert notes["file"]["mime"] == "text/plain" and "never write a link" in notes["note"]
+    # The same file again is the same download.
+    assert again["file"] == chart["file"]
+    # A name never makes a file a picture.
+    assert fake["shown_as"] == "download" and fake["file"]["mime"] == "application/octet-stream"
+    assert big == {"error": "/home/sprite/big.bin is larger than 5 MB. Share a smaller file (compress, split or "
+                            "shrink it)."}
+    assert missing == {"error": "No file at /nope."}
+    saved = {file["name"]: file for file in files.list(UID, chat_id)}
+    assert set(saved) == {"chart.png", "Results.txt", "fake.png"}
+    assert {(file["kind"], file["turn_id"]) for file in saved.values()} == {("vm_file", loop.turn_id)}
+    assert saved["chart.png"]["origin"] == {"source": "vm", "path": "/tmp/chart.png"}
+    assert files.download(UID, chat_id, chart["file"]["id"])[1] == png
+    # The browser hears of each new file once (agent-workspace.js refreshes).
+    shared = [file["name"] for event in events if event.get("type") == "resources" for file in event["files"]]
+    assert shared == ["chart.png", "Results.txt", "fake.png"]
+    assert [event["path"] for event in tool_events(events, "vm_share_file") if event["status"] == "succeeded"] == [
+        "/tmp/chart.png", "/home/sprite/notes.txt", "/tmp/chart.png", "/tmp/fake.png"]
+
+
 # --- Admins only ------------------------------------------------------------------
 
 @pytest.mark.parametrize("admin", [True, False])

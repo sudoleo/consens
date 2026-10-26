@@ -78,7 +78,7 @@ THINKING_UPDATE_SECONDS = 3
 # A VM call's result depends on the VM's state, which every command may
 # change: running the tests again after an edit is progress. The turn's step
 # and time limits bound them (agent_vm_tools.py).
-REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file"})
+REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_share_file"})
 # Tools that bring outside content into the agent's context: model answers
 # and their source excerpts, pages, emails, calendars, files. Once one of them
 # returned in a message, its memory can no longer change (memory_locked): a

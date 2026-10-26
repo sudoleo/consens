@@ -390,14 +390,22 @@ Grundlage dafür, dass Prüfer später die ganze Arbeit des Agenten live prüfen
 sie gilt in beiden Modi (mit Vergleich und im Audit-Modus).
 
 **Was der Agent bekommt.** Eine eigene Linux-VM pro Chat (Fly.io Sprites,
-Ubuntu, bash, sudo) mit drei Werkzeugen (`agent_vm_tools.py`, nur auf
+Ubuntu, bash, sudo) mit vier Werkzeugen (`agent_vm_tools.py`, nur auf
 Account-Turns, nie in Chats mit Google-Daten, wie `read_source`):
 `vm_exec` (`command`, `cwd`, Standard `/home/sprite`, `timeout_seconds`,
 Standard 60, höchstens `EXEC_TIMEOUT_MAX` = 300; Ergebnis `stdout`, `stderr`,
 `exit_code`, `duration_ms`, `timed_out`, `cwd`), `vm_read_file` (`path`,
 `offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, Binärdateien nur als
-Hinweis) und `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
-Ordner an). Der Prompt `AGENT_VM_PROMPT` (prompt_defaults.py, im Admin als
+Hinweis), `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
+Ordner an) und seit 2026-10-26 `vm_share_file` (`path`, optional `name`):
+Es kopiert eine Datei bis 5 MB in die private Dateiablage des Chats
+(`kind: "vm_file"` mit `turn_id`, zählt zum Speicher des Kontos, 30 Tage
+wie jede Datei), meldet sie per `resources`, und die App zeigt sie unter der
+Antwort: PNG, JPEG, WebP und GIF als Bild (nur nach den Bytes erkannt, nie
+nach dem Namen), alles andere als Dateizeile mit Download. Ausgeliefert wird
+nur über die angemeldete Download-Route (`Content-Disposition: attachment`,
+`nosniff`); die VM hat keine öffentliche Adresse, und der Prompt verbietet
+Links auf VM-Dateien. Dieselbe Datei zweimal geteilt bleibt ein Eintrag. Der Prompt `AGENT_VM_PROMPT` (prompt_defaults.py, im Admin als
 „Agent: Linux VM“) steht vor dem Memory-Block, damit der Systemprompt im Chat
 cachebar bleibt. Ausgaben an das Modell behalten je Strom das Ende
 (`MODEL_STREAM_CHARS` = 12.000), die Kürzung steht als
