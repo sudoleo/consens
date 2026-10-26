@@ -108,7 +108,7 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
         # An answer: the source pill is a 19px mark in the line. It takes a
         # finger 44 px across and its own line up and down, no further: a
         # 44 px area reached over the words, links and pills of the lines
-        # above and below. The quoted passage's cross is 22px.
+        # above and below. The quoted passage's cross is 24px.
         _agent_answer_with_sources(page)
         pill = page.locator("#agentAnswerBody .src-ref").first
         area = pill.evaluate(HIT_AREA)
@@ -122,7 +122,7 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
         page.wait_for_function("""() => !document.body.classList.contains('composer-animating')
           && !document.body.classList.contains('composer-gliding')
           && !document.querySelector('.input-section').getAnimations({subtree: true}).some(a => a.playState === 'running')""")
-        assert_tappable(page, "#composerQuoteRemove", drawn=[22, 22])
+        assert_tappable(page, "#composerQuoteRemove", drawn=[24, 24])
         assert_tappable(page, "#sendButton")
 
         # The activity sheet's close: a 34px square, 44px to the finger.

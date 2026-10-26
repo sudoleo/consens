@@ -187,7 +187,7 @@
   "Reference": "Verweis",
   "No sources are available for this question.": "Für diese Frage sind keine Quellen verfügbar.",
   "No differences analysis is available for this question yet.": "Für diese Frage gibt es noch keine Analyse der Unterschiede.",
-  "Stopped at the output limit, so its end is missing. It is used for the consensus as a shortened answer.": "Am Ausgabelimit gestoppt, daher fehlt das Ende. Für den Konsens zählt sie als gekürzte Antwort.",
+  "Stopped at the output limit, so its end is missing.": "Am Ausgabelimit gestoppt, daher fehlt das Ende.",
   "Reduce": "Verkleinern",
   "Ready": "Fertig",
   "Original response": "Originalantwort",

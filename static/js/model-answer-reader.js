@@ -399,7 +399,7 @@
           text: String(result.text || result.streamText || ""), status: result.status || "pending",
           error: result.error?.message || result.error, sources: result.sources || context.evidenceSources || [],
           ...(result.status === "complete" && result.completion === "token_limit" ? { badge: "Cut off",
-            note: "Stopped at the output limit, so its end is missing. It is used for the consensus as a shortened answer." } : {}) };
+            note: "Stopped at the output limit, so its end is missing." } : {}) };
       })
     };
   }

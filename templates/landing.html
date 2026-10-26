@@ -137,14 +137,22 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">Agent is where every question starts: it researches, asks six models and writes one answer.<span class="lp-wide-only"> Compare and Consensus wait in the (+) menu, next to files and reasoning.</span></p>
+              <p class="lp-lead">Agent is where every question starts: it researches, asks six models and writes one answer.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to files and reasoning.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- The field and nothing else: no window, no title bar, no
                    greeting. A frame around the field was a second frame
                    around the first, and the field types a real question
-                   into itself, which says what the greeting said. -->
-              <div class="lp-ask-stage">
+                   into itself, which says what the greeting said.
+                   The field types and the toolbar leaves as the page
+                   scrolls, so a screen reader met an empty or half-typed
+                   field: it reads the finished scene from .lp-sr instead,
+                   and the moving picture is aria-hidden (a11y audit P2). -->
+              <div class="lp-sr">
+                <p>Preview of the message box, with this question typed in and ready to send:</p>
+                <p>Can a heat pump heat our 1978 house with the original radiators?</p>
+              </div>
+              <div class="lp-ask-stage" aria-hidden="true">
                   <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text data-placeholder="Enter your question"></span>
@@ -187,8 +195,33 @@
                    one live status row (Writing answer… / Checking the
                    answer…), then the answer with its marks and the evidence
                    row. Every line, count and the score are the demo run's
-                   own data (static/demo.js). Driver: landing-scenes.js. -->
-              <div class="lp-app lp-agent" data-run>
+                   own data (static/demo.js). Driver: landing-scenes.js.
+                   The run is a function of the scroll position, so a
+                   screen reader read whatever frame the page stood on: the
+                   finished turn below speaks for it (a11y audit P2). -->
+              <div class="lp-sr">
+                <p>Preview of a finished Agent turn:</p>
+                <p>Can a heat pump heat our 1978 house with the original radiators?</p>
+                <p>Thought for 24s</p>
+                <ul>
+                  <li>This turns on each room's heat loss, not on the year the house was built. Six independent reads first.</li>
+                  <li>Compared perspectives: 6 answers</li>
+                  <li>All six say it can work. They split on the flow temperature, so the answer says so instead of picking a side.</li>
+                </ul>
+                <p>Probably yes, with a few radiators changed, not all of them.</p>
+                <p>Three sentences from the answer and how the six models divided on each</p>
+                <dl>
+                  <dt>Get a room-by-room heat-loss calculation before anyone quotes a size.</dt>
+                  <dd>All six models agree.</dd>
+                  <dt>Rooms that stay warm at 50 °C keep their radiators.</dt>
+                  <dd>Four of six models support it.</dd>
+                  <dt>Run at 55 °C, or replace more radiators for 45 °C: three models each way.</dt>
+                  <dd>The models contradict each other here.</dd>
+                </dl>
+                <p>A single answer would have handed you all three as settled.</p>
+                <p>43/100 agreement, 2 contradictions, 6 answers</p>
+              </div>
+              <div class="lp-app lp-agent" data-run aria-hidden="true">
                 <p class="lp-agent-ask">Can a heat pump heat our 1978 house with the original radiators?</p>
                 <div class="lp-agent-body" data-run-body>
                   <div class="lp-agent-activity">

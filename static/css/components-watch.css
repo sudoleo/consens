@@ -134,6 +134,11 @@
   color: var(--ink);
 }
 .watch-page[hidden] { display: none; }
+/* On phones layout.css narrows the body's sides to 6px; cancelling 10px
+   there hung the page 4px past both edges and it scrolled sideways. */
+@media (max-width: 640px) {
+  .watch-page { margin-inline: -6px; }
+}
 /* !important: in a chat shell.css shows the column as flex with the same
    specificity and later in the cascade, so the page hung below the open
    chat (on the phone the menu's Watches seemed to do nothing). */

@@ -316,7 +316,7 @@
                 ? agentBlocker?.message || (hasMessage ? "Send message" : "Write a message to send")
               : hasMinimumModels
                 ? "Send question"
-                : "Select at least two models to run consensus";
+                : "Select at least two models to compare";
             sendButton.setAttribute("aria-label", sendButton.title);
             sendButton.setAttribute("aria-disabled", String(sendButton.disabled));
           }
@@ -1268,7 +1268,7 @@
           // verhalte dich wie früher (nur .excluded toggeln).
           if (!checkbox) {
             if (!box.classList.contains("excluded")) {
-              showPopup("You have excluded this answer. It is minimized and will not be included in the consensus.");
+              showPopup("You have excluded this answer. It is minimized, and its model is left out of your next run.");
             }
             box.classList.toggle("excluded");
             return;
@@ -1278,7 +1278,7 @@
           const willBeChecked = !currentlyChecked;
 
           if (currentlyChecked && !box.classList.contains("excluded")) {
-            showPopup("You have excluded this answer. It is minimized and will not be included in the consensus.");
+            showPopup("You have excluded this answer. It is minimized, and its model is left out of your next run.");
           }
 
           checkbox.checked = willBeChecked;

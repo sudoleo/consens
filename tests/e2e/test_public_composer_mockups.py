@@ -85,12 +85,15 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             ask_bar.scroll_into_view_if_needed()
         else:
             scroll_ask(page, .65)
-            expect(ask_bar).to_have_attribute('aria-hidden', 'false')
         expect(ask_bar).to_be_visible()
+        # A screen reader reads the finished scene in words, never a frame
+        # of the typing (a11y audit P2).
+        expect(page.locator('[data-scene="ask"] .lp-ask-stage')).to_have_attribute('aria-hidden', 'true')
+        expect(page.locator('[data-scene="ask"] .lp-sr')).to_contain_text(
+            'Can a heat pump heat our 1978 house with the original radiators?')
         previews.nth(1).screenshot(path=str(output / f'ask-{suffix}.png'))
         if not reduced:
             scroll_ask(page, .96)
-            expect(ask_bar).to_have_attribute('aria-hidden', 'true')
             expect(ask_bar).to_be_hidden()
             scroll_ask(page, .65)
             expect(ask_bar).to_be_visible()

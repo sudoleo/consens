@@ -38,7 +38,6 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     // fold is a class the stylesheet animates.
     expect(log.hidden).toBe(false);
     expect(log.classList.contains("is-folded")).toBe(true);
-    expect(log.getAttribute("aria-hidden")).toBe("true");
     // The live row stays inside the folding log, so the fold closes one
     // height instead of losing a row first.
     expect(document.querySelector('[data-run-item="status"]').hidden).toBe(false);
@@ -50,5 +49,21 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     expect(wrapper).not.toBeNull();
     expect(document.querySelectorAll("[data-run-log] > :not(.lp-agent-log-items)")).toHaveLength(0);
     expect(wrapper.querySelectorAll("[data-run-item]").length).toBe(4);
+  });
+
+  // a11y audit P2: the run is a function of the scroll position, so a screen
+  // reader read whatever frame the page stood on.
+  it("speaks the finished turn to screen readers instead of a frame", async () => {
+    const { document } = await stillFrame();
+    const words = document.querySelector(".lp-sr");
+    expect(document.querySelector("[data-run]").getAttribute("aria-hidden")).toBe("true");
+    expect(words.closest("[aria-hidden]")).toBeNull();
+    const flat = (text) => text.replace(/\s+/g, " ").trim();
+    const said = flat(words.textContent);
+    // Every streamed sentence and both notes of the picture are in the words.
+    const shown = [...document.querySelectorAll("[data-stream], .lp-agent-note, .lp-agent-ask")];
+    expect(shown.length).toBe(8);
+    for (const el of shown) expect(said).toContain(flat(el.textContent));
+    expect(said).toContain(document.querySelector("[data-run-clock]").textContent);
   });
 });

@@ -977,15 +977,16 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 /* Ein Griff, zwei Stellen: das × am Zitat und das × am Anhang sind
-   derselbe Knopf. Rot war er nie — Entfernen ist hier kein Alarm. */
+   derselbe Knopf. Rot war er nie — Entfernen ist hier kein Alarm.
+   24px: die kleinste Zielgröße für Maus und Trackpad (WCAG 2.5.8). */
 .composer-quote-remove,
 .attachment-chip-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -1002,7 +1003,8 @@ body:not(.dark-mode) .chat-input-container::before {
 .composer-quote-remove {
   grid-area: 1 / 3;
   align-self: start;
-  margin: -1px -2px 0 0;
+  /* The cross keeps the centre it had at 22px. */
+  margin: -2px -2px 0 -1px;
 }
 
 .composer-quote-remove:focus-visible,
@@ -1018,7 +1020,7 @@ body:not(.dark-mode) .chat-input-container::before {
   }
 }
 
-/* 44px to the finger (Apple-Audit F5); the cross stays 22px. */
+/* 44px to the finger (Apple-Audit F5); the button stays 24px. */
 @media (pointer: coarse) {
   .composer-quote-remove,
   .attachment-chip-remove { position: relative; }

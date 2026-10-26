@@ -32,6 +32,12 @@ API v1 und kuratierte Topics.
   Es bleiben `POST/GET/DELETE /chats`, `GET /chats/{id}`, `PUT …/task-checks`
   und `POST /bookmark/consensus/share-result` (Teilen gespeicherter Chats).
 - Details: „Modus: Agent und Compare“ und „Gespeicherte Consensus-Chats“ in §4.
+- Texte nachgezogen (2026-10-26): Landing, About, Modellvergleich, die
+  FAQ der Consensus-Engine-Seite (die Engine stellt der Server ein), die
+  Datenschutzerklärung (gespeichert werden Agent- und Compare-Chats; keine
+  KI-Verdichtung der Folgefragen und keine 24-h-Antwortbelege mehr) und der
+  Settings-Hinweis des Agenten (`agent_settings.ELSEWHERE`: Modus Agent oder
+  Compare im (+)-Menü eines neuen Chats) nennen keinen Consensus-Modus mehr.
 
 Google als Quelle (03.10.2026): Google ist in Consens eine **Quelle von Belegen,
 keine Hand**. Agent-Chats lesen Gmail und Kalender pro Nachricht und nehmen Dateien
@@ -489,7 +495,12 @@ zum Abschluss in die Uhrzeile (`.lp-agent-log.is-folded`, Höhenübergang über
 Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
 hat die Breite seiner längeren Fassung; gemessen wird mit `.is-measuring`
 (Übergänge aus). In `/app` faltet der Aktivitätslog vermutlich genauso hart
-(gemeldet, nicht geändert). Szene 03 und Watch sprechen von „answer“ statt
+(gemeldet, nicht geändert). Seit 2026-10-26 (Barrierefreiheit P2) sind beide
+Szenen-Mockups `aria-hidden`: Sie zeigen den Frame, auf dem der Scroll steht,
+ein Screenreader las dort ein leeres Feld oder einen halben Lauf. Daneben sagt
+je ein `.lp-sr`-Block die fertige Szene in Worten (Frage; fertiger Turn mit
+Notizen, Antwort, Marken und Evidenzzeile), `tests/js/landing-scenes.test.mjs`
+hält ihn mit den gestreamten Sätzen im Gleichlauf. Szene 03 und Watch sprechen von „answer“ statt
 „consensus“. Seit dem Feinschliff (2026-10-02) ist die H1 `.lp-hero-claim` die lauteste
 Zeile der Seite (Display-Größe, zweiter Satz in `--ink-3`), die ganze Landing
 steht auf EINEM Grund (`--ground`; Abschnitte trennt eine auslaufende

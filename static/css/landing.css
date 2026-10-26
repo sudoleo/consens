@@ -1313,6 +1313,21 @@ img { display: block; max-width: 100%; }
   .lp-agent-log { transition: none; }
 }
 
+/* The finished scene in words, for screen readers (a11y audit P2): scenes 01
+   and 02 draw whatever frame the scroll position asks for, so the moving
+   picture is aria-hidden and this text speaks for it. */
+.lp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --------------------------------------------------------------------------
    Scene 03 — Consensus + Differences, rebuilt to mirror the real /app
    -------------------------------------------------------------------------- */

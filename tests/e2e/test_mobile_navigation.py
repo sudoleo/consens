@@ -211,6 +211,10 @@ def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, n
         page.set_viewport_size({'width': 390, 'height': 820})
         header = page.locator('.app-mobile-header')
         expect(page.locator('#watchDashboard')).to_be_visible()
+        # The page cancels exactly the body's 6px phone sides: it starts at
+        # the left edge and never scrolls sideways (a11y audit P8).
+        assert page.evaluate("document.getElementById('watchDashboard').getBoundingClientRect().left") == 0
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         expect(page.locator('#mobileSidebarViews #viewSwitch')).to_have_count(1)
         expect(page.locator('#viewSwitch')).not_to_be_in_viewport()
         expect(page.locator('#toggleSidebarButton')).to_be_visible()

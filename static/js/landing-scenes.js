@@ -16,6 +16,9 @@
 //
 // Reduced motion (or no IntersectionObserver): every scene is rendered
 // at its end state once and never touched again.
+//
+// Screen readers never see a frame: both mockups are aria-hidden, and the
+// finished scene stands beside each in words (.lp-sr in landing.html).
 // =====================================================================
 
 (function () {
@@ -92,10 +95,7 @@
       }
       // Agent Mode hides the starting toolbar after send, as in /app. Keep
       // its layout slot so scrolling backwards has a stable progress range.
-      if (tools) {
-        tools.classList.toggle("is-sent", p >= 0.9);
-        tools.setAttribute("aria-hidden", String(p >= 0.9));
-      }
+      if (tools) tools.classList.toggle("is-sent", p >= 0.9);
     }
 
     return renderAsk;
@@ -199,10 +199,7 @@
 
       // The log: notes and steps appear as they happen and fold into the
       // clock line once the run is over, as in /app -- a fold, not a cut.
-      if (log) {
-        log.classList.toggle("is-folded", done);
-        log.setAttribute("aria-hidden", String(done));
-      }
+      if (log) log.classList.toggle("is-folded", done);
       show(items.plan, p >= PLAN_AT);
       show(items.compare, p >= COMPARE_AT);
       show(items.compared, p >= COMPARED_AT);

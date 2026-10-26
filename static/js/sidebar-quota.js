@@ -160,7 +160,7 @@
       var notes = [];
       if (view.reserved > 0) notes.push(shareOf(view.reserved, view.limit) + " is held for a message still running.");
       if (view.estimated > 0) notes.push(shareOf(view.estimated, view.limit) + " is an estimate until the exact use is known.");
-      if (view.state === "out") notes.push("Compare, Consensus and Agent share this allowance; it returns at the reset.");
+      if (view.state === "out") notes.push("Compare and Agent share this allowance; it returns at the reset.");
       if (view.stale) notes.push("Last confirmed value; it refreshes when the connection is back.");
       setText(foot, notes.join(" "));
       setHidden(foot, notes.length === 0);
