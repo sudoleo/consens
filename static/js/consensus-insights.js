@@ -701,6 +701,7 @@
             pop.classList.toggle("is-instant", previewed && !asModal);
             window.App?.popover?.opened(pop, { trigger: asModal ? null : anchorEl });
             pop.hidden = false;
+            keepPinClear(pop);
             if (asModal) {
               pop.setAttribute("aria-modal", "true");
               pop.tabIndex = -1;
@@ -1708,6 +1709,7 @@
             card.querySelectorAll("button, a[href]").forEach(function (el) { el.tabIndex = -1; });
             card.hidden = false;
             placeCard(card, cardAnchor(spans), spans);
+            keepPinClear(card);
           }
 
           function scheduleHoverPreview(group) {
@@ -1819,6 +1821,25 @@
               act();
             });
             return pin;
+          }
+
+          // Eine lange Karte scrollt in sich (.cx-card); ihre Scrollleiste lief
+          // unter dem Pin durch. Pin und erste Zeile ruecken um die echte Breite
+          // der Leiste nach links (0 bei Overlay-Leisten), auch wenn die Karte
+          // spaeter waechst (2026-10-26).
+          function keepPinClear(container) {
+            const card = container?.querySelector(":scope > .cx-card");
+            container?._pinObserver?.disconnect();
+            if (!card || !container.querySelector(":scope > .cx-card-pin")) return;
+            const fit = function () {
+              const bar = Math.max(0, card.offsetWidth - card.clientWidth);
+              container.style.setProperty("--cx-scrollbar", bar + "px");
+            };
+            fit();
+            if (typeof ResizeObserver === "function") {
+              container._pinObserver = new ResizeObserver(fit);
+              container._pinObserver.observe(card);
+            }
           }
 
           function cardNode(tag, className, text) {

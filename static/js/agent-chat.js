@@ -41,17 +41,18 @@
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     return `${catalogOwner}:${context?.metadata.chatId || context?.basis?.chatId || basis?.chatId || (context ? `run:${context.runId}` : "draft")}`;
   }
-  // Where the next message's settings come from: the running turn, this
-  // session's pick for the chat, the settings an opened chat was saved with,
-  // the account's own pick (account setting "agent_model") or the catalog
-  // default.
+  // Where the next message's settings come from: this session's pick for
+  // the chat (also one made while a response runs: it is for the next
+  // message, the running one keeps its own), the running turn, the settings
+  // an opened chat was saved with, the account's own pick (account setting
+  // "agent_model") or the catalog default.
   function preferredSource() {
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     const saved = context?.consensus.completedTurn?.agent_settings || context?.metadata.agentSettings || basis?.currentTurn?.agent_settings;
-    if (context && registry.isExecuting(context.runId)) return { value: context.config.agentSettings || saved, source: "run" };
     const session = selections.get(selectionKey());
     if (session) return { value: session, source: "session" };
+    if (context && registry.isExecuting(context.runId)) return { value: context.config.agentSettings || saved, source: "run" };
     if (saved) return { value: saved, source: "chat" };
     const preferred = App.userSettings.get("agent_model");
     if (preferred) return { value: preferred, source: "account" };
@@ -263,7 +264,12 @@
       select.dataset.options = signature;
     }
     select.value = ready ? current.model_id || catalog.default_model_id : "";
-    select.disabled = !ready || running || !catalog.models.some(selectable);
+    // Open also while a response runs: the pick is for the next message (the
+    // running one keeps its settings), as the comparison models always were.
+    // Until 2026-10-26 a run locked them, and the Reasoning button below the
+    // composer followed only now and then.
+    select.disabled = !ready || !catalog.models.some(selectable);
+    select.dataset.running = String(running);
     // Whether the chip's words come from the model list (app-bootstrap.js
     // remembers only those for the next first frame; agent-mode.js does not
     // dim Reasoning while they load).
@@ -288,7 +294,7 @@
       effort.dataset.options = effortSignature;
     }
     effort.value = model ? effortFor(model, current.reasoning_effort) : "default";
-    effort.disabled = !ready || running || efforts.length < 2;
+    effort.disabled = !ready || efforts.length < 2;
     effort.dataset.available = String(ready && model?.reasoning_available);
     effort.parentElement.hidden = true;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
@@ -298,7 +304,7 @@
     // Consensus/Compare steps back while linked.
     const comparison = document.getElementById("consensusModelDropdown");
     App.linkModelPicker?.(select, comparison, { ownLabel: "Agent", companionLabel: "Compare with", ariaLabel: "Agent and comparison models" });
-    // A locked chat model (loading, a message running) closes only its own
+    // A locked chat model (its list still loading) closes only its own
     // levels; the comparison models stay open to change for the next message.
     if (select.disabled) App.collapseExpandedModelPicker?.(select, { ownLevelsOnly: true });
     if (effort.disabled || effort.parentElement.hidden) App.collapseExpandedModelPicker?.(effort);

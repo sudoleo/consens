@@ -899,7 +899,7 @@
       hint: group?.label || "",
       level: "models",
       disabled: locked,
-      title: locked ? "The chat model is fixed while it loads or answers" : "",
+      title: locked ? "The models are still loading" : "",
       onEnter: () => enterOwnLevel(select, state, groups.length ? "groups" : "models")
     });
     const effort = state.secondarySelect;
@@ -909,8 +909,17 @@
         hint: effort.selectedOptions[0]?.textContent || "Auto",
         level: "secondary",
         disabled: effort.disabled,
+        title: effort.disabled && !locked ? "This model thinks at one fixed level" : "",
         onEnter: () => enterOwnLevel(select, state, "secondary")
       });
+    }
+    // While a response runs, the choice is for the next message: said once,
+    // quietly, so nobody wonders why the running answer did not change.
+    if (select.dataset.running === "true") {
+      const note = document.createElement("p");
+      note.className = "model-picker-note";
+      note.textContent = "The running response keeps its settings. Changes apply to your next message.";
+      state.menu.appendChild(note);
     }
 
     appendSectionLabel(state.menu, state.companionLabel);

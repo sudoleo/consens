@@ -372,7 +372,9 @@
       if (beta) {
         reasoningButton.removeAttribute("aria-checked");
         reasoningButton.setAttribute("aria-haspopup", "listbox");
-        reasoningButton.title = reasoningButton.disabled ? "Reasoning is unavailable or locked during this run" : "Choose reasoning for your next chat message";
+        reasoningButton.title = !reasoningButton.disabled ? "Choose reasoning for your next chat message"
+          : effort?.dataset.available === "true" ? "This model thinks at one fixed level"
+            : "This model has no reasoning setting";
       } else reasoningButton.removeAttribute("aria-haspopup");
     }
     const attachButton = document.getElementById("composerAttachButton");

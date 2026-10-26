@@ -410,7 +410,8 @@ button.cx-card-logo:focus-visible {
 .cx-card-pin {
   position: absolute;
   top: 8px;
-  right: 8px;
+  /* Left of the card's own scrollbar (consensus-insights.js keepPinClear). */
+  right: calc(8px + var(--cx-scrollbar, 0px));
   display: grid;
   place-items: center;
   width: 26px;

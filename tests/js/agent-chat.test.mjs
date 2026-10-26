@@ -1394,6 +1394,34 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Until 2026-10-26 a run locked model and reasoning, and the Reasoning
+  // button below the composer followed only now and then.
+  it("takes a new reasoning level while a response runs, for the next message", async () => {
+    const { window, document, dom } = bootLinked();
+    await selectAgent(window);
+    let resolve;
+    window.streamSSERequest = vi.fn(() => new Promise(r => { resolve = r; }));
+    const effort = document.getElementById("agentReasoningEffort");
+    const started = effort.value;
+    document.getElementById("questionInput").value = "Question";
+    const pending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
+    const other = [...effort.options].find(option => !option.disabled && option.value !== started);
+    effort.value = other.value;
+    effort.dispatchEvent(new window.Event("change"));
+    window.App.agentChat.render();
+    // The pick stands while the run goes on; the running message keeps its own.
+    expect(effort.value).toBe(other.value);
+    expect(window.streamSSERequest.mock.calls[0][1].reasoning_effort).toBe(started);
+    document.querySelector(".agent-model-picker .model-picker-display").click();
+    expect(document.querySelector(".agent-model-picker .model-picker-note").textContent)
+      .toBe("The running response keeps its settings. Changes apply to your next message.");
+    resolve({ ok: true, data: { response: "Answer", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { id: "b".repeat(32), question: "Question", consensus: "Answer", mode: "Agent", execution_mode: "agent" } } });
+    await pending;
+    dom.window.close();
+  });
+
   it("streams reasoning separately, preserves disclosure, and ignores deltas after stop", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);
@@ -1418,7 +1446,11 @@ describe("single-model agent chat", () => {
     expect(document.querySelector('.agent-progress').textContent).toContain('First thought');
     expect(details.textContent).toContain("First thought");
     expect(document.getElementById("agentAnswerBody").textContent).not.toContain("First thought");
-    expect(document.getElementById("agentModelDropdown").disabled).toBe(true);
+    // Model and reasoning stay open while it runs: the pick is for the next
+    // message, and the menu says so (2026-10-26; before, a run locked them).
+    expect(document.getElementById("agentModelDropdown").disabled).toBe(false);
+    expect(document.getElementById("agentReasoningEffort").disabled).toBe(false);
+    expect(document.getElementById("agentModelDropdown").dataset.running).toBe("true");
     details.querySelector("summary").click();
     handlers.activity.receive({ ...event, text: " continued" });
     window.App.agentChat.project(run);

@@ -259,6 +259,25 @@ describe("reaching the card with the pointer", () => {
     env.dom.window.close();
   });
 
+  // A long card scrolls in itself: its scrollbar ran under the pin (2026-10-26).
+  it("moves the pin left of a scrolling card's scrollbar", async () => {
+    const env = boot();
+    const [mark] = marked(env, [launch], { focusDifference() {} });
+    const { HTMLElement } = env.window;
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth");
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true,
+      get() { return this.classList.contains("cx-card") ? 300 : 0; } });
+    Object.defineProperty(env.window.Element.prototype, "clientWidth", { configurable: true,
+      get() { return this.classList.contains("cx-card") ? 289 : 0; } });
+    env.hover(mark);
+    await wait(160);
+    expect(env.shown().style.getPropertyValue("--cx-scrollbar")).toBe("11px");
+    env.shown().querySelector(".cx-card-pin").click();
+    expect(env.document.getElementById("claimPopover").style.getPropertyValue("--cx-scrollbar")).toBe("11px");
+    if (width) Object.defineProperty(HTMLElement.prototype, "offsetWidth", width);
+    env.dom.window.close();
+  });
+
   it("lets go of the sentence's highlight once the pointer pinned its card from inside it", async () => {
     const env = boot();
     const [launchMark, ticketMark] = marked(env, [launch, tickets], { focusDifference() {} });
