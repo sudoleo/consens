@@ -66,7 +66,7 @@ TOOL_DATA = {
     "start_agent": "agent", "send_agent": "agent", "wait_agents": "agent", "review_agent": "agent",
     "stop_agent": "agent", "report_to_orchestrator": "agent",
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
-    "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm",
+    "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm",
     "github_import": "vm", "update_plan": "agent",
 }
 
@@ -128,13 +128,14 @@ def context_data(actor, index, own_from, message, text):
     words: the app adds its hints, and workers report to the agent. A
     worker's user-role messages are the agent's (its assignment and later
     messages)."""
-    from app.services.agent_compaction import is_work_record
+    from app.services.agent_compaction import PICTURE_OPEN, is_work_record
     role = message.get("role")
     if role in {"system", "tool"}:
         return "app"
     if role == "assistant" or actor != "agent":
         return "agent"
-    if is_work_record(text):
+    if is_work_record(text) or text.startswith(PICTURE_OPEN):
+        # The app's record of VM output, a picture of the VM.
         return "vm"
     if index < own_from:
         return "user"

@@ -79,7 +79,8 @@ THINKING_UPDATE_SECONDS = 3
 # change: running the tests again after an edit is progress. The turn's step
 # and time limits bound them (agent_vm_tools.py).
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
-                              "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process"})
+                              "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
+                              "vm_view_image"})
 # Tools that bring outside content into the agent's context: model answers
 # and their source excerpts, pages, emails, calendars, files. Once one of them
 # returned in a message, its memory can no longer change (memory_locked): a
@@ -91,7 +92,7 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 MEMORY_LOCKING_TOOLS = frozenset({"compare_models", "check_text", "read_source", "calendar_read",
                                   "gmail_read", "import_gmail_attachment", "read_file", "read_document",
                                   "vm_exec", "vm_read_file", "vm_edit_file", "vm_start_process",
-                                  "vm_process_output", "vm_stop_process"})
+                                  "vm_process_output", "vm_stop_process", "vm_view_image"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800
@@ -612,6 +613,22 @@ class DelegationLoop(AgentLoop):
         if remaining < 2 * inputs + routing_output_limit(model) + answer:
             return TURN_ALLOWANCE_LIMIT
         return None
+
+    def _show_pictures(self):
+        """The pictures vm_view_image read in this batch follow its results
+        as user messages with the image; older ones leave the view
+        (agent_compaction.older_pictures)."""
+        if self.vm_tools is None:
+            return
+        pictures = self.vm_tools.take_pictures()
+        if not pictures:
+            return
+        from app.services import agent_compaction
+        from app.services.agent_vm_tools import picture_message
+        for path, mime, raw in pictures:
+            self.messages.append(picture_message(path, mime, raw))
+        for index, message in agent_compaction.older_pictures(self.messages, self.turn_start):
+            self.messages[index] = message
 
     def _compact(self):
         """Older VM output of a long run leaves the conversation once it is
@@ -2159,6 +2176,7 @@ class DelegationLoop(AgentLoop):
                                 # once all required checks have reached an end state.
                                 break
                         self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
+                        self._show_pictures()
                         yield from self._events()
                         if self._brought_outside_content(value, results):
                             self._lock_memory("outside_content", value.step_id)

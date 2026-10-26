@@ -299,7 +299,7 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     # Reading a background process's output again is waiting for it.
     assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
-                                                 "vm_process_output", "vm_stop_process"}
+                                                 "vm_process_output", "vm_stop_process", "vm_view_image"}
 
 
 def test_each_check_runs_two_differences_passes_in_production(store, monkeypatch):
