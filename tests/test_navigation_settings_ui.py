@@ -310,7 +310,7 @@ def test_light_input_is_white_and_account_popup_uses_opaque_surfaces():
     assert ".email-popup" in layout
     assert "background: #fff" in layout
     assert ".dark-mode .email-popup" in layout
-    assert "background: #282828" in layout
+    assert "background: #1c1c1c" in layout
     assert 'class="email-popup" role="menu" hidden' in firebase
     assert "emailPopup.hidden = !isOpen" in firebase
 
