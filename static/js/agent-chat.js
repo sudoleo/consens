@@ -1162,6 +1162,7 @@
     return undefined;
   }
   function syncComposer() {
+    renderQueue();
     const agent = selectedMode() === 'agent';
     const running = registry.isExecuting(registry.visible()?.runId);
     // Nothing stands in a guest's way: Send asks for the login (composer-invite.js).
@@ -1295,43 +1296,132 @@
     }
     App.showPopup?.(message);
   }
-  // Enter while a response runs (app-init.js): with Agent VM, where a run may
-  // take an hour, the message goes into the run (routers/agent.py
-  // add_agent_note) and the agent reads it before its next step, like typing
-  // to Claude Code while it works. Stop stays Stop. Without the VM, Enter
-  // still waits for the response (false: the caller does nothing).
-  async function addNote() {
+  // A message typed while a response runs (Enter or Send, app-init.js,
+  // query-send.js): never lost, always on screen (2026-10-26; before, it
+  // went nowhere without the VM and showed nothing until the agent read it).
+  // A run that reads messages (Agent VM, routers/agent.py add_agent_note)
+  // takes it before its next step, like typing to Claude Code while it works;
+  // the activity then shows it under "You". Any other waits in the queue
+  // above the field and goes out as the next message once the response is
+  // done. Stop or a failure puts it back in the field.
+  let queueSerial = 0;
+  function queueOf(context) {
+    return context?.metadata ? (context.metadata.queue ||= []) : [];
+  }
+  function readsMessages(context) {
+    return context?.config?.agentPreferences?.audit === "on" || context?.config?.agentPreferences?.vm === "on";
+  }
+  // What Send does now: null when it stops the response (an empty field).
+  function steering() {
+    const context = registry.visible();
+    const text = String(document.getElementById("questionInput")?.value || "").trim();
+    if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text) return null;
+    return { title: readsMessages(context) ? "Send into the running response" : "Send after this response" };
+  }
+  async function steer() {
     const context = registry.visible();
     const input = document.getElementById("questionInput");
-    const text = String(input?.value || "").trim();
-    const chatId = context?.metadata?.chatId;
-    if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text
-        || App.agentPreferences?.get?.().vm !== "on" || !document.body.classList.contains("viewer-is-admin")) return false;
-    if (!chatId || !context.metadata.requestSent) {
-      App.showPopup?.("Your message can go into the response once it has started.");
-      return true;
-    }
+    if (!steering() || !input) return false;
+    const text = String(input.value).trim();
     input.value = "";
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    const item = { key: ++queueSerial, text, state: "queued" };
+    queueOf(context).push(item);
+    renderQueue();
+    if (readsMessages(context)) await deliver(context, item);
+    return true;
+  }
+  async function deliver(context, item) {
+    const chatId = context.metadata.chatId;
+    // Before the response has started, the message waits for its end.
+    if (!chatId || !context.metadata.requestSent) return;
+    item.state = "sending";
+    renderQueue();
     const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/notes`;
-    let failure = "";
     try {
       const token = await window.auth.currentUser.getIdToken();
-      const response = await fetch(url, { method: "POST", body: JSON.stringify({ text }),
+      const response = await fetch(url, { method: "POST", body: JSON.stringify({ text: item.text }),
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        failure = data.error || "Your message could not go into the response.";
-      }
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.id) Object.assign(item, { state: "waiting", noteId: data.id });
+      else item.state = "queued";
     } catch (_) {
-      failure = "Your message could not go into the response. Check your connection.";
+      // Unreachable now: it goes out with the next message instead.
+      item.state = "queued";
     }
-    if (failure) {
-      // Nothing is lost: the words come back unless something new was typed.
-      if (input && !input.value.trim()) { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); }
-      App.showPopup?.(failure);
+    renderQueue();
+  }
+  // The activity showed the message under "You": the run has read it.
+  function delivered(context, event) {
+    if (!event?.from_user || typeof event.id !== "string" || !event.id.startsWith("note-")) return;
+    const queue = queueOf(context);
+    const index = queue.findIndex(item => item.noteId && `note-${item.noteId}` === event.id);
+    if (index >= 0) { queue.splice(index, 1); renderQueue(); }
+  }
+  // The response is over: what it did not read goes out now, or back into
+  // the field when it stopped or failed.
+  function flushQueue(context) {
+    const queue = queueOf(context).splice(0);
+    renderQueue();
+    if (!queue.length || !registry.isAuthCurrent(context)) return;
+    const text = queue.map(item => item.text).join("\n\n");
+    const input = window.document?.getElementById("questionInput");
+    if (!input) return;
+    if (context.status === "succeeded" && !input.value.trim()) {
+      setTimeout(() => {
+        if (input.value.trim() || registry.isExecuting(registry.visible()?.runId)) return;
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        window.sendQuestion?.();
+      }, 0);
+      return;
     }
-    return true;
+    input.value = input.value.trim() ? `${text}\n\n${input.value}` : text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    App.showPopup?.(context.status === "succeeded" ? "Your waiting message is back in the field, before your new text."
+      : "Your waiting message is back in the field: the response ended before it could take it.");
+  }
+  const queueLabels = { queued: "Sends after this response", sending: "Sending…", waiting: "Read before the next step" };
+  function renderQueue() {
+    if (!window.document?.body) return;
+    const host = document.getElementById("agentQueue");
+    if (!host) return;
+    const context = registry.visible();
+    const queue = selectedMode() === "agent" && context && registry.isExecuting(context.runId) ? queueOf(context) : [];
+    const signature = JSON.stringify(queue.map(item => [item.key, item.state]));
+    if (host.dataset.signature === signature) return;
+    host.dataset.signature = signature;
+    host.replaceChildren(...queue.map(item => {
+      const row = document.createElement("div");
+      row.className = "agent-queue-item";
+      row.dataset.state = item.state;
+      const text = document.createElement("span");
+      text.className = "agent-queue-text";
+      // The user's own words: never translated.
+      text.dataset.i18nSkip = "";
+      text.textContent = item.text;
+      const state = document.createElement("span");
+      state.className = "agent-queue-state";
+      state.textContent = queueLabels[item.state];
+      row.append(text, state);
+      if (item.state === "queued") {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "agent-queue-remove";
+        remove.setAttribute("aria-label", "Remove waiting message");
+        remove.title = "Remove waiting message";
+        remove.innerHTML = window.App?.closeIcon?.() || "×";
+        remove.addEventListener("click", () => {
+          const index = queue.indexOf(item);
+          if (index >= 0) queue.splice(index, 1);
+          renderQueue();
+          document.getElementById("questionInput")?.focus({ preventScroll: true });
+        });
+        row.append(remove);
+      }
+      return row;
+    }));
+    host.hidden = !queue.length;
   }
   // Stop is explicit: closing the connection no longer ends a turn. The
   // request identity reaches the turn before its id is known, and a Stop
@@ -1396,6 +1486,7 @@
     if (reason === "user" && context.metadata.requestSent) stopOnServer(context);
     else forgetPending(context);
     restoreUnsentDraft(context);
+    flushQueue(context);
   }
   // After a reload: follow this tab's turns that were still running.
   function resumePending() {
@@ -1460,6 +1551,7 @@
     } finally {
       context.controllers.query = null;
       if (["succeeded", "failed"].includes(context.status)) forgetPending(context);
+      flushQueue(context);
       if (registry.isAuthCurrent(context)) registry.renderVisible();
       if (!context.metadata.terminalBudget && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
@@ -1573,6 +1665,7 @@
       activity: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         App.agentActivity?.receive(context.metadata.agentActivity, event);
+        delivered(context, event);
         if (event.kind === "status" && event.clear_response) {
           context.consensus.streamText = "";
           context.metadata.coveragePreview = null;
@@ -1901,6 +1994,7 @@
       // handle theirs in cancelRun, a transport problem keeps it.
       if (["succeeded", "failed"].includes(context.status)) forgetPending(context);
       restoreUnsentDraft(context);
+      flushQueue(context);
       if (registry.isAuthCurrent(context)) registry.renderVisible();
       if (!context.metadata.terminalBudget && context.metadata.requestSent && registry.isAuthCurrent(context)) await refreshBudget(context.auth.uid);
     }
@@ -1910,7 +2004,7 @@
     looksAgent,
     // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
     pick: () => selection(), modelLabel, applyPick,
-    render: () => renderShell(), renderShell, project, send, addNote, revealPendingReview, syncPendingReview,
+    render: () => renderShell(), renderShell, project, send, steer, steering, revealPendingReview, syncPendingReview,
     tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget,
     // demo.js: show (true) or release (false) the answer surface for the demo.
     // Returns the activity host for that turn, or null when released.
@@ -1989,6 +2083,8 @@
     document.getElementById('agentReviewAction')?.addEventListener('click', () => revealPendingReview());
     document.getElementById('questionInput')?.addEventListener('input', () => {
       if (selectedMode() === 'agent') window.updateQuestionInputAccess?.();
+      // Text while a response runs turns Stop into Send (query-send.js).
+      App.syncSendButtonRunning?.();
     });
     render();
   });

@@ -604,6 +604,12 @@
     window.App.anchorGlide?.();
     const visible = registry.visible();
     if (visible && registry.isExecuting(visible.runId)) {
+      // Words in the field: Send hands them to the running response or its
+      // queue (agent-chat.js steer); an empty field means Stop.
+      if (window.App.agentChat?.steering?.()) {
+        await window.App.agentChat.steer();
+        return;
+      }
       // The first rapid repeat is a duplicate gesture, not an intentional stop.
       if (Date.now() - visible.startedAt < 450) return;
       registry.cancel(visible.runId, "user");
@@ -699,11 +705,14 @@
   function setSendButtonRunning(running) {
     const button = document.getElementById("sendButton");
     if (!button) return;
-    const state = running ? "stop" : "send";
+    // Text typed while an Agent response runs: Send, not Stop (agent-chat.js).
+    const steer = running ? window.App.agentChat?.steering?.() : null;
+    const stop = running && !steer;
+    const state = stop ? "stop" : "send";
     // Many projections call this per second; only a real change swaps the
     // icon, so its entry animation plays once instead of on every update.
     if (button.dataset.icon !== state) {
-      if (running && button.dataset.icon === "send") {
+      if (stop && button.dataset.icon === "send") {
         // The question fans out: three arcs leave the button (shell.css).
         // A launch still on screen restarts (a reflow between); the usual
         // first send needs none, so the click forces no style pass.
@@ -717,18 +726,18 @@
       }
       // The arrow comes back the way the stop square came: the same short
       // fade and scale (Apple audit C12), not in one frame.
-      button.classList.toggle("is-returning", !running && button.dataset.icon === "stop");
+      button.classList.toggle("is-returning", !stop && button.dataset.icon === "stop");
       clearTimeout(button._returnTimer);
       if (button.classList.contains("is-returning")) {
         button._returnTimer = setTimeout(() => button.classList.remove("is-returning"), 400);
       }
       button.dataset.icon = state;
-      button.innerHTML = running ? STOP_ICON : SEND_ICON;
+      button.innerHTML = stop ? STOP_ICON : SEND_ICON;
     }
     button.disabled = false;
     button.setAttribute("aria-disabled", "false");
-    button.classList.toggle("is-cancel-action", running);
-    button.title = running ? "Cancel this run" : "Send question";
+    button.classList.toggle("is-cancel-action", stop);
+    button.title = steer ? steer.title : running ? "Cancel this run" : "Send question";
     button.setAttribute("aria-label", button.title);
     if (!running) window.updateQuestionInputAccess?.();
   }

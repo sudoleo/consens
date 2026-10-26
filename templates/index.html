@@ -428,6 +428,9 @@
         <span id="agentReviewMessage" role="status" aria-live="polite"></span>
         <button id="agentReviewAction" type="button">Review</button>
       </div>
+      <!-- Messages typed while a response runs (agent-chat.js steer): read by
+           the run, or sent once it is done. -->
+      <div id="agentQueue" class="agent-queue" role="status" aria-live="polite" hidden></div>
       <div class="chat-input-container u-position-relative" data-drop-label="Drop file to attach">
         <!-- Fallback fuer die im Agent-Chat verborgene Toolbar. attachments.js
              verschiebt dieselbe Leiste im Hero/Direktvergleich unter das Feld.

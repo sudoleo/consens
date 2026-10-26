@@ -304,7 +304,8 @@
           // A guest's Send asks for the sign-in (composer-invite.js), so it
           // works as soon as there is something to send.
           const guestCanSend = guest && Boolean(questionInput?.value.trim());
-          if (sendButton && !sendButton.classList.contains("is-cancel-action")) {
+          // While a response runs, the button is query-send.js's (Stop, or Send into it).
+          if (sendButton && !sendButton.classList.contains("is-cancel-action") && !window.isRunActive?.()) {
             sendButton.disabled = !canStartRun && !guestCanSend;
             sendButton.title = !canAsk
               ? unverified
@@ -876,8 +877,8 @@
             }
             if (window.isRunActive && window.isRunActive()) {
               event.preventDefault();
-              // With Agent VM the words go into the running response (agent-chat.js addNote).
-              window.App.agentChat?.addNote?.();
+              // The words go into the running response or its queue (agent-chat.js steer).
+              window.App.agentChat?.steer?.();
               return;
             }
             if (window.isQueryRequestRunning && window.isQueryRequestRunning()) {

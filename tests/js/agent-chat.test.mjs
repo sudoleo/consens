@@ -1394,6 +1394,80 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A message typed while a response runs is never lost and always on screen
+  // (2026-10-26): into the run when it reads messages, else in the queue.
+  it("queues a message typed during a response and sends it once the response is done", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let resolve;
+    window.streamSSERequest = vi.fn(() => new Promise(r => { resolve = r; }));
+    window.sendQuestion = vi.fn();
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    const pending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
+    expect(window.App.agentChat.steering()).toBeNull();
+    input.value = "Also compare the prices";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Send after this response" });
+    await window.App.agentChat.steer();
+    expect(input.value).toBe("");
+    expect(queue.hidden).toBe(false);
+    expect(queue.querySelector(".agent-queue-text").textContent).toBe("Also compare the prices");
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sends after this response");
+    // Without the VM nothing goes into the run.
+    expect(window.fetch.mock.calls.some(([url]) => String(url).endsWith("/notes"))).toBe(false);
+    resolve({ ok: true, data: { response: "Answer", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { id: "b".repeat(32), question: "Question", consensus: "Answer", mode: "Agent", execution_mode: "agent" } } });
+    await pending;
+    await vi.waitFor(() => expect(window.sendQuestion).toHaveBeenCalled());
+    expect(input.value).toBe("Also compare the prices");
+    expect(queue.hidden).toBe(true);
+    dom.window.close();
+  });
+
+  it("sends a message into a response that reads them and lets it go once the run read it", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => false };
+    } });
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
+      ? { ok: true, json: async () => ({ status: "added", id: "n1" }) } : catalogFetch(url, options));
+    input.value = "Use the newer data";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Send into the running response" });
+    await window.App.agentChat.steer();
+    const [url, options] = window.fetch.mock.calls.find(([u]) => String(u).endsWith("/notes"));
+    expect(url).toContain(`/requests/${encodeURIComponent(run.requestIdentity)}/notes`);
+    expect(JSON.parse(options.body)).toEqual({ text: "Use the newer data" });
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Read before the next step");
+    // A sent message cannot be taken back, a queued one can.
+    expect(queue.querySelector(".agent-queue-remove")).toBeNull();
+    handlers.activity.receive({ version: 1, step_id: "completion:3", id: "note-n1", kind: "progress",
+      text: "Use the newer data", from_user: true });
+    expect(queue.hidden).toBe(true);
+    // Stop with a message still waiting: it comes back into the field.
+    input.value = "Then summarise";
+    window.fetch = vi.fn(async () => ({ ok: false, json: async () => ({ code: "not_running" }) }));
+    await window.App.agentChat.steer();
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sends after this response");
+    window.App.runRegistry.cancel(run.runId, "user");
+    expect(input.value).toBe("Then summarise");
+    dom.window.close();
+  });
+
   // Until 2026-10-26 a run locked model and reasoning, and the Reasoning
   // button below the composer followed only now and then.
   it("takes a new reasoning level while a response runs, for the next message", async () => {
