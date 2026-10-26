@@ -190,4 +190,31 @@ describe('composer autosize', () => {
     expect(app.field.style.height).toBe('52px');
     app.dom.window.close();
   });
+
+  // Chrome brings the caret of the sticky composer into view as if it stood
+  // at the page's end: 42px further down with every key (2026-10-26).
+  it('keeps the page where it was while the composer in view is typed in', () => {
+    const app = boot(); app.tick();
+    const { window } = app;
+    let y = 400, bottom = 752;
+    const writes = [];
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => 800 });
+    window.scrollTo = options => { writes.push(options.top); y = options.top; };
+    app.field.getBoundingClientRect = () => ({ width: 350, top: bottom - 52, bottom, height: 52 });
+    const key = () => app.field.dispatchEvent(new window.InputEvent('beforeinput', { inputType: 'insertText', data: 'a' }));
+    const browserScroll = to => { y = to; window.dispatchEvent(new window.Event('scroll')); };
+
+    key(); browserScroll(442);
+    expect(writes).toEqual([400]);
+    expect(y).toBe(400);
+    // The frame after the key ends the guard: the reader's own scroll stays.
+    app.tick(); browserScroll(520);
+    expect(writes).toEqual([400]);
+    // A field under a phone's keyboard is the browser's to bring into view.
+    bottom = 900;
+    key(); browserScroll(600);
+    expect(writes).toEqual([400]);
+    app.dom.window.close();
+  });
 });

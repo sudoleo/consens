@@ -1,4 +1,5 @@
-// Owns the question field's height, its multiline layout and width changes.
+// Owns the question field's height, its multiline layout and width changes,
+// and keeps the page in place while it is typed in.
 //
 // Head bundle (render-blocking, no DOM work at load): app-bootstrap.js sizes
 // a question that waits in the field before the first paint
@@ -112,6 +113,16 @@
   }
   window.App.sizeQuestionInput = sizeQuestionInput;
 
+  // The whole composer inside the visible part of the page (a phone's
+  // keyboard takes the bottom of it).
+  function composerInView(input) {
+    const box = (input.closest(".input-section") || input).getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const top = viewport ? viewport.offsetTop : 0;
+    const bottom = top + (viewport ? viewport.height : window.innerHeight);
+    return box.height > 0 && box.top >= top - 1 && box.bottom <= bottom + 1;
+  }
+
   window.App.initComposerAutosize = function (questionInput) {
     if (!questionInput) return () => {};
     const resizeQuestionInput = () => sizeQuestionInput(questionInput);
@@ -128,6 +139,22 @@
         sizeQuestionInput(questionInput, { instant: false });
       });
     });
+
+    // Typing never moves the conversation. Chrome brings the caret into view
+    // as if the sticky composer stood at the page's end, so a reader further
+    // up was pulled 42px down with every key (2026-10-26). While the composer
+    // is in view, the caret is too: the page keeps the place it had before
+    // the key. A field under a phone's keyboard is left to the browser. The
+    // browser's scroll arrives before the next frame, which ends the guard.
+    let typingTop = null;
+    questionInput.addEventListener("beforeinput", () => {
+      if (typingTop === null) requestAnimationFrame(() => { typingTop = null; });
+      typingTop = composerInView(questionInput) ? window.scrollY : null;
+    });
+    window.addEventListener("scroll", () => {
+      if (typingTop === null || Math.abs(window.scrollY - typingTop) <= .5) return;
+      window.scrollTo({ top: typingTop, left: window.scrollX, behavior: "instant" });
+    }, { passive: true });
     window.addEventListener("resize", resizeQuestionInput, { passive: true });
     // Empty textarea scrollHeight includes its placeholder. Only a new hint
     // counts: the same words written again (the Agent's composer does it on
