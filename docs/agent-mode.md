@@ -481,7 +481,35 @@ große KI-APIs), damit eine gelesene Seite die Dateien des Chats nicht an einen
 beliebigen Server schicken lässt. Bekanntes Restrisiko: Über den
 Management-Socket in der VM (`/.sprite/api.sock`, Tasks API) kann ein Befehl
 die Sprite bis zu einer Stunde je Task wach halten (Kosten); hingenommen, weil
-nur Admins die VM haben.
+nur Admins die VM haben. Die App selbst nutzt ihn nur für Hintergrundprozesse,
+gedeckelt (siehe unten).
+
+**Hintergrundprozesse (seit 2026-10-26).** Ein mit `&` in `vm_exec`
+gestarteter Prozess endet, sobald die Sprite pausiert (nach wenigen Sekunden
+Leerlauf, also zwischen zwei Schritten des Agenten). Für Dev-Server und lange
+Tests gibt es deshalb `vm_start_process` (`command`, `cwd`, `max_seconds`
+Standard 1.800, höchstens 3.600), `vm_process_output` (`id`, optional
+`wait_seconds` bis 60, begrenzt durch `answer_time_left`; ohne `id` die Liste)
+und `vm_stop_process` (`id`; TERM an `timeout`, das die ganze Prozessgruppe
+beendet, nach 10 s KILL) in `agent_vm_processes.py`. Je Prozess liegt in
+`~/.consens/processes/<id>` ein Aufseher-Skript (`RUNNER`): Es startet den
+Befehl unter `timeout --kill-after=5 <max_seconds>` mit der Login-Umgebung,
+schreibt die gemeinsame Ausgabe nach `output.log`, hält die Sprite über die
+Tasks-API (`/.sprite/api.sock`, `PUT /v1/tasks/consens-<id>` mit 5 min Ablauf,
+jede Minute erneuert) wach, solange der Befehl läuft, schreibt danach
+`exit_code` und gibt die Sperre frei (`DELETE`); stirbt der Aufseher, läuft die
+Sperre von selbst aus. Deckel gegen Kosten: höchstens `MAX_RUNNING` = 3
+gleichzeitig (der vierte Start sagt es dem Agenten), jeder endet spätestens nach
+`max_seconds`, die Sprite bleibt nach dem Ende einer Nachricht also höchstens
+3 × 1 h wach. Ein Prozess überlebt seine Nachricht (der Arbeitsstand nennt
+seine ID). Status: `running`, `exited` mit `exit_code` oder `lost` (die VM hat
+ihn ohne Exit-Code beendet). Das Modell bekommt das Ende der Ausgabe wie bei
+`vm_exec` (12.000 Zeichen, Kürzung im Text), die Anzeige zeigt den Start wie
+einen Befehl („Started in the background“, `$ Befehl`, „Running in the
+background“) und Lesen/Stoppen mit der Prozess-ID; alte Ergebnisse werden
+kompaktiert wie `vm_exec`. Die Shell-Skripte laufen in den Tests in einem
+echten bash; gegen eine echte Sprite ist der Ablauf noch nicht geprüft (eine
+kurze Probe braucht Max' OK).
 
 **Plan (seit 2026-10-26).** Mit der VM bekommt der Agent `update_plan`
 (`agent_plan.py`, Prompt `AGENT_PLAN_PROMPT`, im Admin „Agent: plan“), wie
@@ -590,7 +618,8 @@ Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
 Fensterende, Kompaktierung, Aktivitätsgröße),
 `tests/test_agent_github.py` (Import ohne Token in der VM, App-Token je Repo,
 Fehler), `tests/test_agent_plan.py` (Plan in Aktivität, Protokoll und
-Prüfer-Prompt),
+Prüfer-Prompt), `tests/test_agent_vm_processes.py` (Werkzeuge gegen FakeVM,
+Aufseher-Skripte in echtem bash: Ende, Stopp, Deckel, Zeitlimit),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
 `agent-preferences.test.mjs`, `test_user_settings.py` und
 `test_prompt_config.py`.

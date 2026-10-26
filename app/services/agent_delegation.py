@@ -79,7 +79,7 @@ THINKING_UPDATE_SECONDS = 3
 # change: running the tests again after an edit is progress. The turn's step
 # and time limits bound them (agent_vm_tools.py).
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
-                              "vm_share_file"})
+                              "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process"})
 # Tools that bring outside content into the agent's context: model answers
 # and their source excerpts, pages, emails, calendars, files. Once one of them
 # returned in a message, its memory can no longer change (memory_locked): a
@@ -90,7 +90,8 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # lines an edit shows again.
 MEMORY_LOCKING_TOOLS = frozenset({"compare_models", "check_text", "read_source", "calendar_read",
                                   "gmail_read", "import_gmail_attachment", "read_file", "read_document",
-                                  "vm_exec", "vm_read_file", "vm_edit_file"})
+                                  "vm_exec", "vm_read_file", "vm_edit_file", "vm_start_process",
+                                  "vm_process_output", "vm_stop_process"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800

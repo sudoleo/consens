@@ -45,7 +45,7 @@ MIN_GAIN_CHARS = 30_000
 # A result this short stays as it is: its stub would save next to nothing.
 MIN_RESULT_CHARS = 2_000
 TAIL_CHARS = 600
-COMPACTABLE = frozenset({"vm_exec", "vm_read_file"})
+COMPACTABLE = frozenset({"vm_exec", "vm_read_file", "vm_start_process", "vm_process_output", "vm_stop_process"})
 OUTPUT_CLEARED = ("Earlier output cleared to save context; only its end is kept. Run the command again if you "
                   "need all of it.")
 CONTENT_CLEARED = "File content cleared to save context. Read the file again if you need it."
@@ -107,10 +107,10 @@ def stub(name, content):
         kept = {key: result[key] for key in ("path", "first_line", "last_line", "total_lines", "binary", "bytes")
                 if key in result}
         return json.dumps({**kept, **inputs, "compacted": CONTENT_CLEARED}, ensure_ascii=False)
-    kept = {key: result[key] for key in ("exit_code", "timed_out", "duration_ms", "cwd", "error", "note")
-            if key in result}
+    kept = {key: result[key] for key in ("exit_code", "timed_out", "duration_ms", "cwd", "error", "note", "id",
+                                         "status", "max_seconds") if key in result}
     kept.update(inputs)
-    for stream in ("stdout", "stderr"):
+    for stream in ("stdout", "stderr", "output"):
         end = _tail(result.get(stream))
         if end:
             kept[f"{stream}_end"] = end
@@ -214,6 +214,19 @@ def describe(name, arguments, result):
         line = f"vm_write_file {path} ({data.get('bytes', '?')} bytes)"
     elif name == "vm_edit_file":
         line = f"vm_edit_file {path} ({data.get('replacements', '?')} replaced)"
+    elif name in {"vm_start_process", "vm_process_output", "vm_stop_process"}:
+        line = name
+        if data.get("id") or args.get("id"):
+            line += f" {data.get('id') or args.get('id')}"
+        if name == "vm_start_process":
+            line += f" $ {_short(args.get('command'), 200)}"
+        if "processes" in data:
+            line += f": {len(data['processes'])} processes"
+        elif data.get("status"):
+            line += f" -> {data['status']}" + (f" {data['exit_code']}" if "exit_code" in data else "")
+            end = _last_line(data.get("output") or data.get("output_end"))
+            if end:
+                line += f": {end}"
     elif name == "update_plan":
         line = f"update_plan: {data.get('done', '?')} of {data.get('total', '?')} steps done"
         if data.get("in_progress"):

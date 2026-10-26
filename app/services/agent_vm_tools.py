@@ -375,7 +375,7 @@ class VMSession:
 
 
 class VMTools:
-    """The five VM tools of one message, around its VMSession."""
+    """The VM tools of one message, around its VMSession."""
 
     def __init__(self, loop, factory=None, files=None):
         self.loop = loop
@@ -387,6 +387,7 @@ class VMTools:
 
     def tools(self):
         from app.services import agent_github
+        from app.services.agent_vm_processes import ProcessTools
         # With GitHub credentials in the backend (agent_github.py).
         github = agent_github.GitHubTools(self).tools() if agent_github.configured() else []
         return [
@@ -405,6 +406,8 @@ class VMTools:
             ReadOnlyTool("vm_share_file", "Give the user a file from your VM (up to 5 MB): it appears under your "
                          "answer, a picture as a picture, any other file as a download.",
                          VmShareFileArgs, self.share, activity=self._path_activity, reports=True),
+            # Dev servers and long test runs (agent_vm_processes.py).
+            *ProcessTools(self).tools(),
             *github,
         ]
 

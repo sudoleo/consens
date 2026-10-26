@@ -634,7 +634,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   padding: 0; border-radius: 0; background: none; color: inherit;
   font-family: var(--font-mono); font-size: .9em;
 }
-.agent-vm[data-tool="vm_exec"] .agent-vm-target::before { content: "$ "; color: var(--ink-3); }
+.agent-vm:is([data-tool="vm_exec"], [data-tool="vm_start_process"]) .agent-vm-target::before { content: "$ "; color: var(--ink-3); }
 .agent-vm[open] > summary .agent-vm-target { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-vm-meta { flex: none; padding-left: .25em; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-vm-meta:empty { display: none; }

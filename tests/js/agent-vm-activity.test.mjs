@@ -164,6 +164,25 @@ describe("VM calls in the activity", () => {
     expect(saved[2].querySelector("summary").textContent).toBe("Plan not updated");
   });
 
+  // vm_start_process & co. (2026-10-26): a dev server or a long test run.
+  it("shows a background process with its command, then by its id", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, { version: 1, kind: "tool", id: "b:1/tool", name: "vm_start_process", status: "succeeded",
+      command: "npm run dev", output: "Listening on :3000\n", process: "abcd1234", process_status: "running" });
+    activity.receive(events, { version: 1, kind: "tool", id: "b:2/tool", name: "vm_stop_process", status: "succeeded",
+      process: "abcd1234", exit_code: 143 });
+    activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
+    const [started, stopped] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    expect(started.querySelector(".agent-vm-verb").textContent).toBe("Started in the background");
+    expect(started.querySelector(".agent-vm-target").textContent).toBe("npm run dev");
+    expect(started.querySelector(".agent-vm-meta").textContent).toBe("Running in the background");
+    expect(started.classList.contains("has-output")).toBe(true);
+    expect(stopped.querySelector(".agent-vm-verb").textContent).toBe("Stopped process");
+    expect(stopped.querySelector(".agent-vm-target").textContent).toBe("abcd1234");
+    expect(stopped.querySelector(".agent-vm-meta").textContent).toBe("Exit 143");
+  });
+
   it("adds the VM's run time to the admin's usage line", () => {
     const { host, activity } = setup();
     activity.renderTurn(host, { status: "completed", agent_activity: [], assistant_response: "Done.",
