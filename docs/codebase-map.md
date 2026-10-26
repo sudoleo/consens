@@ -6773,7 +6773,10 @@ mit, sonst entfernt der Reset ihre Werte.
   sperrt `updateQuestionInputAccess()` das Senden, statt still als Compare
   zu senden. Die Ansicht wartet dabei auf Agent (`agent-mode.js`
   `agentAwaited`: Hero statt des Compare-Antwortrasters), sonst blitzte das
-  Raster bei jedem Laden auf, bis der Zugang da ist. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
+  Raster bei jedem Laden auf, bis der Zugang da ist. Seit 2026-10-26 auch in
+  der Sekunde davor, solange Firebase die Anmeldung noch nicht kennt
+  (`__consensioAuthState.known` falsch, weder Konto noch Gast): dort glitt das
+  Feld bei jedem Reload eines angemeldeten Kontos nach unten und wieder hoch. Scheitert `/user_status`, setzt `firebase.js` den Zugang auf
   „nicht erlaubt“; der Wähler zeigt dann sichtbar Compare.
 - UI seit 2026-10-02: der Modus ist die ERSTE Gruppe im (+)-Menü
   (`#runModeControl.attach-menu-modes`): `agent-mode.js::renderModeRows` baut

@@ -257,8 +257,14 @@ describe("agent mode panel projection", () => {
     expect(window.App.runMode.effective()).toBe("compare");
     expect(syncPreview.mock.lastCall[0]).toBe(true);
     expect(document.body.classList.contains("agent-mode-enabled")).toBe(true);
-    // A refusal settles the account in Compare.
+    // Before that, while the sign-in itself is unknown (neither account nor
+    // guest): Agent's start screen too, no grid for that second (2026-10-26).
     state.pending = false;
+    window.__consensioAuthState = { known: false, uid: null, generation: 0 };
+    window.updateAgentModeUI();
+    expect(syncPreview.mock.lastCall[0]).toBe(true);
+    // A refusal settles the account in Compare.
+    window.__consensioAuthState = { known: true, uid: "u1", generation: 1 };
     window.updateAgentModeUI();
     expect(syncPreview.mock.lastCall[0]).toBe(false);
     expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);

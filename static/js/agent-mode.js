@@ -26,10 +26,14 @@
   const runMode = () => window.App.runMode.effective();
   // An Agent choice whose access is still loading runs as nothing yet (Send
   // waits, agent-chat.js); its start screen is Agent's hero, not Compare's
-  // answer grid, which would flash on every load until access arrives.
+  // answer grid, which would flash on every load until access arrives. That
+  // includes the second before the sign-in itself is known (Firebase restores
+  // it from storage): neither account nor guest yet, the grid came for it
+  // and the field slid down and back up on every reload (2026-10-26).
   const agentAwaited = () => {
     const state = window.App.agentChat?.modeState?.();
-    return window.App.runMode.preference() === "agent" && !state?.family && state?.pending === true;
+    if (window.App.runMode.preference() !== "agent" || state?.family) return false;
+    return state?.pending === true || (!state?.canUse && !state?.guest && window.__consensioAuthState?.known !== true);
   };
   // Anything but a side-by-side comparison: the next message goes to Agent.
   const threadMode = () => runMode() !== "compare" || agentAwaited();
