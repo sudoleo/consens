@@ -47,6 +47,30 @@ def filter_console_errors(errors):
     ]
 
 
+# Ueberschreitet die Suite das Zeitlimit des CI-Jobs, bricht GitHub sie ab,
+# bevor pytest den JUnit-Bericht schreibt (Nachtlaeufe 2026-10-25). Dieses
+# Protokoll entsteht waehrend des Laufs und nennt danach den Test, der noch
+# lief, und die langsamen davor (scripts/ci_annotate_failures.py).
+PROGRESS_LOG = os.environ.get("E2E_PROGRESS_LOG")
+
+
+def _log_progress(event, nodeid):
+    path = Path(PROGRESS_LOG)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as log:
+        log.write(f"{time.time():.1f} {event} {nodeid}\n")
+
+
+def pytest_runtest_logstart(nodeid, location):
+    if PROGRESS_LOG:
+        _log_progress("start", nodeid)
+
+
+def pytest_runtest_logfinish(nodeid, location):
+    if PROGRESS_LOG:
+        _log_progress("end", nodeid)
+
+
 @pytest.fixture(scope="session")
 def app_server():
     env = os.environ.copy()

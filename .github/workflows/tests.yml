@@ -112,6 +112,8 @@ jobs:
       GCLOUD_PROJECT: demo-consensio-e2e
       FIREBASE_PROJECT_ID: demo-consensio-e2e
       FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+      # Written as the suite goes: names the test a timeout cut off.
+      E2E_PROGRESS_LOG: test-results/browser-progress.log
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -140,8 +142,10 @@ jobs:
           firebase emulators:exec --only firestore --project demo-consensio-e2e --config firebase.json --non-interactive
           "npm run test:rules && python -m pytest tests/e2e -q --junitxml=test-results/browser.xml"
       - name: Failed tests as annotations
-        if: failure()
-        run: python scripts/ci_annotate_failures.py test-results/browser.xml
+        # Also when the job's time limit cancels the suite before its report;
+        # a green report prints nothing.
+        if: always()
+        run: python scripts/ci_annotate_failures.py test-results/browser.xml test-results/browser-progress.log
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -28,8 +28,13 @@ WORKFLOW = "Regression tests"
 API = f"https://api.github.com/repos/{REPO}"
 POLL_SECONDS = 60
 WAIT_MINUTES = 40
-# Annotations GitHub adds to every failed step; the test names say more.
-NOISE = ("Process completed with exit code",)
+# Annotations GitHub adds to every failed or cancelled step; the test names
+# say more.
+NOISE = ("Process completed with exit code", "The operation was canceled.")
+# A job over its time limit ends cancelled, like one a newer run or a person
+# cancelled, but it failed: the nightly browser suite ran into it unseen
+# (2026-10-25).
+TIMED_OUT = "exceeded the maximum execution time"
 
 
 class ApiError(Exception):
@@ -60,12 +65,14 @@ def failures(run):
     """Failed jobs of a run, each with its failed tests (or other errors)."""
     found = []
     for job in get(f"/actions/runs/{run['id']}/jobs")["jobs"]:
-        if job["conclusion"] in ("success", "skipped", "cancelled", None):
+        if job["conclusion"] in ("success", "skipped", None):
+            continue
+        notes = [note for note in get(f"/check-runs/{job['id']}/annotations")
+                 if note["annotation_level"] == "failure" and not note["message"].startswith(NOISE)]
+        if job["conclusion"] == "cancelled" and not any(TIMED_OUT in note["message"] for note in notes):
             continue
         messages = []
-        for note in get(f"/check-runs/{job['id']}/annotations"):
-            if note["annotation_level"] != "failure" or note["message"].startswith(NOISE):
-                continue
+        for note in notes:
             title = note.get("title") or ""
             messages.append((title + " :: " if title else "") + note["message"].strip())
         if not messages:
@@ -94,17 +101,19 @@ def report(run, found):
 def recent(hours):
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
     chosen = [run for run in runs(branch="main") if run["status"] == "completed"
-              and run["conclusion"] != "cancelled"
               and datetime.fromisoformat(run["created_at"].replace("Z", "+00:00")) >= since]
-    if not chosen:
-        print(f"No completed run on main in the last {hours} hours.")
-        return 2
-    red = 0
+    red = shown = 0
     for run in chosen:
         found = failures(run) if run["conclusion"] != "success" else []
+        if run["conclusion"] == "cancelled" and not found:
+            continue  # cancelled by a newer run or by hand, not by the time limit
         red += bool(found)
+        shown += 1
         report(run, found)
-    print(f"\n{red} of {len(chosen)} runs red." if red else f"\nAll {len(chosen)} runs green.")
+    if not shown:
+        print(f"No completed run on main in the last {hours} hours.")
+        return 2
+    print(f"\n{red} of {shown} runs red." if red else f"\nAll {shown} runs green.")
     return 1 if red else 0
 
 

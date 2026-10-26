@@ -552,6 +552,12 @@ Fehlgeschlagene Backend- und Browser-Tests stehen als Annotationen am Lauf
 Annotationen nicht, also ist ein roter Lauf aus der Fehler-Mail heraus lesbar.
 Die zweite Zeile nennt die Stelle im Test (`at tests/...py:<Zeile>`), auch wenn
 die Meldung selbst in Bibliotheks-Frames endet (abgelaufenes Playwright-Warten).
+Läuft die Browser-Suite ins Zeitlimit des Jobs, bricht GitHub sie ab, bevor
+pytest den JUnit-Bericht schreibt. Dafür protokolliert `tests/e2e/conftest.py`
+mit `E2E_PROGRESS_LOG` jeden Test schon während des Laufs; die Annotation nennt
+dann den Test, der noch lief, und die langsamsten davor. `ci_status.py` zählt
+einen Job über dem Zeitlimit als rot, obwohl GitHub ihn „cancelled“ nennt; von
+einem neueren Lauf oder von Hand abgebrochene Läufe bleiben außen vor.
 Rote Läufe gehen als Mail an den, der gepusht hat. Darum prüft jede Session ihren Push selbst (AGENTS.md):
 
 ```powershell
