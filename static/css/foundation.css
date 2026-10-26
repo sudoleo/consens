@@ -269,6 +269,8 @@ html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-she
   .agent-activity-chevron,
   .agent-vm.has-output > summary::after,
   .agent-vm-fold > summary::after,
+  .agent-plan > summary::after,
+  .agent-plan-list > li[data-status="completed"]::before,
   .agent-doc-earlier > summary::before,
   .diff-more-summary::after,
   .consensus-differences-summary::before,
