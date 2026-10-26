@@ -8258,7 +8258,15 @@ Wichtige Verträge im Backend:
 
 **Firestore-Sicherheitsregeln und Indizes** (`firestore.rules` und
 `firestore.indexes.json`, Quellen der Wahrheit im Repo; Deployment per Firebase
-CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
+CLI mit `firebase deploy --only firestore:rules,firestore:indexes`). Kein Deploy
+und keine CI spielt neue Einträge von selbst ein: Wer einen Index oder eine
+Ausnahme ergänzt, legt sie im selben Auftrag in Prod an (`consensai`), sonst
+scheitert die Abfrage dort mit `FailedPrecondition` (2026-10-26: der
+Work-Log-Index fehlte einen Tag, die stündliche Wartung meldete es per Telegram).
+Prod trägt zusätzlich alte Feld-Ausnahmen entfernter Funktionen
+(`source_check_*`, `data`, `packages`), die nicht im Repo stehen: nie blind die
+Repo-Datei deployen, sondern `firebase firestore:indexes --project consensai`
+lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
 - **Deny-all für alle Clients.** Kein Browser-Code spricht direkt mit Firestore —
   `static/firebase.js` lädt seit 2026-10-05 nur noch App- und Auth-SDK (das
   ungenutzte Firestore-SDK blockierte vorher den App-Start), und die CSP führt
