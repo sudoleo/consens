@@ -68,6 +68,21 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
         f"vm_start_process {PID} $ npm run dev -> running: Listening on :3000")
 
 
+def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(store, fake_vm, fixed_id, monkeypatch):
+    """It holds the VM awake up to its limit, after the message too: that limit
+    is charged, and it never runs past what is left today (agent_vm_time.py)."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 1000)
+    directory = process_dir(PID)
+    fake_vm.commands[start_command(directory, 1000, task_name(PID))] = (status("running", "Listening\n"), 0, 2.0)
+    loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev", "max_seconds": 1800})]]))
+    list(loop.run())
+    started = results(loop)[0]
+    assert started["status"] == "running" and started["max_seconds"] == 1000
+    # The start itself is the app's own call, not command time.
+    assert agent_vm_time.used(store.db, UID) == 1000
+
+
 def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed_id):
     directory = process_dir(PID)
     fake_vm.commands[start_command(directory, 60, task_name(PID))] = ([], 4, .1)

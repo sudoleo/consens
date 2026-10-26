@@ -95,6 +95,8 @@ EDIT_SNIPPET_CHARS = 2_000
 VM_UNAVAILABLE = ("The VM is not available right now. Continue without it for this message and do not call VM "
                   "tools again; say so if the answer needed it.")
 VM_NO_TIME = ("Not enough time is left in this message for a command. Write the answer from what you have.")
+VM_DAY_LIMIT = ("The VM time of this account for today is used up. Continue without the VM for this message and "
+                "tell the user that the VM is available again tomorrow (the day starts at midnight UTC).")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
@@ -301,6 +303,11 @@ class VMSession:
         self.inputs, self.skipped = [], []
         self.calls = self.commands = 0
         self.seconds = 0.0
+        # The account's VM time today (agent_vm_time.py): read once per
+        # message, on its first VM call; background processes count with
+        # their time limit (``reserved``). Charged when the message ends.
+        self._day = None
+        self.reserved = 0.0
         # The first result after the VM became ready tells the agent which
         # attachments are in INPUT_DIR.
         self._announced = False
@@ -409,7 +416,24 @@ class VMSession:
             data["unavailable"] = True
         return data
 
+    def left(self):
+        """Seconds of VM time the account has left today, or None (no cap).
+        A failed read leaves the VM open: the cap is cost control."""
+        from app.services import agent_vm_time
+        if self._day is None:
+            try:
+                limit = agent_vm_time.daily_limit(self.loop.uid)
+                self._day = (limit, agent_vm_time.used(self.loop.store.db, self.loop.uid) if limit is not None else 0.0)
+            except Exception as exc:
+                logging.warning("Agent VM time unavailable category=%s", safe_exception(exc))
+                self._day = (None, 0.0)
+        limit, before = self._day
+        return None if limit is None else limit - before - self.seconds - self.reserved
+
     def close(self):
+        if self.state != "idle":
+            from app.services import agent_vm_time
+            agent_vm_time.charge(self.loop.store, self.loop.uid, self.seconds + self.reserved)
         if self.backend is not None:
             try:
                 self.backend.close()
@@ -475,6 +499,9 @@ class VMTools:
         return self._files
 
     def _start(self, cancellation):
+        left = self.session.left()
+        if left is not None and left < 1:
+            raise ValueError(VM_DAY_LIMIT)
         with self.session._lock:
             self.session.calls += 1
         self.session.ready(cancellation)
@@ -499,6 +526,12 @@ class VMTools:
             if left < MIN_COMMAND_SECONDS:
                 raise ValueError(VM_NO_TIME)
             timeout = min(timeout, int(left))
+        # Never past the account's VM time for today (agent_vm_time.py).
+        day = self.session.left()
+        if day is not None:
+            if day < 1:
+                raise ValueError(VM_DAY_LIMIT)
+            timeout = min(timeout, max(1, int(day)))
         return timeout
 
     def exec(self, args, *, cancellation, report=None):
@@ -692,7 +725,7 @@ class VMTools:
     def _outcome(result):
         error = (result or {}).get("error") if isinstance(result, dict) else None
         return {"outcome": "unavailable"} if error == VM_UNAVAILABLE else {"outcome": "no_time"} \
-            if error == VM_NO_TIME else {}
+            if error == VM_NO_TIME else {"outcome": "day_limit"} if error == VM_DAY_LIMIT else {}
 
     def _exec_activity(self, args, result):
         command = args.command if len(args.command) <= COMMAND_VIEW_CHARS else \

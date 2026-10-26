@@ -460,7 +460,8 @@
     vm_process_output: ['Reading the output of process', 'Read the output of process'],
     vm_stop_process: ['Stopping process', 'Stopped process'],
     vm_view_image: ['Looking at the picture', 'Looked at the picture'] };
-  const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left' };
+  const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left',
+    day_limit: 'Skipped · VM time for today used up' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
     if (item.status === 'running') return item.name === 'vm_exec' ? App.t('Running…') : '';

@@ -396,6 +396,8 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       document.body.classList.toggle("viewer-is-admin", data.is_admin === true);
       // Audit with its own VM (Pro and admins): its settings, work log and restore.
       document.body.classList.toggle("viewer-can-audit", data.audit_access === true);
+      window.App.vmTime = data.vm_time || null;
+      window.App.agentPreferences?.sync?.();
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
       window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });

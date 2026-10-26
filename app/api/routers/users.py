@@ -98,6 +98,7 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             account_language.record, uid, request_language(request), db=db_firestore,
         )
 
+        audit_access = entitlements.tier == "pro" or is_user_admin(uid)
         return {
             "uid": uid,
             # is_pro heisst weiterhin "Frontier-Modelle" und ist
@@ -115,7 +116,9 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # (analytics-opt-out.js); same cached flags as the tier above.
             "is_admin": is_user_admin(uid),
             # Audit with its own VM (routers/agent.py audit_allowed): Pro and admins.
-            "audit_access": entitlements.tier == "pro" or is_user_admin(uid),
+            "audit_access": audit_access,
+            # Its VM time today (agent_vm_time.py), for the settings.
+            **({"vm_time": _vm_time(uid)} if audit_access else {}),
         }
 
     except HTTPException:
@@ -128,6 +131,17 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
     except Exception as exc:
         logging.error("User status check failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed")
+
+def _vm_time(uid):
+    """Today's VM time, or None when it cannot be read (the settings then say
+    nothing about it)."""
+    from app.services import agent_vm_time
+    try:
+        return agent_vm_time.status(db_firestore, uid)
+    except Exception as exc:
+        logging.warning("VM time status unavailable category=%s", safe_exception(exc))
+        return None
+
 
 @router.post("/usage")
 @limiter.limit("20/minute")

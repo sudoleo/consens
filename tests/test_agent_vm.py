@@ -544,6 +544,37 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
         "/tmp/chart.png", "/home/sprite/notes.txt", "/tmp/chart.png", "/tmp/fake.png"]
 
 
+def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(store, fake_vm, monkeypatch):
+    """agent_vm_time.py (2026-10-26, with Audit for Pro): a command never runs
+    past what is left today, a background process counts with its whole time
+    limit, and a message charges its time once it ends."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 70)
+    fake_vm.commands["make test"] = ([("stdout", b"ok\n")], 0, 20)
+    script = Agent([[("vm_exec", {"command": "make test", "timeout_seconds": 300})],
+                    [("vm_start_process", {"command": "npm run dev", "max_seconds": 1800})],
+                    [("vm_exec", {"command": "ls"})]])
+    loop = vm_loop(store, script)
+    events = list(loop.run())
+    tests, process, listing = results(loop)
+    assert tests["exit_code"] == 0
+    # 30 seconds were left: the command's limit; then 10, too few for a process.
+    timeouts = [call[4] for call in fake_vm.calls if call[0] == "exec" and call[2] in {"make test", "ls"}]
+    assert timeouts == [30, 10]
+    assert process == {"error": agent_vm_tools.VM_DAY_LIMIT}
+    assert [e.get("outcome") for e in tool_events(events, "vm_start_process") if e["status"] != "running"] == ["day_limit"]
+    assert listing["exit_code"] == 0
+    assert agent_vm_time.used(store.db, UID) == 70 + 20 + .5
+    # Used up: the next message works on without the VM.
+    agent_vm_time.charge(store, UID, 20)
+    script = Agent([[("vm_exec", {"command": "ls"})]])
+    loop = vm_loop(store, script, request_id="two")
+    list(loop.run())
+    assert results(loop) == [{"error": agent_vm_tools.VM_DAY_LIMIT}]
+    assert loop.completion.text == ANSWER
+
+
 # --- Admins only ------------------------------------------------------------------
 
 # The VM comes with Audit, for Pro accounts and admins (2026-10-26): a saved

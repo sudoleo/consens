@@ -206,22 +206,34 @@ class ProcessTools:
     def start(self, args, *, cancellation, report=None):
         from app.services.agent_vm_tools import vm_path
         report = report or (lambda fields: None)
+        from app.services.agent_vm_tools import VM_DAY_LIMIT
         cwd = vm_path(args.cwd) if args.cwd.strip() else HOME
         self.vm._start(cancellation)
         session = self.vm.session
+        # It holds the VM awake for up to its time limit, after the message
+        # too: that whole limit counts against today's VM time, and it never
+        # runs past what is left (agent_vm_time.py).
+        seconds = args.max_seconds
+        left = session.left()
+        if left is not None:
+            if left < 60:
+                raise ValueError(VM_DAY_LIMIT)
+            seconds = min(seconds, int(left))
         process_id = new_id()
         directory = process_dir(process_id)
         for name, content in (("run.sh", RUNNER), ("command.sh", command_script(args.command, cwd)),
                               ("command", args.command)):
             self.vm._provider("write", lambda name=name, content=content: session.backend.write_file(
                 session.name, posixpath.join(directory, name), content.encode("utf-8")))
-        code, text = self._run(start_command(directory, args.max_seconds, task_name(process_id)), cancellation, 30)
+        code, text = self._run(start_command(directory, seconds, task_name(process_id)), cancellation, 30)
         if code == 4:
             raise ValueError(f"{MAX_RUNNING} background processes are already running. Stop one with "
                              "vm_stop_process first.")
         if code != 0:
             raise ValueError("The background process could not be started.")
-        result = self._result(process_id, text, {"max_seconds": args.max_seconds, "note": PROCESSES_NOTE})
+        with session._lock:
+            session.reserved += seconds
+        result = self._result(process_id, text, {"max_seconds": seconds, "note": PROCESSES_NOTE})
         report({"output": result.pop("_view"), "process": process_id})
         return self.vm.session.announce(result)
 

@@ -67,6 +67,21 @@
       if (control && control.value !== value[field]) control.value = value[field];
     }
     document.getElementById("agentSettingsSection")?.classList.toggle("is-audit", auditing());
+    renderVmTime();
+  }
+
+  // Today's VM time under the way of working (/user_status vm_time,
+  // agent_vm_time.py): whole sentences, translated here (data-i18n-skip).
+  function renderVmTime() {
+    const line = document.getElementById("agentVmTime");
+    if (!line) return;
+    const time = App.vmTime;
+    const used = Math.round((Number(time?.used_seconds) || 0) / 60);
+    const limit = Number(time?.limit_seconds) > 0 ? Math.round(time.limit_seconds / 60) : null;
+    line.hidden = !time || !auditing();
+    line.textContent = !time ? "" : limit === null
+      ? App.t("VM time today: {used} min, no daily limit", { used })
+      : App.t("VM time today: {used} of {limit} min", { used: Math.min(used, limit), limit });
   }
 
   function bind() {

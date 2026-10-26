@@ -484,7 +484,19 @@ Daten des Chats an Adressen zu schicken, die nur eine Seite, Datei oder
 Ausgabe nennt, und die Prüfer sehen jeden Befehl live (später mit Aussteuerung).
 Bekanntes Restrisiko: Über den Management-Socket in der VM
 (`/.sprite/api.sock`, Tasks API) kann ein Befehl die Sprite bis zu einer Stunde
-je Task wach halten (Kosten); seit der Öffnung für Pro offen zur Entscheidung. Die App selbst nutzt ihn nur für Hintergrundprozesse,
+je Task wach halten (Kosten), am Tageskonto vorbei.
+
+**VM-Zeit pro Tag (seit 2026-10-26).** Eine Sprite kostet nur, solange sie läuft
+(Fly.io rechnet CPU und Speicher nach Laufzeit ab, warm oder kalt nichts), und
+zwischen zwei Schritten des Agenten pausiert sie nach Sekunden. Deshalb zählt
+`agent_vm_time.py` je Konto und UTC-Tag die Befehlszeit plus Hintergrundprozesse
+mit ihrem ganzen Zeitlimit (beim Start abgebucht, sie überdauern die Nachricht):
+Pro `PRO_DAILY_SECONDS` = 2 Stunden, Admins ohne Grenze. Ein Befehl läuft nie
+über den Rest (`VMTools._timeout`), ein Prozess höchstens so lange; ist nichts
+mehr übrig, bekommt der Agent `VM_DAY_LIMIT` und arbeitet ohne VM weiter, die
+Aktivität sagt „Skipped · VM time for today used up“. Gebucht wird beim Ende der
+Nachricht (`VMSession.close`, `users/{uid}/chat_state/agent_vm_time_<Tag>`);
+`/user_status` liefert `vm_time`, die Einstellungen zeigen „VM time today“. Die App selbst nutzt ihn nur für Hintergrundprozesse,
 gedeckelt (siehe unten).
 
 **Eingreifen (seit 2026-10-26).** Zwei Wege neben Stop, beide nur mit der

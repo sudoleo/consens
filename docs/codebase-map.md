@@ -5582,7 +5582,7 @@ dem Memory-Block an; in beiden Modi. Eine VM pro Chat (Fly.io Sprites über
 beim ersten VM-Aufruf, über Nachrichten wiederverwendet. Der erste Aufruf
 einer Nachricht schreibt das Chat-Feld `agent_vm`, ruft `ensure` (anlegen,
 Egress ins offene Web außer Flys internem Netz, `EGRESS_RULES`, seit
-2026-10-26), legt den Checkpoint der
+2026-10-26; Tageskonto `agent_vm_time.py`, Pro 2 h Befehls- und Prozesszeit), legt den Checkpoint der
 Nachricht an und kopiert ihre Anhänge nach `/home/sprite/input`. Befehle
 laufen unter einem Limit (60 s, höchstens 300 s, nie über `answer_time_left`)
 mit VM-seitigem `timeout`; Ausgaben gehen gekürzt (Ende bleibt) an das Modell.
