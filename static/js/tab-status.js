@@ -9,6 +9,8 @@
   const READY = "Answer ready";
   const WORKING = "Working…";
   const FAILED = "Failed";
+  // A reviewer paused the work and the user decides (agent-chat.js renderHold).
+  const PAUSED = "Paused";
   let baseTitle = document.title;
   let shown = null; // the label currently in the title, or null for the base
   let watched = { runId: null, status: null };
@@ -19,10 +21,6 @@
     } catch (_) {
       return null;
     }
-  }
-
-  function visibleStatus() {
-    return visibleRun()?.status || null;
   }
 
   // The answer's words arrive without a word about them, and the progress
@@ -42,7 +40,9 @@
     else if (status === "succeeded" && (was === "starting" || was === "running")) line.textContent = window.App.t(READY);
   }
 
-  function label(status) {
+  function label(run) {
+    const status = run?.status || null;
+    if ((status === "starting" || status === "running") && run?.metadata?.hold) return PAUSED;
     if (status === "starting" || status === "running") return WORKING;
     if (status === "succeeded") return READY;
     if (status === "failed") return FAILED;
@@ -59,9 +59,10 @@
 
   function sync() {
     if (!document.hidden) { apply(null); return; }
-    const next = label(visibleStatus());
-    // A run that finished before the page was hidden is not news.
-    if (next && next !== WORKING && shown === null) return;
+    const next = label(visibleRun());
+    // A run that finished before the page was hidden is not news; one that
+    // waits for the user still is.
+    if (next && next !== WORKING && next !== PAUSED && shown === null) return;
     apply(next);
   }
 

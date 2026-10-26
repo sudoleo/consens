@@ -3,18 +3,19 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 function boot() {
   let status = null;
+  let metadata = {};
   let hidden = false;
   const result = loadScripts(["static/js/tab-status.js"], {
     before(window) {
       window.document.title = "consens.io";
       Object.defineProperty(window.document, "hidden", { configurable: true, get: () => hidden });
-      window.App = { runRegistry: { visible: () => (status ? { status } : null) } };
+      window.App = { runRegistry: { visible: () => (status ? { status, metadata } : null) } };
     },
   });
   const { window } = result;
   return {
     title: () => window.document.title,
-    run(next) { status = next; window.dispatchEvent(new window.CustomEvent("consensio:run-registry-change")); },
+    run(next, data = {}) { status = next; metadata = data; window.dispatchEvent(new window.CustomEvent("consensio:run-registry-change")); },
     hide() { hidden = true; window.document.dispatchEvent(new window.Event("visibilitychange")); },
     show() { hidden = false; window.document.dispatchEvent(new window.Event("visibilitychange")); },
   };
@@ -31,6 +32,15 @@ describe("tab status", () => {
     expect(app.title()).toBe("Answer ready · consens.io");
     app.show();
     expect(app.title()).toBe("consens.io");
+  });
+
+  it("says that a run paused by a reviewer waits for the user, also when it paused before", () => {
+    const app = boot();
+    app.run("running", { hold: { id: "a1b2c3d4e5f6" } });
+    app.hide();
+    expect(app.title()).toBe("Paused · consens.io");
+    app.run("running", { hold: null });
+    expect(app.title()).toBe("Working… · consens.io");
   });
 
   it("does not announce a run that was already done before the tab was left", () => {

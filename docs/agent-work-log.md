@@ -230,6 +230,12 @@ Agent-Panel.
    2026-10-25 stehen Befehle und Dateien der Agent-VM ([agent-mode.md](agent-mode.md),
    „Agent VM“) als `tool`-Einträge mit Herkunft `vm` im Protokoll, sobald sie
    fertig sind.
+4. **Aussteuern** (umgesetzt 2026-10-26, Max: ein Prüfer reicht, 30 min bis
+   zum Stop): Ein Prüfer hält den Lauf für den Nutzer an (`halt` in der
+   Live-Runde: sicherheitskritisch, Schaden, weit vom Ziel, Prompt
+   Injection); der Agent erfährt nichts davon. Im Protokoll stehen die
+   App-Einträge `paused` und `decision`, so lesen die Prüfer die Entscheidung
+   mit. Ablauf: [agent-mode.md](agent-mode.md), „Aussteuern“.
 
 ## Entscheidungen (Max, 2026-10-25)
 

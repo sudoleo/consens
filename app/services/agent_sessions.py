@@ -463,6 +463,42 @@ class AgentSessionStore:
         self._agent_transaction(uid, operation)
         return root
 
+    def set_hold(self, uid, chat_id, turn_id, hold):
+        """The run's open hold (a reviewer paused it, agent_audit.AnswerAudit.halt)
+        or None once decided: the decision endpoint checks against it."""
+        ref = self.receipt_ref(uid, chat_id, turn_id)
+
+        def operation(tx):
+            data = ref.get(transaction=tx).to_dict() or {}
+            if data.get("run_status") != "running":
+                raise TurnStatusConflict("This response is no longer running.")
+            tx.update(ref, {"hold": hold})
+        return self._agent_transaction(uid, operation)
+
+    def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text=""):
+        """The user's decision on an open hold: "continue", "stop" or "steer"
+        (continue with ``text`` as their message into the run, like a note).
+        The run's watcher reads it from the root (DelegationLoop._receive_hold)."""
+        from uuid import uuid4
+        ref = self.receipt_ref(uid, chat_id, turn_id)
+
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            data = ref.get(transaction=tx).to_dict() or {}
+            if data.get("run_status") != "running" or data.get("cancel_requested"):
+                raise TurnStatusConflict("This response is no longer running.")
+            if (data.get("hold") or {}).get("id") != hold_id or (data.get("hold_decision") or {}).get("id") == hold_id:
+                raise TurnStatusConflict("This pause is already over.")
+            update = {"hold_decision": {"id": hold_id, "action": action}}
+            if action == "steer":
+                notes = list(data.get("user_notes") or [])
+                if len(notes) >= USER_NOTES_MAX:
+                    raise TurnStatusConflict("This response already has the most messages it takes while it runs.")
+                update["user_notes"] = [*notes, {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
+                                                 "at": datetime.now(timezone.utc).isoformat()}]
+            tx.update(ref, update)
+        return self._agent_transaction(uid, operation)
+
     def add_user_note(self, uid, chat_id, turn_id, text):
         """A message of the user into the running response (DelegationLoop
         takes it before its next step). At most USER_NOTES_MAX per response."""

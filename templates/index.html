@@ -428,6 +428,8 @@
         <span id="agentReviewMessage" role="status" aria-live="polite"></span>
         <button id="agentReviewAction" type="button">Review</button>
       </div>
+      <!-- A reviewer paused the work for the user (agent-chat.js renderHold). -->
+      <div id="agentHold" class="agent-hold" hidden></div>
       <!-- Messages typed while a response runs (agent-chat.js steer): read by
            the run, or sent once it is done. -->
       <div id="agentQueue" class="agent-queue" role="status" aria-live="polite" hidden></div>

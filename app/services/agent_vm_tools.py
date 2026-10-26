@@ -54,7 +54,7 @@ from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
 from app.services.error_alerts import report_server_exception
-from app.services.llm.provider_runtime import ProviderCancelled
+from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
 HOME = agent_vm.HOME
 INPUT_DIR = HOME + "/input"
@@ -451,6 +451,8 @@ class VMTools:
         # Shared in this message: (path, sha256) -> file, so sharing the same
         # file again gives the same download.
         self.shared = {}
+        # The command running now, to end it on a reviewer's halt (interrupt).
+        self._running = None
         # Pictures vm_view_image read, for the loop to show after the batch.
         self._pictures, self._pictures_lock = [], threading.Lock()
 
@@ -534,6 +536,14 @@ class VMTools:
             timeout = min(timeout, max(1, int(day)))
         return timeout
 
+    def interrupt(self):
+        """A reviewer's halt (DelegationLoop.request_hold): the running
+        command ends now, as if the user had stopped it."""
+        with self.session._lock:
+            running = self._running
+        if running is not None:
+            running.cancel()
+
     def exec(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
         self._start(cancellation)
@@ -541,6 +551,12 @@ class VMTools:
         cwd = vm_path(args.cwd) if args.cwd.strip() else HOME
         output = _Output()
         reported = [self.session.clock()]
+        # Its own stop, part of the run's: a halt ends only this command.
+        command = ProviderCancellation()
+        unregister = cancellation.register(command)
+        with self.session._lock:
+            self._running = command
+        started = self.session.clock()
 
         def on_output(stream, chunk):
             output.add(stream, chunk)
@@ -552,10 +568,28 @@ class VMTools:
         try:
             outcome = self._provider("exec", lambda: self.session.backend.exec(
                 self.session.name, args.command, cwd=cwd, timeout=timeout, on_output=on_output,
-                cancellation=cancellation))
+                cancellation=command))
         except _VMOff:
             report(output.shown())
             raise
+        except ProviderCancelled:
+            if cancellation.cancelled or not command.cancelled:
+                raise
+            # Ended by a reviewer's halt: for the agent, the user stopped it.
+            seconds = self.session.clock() - started
+            with self.session._lock:
+                self.session.commands += 1
+                self.session.seconds += seconds
+            result = {"exit_code": None, "stopped": True, "duration_ms": int(seconds * 1000), "cwd": cwd,
+                      "stdout": output.for_model("stdout"), "stderr": output.for_model("stderr"),
+                      "note": "The user stopped this command before it finished."}
+            report({**output.shown(), "stopped": True, "duration_ms": result["duration_ms"]})
+            return self.session.announce(result)
+        finally:
+            unregister()
+            with self.session._lock:
+                if self._running is command:
+                    self._running = None
         with self.session._lock:
             self.session.commands += 1
             self.session.seconds += outcome.seconds

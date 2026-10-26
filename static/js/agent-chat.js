@@ -1163,6 +1163,7 @@
   }
   function syncComposer() {
     renderQueue();
+    renderHold();
     const agent = selectedMode() === 'agent';
     const running = registry.isExecuting(registry.visible()?.runId);
     // Nothing stands in a guest's way: Send asks for the login (composer-invite.js).
@@ -1316,7 +1317,8 @@
     const context = registry.visible();
     const text = String(document.getElementById("questionInput")?.value || "").trim();
     if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text) return null;
-    return { title: readsMessages(context) ? "Send into the running response" : "Send after this response" };
+    return { title: openHold(context) ? "Send to the agent and let it go on"
+      : readsMessages(context) ? "Send into the running response" : "Send after this response" };
   }
   async function steer() {
     const context = registry.visible();
@@ -1325,6 +1327,14 @@
     const text = String(input.value).trim();
     input.value = "";
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    if (openHold(context)) {
+      // Paused by a reviewer: the message is the decision (renderHold).
+      if (!(await decideHold(context, "steer", text)) && !input.value.trim()) {
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      return true;
+    }
     const item = { key: ++queueSerial, text, state: "queued" };
     queueOf(context).push(item);
     renderQueue();
@@ -1363,6 +1373,8 @@
   function flushQueue(context) {
     const queue = queueOf(context).splice(0);
     renderQueue();
+    // An open pause ends with the response too.
+    renderHold();
     if (!queue.length || !registry.isAuthCurrent(context)) return;
     const text = queue.map(item => item.text).join("\n\n");
     const input = window.document?.getElementById("questionInput");
@@ -1422,6 +1434,140 @@
       return row;
     }));
     host.hidden = !queue.length;
+  }
+  // A reviewer paused the work for the user (agent_audit.py halt,
+  // DelegationLoop.request_hold; since 2026-10-26): one card above the field
+  // until the user decides. The agent never learns of it: going on changes
+  // nothing for it, a message written now reaches it like any message
+  // written while it works, and Stop is the Stop button. Without a decision
+  // the response stops after timeout_seconds (30 min).
+  const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
+    injection: "Prompt injection" };
+  let holdTimer = null;
+  function openHold(context) {
+    const hold = context?.metadata?.hold;
+    return hold && registry.isExecuting(context.runId) && registry.isAuthCurrent(context) ? hold : null;
+  }
+  function holdClock(hold) {
+    // The server's time, unless this clock runs behind it.
+    const at = Date.parse(hold.at);
+    const since = Number.isFinite(at) ? Math.min(at, hold.receivedAt) : hold.receivedAt;
+    const left = since + (Number(hold.timeout_seconds) || 1800) * 1000 - Date.now();
+    const minutes = Math.ceil(left / 60000);
+    return minutes > 1 ? App.t("Stops in {count} minutes without your decision", { count: minutes })
+      : "Stops within a minute without your decision";
+  }
+  async function decideHold(context, action, text = "") {
+    const hold = openHold(context);
+    if (!hold || hold.deciding) return false;
+    hold.deciding = action;
+    renderHold();
+    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/hold`;
+    let response = null;
+    try {
+      const token = await window.auth.currentUser.getIdToken();
+      response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, action, text }),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+    } catch (_) { /* below */ }
+    // Decided, or over already (another tab, the run's end): the card goes,
+    // the activity keeps the record.
+    if (response && (response.ok || response.status === 409)) {
+      context.metadata.holdDecided = hold.id;
+      if (context.metadata.hold === hold) context.metadata.hold = null;
+      renderHold();
+      registry.update(context.runId, () => {});
+      return true;
+    }
+    hold.deciding = null;
+    renderHold();
+    App.showPopup?.("Your decision did not reach the server. Try again.");
+    return false;
+  }
+  function holdButton(label, className, onClick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+  function holdCard(context, hold) {
+    const card = document.createElement("section");
+    card.className = "agent-hold-card";
+    card.setAttribute("aria-labelledby", "agentHoldTitle");
+    // Said once when it appears: the title and the reviewer's reason.
+    const alert = document.createElement("div");
+    alert.setAttribute("role", "alert");
+    const head = document.createElement("div");
+    head.className = "agent-hold-head";
+    const icon = document.createElement("span");
+    icon.className = "agent-hold-icon";
+    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"></path></svg>';
+    const title = document.createElement("h2");
+    title.id = "agentHoldTitle";
+    title.className = "agent-hold-title";
+    title.textContent = "A reviewer paused the work";
+    head.append(icon, title);
+    const reason = document.createElement("p");
+    reason.className = "agent-hold-reason";
+    // The reviewer's own sentence, already in the user's language.
+    reason.dataset.i18nSkip = "";
+    reason.textContent = String(hold.reason || "");
+    alert.append(head, reason);
+    const meta = document.createElement("p");
+    meta.className = "agent-hold-meta";
+    const kind = document.createElement("span");
+    kind.textContent = holdKinds[hold.kind] || "Needs your decision";
+    const step = document.createElement("span");
+    step.textContent = App.t("Step {entry}", { entry: hold.entry });
+    const reviewer = document.createElement("span");
+    reviewer.dataset.i18nSkip = "";
+    reviewer.textContent = String(hold.reviewer || "");
+    meta.append(...[kind, step, hold.reviewer ? reviewer : null].filter(Boolean));
+    card.append(alert, meta);
+    if (hold.step) {
+      // What the agent was doing, as the reviewers read it (the work log).
+      const excerpt = document.createElement("p");
+      excerpt.className = "agent-hold-excerpt";
+      excerpt.dataset.i18nSkip = "";
+      excerpt.textContent = `${hold.step_name ? `${hold.step_name}: ` : ""}${hold.step}`;
+      card.append(excerpt);
+    }
+    const actions = document.createElement("div");
+    actions.className = "agent-hold-actions";
+    actions.append(
+      holdButton("Let it continue", "btn agent-hold-continue", () => decideHold(context, "continue")),
+      holdButton("Write to the agent", "run-blocked-btn agent-hold-write", () => {
+        document.getElementById("questionInput")?.focus({ preventScroll: true });
+      }),
+      holdButton("Stop", "run-blocked-btn agent-hold-stop", () => registry.cancel(context.runId, "user")));
+    const clock = document.createElement("p");
+    clock.className = "agent-hold-clock";
+    card.append(actions, clock);
+    return card;
+  }
+  function renderHold() {
+    if (!window.document?.body) return;
+    const host = document.getElementById("agentHold");
+    if (!host) return;
+    const context = registry.visible();
+    const hold = selectedMode() === "agent" ? openHold(context) : null;
+    clearTimeout(holdTimer);
+    if (!hold) {
+      if (host.dataset.id) { host.replaceChildren(); delete host.dataset.id; }
+      host.hidden = true;
+      return;
+    }
+    if (host.dataset.id !== hold.id) {
+      host.dataset.id = hold.id;
+      host.replaceChildren(holdCard(context, hold));
+    }
+    host.hidden = false;
+    const clock = host.querySelector(".agent-hold-clock");
+    const time = holdClock(hold);
+    if (clock.textContent !== App.t(time)) clock.textContent = time;
+    for (const button of host.querySelectorAll("button")) button.disabled = Boolean(hold.deciding);
+    holdTimer = setTimeout(renderHold, 15000);
   }
   // Stop is explicit: closing the connection no longer ends a turn. The
   // request identity reaches the turn before its id is known, and a Stop
@@ -1652,6 +1798,16 @@
       review: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.metadata.agentReview = event.review;
+        registry.update(context.runId, () => {});
+      } },
+      // A reviewer paused the work for the user (renderHold), or the pause
+      // is over (null). A frame for a pause decided here is late news.
+      hold: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        const hold = event.hold && typeof event.hold.id === "string" ? event.hold : null;
+        if (hold && context.metadata.holdDecided === hold.id) return;
+        context.metadata.hold = hold ? { ...hold, receivedAt: Date.now() } : null;
+        renderHold();
         registry.update(context.runId, () => {});
       } },
       // Provisional marks of the fixed answer: the newest per comparison,

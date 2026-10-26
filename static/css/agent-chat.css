@@ -360,6 +360,35 @@
   border: 0; border-radius: 9px; background: transparent; color: var(--ink-3); cursor: pointer;
 }
 .agent-queue-remove svg { width: 14px; height: 14px; }
+/* A reviewer paused the work (agent-chat.js renderHold): the card above the
+   field, tinted like the queue (no frame), in the warning tone of
+   .run-blocked (shell.css). A pause is a question, not a refusal: --partial,
+   never --dispute. Its secondary buttons wear .run-blocked-btn, the primary
+   one .btn. */
+.agent-hold { margin: 0 0 8px; min-width: 0; text-align: left; }
+.agent-hold[hidden] { display: none; }
+.agent-hold-card { display: grid; gap: 6px; padding: 14px 16px; border-radius: var(--radius-md); background: var(--partial-bg); }
+@media (prefers-reduced-motion: no-preference) {
+  .agent-hold-card { animation: agent-hold-in var(--dur-state) var(--ease-out) both; }
+}
+@keyframes agent-hold-in { from { opacity: 0; transform: translateY(3px); } }
+.agent-hold-head { display: flex; align-items: center; gap: 9px; }
+.agent-hold-icon { display: inline-flex; flex: none; color: var(--partial); }
+.agent-hold-icon svg { width: 17px; height: 17px; }
+.agent-hold-title {
+  flex: 1 1 auto; min-width: 0; margin: 0; text-align: left;
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); letter-spacing: var(--tracking-tight); color: var(--ink);
+}
+.agent-hold-reason { margin: 4px 0 0; color: var(--ink); font-size: var(--font-size-sm); line-height: var(--line-height-ui); overflow-wrap: anywhere; }
+.agent-hold-meta { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-hold-meta > span + span::before { content: "·"; margin-right: 8px; }
+.agent-hold-excerpt {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0;
+  color: var(--ink-3); font-family: var(--font-mono); font-size: var(--font-size-micro); line-height: 1.5; overflow-wrap: anywhere;
+}
+.agent-hold-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.agent-hold-actions button:disabled { opacity: .55; cursor: default; }
+.agent-hold-clock { margin: 0; color: var(--ink-3); font-size: var(--font-size-micro); font-variant-numeric: tabular-nums; }
 .agent-queue-remove:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 @media (hover: hover) and (pointer: fine) { .agent-queue-remove:hover { background: var(--hover); color: var(--ink); } }
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
@@ -627,6 +656,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     }
   }
 }
+/* Paused for the user's decision (a reviewer's halt): nothing works, so
+   nothing shines. */
+.agent-current-status.is-paused::after { content: none; }
+.agent-activity.is-running .agent-activity-current.is-paused > strong {
+  background: none; -webkit-text-fill-color: currentColor; animation: none;
+}
 .agent-progress p:last-child, .agent-progress-step:last-child { margin-bottom: 0; }
 .agent-progress-step[hidden] { display: none; }
 .agent-progress[hidden], .agent-activity[open] ~ .agent-progress { display: none; }
@@ -710,6 +745,14 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    userNote): their words in full ink after a quiet "You". */
 .agent-user-note { color: var(--ink); font-size: var(--font-size-ui); line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
 .agent-progress > .agent-user-note { margin: 0 0 16px; }
+/* A reviewer's halt in the activity (agent-activity.js holdView): who, why,
+   what the user decided. The partial tone marks it while it waits. */
+.agent-hold-step { display: grid; gap: 2px; color: var(--ink); font-size: var(--font-size-ui); line-height: 1.55; }
+.agent-progress > .agent-hold-step { margin: 0 0 16px; }
+.agent-hold-step > strong { font-weight: var(--font-weight-semibold); }
+.agent-hold-step-reason { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.agent-hold-step-state { color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-hold-step[data-state="waiting"] .agent-hold-step-state { color: var(--partial); }
 .agent-user-note-who { margin-right: .5em; color: var(--ink-3); }
 /* The agent's plan (agent-activity.js planView, update_plan): its steps as a
    quiet checklist under one line, pinned open above the live progress and

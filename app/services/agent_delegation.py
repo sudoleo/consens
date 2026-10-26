@@ -116,6 +116,14 @@ TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
 # A message the user sends into the running response (add_user_note): it
 # opens the user-role message the agent gets before its next step.
 USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the user:]"
+# A reviewer's halt (agent_audit.AnswerAudit.halt) waits this long for the
+# user's decision; then the response stops, as with the Stop button. It never
+# goes on by itself.
+HOLD_TIMEOUT_SECONDS = 30 * 60
+# Calls of a batch after the user paused the work and wrote to the agent: not
+# run, so the agent reads the message first. All the agent learns: a pause of
+# the user.
+HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
 NOTES_UNREAD = ("Your message arrived after the answer was written. Send it again as a new message.")
 # Pause before the one retry of a session update after a short database
 # outage (_journal_write; a worker's end record, audit A12).
@@ -297,6 +305,12 @@ class DelegationLoop(AgentLoop):
         # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
         # those not yet in the conversation.
         self.notes_seen, self.notes = set(), deque()
+        # A reviewer's halt (request_hold): the run waits for the user before
+        # its next step or call, and its time stands still meanwhile. Nothing
+        # of it enters the agent's conversation.
+        self.hold = self.hold_decision = None
+        self.hold_started = 0.0
+        self.paused_seconds = 0.0
         self.tools_used = 0
         self.invalid_tool_rounds = 0
         self.search_remaining = self.policy.max_searches
@@ -549,7 +563,11 @@ class DelegationLoop(AgentLoop):
             raise AnalysisBudgetExceeded(TURN_TIME_LIMIT)
 
     def _turn_elapsed(self):
-        return self.clock() - self.turn_started
+        """The turn's running time, without the time it waited for the user
+        on a reviewer's halt (request_hold)."""
+        now = self.clock()
+        paused = self.paused_seconds + (now - self.hold_started if self.hold is not None else 0.0)
+        return now - self.turn_started - paused
 
     def _long_run(self):
         """Whether this turn works in its VM: from the VM's first start in
@@ -1624,6 +1642,7 @@ class DelegationLoop(AgentLoop):
                 if self.claimed:
                     root = self.store.check_delegation(self.uid, self.chat_id, self.turn_id, self.run_token)
                     self._receive_notes(root)
+                    self._receive_hold(root)
                 last_verified = time.monotonic()
             except (DeadlineExceeded, InternalServerError, ServiceUnavailable):
                 # A short database outage is not a user stop. Leave time to
@@ -1641,6 +1660,89 @@ class DelegationLoop(AgentLoop):
                     "The response could not continue because its saved run state is unavailable. Your available answer has been saved.")
                 self.cancellation.cancel()
                 return
+
+    def request_hold(self, details):
+        """A reviewer stops the work for the user (agent_audit.py): a running
+        VM command ends as if the user had stopped it, and the run waits
+        before its next step or call (_hold_wait) until the user decides
+        (POST .../hold) or HOLD_TIMEOUT_SECONDS pass. The agent never learns
+        of it. One hold at a time; True when this one opened."""
+        from uuid import uuid4
+        with self.condition:
+            if self.hold is not None or self.closed.is_set() or self.cancellation.cancelled:
+                return False
+            hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
+                    "timeout_seconds": HOLD_TIMEOUT_SECONDS}
+            self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
+            self.condition.notify_all()
+        if self.vm_tools is not None:
+            self.vm_tools.interrupt()
+        try:
+            self.store.set_hold(self.uid, self.chat_id, self.turn_id, hold)
+        except Exception as exc:
+            logging.warning("Agent hold could not be saved category=%s", safe_exception(exc))
+        self.outgoing.put_nowait({"type": "hold", "hold": hold})
+        self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                                **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
+                                                "halt": hold["kind"], "state": "waiting"}))
+        if self.work_log is not None:
+            self.work_log.app("paused", f"{details['reviewer']} paused the work for the user ({details['kind']}, "
+                                        f"entry {details['entry']}): {details['reason']}")
+        return True
+
+    def _receive_hold(self, root):
+        """The user's decision on the open hold, from the run's root (the watcher)."""
+        decision = (root or {}).get("hold_decision") or {}
+        with self.condition:
+            if self.hold is not None and self.hold_decision is None and decision.get("id") == self.hold["id"]:
+                self.hold_decision = decision.get("action")
+                self.condition.notify_all()
+
+    def _hold_wait(self):
+        """Wait while a reviewer's halt is open; events keep flowing and Stop
+        works. Returns the decision ("continue", "steer") or None without a
+        hold; "stop" and the timeout end the response like the Stop button."""
+        if self.hold is None:
+            return None
+        while True:
+            with self.condition:
+                hold, decision = self.hold, self.hold_decision
+                if hold is None:
+                    return None
+                if decision is None and self.clock() - self.hold_started >= HOLD_TIMEOUT_SECONDS:
+                    decision = "timeout"
+                if decision is not None:
+                    self.paused_seconds += self.clock() - self.hold_started
+                    self.hold = self.hold_decision = None
+                    break
+                self.condition.wait(.2)
+            if self.watch_error:
+                raise self.watch_error
+            self.cancellation.raise_if_cancelled()
+            yield from self._events()
+        try:
+            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None)
+        except Exception as exc:
+            logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
+        self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
+        self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                                "state": decision}))
+        if self.work_log is not None:
+            self.work_log.app("decision", {"continue": "The user let the work go on.",
+                                           "steer": "The user let the work go on with a message.",
+                                           "stop": "The user stopped the work.",
+                                           "timeout": "No decision in 30 minutes: the response stopped."}[decision])
+        yield from self._events()
+        if decision in {"stop", "timeout"}:
+            if decision == "timeout":
+                # As the Stop button does (routers/agent.py stop_agent_request).
+                try:
+                    self.store.stop_delegation(self.uid, self.chat_id, self.turn_id)
+                except Exception as exc:
+                    logging.warning("Agent hold timeout stop failed category=%s", safe_exception(exc))
+            self.cancellation.cancel()
+            self.cancellation.raise_if_cancelled()
+        return decision
 
     def _receive_notes(self, root):
         """New messages of the user from the run's root (the watcher)."""
@@ -2116,6 +2218,8 @@ class DelegationLoop(AgentLoop):
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
                 value = None
                 for index in steps:
+                    # A reviewer's halt waits for the user here (request_hold).
+                    yield from self._hold_wait()
                     self._check()
                     # Before the limits: they measure what the next step sends.
                     self._compact()
@@ -2197,8 +2301,18 @@ class DelegationLoop(AgentLoop):
                         # A comparison of this step returned answers to write
                         # from: AGENT_WRITE_NOTE follows them.
                         compared = False
+                        steered = False
                         for call in value.tool_calls:
                             name = (call.get("function") or {}).get("name")
+                            # Between the calls of a batch too: after a halt
+                            # the next call waits for the user. Once the user
+                            # wrote to the agent, the rest of the batch waits
+                            # for the agent's next step instead.
+                            steered = steered or (yield from self._hold_wait()) == "steer"
+                            if steered:
+                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
+                                                       "content": json.dumps({"error": HOLD_STEERED})}
+                                continue
                             repeat = self._identical_call(call)
                             if repeat == "stop":
                                 limit = TURN_REPEAT_LIMIT
@@ -2268,6 +2382,14 @@ class DelegationLoop(AgentLoop):
                             yield from self._retract(value)
                         self.messages.append({"role": "user", "content": "Before finalizing, resolve questions and verify each worker result or your own replacement with review_agent (use_fallback=true for a verified replacement). Preserve the original user's requested output format, without a workflow recap. Current sessions: " + json.dumps(self._summaries())})
                         continue
+                    if self.hold is not None:
+                        # A reviewer's halt still open as the answer stands:
+                        # it counts only once the user decided, and their
+                        # message gets the agent's next step.
+                        if (yield from self._hold_wait()) == "steer":
+                            if self.merged:
+                                yield from self._retract(value)
+                            continue
                     if self.merged:
                         # The agent wrote the answer itself (agent_answer_mode).
                         yield from self._finish_merged(value)
@@ -2312,6 +2434,19 @@ class DelegationLoop(AgentLoop):
             for step, (value, step_status) in list(self.unsettled.items()):
                 self._settle_step(step, value, step_status)
             self.completion.usage = self.costs.total()
+            if self.hold is not None:
+                # Still open as the run ended: stopped while it waited (the
+                # card's Stop is the Stop button), or opened as the answer's
+                # check began. Nothing waits for it any more.
+                hold, self.hold = self.hold, None
+                decision = "stop" if status == "cancelled" else "ended"
+                try:
+                    self.store.set_hold(self.uid, self.chat_id, self.turn_id, None)
+                except Exception as exc:
+                    logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
+                self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
+                self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                                        "state": decision}))
             if self.notes:
                 # Arrived after the answer was written: said, not lost silently.
                 self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",

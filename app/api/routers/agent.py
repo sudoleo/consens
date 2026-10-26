@@ -830,6 +830,49 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
         _raise_store_error(exc, operation="add agent note", uid=uid)
 
 
+class AgentHoldDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=r"^[0-9a-f]{12}$")
+    action: Literal["continue", "stop", "steer"]
+    text: str = Field(default="", max_length=4000)
+
+
+@router.post("/agent/chats/{chat_id}/requests/{request_id}/hold")
+@limiter.limit("30/minute")
+def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: AgentHoldDecision):
+    """The user's decision when a reviewer paused the response (agent_audit.py
+    halt, DelegationLoop.request_hold; since 2026-10-26): let it go on, stop
+    it, or go on with a message to the agent. The agent learns only of the
+    message, as one the user wrote while it worked."""
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
+        raise HTTPException(status_code=404, detail="Request not found")
+    text = payload.text.strip()
+    if payload.action == "steer" and not text:
+        raise HTTPException(status_code=422, detail="Write what the agent should do instead.")
+    try:
+        store = AgentRunStore(db_firestore)
+        turn_id = _idempotent_turn_id(chat_id, request_id)
+        try:
+            turn = store.get_turn(uid, chat_id, turn_id)
+        except ChatNotFound:
+            turn = None
+        if not turn or turn.get("status") != "pending":
+            return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
+        try:
+            store.decide_hold(uid, chat_id, turn_id, payload.id, payload.action, text)
+        except TurnStatusConflict as exc:
+            return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
+        if payload.action == "stop" and not agent_background.stop(uid, chat_id, request_id=request_id):
+            store.stop_delegation(uid, chat_id, turn_id)
+        return JSONResponse({"status": "decided"}, headers={"Cache-Control": "private, no-store"})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_store_error(exc, operation="decide agent hold", uid=uid)
+
+
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/stop")
 @limiter.limit("30/minute")
 def stop_agent_request(request: Request, chat_id: str, request_id: str):

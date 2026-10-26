@@ -454,6 +454,37 @@ def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm)
     assert entry["data"] == "vm"
 
 
+def test_a_reviewers_halt_ends_the_running_command_as_if_the_user_stopped_it(store, fake_vm, monkeypatch):
+    import threading
+    import time
+    loop = vm_loop(store, Agent())
+    tools, cancellation = loop.vm_tools, ProviderCancellation()
+    plain = _FakeBackend.exec
+
+    def exec(backend, name, command, *, cwd, timeout, on_output, cancellation):
+        if command != "sleep 600":
+            return plain(backend, name, command, cwd=cwd, timeout=timeout, on_output=on_output,
+                         cancellation=cancellation)
+        on_output("stdout", b"waiting\n")
+        while not cancellation.cancelled:
+            time.sleep(.01)
+        raise ProviderCancelled("stopped")
+    monkeypatch.setattr(_FakeBackend, "exec", exec)
+
+    def halt():
+        while tools._running is None:
+            time.sleep(.01)
+        tools.interrupt()
+    threading.Thread(target=halt, daemon=True).start()
+    stopped = tools.exec(VmExecArgs(command="sleep 600"), cancellation=cancellation)
+    assert stopped["stopped"] and stopped["exit_code"] is None and "waiting" in stopped["stdout"]
+    assert stopped["note"] == "The user stopped this command before it finished."
+    # Only the command ended: the run and the next command go on.
+    assert not cancellation.cancelled and tools._running is None
+    tools.interrupt()
+    assert tools.exec(VmExecArgs(command="ls"), cancellation=cancellation)["exit_code"] == 0
+
+
 def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
     loop = vm_loop(store, Agent())
     tools, cancellation = loop.vm_tools, ProviderCancellation()

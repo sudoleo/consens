@@ -368,6 +368,37 @@ Seitenleiste unter „Work log“, und die Prüfer folgen ihm
 ([agent-work-log.md](agent-work-log.md)). Befunde gehen noch nicht an den
 Agenten.
 
+**Aussteuern** (seit 2026-10-26): Ein Prüfer darf in einer Live-Runde neben
+seinen Marken `"halt": {"entry", "kind", "reason"}` setzen, wenn ein Schritt
+die Entscheidung des Nutzers braucht. Gründe (`HALT_KINDS`): `safety`
+(sicherheitskritisch, nicht verlangt), `harm` (Schaden über die Aufgabe
+hinaus), `off_goal` (weit weg von der Anfrage), `injection` (der Agent folgt
+Anweisungen aus Seite, Datei, Mail oder Befehlsausgabe). Zweifel bleiben
+Marken; in der Schlussrunde gibt es keinen Halt. `parse_halt` nimmt nur einen
+der vier Gründe, einen Satz und einen gesehenen Eintrag; `AnswerAudit.halt`
+lässt je Prüfer und Eintrag einen zu (ein Prüfer reicht) und ruft
+`DelegationLoop.request_hold`. Der Lauf hält vor seinem nächsten Schritt oder
+Aufruf (`_hold_wait`, auch zwischen den Aufrufen einer Runde und bevor eine
+geschriebene Antwort zählt), ein laufender VM-Befehl endet sofort
+(`VMTools.interrupt`, für den Agenten „The user stopped this command“), und
+seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
+Pause). **Der Agent erfährt nichts davon.** Der Nutzer entscheidet über die
+Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
+`hold`, sticky in `agent_live.py`) per `POST
+/agent/chats/{chat}/requests/{request_id}/hold` (`{id, action, text}`):
+`continue` läuft weiter, als wäre nichts gewesen; `steer` ist eine Nachricht
+des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie
+wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen
+nicht, `HOLD_STEERED`, und eine schon geschriebene Antwort geht zurück); Stop
+ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung.
+Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
+mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
+`state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
+`paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
+mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
+(`tab-status.js`). Die Karte zeigt den Eintrag lesbar (`halt_step`: Befehl,
+Adresse oder Suche statt Protokoll-JSON).
+
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
 Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
@@ -375,7 +406,9 @@ Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
 
 Tests: `tests/test_agent_audit.py` (Turn, Live-Runden, Schlussrunde,
 Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
-Prompts, Route), `tests/js/audit-marks.test.mjs`, die Audit-Fälle in
+Prompts, Route, Aussteuern), `tests/js/audit-marks.test.mjs`, die Halt-Fälle
+in `agent-chat.test.mjs`, `agent-vm-activity.test.mjs` und
+`tab-status.test.mjs`, die Audit-Fälle in
 `tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
 `model-answer-reader.test.mjs` und `agent-preferences.test.mjs`.
 

@@ -382,7 +382,7 @@
   }
 
   function receive(events, event) {
-    if (event?.version !== 1 || !["status", "progress", "reasoning", "usage", "tool"].includes(event.kind) || typeof event.id !== "string") return;
+    if (event?.version !== 1 || !["status", "progress", "reasoning", "usage", "tool", "hold"].includes(event.kind) || typeof event.id !== "string") return;
     const existing = events.find(item => item.id === event.id);
     if (existing && event.append && event.kind === "reasoning") {
       existing.text = (existing.text + String(event.text || "")).slice(0, 32000);
@@ -565,6 +565,39 @@
 
   // A message the user sent into the running response (agent-chat.js
   // steer): the user's own words, never translated, under a quiet "You".
+  // A reviewer's halt (agent_audit.py): who paused the work, why (the
+  // reviewer's own sentence) and what the user decided (agent-chat.js
+  // renderHold has the card).
+  const holdKinds = { safety: 'Security-critical step', harm: 'Possible damage', off_goal: 'Far off your request',
+    injection: 'Prompt injection' };
+  const holdStates = { waiting: 'Waiting for your decision', continue: 'You let the work go on',
+    steer: 'You wrote to the agent', stop: 'You stopped the response',
+    timeout: 'Stopped after 30 minutes without a decision', ended: 'Over when the response ended' };
+  function holdView(className) {
+    const node = document.createElement('div');
+    node.className = className;
+    const head = document.createElement('strong');
+    const reason = document.createElement('p');
+    reason.className = 'agent-hold-step-reason';
+    reason.dataset.i18nSkip = '';
+    const state = document.createElement('span');
+    state.className = 'agent-hold-step-state';
+    node.append(head, reason, state);
+    Object.assign(node, { _head: head, _reason: reason, _state: state });
+    return node;
+  }
+  function updateHold(node, item) {
+    const state = holdStates[item.state] ? item.state : 'waiting';
+    const signature = JSON.stringify([item.reviewer, item.halt, item.reason, state]);
+    if (node.dataset.signature === signature) return;
+    node.dataset.signature = signature;
+    node.dataset.state = state;
+    node._head.textContent = item.reviewer ? App.t('Paused by {reviewer}', { reviewer: String(item.reviewer) })
+      : 'Paused by a reviewer';
+    node._reason.textContent = String(item.reason || '').slice(0, 400);
+    node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t(holdStates[state])}`;
+  }
+
   function userNote(className, text) {
     const p = document.createElement('p');
     p.className = className;
@@ -589,9 +622,10 @@
     const lastVm = paragraphs.findLastIndex(item => item.kind === 'vm');
     let start = lastVm;
     while (start > 0 && paragraphs[start - 1].kind === 'progress' && !paragraphs[start - 1].quiet) start--;
-    const review = paragraphs.findIndex(item => item.kind === 'review');
-    const past = paragraphs.slice(0, review >= 0 ? Math.min(start, review) : start);
-    const steps = past.filter(item => !['progress', 'user'].includes(item.kind));
+    const waits = paragraphs.findIndex(item => item.kind === 'review'
+      || (item.kind === 'hold' && (item.item.state || 'waiting') === 'waiting'));
+    const past = paragraphs.slice(0, waits >= 0 ? Math.min(start, waits) : start);
+    const steps = past.filter(item => !['progress', 'user', 'hold'].includes(item.kind));
     if (steps.length < 2 || !steps.some(item => item.kind === 'vm')) return null;
     const commands = steps.filter(item => item.kind === 'vm' && item.item.name === 'vm_exec').length;
     const label = commands === steps.length ? (commands === 1 ? 'Ran 1 command' : `Ran ${commands} commands`)
@@ -717,6 +751,7 @@
       && item.status === "unknown" && (item.server_tool || item.provider_native)
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
+    const holds = events.filter(item => item.kind === 'hold' && item.reason);
     const textOnly = textOnlyReview(review);
     const latest = events.filter(item => item.kind === "status").at(-1);
     // Text the model writes before a tool call is a preamble, not the answer.
@@ -729,8 +764,10 @@
     const waiting = running && latest?.status === 'waiting';
     // The run keeps going on the server while the browser is offline or
     // asleep; say that instead of a step that may be long over.
+    // A reviewer's halt: the work waits for the user's decision (the card above the field).
+    const held = running && holds.some(item => (item.state || 'waiting') === 'waiting');
     const heading = running && reconnecting ? 'Reconnecting…'
-      : waiting ? 'Waiting for available tokens…' : reviewStage
+      : held ? 'Paused for your decision' : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.
@@ -748,17 +785,18 @@
     // from announcing the entire history again whenever a new paragraph arrives.
     // The latest plan stands above the live progress, never in its order.
     const plan = tools.findLast(item => hasPlan(item) && item.status !== 'failed');
-    const paragraphs = events.flatMap(item => progress.includes(item)
+    const paragraphs = events.flatMap(item => holds.includes(item) ? [{id:`hold:${item.id}`, kind:'hold', item}]
+      : progress.includes(item)
       ? [{id:item.id, text:item.text, kind:item.from_user ? 'user' : 'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
         : tools.includes(item) && item.name === 'update_plan' ? []
         : tools.includes(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
         : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
-          current:running && !waiting && !reconnecting && item === activeTool},
+          current:running && !waiting && !reconnecting && !held && item === activeTool},
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
-    if (running && (!activeTool || waiting || reconnecting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
+    if (running && (!activeTool || waiting || reconnecting || held)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true, paused:held});
     // While the comparison models answer, the main model is silent: one quiet
     // line quotes their reasoning in turn (comparisonLine).
     const comparing = reviewStage === 'Comparing perspectives…' || ['compare_models', 'check_text'].includes(activeTool?.name);
@@ -820,7 +858,8 @@
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
-        p = item.kind === 'vm' ? vmView('agent-vm') : item.kind === 'user' ? userNote('agent-user-note', item.text)
+        p = item.kind === 'vm' ? vmView('agent-vm') : item.kind === 'hold' ? holdView('agent-hold-step')
+          : item.kind === 'user' ? userNote('agent-user-note', item.text)
           : document.createElement(item.kind === 'progress' ? 'p' : 'div');
         view.previewNodes.set(item.id, p);
         if (item.kind === 'review') {
@@ -835,14 +874,17 @@
         previewChanged = true;
         if (!view.details.open) reveal(p);
       }
-      if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user') {
+      if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user' || item.kind === 'hold') {
         if (item.kind === 'vm') updateVm(p, item.item);
+        if (item.kind === 'hold') updateHold(p, item.item);
         place(item, p);
         continue;
       }
       if (item.quiet) p.setAttribute('aria-hidden', 'true');
       p.classList.toggle('agent-progress-step', item.kind === 'step');
       p.classList.toggle('agent-current-status', Boolean(item.current));
+      // Paused for the user: nothing works, so nothing shines.
+      p.classList.toggle('is-paused', Boolean(item.paused));
       if (item.current) p.setAttribute('role', 'status'); else p.removeAttribute('role');
       if (item.status) p.dataset.status = item.status;
       // A reasoning line that changes in place (a comparison model's quote,
@@ -869,11 +911,13 @@
       }
     } else hidePreview(view, answering);
     const ids = new Set();
-    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item))) {
+    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item)
+      || holds.includes(item))) {
       ids.add(item.id);
       let node = view.nodes.get(item.id);
       if (!node) {
-        node = item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
+        node = item.kind === 'hold' ? holdView('agent-activity-tool agent-hold-step')
+          : item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
           : hasPlan(item) ? planView('agent-activity-tool agent-plan')
           : item.from_user ? userNote('agent-activity-update agent-user-note', item.text)
           : document.createElement(item.kind === 'progress' ? 'p' : 'div');
@@ -882,7 +926,9 @@
         view.content.appendChild(node);
         if (item.kind === 'progress' && view.details.open && running) reveal(node);
       }
-      if (item.kind === "tool" && vmTools.has(item.name)) {
+      if (item.kind === 'hold') {
+        updateHold(node, item);
+      } else if (item.kind === "tool" && vmTools.has(item.name)) {
         updateVm(node, item);
       } else if (node.classList.contains('agent-user-note')) {
         // The user's words, written once at creation.
@@ -927,7 +973,7 @@
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
-    const currentStep = running && (!activeTool || waiting || reconnecting) ? heading : '';
+    const currentStep = running && (!activeTool || waiting || reconnecting || held) ? heading : '';
     if (currentStep) {
       const label = view.current.firstElementChild;
       if (label.textContent !== window.App.t(currentStep)) label.textContent = currentStep;
@@ -935,7 +981,8 @@
       if (view.timeline.lastElementChild !== view.current) view.timeline.append(view.current);
     } else view.current.remove();
     view.timeline.classList.toggle('has-current', Boolean(currentStep));
-    view.content.hidden = !progress.length && !reasoning.length && !tools.length;
+    view.current.classList.toggle('is-paused', held);
+    view.content.hidden = !progress.length && !reasoning.length && !tools.length && !holds.length;
     App.agentReview?.renderActivity(view.insights, review, answerText);
     view.timeline.classList.toggle('has-insights', !view.insights.hidden);
     view.note.textContent = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"

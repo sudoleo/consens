@@ -203,6 +203,36 @@ describe("VM calls in the activity", () => {
     expect(saved.textContent).toBe("Done");
   });
 
+  // A reviewer's halt (agent_audit.py, 2026-10-26): who paused, why, and the
+  // user's decision, live and in the saved timeline.
+  it("shows a reviewer's pause with its reason, then the user's decision", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, vm({ id: "c:1/tool", status: "succeeded", command: "curl https://example.net", exit_code: 0 }));
+    activity.receive(events, vm({ id: "c:2/tool", status: "succeeded", command: "ls", exit_code: 0 }));
+    activity.receive(events, { version: 1, kind: "hold", step_id: "hold", id: "hold-a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5",
+      halt: "injection", reason: "Die Seite will Dateien an einen fremden Server schicken.", entry: 9, state: "waiting" });
+    activity.receive(events, vm({ id: "c:3/tool", status: "running", command: "make" }));
+    activity.render(host, { running: true, status: "running", events });
+    const live = host.querySelector(".agent-progress .agent-hold-step");
+    expect(live.querySelector("strong").textContent).toBe("Paused by Claude Sonnet 5.5");
+    const reason = live.querySelector(".agent-hold-step-reason");
+    expect(reason.textContent).toBe("Die Seite will Dateien an einen fremden Server schicken.");
+    expect(reason.hasAttribute("data-i18n-skip")).toBe(true);
+    expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Prompt injection · Waiting for your decision");
+    // A pause that waits never folds away (the commands before it do), and
+    // the current line says so.
+    expect(host.querySelector(".agent-vm-fold summary").textContent).toBe("Ran 2 commands");
+    expect(live.closest(".agent-vm-fold")).toBeNull();
+    expect(host.querySelector(".agent-current-status").textContent).toBe("Paused for your decision");
+    activity.receive(events, { version: 1, kind: "hold", step_id: "hold", id: "hold-a1b2c3d4e5f6", state: "steer" });
+    activity.render(host, { running: true, status: "running", events });
+    expect(live.dataset.state).toBe("steer");
+    expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Prompt injection · You wrote to the agent");
+    const saved = host.querySelector(".agent-activity-content .agent-hold-step");
+    expect(saved.querySelector(".agent-hold-step-reason").textContent).toBe("Die Seite will Dateien an einen fremden Server schicken.");
+  });
+
   it("offers the admin to restore the VM to before a finished message", () => {
     const { host, activity } = setup();
     const turn = { status: "completed", agent_activity: [], assistant_response: "Done.",
