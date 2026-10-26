@@ -433,8 +433,9 @@ class VMTools:
     def tools(self):
         from app.services import agent_github
         from app.services.agent_vm_processes import ProcessTools
-        # With GitHub credentials in the backend (agent_github.py).
-        github = agent_github.GitHubTools(self).tools() if agent_github.configured() else []
+        # GitHub through the user's own installation of the app (agent_github.py);
+        # without the app's configuration the tools say "not set up".
+        github = agent_github.GitHubTools(self).tools()
         return [
             ReadOnlyTool("vm_exec", "Run a shell command in your Linux VM (bash, your home folder by default). "
                          "Returns stdout, stderr (their ends when long), exit code and duration.",

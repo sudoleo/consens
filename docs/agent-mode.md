@@ -580,29 +580,82 @@ Schritten ist Einleitung, der Lauf geht weiter; der
 Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
 steps done, now: …“).
 
-**GitHub aus der VM (seit 2026-10-26, wartet auf Zugangsdaten).** Öffentliche
-Repos klont der Agent selbst (`git clone`, GitHub ist im Egress erlaubt).
-Private Repos kommen über das Backend, das Token nie in die VM
-(`agent_github.py`): Mit `AGENT_GITHUB_APP_ID` + `AGENT_GITHUB_APP_PRIVATE_KEY` (eine
-GitHub-App, installiert auf den Repos, die der Agent sehen darf; je Import ein
-Installations-Token nur für dieses Repo, eine Stunde gültig, gecacht bis fünf
-Minuten vorher) oder `AGENT_GITHUB_TOKEN` (fine-grained PAT) bekommt der Agent
-`github_import` (`repo` „owner/name“, optional `ref`, optional `dest`) und den
-Prompt `AGENT_GITHUB_PROMPT` (im Admin „Agent: GitHub“); ohne beides gibt es
-weder Werkzeug noch Prompt. Das Backend löst `ref` (Standard: der
-Default-Branch) zum Commit auf, lädt dessen Tarball (höchstens
-`IMPORT_BYTES` = 50 MB gepackt; die Weiterleitung zu codeload trägt ihr
-eigenes Kurzzeit-Token, `Authorization` geht nur an api.github.com), schreibt
-ihn in die VM und packt ihn dort nach `/home/sprite/repos/<name>` aus, als
-frisches Git-Repo mit einem Commit „consens.io import of owner/name@sha“ und
-`.git/consens-import.json` (Repo, Ref, Commit) für einen späteren PR. Ein
-vorhandener Ordner wird nie überschrieben („already exists“). Fehler von
-GitHub (kein Zugriff, Repo fehlt, zu groß) sind Tool-Fehler des Agenten; die
-Anzeige zeigt den Import wie einen VM-Schritt („Imported the repository
-into“ + Ordner), im Arbeitsprotokoll mit Herkunft `vm`. Offen:
-`prepare_pull_request` nach dem Muster der Gmail-Entwürfe (Karte, Bestätigung,
-Branch/Commit/PR über die Git-Data-API des Backends) und die Wahl zwischen App
-und PAT durch den Betreiber; live erst mit den Variablen auf Render.
+**GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Öffentliche Repos
+klont der Agent selbst (`git clone`, GitHub ist im Egress erlaubt). Private
+Repos und Pull Requests laufen über eine **öffentliche GitHub-App**, die jeder
+Nutzer selbst auf Repositories seiner Wahl installiert (`agent_github.py`,
+Router `routers/agent_github.py`, Browser `agent-github.js`; Einrichtung der
+App: `docs/github-app-setup.md`). Konfiguration: `GITHUB_APP_ID`,
+`GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`,
+`GITHUB_APP_SLUG`; fehlt eine, sagen die Werkzeuge ruhig „GitHub is not set
+up“. Die Werkzeuge und der Prompt `AGENT_GITHUB_PROMPT` (Admin „Agent: GitHub“)
+kommen mit der VM, also derzeit nur für Admins; die Verbindung selbst ist für
+jedes Konto mit Agent gebaut.
+
+*Verbinden* (Einstellungen → Agent · Beta → GitHub, Zeile `#agentGithubSettings`,
+`.admin-only` wie die VM-Zeile): wie bei Google ein Popup.
+`POST /agent/github/connect` legt einen einmaligen `state` an
+(`users/{uid}/github_oauth_states/{sha(state)}`, 10 min) und setzt das
+HttpOnly-Cookie `consens_github_oauth` (Pfad `/agent/github`) mit dem
+Browser-Geheimnis; das Popup öffnet `https://github.com/apps/<slug>/installations/new?state=…`.
+Nach der Installation schickt GitHub es zur Callback-Seite
+`GET /agent/github/callback` (die App fordert die Nutzer-Autorisierung bei der
+Installation an), die `code` und `state` per `postMessage` an das öffnende
+Fenster gibt; kommt sie ohne `code` (bestehende Installation), führt das Fenster
+das Popup zur OAuth-Freigabe (`/login/oauth/authorize?client_id&state`), die
+sicher beides zurückbringt. `POST /agent/github/finish` (angemeldeter Nutzer,
+`state`, Cookie, `code`) tauscht den Code gegen ein Nutzer-Token und liest damit
+`GET /user/installations` (nur Installationen dieser App) und je Installation
+`GET /user/installations/{id}/repositories` samt den Rechten des Nutzers
+(`pull`, `push`). Nur das wird gespeichert
+(`users/{uid}/github_connections/github`: Login, Installationen, Repos mit
+`push`), nie eine `installation_id` aus einer URL. Das Nutzer-Token wird sofort
+widerrufen und nie gespeichert. Höchstens 10 Installationen und 500 Repos je
+Installation. `GET /agent/github/connection` zeigt den Stand,
+`DELETE /agent/github/connection` trennt; die Kontolöschung löscht beides
+(`account_deletion`, `github_connections`, `github_oauth_states`). Ein später
+auf GitHub hinzugefügtes Repo braucht „Connect again“.
+
+*Tokens* erzeugt nur das Backend (`GitHubConnections.token`), je Vorgang mit
+dem App-Schlüssel (JWT), für das eine Repository und nur die nötigen Rechte:
+Import `contents: read`, Pull Request `contents` und `pull_requests: write`.
+Die Rechte des Nutzers begrenzen es zusätzlich: Import nur mit Lesezugriff,
+Pull Request nur mit Push-Recht (sonst `NO_ACCESS`/`NO_PUSH`). Lehnt GitHub das
+Token ab (App entfernt), meldet das Werkzeug „no longer connected“, und die
+Installation fällt aus der Verbindung; danach „not connected“. Kein Webhook.
+
+*`github_import`* (`repo`, optional `ref`, `dest`) löst `ref` (Standard:
+Default-Branch) zum Commit auf, lädt dessen Tarball (höchstens 50 MB gepackt;
+die Weiterleitung zu codeload trägt ihr eigenes Kurzzeit-Token,
+`Authorization` geht nur an api.github.com), schreibt ihn in die VM und packt
+ihn nach `/home/sprite/repos/<name>` aus, als Git-Repo mit einem Commit und
+`.git/consens-import.json` (Repo, Ref, Commit). Ein vorhandener Ordner wird nie
+überschrieben.
+
+*`prepare_pull_request`* (`path`, `title`, `body`, optional `branch`, `base`):
+nur für einen Ordner aus `github_import`. Das Backend staged in der VM alles
+(`git add -A`), liest die Änderungen gegen den importierten Commit
+(`--raw`/`--numstat`, ohne Umbenennungen), höchstens 200 Dateien und 20 MB, je
+Datei 5 MB, liest jede Datei und merkt sich ihren SHA-256, dazu einen
+Diff-Auszug (12.000 Zeichen). Änderungen unter `.github/workflows` lehnt es ab
+(die App hat kein Workflows-Recht, `WORKFLOWS_REFUSED`). `base` muss ein
+Branch sein (Standard: der importierte), `branch` ein neuer Name (Standard
+`consens/<titel>-<4 hex>`). Der Vorschlag liegt am Turn
+(`agent_pull_request`, geht mit dem Turn an den Browser) und ist eine
+Seitenaktion wie `prepare_watch` (`SIDE_TOOLS`). Bis dahin nur Lesezugriffe auf
+GitHub. *Die Karte* (`agent-github.js`) zeigt Repo, `branch → base`, Titel,
+Beschreibung, Dateien mit Zählern und den Diff eingeklappt, alles als Daten
+unübersetzt; Bestätigungsfrist 60 min. Erst „Create pull request“
+(`POST /agent/chats/{chat}/turns/{turn}/pull-request` mit `expected_hash`)
+schickt etwas zu GitHub: `PullRequests.confirm` beansprucht den Vorschlag
+einmal (`pending` → `executing`), liest die Dateien erneut aus der VM und
+bricht ab, wenn eine vom Vorschau-Hash abweicht, legt Blobs, Tree (auf dem Tree
+des importierten Commits, gelöschte Dateien mit `sha: null`), Commit (Eltern:
+der importierte Commit), den neuen Branch und den Pull Request an und speichert
+Nummer und Link (`succeeded`) oder den Fehler (`failed`). Ein bestehender
+Branch wird nie geändert, nie direkt auf main gepusht. „Discard“
+(`…/pull-request/discard`) setzt `discarded`. Der Link der Karte führt nur zu
+`https://github.com/…`.
 
 **Anbieter-Schnittstelle** (`agent_vm.py`): `VMBackend` mit `ensure`, `exec`,
 `read_file`, `write_file`, `checkpoint`, `delete`, `close`; `SpritesBackend`
@@ -665,8 +718,10 @@ Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
 `SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket),
 `tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
 Fensterende, Kompaktierung, Aktivitätsgröße),
-`tests/test_agent_github.py` (Import ohne Token in der VM, App-Token je Repo,
-Fehler), `tests/test_agent_plan.py` (Plan in Aktivität, Protokoll und
+`tests/test_agent_github.py` (Verbinden nur mit GitHubs eigener Liste, Cookie
+und `state`, Token je Repo und Vorgang, Import, Vorschlag, Erstellung,
+geänderte Dateien, Verwerfen), `tests/js/agent-github.test.mjs` (Karte,
+Einstellungen), `tests/test_agent_plan.py` (Plan in Aktivität, Protokoll und
 Prüfer-Prompt), `tests/test_agent_vm_processes.py` (Werkzeuge gegen FakeVM,
 Aufseher-Skripte in echtem bash: Ende, Stopp, Deckel, Zeitlimit),
 `tests/test_agent_vm_pictures.py` (Bild nach den Ergebnissen, nur für

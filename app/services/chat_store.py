@@ -518,7 +518,7 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # which would invalidate a completed review even on trailing newlines.
         # Agent output is already bounded at generation/storage time.
         result["assistant_response"] = result["consensus"] = text if isinstance(text, str) else ""
-        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal", "agent_vm"):
+        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal", "agent_vm", "agent_pull_request"):
             if field in source:
                 result[field] = source[field]
         # The turn has a work log (agent_work_log, audit mode): its view

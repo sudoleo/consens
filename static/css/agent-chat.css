@@ -978,6 +978,68 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-watch-link { min-height: 44px; }
 }
 
+/* ---- A pull request the Agent prepared (agent-github.js) ------------------
+   The Watch card's block: where it goes (repository, new branch -> base),
+   its title, the changed files, the diff folded, then the one button. The
+   state lives in the words; nothing here is coloured. */
+.agent-pr-card {
+  max-width: 66ch;
+  margin: 14px 0 6px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+.agent-pr-card p { margin: 0; }
+.agent-pr-card [hidden] { display: none; }
+.agent-pr-title { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.agent-pr-card .agent-pr-target { margin-top: 6px; font-family: var(--font-mono); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.agent-pr-card .agent-pr-name { margin-top: 4px; color: var(--ink); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
+.agent-pr-card .agent-pr-body { margin-top: 2px; font-size: var(--font-size-sm); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: auto; }
+.agent-pr-files { margin: 8px 0 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: var(--font-size-xs); }
+.agent-pr-files li { overflow-wrap: anywhere; }
+.agent-pr-card .agent-pr-more { color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-pr-diff { margin-top: 8px; }
+.agent-pr-diff > summary { width: fit-content; color: var(--ink-3); font-size: var(--font-size-xs); cursor: pointer; }
+.agent-pr-diff > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.agent-pr-diff-text {
+  box-sizing: border-box; max-height: 18em; margin: 6px 0 0; padding: 8px 10px; overflow: auto; border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink-2);
+  font: var(--font-size-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.agent-pr-card .agent-pr-status { margin-top: 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-pr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
+.agent-pr-actions:not(:has(> :not([hidden]))) { display: none; }
+.agent-pr-create { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.agent-pr-link, .agent-pr-open { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  :is(.agent-pr-link, .agent-pr-open):hover { color: var(--ink); }
+}
+.agent-pr-card :is(button, a):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .agent-pr-link { min-height: 44px; }
+}
+/* GitHub in Settings (agent-github.js): the connection in words, the actions as quiet links. */
+.agent-github-settings > strong { display: block; }
+.agent-github-settings > small { display: block; margin-top: 2px; }
+.agent-github-status, .agent-github-repos { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
+.agent-github-repos { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.agent-github-repos[hidden], .agent-github-actions [hidden] { display: none; }
+.agent-github-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.agent-github-actions .agent-github-link {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; border: 0; background: transparent;
+  color: var(--ink-2); font: inherit; font-size: var(--font-size-sm); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .agent-github-link:hover { color: var(--ink); }
+}
+.agent-github-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* Links look like the button links beside them (base.css takes every
+   underline away with !important, as components-modals.css also undoes). */
+a.agent-github-link, a.agent-pr-open { text-decoration: underline !important; text-underline-offset: 3px; }
+
 /* ---- A settings change the Agent prepared (agent-settings.js) -------------
    The Watch card's block: each change as "now → new", the new value in the
    reading colour, then Apply. After Apply the words say it is in place. */

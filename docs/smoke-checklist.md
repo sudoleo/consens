@@ -102,6 +102,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Schlussrunde.
       Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
       `agent-review.test.mjs`, `agent-delegation.test.mjs`.
+- [ ] GitHub (2026-10-26, Admin-Konto, App nach `docs/github-app-setup.md`
+      eingerichtet): Einstellungen → Agent · Beta → GitHub → „Connect GitHub“,
+      App auf ein Test-Repo installieren; das Fenster schließt sich,
+      „Connected as …“ mit dem Repo. Im Chat mit Agent VM: „Hol <owner/repo>,
+      ändere die README, mach einen PR.“ Unter der Antwort die Karte mit Datei
+      und Diff; „Create pull request“ → „Pull request created“ mit Link, auf
+      GitHub ein neuer Branch mit PR, main unverändert. Eine Änderung unter
+      `.github/workflows` lehnt der Agent mit Begründung ab. App auf GitHub
+      deinstallieren → nächster Import sagt „no longer connected“.
+      Automatisiert: `test_agent_github.py`, `agent-github.test.mjs`.
 - [ ] Agent VM: Eingreifen (2026-10-26, Admin-Konto, Agent VM an): Während
       ein Lauf Befehle ausführt, Text tippen und Enter: das Feld leert sich,
       die Nachricht erscheint vor dem nächsten Schritt als „You …“ in den

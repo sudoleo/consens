@@ -67,7 +67,7 @@ TOOL_DATA = {
     "stop_agent": "agent", "report_to_orchestrator": "agent",
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
     "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm",
-    "github_import": "vm", "update_plan": "agent",
+    "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
 }
 
 

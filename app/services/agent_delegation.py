@@ -272,6 +272,8 @@ class DelegationLoop(AgentLoop):
         self.watch_tools = None
         # The latest Watch this turn prepared (agent_watch.py).
         self.watch_proposal = None
+        # The latest pull request this turn prepared (agent_github.py).
+        self.pull_request_proposal = None
         self.settings_tools = None
         # The latest settings change this turn prepared (agent_settings.py).
         self.settings_proposal = None
@@ -462,11 +464,9 @@ class DelegationLoop(AgentLoop):
             from app.services.prompt_defaults import AGENT_VM_PROMPT
             self.vm_tools = VMTools(self)
             self.messages[0]["content"] += "\n\n" + AGENT_VM_PROMPT
-            from app.services import agent_github
-            if agent_github.configured():
-                # Set per installation, so the prompt stays cacheable.
-                from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
-                self.messages[0]["content"] += "\n\n" + AGENT_GITHUB_PROMPT
+            # GitHub (agent_github.py): the tools come with the VM, so the prompt does too.
+            from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
+            self.messages[0]["content"] += "\n\n" + AGENT_GITHUB_PROMPT
             # The plan of a long task (agent_plan.py), with the VM where tasks run long.
             from app.services.agent_plan import PlanTools
             from app.services.prompt_defaults import AGENT_PLAN_PROMPT
@@ -1894,7 +1894,8 @@ class DelegationLoop(AgentLoop):
                 content = None
             if not isinstance(content, dict) or "error" in content or content.get("status") == "refused":
                 return False
-            if ((call.get("function") or {}).get("name") in {"prepare_watch", "prepare_settings_change"}
+            if ((call.get("function") or {}).get("name") in {"prepare_watch", "prepare_settings_change",
+                                                             "prepare_pull_request"}
                     and content.get("status") != "prepared"):
                 return False
         return True

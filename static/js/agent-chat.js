@@ -521,6 +521,9 @@
       App.answerShare?.button?.(document.getElementById('agentAnswerBody'), {
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId,
         eligible: basis.currentTurn?.status === 'completed' && Boolean(String(basis.consensus || '').trim()) });
+      App.agentGithub?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
+        proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_pull_request : null,
+        chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId });
       App.agentSettings?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_settings_proposal : null });
       App.agentDelegation?.project(basis.currentTurn?.agent_settings?.policy?.delegation ? {

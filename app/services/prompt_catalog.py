@@ -90,9 +90,8 @@ _ENTRIES = (
      "checklist in the activity and the work log, where the reviewers hold it against the work.",
      "prompt_defaults.py:AGENT_PLAN_PROMPT", _plan),
     ("agent_github", "Agent: GitHub",
-     "Appended after \"Agent: Linux VM\" when the backend holds GitHub credentials (AGENT_GITHUB_APP_ID and "
-     "AGENT_GITHUB_APP_PRIVATE_KEY, or AGENT_GITHUB_TOKEN; agent_github.py): github_import brings a repository "
-     "into the VM through the backend.",
+     "Appended after \"Agent: plan\" with the VM (agent_github.py): github_import brings a repository the "
+     "user connected through the GitHub app into the VM, prepare_pull_request proposes its changes on a card.",
      "prompt_defaults.py:AGENT_GITHUB_PROMPT", _github),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "

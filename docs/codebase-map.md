@@ -126,6 +126,14 @@ readonly use requires restricted-scope verification/security assessment as detai
 in `docs/google-integrations-setup.md`. `tests/test_agent_gmail.py` includes the real
 files → two-model comparison → document → draft → synthesis/review integration.
 
+GitHub for the Agent VM (26.10.2026): `routers/agent_github.py` exposes
+`/agent/github/{connection,connect,callback,finish}` (connect/finish need Agent
+access, reading and disconnecting only the owner) and the pull request card's
+`POST /agent/chats/{chat}/turns/{turn}/pull-request[/discard]`;
+`agent-github.js` (bundle after `agent-watch.js`) renders the Settings row
+`#agentGithubSettings` and the card. Details in `docs/agent-mode.md`
+("GitHub aus der VM") and `docs/github-app-setup.md`.
+
 Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner-bound
 connection controls at `/agent/google/{connections,connect,finish}` and the isolated
 popup callback; connect/finish/actions require Agent access, listing and disconnect
@@ -8135,7 +8143,7 @@ app/services/
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
-  agent_github.py            GitHub für die VM (seit 2026-10-26, aktiv nur mit AGENT_GITHUB_APP_ID+AGENT_GITHUB_APP_PRIVATE_KEY oder AGENT_GITHUB_TOKEN): github_import lädt den Tarball eines Commits über die REST-API (App-Installations-Token je Repo oder PAT) und packt ihn in der VM als Git-Repo mit einem Commit aus; das Token kommt nie in die VM. PRs (prepare_pull_request) noch offen
+  agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import, prepare_pull_request (Vorschlag am Turn agent_pull_request) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
   agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
@@ -8780,9 +8788,10 @@ alte Gemini-ADC-JSON ist entfernt.
   in der normalen `.env` deaktiviert.
 - Agent VM: `SPRITES_TOKEN` (Fly.io Sprites, nur im Backend, nie in einer
   VM); ohne ihn melden die VM-Werkzeuge „not available“ (`agent_vm.backend`).
-  GitHub für die VM (seit 2026-10-26): `AGENT_GITHUB_APP_ID` + `AGENT_GITHUB_APP_PRIVATE_KEY`
-  oder `AGENT_GITHUB_TOKEN`, nur im Backend (`agent_github.py`); ohne sie kein
-  `github_import`.
+  GitHub für die VM (seit 2026-10-26): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`,
+  `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, nur im
+  Backend (`agent_github.py`, Einrichtung `docs/github-app-setup.md`); fehlt
+  eine, sagen die Werkzeuge „not set up“.
 - Der serverseitige LLM-Key ist ausschließlich `OPENROUTER_API_KEY`.
   App-Consensus, Consensus-API und Benchmark lösen ihn über
   `llm.credentials.resolve_developer_api_keys` mit identischer

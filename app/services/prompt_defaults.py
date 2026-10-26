@@ -152,7 +152,7 @@ For a task with several steps, write your plan with update_plan before you start
 
 AGENT_GITHUB_PROMPT = """GITHUB
 
-github_import copies a GitHub repository into your VM, a private one too if consens.io may read it: the backend downloads it, so the VM itself never holds GitHub credentials and git push from the VM does not work. It lands in /home/sprite/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes. Public repositories can also be cloned with git in the VM."""
+github_import copies a GitHub repository the user connected into your VM, a private one too: the backend downloads it, so the VM itself never holds GitHub credentials and git push from the VM does not work. It lands in /home/sprite/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes. To hand changes back, call prepare_pull_request on that folder: the user reviews them on a card under your answer and creates the pull request there, so never claim one exists. If GitHub is not connected or not set up, the tool says so; tell the user, do not work around it. Files under .github/workflows cannot be changed this way. Public repositories can also be cloned with git in the VM."""
 
 
 ANSWER_SYSTEM_PROMPT = (

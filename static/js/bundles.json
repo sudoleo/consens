@@ -210,6 +210,10 @@
           "note": "App.agentWatch: the Watch card under an Agent answer. Uses App.watch and App.watchUi (watch.js) at runtime; agent-chat.js renders it."
         },
         {
+          "file": "static/js/agent-github.js",
+          "note": "App.agentGithub: connecting GitHub in Settings and the pull request card under an Agent answer. Uses App.httpError, App.readJson and App.userError (app-text.js); agent-chat.js renders the card."
+        },
+        {
           "file": "static/js/agent-settings.js",
           "note": "App.agentSettings: the settings-change card under an Agent answer. Uses App.userSettings, App.agentPreferences, App.agentChat and App.activeConsensusPresetId (model-picker.js) at runtime; agent-chat.js renders it."
         },
