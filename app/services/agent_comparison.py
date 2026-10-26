@@ -982,8 +982,11 @@ class ComparisonTools:
                 slots.release()
         truncated = keep_truncated and value.finish_reason in {"length", "max_tokens"}
         if value.tool_calls or not value.text.strip() or (value.finish_reason != "stop" and not truncated):
-            raise ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
+            error = ModelOutputLimit() if value.finish_reason in {"length", "max_tokens"} and not value.tool_calls \
                 else ValueError("Model response did not complete")
+            # The reply as it came, for a caller's log of its shape (agent_audit.reply_shape).
+            error.reply = value
+            raise error
         value.truncated = truncated
         return value
 

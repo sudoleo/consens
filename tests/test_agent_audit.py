@@ -6,6 +6,7 @@ app places their quotes on the answer's sentences. Without the setting
 everything runs as before (test_agent_comparison, test_agent_answer_mode).
 """
 import json
+import logging
 import threading
 import time
 
@@ -523,10 +524,17 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 4
 
 
-def test_a_failed_or_unreadable_review_costs_only_its_marks(store):
+def test_a_failed_or_unreadable_review_costs_only_its_marks(store, caplog):
     script = Audit({"anthropic": RuntimeError("provider down"), "openai": "Looks fine to me."})
     loop = audit_loop(store, script)
-    list(loop.run())
+    with caplog.at_level(logging.WARNING):
+        list(loop.run())
+    # The unreadable reply is logged by its shape, never by its words; a
+    # provider failure brought no reply to describe (2026-10-26).
+    unusable = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Agent reviewer reply unusable")]
+    assert unusable and all("shape=no_json chars=17 finish=stop" in line for line in unusable)
+    assert all("openai" in line for line in unusable)
+    assert not any("Looks fine" in r.getMessage() for r in caplog.records)
     turn = saved(store, loop)
     review = turn["agent_review"]
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
@@ -534,6 +542,22 @@ def test_a_failed_or_unreadable_review_costs_only_its_marks(store):
     assert [(r["status"], r["failure"]["code"]) for r in review["audit"]["reviewers"]] == [
         ("failed", "provider_error"), ("failed", "review_unreadable")]
     assert {"code": "reviewers_unavailable", "count": 2} in review["audit"]["issues"]
+
+
+def test_an_empty_or_cut_reply_is_described_without_its_words():
+    from types import SimpleNamespace
+    from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
+    assert agent_audit.reply_shape(ModelEmptyAnswer())["shape"] == "empty"
+    cut = ModelOutputLimit()
+    cut.reply = SimpleNamespace(text='{"marks": [', finish_reason="length", tool_calls=[],
+                                usage={"output_tokens": 4000, "reasoning_tokens": 3900})
+    assert agent_audit.reply_shape(cut) == {"shape": "cut", "chars": 11, "finish": "length", "output_tokens": 4000,
+                                           "reasoning_tokens": 3900}
+    searching = ValueError("Model response did not complete")
+    searching.reply = SimpleNamespace(text="", finish_reason="tool_calls", tool_calls=[{"id": "x"}], usage=None)
+    assert agent_audit.reply_shape(searching)["shape"] == "tool_calls"
+    # A provider failure brought no reply.
+    assert agent_audit.reply_shape(RuntimeError("provider down")) is None
 
 
 def test_one_reviewer_left_keeps_its_marks_as_a_partial_review(store):
@@ -726,9 +750,12 @@ def test_a_review_is_read_tolerantly_and_a_wrong_needs_a_source():
         {"quote": "A", "kind": "doubtful", "note": "No source."},
         {"quote": "B", "kind": "wrong", "note": "With one.", "source": "https://example.org/b"},
         {"quote": "D", "kind": "doubtful", "note": "Credentials."}]
-    for unreadable in ("No problems found.", '{"verdict": "fine"}', ""):
-        with pytest.raises(agent_audit.ReviewUnreadable):
+    # How it failed, for the log (reply_shape), never its words.
+    for unreadable, shape in (("No problems found.", "no_json"), ('{"verdict": "fine"}', "no_marks"), ("", "empty"),
+                              ('{"marks": [{"quote": "A", "kind"', "cut_json"), ('{"marks": [,]}', "broken_json")):
+        with pytest.raises(agent_audit.ReviewUnreadable) as caught:
             parse_review(unreadable)
+        assert caught.value.shape == shape
     marks = [{"quote": f"q{i}", "kind": "doubtful", "note": "n"} for i in range(50)]
     assert len(parse_review(json.dumps({"marks": marks}))) == agent_audit.MAX_MARKS
 

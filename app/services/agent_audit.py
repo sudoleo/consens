@@ -301,7 +301,14 @@ def work_goes_on(entries):
 # --- Reading a review ---------------------------------------------------------
 
 class ReviewUnreadable(ValueError):
-    """The reviewer's reply holds no review in the asked form."""
+    """The reviewer's reply holds no review in the asked form. ``shape`` says
+    how, never with its words (reply_shape): ``empty``, ``no_json``,
+    ``cut_json`` (an object that never closes), ``broken_json`` or
+    ``no_marks`` (JSON without a list of marks)."""
+
+    def __init__(self, message, shape="no_marks"):
+        super().__init__(message)
+        self.shape = shape
 
 
 def _text(value, limit):
@@ -384,7 +391,10 @@ def parse_review(text, *, known=(), final=True):
             continue
     marks = data if isinstance(data, list) else data.get("marks") if isinstance(data, dict) else None
     if not isinstance(marks, list):
-        raise ReviewUnreadable("The review could not be read.")
+        shape = ("empty" if not raw else "no_marks" if data is not None
+                 else "no_json" if "{" not in raw and not raw.startswith("[")
+                 else "cut_json" if raw.count("{") > raw.count("}") else "broken_json")
+        raise ReviewUnreadable("The review could not be read.", shape)
     known = set(known)
     result = []
     for item in marks:
@@ -427,6 +437,32 @@ class ReviewCancellation(ProviderCancellation):
 
 class ReviewTooLong(ValueError):
     """The work and the answer do not fit the reviewer's context."""
+
+
+def reply_shape(error, reply=None):
+    """How a reviewer's reply failed, for the log, never with its words
+    (2026-10-26): {shape, chars, finish, output_tokens, reasoning_tokens}, or
+    None for a failure without a reply (provider, stop, deadline)."""
+    from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
+    reply = reply if reply is not None else getattr(error, "reply", None)
+    if isinstance(error, ReviewUnreadable):
+        shape = error.shape
+    elif isinstance(error, ModelEmptyAnswer):
+        shape = "empty"
+    elif isinstance(error, ModelOutputLimit):
+        shape = "cut"
+    elif reply is None:
+        return None
+    elif getattr(reply, "tool_calls", None):
+        shape = "tool_calls"
+    elif not str(getattr(reply, "text", "") or "").strip():
+        shape = "empty"
+    else:
+        shape = "incomplete"
+    usage = getattr(reply, "usage", None) or {}
+    return {"shape": shape, "chars": len(str(getattr(reply, "text", "") or "")) if reply is not None else None,
+            "finish": getattr(reply, "finish_reason", None), "output_tokens": usage.get("output_tokens"),
+            "reasoning_tokens": usage.get("reasoning_tokens")}
 
 
 def review_failure(error, cancellation=None):
@@ -767,12 +803,20 @@ class ReviewerSession:
         if self.worker is None:
             self.worker = self._open()
         self.messages.append({"role": "user", "content": message})
+        value = None
         try:
             value = self.tools.worker_request(
                 self.worker, self.model, self.messages, cancellation=self.cancellation, slots=self.audit.slots,
                 searching=True, search_rounds=REVIEW_SEARCH_ROUNDS if final else LIVE_SEARCH_ROUNDS, one_off=final)
             marks = parse_review(value.text, known=known, final=final)
         except BaseException as exc:
+            shape = reply_shape(exc, value) if isinstance(exc, Exception) else None
+            if shape:
+                # A reply came and could not be used: how, never its words.
+                logging.warning("Agent reviewer reply unusable model=%s round=%s shape=%s chars=%s finish=%s "
+                                "output_tokens=%s reasoning_tokens=%s", self.model.model,
+                                "final" if final else self.live_rounds + 1, shape["shape"], shape["chars"],
+                                shape["finish"], shape["output_tokens"], shape["reasoning_tokens"])
             self.messages.pop()
             failure = review_failure(exc, self.cancellation)
             if not final and not isinstance(exc, ProviderCancelled):

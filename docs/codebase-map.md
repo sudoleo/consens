@@ -5515,7 +5515,11 @@ Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
 trotzdem `completed`, auch nach einem Stop während der Prüfung
 (`_finish_review` fängt ihn ab, außer bei `watch_error`). Gescheiterte
-Speicherungen holt `AnswerAudit.close` nach; `agent_runs.finish_run` setzt
+Speicherungen holt `AnswerAudit.close` nach. Eine Prüferantwort, die kam, aber
+nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
+(„Agent reviewer reply unusable“: `reply_shape` mit `shape` empty/cut/no_json/
+cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
+`agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
 `failed`. Eigene Suchtreffer sperren Memory für die Nachricht
 (`memory_locked`). Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
