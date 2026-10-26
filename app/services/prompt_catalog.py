@@ -35,6 +35,11 @@ def _vm():
     return AGENT_VM_PROMPT
 
 
+def _plan():
+    from app.services.prompt_defaults import AGENT_PLAN_PROMPT
+    return AGENT_PLAN_PROMPT
+
+
 def _github():
     from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
     return AGENT_GITHUB_PROMPT
@@ -80,6 +85,10 @@ _ENTRIES = (
      "an admin switched on Agent VM (agent_vm_tools.py) and the chat has no Google data: the agent's own VM with "
      "vm_exec, vm_read_file, vm_write_file, vm_edit_file and vm_share_file.",
      "prompt_defaults.py:AGENT_VM_PROMPT", _vm),
+    ("agent_plan", "Agent: plan",
+     "Appended after \"Agent: Linux VM\" with the VM (agent_plan.py): update_plan keeps the agent's plan as a "
+     "checklist in the activity and the work log, where the reviewers hold it against the work.",
+     "prompt_defaults.py:AGENT_PLAN_PROMPT", _plan),
     ("agent_github", "Agent: GitHub",
      "Appended after \"Agent: Linux VM\" when the backend holds GitHub credentials (AGENT_GITHUB_APP_ID and "
      "AGENT_GITHUB_APP_PRIVATE_KEY, or AGENT_GITHUB_TOKEN; agent_github.py): github_import brings a repository "

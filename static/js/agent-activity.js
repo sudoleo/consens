@@ -41,6 +41,7 @@
     vm_edit_file: ['Edit file', 'Editing a file…', 'Edited a file'],
     vm_share_file: ['Share file', 'Sharing a file…', 'Shared a file'],
     github_import: ['GitHub', 'Importing a repository…', 'Imported a repository'],
+    update_plan: ['Plan', 'Updating the plan…', 'Updated the plan'],
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
@@ -507,6 +508,49 @@
     if (details.open) output.scrollTop = output.scrollHeight;
   }
 
+  // The agent's plan (agent_plan.py, update_plan), like Claude Code's todo
+  // list: its steps as a checklist, the latest pinned above the live
+  // progress, each change folded in the timeline. The steps are the model's
+  // words, data that stays untranslated; the line above them goes through App.t.
+  const planStates = { completed: 'Done', in_progress: 'In progress', pending: 'To do' };
+  const hasPlan = item => item.kind === 'tool' && item.name === 'update_plan' && Array.isArray(item.items)
+    && item.items.length > 0;
+  function planView(className) {
+    const details = document.createElement('details');
+    details.className = className;
+    const summary = document.createElement('summary');
+    summary.className = 'agent-plan-head';
+    summary.dataset.i18nSkip = '';
+    const list = document.createElement('ol');
+    list.className = 'agent-plan-list';
+    list.translate = false;
+    list.dataset.i18nSkip = '';
+    details.append(summary, list);
+    summary.addEventListener('click', () => { details.dataset.chosen = ''; });
+    return details;
+  }
+  function updatePlan(details, item, open) {
+    const steps = item.items.slice(0, 20);
+    const signature = JSON.stringify([item.status, steps]);
+    if (details.dataset.signature === signature) return;
+    details.dataset.signature = signature;
+    details.dataset.status = item.status;
+    const done = steps.filter(step => step.status === 'completed').length;
+    details.firstElementChild.textContent = item.status === 'failed' ? App.t('Plan not updated')
+      : App.t('Plan · {done} of {total} done', { done, total: steps.length });
+    details.lastElementChild.replaceChildren(...steps.map(step => {
+      const li = document.createElement('li');
+      const status = planStates[step.status] ? step.status : 'pending';
+      const text = String(step.content || '').slice(0, 200);
+      li.dataset.status = status;
+      li.textContent = text;
+      // The mark is drawn by CSS; a screen reader hears the state in words.
+      li.setAttribute('aria-label', `${App.t(planStates[status])}: ${text}`);
+      return li;
+    }));
+    if (!('chosen' in details.dataset)) details.open = open;
+  }
+
   // Like Claude Code, a run that works in its VM folds its earlier steps into
   // one line ("Ran 4 commands"); the note that leads into the latest command,
   // that command and what follows stay in view. Until 2026-10-26 every
@@ -665,9 +709,12 @@
     view.running = running;
     // Stable paragraphs keep earlier updates readable and prevent a live region
     // from announcing the entire history again whenever a new paragraph arrives.
+    // The latest plan stands above the live progress, never in its order.
+    const plan = tools.findLast(item => hasPlan(item) && item.status !== 'failed');
     const paragraphs = events.flatMap(item => progress.includes(item)
       ? [{id:item.id, text:item.text, kind:'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
+        : tools.includes(item) && item.name === 'update_plan' ? []
         : tools.includes(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
         : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && item === activeTool},
@@ -707,6 +754,14 @@
       view.preview.inert = false;
     }
     const previewIds = new Set();
+    const pinned = showPreview && plan ? 1 : 0;
+    if (pinned) {
+      previewIds.add('plan');
+      let node = view.previewNodes.get('plan');
+      if (!node) { node = planView('agent-plan'); view.previewNodes.set('plan', node); previewChanged = true; }
+      updatePlan(node, plan, true);
+      if (view.preview.firstElementChild !== node) view.preview.insertBefore(node, view.preview.firstElementChild);
+    }
     const folded = showPreview ? foldPast(paragraphs) : null;
     const pastIds = new Set(folded?.past.map(item => item.id) || []);
     let fold = view.previewNodes.get('vm-fold');
@@ -715,9 +770,9 @@
       if (!fold) { fold = foldView(); view.previewNodes.set('vm-fold', fold); }
       if (fold._label.textContent !== window.App.t(folded.label)) fold._label.textContent = folded.label;
       if (fold.dataset.count !== String(pastIds.size)) { fold.dataset.count = String(pastIds.size); previewChanged = true; }
-      if (view.preview.firstElementChild !== fold) view.preview.insertBefore(fold, view.preview.firstElementChild);
+      if (view.preview.children[pinned] !== fold) view.preview.insertBefore(fold, view.preview.children[pinned] || null);
     }
-    let pastIndex = 0, presentIndex = folded ? 1 : 0;
+    let pastIndex = 0, presentIndex = pinned + (folded ? 1 : 0);
     const place = (item, p) => {
       const inFold = pastIds.has(item.id);
       const parent = inFold ? fold._list : view.preview;
@@ -781,6 +836,7 @@
       let node = view.nodes.get(item.id);
       if (!node) {
         node = item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
+          : hasPlan(item) ? planView('agent-activity-tool agent-plan')
           : document.createElement(item.kind === 'progress' ? 'p' : 'div');
         if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
@@ -789,6 +845,8 @@
       }
       if (item.kind === "tool" && vmTools.has(item.name)) {
         updateVm(node, item);
+      } else if (node.classList.contains('agent-plan')) {
+        if (hasPlan(item)) updatePlan(node, item, false);
       } else if (item.kind === "tool") {
         const signature = JSON.stringify([item, textOnly]);
         if (node.dataset.signature !== signature) {

@@ -127,6 +127,43 @@ describe("VM calls in the activity", () => {
     expect(host.querySelectorAll(".agent-activity-content .agent-vm")).toHaveLength(5);
   });
 
+  // update_plan (2026-10-26), like Claude Code's todo list.
+  it("pins the latest plan above the live progress and keeps each change in the timeline", () => {
+    const { host, activity } = setup();
+    const events = [];
+    const plan = (n, statuses, fields = {}) => activity.receive(events, { version: 1, kind: "tool", id: `p:${n}/tool`,
+      name: "update_plan", status: "succeeded", ...fields,
+      items: ["Read the data", "Fit the model", "Plot the result"].map((content, i) => ({ content, status: statuses[i] })) });
+    plan(1, ["in_progress", "pending", "pending"]);
+    activity.receive(events, vm({ id: "c:1/tool", status: "succeeded", command: "head data.csv", exit_code: 0 }));
+    plan(2, ["completed", "in_progress", "pending"]);
+    activity.receive(events, vm({ id: "c:2/tool", status: "running", command: "python fit.py" }));
+    activity.render(host, { running: true, status: "running", events });
+    const preview = host.querySelector(".agent-progress");
+    // One plan, the latest, first and open; the commands follow in their order.
+    const pinned = preview.querySelectorAll(".agent-plan");
+    expect(pinned).toHaveLength(1);
+    expect(preview.firstElementChild).toBe(pinned[0]);
+    expect(pinned[0].open).toBe(true);
+    expect(pinned[0].querySelector("summary").textContent).toBe("Plan · 1 of 3 done");
+    const steps = [...pinned[0].querySelectorAll("li")];
+    expect(steps.map(li => li.dataset.status)).toEqual(["completed", "in_progress", "pending"]);
+    expect(steps[1].getAttribute("aria-label")).toBe("In progress: Fit the model");
+    // The steps are the model's words: data, never translated.
+    expect(pinned[0].querySelector(".agent-plan-list").hasAttribute("data-i18n-skip")).toBe(true);
+    expect(preview.querySelectorAll(".agent-vm:not(.agent-vm-fold)")).toHaveLength(2);
+    // A rejected update never replaces the plan in view.
+    plan(3, ["completed", "completed", "completed"], { status: "failed" });
+    activity.render(host, { running: true, status: "running", events });
+    expect(preview.querySelector(".agent-plan summary").textContent).toBe("Plan · 1 of 3 done");
+    // The timeline keeps each change, folded.
+    const saved = host.querySelectorAll(".agent-activity-content .agent-plan");
+    expect(saved).toHaveLength(3);
+    expect([...saved].map(node => node.open)).toEqual([false, false, false]);
+    expect(saved[0].querySelector("summary").textContent).toBe("Plan · 0 of 3 done");
+    expect(saved[2].querySelector("summary").textContent).toBe("Plan not updated");
+  });
+
   it("adds the VM's run time to the admin's usage line", () => {
     const { host, activity } = setup();
     activity.renderTurn(host, { status: "completed", agent_activity: [], assistant_response: "Done.",

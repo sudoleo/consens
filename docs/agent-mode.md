@@ -483,6 +483,26 @@ Management-Socket in der VM (`/.sprite/api.sock`, Tasks API) kann ein Befehl
 die Sprite bis zu einer Stunde je Task wach halten (Kosten); hingenommen, weil
 nur Admins die VM haben.
 
+**Plan (seit 2026-10-26).** Mit der VM bekommt der Agent `update_plan`
+(`agent_plan.py`, Prompt `AGENT_PLAN_PROMPT`, im Admin „Agent: plan“), wie
+Claude Codes Todo-Liste: Jeder Aufruf ersetzt die ganze Liste (1–20 Schritte,
+`content` bis 200 Zeichen, `status` `pending`/`in_progress`/`completed`,
+höchstens einer `in_progress`, sonst Tool-Fehler). Der Prompt bittet bei
+mehreren Schritten um einen Plan vor dem Start und um Updates unterwegs. Das
+Tool-Event trägt `items`; `agent-activity.js` heftet den neuesten gültigen Plan
+offen über die Live-Fortschrittszeilen („Plan · 1 of 4 done“, ○ offen, ● läuft,
+✓ erledigt wie die Antwort-Checklisten, Zustand für Screenreader als
+`aria-label`), außerhalb der Falt-Zeile der VM-Schritte; die Zeitleiste zeigt
+jede Änderung eingeklappt an ihrer Stelle („Plan not updated“ bei einem
+abgelehnten Aufruf). Die Schritte sind Modelltext und bleiben unübersetzt. Im
+Arbeitsprotokoll steht der Aufruf im `step` des Agenten, das Ergebnis als
+`tool` mit Herkunft `agent`, der letzte Plan im `end`-Eintrag (`plan`); der
+Prüfer-Prompt sagt, Plan und Protokoll gegeneinander zu halten (als erledigt
+markiert, aber nicht getan; Abweichung ohne Grund). Eine Antwort mit einem
+letzten `update_plan` im selben Schritt bleibt stehen (`SIDE_TOOLS`); der
+Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
+steps done, now: …“).
+
 **GitHub aus der VM (seit 2026-10-26, wartet auf Zugangsdaten).** Öffentliche
 Repos klont der Agent selbst (`git clone`, GitHub ist im Egress erlaubt).
 Private Repos kommen über das Backend, das Token nie in die VM
@@ -569,7 +589,8 @@ Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
 `tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
 Fensterende, Kompaktierung, Aktivitätsgröße),
 `tests/test_agent_github.py` (Import ohne Token in der VM, App-Token je Repo,
-Fehler),
+Fehler), `tests/test_agent_plan.py` (Plan in Aktivität, Protokoll und
+Prüfer-Prompt),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
 `agent-preferences.test.mjs`, `test_user_settings.py` und
 `test_prompt_config.py`.

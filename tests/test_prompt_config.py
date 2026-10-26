@@ -170,7 +170,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "comparison", "agent_audit", "audit_reviewer", "agent_vm", "agent_github", "answers", "consensus",
+        "agent", "comparison", "agent_audit", "audit_reviewer", "agent_vm", "agent_plan", "agent_github", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
@@ -202,6 +202,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # Agent VM: its own section, appended for admins who switched it on.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert texts["agent_vm"] == AGENT_VM_PROMPT and "vm_exec" in texts["agent_vm"]
+    from app.services.prompt_defaults import AGENT_PLAN_PROMPT
+    assert texts["agent_plan"] == AGENT_PLAN_PROMPT and "update_plan" in texts["agent_plan"]
     # GitHub: only with credentials in the backend (agent_github.py).
     from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
     assert texts["agent_github"] == AGENT_GITHUB_PROMPT and "github_import" in texts["agent_github"]

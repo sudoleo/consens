@@ -432,6 +432,7 @@ class DelegationLoop(AgentLoop):
         # account-mode turns, never with Google data (it would leave the
         # allowed providers). A setting, so the prompt stays cacheable.
         self.vm_tools = None
+        self.plan_tools = None
         if (self.comparison is not None and self.policy.account_budget_only and not google_selection
                 and not google_data and agent_preferences is not None and agent_preferences.vm == "on"):
             from app.services.agent_vm_tools import VMTools
@@ -443,7 +444,13 @@ class DelegationLoop(AgentLoop):
                 # Set per installation, so the prompt stays cacheable.
                 from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
                 self.messages[0]["content"] += "\n\n" + AGENT_GITHUB_PROMPT
-            self.registry = ToolRegistry([*self.registry.tools.values(), *self.vm_tools.tools()],
+            # The plan of a long task (agent_plan.py), with the VM where tasks run long.
+            from app.services.agent_plan import PlanTools
+            from app.services.prompt_defaults import AGENT_PLAN_PROMPT
+            self.plan_tools = PlanTools()
+            self.messages[0]["content"] += "\n\n" + AGENT_PLAN_PROMPT
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.vm_tools.tools(),
+                                          *self.plan_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
@@ -2254,7 +2261,9 @@ class DelegationLoop(AgentLoop):
                 self.work_log.add("end", content={
                     "status": status, "finish_reason": self.completion.finish_reason, "answer": self.completion.text,
                     "failure": getattr(self.completion, "failure", None), "usage": self.completion.usage,
-                    "vm": getattr(self.completion, "vm", None)})
+                    "vm": getattr(self.completion, "vm", None),
+                    # The agent's last plan, to hold against what it did.
+                    "plan": self.plan_tools.items if self.plan_tools is not None and self.plan_tools.items else None})
                 self.work_log.close()
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:

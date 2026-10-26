@@ -214,6 +214,10 @@ def describe(name, arguments, result):
         line = f"vm_write_file {path} ({data.get('bytes', '?')} bytes)"
     elif name == "vm_edit_file":
         line = f"vm_edit_file {path} ({data.get('replacements', '?')} replaced)"
+    elif name == "update_plan":
+        line = f"update_plan: {data.get('done', '?')} of {data.get('total', '?')} steps done"
+        if data.get("in_progress"):
+            line += f", now: {_short(data['in_progress'], RECORD_TAIL_CHARS)}"
     elif name == "vm_share_file":
         line = f"vm_share_file {path} -> the user got {(data.get('file') or {}).get('name') or 'it'}"
     else:

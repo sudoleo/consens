@@ -145,6 +145,11 @@ You have your own Linux VM for this chat (Ubuntu, bash, sudo): vm_exec runs a sh
 The user cannot see your VM. Every file the user should get, such as a chart, a document or a data file, goes to them with vm_share_file, and the app shows it with your answer by itself, a picture as a picture, any other file as a download. So do not embed a shared file as an image in your text, link it or say where it appears; the VM has no public address. Never say you shared a file unless vm_share_file returned it."""
 
 
+AGENT_PLAN_PROMPT = """PLAN
+
+For a task with several steps, write your plan with update_plan before you start: the steps in order, the one you are working on in_progress and each finished one completed. Update it as you go and when the plan changes, so that it always shows what you are doing; the user follows it while you work."""
+
+
 AGENT_GITHUB_PROMPT = """GITHUB
 
 github_import copies a GitHub repository into your VM, a private one too if consens.io may read it: the backend downloads it, so the VM itself never holds GitHub credentials and git push from the VM does not work. It lands in /home/sprite/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes. Public repositories can also be cloned with git in the VM."""

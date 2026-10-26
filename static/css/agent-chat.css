@@ -674,6 +674,42 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm-fold-list > .agent-vm { margin: 0 0 16px; }
 .agent-vm-fold-list > :last-child { margin-bottom: 0; }
 .agent-vm-output[hidden] { display: none; }
+/* The agent's plan (agent-activity.js planView, update_plan): its steps as a
+   quiet checklist under one line, pinned open above the live progress and
+   folded in the timeline. A ring for a step to do, a filled dot for the one
+   under way, the answer checklists' tick (shell.css) for a done one, in the
+   quiet ink; monochrome like the trace. */
+.agent-plan { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
+.agent-progress > .agent-plan { margin: 0 0 16px; }
+.agent-progress > .agent-plan:last-child { margin-bottom: 0; }
+.agent-plan > summary {
+  display: flex; align-items: baseline; gap: .5em; width: fit-content; list-style: none; cursor: pointer;
+  color: var(--ink-3);
+}
+.agent-plan > summary::-webkit-details-marker { display: none; }
+.agent-plan > summary::after {
+  content: ""; flex: none; align-self: center; width: 1em; height: 1em; background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
+}
+.agent-plan[open] > summary::after { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-plan > summary:hover { color: var(--ink-2); }
+}
+.agent-plan > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.agent-plan-list { margin: 4px 0 0; padding: 0; list-style: none; }
+.agent-plan-list > li { position: relative; padding-left: 1.4em; color: var(--ink-2); overflow-wrap: anywhere; }
+.agent-plan-list > li::before {
+  content: ""; position: absolute; left: .15em; top: .6em; width: .55em; height: .55em; box-sizing: border-box;
+  border: 1.5px solid currentColor; border-radius: 50%; color: var(--ink-3);
+}
+.agent-plan-list > li[data-status="in_progress"] { color: var(--agent-ink); }
+.agent-plan-list > li[data-status="in_progress"]::before { background: currentColor; color: var(--agent-ink); }
+.agent-plan-list > li[data-status="completed"] { color: var(--ink-3); }
+.agent-plan-list > li[data-status="completed"]::before {
+  left: 0; top: .42em; width: .85em; height: .85em; border: 0; border-radius: 0; background: currentColor;
+  -webkit-mask: var(--task-check-mask) center / contain no-repeat; mask: var(--task-check-mask) center / contain no-repeat;
+}
 /* The end of the history: how the notes came about and the model it ran on,
    in the quietest ink, one line each. */
 .agent-activity-note, .agent-activity-run-details, .agent-usage { margin: 16px 0 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
