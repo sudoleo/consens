@@ -1755,8 +1755,10 @@ Der Browser folgt dem Lauf so lange wie möglich:
   einem Neuladen); war der Lauf da schon fertig, zeigt die App das
   gespeicherte Ergebnis.
 - Nach einem Neuladen im selben Tab nimmt die App laufende Nachrichten wieder
-  auf (gemerkt in `sessionStorage`, höchstens 20 min) und zeigt sie mit
-  Fortschritt bis zur Antwort, ohne etwas neu zu senden. Wer den Tab schließt,
+  auf (gemerkt in `sessionStorage`, höchstens 3 h) und zeigt sie mit
+  Fortschritt bis zur Antwort, ohne etwas neu zu senden. Vorher fragt sie den
+  Server: Ein längst beendeter oder unbekannter Lauf wird verworfen, statt
+  den Startbildschirm wegzuschieben (2026-10-26). Wer den Tab schließt,
   findet die Antwort nach dem Ende im Verlauf.
 
 Beim Deploy oder dem nächtlichen Neustart nimmt der alte Prozess keine neuen

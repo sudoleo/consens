@@ -2830,6 +2830,9 @@ describe("agent turns that outlive their connection", () => {
           events: [{ seq: 2, type: "accepted", data: { chat_id: CHAT, turn_id: TURN } }, { seq: 3, type: "delta", data: { text: "then more" } }] },
         { known: true, done: true, last_seq: 4, events: [{ seq: 4, type: "final", data: finalData("Earlier text, then more") }] },
       ] });
+    // Asked first: the server still runs it.
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
     await selectAgent(w);
     await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-resume")).toBe(true));
     const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-resume");
@@ -2837,11 +2840,33 @@ describe("agent turns that outlive their connection", () => {
     expect(run.consensus.text).toBe("Earlier text, then more");
     expect(run.metadata.agentTurnId).toBe(TURN);
     expect(liveCalls(w)[0]).toBe(`/agent/chats/${CHAT}/live?request_id=req-resume&after=0`);
-    // Nothing was sent again: the turn ran on the server all along.
-    expect(w.streamSSERequest).not.toHaveBeenCalled();
+    // Nothing was sent again: the turn ran on the server all along, only asked after.
+    expect(w.streamSSERequest.mock.calls.every(([, body]) => body.recover_only === true)).toBe(true);
     expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
     expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_run_resumed")).toHaveLength(1);
     dom.window.close();
+  });
+
+  // A record of a turn long over, or one the server no longer knows, took the
+  // screen on every reload: the field slid down and back up (2026-10-26).
+  it("drops a record whose turn is over or unknown and stays on the start screen", async () => {
+    for (const [age, answer] of [
+      [30 * 60 * 1000, { ok: true, status: 200, data: { turn: { id: TURN, question: "Old", consensus: "Old answer", status: "completed" } } }],
+      [60 * 1000, { ok: false, status: 404, data: { code: "answer_unavailable", recoverable: false } }],
+      [60 * 1000, { ok: false, status: 409, data: { error: "Request identity conflicts with different Agent settings" } }]]) {
+      const record = { at: Date.now() - age, title: "Old", followup: false,
+        body: { chat_id: CHAT, question: "Old", client_request_id: "req-old", bookmark_id: "b_old", recover_only: false,
+          model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {}, file_ids: [] } };
+      const { window: w, dom } = bootFollow({
+        before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+        pages: [{ known: false }] });
+      w.streamSSERequest.mockImplementation(async () => structuredClone(answer));
+      await selectAgent(w);
+      await vi.waitFor(() => expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null));
+      expect(w.App.runRegistry.list()).toHaveLength(0);
+      expect(liveCalls(w)).toHaveLength(0);
+      dom.window.close();
+    }
   });
 
   it("ignores stale or foreign records after a reload", async () => {

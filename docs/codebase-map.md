@@ -4977,10 +4977,15 @@ Antwortet der Server `not_running` für einen angenommenen Turn, holt
 `recoverAnswer` das gespeicherte Ergebnis. Logout/Kontowechsel stoppen den
 Turn nicht. Nach dem Absenden liegt `{at, body, title, followup, settings,
 attachmentMeta, stop?}` in `sessionStorage["agent_pending_runs_<uid>"]` (≤ 4,
-20 min), bis der Tab ein bekanntes Ende gesehen hat (Erfolg/gespeicherter
-Fehler; ein Transportproblem behält ihn); nach einem Reload legt
-`resumePending` (sobald Katalog bereit, Agent-Modus) dafür wieder einen
-Run-Context an und folgt ihm ohne neuen Aufruf; ein Follow-up öffnet danach
+3 h: lange VM-Läufe mit Pause), bis der Tab ein bekanntes Ende gesehen hat
+(Erfolg/gespeicherter Fehler; ein Transportproblem behält ihn); nach einem
+Reload fragt `resumePending` (sobald Katalog bereit, Agent-Modus) erst still
+nach (`resumeState`, `recover_only`): nur ein laufender Turn oder einer, der
+vor höchstens 10 min endete (`RESUME_FRESH_MS`), bekommt wieder einen
+Run-Context und wird ohne neuen Aufruf verfolgt; einen längst beendeten oder
+dem Server unbekannten Turn verwirft es (`dropPending`). Bis 2026-10-26 nahm
+jeder Reload einen solchen Eintrag wieder auf und schob den Startbildschirm
+weg (das Feld rutschte nach unten und zurück). Ein Follow-up öffnet danach
 seinen Bookmark ganz. Analytics:
 `app_stream_buffered`, `app_stream_resumed`, `app_run_resumed`
 (docs/analytics.md).

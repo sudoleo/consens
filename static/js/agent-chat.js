@@ -1661,7 +1661,7 @@
     const records = readPending(uid);
     if (!records.length) return;
     // Outside the current render: creating a run renders the shell again.
-    setTimeout(() => {
+    setTimeout(async () => {
       for (const record of records) {
         if (registry.list().some(run => run.requestIdentity === record.body.client_request_id)) continue;
         if (record.stop) {
@@ -1670,9 +1670,34 @@
             metadata: { requestSent: true, chatId: record.body.chat_id } });
           continue;
         }
+        if (await resumeState(record) === "over") { dropPending(uid, record); continue; }
         resume(record, uid);
       }
     }, 0);
+  }
+  // A record says only that this page did not see its turn end. Asked
+  // first, quietly (recover_only starts nothing): only a turn still running,
+  // or one that ended moments ago, takes the screen. A turn long over or one
+  // the server no longer knows took it on every reload, the field slid down
+  // and back up, and its record stayed (2026-10-26). Without an answer (no
+  // network) it is followed as before.
+  const RESUME_FRESH_MS = 10 * 60 * 1000;
+  async function resumeState(record) {
+    let result = null;
+    try {
+      const headers = { Authorization: `Bearer ${await window.auth.currentUser.getIdToken()}` };
+      result = await App.withRequestDeadline(signal => window.streamSSERequest("/agent", { ...record.body, recover_only: true },
+        signal, {}, { headers }), { timeoutMs: 15000 });
+    } catch (_) { return "unknown"; }
+    if (result?.data?.recovery_state === "running") return "running";
+    if (result?.data?.turn) return Date.now() - Number(record.at) < RESUME_FRESH_MS ? "ended" : "over";
+    if (!result || result.status >= 500 || result.status === 429) return "unknown";
+    return "over";
+  }
+  function dropPending(uid, record) {
+    const list = readPending(uid);
+    const rest = list.filter(item => item.body.client_request_id !== record.body.client_request_id);
+    if (rest.length !== list.length) writePending(uid, rest);
   }
   async function resume(record, uid) {
     if (!canUse() || window.auth.currentUser.uid !== uid) return;
