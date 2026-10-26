@@ -22,6 +22,7 @@ from app.services import agent_quota, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
+from app.services.agent_sessions import NotesFull
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
@@ -862,6 +863,9 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
             return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
         try:
             store.decide_hold(uid, chat_id, turn_id, payload.id, payload.action, text)
+        except NotesFull as exc:
+            # Nothing decided: the card stays for another answer.
+            return JSONResponse({"error": str(exc), "code": "notes_full"}, status_code=409)
         except TurnStatusConflict as exc:
             return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
         if payload.action == "stop" and not agent_background.stop(uid, chat_id, request_id=request_id):

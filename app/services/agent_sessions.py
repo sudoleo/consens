@@ -34,6 +34,10 @@ USER_NOTES_MAX = 10
 USER_NOTE_CHARS = 4000
 
 
+class NotesFull(TurnStatusConflict):
+    """A message into the run would exceed USER_NOTES_MAX (decide_hold)."""
+
+
 def root_usage(root):
     """Turn usage including compacted steps, for every reader of root maps."""
     usages = list((root.get("step_usage") or {}).values())
@@ -463,15 +467,19 @@ class AgentSessionStore:
         self._agent_transaction(uid, operation)
         return root
 
-    def set_hold(self, uid, chat_id, turn_id, hold):
+    def set_hold(self, uid, chat_id, turn_id, hold, *, replaces=None):
         """The run's open hold (a reviewer paused it, agent_audit.AnswerAudit.halt)
-        or None once decided: the decision endpoint checks against it."""
+        or None once decided: the decision endpoint checks against it.
+        ``replaces``: clear only while that hold is the stored one, so a
+        late clear never removes a newer hold written in between."""
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
         def operation(tx):
             data = ref.get(transaction=tx).to_dict() or {}
             if data.get("run_status") != "running":
                 raise TurnStatusConflict("This response is no longer running.")
+            if replaces is not None and (data.get("hold") or {}).get("id") != replaces:
+                return
             tx.update(ref, {"hold": hold})
         return self._agent_transaction(uid, operation)
 
@@ -493,7 +501,8 @@ class AgentSessionStore:
             if action == "steer":
                 notes = list(data.get("user_notes") or [])
                 if len(notes) >= USER_NOTES_MAX:
-                    raise TurnStatusConflict("This response already has the most messages it takes while it runs.")
+                    # Nothing decided: the pause stays open for another answer.
+                    raise NotesFull("This response already has the most messages it takes while it runs.")
                 update["user_notes"] = [*notes, {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
                                                  "at": datetime.now(timezone.utc).isoformat()}]
             tx.update(ref, update)

@@ -1030,6 +1030,16 @@ def test_the_route_takes_the_users_decision_on_an_open_hold(api, monkeypatch):
     assert client.post(url, json={"id": "a1b2c3d4e5f6", "action": "steer"}, headers=AUTH).status_code == 422
     stale = client.post(url, json={"id": "ffffffffffff", "action": "continue"}, headers=AUTH)
     assert stale.status_code == 409 and stale.json()["code"] == "hold_over"
+    # No room for another message: nothing is decided, the pause stays open.
+    from app.services.agent_sessions import USER_NOTES_MAX
+    ref.set({"user_notes": [{"id": f"n{i}", "text": "x", "at": "2026-10-26T08:00:00+00:00"} for i in range(USER_NOTES_MAX)]},
+            merge=True)
+    full = client.post(url, json={"id": "a1b2c3d4e5f6", "action": "steer", "text": "Use the official site."}, headers=AUTH)
+    assert full.status_code == 409 and full.json()["code"] == "notes_full"
+    assert not ref.get().to_dict().get("hold_decision")
+    # A late clear of an earlier pause leaves a newer one in place.
+    store.set_hold(UID, chat_id, turn["id"], None, replaces="0123456789ab")
+    assert ref.get().to_dict()["hold"]["id"] == "a1b2c3d4e5f6"
     stopped = []
     monkeypatch.setattr(agent_router.agent_background, "stop", lambda *a, **k: stopped.append(k) or True)
     assert client.post(url, json={"id": "a1b2c3d4e5f6", "action": "stop"}, headers=AUTH).status_code == 200

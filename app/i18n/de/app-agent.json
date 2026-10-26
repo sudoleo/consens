@@ -826,5 +826,6 @@
   "No result": "Kein Ergebnis",
   "Follows the work from its first step.": "Verfolgt die Arbeit ab dem ersten Schritt.",
   "No rounds.": "Keine Runden.",
-  "Copy code": "Code kopieren"
+  "Copy code": "Code kopieren",
+  "Not sent: “{text}”. You had opened another chat before the response ended.": "Nicht gesendet: „{text}“. Du hattest einen anderen Chat geöffnet, bevor die Antwort fertig war."
 }

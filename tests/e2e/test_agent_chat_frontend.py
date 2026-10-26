@@ -509,9 +509,10 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator("#agentAnswerActivity .agent-progress")).to_be_visible()
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute('open', '')
         expect(page.locator("#agentAnswerBody")).to_be_empty()
-        expect(page.locator("#agentModelDropdown")).to_be_disabled()
-        # The chat model is fixed while it answers; the one chip stays open for
-        # the comparison models of the next message.
+        # Model and reasoning stay open while it answers (2026-10-26): the pick
+        # is for the next message, which the menu says once.
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        expect(page.locator("#agentModelDropdown")).to_have_attribute("data-running", "true")
         chip = page.locator(".agent-model-picker .model-picker-display")
         expect(chip).to_be_enabled()
         if width < 700:
@@ -519,8 +520,10 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
             page.locator("#questionInput").click()
         expect(chip).to_be_visible()
         chip.click()
-        expect(page.locator('.agent-model-picker [data-picker-level="models"]')).to_be_disabled()
+        expect(page.locator('.agent-model-picker [data-picker-level="models"]')).to_be_enabled()
         expect(page.locator('.agent-model-picker [data-picker-level="companion"]')).to_be_enabled()
+        expect(page.locator('.agent-model-picker .model-picker-note')).to_have_text(
+            "The running response keeps its settings. Changes apply to your next message.")
         page.keyboard.press("Escape")
         page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'allowance',
           status:'waiting', text:'Waiting for active model calls to finish and release their unused allowance.'})""")

@@ -59,8 +59,11 @@
   // GONE_MS (a turn may still be in preparation) ends the wait.
   const MAX_GONE = 3;
   const GONE_MS = 20000;
-  // A turn ends within 15 min plus its wrap-up; following stops after this.
-  const MAX_FOLLOW_MS = 30 * 60 * 1000;
+  // Following stops after this long without a new frame. A turn can run for
+  // hours (Agent VM), and a pause for the user (a reviewer's halt) sends
+  // nothing for up to 30 minutes: counted from the start of following, a
+  // paused turn was given up while the user could still decide.
+  const MAX_FOLLOW_MS = 40 * 60 * 1000;
 
   function sequence() {
     let applied = 0;
@@ -224,6 +227,7 @@
         cursor = Math.max(cursor, Number(reset.seq));
         deliver('reset', { text: typeof reset.text === 'string' ? reset.text : '' }, reset.seq);
       }
+      if (reset || data.events?.length) followSince = Date.now();
       for (const event of Array.isArray(data.events) ? data.events : []) {
         if (stopped || !polling) return;
         const seq = Number(event?.seq);

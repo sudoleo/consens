@@ -1210,7 +1210,9 @@
                 <label for="agentAuditSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Way of working</strong>
-                    <small>Comparison: Agent asks your comparison models and writes the answer from what they found. Audit: Agent works on its own, with its own Linux VM and the open web, also on longer tasks; your comparison models follow every step live and review the finished answer.</small>
+                    <small>Comparison: Agent asks your comparison models and writes the answer from what they found. Audit: Agent works on its own, also on longer tasks; your comparison models follow every step live and review the finished answer.</small>
+                    <!-- Only where the server has a VM provider (/user_status vm_time). -->
+                    <small id="agentAuditVm" hidden>In Audit, Agent has its own Linux VM and the open web.</small>
                     <small id="agentVmTime" class="agent-vm-time" data-i18n-skip hidden></small>
                   </span>
                   <span class="settings-select">

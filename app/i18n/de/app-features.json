@@ -693,5 +693,6 @@
   "Only when something happened": "Nur wenn etwas passiert ist",
   "Example: When will OpenAI release GPT-6?": "Beispiel: Wann veröffentlicht OpenAI GPT-6?",
   "Ask about this": "Dazu fragen",
-  "Remember": "Merken"
+  "Remember": "Merken",
+  "Together with the details already set, this is too long. Say it in fewer words.": "Zusammen mit den schon gesetzten Details ist das zu lang. Sag es mit weniger Worten."
 }

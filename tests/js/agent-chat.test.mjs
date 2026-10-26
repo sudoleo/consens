@@ -1455,7 +1455,8 @@ describe("single-model agent chat", () => {
     expect(queue.querySelector(".agent-queue-state").textContent).toBe("Read before the next step");
     // A sent message cannot be taken back, a queued one can.
     expect(queue.querySelector(".agent-queue-remove")).toBeNull();
-    handlers.activity.receive({ version: 1, step_id: "completion:3", id: "note-n1", kind: "progress",
+    // As agent_loop.activity sends it: the step, then the note.
+    handlers.activity.receive({ version: 1, step_id: "completion:3", id: "completion:3/note-n1", kind: "progress",
       text: "Use the newer data", from_user: true });
     expect(queue.hidden).toBe(true);
     // Stop with a message still waiting: it comes back into the field.
@@ -1504,6 +1505,18 @@ describe("single-model agent chat", () => {
       decisions.push([String(url), JSON.parse(options.body)]);
       return { ok: true, json: async () => ({ status: "decided" }) };
     });
+    // No room for another message: nothing is decided, the card stays and
+    // the words come back into the field.
+    const accepting = window.fetch;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/hold")
+      ? { ok: false, status: 409, json: async () => ({ code: "notes_full", error: "This response already has the most messages it takes while it runs." }) }
+      : accepting(url, options));
+    input.value = "Erst die Quelle prüfen";
+    await window.App.agentChat.steer();
+    expect(host.hidden).toBe(false);
+    expect(input.value).toBe("Erst die Quelle prüfen");
+    expect(host.querySelector(".agent-hold-continue").disabled).toBe(false);
+    window.fetch = accepting;
     // A message written now is the decision: the agent goes on with it.
     input.value = "Nur die offizielle Seite nutzen";
     expect(window.App.agentChat.steering()).toEqual({ title: "Send to the agent and let it go on" });
@@ -2832,7 +2845,8 @@ describe("agent turns that outlive their connection", () => {
   });
 
   it("ignores stale or foreign records after a reload", async () => {
-    const stale = { at: Date.now() - 21 * 60 * 1000, body: { chat_id: CHAT, question: "Old", client_request_id: "old", bookmark_id: "b" } };
+    // Older than a long VM run with a pause (PENDING_MAX_AGE_MS, 3 h).
+    const stale = { at: Date.now() - 181 * 60 * 1000, body: { chat_id: CHAT, question: "Old", client_request_id: "old", bookmark_id: "b" } };
     const { window: w, dom } = bootFollow({
       before: window => {
         window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([stale, { at: Date.now() }]));

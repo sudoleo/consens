@@ -76,6 +76,9 @@
     const line = document.getElementById("agentVmTime");
     if (!line) return;
     const time = App.vmTime;
+    // The VM is promised only where the server has one (no vm_time without).
+    const vm = document.getElementById("agentAuditVm");
+    if (vm) vm.hidden = !time;
     const used = Math.round((Number(time?.used_seconds) || 0) / 60);
     const limit = Number(time?.limit_seconds) > 0 ? Math.round(time.limit_seconds / 60) : null;
     line.hidden = !time || !auditing();

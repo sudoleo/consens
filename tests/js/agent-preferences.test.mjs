@@ -95,8 +95,13 @@ it("audits only for an account allowed it and redraws the chip when audit change
   expect(section.classList.contains("is-audit")).toBe(true);
   // Today's VM time under the way of working (/user_status vm_time).
   const line = d.createElement("small"); line.id = "agentVmTime"; line.hidden = true; section.append(line);
+  // The VM is promised only where the server has one (no vm_time without).
+  const vm = d.createElement("small"); vm.id = "agentAuditVm"; vm.hidden = true; section.append(vm);
+  w.App.agentPreferences.sync();
+  expect(vm.hidden).toBe(true);
   w.App.vmTime = { used_seconds: 2520, limit_seconds: 7200 };
   w.App.agentPreferences.sync();
+  expect(vm.hidden).toBe(false);
   expect(line.hidden).toBe(false);
   expect(line.textContent).toBe("VM time today: 42 of 120 min");
   w.App.vmTime = { used_seconds: 90, limit_seconds: null };

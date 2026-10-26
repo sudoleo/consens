@@ -978,6 +978,13 @@
         const saved = String(entry.watch.requirements || "").replace(/\s+/g, " ").trim();
         const changes = { status: "active", reject_match: true };
         if (text) changes.requirements = saved ? saved + (/[.!?;:]$/.test(saved) ? " " : ". ") + text : text;
+        // Each field takes 500 characters, the details as a whole too
+        // (watch_service.validate_requirements): said here, not as a refusal.
+        const limit = rejectInput.maxLength > 0 ? rejectInput.maxLength : 500;
+        if ((changes.requirements || "").length > limit) {
+          fields.setError(reject, "Together with the details already set, this is too long. Say it in fewer words.");
+          return;
+        }
         keep.disabled = true;
         try {
           const data = await patchWatch(entry.watch, changes);

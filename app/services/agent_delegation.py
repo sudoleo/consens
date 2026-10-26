@@ -1725,7 +1725,7 @@ class DelegationLoop(AgentLoop):
             self.cancellation.raise_if_cancelled()
             yield from self._events()
         try:
-            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None)
+            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
         except Exception as exc:
             logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
         self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
@@ -2445,7 +2445,7 @@ class DelegationLoop(AgentLoop):
                 hold, self.hold = self.hold, None
                 decision = "stop" if status == "cancelled" else "ended"
                 try:
-                    self.store.set_hold(self.uid, self.chat_id, self.turn_id, None)
+                    self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
                 except Exception as exc:
                     logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
                 self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})

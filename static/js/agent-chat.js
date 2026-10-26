@@ -1237,7 +1237,8 @@
   // A turn keeps running on the server when this page goes away (reload, a
   // phone that discarded the tab). Its identity stays in this tab's session
   // storage until the page saw the turn end, so a reload can follow it again.
-  const PENDING_MAX_AGE_MS = 20 * 60 * 1000;
+  // Long enough for a long VM run (2 h) with a pause for the user (30 min).
+  const PENDING_MAX_AGE_MS = 3 * 60 * 60 * 1000;
   let resumedFor = '';
   function pendingKey(uid) { return `agent_pending_runs_${uid}`; }
   function readPending(uid) {
@@ -1361,11 +1362,15 @@
     }
     renderQueue();
   }
-  // The activity showed the message under "You": the run has read it.
+  // The activity showed the message under "You": the run has read it. Its
+  // id comes with the step that read it ("completion:3/note-<id>",
+  // agent_loop.activity); matched as "note-<id>" alone, a read message
+  // stayed queued and went out again after the response.
   function delivered(context, event) {
-    if (!event?.from_user || typeof event.id !== "string" || !event.id.startsWith("note-")) return;
+    const match = typeof event?.id === "string" ? /(?:^|\/)note-([^/]+)$/.exec(event.id) : null;
+    if (!event?.from_user || !match) return;
     const queue = queueOf(context);
-    const index = queue.findIndex(item => item.noteId && `note-${item.noteId}` === event.id);
+    const index = queue.findIndex(item => item.noteId === match[1]);
     if (index >= 0) { queue.splice(index, 1); renderQueue(); }
   }
   // The response is over: what it did not read goes out now, or back into
@@ -1379,8 +1384,17 @@
     const text = queue.map(item => item.text).join("\n\n");
     const input = window.document?.getElementById("questionInput");
     if (!input) return;
+    // Another chat is open now: its field and its mode are not this
+    // message's. Said, never sent there.
+    const elsewhere = () => {
+      const start = text.replace(/\s+/g, " ").trim();
+      App.showPopup?.(App.t("Not sent: “{text}”. You had opened another chat before the response ended.",
+        { text: start.length > 60 ? `${start.slice(0, 59)}…` : start }));
+    };
+    if (!registry.isVisible(context.runId)) { elsewhere(); return; }
     if (context.status === "succeeded" && !input.value.trim()) {
       setTimeout(() => {
+        if (!registry.isVisible(context.runId)) { elsewhere(); return; }
         if (input.value.trim() || registry.isExecuting(registry.visible()?.runId)) return;
         input.value = text;
         input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1469,18 +1483,23 @@
       response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, action, text }),
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
     } catch (_) { /* below */ }
-    // Decided, or over already (another tab, the run's end): the card goes,
-    // the activity keeps the record.
-    if (response && (response.ok || response.status === 409)) {
+    const data = response && !response.ok ? await response.json().catch(() => ({})) : {};
+    // Decided, or the response is over: the card goes, the activity keeps
+    // the record.
+    if (response && (response.ok || data.code === "not_running")) {
       context.metadata.holdDecided = hold.id;
       if (context.metadata.hold === hold) context.metadata.hold = null;
       renderHold();
       registry.update(context.runId, () => {});
       return true;
     }
+    // Refused (no room for another message, decided in another tab): the
+    // card stays until the run says the pause is over, so a decision stays
+    // possible; Stop always is.
     hold.deciding = null;
     renderHold();
-    App.showPopup?.("Your decision did not reach the server. Try again.");
+    App.showPopup?.(typeof data.error === "string" && data.error ? data.error
+      : "Your decision did not reach the server. Try again.");
     return false;
   }
   function holdButton(label, className, onClick) {

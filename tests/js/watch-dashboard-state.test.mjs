@@ -588,4 +588,19 @@ describe("details and wrong matches", () => {
     const said = await rejectWith("No private sellers.");
     expect(said.requirements).toBe("Size 44.5, only new. No private sellers.");
   });
+
+  it("says so when the reason and the details together exceed the limit, without asking the server", async () => {
+    const { window, calls } = dashboard([{
+      id: "w1", status: "resolved", question: "Adios Pro 4?", share_path: "/s/a", condition: "A new pair is offered",
+      goal_state: "reached", requirements: "x".repeat(480), history: [],
+      resolution: { at: "2026-10-13T07:30:00+00:00", reason: "Listed.", sources: [] } }]);
+    await window.App.watchDashboard.render();
+    const card = window.document.querySelector(".wd-item");
+    [...card.querySelectorAll(".wd-action")].find(button => button.textContent === "Not what I wanted").click();
+    card.querySelector(".wd-goal-input.is-reject").value = "Only shops, no private sellers please.";
+    [...card.querySelectorAll(".wd-button")].find(button => button.textContent === "Keep watching").click();
+    await vi.waitFor(() => expect(card.querySelector(".wd-reject .watch-field-error").textContent)
+      .toBe("Together with the details already set, this is too long. Say it in fewer words."));
+    expect(calls.some(call => call[0] === "PATCH")).toBe(false);
+  });
 });
