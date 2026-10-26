@@ -5569,7 +5569,8 @@ als `tool`-Eintrag mit Herkunft `vm` im Arbeitsprotokoll. Der Turn speichert
 sperren Memory. Ein Ausfall (`VMUnavailable`) schaltet die VM für die
 Nachricht ab, die Antwort läuft weiter. Anzeige: `agent-activity.js` `vmView`
 (kompakter Block, offen während der Befehl läuft, danach eingeklappt;
-Befehl/Ausgabe in `<code>`/`<pre>`). Details: `docs/agent-mode.md`, „Agent VM“.
+Befehl/Ausgabe in `<code>`/`<pre>`); live faltet `foldPast` frühere Schritte in
+eine Zeile („Ran 3 commands“). Details: `docs/agent-mode.md`, „Agent VM“.
 
 ### Eingefügten Text prüfen (Agent, seit 2026-10-09)
 „Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist

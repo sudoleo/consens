@@ -501,6 +501,36 @@
     if (details.open) output.scrollTop = output.scrollHeight;
   }
 
+  // Like Claude Code, a run that works in its VM folds its earlier steps into
+  // one line ("Ran 4 commands"); the note that leads into the latest command,
+  // that command and what follows stay in view. Until 2026-10-26 every
+  // command and every note between them stood one under the other, a screen
+  // long. A step that waits on the reader never folds away.
+  function foldPast(paragraphs) {
+    const lastVm = paragraphs.findLastIndex(item => item.kind === 'vm');
+    let start = lastVm;
+    while (start > 0 && paragraphs[start - 1].kind === 'progress' && !paragraphs[start - 1].quiet) start--;
+    const review = paragraphs.findIndex(item => item.kind === 'review');
+    const past = paragraphs.slice(0, review >= 0 ? Math.min(start, review) : start);
+    const steps = past.filter(item => item.kind !== 'progress');
+    if (steps.length < 2 || !steps.some(item => item.kind === 'vm')) return null;
+    const commands = steps.filter(item => item.kind === 'vm' && item.item.name === 'vm_exec').length;
+    const label = commands === steps.length ? (commands === 1 ? 'Ran 1 command' : `Ran ${commands} commands`)
+      : steps.length === 1 ? '1 earlier step' : `${steps.length} earlier steps`;
+    return { past, label };
+  }
+  function foldView() {
+    const fold = document.createElement('details');
+    fold.className = 'agent-vm-fold';
+    const summary = document.createElement('summary');
+    const label = document.createElement('span');
+    summary.append(label);
+    const list = document.createElement('div');
+    list.className = 'agent-vm-fold-list';
+    fold.append(summary, list);
+    fold._label = label; fold._list = list;
+    return fold;
+  }
   function render(host, spec) {
     const restore = host?._agentActivity && App.chatScroll?.preserveAbove(host, host.nextElementSibling);
     offscreenUpdate = !!restore;
@@ -671,6 +701,23 @@
       view.preview.inert = false;
     }
     const previewIds = new Set();
+    const folded = showPreview ? foldPast(paragraphs) : null;
+    const pastIds = new Set(folded?.past.map(item => item.id) || []);
+    let fold = view.previewNodes.get('vm-fold');
+    if (folded) {
+      previewIds.add('vm-fold');
+      if (!fold) { fold = foldView(); view.previewNodes.set('vm-fold', fold); }
+      if (fold._label.textContent !== window.App.t(folded.label)) fold._label.textContent = folded.label;
+      if (fold.dataset.count !== String(pastIds.size)) { fold.dataset.count = String(pastIds.size); previewChanged = true; }
+      if (view.preview.firstElementChild !== fold) view.preview.insertBefore(fold, view.preview.firstElementChild);
+    }
+    let pastIndex = 0, presentIndex = folded ? 1 : 0;
+    const place = (item, p) => {
+      const inFold = pastIds.has(item.id);
+      const parent = inFold ? fold._list : view.preview;
+      const position = parent.children[inFold ? pastIndex++ : presentIndex++];
+      if (position !== p) parent.insertBefore(p, position || null);
+    };
     for (const item of showPreview ? paragraphs : []) {
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
@@ -691,8 +738,7 @@
       }
       if (item.kind === 'review' || item.kind === 'vm') {
         if (item.kind === 'vm') updateVm(p, item.item);
-        const position = view.preview.children[previewIds.size - 1];
-        if (position !== p) view.preview.insertBefore(p, position || null);
+        place(item, p);
         continue;
       }
       if (item.quiet) p.setAttribute('aria-hidden', 'true');
@@ -709,8 +755,7 @@
         if (previous) motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
       }
       // A fallback Thinking/Writing row moves after a newly received insight.
-      const position = view.preview.children[previewIds.size - 1];
-      if (position !== p) view.preview.insertBefore(p, position || null);
+      place(item, p);
     }
     if (showPreview) {
       for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) {

@@ -80,6 +80,43 @@ describe("VM calls in the activity", () => {
     expect(failed.textContent).not.toMatch(/error|exception|HTTP/i);
   });
 
+  // Like Claude Code: the earlier steps fold into one line, the latest note
+  // and command stay in view (2026-10-26; before, a screen of commands).
+  it("folds the earlier steps of a VM run into one line while it works", () => {
+    const { host, activity } = setup();
+    const events = [];
+    const note = (n, text) => activity.receive(events, { version: 1, kind: "progress", id: `p${n}`, text });
+    const command = (n, fields) => activity.receive(events, vm({ id: `c:${n}/tool`, ...fields }));
+    note(1, "Let me look around."); command(1, { status: "succeeded", command: "ls -la", exit_code: 0 });
+    note(2, "Let me check the file."); command(2, { status: "succeeded", command: "file chart.png", exit_code: 0 });
+    activity.render(host, { running: true, status: "running", events });
+    const preview = host.querySelector(".agent-progress");
+    // One earlier command is no list worth folding.
+    expect(preview.querySelector(".agent-vm-fold")).toBeNull();
+    note(3, "Let me rebuild the chart."); command(3, { status: "running", command: "python3 chart.py" });
+    activity.render(host, { running: true, status: "running", events });
+    const fold = preview.querySelector(".agent-vm-fold");
+    expect(fold.querySelector("summary").textContent).toBe("Ran 2 commands");
+    expect(fold.open).toBe(false);
+    expect([...fold.querySelectorAll(".agent-vm-target")].map(el => el.textContent)).toEqual(["ls -la", "file chart.png"]);
+    expect(fold.textContent).toContain("Let me check the file.");
+    // In view: the fold, the note leading into the command at work, the command.
+    expect([...preview.children].map(el => el.className.split(" ")[0])).toEqual(["agent-vm-fold", "", "agent-vm"]);
+    expect(preview.children[1].textContent).toBe("Let me rebuild the chart.");
+    expect(preview.children[2].querySelector(".agent-vm-target").textContent).toBe("python3 chart.py");
+    // A read among them makes them steps; the reader's open fold stays open.
+    fold.open = true;
+    activity.receive(events, { version: 1, kind: "tool", id: "c:4/tool", name: "vm_read_file", status: "succeeded",
+      path: "/home/sprite/chart.py" });
+    command(5, { status: "running", command: "ls /tmp" });
+    activity.render(host, { running: true, status: "running", events });
+    expect(fold.querySelector("summary").textContent).toBe("4 earlier steps");
+    expect(fold.open).toBe(true);
+    expect(preview.children[1].querySelector(".agent-vm-target").textContent).toBe("ls /tmp");
+    // The history keeps every step as it was.
+    expect(host.querySelectorAll(".agent-activity-content .agent-vm")).toHaveLength(5);
+  });
+
   it("adds the VM's run time to the admin's usage line", () => {
     const { host, activity } = setup();
     activity.renderTurn(host, { status: "completed", agent_activity: [], assistant_response: "Done.",

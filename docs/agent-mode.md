@@ -483,7 +483,11 @@ die Ausgabe in einem getönten Feld, offen, solange der Befehl läuft, danach
 eingeklappt (eine Wahl des Lesers bleibt). Befehl und Ausgabe stehen in
 `<code>`/`<pre>` und werden nie übersetzt. Live erscheint der Block in den
 Fortschrittszeilen, danach in der Zeitleiste; die Admin-Verbrauchszeile nennt
-„VM 12s“. Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
+„VM 12s“. Wie bei Claude Code falten die Fortschrittszeilen ab zwei früheren
+Schritten diese samt Zwischensätzen in eine Zeile („Ran 3 commands“, mit
+Lese-/Schreibschritten „4 earlier steps“, `foldPast`, seit 2026-10-26);
+sichtbar bleiben der Satz vor dem letzten Befehl, der Befehl und was folgt.
+Die Zeitleiste zeigt weiter jeden Schritt. Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
 
 **Löschung.** `chat_store._purge_chat` löscht die VM, die der Chat nennt
 (`agent_vm.delete_chat_vm`), vor dem Rest des Chats; scheitert der Anbieter,

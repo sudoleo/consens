@@ -652,6 +652,25 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 /* Live, a running command shows the last lines of its output. */
 .agent-progress .agent-vm-output { max-height: 9.3em; }
+/* The earlier steps of a VM run in one line ("Ran 4 commands", agent-activity.js
+   foldPast); open, they stand in order below it as before. */
+.agent-progress > .agent-vm-fold { margin: 0 0 16px; }
+.agent-vm-fold > summary {
+  display: flex; align-items: baseline; gap: .5em; width: fit-content; list-style: none; cursor: pointer;
+  color: var(--ink-3); font-size: var(--font-size-ui); line-height: 1.65;
+}
+.agent-vm-fold > summary::-webkit-details-marker { display: none; }
+.agent-vm-fold > summary::after {
+  content: ""; flex: none; align-self: center; width: 1em; height: 1em; background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
+}
+.agent-vm-fold[open] > summary::after { transform: none; }
+.agent-vm-fold > summary:hover { color: var(--ink-2); }
+.agent-vm-fold > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+.agent-vm-fold-list { margin-top: 10px; }
+.agent-vm-fold-list > .agent-vm { margin: 0 0 16px; }
+.agent-vm-fold-list > :last-child { margin-bottom: 0; }
 .agent-vm-output[hidden] { display: none; }
 /* The end of the history: how the notes came about and the model it ran on,
    in the quietest ink, one line each. */
