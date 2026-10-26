@@ -35,6 +35,11 @@ def _vm():
     return AGENT_VM_PROMPT
 
 
+def _github():
+    from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
+    return AGENT_GITHUB_PROMPT
+
+
 def _delegation(name):
     from app.services import agent_delegation_config
     return agent_delegation_config.PROMPTS[name]
@@ -75,6 +80,11 @@ _ENTRIES = (
      "an admin switched on Agent VM (agent_vm_tools.py) and the chat has no Google data: the agent's own VM with "
      "vm_exec, vm_read_file, vm_write_file, vm_edit_file and vm_share_file.",
      "prompt_defaults.py:AGENT_VM_PROMPT", _vm),
+    ("agent_github", "Agent: GitHub",
+     "Appended after \"Agent: Linux VM\" when the backend holds GitHub credentials (AGENT_GITHUB_APP_ID and "
+     "AGENT_GITHUB_APP_PRIVATE_KEY, or AGENT_GITHUB_TOKEN; agent_github.py): github_import brings a repository "
+     "into the VM through the backend.",
+     "prompt_defaults.py:AGENT_GITHUB_PROMPT", _github),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "
      "personal instructions replace it.",

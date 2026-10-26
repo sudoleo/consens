@@ -217,7 +217,7 @@ def describe(name, arguments, result):
     elif name == "vm_share_file":
         line = f"vm_share_file {path} -> the user got {(data.get('file') or {}).get('name') or 'it'}"
     else:
-        detail = next((args[key] for key in ("task", "question", "url", "title", "query", "setting")
+        detail = next((args[key] for key in ("task", "question", "repo", "url", "title", "query", "setting")
                        if isinstance(args.get(key), str) and args[key].strip()), "")
         line = f"{name} {_short(detail, 160)}".rstrip()
     if "error" in data:

@@ -386,6 +386,9 @@ class VMTools:
         self.shared = {}
 
     def tools(self):
+        from app.services import agent_github
+        # With GitHub credentials in the backend (agent_github.py).
+        github = agent_github.GitHubTools(self).tools() if agent_github.configured() else []
         return [
             ReadOnlyTool("vm_exec", "Run a shell command in your Linux VM (bash, your home folder by default). "
                          "Returns stdout, stderr (their ends when long), exit code and duration.",
@@ -402,6 +405,7 @@ class VMTools:
             ReadOnlyTool("vm_share_file", "Give the user a file from your VM (up to 5 MB): it appears under your "
                          "answer, a picture as a picture, any other file as a download.",
                          VmShareFileArgs, self.share, activity=self._path_activity, reports=True),
+            *github,
         ]
 
     @property

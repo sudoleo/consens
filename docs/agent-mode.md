@@ -483,6 +483,30 @@ Management-Socket in der VM (`/.sprite/api.sock`, Tasks API) kann ein Befehl
 die Sprite bis zu einer Stunde je Task wach halten (Kosten); hingenommen, weil
 nur Admins die VM haben.
 
+**GitHub aus der VM (seit 2026-10-26, wartet auf Zugangsdaten).** Öffentliche
+Repos klont der Agent selbst (`git clone`, GitHub ist im Egress erlaubt).
+Private Repos kommen über das Backend, das Token nie in die VM
+(`agent_github.py`): Mit `AGENT_GITHUB_APP_ID` + `AGENT_GITHUB_APP_PRIVATE_KEY` (eine
+GitHub-App, installiert auf den Repos, die der Agent sehen darf; je Import ein
+Installations-Token nur für dieses Repo, eine Stunde gültig, gecacht bis fünf
+Minuten vorher) oder `AGENT_GITHUB_TOKEN` (fine-grained PAT) bekommt der Agent
+`github_import` (`repo` „owner/name“, optional `ref`, optional `dest`) und den
+Prompt `AGENT_GITHUB_PROMPT` (im Admin „Agent: GitHub“); ohne beides gibt es
+weder Werkzeug noch Prompt. Das Backend löst `ref` (Standard: der
+Default-Branch) zum Commit auf, lädt dessen Tarball (höchstens
+`IMPORT_BYTES` = 50 MB gepackt; die Weiterleitung zu codeload trägt ihr
+eigenes Kurzzeit-Token, `Authorization` geht nur an api.github.com), schreibt
+ihn in die VM und packt ihn dort nach `/home/sprite/repos/<name>` aus, als
+frisches Git-Repo mit einem Commit „consens.io import of owner/name@sha“ und
+`.git/consens-import.json` (Repo, Ref, Commit) für einen späteren PR. Ein
+vorhandener Ordner wird nie überschrieben („already exists“). Fehler von
+GitHub (kein Zugriff, Repo fehlt, zu groß) sind Tool-Fehler des Agenten; die
+Anzeige zeigt den Import wie einen VM-Schritt („Imported the repository
+into“ + Ordner), im Arbeitsprotokoll mit Herkunft `vm`. Offen:
+`prepare_pull_request` nach dem Muster der Gmail-Entwürfe (Karte, Bestätigung,
+Branch/Commit/PR über die Git-Data-API des Backends) und die Wahl zwischen App
+und PAT durch den Betreiber; live erst mit den Variablen auf Render.
+
 **Anbieter-Schnittstelle** (`agent_vm.py`): `VMBackend` mit `ensure`, `exec`,
 `read_file`, `write_file`, `checkpoint`, `delete`, `close`; `SpritesBackend`
 spricht REST über `httpx` (Sprite, Dateien `fs/read`/`fs/write`,
@@ -544,6 +568,8 @@ Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
 `SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket),
 `tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
 Fensterende, Kompaktierung, Aktivitätsgröße),
+`tests/test_agent_github.py` (Import ohne Token in der VM, App-Token je Repo,
+Fehler),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
 `agent-preferences.test.mjs`, `test_user_settings.py` und
 `test_prompt_config.py`.

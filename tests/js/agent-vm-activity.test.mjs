@@ -72,8 +72,13 @@ describe("VM calls in the activity", () => {
       command: "ls", outcome: "unavailable" });
     activity.receive(events, { version: 1, kind: "tool", id: "s:3/tool", name: "vm_edit_file", status: "succeeded",
       path: "/home/sprite/calc.py" });
+    activity.receive(events, { version: 1, kind: "tool", id: "s:4/tool", name: "github_import", status: "succeeded",
+      path: "/home/sprite/repos/app", repo: "owner/app" });
     activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
-    const [write, failed, edit] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    const [write, failed, edit, imported] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    // A repository the backend brought into the VM (agent_github.py).
+    expect(imported.querySelector(".agent-vm-verb").textContent).toBe("Imported the repository into");
+    expect(imported.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/repos/app");
     expect(write.querySelector(".agent-vm-verb").textContent).toBe("Wrote the file");
     expect(write.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/stats.py");
     // An exact replacement (vm_edit_file, 2026-10-26) says so with its file.

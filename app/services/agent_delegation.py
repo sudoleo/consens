@@ -438,6 +438,11 @@ class DelegationLoop(AgentLoop):
             from app.services.prompt_defaults import AGENT_VM_PROMPT
             self.vm_tools = VMTools(self)
             self.messages[0]["content"] += "\n\n" + AGENT_VM_PROMPT
+            from app.services import agent_github
+            if agent_github.configured():
+                # Set per installation, so the prompt stays cacheable.
+                from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
+                self.messages[0]["content"] += "\n\n" + AGENT_GITHUB_PROMPT
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.vm_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
