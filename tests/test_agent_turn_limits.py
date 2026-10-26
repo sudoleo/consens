@@ -294,8 +294,10 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     reordered = {"id": "d", "type": "function", "function": {"name": "read_file", "arguments": '{"a":2,"b":1}'}}
     assert [loop._identical_call(c) for c in (other, reordered, other, reordered)] == [None, None, "refuse", "stop"]
     # The VM tools too: a command's result depends on the VM's state, which
-    # every command may change (the tests again after an edit; test_agent_vm).
-    assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file"}
+    # every command may change (the tests again after an edit; test_agent_vm),
+    # and sharing a file again after it changed is a new file for the user.
+    assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
+                                                 "vm_share_file"}
 
 
 def test_each_check_runs_two_differences_passes_in_production(store, monkeypatch):
