@@ -696,14 +696,23 @@
       check.append(node('span', '', text));
     }
     card.append(check);
-    if (done) {
+    if (done || !ended) {
       const actions = node('div', 'agent-activity-insight-actions');
       const button = node('button', 'consensus-tab', 'Read the notes'); button.type = 'button';
-      button.addEventListener('click', () => {
-        const current = host._activityReview;
-        const context = contextsByKey.get(`agent-audit:${current.answer_hash}`) || auditContext(current);
-        App.answerReader?.openContext(context, { section: 'differences', trigger: button });
-      });
+      if (done) {
+        button.addEventListener('click', () => {
+          const current = host._activityReview;
+          const context = contextsByKey.get(`agent-audit:${current.answer_hash}`) || auditContext(current);
+          App.answerReader?.openContext(context, { section: 'differences', trigger: button });
+        });
+      } else {
+        // Its place is kept while the reviewers work: the open history no
+        // longer grows by a row just as the marks arrive (2026-10-26).
+        actions.classList.add('is-reserved');
+        actions.setAttribute('aria-hidden', 'true');
+        actions.inert = true;
+        button.disabled = true;
+      }
       actions.append(button); card.append(actions);
     }
     host.append(card);

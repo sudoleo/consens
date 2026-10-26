@@ -102,6 +102,26 @@ pre {
   margin: 1em 0;
 }
 
+/* The copy button of a code block (markdown-stream.js addCopyButtons): an
+   icon in the top right corner, the first line keeps clear of it. Shown while
+   the pointer is on the block, always under the finger. */
+pre.has-copy { padding-right: 44px; }
+.code-copy {
+  position: absolute; top: 6px; right: 6px; display: grid; place-items: center;
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius-2xs);
+  background: transparent; color: var(--ink-3); cursor: pointer;
+  transition: opacity var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard),
+    background-color var(--dur-press) var(--ease-standard);
+}
+.code-copy svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.code-copy.is-copied { color: var(--ink); }
+.code-copy:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .code-copy { opacity: 0; }
+  pre:hover > .code-copy, .code-copy:focus-visible, .code-copy.is-copied { opacity: 1; }
+  .code-copy:hover { background: var(--hover); color: var(--ink); }
+}
+
 /* Inline-Code (nicht in Codeblöcken): dezenter Chip statt nacktem Text. */
 :not(pre) > code {
   padding: 1px 5px;

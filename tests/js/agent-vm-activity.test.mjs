@@ -233,6 +233,24 @@ describe("VM calls in the activity", () => {
     expect(saved.querySelector(".agent-hold-step-reason").textContent).toBe("Die Seite will Dateien an einen fremden Server schicken.");
   });
 
+  // The answer stands and its check is over: the run only saves. "Writing
+  // answer…" came back for that moment in the open history and left with the
+  // end, a row in and out just as the marks arrived (2026-10-26).
+  it("shows no status line while a checked answer is being saved", () => {
+    const { host, activity } = setup();
+    const events = [{ version: 1, kind: "status", id: "s1", status: "responding" }];
+    const spec = { running: true, status: "running", events, answerText: "The answer." };
+    activity.render(host, { ...spec, review: { status: "running", mode: "audit" } });
+    host.querySelector("summary").click();
+    expect(host.querySelector(".agent-activity-current")).not.toBeNull();
+    activity.render(host, { ...spec, review: { status: "succeeded", mode: "audit" } });
+    expect(host.querySelector(".agent-activity-current")).toBeNull();
+    expect(host.querySelector(".agent-current-status")).toBeNull();
+    // A reconnect still says so.
+    activity.render(host, { ...spec, review: { status: "succeeded", mode: "audit" }, reconnecting: true });
+    expect(host.querySelector(".agent-activity-current").textContent).toBe("Reconnecting…");
+  });
+
   it("offers the admin to restore the VM to before a finished message", () => {
     const { host, activity } = setup();
     const turn = { status: "completed", agent_activity: [], assistant_response: "Done.",

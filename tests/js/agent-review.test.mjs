@@ -914,8 +914,13 @@ it('shows the review in the duration disclosure and opens its notes', () => {
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, auditReview('running'), 'Exact answer.');
   expect(details.textContent).toContain('Reviewing the answer…');
-  expect(details.querySelector('button')).toBeNull();
+  // "Read the notes" holds its place, hidden and disabled, so the open
+  // history does not grow under the arriving marks (2026-10-26).
+  const reserved = details.querySelector('.agent-activity-insight-actions.is-reserved');
+  expect(reserved.getAttribute('aria-hidden')).toBe('true');
+  expect(reserved.querySelector('button').disabled).toBe(true);
   w.App.agentReview.renderActivity(details, auditReview(), 'Exact answer.');
+  expect(details.querySelector('.is-reserved')).toBeNull();
   expect(details.textContent).toContain('Review · 3 models');
   expect(details.textContent).toContain('Models: GPT, Claude, Gemini');
   expect(details.textContent).toContain('No review: Gemini');

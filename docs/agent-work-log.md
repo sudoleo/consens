@@ -211,8 +211,11 @@ Agent-Panel.
   umrandet), Uhrzeit; der Inhalt öffnet sich auf Klick, ein langer ganz über
   „Show all“. Endpunkte: `GET /agent/chats/{chat}/turns/{turn}/work-log` und
   `.../work-log/{seq}`, beide nur für Admins.
-- Prüfer-Sitzungen im Agent-Panel zeigen ihre Befunde je Runde („Notes
-  during the run“, `kind: "round"`) und die Schlussliste („Final notes“).
+- Prüfer-Sitzungen im Agent-Panel zeigen seit 2026-10-26 drei Zahlen
+  (Runden, Anmerkungen, Schlussprüfung) und eine Zeitleiste: Runden ohne
+  Einwand in einer Zeile („Rounds 1–5 · No objections“), Runden mit Befunden
+  (`kind: "round"`) und die Schlussprüfung (`kind: "result"`) mit ihren
+  Anmerkungen.
   Notes zeigt alle Befunde, die zum Ablauf mit `#seq`, Art und Name des
   Eintrags; die Aktivität zählt markierte Stellen und Befunde zur Arbeit.
 

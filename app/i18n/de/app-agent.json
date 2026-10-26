@@ -814,5 +814,17 @@
   "Write to the agent": "Dem Agenten schreiben",
   "Stop": "Stoppen",
   "Write what the agent should do instead.": "Schreib, was der Agent stattdessen tun soll.",
-  "This response is no longer running.": "Diese Antwort läuft nicht mehr."
+  "This response is no longer running.": "Diese Antwort läuft nicht mehr.",
+  "No objections": "Keine Einwände",
+  "1 note": "1 Anmerkung",
+  "{count} notes": "{count} Anmerkungen",
+  "Rounds": "Runden",
+  "Final review": "Schlussprüfung",
+  "Pending": "Ausstehend",
+  "Round {n}": "Runde {n}",
+  "Rounds {first}–{last}": "Runden {first}–{last}",
+  "No result": "Kein Ergebnis",
+  "Follows the work from its first step.": "Verfolgt die Arbeit ab dem ersten Schritt.",
+  "No rounds.": "Keine Runden.",
+  "Copy code": "Code kopieren"
 }

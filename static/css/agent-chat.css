@@ -141,6 +141,41 @@
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
 .agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+/* A reviewer's work (agent-delegation.js reviewTimeline): three numbers, then
+   its rounds on one quiet line with dots, like the reasoning timeline. A
+   hollow dot is a round without objection, a filled one a round with notes.
+   The kinds wear the colours of their marks in the answer. */
+.agent-review-stats { display: flex; flex-wrap: wrap; gap: 8px 18px; overflow-wrap: normal; margin: 6px 0 14px; padding: 10px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.agent-review-stats dt { color: var(--ink-3); font-size: var(--font-size-xs); white-space: nowrap; }
+.agent-review-stats dd { margin: 3px 0 0; color: var(--ink); font-size: var(--font-size-xs); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.agent-review-rounds { margin: 0; padding: 0; list-style: none; }
+.agent-review-round { position: relative; padding: 0 0 12px 18px; }
+.agent-review-round::before {
+  content: ""; position: absolute; left: 0; top: .5em; width: 7px; height: 7px; box-sizing: border-box;
+  border: 1.5px solid var(--ink-2); border-radius: 50%; background: var(--ink-2);
+}
+.agent-review-round::after { content: ""; position: absolute; left: 3px; top: calc(.5em + 11px); bottom: 3px; width: 1px; background: var(--line); }
+.agent-review-round:last-child { padding-bottom: 0; }
+.agent-review-round:last-child::after { content: none; }
+.agent-review-round.is-quiet::before { border-color: var(--ink-3); background: transparent; }
+.agent-review-round.is-failed::before { border-style: dashed; border-color: var(--ink-3); background: transparent; }
+.agent-review-round-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: var(--font-size-xs); line-height: 1.6; }
+.agent-review-round-label { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.agent-review-round.is-quiet .agent-review-round-label { color: var(--ink-2); font-weight: 400; }
+.agent-review-round-state { flex: 1 1 auto; min-width: 0; color: var(--ink-3); }
+.agent-review-round-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.agent-session-detail .agent-review-round-reason { margin: 2px 0 0; color: var(--ink-3); line-height: 1.6; }
+.agent-review-notes { display: grid; gap: 10px; margin: 6px 0 2px; padding: 0; list-style: none; }
+.agent-review-note { font-size: var(--font-size-xs); line-height: 1.6; }
+.agent-review-note-where { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; color: var(--ink-3); }
+.agent-review-note-where > * + *::before { content: "·"; margin-right: 6px; color: var(--ink-3); }
+.agent-review-note-where strong { font-weight: 600; color: var(--ink-2); }
+.agent-review-note[data-kind="wrong"] .agent-review-note-where strong { color: var(--dispute); }
+.agent-review-note[data-kind="doubtful"] .agent-review-note-where strong { color: var(--partial); }
+.agent-review-note-quote { display: block; margin-top: 1px; color: var(--ink-2); font-style: italic; quotes: "“" "”"; }
+.agent-session-detail .agent-review-note-text { margin: 2px 0 0; color: var(--ink); }
+.agent-review-note-source { display: inline-block; margin-top: 2px; color: var(--ink-3); text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) { .agent-review-note-source:hover { color: var(--ink); } }
 .agent-source { display: block; color: var(--ink-2); font-size: var(--font-size-xs); margin: 6px 0; }
 .agent-inline-models { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; vertical-align: top; }
 .agent-inline-models button { display: inline-flex; align-items: center; justify-content: center; padding: 4px 7px; font-size: var(--font-size-xs); }
@@ -677,7 +712,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
 .agent-progress > .agent-vm { margin: 0 0 16px; }
 .agent-progress > .agent-vm:last-child { margin-bottom: 0; }
-.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; min-width: 0; list-style: none; cursor: default; }
+/* One line box of the trace (1.65em), as tall as the status line it takes
+   the place of: the mono command and the small time made it 20.3px against
+   21.45px, and every command start pulled the page up by a pixel. */
+.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; min-width: 0; min-height: 1.65em; list-style: none; cursor: default; }
 .agent-vm > summary::-webkit-details-marker { display: none; }
 .agent-vm.has-output > summary { cursor: pointer; }
 .agent-vm-verb { flex: none; }
@@ -705,8 +743,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   border-radius: 8px; background: color-mix(in srgb, var(--agent-ink) 5%, transparent);
   color: var(--ink-2); font: var(--font-size-xs)/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
 }
-/* Live, a running command shows the last lines of its output. */
-.agent-progress .agent-vm-output { max-height: 9.3em; }
+/* Live, a running command shows the last five lines of its output: whole
+   lines plus the padding, so a sixth line scrolls instead of adding the
+   remainder of a line (0.6px) to the page. */
+.agent-progress .agent-vm-output { max-height: calc(5 * 1.55em + 16px); max-height: calc(5lh + 16px); }
 /* The earlier steps of a VM run in one line ("Ran 4 commands", agent-activity.js
    foldPast); open, they stand in order below it as before. */
 .agent-progress > .agent-vm-fold { margin: 0 0 16px; }
@@ -814,6 +854,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .agent-activity-findings li[data-type="contradiction"]::before { background: var(--dispute); }
 .agent-activity-insight-actions { display: flex; flex-wrap: wrap; gap: 0 18px; margin-top: 4px; }
+/* The review's "Read the notes" holds its place while the reviewers work
+   (agent-review.js renderAuditActivity). */
+.agent-activity-insight-actions.is-reserved { visibility: hidden; }
 .agent-activity-insight-actions .consensus-tab {
   width: auto; min-height: 36px; justify-content: flex-start; padding: 6px 0; border-radius: 0; background: none;
   color: var(--ink-2); font-size: var(--font-size-xs); text-align: left; text-decoration: none; cursor: pointer;

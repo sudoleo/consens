@@ -86,7 +86,9 @@ Zitat zurück, sofern der Nutzer inzwischen keinen anderen Entwurf begonnen oder
 Chat/Account gewechselt hat. Bereits versendete Nachrichten werden nicht erneut
 als ungesendet angeboten.
 
-Agent-Antworten haben seit 2026-10-04 keinen eigenen Copy-Button mehr.
+Agent-Antworten haben seit 2026-10-04 keinen eigenen Copy-Button mehr; ihre
+Codeblöcke haben seit 2026-10-26 einen Kopier-Knopf in der Ecke
+(`markdown-stream.js` `addCopyButtons`).
 Folgefragen werden direkt im Eingabefeld gestellt.
 Contradictions/Review, Answers und Sources verwenden dieselben dezenten Aktionen
 mit vorangestellten Icons. Bis 540 px stehen die drei Bereiche gleichmäßig in

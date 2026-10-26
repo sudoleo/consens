@@ -472,8 +472,12 @@ class DelegationLoop(AgentLoop):
         # allowed providers). A setting, so the prompt stays cacheable.
         self.vm_tools = None
         self.plan_tools = None
+        from app.services import agent_vm
+        # Without a provider (no SPRITES_TOKEN) the agent is not told of a
+        # VM that would answer every call with "not available".
         if (self.comparison is not None and self.policy.account_budget_only and not google_selection
-                and not google_data and agent_preferences is not None and agent_preferences.vm == "on"):
+                and not google_data and agent_preferences is not None and agent_preferences.vm == "on"
+                and agent_vm.configured()):
             from app.services.agent_vm_tools import VMTools
             from app.services.prompt_defaults import AGENT_VM_PROMPT
             self.vm_tools = VMTools(self)

@@ -498,6 +498,100 @@
       || (agent.model?.label && item.label === agent.model.label));
     return Boolean(answer) && App.answerReader?.openContext(context, { model: answer.provider, trigger }) !== false;
   }
+  // A reviewer's work as one overview and one timeline (2026-10-26): rounds
+  // without objection fold into one line ("Rounds 1–5 · No objections"), a
+  // round with notes lists them, the final review closes it. Before, every
+  // round stood under its own heading: a screen of "No objections." per run.
+  // The notes come as agent_audit.review_text writes them
+  // ("- **kind** · #entry · “quote”: note (source)").
+  const NO_OBJECTION = "No objections.";
+  const NOTE_LINE = /^- \*\*([a-z_]+)\*\* · (?:#(\d+))?(?: · )?(“[^”]*”)?: (.*?)(?: \((https?:\/\/[^\s)]+)\))?$/;
+  const noteKinds = { wrong: "Wrong", doubtful: "Doubtful", incomplete: "Incomplete" };
+  const reviewNotes = text => String(text || "").trim() === NO_OBJECTION ? []
+    : String(text || "").split("\n").filter(line => line.trim()).map(line => {
+      const match = NOTE_LINE.exec(line.trim());
+      return match ? { kind: match[1], entry: match[2], quote: match[3], note: match[4], source: match[5] } : { note: line.replace(/^- /, "") };
+    });
+  const notesLabel = count => !count ? "No objections" : count === 1 ? "1 note" : App.t("{count} notes", { count });
+  function reviewTimeline(body, messages, agent) {
+    const rounds = messages.filter(message => message.kind === "round");
+    const final = messages.findLast(message => message.kind === "result");
+    const stats = node("dl", "agent-review-stats");
+    const stat = (label, value) => { const item = node("div"); item.append(node("dt", "", label), node("dd", "", value)); stats.append(item); };
+    stat("Rounds", App.format.number(rounds.length));
+    stat("Notes", App.format.number(rounds.reduce((n, message) => n + reviewNotes(message.text).length, 0)));
+    stat("Final review", final ? App.format.number(reviewNotes(final.text).length) : activeStates.has(agent.status) ? "Pending" : "None");
+    body.append(stats);
+    const list = node("ol", "agent-review-rounds");
+    const entry = (label, state, message, notes) => {
+      const item = node("li", "agent-review-round");
+      item.classList.toggle("is-quiet", !notes?.length);
+      const head = node("div", "agent-review-round-head");
+      const time = node("time", "agent-review-round-time", App.format.time(message.created_at));
+      if (message.created_at) time.dateTime = message.created_at;
+      head.append(node("span", "agent-review-round-label", label), node("span", "agent-review-round-state", state), time);
+      item.append(head);
+      if (notes?.length) item.append(noteList(notes, agent));
+      list.append(item);
+      return item;
+    };
+    let round = 0, quiet = null;
+    for (const message of messages) {
+      if (message.kind === "round") {
+        round += 1;
+        const notes = reviewNotes(message.text);
+        if (!notes.length && quiet) {
+          quiet.label.textContent = App.t("Rounds {first}–{last}", { first: quiet.first, last: round });
+          continue;
+        }
+        const item = entry(App.t("Round {n}", { n: round }), notesLabel(notes.length), message, notes);
+        quiet = notes.length ? null : { first: round, label: item.querySelector(".agent-review-round-label") };
+      } else if (message.kind === "result") {
+        quiet = null;
+        const notes = reviewNotes(message.text);
+        entry("Final review", notesLabel(notes.length), message, notes).classList.add("is-final");
+      } else if (message.kind === "failure") {
+        // Why a round or the review brought nothing: in its place in time.
+        quiet = null;
+        const item = entry("No result", "", message);
+        item.classList.add("is-failed");
+        item.append(node("p", "agent-review-round-reason", message.text));
+      }
+    }
+    if (list.childElementCount) body.append(list);
+    else body.append(node("p", "agent-judge-note", activeStates.has(agent.status) ? "Follows the work from its first step." : "No rounds."));
+  }
+  function noteList(notes, agent) {
+    const list = node("ul", "agent-review-notes");
+    for (const note of notes) {
+      const item = node("li", "agent-review-note");
+      if (note.kind) item.dataset.kind = note.kind;
+      const head = node("span", "agent-review-note-where");
+      if (note.kind) head.append(node("strong", "", noteKinds[note.kind] || note.kind));
+      if (note.entry) head.append(node("span", "", App.t("Step {entry}", { entry: note.entry })));
+      if (head.childElementCount) item.append(head);
+      if (note.quote) {
+        // The words of the answer it is about.
+        const quote = node("q", "agent-review-note-quote", note.quote.replace(/^“|”$/g, ""));
+        quote.dataset.i18nSkip = "";
+        item.append(quote);
+      }
+      // The reviewer's own words.
+      const text = node("p", "agent-review-note-text", note.note);
+      text.dataset.i18nSkip = "";
+      item.append(text);
+      if (note.source) {
+        try {
+          const url = new URL(note.source);
+          const link = node("a", "agent-review-note-source", url.hostname.replace(/^www\./, ""));
+          link.href = url.href; link.target = "_blank"; link.rel = "noopener noreferrer";
+          item.append(link);
+        } catch (_) { /* Not a link. */ }
+      }
+      list.append(item);
+    }
+    return list;
+  }
   function renderDetail(row, view, agent) {
     if (agent.kind === 'check') {
       const signature = JSON.stringify([agent.status, agent.usage, agent.progress_text, agent.missing]);
@@ -535,7 +629,7 @@
       }
       return;
     }
-    const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, detail.loading, agent.sources, agent.result_truncated, agent.progress_text]);
+    const signature = JSON.stringify([detail.assignment, [...detail.messages.keys()], detail.error, detail.hasMore, detail.loading, agent.sources, agent.result_truncated, agent.progress_text, agent.status]);
     if (row.body.dataset.signature === signature) return;
     row.body.dataset.signature = signature;
     row.body.replaceChildren();
@@ -556,7 +650,10 @@
       }
       row.body.append(node("h3", "", label), node("p", "", detail.assignment[key]));
     }
-    for (const message of [...detail.messages.values()].sort((a, b) => a.seq - b.seq)) {
+    // A reviewer's sessions follow one another: their messages in time order.
+    if (agent.kind === "audit") reviewTimeline(row.body, [...detail.messages.values()].sort((a, b) =>
+      ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)) || a.seq - b.seq), agent);
+    else for (const message of [...detail.messages.values()].sort((a, b) => a.seq - b.seq)) {
       if (agent.kind === "judge" && message.kind === "result") continue;
       const from = message.sender === "orchestrator" ? "Orchestrator" : agent.title;
       const to = message.recipient === "orchestrator" ? "Orchestrator" : agent.title;
@@ -567,11 +664,6 @@
         if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
         if (message.kind === "result") item.append(node("h3", "", "Answer"));
         if (message.kind === "partial") item.append(node("h3", "", "Incomplete answer · not used"));
-      } else if (agent.kind === "audit") {
-        // A reviewer's notes of each round while the agent works, then its
-        // final list; or why none arrived.
-        if (message.kind === "failure") { row.body.append(node("p", "agent-judge-note", message.text)); continue; }
-        item.append(node("h3", "", message.kind === "round" ? "Notes during the run" : "Final notes"));
       } else item.append(node("h3", "", `${from} → ${to} · ${message.kind}`));
       const text = node("div", "consensus-answer-body agent-message-body");
       if (window.injectMarkdown) window.injectMarkdown(text, message.text, agent.sources || []);

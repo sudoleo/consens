@@ -22,7 +22,7 @@ from app.core.security import (
     db_firestore,
     auth_unavailable_error,
 )
-from app.services import agent_quota
+from app.services import agent_quota, agent_vm
 from app.services.usage_repository import (
     FirestoreUsageRepository,
     UsageRunNotFound,
@@ -118,7 +118,7 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # Audit with its own VM (routers/agent.py audit_allowed): Pro and admins.
             "audit_access": audit_access,
             # Its VM time today (agent_vm_time.py), for the settings.
-            **({"vm_time": _vm_time(uid)} if audit_access else {}),
+            **({"vm_time": _vm_time(uid)} if audit_access and agent_vm.configured() else {}),
         }
 
     except HTTPException:

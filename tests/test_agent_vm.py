@@ -157,6 +157,7 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on
 def fake_vm(monkeypatch):
     vm = FakeVM()
     monkeypatch.setattr(agent_vm, "backend", vm.backend)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
     return vm
 
 
@@ -615,6 +616,7 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, admin):
     from app.api.routers import agent
     client, store, calls = api
     monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
     alone = store.create_chat(UID, execution_mode="agent")["id"]
     assert client.post("/agent", json={"chat_id": alone, "question": "Hi", "client_request_id": "r0", "bookmark_id": "bm0",
                                        "agent_preferences": {"vm": "on"}}, headers=AUTH).status_code == 200
@@ -635,6 +637,23 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, admin):
     assert (prompt_defaults.AGENT_VM_PROMPT in calls[0]["messages"][0]["content"]) is admin
     # The same request again is the same message, with the same effective settings.
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+
+
+# A server without a VM provider (no SPRITES_TOKEN): Audit runs without the
+# VM, and the agent is not told of one that answers every call with "not
+# available" (2026-10-26).
+def test_a_server_without_a_vm_provider_offers_no_vm(api, monkeypatch):
+    from app.api.routers import agent
+    client, store, calls = api
+    monkeypatch.setattr(agent, "audit_allowed", lambda uid: True)
+    monkeypatch.delenv("SPRITES_TOKEN", raising=False)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
+               "agent_preferences": {"audit": "on"}}
+    assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+    names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
+    assert not any(name.startswith("vm_") for name in names)
+    assert prompt_defaults.AGENT_VM_PROMPT not in calls[0]["messages"][0]["content"]
 
 
 def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, monkeypatch):

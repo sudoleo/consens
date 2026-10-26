@@ -562,23 +562,40 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it("shows a reviewer's notes of each round and its final notes, never its whole task (Agent audit)", async () => {
+  // One overview and one timeline (2026-10-26): rounds without objection
+  // fold into one line; before, each round stood under its own heading.
+  it("shows a reviewer's rounds as one timeline with its notes, never its whole task (Agent audit)", async () => {
     const reviewer = { ...agent(1, "completed"), kind: "audit", title: "Review · Haiku" };
-    const round = "- **doubtful** · #4: The lookup is unchecked.";
+    const round = "- **doubtful** · #4: The lookup is unchecked. (https://www.example.org/a)";
     const notes = "- **wrong** · “14 euros”: The top costs 36.10 euros.";
+    const quiet = (id, seq) => ({ id, seq, sender: agentId, recipient: "orchestrator", kind: "round", text: "No objections.",
+      created_at: `2026-10-26T08:0${seq}:00Z` });
     const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes(agentId)
       ? { agent: { assignment: { goal: "Review · Haiku", context: '{"latest_message":"Q","answer":"A long answer"}' } },
-          messages: [{ id: "m1", seq: 1, sender: agentId, recipient: "orchestrator", kind: "round", text: round },
-                     { id: "m2", seq: 2, sender: agentId, recipient: "orchestrator", kind: "result", text: notes }] }
+          messages: [quiet("m1", 1), quiet("m2", 2), quiet("m3", 3),
+                     { id: "m4", seq: 4, sender: agentId, recipient: "orchestrator", kind: "round", text: round, created_at: "2026-10-26T08:04:00Z" },
+                     quiet("m5", 5),
+                     { id: "m6", seq: 6, sender: agentId, recipient: "orchestrator", kind: "result", text: notes, created_at: "2026-10-26T08:06:00Z" }] }
       : { agents: [reviewer], status: "succeeded" } }));
     receive(w, reviewer);
     w.App.agentDelegation.project({ chatId, turnId });
     await settle();
     expect(d.querySelector(".agent-session-role").textContent).toBe("Reviewer");
     d.querySelector(".agent-session summary").click();
-    await vi.waitFor(() => expect(d.querySelector(".agent-session-detail h3")?.textContent).toBe("Notes during the run"));
-    expect([...d.querySelectorAll(".agent-session-detail h3")].map(h => h.textContent)).toEqual(
-      ["Notes during the run", "Final notes"]);
+    await vi.waitFor(() => expect(d.querySelector(".agent-review-round")).not.toBeNull());
+    expect([...d.querySelectorAll(".agent-review-stats dd")].map(n => n.textContent)).toEqual(["5", "1", "1"]);
+    expect([...d.querySelectorAll(".agent-review-round")].map(item => [item.querySelector(".agent-review-round-label").textContent,
+      item.querySelector(".agent-review-round-state").textContent, item.classList.contains("is-quiet")])).toEqual([
+      ["Rounds 1–3", "No objections", true], ["Round 4", "1 note", false], ["Round 5", "No objections", true],
+      ["Final review", "1 note", false]]);
+    const [lookup, price] = d.querySelectorAll(".agent-review-note");
+    expect(lookup.dataset.kind).toBe("doubtful");
+    expect(lookup.querySelector(".agent-review-note-where").textContent).toBe("DoubtfulStep 4");
+    expect(lookup.querySelector(".agent-review-note-text").textContent).toBe("The lookup is unchecked.");
+    expect(lookup.querySelector(".agent-review-note-source").textContent).toBe("example.org");
+    expect(price.querySelector(".agent-review-note-quote").textContent).toBe("14 euros");
+    // The reviewer's own words are never translated.
+    expect(price.querySelector(".agent-review-note-text").hasAttribute("data-i18n-skip")).toBe(true);
     const detail = d.querySelector(".agent-session-detail").textContent;
     expect(detail).toContain("The lookup is unchecked.");
     expect(detail).toContain("The top costs 36.10 euros.");
@@ -615,7 +632,7 @@ describe("Agent sidebar", () => {
     expect(rows[0].querySelector(".agent-session-state").textContent).toMatch(/^Waiting · /);
     expect(rows[0].querySelector(".agent-session-tokens").textContent).toBe("1,200+ tokens");
     rows[0].querySelector("summary").click();
-    await vi.waitFor(() => expect(rows[0].querySelector(".agent-session-detail h3")?.textContent).toBe("Notes during the run"));
+    await vi.waitFor(() => expect(rows[0].querySelector(".agent-review-round.is-failed")).not.toBeNull());
     const detail = rows[0].querySelector(".agent-session-detail").textContent;
     expect(detail.indexOf("This round failed.")).toBeLessThan(detail.indexOf("Unchecked."));
     // The icon of the later session opens the reviewer's one row.

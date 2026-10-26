@@ -95,8 +95,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       nach. Ein langer Eintrag lädt über „Show all“ ganz. Nicht-Admin oder
       Audit aus: kein Abschnitt.
       Live-Prüfung: eine Frage, für die der Agent eine Quelle liest oder ein
-      Werkzeug ruft. Die Prüfer-Sitzungen zeigen schon während des Laufs
-      „Notes during the run“, am Ende „Final notes“. Notes zeigt Befunde zur
+      Werkzeug ruft. Die Prüfer-Sitzungen zeigen aufgeklappt Runden,
+      Anmerkungen und Schlussprüfung als Zahlen, darunter die Zeitleiste
+      (saubere Runden gefaltet, Anmerkungen mit Art, Schritt, Zitat). Notes zeigt Befunde zur
       Arbeit unter „On the work“ mit „#Nummer“, Art und Name des Eintrags,
       die Nummer passt zum Work log. Eine Antwort ohne Werkzeug hat nur die
       Schlussrunde.
@@ -1170,7 +1171,10 @@ Server.
   Während der Antwort bleibt Stop nutzbar und ein neuer Entwurf kann entstehen.
 - [ ] Ein Fehler/Stop vor dem Versand erhält Text und Zitat im Composer.
   Ein inzwischen neu geschriebener Entwurf oder anderer Chat bleibt unverändert.
-- [ ] Unter einer Agent-Antwort steht kein Copy-Button (Desktop und Handy).
+- [ ] Unter einer Agent-Antwort steht kein Copy-Button (Desktop und Handy);
+      ein Codeblock in der Antwort hat oben rechts einen Kopier-Knopf (Desktop
+      beim Zeigen, Handy immer), der Klick kopiert den Code und zeigt kurz
+      einen Haken.
 - [ ] Am Ende eines geprüften Laufs bleiben die Claim-Marken stehen (kein
   erneutes Einblenden); Reload eines Agent-Chats: Bookmarks und Eingabefeld
   springen nicht.

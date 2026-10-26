@@ -766,6 +766,11 @@
     // asleep; say that instead of a step that may be long over.
     // A reviewer's halt: the work waits for the user's decision (the card above the field).
     const held = running && holds.some(item => (item.state || 'waiting') === 'waiting');
+    // The answer stands and its check is over: the run only saves now. Its
+    // status line ("Writing answer…") came back for that moment and left with
+    // the end, a row in and out of the open history just as the marks arrived.
+    const saving = running && !activeTool && !waiting && !reconnecting && !held && Boolean(review)
+      && !['running', 'required', 'pending'].includes(review.status) && Boolean(String(answerText || '').trim());
     const heading = running && reconnecting ? 'Reconnecting…'
       : held ? 'Paused for your decision' : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
@@ -796,7 +801,7 @@
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
-    if (running && (!activeTool || waiting || reconnecting || held)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true, paused:held});
+    if (running && !saving && (!activeTool || waiting || reconnecting || held)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true, paused:held});
     // While the comparison models answer, the main model is silent: one quiet
     // line quotes their reasoning in turn (comparisonLine).
     const comparing = reviewStage === 'Comparing perspectives…' || ['compare_models', 'check_text'].includes(activeTool?.name);
@@ -973,7 +978,7 @@
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
-    const currentStep = running && (!activeTool || waiting || reconnecting || held) ? heading : '';
+    const currentStep = running && !saving && (!activeTool || waiting || reconnecting || held) ? heading : '';
     if (currentStep) {
       const label = view.current.firstElementChild;
       if (label.textContent !== window.App.t(currentStep)) label.textContent = currentStep;

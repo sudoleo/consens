@@ -8,7 +8,7 @@
 // window.createStreamRenderer, window.streamSSERequest.
 // (readSSEStream bleibt modul-privat.)
 // Call-time-Abhaengigkeiten: DOMPurify, marked (CDN), window.ConsensusMath,
-// window.addCopyButtons, window.addNewTabToLinks, window.linkifySourceTags,
+// window.addNewTabToLinks, window.linkifySourceTags,
 // window.currentEvidenceSources, window.App.taskChecks (task-checks.js).
 // =====================================================================
 
@@ -134,6 +134,62 @@ function syncTaskBoxes(el) {
   if (el?.querySelector?.(".md-task-box")) window.App?.taskChecks?.apply?.(el);
 }
 
+// --- Copying a code block -------------------------------------------------
+// Each code block carries a copy button in its corner (2026-10-26). An icon
+// without text, so the answer's text (claims, selections, the copied answer)
+// stays as it was; one listener on the document copies, because a morph
+// keeps or swaps nodes without their listeners.
+const COPY_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.75"></rect><path d="M10.75 5.25V4A1.75 1.75 0 0 0 9 2.25H4A1.75 1.75 0 0 0 2.25 4v5A1.75 1.75 0 0 0 4 10.75h1.25"></path></svg>';
+const COPIED_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.25 8.5l3 3 6.5-7"></path></svg>';
+const COPY_LABEL = "Copy code";
+
+function copyLabel(text) {
+  return window.App?.t ? window.App.t(text) : text;
+}
+
+function addCopyButtons(root) {
+  root.querySelectorAll?.("pre").forEach(pre => {
+    if (!pre.querySelector(":scope > code") || pre.querySelector(":scope > .code-copy")) return;
+    const button = (pre.ownerDocument || document).createElement("button");
+    button.type = "button";
+    button.className = "code-copy";
+    // The answer around it is never translated (data-i18n-skip); its label is.
+    button.setAttribute("aria-label", copyLabel(COPY_LABEL));
+    button.title = copyLabel(COPY_LABEL);
+    button.innerHTML = COPY_ICON;
+    pre.classList.add("has-copy");
+    pre.append(button);
+  });
+}
+
+async function copyCode(button) {
+  const code = button.parentElement?.querySelector(":scope > code");
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code.textContent.replace(/\n$/, ""));
+  } catch (error) {
+    window.App?.showPopup?.("Copy to clipboard failed.");
+    return;
+  }
+  const done = copyLabel("Copied");
+  button.classList.add("is-copied");
+  button.innerHTML = COPIED_ICON;
+  button.setAttribute("aria-label", done);
+  button.title = done;
+  clearTimeout(button._copiedTimer);
+  button._copiedTimer = setTimeout(() => {
+    button.classList.remove("is-copied");
+    button.innerHTML = COPY_ICON;
+    button.setAttribute("aria-label", copyLabel(COPY_LABEL));
+    button.title = copyLabel(COPY_LABEL);
+  }, 1600);
+}
+
+document.addEventListener("click", event => {
+  const button = event.target?.closest?.(".code-copy");
+  if (button) copyCode(button);
+});
+
 // A model's headings stand under the chat's h1 and the turn's h2 "Answer":
 // a screen reader hears its "# Title" as level 3. The look stays with the
 // tag (a11y audit B3).
@@ -250,7 +306,7 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
 
   enhanceMarkdownTables(el);
 
-  if (window.addCopyButtons) window.addCopyButtons(el);
+  addCopyButtons(el);
   if (window.addNewTabToLinks) window.addNewTabToLinks(el);
 
   const linked = Array.isArray(evidenceSources) && evidenceSources.length && window.linkifySourceTags;
@@ -483,6 +539,7 @@ function renderStreamFragment(md, decorate) {
   const holder = document.createElement("div");
   holder.append(renderMarkdownFragment(md));
   enhanceMarkdownTables(holder);
+  addCopyButtons(holder);
   if (window.ConsensusMath) window.ConsensusMath.render(holder);
   decorate?.(holder);
   return Array.from(holder.childNodes);
@@ -638,6 +695,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
     lastRenderAt = Date.now();
     outputEl.replaceChildren(renderMarkdownFragment(text));
     enhanceMarkdownTables(outputEl);
+    addCopyButtons(outputEl);
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
     syncTaskBoxes(outputEl);
   }

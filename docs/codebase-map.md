@@ -2153,7 +2153,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`, `morphMarkdown`,
   `renderMarkdownStream`, `keepTextSelection`, ein Parse je Render über
-  `renderMarkdownFragment`) + SSE-Helfer
+  `renderMarkdownFragment`; jeder Codeblock bekommt seit 2026-10-26 einen
+  Kopier-Knopf `.code-copy` ohne Text, `addCopyButtons` in jedem Renderpfad,
+  ein Klick-Listener am Dokument kopiert, weil Morphs Listener nicht tragen) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`; eine `id:`-Zeile wird als zweites
   Argument an `renderer.receive(data, id)` gereicht, nur wenn vorhanden); setzt LaTeX nach jedem
   gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
@@ -5164,7 +5166,13 @@ Seitenleiste behält jeden Aufruf. Ausnahme Audit-Prüfer (seit 2026-10-26):
 Die Sitzungen eines Prüfers (neue nach gescheiterter Runde oder vollem
 Gespräch) bilden eine Zeile unter der ID seiner ersten (`reviewerRows`;
 Zustand der arbeitenden bzw. letzten Sitzung, Tokens und `span` über alle,
-`rowDetail` legt ihre Nachrichten nach `seq` zusammen).
+`rowDetail` legt ihre Nachrichten zusammen). Aufgeklappt zeigt ein Prüfer
+seit 2026-10-26 drei Zahlen (Runden, Anmerkungen, Schlussprüfung) und eine
+Zeitleiste (`reviewTimeline`, nach `created_at`): Runden ohne Einwand falten
+zu „Rounds 1–5 · No objections“, Runden mit Anmerkungen und die
+Schlussprüfung listen sie (`reviewNotes` liest `agent_audit.review_text`:
+Art in der Farbe ihrer Marke, Schritt, Zitat, Notiz, Quelle), Ausfälle
+stehen als „No result“ an ihrer Stelle.
 Der Kopf mit Titel, Stop/Schließen und die Übersicht bleiben außerhalb des
 Scrollbereichs sichtbar. Die Übersicht (`.agent-sidebar-overview`) nennt
 `n of m done` (plus `· k without result` für `failed`/`stopped`) und rechts den
@@ -5593,7 +5601,9 @@ folgt laufenden Turns nur, solange der Abschnitt sichtbar ist.
 
 `agent_preferences.vm` folgt seit 2026-10-26 `audit` (eigene Zeile entfernt;
 `routers/agent.py::effective_preferences`, im Browser `agent-preferences.js`
-`get`). Mit `on` registriert
+`get`). Mit `on` (und einem Anbieter: `agent_vm.configured()`, sonst kein
+VM-Werkzeug, kein Prompt und kein `vm_time` in `/user_status`, seit
+2026-10-26) registriert
 `DelegationLoop` auf Account-Turns ohne Google-Daten `agent_vm_tools.VMTools`
 (`vm_exec`, `vm_read_file`, `vm_write_file`, `vm_share_file`) und hängt `AGENT_VM_PROMPT` vor
 dem Memory-Block an; in beiden Modi. Eine VM pro Chat (Fly.io Sprites über
