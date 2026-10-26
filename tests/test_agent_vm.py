@@ -446,7 +446,7 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     assert "vm_share_file" in script.offered[0]
     assert chart["shown_as"] == "picture" and chart["file"]["mime"] == "image/png" and chart["file"]["name"] == "chart.png"
     assert notes["shown_as"] == "download" and notes["file"]["name"] == "Results.txt"
-    assert notes["file"]["mime"] == "text/plain" and "never write a link" in notes["note"]
+    assert notes["file"]["mime"] == "text/plain" and "Do not embed it as an image" in notes["note"]
     # The same file again is the same download.
     assert again["file"] == chart["file"]
     # A name never makes a file a picture.

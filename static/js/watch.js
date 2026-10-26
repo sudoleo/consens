@@ -2071,7 +2071,7 @@
         row.className = "agent-watch-pill-row";
         row.appendChild(button);
       }
-      const after = review || answerBody;
+      const after = review || window.App.answerTail?.(answerBody) || answerBody;
       if (after.nextElementSibling !== row) after.after(row);
     }
     syncWatchPill(button);

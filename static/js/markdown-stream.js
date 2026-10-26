@@ -56,7 +56,14 @@ function neutralizeRemoteMedia(root) {
     note.className = "blocked-remote-image";
     const alt = (img.getAttribute("alt") || "").trim();
     note.textContent = alt ? `[Image not loaded: ${alt}]` : "[External image not loaded]";
+    // A file name or a path of the agent's VM, never loadable here: an
+    // answer whose pictures the app shows itself hides it (agent-workspace.css).
+    if (!/^(?:https?:)?\/\//i.test(src)) note.classList.add("is-local-ref");
     img.replaceWith(note);
+  });
+  // Alone on its line (once every image of it is a note), the line goes with it.
+  root.querySelectorAll("p > .is-local-ref").forEach(note => {
+    if (note.parentElement.textContent.trim() === note.textContent) note.parentElement.classList.add("local-ref-line");
   });
   root.querySelectorAll("[style]").forEach(el => {
     if (/[()\\]|url|image|@import|expression/i.test(el.getAttribute("style") || "")) {

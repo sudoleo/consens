@@ -515,8 +515,8 @@ class VMTools:
         file = self.shared[key]
         return self.session.announce({"path": path, "file": file,
                                       "shown_as": "picture" if file["mime"].startswith("image/") else "download",
-                                      "note": "The user sees it under your answer. Name it there; never write a "
-                                              "link or address for it."})
+                                      "note": "The app shows it with your answer by itself. Do not embed it as an "
+                                              "image, link it or say where it appears."})
 
     # --- Activity fields (DelegationLoop._execute) -----------------------------
 

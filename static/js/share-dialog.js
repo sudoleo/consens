@@ -514,7 +514,7 @@
     if (row.lastElementChild !== button) row.appendChild(button);
     if (ownRow && ownRow !== row && !ownRow.children.length) ownRow.remove();
     // Also off the page: a history turn is built before it is inserted.
-    const after = review || answerBody;
+    const after = review || window.App.answerTail?.(answerBody) || answerBody;
     if (!row.parentNode || (!watchRow && after.nextElementSibling !== row)) after.after(row);
   }
 

@@ -9,9 +9,13 @@
 // - #agentAnswerResources (after the live answer) and one resources row per
 //   archived Agent turn (renderTurnResources) show the documents created or
 //   revised in that turn (one card per document_id), the files the agent
-//   shared from its VM (pictures as pictures), mail attachments the agent
-//   fetched in it, per-file upload progress, and a note when a file of the
-//   turn was only partly readable.
+//   shared from its VM, mail attachments the agent fetched in it, per-file
+//   upload progress, and a note when a file of the turn was only partly
+//   readable.
+// - The pictures the agent shared from its VM stand right under the answer
+//   text, above its evidence row (Notes, Watch, Share): .agent-answer-pictures,
+//   directly after the answer body. App.answerTail(body) is where that row
+//   and the answer check line go (agent-review.js, watch.js, share-dialog.js).
 //
 // refresh(chatId, force) is cheap to call on every render: without force it
 // only re-projects the cached list (for example when the turn changes). A
@@ -385,6 +389,30 @@
     }
     return wrap;
   }
+  function answerTail(body) {
+    const slot = body?._pictures;
+    return slot?.isConnected && slot.parentNode === body.parentNode && !slot.hidden ? slot : body;
+  }
+  // The answer's own place for its pictures, kept right after its text.
+  function picturesSlot(body) {
+    if (!body) return null;
+    if (!body._pictures) { body._pictures = node('div', 'agent-answer-pictures'); body._pictures.hidden = true; }
+    const slot = body._pictures;
+    if (body.parentNode && body.nextElementSibling !== slot) body.after(slot);
+    return slot;
+  }
+  // Drawn again only when its pictures (or a removal question) change, so a
+  // picture never blinks while the answer around it updates.
+  function fillPictures(body, chatId, shown, scope) {
+    const slot = shown.length ? picturesSlot(body) : body?._pictures;
+    if (!slot) return;
+    const signature = JSON.stringify([chatId, scope, shown.map(file => [file.id, file.name, file.status]),
+      shown.some(file => confirmKey === `${scope}:file:${file.id}`) ? confirmKey : '']);
+    if (slot.dataset.signature === signature) return;
+    slot.dataset.signature = signature;
+    slot.replaceChildren(...shown.map(file => pictureCard(chatId, file, scope)));
+    slot.hidden = !shown.length;
+  }
   function readDataUrl(blob) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -470,14 +498,15 @@
   function hideAll() {
     const resources = document.getElementById('agentAnswerResources');
     if (resources) { resources.replaceChildren(); resources.hidden = true; }
-    for (const row of historyRows()) { row.replaceChildren(); row.hidden = true; }
+    fillPictures(document.getElementById('agentAnswerBody'), '', [], 'answer');
+    for (const row of historyRows()) { row.replaceChildren(); row.hidden = true; fillPictures(row._answerBody, '', [], 'turn'); }
     rendered = '';
   }
   // What one turn produced: its documents (versions up to this turn), the
   // files the agent shared from its VM and the mail attachments it fetched.
   // Uploads are on the message.
-  function turnResources(box, chatId, files, turnId, scope, live) {
-    if (!turnId) return;
+  function turnResources(box, chatId, files, turnId, scope, live, body) {
+    if (!turnId) { fillPictures(body, chatId, [], scope); return; }
     for (const group of groupDocuments(files)) {
       const mine = group.list.filter(version => version.turn === turnId);
       if (!mine.length) continue;
@@ -486,8 +515,10 @@
     }
     const shared = files.filter(file => file.kind === 'vm_file' && file.turn_id === turnId);
     const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
-    if (shown.length) {
-      const gallery = node('div', 'agent-vm-pictures');
+    // Under the answer text when there is one, else with the other files.
+    if (body) fillPictures(body, chatId, shown, scope);
+    else if (shown.length) {
+      const gallery = node('div', 'agent-answer-pictures');
       for (const file of shown) gallery.append(pictureCard(chatId, file, scope));
       box.append(gallery);
     }
@@ -502,7 +533,8 @@
   function fillHistoryRow(row) {
     row.replaceChildren();
     const turnId = row.dataset.agentTurnResources;
-    if (chat && data) turnResources(row, chat, data.files || [], turnId, `turn:${turnId}`, false);
+    if (chat && data) turnResources(row, chat, data.files || [], turnId, `turn:${turnId}`, false, row._answerBody);
+    else fillPictures(row._answerBody, chat, [], `turn:${turnId}`);
     row.hidden = !row.childElementCount;
   }
   function project() {
@@ -530,7 +562,7 @@
         notice.append(retry);
         resources.append(notice);
       }
-      turnResources(resources, chatId, files, turnInfo.id, 'answer', true);
+      turnResources(resources, chatId, files, turnInfo.id, 'answer', true, document.getElementById('agentAnswerBody'));
       resources.hidden = !resources.childElementCount;
     }
     for (const row of historyRows()) fillHistoryRow(row);
@@ -698,4 +730,5 @@
     reset(); chat = ''; owner = ''; uploads.clear(); openState.versions.clear(); hideAll();
   });
   App.agentWorkspace = { refresh, upload, request, button, download, openFile, removeFile, renderTurnResources };
+  App.answerTail = answerTail;
 })();

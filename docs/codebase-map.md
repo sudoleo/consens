@@ -5578,9 +5578,13 @@ eine Zeile („Ran 3 commands“). `vm_share_file` (seit 2026-10-26) kopiert ein
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
-`agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn als Bild unter der
-Antwort (data:-URL, Klick öffnet `App.attachments.openStored`), andere als
-Dateizeile. Details: `docs/agent-mode.md`, „Agent VM“.
+`agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn als Bild direkt unter dem
+Antworttext, über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
+dem Antwort-Body; `App.answerTail(body)` sagt agent-review.js, watch.js,
+share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffnet
+`App.attachments.openStored`), andere als Dateizeile. Ein Markdown-Bild mit
+Dateinamen/VM-Pfad (`is-local-ref`, markdown-stream.js) blendet eine Antwort mit
+geteilten Bildern aus, statt „[Image not loaded]“ zu zeigen. Details: `docs/agent-mode.md`, „Agent VM“.
 
 ### Eingefügten Text prüfen (Agent, seit 2026-10-09)
 „Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist
@@ -10396,8 +10400,10 @@ Dateiliste unter der Antwort mehr:
   eingeklappt, ein Revisionshinweis. Dazu die in dieser Turn geholten
   Mail-Anhänge („From email: Betreff (Absender)“, Fallback
   `App.agentGoogle?.evidenceFor`) und die Dateien, die der Agent aus seiner VM
-  geteilt hat (`kind: "vm_file"`): Bilder als Bild (`pictureCard`, einmal je
-  Datei als data:-URL geladen), andere als Dateizeile. Keine Roh-IDs in der Oberfläche.
+  geteilt hat (`kind: "vm_file"`): andere als Dateizeile; Bilder stehen nicht
+  hier, sondern direkt unter dem Antworttext (`.agent-answer-pictures`,
+  `pictureCard`, einmal je Datei als data:-URL geladen, nur bei Änderung neu
+  gezeichnet; im Verlauf über `row._answerBody` aus thread-history.js). Keine Roh-IDs in der Oberfläche.
 - Archivierte Agent-Turns (`buildHistoryTurn` in `thread-history.js`) bekommen
   eine eigene Ressourcenzeile: `App.agentWorkspace.renderTurnResources(row, turnId)`
   registriert sie (`data-agent-turn-resources`), jede Projektion füllt sie aus der

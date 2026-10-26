@@ -123,9 +123,19 @@ describe('private Agent workspace', () => {
     window.fetch = vi.fn(async url => url.endsWith(PICTURE.id)
       ? { ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } : reply(files));
     window.App.attachments = { openStored: vi.fn() };
+    // The evidence row (Notes, Watch, Share) already stands under the text.
+    const body = document.getElementById('agentAnswerBody');
+    const evidence = document.createElement('section'); evidence.className = 'agent-review';
+    body.after(evidence);
     await window.App.agentWorkspace.refresh(CHAT);
     const resources = document.getElementById('agentAnswerResources');
-    const figures = resources.querySelectorAll('.agent-vm-picture');
+    // The pictures stand right under the answer text, above that row.
+    const slot = body.nextElementSibling;
+    expect(slot.className).toBe('agent-answer-pictures');
+    expect(slot.nextElementSibling).toBe(evidence);
+    expect(window.App.answerTail(body)).toBe(slot);
+    expect(resources.querySelector('.agent-vm-picture')).toBeNull();
+    const figures = slot.querySelectorAll('.agent-vm-picture');
     expect(figures).toHaveLength(1);
     const img = figures[0].querySelector('img');
     await vi.waitFor(() => expect(img.getAttribute('src')).toMatch(/^data:image\/png;base64,/));
@@ -136,10 +146,16 @@ describe('private Agent workspace', () => {
     // Any other file is a row with its download; an earlier turn's file is not here.
     expect([...resources.querySelectorAll('.agent-file-row .agent-file-name')].map(el => el.textContent)).toEqual(['table.csv']);
     expect(resources.textContent).not.toContain('earlier.png');
-    // A picture loads once, also when the list is drawn again.
+    // A picture loads once and is not drawn again while the list refreshes.
     await window.App.agentWorkspace.refresh(CHAT, true);
-    expect(document.querySelector('.agent-vm-picture img').getAttribute('src')).toMatch(/^data:image\/png/);
+    expect(slot.querySelector('.agent-vm-picture')).toBe(figures[0]);
     expect(window.fetch.mock.calls.filter(([url]) => url.endsWith(PICTURE.id))).toHaveLength(1);
+    // Another turn on screen: its answer has no pictures, the place is empty.
+    const plain = '7'.repeat(32);
+    window.App.runRegistry.getSelectedConversationBasis = () => ({ chatId: CHAT, turnId: plain, currentTurn: { id: plain } });
+    window.App.agentWorkspace.refresh(CHAT);
+    expect(slot.hidden).toBe(true);
+    expect(window.App.answerTail(body)).toBe(body);
     dom.window.close();
   });
 
@@ -243,6 +259,27 @@ describe('private Agent workspace', () => {
     const empty = document.createElement('div'); document.getElementById('threadHistory').append(empty);
     window.App.agentWorkspace.renderTurnResources(empty, 'f'.repeat(32));
     expect(empty.hidden).toBe(true);
+    dom.window.close();
+  });
+
+  it('puts an archived turn\'s pictures under its own answer text, above its evidence row', async () => {
+    const PICTURE = { id: 'e'.repeat(32), name: 'bunny.png', mime: 'image/png', size: 900, status: 'ready', kind: 'vm_file',
+      turn_id: TURN_ONE, expires_at: '2099-10-29T10:00:00Z' };
+    const history = '<div id="threadHistory"><article><div class="consensus-answer-body" id="oldBody"></div>'
+      + '<section class="agent-review" id="oldReview"></section><div id="old"></div></article></div>';
+    const { window, document, dom } = boot({ files: [PICTURE], body: history + ANSWER });
+    window.fetch = vi.fn(async url => url.endsWith(PICTURE.id)
+      ? { ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } : reply([PICTURE]));
+    const row = document.getElementById('old');
+    row._answerBody = document.getElementById('oldBody');
+    window.App.agentWorkspace.renderTurnResources(row, TURN_ONE);
+    await window.App.agentWorkspace.refresh(CHAT);
+    const slot = document.getElementById('oldBody').nextElementSibling;
+    expect(slot.className).toBe('agent-answer-pictures');
+    expect(slot.nextElementSibling.id).toBe('oldReview');
+    expect(slot.querySelector('img').alt).toBe('bunny.png');
+    // The live answer (another turn) has none.
+    expect(document.querySelector('#agentAnswer .agent-vm-picture')).toBeNull();
     dom.window.close();
   });
 

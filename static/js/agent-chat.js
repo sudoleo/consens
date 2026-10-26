@@ -642,7 +642,8 @@
     line.className = 'agent-check-status';
     line.setAttribute('role', 'status');
     line.textContent = App.words?.checking || 'Checking the answer…';
-    body.after(line);
+    // Under the answer's pictures, where the evidence row will stand.
+    (App.answerTail?.(body) || body).after(line);
     body._checkStatus = line;
     App.agentActivity?.reveal(line, { lift: false });
   }

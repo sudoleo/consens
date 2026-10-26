@@ -264,6 +264,8 @@
         // agent-workspace.js fills the row from the chat's file list.
         if (turnId) {
           agentResources = document.createElement("div");
+          // Its pictures go right under the answer text (agent-workspace.js).
+          agentResources._answerBody = answerBody;
           answer.appendChild(agentResources);
         }
       }

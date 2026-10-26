@@ -401,8 +401,11 @@ Ordner an) und seit 2026-10-26 `vm_share_file` (`path`, optional `name`):
 Es kopiert eine Datei bis 5 MB in die private Dateiablage des Chats
 (`kind: "vm_file"` mit `turn_id`, zählt zum Speicher des Kontos, 30 Tage
 wie jede Datei), meldet sie per `resources`, und die App zeigt sie unter der
-Antwort: PNG, JPEG, WebP und GIF als Bild (nur nach den Bytes erkannt, nie
-nach dem Namen), alles andere als Dateizeile mit Download. Ausgeliefert wird
+Antwort: PNG, JPEG, WebP und GIF als Bild direkt unter dem Antworttext, über
+Notes · Watch · Share (nur nach den Bytes erkannt, nie nach dem Namen), alles
+andere als Dateizeile mit Download. Der Agent soll eine geteilte Datei weder
+als Bild einbetten noch verlinken noch ihren Ort beschreiben; tut er es doch,
+blendet die Antwort den nicht ladbaren Verweis aus. Ausgeliefert wird
 nur über die angemeldete Download-Route (`Content-Disposition: attachment`,
 `nosniff`); die VM hat keine öffentliche Adresse, und der Prompt verbietet
 Links auf VM-Dateien. Dieselbe Datei zweimal geteilt bleibt ein Eintrag. Der Prompt `AGENT_VM_PROMPT` (prompt_defaults.py, im Admin als

@@ -713,7 +713,7 @@
     const exact = Boolean(version) && raw === version.text && version.hash === review.answer_hash;
     const done = AUDIT_DONE.has(review.status);
     if (!host?.isConnected) {
-      host = node('section', 'agent-review'); body.after(host); body._agentReview = host;
+      host = node('section', 'agent-review'); (App.answerTail?.(body) || body).after(host); body._agentReview = host;
       host.setAttribute('aria-label', 'Answer evidence');
     }
     body._agentModels?.remove(); body._agentModels = null;
@@ -767,7 +767,7 @@
       if (!turnSources.length) {
         host?.remove(); body._agentReview = null; return;
       }
-      if (!host?.isConnected) { host = node('section', 'agent-review'); body.after(host); body._agentReview = host; }
+      if (!host?.isConnected) { host = node('section', 'agent-review'); (App.answerTail?.(body) || body).after(host); body._agentReview = host; }
       // An answer without a comparison may still rest on pages the agent read.
       const read = readUrls(review);
       const signature = JSON.stringify([evidence.key, evidence.question, turnSources, [...read]]);
@@ -782,7 +782,7 @@
       nav.append(button); host.replaceChildren(nav); App.answerReader?.refreshContext(context); return;
     }
     if (!host?.isConnected) {
-      host = node("section", "agent-review"); body.after(host); body._agentReview = host;
+      host = node("section", "agent-review"); (App.answerTail?.(body) || body).after(host); body._agentReview = host;
       host.setAttribute("aria-label", "Answer evidence");
     }
     const exact = !!version && raw === version.text && version.hash === review.answer_hash;

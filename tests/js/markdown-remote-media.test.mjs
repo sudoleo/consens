@@ -23,6 +23,22 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.querySelector("img")).toBeNull();
     expect(output.innerHTML).not.toContain("evil.example");
     expect(output.textContent).toContain("[Image not loaded: x]");
+    // A web address is a remote image, not a file of the agent's VM.
+    expect(output.querySelector(".blocked-remote-image").classList.contains("is-local-ref")).toBe(false);
+  });
+
+  // An agent that names its shared picture as an image (a file name or VM
+  // path): the answer whose pictures the app shows hides this note (CSS).
+  it("marks an image that names a file instead of a web address", () => {
+    const output = render("![Bunny](hasen_bild.png) ![Chart](sandbox:/mnt/data/chart.png) ![Web](//cdn.example/x.png)");
+    const notes = [...output.querySelectorAll(".blocked-remote-image")];
+    expect(notes.map(note => note.classList.contains("is-local-ref"))).toEqual([true, true, false]);
+    // In a sentence it keeps its line; alone, its line goes with it.
+    expect(output.querySelector(".local-ref-line")).toBeNull();
+    const alone = render("![Bunny](hasen_bild.png)\n\nHere is your bunny.");
+    expect(alone.querySelector("p.local-ref-line .is-local-ref")).not.toBeNull();
+    expect(alone.querySelectorAll(".local-ref-line")).toHaveLength(1);
+    expect(output.querySelector("img")).toBeNull();
   });
 
   it("strips raw HTML images, srcset, media and style blocks", () => {
