@@ -1,6 +1,7 @@
 """Bounded Agent turns in the existing chat storage (every signed-in account)."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 import re
 from typing import Literal
@@ -17,7 +18,7 @@ from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
-from app.services import agent_quota
+from app.services import agent_quota, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
@@ -349,8 +350,8 @@ def run_agent(request: Request, payload: AgentRequest):
         # Google data enters a chat through a Gmail/Calendar selection or a file
         # picked from Google Drive; once there, the chat keeps the Google rules.
         drive_files = any(meta.get("kind") == "drive_file" for meta in file_meta)
-        google_data = bool(payload.google_selection or drive_files
-                           or (store._chat_ref(uid, payload.chat_id).get().to_dict() or {}).get("google_data"))
+        chat_data = store._chat_ref(uid, payload.chat_id).get().to_dict() or {}
+        google_data = bool(payload.google_selection or drive_files or chat_data.get("google_data"))
         if google_data:
             from app.services.google_connections import restricted_model
             if not payload.google_data_consent:
@@ -385,6 +386,11 @@ def run_agent(request: Request, payload: AgentRequest):
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
         app_context = get_agent_turn_context(model, config)
+        # The user restored the VM since the last message (restore_agent_vm):
+        # this message's context says so, once.
+        restored = (chat_data.get("agent_vm") or {}).get("restored") if preferences.vm == "on" else None
+        if isinstance(restored, dict) and not restored.get("told"):
+            app_context += "\n" + agent_vm.VM_RESTORED_NOTE
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -406,6 +412,8 @@ def run_agent(request: Request, payload: AgentRequest):
         if turn["status"] == "completed":
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
+        if isinstance(restored, dict) and not restored.get("told"):
+            _vm_restore_told(store, uid, payload.chat_id)
         chat_sources = []
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
                                   context=app_context)
@@ -720,6 +728,110 @@ def prepare_agent_share(request: Request, chat_id: str, turn_id: str):
         raise HTTPException(status_code=404, detail="This chat no longer exists.")
     return JSONResponse(prepare_agent_share_result(uid, chat_id, turn_id),
                         headers={"Cache-Control": "private, no-store"})
+
+
+def _vm_restore_told(store, uid, chat_id):
+    """The next message carries the restore in its context: told once."""
+    ref = store._chat_ref(uid, chat_id)
+
+    def operation(tx):
+        record = dict((ref.get(transaction=tx).to_dict() or {}).get("agent_vm") or {})
+        if isinstance(record.get("restored"), dict):
+            tx.update(ref, {"agent_vm": {**record, "restored": {**record["restored"], "told": True}}})
+    try:
+        store._transaction(operation)
+    except Exception as exc:
+        logging.warning("Agent VM restore note not marked category=%s", safe_exception(exc))
+
+
+@router.post("/agent/chats/{chat_id}/turns/{turn_id}/vm-restore")
+@limiter.limit("10/minute")
+def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
+    """Return the chat's VM to the checkpoint taken before this message
+    (VMSession.ready; since 2026-10-26, admins). Never while a response
+    runs in the chat; the next message is told (VM_RESTORED_NOTE)."""
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    try:
+        if not is_user_admin(uid):
+            raise HTTPException(status_code=403, detail="Agent VM is not available on your account.")
+    except TierStatusUnavailable:
+        raise HTTPException(status_code=503, detail="Account tier is temporarily unavailable. Please retry.") from None
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", turn_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    store = AgentRunStore(db_firestore)
+    try:
+        turn = store.get_turn(uid, chat_id, turn_id)
+        chat = store._chat_ref(uid, chat_id).get().to_dict() or {}
+    except ChatNotFound:
+        raise HTTPException(status_code=404, detail="Message not found") from None
+    except Exception as exc:
+        _raise_store_error(exc, operation="read agent vm restore", uid=uid)
+    checkpoint = (turn.get("agent_vm") or {}).get("checkpoint")
+    if not checkpoint:
+        return JSONResponse({"error": "This message has no VM state to go back to.", "code": "no_checkpoint"},
+                            status_code=409)
+    lock = chat.get("agent_lock_until")
+    if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)):
+        return JSONResponse({"error": "Wait until the response is done, then restore the VM.", "code": "running"},
+                            status_code=409)
+    try:
+        agent_vm.restore_chat_vm(uid, chat_id, chat.get("agent_vm"), checkpoint)
+    except agent_vm.VMUnavailable as exc:
+        logging.warning("Agent VM restore unavailable category=%s", safe_exception(exc))
+        return JSONResponse({"error": "The VM could not be restored right now. Try again later.",
+                             "code": "vm_unavailable"}, status_code=503)
+    ref = store._chat_ref(uid, chat_id)
+
+    def record(tx):
+        current = dict((ref.get(transaction=tx).to_dict() or {}).get("agent_vm") or {})
+        tx.update(ref, {"agent_vm": {**current, "restored": {"checkpoint": checkpoint, "turn_id": turn_id,
+                                                             "at": datetime.now(timezone.utc).isoformat()}}})
+    try:
+        store._transaction(record)
+    except Exception as exc:
+        # Restored all the same; only the next message's note is missing.
+        logging.warning("Agent VM restore not recorded category=%s", safe_exception(exc))
+    return JSONResponse({"status": "restored", "checkpoint": checkpoint}, headers={"Cache-Control": "private, no-store"})
+
+
+class AgentNoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    text: str = Field(min_length=1, max_length=4000)
+
+
+@router.post("/agent/chats/{chat_id}/requests/{request_id}/notes")
+@limiter.limit("30/minute")
+def add_agent_note(request: Request, chat_id: str, request_id: str, payload: AgentNoteRequest):
+    """A message into the running response, by the browser's request identity
+    (Enter while it runs, agent-chat.js addNote; since 2026-10-26, with Agent
+    VM). The run takes it before its next step (DelegationLoop._take_notes)."""
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
+        raise HTTPException(status_code=404, detail="Request not found")
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Write a message first.")
+    try:
+        store = AgentRunStore(db_firestore)
+        turn_id = _idempotent_turn_id(chat_id, request_id)
+        try:
+            turn = store.get_turn(uid, chat_id, turn_id)
+        except ChatNotFound:
+            turn = None
+        if not turn or turn.get("status") != "pending":
+            return JSONResponse({"error": "This response is no longer running. Send your message as a new one.",
+                                 "code": "not_running"}, status_code=409)
+        if ((turn.get("agent_settings") or {}).get("agent_preferences") or {}).get("vm") != "on":
+            return JSONResponse({"error": "Messages during a response need Agent VM.", "code": "notes_unavailable"},
+                                status_code=409)
+        note = store.add_user_note(uid, chat_id, turn_id, text)
+        return JSONResponse({"status": "added", "id": note["id"]}, headers={"Cache-Control": "private, no-store"})
+    except TurnStatusConflict as exc:
+        return JSONResponse({"error": str(exc), "code": "not_running"}, status_code=409)
+    except Exception as exc:
+        _raise_store_error(exc, operation="add agent note", uid=uid)
 
 
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/stop")

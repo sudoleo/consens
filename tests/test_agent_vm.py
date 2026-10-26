@@ -96,6 +96,9 @@ class _FakeBackend(VMBackend):
         checkpoints.append(comment)
         return f"v{len(checkpoints)}"
 
+    def restore(self, name, checkpoint):
+        self._call("restore", name, checkpoint)
+
     def delete(self, name):
         self._call("delete", name)
         self.vm.vms.pop(name, None)

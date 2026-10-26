@@ -183,6 +183,45 @@ describe("VM calls in the activity", () => {
     expect(stopped.querySelector(".agent-vm-meta").textContent).toBe("Exit 143");
   });
 
+  // A message the user sent into the running response (2026-10-26).
+  it("shows the user's message in their own words, live and in the timeline", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, vm({ id: "c:1/tool", status: "succeeded", command: "make", exit_code: 0 }));
+    activity.receive(events, { version: 1, kind: "progress", id: "completion:1/note-n1", text: "Done", from_user: true });
+    activity.receive(events, vm({ id: "c:2/tool", status: "running", command: "make test" }));
+    activity.render(host, { running: true, status: "running", events });
+    const live = host.querySelector(".agent-progress .agent-user-note");
+    expect(live.querySelector(".agent-user-note-who").textContent).toBe("You");
+    // The words stay the user's: never translated, even when they match a label.
+    const words = live.querySelector(".agent-user-note-text");
+    expect(words.textContent).toBe("Done");
+    expect(words.hasAttribute("data-i18n-skip")).toBe(true);
+    // A note between commands does not count as a step of the fold.
+    expect(host.querySelector(".agent-vm-fold")).toBeNull();
+    const saved = host.querySelector(".agent-activity-content .agent-user-note .agent-user-note-text");
+    expect(saved.textContent).toBe("Done");
+  });
+
+  it("offers the admin to restore the VM to before a finished message", () => {
+    const { host, activity } = setup();
+    const turn = { status: "completed", agent_activity: [], assistant_response: "Done.",
+      agent_vm: { commands: 2, seconds: 3, checkpoint: "v2" } };
+    let restored = 0;
+    activity.renderTurn(host, turn, { vmRestore: () => { restored += 1; } });
+    const button = host.querySelector(".agent-vm-restore");
+    expect(button.hidden).toBe(false);
+    expect(button.classList.contains("admin-only")).toBe(true);
+    expect(button.textContent).toBe("Restore the VM to before this message");
+    button.click();
+    expect(restored).toBe(1);
+    // No action without a checkpoint or a handler.
+    activity.renderTurn(host, { ...turn, agent_vm: { commands: 0 } }, { vmRestore: () => {} });
+    expect(button.hidden).toBe(true);
+    activity.renderTurn(host, turn);
+    expect(button.hidden).toBe(true);
+  });
+
   it("adds the VM's run time to the admin's usage line", () => {
     const { host, activity } = setup();
     activity.renderTurn(host, { status: "completed", agent_activity: [], assistant_response: "Done.",

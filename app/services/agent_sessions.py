@@ -28,6 +28,10 @@ ROOT_MAX_RUNNING_STEPS = 64
 ROOT_MAX_BYTES = 256_000
 TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent turn. "
                         "The available results have been saved; send a follow-up message to continue.")
+# Messages the user sends into a running response (add_user_note), on its root
+# receipt, which the run's watcher reads every few seconds anyway.
+USER_NOTES_MAX = 10
+USER_NOTE_CHARS = 4000
 
 
 def root_usage(root):
@@ -431,11 +435,12 @@ class AgentSessionStore:
         if (chat.get("status") != "active" or root.get("run_token") != run_token
                 or root.get("run_status") != "running" or root.get("cancel_requested")):
             raise ProviderCancelled("Agent run stopped")
+        # The root as read: the caller takes the user's notes from it.
         if not (root.get("policy") or {}).get("account_budget_only"):
-            return
+            return root
         now = datetime.now(timezone.utc)
         if root["lease_until"] > now + timedelta(seconds=PRODUCER_RENEW_BEFORE_SECONDS):
-            return
+            return root
         # Renew all three fences together, only while this producer still owns
         # a live lease. A crashed or superseded producer can never resume work.
         chat_ref, active_ref = self._chat_ref(uid, chat_id), self.active_ref(uid)
@@ -456,6 +461,27 @@ class AgentSessionStore:
             tx.update(chat_ref, {"agent_lock_until": until})
             tx.set(active_ref, {"leases": leases})
         self._agent_transaction(uid, operation)
+        return root
+
+    def add_user_note(self, uid, chat_id, turn_id, text):
+        """A message of the user into the running response (DelegationLoop
+        takes it before its next step). At most USER_NOTES_MAX per response."""
+        from uuid import uuid4
+        ref = self.receipt_ref(uid, chat_id, turn_id)
+
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            data = ref.get(transaction=tx).to_dict() or {}
+            if data.get("run_status") != "running" or data.get("cancel_requested"):
+                raise TurnStatusConflict("This response is no longer running. Send your message as a new one.")
+            notes = list(data.get("user_notes") or [])
+            if len(notes) >= USER_NOTES_MAX:
+                raise TurnStatusConflict("This response already has the most messages it takes while it runs.")
+            note = {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
+                    "at": datetime.now(timezone.utc).isoformat()}
+            tx.update(ref, {"user_notes": [*notes, note]})
+            return note
+        return self._agent_transaction(uid, operation)
 
     def stop_delegation(self, uid, chat_id, turn_id):
         self.get_turn(uid, chat_id, turn_id)

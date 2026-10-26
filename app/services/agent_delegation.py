@@ -113,6 +113,10 @@ TURN_ALLOWANCE_LIMIT = ("This response ended because today's token allowance is 
                         "The available results have been saved.")
 TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
                       "The available results have been saved; send a follow-up message to continue.")
+# A message the user sends into the running response (add_user_note): it
+# opens the user-role message the agent gets before its next step.
+USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the user:]"
+NOTES_UNREAD = ("Your message arrived after the answer was written. Send it again as a new message.")
 # Pause before the one retry of a session update after a short database
 # outage (_journal_write; a worker's end record, audit A12).
 TERMINAL_RETRY_SECONDS = .5
@@ -274,6 +278,9 @@ class DelegationLoop(AgentLoop):
                                     progress_gap=THINKING_UPDATE_SECONDS / 2)
         self.unsettled = {}
         self.mailbox = deque()
+        # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
+        # those not yet in the conversation.
+        self.notes_seen, self.notes = set(), deque()
         self.tools_used = 0
         self.invalid_tool_rounds = 0
         self.search_remaining = self.policy.max_searches
@@ -1601,7 +1608,8 @@ class DelegationLoop(AgentLoop):
             try:
                 self._check()
                 if self.claimed:
-                    self.store.check_delegation(self.uid, self.chat_id, self.turn_id, self.run_token)
+                    root = self.store.check_delegation(self.uid, self.chat_id, self.turn_id, self.run_token)
+                    self._receive_notes(root)
                 last_verified = time.monotonic()
             except (DeadlineExceeded, InternalServerError, ServiceUnavailable):
                 # A short database outage is not a user stop. Leave time to
@@ -1619,6 +1627,27 @@ class DelegationLoop(AgentLoop):
                     "The response could not continue because its saved run state is unavailable. Your available answer has been saved.")
                 self.cancellation.cancel()
                 return
+
+    def _receive_notes(self, root):
+        """New messages of the user from the run's root (the watcher)."""
+        for note in (root or {}).get("user_notes") or []:
+            if not isinstance(note, dict) or not isinstance(note.get("text"), str) or note.get("id") in self.notes_seen:
+                continue
+            with self.condition:
+                self.notes_seen.add(note.get("id"))
+                self.notes.append(note)
+                self.condition.notify_all()
+
+    def _take_notes(self, step):
+        """The user's new messages join the conversation before the next
+        step, each one shown in the activity in the user's own words."""
+        with self.condition:
+            notes, self.notes = list(self.notes), deque()
+        for note in notes:
+            self.messages.append({"role": "user", "content": f"{USER_NOTE_OPEN}\n{note['text']}"})
+            self.outgoing.put_nowait(self.activity({"step_id": step, "id": f"note-{note.get('id')}",
+                                                    "kind": "progress", "text": note["text"], "from_user": True}))
+        return bool(notes)
 
     def _consensus_search_handoff(self, value):
         """OpenRouter asks for a final answer after its server-search step cap.
@@ -2085,6 +2114,8 @@ class DelegationLoop(AgentLoop):
                     incoming = self._mail()
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
+                    if self._take_notes(f"completion:{index}"):
+                        yield from self._events()
                     # Before a comparison the orchestrator may research to
                     # understand the question: several rounds, once. In audit
                     # mode it researches the answer itself, in every step, and
@@ -2265,6 +2296,10 @@ class DelegationLoop(AgentLoop):
             for step, (value, step_status) in list(self.unsettled.items()):
                 self._settle_step(step, value, step_status)
             self.completion.usage = self.costs.total()
+            if self.notes:
+                # Arrived after the answer was written: said, not lost silently.
+                self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",
+                                                        "text": NOTES_UNREAD}))
             if self.vm_tools is not None:
                 # Saved with the turn (agent_runs.finish_run): its checkpoint
                 # and the commands' summed run time.

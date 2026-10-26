@@ -562,6 +562,23 @@
     if (!('chosen' in details.dataset)) details.open = open;
   }
 
+  // A message the user sent into the running response (agent-chat.js
+  // addNote): the user's own words, never translated, under a quiet "You".
+  function userNote(className, text) {
+    const p = document.createElement('p');
+    p.className = className;
+    const who = document.createElement('span');
+    who.className = 'agent-user-note-who';
+    who.textContent = 'You';
+    const words = document.createElement('span');
+    words.className = 'agent-user-note-text';
+    words.dataset.i18nSkip = '';
+    words.translate = false;
+    words.textContent = String(text || '').slice(0, 4000);
+    p.append(who, words);
+    return p;
+  }
+
   // Like Claude Code, a run that works in its VM folds its earlier steps into
   // one line ("Ran 4 commands"); the note that leads into the latest command,
   // that command and what follows stay in view. Until 2026-10-26 every
@@ -573,7 +590,7 @@
     while (start > 0 && paragraphs[start - 1].kind === 'progress' && !paragraphs[start - 1].quiet) start--;
     const review = paragraphs.findIndex(item => item.kind === 'review');
     const past = paragraphs.slice(0, review >= 0 ? Math.min(start, review) : start);
-    const steps = past.filter(item => item.kind !== 'progress');
+    const steps = past.filter(item => !['progress', 'user'].includes(item.kind));
     if (steps.length < 2 || !steps.some(item => item.kind === 'vm')) return null;
     const commands = steps.filter(item => item.kind === 'vm' && item.item.name === 'vm_exec').length;
     const label = commands === steps.length ? (commands === 1 ? 'Ran 1 command' : `Ran ${commands} commands`)
@@ -615,7 +632,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlights = [], reconnecting = false, vm = null } = {}) {
+    highlights = [], reconnecting = false, vm = null, vmRestore = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -646,6 +663,13 @@
       // reader's (Apple-Audit H4): only an admin sees this line.
       const usageEl = document.createElement("p");
       usageEl.className = "agent-usage admin-only";
+      // The VM back to its checkpoint before this message (agent-chat.js
+      // restoreVm, admins): a quiet action under the usage line.
+      const vmRestoreEl = document.createElement("button");
+      vmRestoreEl.type = "button";
+      vmRestoreEl.className = "agent-vm-restore admin-only";
+      vmRestoreEl.textContent = "Restore the VM to before this message";
+      vmRestoreEl.hidden = true;
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
       // A line that changes swaps its text node, an addition: "text" as well
@@ -666,12 +690,13 @@
       current.append(document.createElement('strong'));
       history.inert = true;
       timeline.append(content, insights);
-      history.append(timeline, note, runDetails, usageEl);
+      history.append(timeline, note, runDetails, usageEl, vmRestoreEl);
       details.append(summary, history);
       // Progress shows at the model icons in the summary (agent-chat.css,
       // "Progress at the models"), not on a line of its own.
       host.replaceChildren(details, preview);
-      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, preview, nodes: new Map(), previewNodes: new Map() };
+      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, vmRestoreEl, preview, nodes: new Map(), previewNodes: new Map() };
+      vmRestoreEl.addEventListener('click', () => host._agentActivity.vmRestore?.());
       summary.addEventListener('click', event => {
         event.preventDefault();
         const view = host._agentActivity;
@@ -723,7 +748,7 @@
     // The latest plan stands above the live progress, never in its order.
     const plan = tools.findLast(item => hasPlan(item) && item.status !== 'failed');
     const paragraphs = events.flatMap(item => progress.includes(item)
-      ? [{id:item.id, text:item.text, kind:'progress'}]
+      ? [{id:item.id, text:item.text, kind:item.from_user ? 'user' : 'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
         : tools.includes(item) && item.name === 'update_plan' ? []
         : tools.includes(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
@@ -794,7 +819,8 @@
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
-        p = item.kind === 'vm' ? vmView('agent-vm') : document.createElement(item.kind === 'progress' ? 'p' : 'div');
+        p = item.kind === 'vm' ? vmView('agent-vm') : item.kind === 'user' ? userNote('agent-user-note', item.text)
+          : document.createElement(item.kind === 'progress' ? 'p' : 'div');
         view.previewNodes.set(item.id, p);
         if (item.kind === 'review') {
           const jump = document.createElement('button');
@@ -808,7 +834,7 @@
         previewChanged = true;
         if (!view.details.open) reveal(p);
       }
-      if (item.kind === 'review' || item.kind === 'vm') {
+      if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user') {
         if (item.kind === 'vm') updateVm(p, item.item);
         place(item, p);
         continue;
@@ -848,6 +874,7 @@
       if (!node) {
         node = item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
           : hasPlan(item) ? planView('agent-activity-tool agent-plan')
+          : item.from_user ? userNote('agent-activity-update agent-user-note', item.text)
           : document.createElement(item.kind === 'progress' ? 'p' : 'div');
         if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
@@ -856,6 +883,8 @@
       }
       if (item.kind === "tool" && vmTools.has(item.name)) {
         updateVm(node, item);
+      } else if (node.classList.contains('agent-user-note')) {
+        // The user's words, written once at creation.
       } else if (node.classList.contains('agent-plan')) {
         if (hasPlan(item)) updatePlan(node, item, false);
       } else if (item.kind === "tool") {
@@ -938,13 +967,16 @@
     view.usageEl.textContent = tokens + cost + vmTime;
     view.usageEl.title = measured ? `${number(usage.input_tokens)} input · ${number(usage.output_tokens)} output tokens` : "The provider did not report token usage.";
     view.usageEl.hidden = running;
+    view.vmRestore = vmRestore;
+    view.vmRestoreEl.hidden = running || !vmRestore || !vm?.checkpoint;
     // A history the reader opened stays open while it is on screen: closing
     // it there moved the answer below. Above the viewport the correction in
     // render() keeps the reading position, so it can tidy itself up.
     if (finished && (offscreenUpdate || !view.details.open)) disclosure(view, false);
   }
 
-  function renderTurn(host, turn) {
+  // options.vmRestore: what the VM's restore action does (agent-chat.js).
+  function renderTurn(host, turn, options = {}) {
     const events = turn?.agent_activity || [];
     const terminal = events.filter(item => item.kind === "status" && ["succeeded", "failed", "cancelled", "canceled"].includes(item.status)).at(-1);
     const status = turn?.error_code === "cancelled" ? "cancelled" : terminal?.status
@@ -952,7 +984,7 @@
     render(host, { events, usage: turn?.agent_usage, status, truncated: turn?.agent_reasoning_truncated,
       finishReason: turn?.agent_finish_reason, elapsedMs:savedDuration(turn),
       review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings,
-      vm: turn?.agent_vm });
+      vm: turn?.agent_vm, vmRestore: options.vmRestore || null });
   }
   App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration };
 })();

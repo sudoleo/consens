@@ -137,6 +137,10 @@ def context_data(actor, index, own_from, message, text):
     if is_work_record(text) or text.startswith(PICTURE_OPEN):
         # The app's record of VM output, a picture of the VM.
         return "vm"
+    from app.services.agent_delegation import USER_NOTE_OPEN
+    if text.startswith(USER_NOTE_OPEN):
+        # A message the user sent into the running response.
+        return "user"
     if index < own_from:
         return "user"
     return "agent" if text.startswith("Worker messages") else "app"

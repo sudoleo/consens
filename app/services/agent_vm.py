@@ -108,6 +108,10 @@ class VMBackend:
         """Snapshot the VM's disk; returns the checkpoint's id."""
         raise NotImplementedError
 
+    def restore(self, name, checkpoint):
+        """Return the VM's disk to ``checkpoint``; what ran in it stops."""
+        raise NotImplementedError
+
     def delete(self, name):
         """Delete the VM and its disk; a VM that is already gone is fine."""
         raise NotImplementedError
@@ -229,6 +233,30 @@ class SpritesBackend(VMBackend):
             raise VMUnavailable("checkpoint: not listed")
         return str(max(found, key=lambda item: str(item.get("create_time") or ""))["id"])
 
+    def restore(self, name, checkpoint):
+        # Streams its progress as NDJSON like a checkpoint; "complete" or "error" ends it.
+        path = f"{self._sprite(name)}/checkpoints/{quote(str(checkpoint), safe='')}/restore"
+        try:
+            with self._http.stream("POST", path, timeout=CHECKPOINT_SECONDS) as response:
+                if not response.is_success:
+                    logging.warning("Agent VM request refused operation=restore status=%s", response.status_code)
+                    raise VMUnavailable(f"restore: HTTP {response.status_code}")
+                done = False
+                for line in response.iter_lines():
+                    try:
+                        event = json.loads(line) if line.strip() else {}
+                    except ValueError:
+                        continue
+                    if event.get("type") == "error":
+                        logging.warning("Agent VM restore failed code=%s", str(event.get("code") or "")[:40])
+                        raise VMUnavailable("restore: error event")
+                    done |= event.get("type") == "complete"
+        except httpx.HTTPError as exc:
+            logging.warning("Agent VM request failed operation=restore category=%s", safe_exception(exc))
+            raise VMUnavailable("restore: no connection") from None
+        if not done:
+            raise VMUnavailable("restore: no completion")
+
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
 
@@ -337,6 +365,27 @@ def backend():
     """The configured provider for one message, or None without one."""
     token = os.getenv("SPRITES_TOKEN", "").strip()
     return SpritesBackend(token) if token else None
+
+
+# What the next message is told after the user restored the VM (the turn's
+# app context, routers/agent.py run_agent).
+VM_RESTORED_NOTE = ("Before this message the user restored your VM to how it was before an earlier message: "
+                    "whatever later commands changed there is gone, background processes included. Check the files "
+                    "before you rely on them.")
+
+
+def restore_chat_vm(uid, chat_id, record, checkpoint, *, factory=None):
+    """Return the chat's VM (chat field ``agent_vm``) to ``checkpoint``.
+    Raises VMUnavailable when there is none or the provider fails."""
+    if not isinstance(record, dict) or record.get("name") != vm_name(uid, chat_id):
+        raise VMUnavailable("restore: no VM of this chat")
+    vm = (factory or backend)()
+    if vm is None:
+        raise VMUnavailable("restore: no provider configured")
+    try:
+        vm.restore(record["name"], checkpoint)
+    finally:
+        vm.close()
 
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None):

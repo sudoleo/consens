@@ -499,7 +499,9 @@
       renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
         : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
       markLiveTurn(basis.currentTurn);
-      App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn);
+      App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn, {
+        vmRestore: basis.currentTurn?.agent_vm?.checkpoint && basis.currentTurn?.status !== 'pending'
+          ? () => restoreVm(basis.chatId, basis.currentTurn.id || basis.turnId) : null });
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
@@ -1264,6 +1266,64 @@
     item.stop = true;
     writePending(uid, list);
   }
+  // The VM back to how it was before this message (routers/agent.py
+  // restore_agent_vm, admins): asked first, since later changes are lost.
+  async function restoreVm(chatId, turnId) {
+    const confirmed = await App.confirm?.({ title: "Restore the VM?", danger: true, confirmLabel: "Restore",
+      body: "The agent’s VM goes back to how it was before this message. Everything this message and later ones changed in it is lost, and running background processes stop." });
+    if (!confirmed) return;
+    let message = "The VM is back to how it was before this message.";
+    try {
+      const token = await window.auth.currentUser.getIdToken();
+      const response = await fetch(`/agent/chats/${encodeURIComponent(chatId)}/turns/${encodeURIComponent(turnId)}/vm-restore`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        message = data.error || "The VM could not be restored.";
+      }
+    } catch (_) {
+      message = "The VM could not be restored. Check your connection.";
+    }
+    App.showPopup?.(message);
+  }
+  // Enter while a response runs (app-init.js): with Agent VM, where a run may
+  // take an hour, the message goes into the run (routers/agent.py
+  // add_agent_note) and the agent reads it before its next step, like typing
+  // to Claude Code while it works. Stop stays Stop. Without the VM, Enter
+  // still waits for the response (false: the caller does nothing).
+  async function addNote() {
+    const context = registry.visible();
+    const input = document.getElementById("questionInput");
+    const text = String(input?.value || "").trim();
+    const chatId = context?.metadata?.chatId;
+    if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text
+        || App.agentPreferences?.get?.().vm !== "on" || !document.body.classList.contains("viewer-is-admin")) return false;
+    if (!chatId || !context.metadata.requestSent) {
+      App.showPopup?.("Your message can go into the response once it has started.");
+      return true;
+    }
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/notes`;
+    let failure = "";
+    try {
+      const token = await window.auth.currentUser.getIdToken();
+      const response = await fetch(url, { method: "POST", body: JSON.stringify({ text }),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        failure = data.error || "Your message could not go into the response.";
+      }
+    } catch (_) {
+      failure = "Your message could not go into the response. Check your connection.";
+    }
+    if (failure) {
+      // Nothing is lost: the words come back unless something new was typed.
+      if (input && !input.value.trim()) { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); }
+      App.showPopup?.(failure);
+    }
+    return true;
+  }
   // Stop is explicit: closing the connection no longer ends a turn. The
   // request identity reaches the turn before its id is known, and a Stop
   // that overtakes its own message keeps it from starting at all. It is
@@ -1841,7 +1901,7 @@
     looksAgent,
     // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
     pick: () => selection(), modelLabel, applyPick,
-    render: () => renderShell(), renderShell, project, send, revealPendingReview, syncPendingReview,
+    render: () => renderShell(), renderShell, project, send, addNote, revealPendingReview, syncPendingReview,
     tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget,
     // demo.js: show (true) or release (false) the answer surface for the demo.
     // Returns the activity host for that turn, or null when released.

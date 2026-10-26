@@ -674,6 +674,23 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm-fold-list > .agent-vm { margin: 0 0 16px; }
 .agent-vm-fold-list > :last-child { margin-bottom: 0; }
 .agent-vm-output[hidden] { display: none; }
+/* Restore the VM to before this message (agent-activity.js, admins): a quiet
+   text action under the usage line, no frame. */
+.agent-vm-restore {
+  display: block; margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--ink-3);
+  font: inherit; font-size: var(--font-size-xs); line-height: 1.6; cursor: pointer; text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px;
+}
+.agent-vm-restore[hidden] { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-vm-restore:hover { color: var(--ink-2); }
+}
+.agent-vm-restore:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+/* A message the user sent into the running response (agent-activity.js
+   userNote): their words in full ink after a quiet "You". */
+.agent-user-note { color: var(--ink); font-size: var(--font-size-ui); line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
+.agent-progress > .agent-user-note { margin: 0 0 16px; }
+.agent-user-note-who { margin-right: .5em; color: var(--ink-3); }
 /* The agent's plan (agent-activity.js planView, update_plan): its steps as a
    quiet checklist under one line, pinned open above the live progress and
    folded in the timeline. A ring for a step to do, a filled dot for the one

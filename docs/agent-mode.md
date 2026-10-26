@@ -452,7 +452,9 @@ Chat beim Anlegen gelöscht, löscht der Lauf die VM selbst
 (`_still_active`). Eine Nachricht ohne VM-Aufruf weckt die VM nicht und legt
 keinen Checkpoint an. Der Turn speichert `agent_vm: {provider, checkpoint,
 calls, commands, seconds}` (Summe der Befehlslaufzeiten; `unavailable: true`,
-wenn die VM ausfiel).
+wenn die VM ausfiel). Wiederherstellen in der Oberfläche seit 2026-10-26
+(siehe „Eingreifen“); die Sprite pausiert nach etwa 30 s Leerlauf ohne
+Rechenkosten.
 
 **Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
 erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM
@@ -469,8 +471,7 @@ Präfix der vorigen liest. Es ist nie Nutzertext: `is_work_record` lässt es aus
 `answer_conversation` heraus (Memory-Belege, Links für `read_source`,
 Adressen für Gmail, Vergleichskontext), im Arbeitsprotokoll hat es die
 Herkunft `vm`. Auch ein Turn, der scheiterte oder gestoppt wurde, speichert
-es; ein Turn, dessen VM nie startete, nicht. Noch keine Wiederherstellung in der Oberfläche; die
-Sprite pausiert nach etwa 30 s Leerlauf ohne Rechenkosten.
+es; ein Turn, dessen VM nie startete, nicht.
 
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
 dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von
@@ -483,6 +484,34 @@ Management-Socket in der VM (`/.sprite/api.sock`, Tasks API) kann ein Befehl
 die Sprite bis zu einer Stunde je Task wach halten (Kosten); hingenommen, weil
 nur Admins die VM haben. Die App selbst nutzt ihn nur für Hintergrundprozesse,
 gedeckelt (siehe unten).
+
+**Eingreifen (seit 2026-10-26).** Zwei Wege neben Stop, beide nur mit der
+VM:
+- *Nachricht in den laufenden Lauf.* Enter mit Text im Eingabefeld schickt die
+  Nachricht während eines laufenden VM-Laufs hinein (`agent-chat.js`
+  `addNote`, aufgerufen vom Enter-Handler in `app-init.js`, der während eines
+  Laufs bisher nichts tat); der Stop-Knopf bleibt Stop. Ohne VM wartet Enter
+  wie bisher. `POST /agent/chats/{chat}/requests/{request_id}/notes`
+  (`text` 1–4.000 Zeichen) prüft laufenden Turn und VM-Einstellung und legt die
+  Nachricht am Root-Beleg ab (`AgentSessionStore.add_user_note`, höchstens
+  `USER_NOTES_MAX` = 10 je Antwort); der Wächter-Thread liest sie bei der
+  Lease-Prüfung mit (`check_delegation` gibt den Root zurück, kein zusätzlicher
+  Lesezugriff), die Schleife hängt sie vor dem nächsten Schritt an
+  (`_take_notes`: „[The user wrote this while you were working; it comes from
+  the user:]“ + Text). Ein laufender Befehl wird nicht unterbrochen. Die
+  Aktivität zeigt sie als „You“ + Worte des Nutzers (`from_user`, nie
+  übersetzt), das Arbeitsprotokoll mit Herkunft `user`. Kommt sie erst nach der
+  fertigen Antwort an, sagt die Aktivität das (`NOTES_UNREAD`).
+- *Checkpoint wiederherstellen.* Unter der Verbrauchszeile der letzten
+  Antwort steht für Admins „Restore the VM to before this message“, wenn der
+  Turn einen Checkpoint hat; nach Bestätigung (`App.confirm`, gefährlich)
+  setzt `POST /agent/chats/{chat}/turns/{turn}/vm-restore` die VM über
+  `agent_vm.restore_chat_vm` (Sprites `POST …/checkpoints/{id}/restore`,
+  NDJSON bis `complete`) auf den Stand vor dieser Nachricht zurück. Nie,
+  solange im Chat eine Antwort läuft (409), nur mit Checkpoint (409), Ausfall
+  des Anbieters 503. Der Chat merkt sich `agent_vm.restored`; die nächste
+  Nachricht mit VM bekommt einmal `VM_RESTORED_NOTE` in ihren App-Kontext
+  (danach `told`), damit der Agent seinem Arbeitsstand nicht blind glaubt.
 
 **Bilder ansehen (seit 2026-10-26).** Nimmt das Chatmodell Bilder an
 (`input_modalities` der OpenRouter-Metadaten, `sees_pictures`), bekommt der
@@ -638,7 +667,9 @@ Fehler), `tests/test_agent_plan.py` (Plan in Aktivität, Protokoll und
 Prüfer-Prompt), `tests/test_agent_vm_processes.py` (Werkzeuge gegen FakeVM,
 Aufseher-Skripte in echtem bash: Ende, Stopp, Deckel, Zeitlimit),
 `tests/test_agent_vm_pictures.py` (Bild nach den Ergebnissen, nur für
-Bildmodelle, nur die neuesten),
+Bildmodelle, nur die neuesten), `tests/test_agent_notes.py` (Nachricht in den
+laufenden Lauf), `tests/test_agent_vm_restore.py` (Restore über die API und
+Hinweis an die nächste Nachricht),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
 `agent-preferences.test.mjs`, `test_user_settings.py` und
 `test_prompt_config.py`.

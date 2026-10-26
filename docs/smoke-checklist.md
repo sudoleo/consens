@@ -102,6 +102,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Schlussrunde.
       Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
       `agent-review.test.mjs`, `agent-delegation.test.mjs`.
+- [ ] Agent VM: Eingreifen (2026-10-26, Admin-Konto, Agent VM an): Während
+      ein Lauf Befehle ausführt, Text tippen und Enter: das Feld leert sich,
+      die Nachricht erscheint vor dem nächsten Schritt als „You …“ in den
+      Fortschrittszeilen, der Agent geht darauf ein; Stop bleibt Stop. Ohne
+      Agent VM passiert bei Enter während eines Laufs nichts. Danach unter der
+      Verbrauchszeile „Restore the VM to before this message“: Dialog,
+      Bestätigen, Hinweis „The VM is back …“; ein `ls` in der nächsten
+      Nachricht zeigt den alten Stand, und der Agent erwähnt den Restore.
+      Automatisiert: `test_agent_notes.py`, `test_agent_vm_restore.py`,
+      `agent-vm-activity.test.mjs`.
 - [ ] Agent VM (2026-10-25, Admin-Konto, echter Provider, `SPRITES_TOKEN`
       gesetzt): Settings › Agent · Beta › Agent VM auf On (die Zeile fehlt für
       Nicht-Admins). Mit einer CSV im Anhang: „Rechne den Mittelwert der

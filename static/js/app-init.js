@@ -876,6 +876,8 @@
             }
             if (window.isRunActive && window.isRunActive()) {
               event.preventDefault();
+              // With Agent VM the words go into the running response (agent-chat.js addNote).
+              window.App.agentChat?.addNote?.();
               return;
             }
             if (window.isQueryRequestRunning && window.isQueryRequestRunning()) {
