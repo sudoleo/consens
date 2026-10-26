@@ -5482,6 +5482,10 @@ Request-Identität auf `off`). Mit `on` schickt die Route
 Agent-Prompts, `ComparisonTools.audit_mode` bietet keine Vergleichstools an,
 und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
 streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
+Die Vergleichsmodelle sind hier Prüfer, also reicht eines
+(`comparison_selection(..., audit=True)`: 1 bis `MAX_RUN_FAMILIES`, sonst 2;
+im Browser `App.agentPreferences.auditing()` für Chip, Menü und Senden, seit
+2026-10-26).
 Ab dem Start des Laufs folgt jedes Vergleichsmodell dem Arbeitsprotokoll
 (`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
 Thread, eine Sitzung Art `audit`, Runden über

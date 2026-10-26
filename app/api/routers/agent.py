@@ -380,7 +380,7 @@ def run_agent(request: Request, payload: AgentRequest):
         # retains its separately configured model/protocol feature gate.
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
-        comparisons = comparison_selection(payload.comparison_models)
+        comparisons = comparison_selection(payload.comparison_models, audit=preferences.audit == "on")
         memory = _memory_snapshot(uid)
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).

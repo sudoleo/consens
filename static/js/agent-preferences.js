@@ -37,6 +37,18 @@
   function set(field, choice) {
     if (!CHOICES[field]?.includes(choice)) return;
     settings.set("agent_preferences", { ...stored(), [field]: choice });
+    if (field === "audit") auditChanged();
+  }
+
+  // Audit runs for admins only (routers/agent.py effective_preferences). Its
+  // comparison models review the agent's work, and one reviewer is enough
+  // (agent_comparison.comparison_selection): the chip and Send follow.
+  function auditing() {
+    return get().audit === "on" && document.body.classList.contains("viewer-is-admin");
+  }
+  function auditChanged() {
+    window.syncCustomModelPickers?.();
+    window.updateQuestionInputAccess?.();
   }
 
   // The tab only exists for accounts that can use Agent · Beta.
@@ -55,11 +67,11 @@
       document.getElementById(id)?.addEventListener("change", event => set(field, event.target.value));
     }
     // The account's values arrived (server, another tab, sign-out).
-    settings.onChange("agent_preferences", detail => { if (detail.source !== "local") sync(); });
+    settings.onChange("agent_preferences", detail => { if (detail.source !== "local") { sync(); auditChanged(); } });
     sync();
   }
 
-  App.agentPreferences = { get, set, sync, defaults: () => ({ ...DEFAULTS }) };
+  App.agentPreferences = { get, set, sync, auditing, defaults: () => ({ ...DEFAULTS }) };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);
   else bind();
 })();

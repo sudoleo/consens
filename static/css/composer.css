@@ -505,6 +505,13 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   transform: translateY(calc(-1 * var(--starters-room, 0px)));
   transition-delay: var(--dur-press);
 }
+/* A composer notice stands in the examples' room (components-input.css):
+   the note stays below it instead of gliding up into it, where both lay
+   over each other ("Select between two and 6 comparison models…" on
+   "Please avoid personal…", 2026-10-26). */
+body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)):has(> .agent-composer-notice:not([hidden])) > .app-footer {
+  transform: none;
+}
 /* Reduced motion: the examples only fade; the note jumps, after they are gone. */
 @media (prefers-reduced-motion: reduce) {
   .input-section:has(#questionInput:not(:placeholder-shown)) > .composer-starters > .composer-starter { transform: none; }

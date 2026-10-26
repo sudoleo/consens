@@ -78,3 +78,22 @@ it("offers the settings tab only to accounts with Agent Beta", () => {
   const denied = boot(false);
   expect(denied.window.App.settingsTabs.setTabAvailable).toHaveBeenLastCalledWith("agentSettingsSection", false);
 });
+
+// One reviewer is enough in audit mode, which runs for admins only: the chip
+// and Send learn of a change at once (model-picker.js, agent-chat.js).
+it("audits only for an admin and redraws the chip when audit changes", () => {
+  const { window: w, document: d } = boot(true);
+  w.syncCustomModelPickers = vi.fn();
+  w.updateQuestionInputAccess = vi.fn();
+  const audit = d.getElementById("agentAuditSelect");
+  audit.value = "on"; audit.dispatchEvent(new w.Event("change"));
+  expect(w.App.agentPreferences.auditing()).toBe(false);
+  d.body.classList.add("viewer-is-admin");
+  expect(w.App.agentPreferences.auditing()).toBe(true);
+  expect(w.syncCustomModelPickers).toHaveBeenCalledTimes(1);
+  expect(w.updateQuestionInputAccess).toHaveBeenCalledTimes(1);
+  // Another setting leaves the chip alone.
+  const depth = d.getElementById("agentDepthSelect");
+  depth.value = "quick"; depth.dispatchEvent(new w.Event("change"));
+  expect(w.syncCustomModelPickers).toHaveBeenCalledTimes(1);
+});

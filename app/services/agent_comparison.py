@@ -573,12 +573,15 @@ class JudgeArgs(ProgressArgs):
     finalize: SkipJsonSchema[bool] = True
 
 
-def comparison_selection(value=None):
+def comparison_selection(value=None, *, audit=False):
+    """The comparison models of one message. A comparison needs two sides; in
+    audit mode they are reviewers of the agent's work, and one is enough."""
     chosen = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]) if value is None else dict(value)
     # A browser may still hold a migrated ID (grok-4.3-no-reasoning, 2026-10-11).
     chosen = {provider: cfg.canonical_model_id(model_id, provider) for provider, model_id in chosen.items()}
-    if not 2 <= len(chosen) <= cfg.MAX_RUN_FAMILIES:
-        raise ValueError(f"Select between two and {cfg.MAX_RUN_FAMILIES} comparison models")
+    if not (1 if audit else 2) <= len(chosen) <= cfg.MAX_RUN_FAMILIES:
+        raise ValueError(f"Select between one and {cfg.MAX_RUN_FAMILIES} reviewers" if audit
+                         else f"Select between two and {cfg.MAX_RUN_FAMILIES} comparison models")
     for provider, model_id in chosen.items():
         if provider not in cfg.PROVIDERS or model_id not in cfg.PROVIDERS[provider].models:
             raise ValueError("Comparison model is not available")

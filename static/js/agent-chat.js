@@ -1010,10 +1010,20 @@
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => [pref.provider, document.getElementById(pref.selectId)?.value]));
   }
+  // A comparison needs two models; in audit mode they review the work, and
+  // one is enough (agent-preferences.js auditing).
+  function comparisonMinimum() { return App.agentPreferences?.auditing?.() ? 1 : 2; }
+  function comparisonLimit() { return Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6; }
+  function comparisonRequirement(suffix) {
+    const limit = comparisonLimit();
+    return comparisonMinimum() === 1
+      ? (suffix === 'send' ? `Select between one and ${limit} reviewers to send your message.` : `Select between one and ${limit} reviewers before sending.`)
+      : (suffix === 'send' ? `Select between two and ${limit} comparison models to send your message.` : `Select between two and ${limit} comparison models before sending.`);
+  }
   function hasValidComparisonSelection(value = comparisonSelection()) {
     const models = Object.values(value);
-    const limit = Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6;
-    return models.length >= 2 && models.length <= limit && models.every(id => typeof id === 'string' && id.trim());
+    return models.length >= comparisonMinimum() && models.length <= comparisonLimit()
+      && models.every(id => typeof id === 'string' && id.trim());
   }
   function sendBlocker() {
     if (!canUse()) return { message: 'Log in to use Agent.' };
@@ -1023,8 +1033,7 @@
       return { message: 'No chat models are available right now. Try reloading the model list.', action: 'reload', label: 'Reload models' };
     }
     if (!hasValidComparisonSelection()) {
-      const limit = Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6;
-      return { message: `Select between two and ${limit} comparison models to send your message.`, action: 'compare', label: 'Choose models' };
+      return { message: comparisonRequirement('send'), action: 'compare', label: 'Choose models' };
     }
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
     if (basis && (!basis.chatId || basis.continuationUnavailable)) return { message: 'Reopen this saved chat before continuing.' };
@@ -1704,7 +1713,7 @@
     };
     const comparisonModels = comparisonSelection();
     if (!hasValidComparisonSelection(comparisonModels)) {
-      App.showPopup?.(`Select between two and ${Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6} comparison models before sending.`);
+      App.showPopup?.(comparisonRequirement('before'));
       return;
     }
     if (!catalog || catalogStatus !== 'ready' || !catalog.models.some(model => model.id === settings.model_id && model.available !== false)) {

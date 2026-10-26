@@ -43,6 +43,15 @@ def test_api_comparison_selection_uses_the_same_six_family_cap_as_the_picker():
         comparison_selection(choices)
 
 
+def test_one_comparison_model_is_enough_only_as_a_reviewer():
+    one = {'anthropic': 'claude-haiku-4-5'}
+    with pytest.raises(ValueError, match='between two and'):
+        comparison_selection(one)
+    assert list(comparison_selection(one, audit=True)) == ['anthropic']
+    with pytest.raises(ValueError, match='between one and'):
+        comparison_selection({}, audit=True)
+
+
 def test_admission_cannot_wait_when_even_released_tokens_cannot_fit(store, monkeypatch):
     loop = chat_loop(store, Completion)
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())

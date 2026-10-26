@@ -892,3 +892,22 @@ def test_only_an_admins_message_runs_in_audit_mode(api, monkeypatch, admin):
         assert "COMPARE OR ANSWER DIRECTLY" in system and "compare_models" in names
     # The same request again is the same message, with the same effective settings.
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+
+
+@pytest.mark.parametrize("admin", [True, False])
+def test_one_reviewer_is_enough_only_in_audit_mode(api, monkeypatch, admin):
+    """In audit mode the comparison models review the agent's work, and one
+    is enough; a comparison still needs two sides (2026-10-26)."""
+    from app.api.routers import agent
+    client, store, _calls = api
+    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
+               "agent_preferences": {"audit": "on"}, "comparison_models": {"anthropic": "claude-haiku-4-5"}}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    if not admin:
+        assert response.status_code == 422 and "between two and" in response.text
+        return
+    assert response.status_code == 200, response.text
+    turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
+    assert list(store.get_turn(UID, chat_id, turn["id"])["agent_settings"]["comparison_models"]) == ["anthropic"]

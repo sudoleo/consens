@@ -477,16 +477,21 @@
   text-transform: uppercase;
 }
 
-.model-picker-requirement {
-  margin: 2px 8px 6px;
-  padding: 7px 9px;
-  border-radius: var(--radius-xs);
-  background: var(--partial-bg);
-  color: var(--partial);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-ui);
+/* The count shares the label's line, always there: below the minimum it
+   only changes its words and colour, so no row moves (model-picker.js). */
+.model-picker-section-label:has(> .model-picker-requirement) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
+.model-picker-requirement {
+  flex: none;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: normal;
+  text-transform: none;
+}
+.model-picker-requirement.is-invalid { color: var(--partial); }
 
 .model-picker-row {
   display: flex;

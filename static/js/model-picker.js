@@ -92,6 +92,12 @@
     return Number(window.App.maxRunFamilies) > 0 ? Number(window.App.maxRunFamilies) : 6;
   }
 
+  // Neben einer Agent-Antwort im Audit-Modus pruefen die Vergleichsmodelle
+  // die Arbeit, dafuer reicht eines (agent-preferences.js auditing).
+  function comparisonMinimum() {
+    return window.App.agentPreferences?.auditing?.() ? 1 : 2;
+  }
+
   function selectedFamilyCount(exceptPref) {
     return window.App.modelPrefs.filter(pref => (
       pref !== exceptPref && document.getElementById(pref.checkId)?.checked
@@ -541,14 +547,18 @@
     const pending = pendingLinks.get(select);
     if ((state.companion || pending?.companion) && select.dataset.catalog !== "failed") {
       const count = window.App.getSelectedModelCount?.() || 0;
+      const minimum = comparisonMinimum();
       const linked = state.linkedAriaLabel || pending?.options?.ariaLabel || select.getAttribute("aria-label");
-      displayLabel = window.App.words.crossCheck(count);
-      displayTitle = count < 2
-        ? `${selectedLabel} writes the answer. Choose at least 2 models to cross-check it.`
-        : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
-      ariaLabel = count < 2
+      displayLabel = window.App.words.crossCheck(count, minimum);
+      displayTitle = count < minimum
+        ? (minimum === 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
+          : `${selectedLabel} writes the answer. Choose at least 2 models to cross-check it.`)
+        : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
+          : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
+      ariaLabel = count < minimum
         ? `${linked}: ${selectedLabel} writes the answer, no cross-check`
-        : `${linked}: ${selectedLabel} writes the answer, ${count} AIs cross-check it`;
+        : count === 1 ? `${linked}: ${selectedLabel} writes the answer, 1 AI cross-checks it`
+          : `${linked}: ${selectedLabel} writes the answer, ${count} AIs cross-check it`;
     }
 
     if (state.displayButton) {
@@ -732,10 +742,17 @@
     state.menu.appendChild(back);
   }
 
-  function appendSectionLabel(menu, text) {
+  function appendSectionLabel(menu, text, aside = null) {
     const label = document.createElement("div");
     label.className = "model-picker-section-label";
-    label.textContent = text;
+    if (aside) {
+      // Two entries for the German page, not one run with markup.
+      const name = document.createElement("span");
+      name.textContent = text;
+      label.append(name, aside);
+    } else {
+      label.textContent = text;
+    }
     menu.appendChild(label);
   }
 
@@ -906,7 +923,8 @@
     const models = count === 1 ? "1 model" : `${count} models`;
     renderLevelRow(state, {
       name: `${window.App.t(models)} · ${window.App.t(preset ? preset.label : "Custom")}`,
-      hint: count < 2 ? "Choose at least 2" : families.join(", "),
+      hint: count < comparisonMinimum() ? (comparisonMinimum() === 1 ? "Choose at least 1" : "Choose at least 2")
+        : families.join(", "),
       level: "companion",
       disabled: state.companion.disabled,
       onEnter: () => enterCompanion(state)
@@ -1007,15 +1025,19 @@
 
     // Next to an Agent answer these models compare, they do not answer.
     const comparisonOnly = select.dataset.comparisonOnly === "true";
-    appendSectionLabel(state.menu, comparisonOnly ? "Comparison models" : "Answering models");
+    // The count stands in the label's line from the start. A requirement
+    // that appeared above the rows only below the minimum moved every row
+    // under the pointer, one click before the last (2026-10-26).
     const selectedCount = window.App.getSelectedModelCount?.() || 0;
-    if (selectedCount < 2) {
-      const requirement = document.createElement("p");
-      requirement.className = "model-picker-requirement";
-      requirement.setAttribute("role", "status");
-      requirement.textContent = `Select at least 2 models to compare with · ${selectedCount} selected`;
-      state.menu.appendChild(requirement);
-    }
+    const minimum = comparisonOnly ? comparisonMinimum() : 2;
+    const requirement = document.createElement("span");
+    requirement.className = "model-picker-requirement";
+    requirement.setAttribute("role", "status");
+    requirement.classList.toggle("is-invalid", selectedCount < minimum);
+    requirement.textContent = selectedCount < minimum
+      ? (minimum === 1 ? `At least 1 · ${selectedCount} selected` : `At least 2 · ${selectedCount} selected`)
+      : selectedCount === 1 ? "1 model selected" : `${selectedCount} models selected`;
+    appendSectionLabel(state.menu, comparisonOnly ? "Comparison models" : "Answering models", requirement);
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
   }
 

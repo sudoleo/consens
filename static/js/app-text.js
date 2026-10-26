@@ -218,7 +218,9 @@
     allowance: "allowance",
     // The Agent chip says what the comparison models do, not their names:
     // "Claude Sonnet 5.5 +6" meant nothing to a reader new to AI models.
-    crossCheck: count => count >= 2 ? `${count} AIs cross-check` : "No cross-check"
+    // One is enough in audit mode, where they review (agent-preferences.js).
+    crossCheck: (count, minimum = 2) => count < minimum ? "No cross-check"
+      : count === 1 ? "1 AI cross-checks" : `${count} AIs cross-check`
   });
 
   // ------------------------------------------------------------------

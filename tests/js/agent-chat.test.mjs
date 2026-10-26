@@ -2258,6 +2258,45 @@ function bootLinked({ initComparison = true, ...options } = {}) {
 describe('one Agent chip for the chat model and its comparison models', () => {
   const key = (w, el, name) => el.dispatchEvent(new w.KeyboardEvent('keydown', { key: name, bubbles: true }));
 
+  // In audit mode the comparison models review the agent's work, and one is
+  // enough; a comparison needs two (agent-preferences.js auditing, 2026-10-26).
+  it('lets one reviewer suffice in audit mode and counts in the label line', async () => {
+    const { window: w, document: d, dom } = bootLinked();
+    let audit = false;
+    w.App.agentPreferences = { auditing: () => audit };
+    await selectAgent(w);
+    const trigger = d.querySelector('.agent-model-picker .model-picker-display');
+    const menu = d.querySelector('.agent-model-picker .model-picker-menu');
+    const chipText = () => trigger.querySelector('.model-picker-display-text').textContent;
+    d.getElementById('compareClaude').checked = false;
+    w.syncCustomModelPickers();
+    expect(chipText()).toBe('No cross-check');
+    expect(w.App.agentChat.sendBlocker().message).toBe('Select between two and 6 comparison models to send your message.');
+
+    audit = true;
+    w.syncCustomModelPickers();
+    expect(chipText()).toBe('1 AI cross-checks');
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 1 AI cross-checks it.');
+    expect(w.App.agentChat.sendBlocker()).toBeNull();
+
+    // The count stands in the label's line from the start; below the
+    // minimum only its words change, so no row moves.
+    trigger.click();
+    menu.querySelector('[data-picker-level="companion"]').click();
+    menu.querySelector('.model-picker-custom-option').click();
+    const count = () => menu.querySelector('.model-picker-section-label .model-picker-requirement');
+    expect(count().textContent).toBe('1 model selected');
+    expect(count().classList.contains('is-invalid')).toBe(false);
+    const rows = menu.querySelectorAll('.model-picker-row').length;
+    menu.querySelector('[data-focus-key="toggle:OpenAI"]').click();
+    expect(count().textContent).toBe('At least 1 · 0 selected');
+    expect(count().classList.contains('is-invalid')).toBe(true);
+    expect(menu.querySelectorAll('.model-picker-row').length).toBe(rows);
+    expect(chipText()).toBe('No cross-check');
+    expect(w.App.agentChat.sendBlocker().message).toBe('Select between one and 6 reviewers to send your message.');
+    dom.window.close();
+  });
+
   it('carries both choices in one menu and gives the comparison chip back outside Agent', async () => {
     const { window: w, document: d, dom } = bootLinked();
     await selectAgent(w);
