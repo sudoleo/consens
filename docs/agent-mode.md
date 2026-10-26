@@ -232,7 +232,7 @@ Marken, kein Model-Pulse-Pick und keine `differences_stats`.
 - Consensus, Watches und Topics behalten ihre Prüfung; der Schalter gehört zu
   Agent · Beta. Ältere Turns ohne `judges` gelten als `on` (`stored_preferences`).
 
-### Audit statt Vergleich (seit 2026-10-25, nur Admins)
+### Audit statt Vergleich (seit 2026-10-25; seit 2026-10-26 für Pro und Admins)
 
 Einstellungen → Agent · Beta → **Audit instead of comparison**
 (`AgentPreferences.audit`: `off` = Standard, `on`; Zeile `.admin-only`,
@@ -379,15 +379,14 @@ Prompts, Route), `tests/js/audit-marks.test.mjs`, die Audit-Fälle in
 `tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
 `model-answer-reader.test.mjs` und `agent-preferences.test.mjs`.
 
-### Agent VM (seit 2026-10-25, nur Admins)
+### Agent VM (seit 2026-10-25; seit 2026-10-26 Teil von Audit)
 
-Einstellungen → Agent · Beta → **Agent VM** (`AgentPreferences.vm`: `off` =
-Standard, `on`; Zeile `.admin-only`, `#agentVmSelect`). Wie bei Audit nimmt der
-Server `on` nur von Admins an (`routers/agent.py::ADMIN_PREFERENCES`,
-`effective_preferences`); jedes andere Konto läuft wie bisher, der Turn friert
-den wirksamen Wert ein. Ohne Einstellung ändert sich nichts. Die VM ist die
-Grundlage dafür, dass Prüfer später die ganze Arbeit des Agenten live prüfen;
-sie gilt in beiden Modi (mit Vergleich und im Audit-Modus).
+Seit 2026-10-26 gibt es keine eigene VM-Einstellung mehr: Einstellungen →
+Agent · Beta → **Way of working** = Audit bringt die VM mit
+(`AgentPreferences.vm` folgt `audit`, `routers/agent.py::effective_preferences`
+für Pro und Admins, `audit_allowed`); ohne Audit keine VM. Der Turn friert den
+wirksamen Wert ein. Die Prüfer verfolgen jeden VM-Schritt live im
+Arbeitsprotokoll.
 
 **Was der Agent bekommt.** Eine eigene Linux-VM pro Chat (Fly.io Sprites,
 Ubuntu, bash, sudo) mit fünf Werkzeugen (`agent_vm_tools.py`, nur auf
@@ -476,22 +475,30 @@ es; ein Turn, dessen VM nie startete, nicht.
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
 dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von
 `agent_vm.py`, Gmail und Kalender bleiben Backend-Werkzeuge mit Bestätigung.
-Ausgehend erreicht die VM nur die Standardziele des Anbieters
-(`EGRESS_RULES = [{"include": "defaults"}]`: GitHub, npm, PyPI, Docker Hub,
-große KI-APIs), damit eine gelesene Seite die Dateien des Chats nicht an einen
-beliebigen Server schicken lässt. Bekanntes Restrisiko: Über den
-Management-Socket in der VM (`/.sprite/api.sock`, Tasks API) kann ein Befehl
-die Sprite bis zu einer Stunde je Task wach halten (Kosten); hingenommen, weil
-nur Admins die VM haben. Die App selbst nutzt ihn nur für Hintergrundprozesse,
+Ausgehend erreicht die VM seit 2026-10-26 das offene Web (`EGRESS_RULES`:
+`*.internal` und `*.flycast` gesperrt, also Flys internes Netz, sonst `*`
+erlaubt; die Sprites-Policy kennt nur Domains, keine IP-Bereiche). Vorher nur
+die Standardziele des Anbieters (Paketquellen, KI-APIs). Damit fällt die
+technische Sperre gegen Datenabfluss weg: Der Prompt verbietet, Dateien und
+Daten des Chats an Adressen zu schicken, die nur eine Seite, Datei oder
+Ausgabe nennt, und die Prüfer sehen jeden Befehl live (später mit Aussteuerung).
+Bekanntes Restrisiko: Über den Management-Socket in der VM
+(`/.sprite/api.sock`, Tasks API) kann ein Befehl die Sprite bis zu einer Stunde
+je Task wach halten (Kosten); seit der Öffnung für Pro offen zur Entscheidung. Die App selbst nutzt ihn nur für Hintergrundprozesse,
 gedeckelt (siehe unten).
 
 **Eingreifen (seit 2026-10-26).** Zwei Wege neben Stop, beide nur mit der
 VM:
-- *Nachricht in den laufenden Lauf.* Enter mit Text im Eingabefeld schickt die
-  Nachricht während eines laufenden VM-Laufs hinein (`agent-chat.js`
-  `addNote`, aufgerufen vom Enter-Handler in `app-init.js`, der während eines
-  Laufs bisher nichts tat); der Stop-Knopf bleibt Stop. Ohne VM wartet Enter
-  wie bisher. `POST /agent/chats/{chat}/requests/{request_id}/notes`
+- *Nachricht in den laufenden Lauf.* Enter oder Senden mit Text im
+  Eingabefeld schickt die Nachricht während eines laufenden VM-Laufs hinein
+  (`agent-chat.js` `steer`; seit 2026-10-26 wird der Knopf mit Text im Feld
+  zu Senden, „Send into the running response“, leer bleibt er Stop). Jede
+  Nachricht steht sofort als Zeile in `#agentQueue` über dem Feld: „Read
+  before the next step“, bis die Aktivität sie unter „You“ zeigt
+  (`note-<id>`). Ohne VM (oder vor dem Start) wartet sie dort als „Sends
+  after this response“ (mit ×). Was der Lauf nicht las, geht nach seinem
+  Ende als nächste Nachricht raus; nach Stop oder Fehler steht es wieder im
+  Feld (`flushQueue`). `POST /agent/chats/{chat}/requests/{request_id}/notes`
   (`text` 1–4.000 Zeichen) prüft laufenden Turn und VM-Einstellung und legt die
   Nachricht am Root-Beleg ab (`AgentSessionStore.add_user_note`, höchstens
   `USER_NOTES_MAX` = 10 je Antwort); der Wächter-Thread liest sie bei der
@@ -589,11 +596,11 @@ App: `docs/github-app-setup.md`). Konfiguration: `GITHUB_APP_ID`,
 `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`,
 `GITHUB_APP_SLUG`; fehlt eine, sagen die Werkzeuge ruhig „GitHub is not set
 up“. Die Werkzeuge und der Prompt `AGENT_GITHUB_PROMPT` (Admin „Agent: GitHub“)
-kommen mit der VM, also derzeit nur für Admins; die Verbindung selbst ist für
+kommen mit der VM, also mit Audit (Pro und Admins); die Verbindung selbst ist für
 jedes Konto mit Agent gebaut.
 
 *Verbinden* (Einstellungen → Agent · Beta → GitHub, Zeile `#agentGithubSettings`,
-`.admin-only` wie die VM-Zeile): wie bei Google ein Popup.
+`.audit-only`, nur bei Audit sichtbar): wie bei Google ein Popup.
 `POST /agent/github/connect` legt einen einmaligen `state` an
 (`users/{uid}/github_oauth_states/{sha(state)}`, 10 min) und setzt das
 HttpOnly-Cookie `consens_github_oauth` (Pfad `/agent/github`) mit dem

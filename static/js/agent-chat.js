@@ -919,7 +919,7 @@
     // open keeps it open, waiting (agent-delegation.js, Apple audit A9).
     // Audit mode writes a work log (admins only, agent-work-log.js).
     const workLog = Boolean(state.completedTurn?.agent_work_log)
-      || (context.config.agentPreferences?.audit === "on" && document.body.classList.contains("viewer-is-admin"));
+      || (context.config.agentPreferences?.audit === "on" && document.body.classList.contains("viewer-can-audit"));
     App.agentDelegation?.project(delegated ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running, workLog }

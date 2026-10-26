@@ -1,8 +1,10 @@
-// Agent · Beta settings: how deep the comparison models answer, when the
-// answer starts (quorum), how freely Agent picks its models (autonomy),
-// whether the judges check the answer (judges, "Answer check") and, for
-// admins, audit instead of comparison (audit, agent_audit.py) and the
-// agent's own Linux VM (vm, agent_vm_tools.py). An
+// Agent · Beta settings: the way of working (audit: Comparison or Audit,
+// agent_audit.py; Pro and admins) and, for Comparison, how deep the
+// comparison models answer, when the answer starts (quorum), how freely
+// Agent picks its models (autonomy) and whether the judges check the answer
+// (judges, "Answer check"). Audit always brings its own Linux VM
+// (agent_vm_tools.py) and its reviewers, so ``vm`` follows ``audit`` (the
+// server decides the same, routers/agent.py effective_preferences). An
 // account setting ("agent_preferences", user-settings.js) sent with every
 // Agent message; a running turn keeps the values it started with.
 (function () {
@@ -15,9 +17,9 @@
     vm: "off" });
   const CHOICES = { depth: ["auto", "quick", "full"], quorum: ["balanced", "fast", "all"], autonomy: ["guided", "free"],
     judges: ["on", "off"], audit: ["off", "on"], vm: ["off", "on"] };
-  // The audit and VM rows are .admin-only in the page; the server runs them for admins only.
+  // The way of working is .audit-only in the page (Pro and admins); there is no VM row.
   const CONTROLS = { depth: "agentDepthSelect", quorum: "agentQuorumSelect", autonomy: "agentAutonomySelect",
-    judges: "agentJudgesSelect", audit: "agentAuditSelect", vm: "agentVmSelect" };
+    judges: "agentJudgesSelect", audit: "agentAuditSelect" };
 
   // Only what the user chose is stored, so a later change of a default
   // reaches everyone who never touched that setting.
@@ -31,6 +33,7 @@
     for (const field of Object.keys(CHOICES)) {
       if (CHOICES[field].includes(saved[field])) value[field] = saved[field];
     }
+    value.vm = value.audit;
     return value;
   }
 
@@ -40,13 +43,15 @@
     if (field === "audit") auditChanged();
   }
 
-  // Audit runs for admins only (routers/agent.py effective_preferences). Its
-  // comparison models review the agent's work, and one reviewer is enough
-  // (agent_comparison.comparison_selection): the chip and Send follow.
+  // Audit runs for Pro accounts and admins (routers/agent.py audit_allowed,
+  // /user_status audit_access). Its comparison models review the agent's
+  // work, and one reviewer is enough (agent_comparison.comparison_selection):
+  // the chip and Send follow, and the settings show only what applies.
   function auditing() {
-    return get().audit === "on" && document.body.classList.contains("viewer-is-admin");
+    return get().audit === "on" && document.body.classList.contains("viewer-can-audit");
   }
   function auditChanged() {
+    document.getElementById("agentSettingsSection")?.classList.toggle("is-audit", auditing());
     window.syncCustomModelPickers?.();
     window.updateQuestionInputAccess?.();
   }
@@ -60,6 +65,7 @@
       const control = document.getElementById(id);
       if (control && control.value !== value[field]) control.value = value[field];
     }
+    document.getElementById("agentSettingsSection")?.classList.toggle("is-audit", auditing());
   }
 
   function bind() {

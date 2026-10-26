@@ -8,9 +8,9 @@ activity events are in agent_vm_tools.py.
 
 The VM never holds a secret: the provider token (SPRITES_TOKEN) goes only
 into the headers of this module's own requests, no command gets an
-environment variable from the backend, and the VM reaches only the package
-registries and developer services of the provider's default network policy
-(EGRESS_RULES), applied whenever a message first uses the VM.
+environment variable from the backend. The VM reaches the open web
+(EGRESS_RULES, applied whenever a message first uses the VM), not the
+provider's internal network.
 
 Sprites API (https://docs.fly.io/sprites/api): REST over HTTPS for the
 sprite, its files, network policy and checkpoints; commands over the exec
@@ -35,10 +35,15 @@ import httpx
 from app.core.observability import safe_exception
 
 SPRITES_API = "https://api.sprites.dev"
-# The provider's default allowlist: GitHub, npm, PyPI, Docker Hub and the
-# major AI APIs. Everything else is refused by DNS, so a page the agent read
-# cannot have it send the chat's files to a server of its choosing.
-EGRESS_RULES = [{"include": "defaults"}]
+# The open web since 2026-10-26 (before: the provider's allowlist of
+# package registries and AI APIs), so the agent works like a developer with a
+# browser and a shell. Fly.io's private network (*.internal, *.flycast) stays
+# closed; the policy is DNS-based and knows no IP ranges. What stops the
+# agent from sending the chat's files where a page told it to is the prompt
+# (AGENT_VM_PROMPT) and the reviewers who follow every command live in audit
+# mode, which is the only way to the VM.
+EGRESS_RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
+                {"domain": "*", "action": "allow"}]
 HOME = "/home/sprite"
 # Seconds between the command's own time limit (the VM-side ``timeout``)
 # and its forced end, and how much longer the backend waits for the exit

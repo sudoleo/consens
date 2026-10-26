@@ -1197,10 +1197,28 @@
             aria-labelledby="settingsAgentTitle" hidden>
             <div class="settings-category-heading">
               <h3 id="settingsAgentTitle">Agent · Beta</h3>
-              <p>How Agent compares and checks your questions. Saved to your account; applies from your next message.</p>
+              <p>How Agent works on your questions. Saved to your account; applies from your next message.</p>
             </div>
             <div class="settings-group">
-              <div class="settings-section" data-settings-keywords="tiefe depth ausführlich gründlich thorough kurz brief knapp quick automatisch automatic länge length">
+              <!-- One choice instead of separate Audit, VM and answer-check rows
+                   (2026-10-26): Audit always brings its VM and its reviewers;
+                   the comparison rows below show only for Comparison
+                   (agent-preferences.js, #agentSettingsSection.is-audit). -->
+              <div class="settings-section audit-only" data-settings-keywords="arbeitsweise way of working audit prüfer reviewer review vergleich comparison vm linux shell terminal code internet web">
+                <label for="agentAuditSelect" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Way of working</strong>
+                    <small>Comparison: Agent asks your comparison models and writes the answer from what they found. Audit: Agent works on its own, with its own Linux VM and the open web, also on longer tasks; your comparison models follow every step live and review the finished answer.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="agentAuditSelect">
+                      <option value="off" selected>Comparison</option>
+                      <option value="on">Audit</option>
+                    </select>
+                  </span>
+                </label>
+              </div>
+              <div class="settings-section agent-comparison-setting" data-settings-keywords="tiefe depth ausführlich gründlich thorough kurz brief knapp quick automatisch automatic länge length">
                 <label for="agentDepthSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer depth</strong>
@@ -1215,7 +1233,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section" data-settings-keywords="tempo speed schnell fast schneller faster warten wait quorum hälfte half start beginn">
+              <div class="settings-section agent-comparison-setting" data-settings-keywords="tempo speed schnell fast schneller faster warten wait quorum hälfte half start beginn">
                 <label for="agentQuorumSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer start</strong>
@@ -1230,7 +1248,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section" data-settings-keywords="autonomie autonomy freiheit frei free geführt guided runden rounds modelle models auswahl choice">
+              <div class="settings-section agent-comparison-setting" data-settings-keywords="autonomie autonomy freiheit frei free geführt guided runden rounds modelle models auswahl choice">
                 <label for="agentAutonomySelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Agent freedom</strong>
@@ -1245,7 +1263,7 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section" data-settings-keywords="prüfung check prüfen judges judge richter score highlights markierungen schneller faster">
+              <div class="settings-section agent-comparison-setting" data-settings-keywords="prüfung check prüfen judges judge richter score highlights markierungen schneller faster">
                 <label for="agentJudgesSelect" class="settings-switch-row settings-choice-row">
                   <span>
                     <strong>Answer check</strong>
@@ -1259,36 +1277,8 @@
                   </span>
                 </label>
               </div>
-              <div class="settings-section admin-only" data-settings-keywords="audit prüfer reviewer review anmerkungen notes vergleich comparison admin">
-                <label for="agentAuditSelect" class="settings-switch-row settings-choice-row">
-                  <span>
-                    <strong>Audit instead of comparison</strong>
-                    <small>Admins only. Agent answers on its own, with its own web search, and the answer appears at once. Then your comparison models review the finished answer and mark what they consider wrong, doubtful or incomplete, each with a note. Unmarked text means no objection, not confirmed. With the answer check off, nobody reviews it. Answer depth, answer start and Agent freedom apply only to comparisons.</small>
-                  </span>
-                  <span class="settings-select">
-                    <select id="agentAuditSelect">
-                      <option value="off" selected>Off</option>
-                      <option value="on">On</option>
-                    </select>
-                  </span>
-                </label>
-              </div>
-              <div class="settings-section admin-only" data-settings-keywords="vm linux shell terminal code befehle commands sandbox dateien files admin">
-                <label for="agentVmSelect" class="settings-switch-row settings-choice-row">
-                  <span>
-                    <strong>Agent VM</strong>
-                    <small>Admins only. Agent gets its own Linux VM for each chat: it runs commands, installs packages, writes and runs code and works with your attachments. Its files stay there across the chat’s messages, and you see each command with its output. The VM reaches package registries and developer services, not the open web, and holds no keys or accounts. Not in chats with Google data.</small>
-                  </span>
-                  <span class="settings-select">
-                    <select id="agentVmSelect">
-                      <option value="off" selected>Off</option>
-                      <option value="on">On</option>
-                    </select>
-                  </span>
-                </label>
-              </div>
-              <!-- GitHub for the Agent VM (agent-github.js). Admins only while the VM is; the connection itself works for every account. -->
-              <div class="settings-section admin-only agent-github-settings" id="agentGithubSettings" data-settings-keywords="github repository repo pull request code git">
+              <!-- GitHub for the Agent VM (agent-github.js), which comes with Audit (Pro and admins). -->
+              <div class="settings-section audit-only agent-audit-setting agent-github-settings" id="agentGithubSettings" data-settings-keywords="github repository repo pull request code git">
                 <strong>GitHub</strong>
                 <small>Connect GitHub so the Agent can bring your repositories into its VM and propose pull requests. You choose the repositories when you install the consens.io app on GitHub. Nothing goes to GitHub until you confirm a pull request, and the VM never holds a GitHub key.</small>
               </div>

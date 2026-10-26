@@ -895,11 +895,12 @@ def test_only_a_step_that_calls_a_tool_starts_a_live_round():
 
 # --- The route ---------------------------------------------------------------------
 
+# Audit for Pro accounts and admins since 2026-10-26 (routers/agent.py audit_allowed).
 @pytest.mark.parametrize("admin", [True, False])
-def test_only_an_admins_message_runs_in_audit_mode(api, monkeypatch, admin):
+def test_only_an_allowed_accounts_message_runs_in_audit_mode(api, monkeypatch, admin):
     from app.api.routers import agent
     client, store, calls = api
-    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
+    monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
                "agent_preferences": {"audit": "on"}}
@@ -927,7 +928,7 @@ def test_one_reviewer_is_enough_only_in_audit_mode(api, monkeypatch, admin):
     is enough; a comparison still needs two sides (2026-10-26)."""
     from app.api.routers import agent
     client, store, _calls = api
-    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
+    monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
                "agent_preferences": {"audit": "on"}, "comparison_models": {"anthropic": "claude-haiku-4-5"}}

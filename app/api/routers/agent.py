@@ -92,24 +92,24 @@ def require_reasoning_access(uid, reasoning_effort):
         raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
 
 
-# Agent settings for admin accounts only: Audit instead of comparison
-# (agent_audit.py) and Agent VM (agent_vm_tools.py).
-ADMIN_PREFERENCES = ("audit", "vm")
+# Audit instead of comparison (agent_audit.py), since 2026-10-26 for Pro
+# accounts and admins (before: admins only). It always brings its own Linux
+# VM (agent_vm_tools.py) and its reviewers: the settings page offers no
+# separate VM or answer-check choice for it any more.
+def audit_allowed(uid):
+    return _premium_allowed(uid)
 
 
 def effective_preferences(uid, preferences):
-    """The Agent settings this message runs with. Any account other than an
-    admin's runs ADMIN_PREFERENCES as before, also when its saved settings
-    still say "on" (a former admin)."""
-    if all(getattr(preferences, name) != "on" for name in ADMIN_PREFERENCES):
-        return preferences
-    try:
-        admin = is_user_admin(uid)
-    except TierStatusUnavailable:
-        raise HTTPException(
-            status_code=503, detail="Account tier is temporarily unavailable. Please retry."
-        ) from None
-    return preferences if admin else preferences.model_copy(update=dict.fromkeys(ADMIN_PREFERENCES, "off"))
+    """The Agent settings this message runs with. Audit runs only for an
+    account allowed it (audit_allowed), also when saved settings still say
+    "on" (a former Pro account), and then always with its VM and reviewers;
+    without audit there is no VM."""
+    if preferences.audit != "on":
+        return preferences if preferences.vm == "off" else preferences.model_copy(update={"vm": "off"})
+    if not audit_allowed(uid):
+        return preferences.model_copy(update={"audit": "off", "vm": "off"})
+    return preferences.model_copy(update={"vm": "on", "judges": "on"})
 
 
 def _memory_snapshot(uid):
@@ -642,14 +642,10 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
 
 
 def _require_work_log_access(uid):
-    """The work log (agent_work_log.py) is written in audit mode, which only
-    admins have; so is its view."""
+    """The work log (agent_work_log.py) is written in audit mode (Pro and
+    admins, audit_allowed); so is its view."""
     require_agent_access(uid)
-    try:
-        admin = is_user_admin(uid)
-    except TierStatusUnavailable:
-        raise HTTPException(status_code=503, detail="Account tier is temporarily unavailable. Please retry.") from None
-    if not admin:
+    if not audit_allowed(uid):
         raise HTTPException(status_code=404, detail="Not found")
 
 
@@ -751,15 +747,12 @@ def _vm_restore_told(store, uid, chat_id):
 @limiter.limit("10/minute")
 def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     """Return the chat's VM to the checkpoint taken before this message
-    (VMSession.ready; since 2026-10-26, admins). Never while a response
+    (VMSession.ready; since 2026-10-26, Pro and admins). Never while a response
     runs in the chat; the next message is told (VM_RESTORED_NOTE)."""
     uid = _chat_uid(request)
     require_agent_access(uid)
-    try:
-        if not is_user_admin(uid):
-            raise HTTPException(status_code=403, detail="Agent VM is not available on your account.")
-    except TierStatusUnavailable:
-        raise HTTPException(status_code=503, detail="Account tier is temporarily unavailable. Please retry.") from None
+    if not audit_allowed(uid):
+        raise HTTPException(status_code=403, detail="Agent VM is not available on your account.")
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", turn_id):
         raise HTTPException(status_code=404, detail="Message not found")
     store = AgentRunStore(db_firestore)

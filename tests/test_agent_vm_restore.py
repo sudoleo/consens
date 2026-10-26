@@ -53,7 +53,8 @@ def vm_turn(store, *, checkpoint="v3", status="completed"):
 
 @pytest.fixture
 def admin_api(api, monkeypatch):
-    monkeypatch.setattr(agent_router, "is_user_admin", lambda uid: True)
+    # Audit with its VM: Pro accounts and admins (routers/agent.py audit_allowed).
+    monkeypatch.setattr(agent_router, "audit_allowed", lambda uid: True)
     return api
 
 
@@ -81,7 +82,7 @@ def test_restore_is_refused_while_a_response_runs_without_a_checkpoint_or_for_ot
     failed = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
     assert failed.status_code == 503 and failed.json()["code"] == "vm_unavailable"
     assert not [call for call in fake_vm.calls if call[0] == "restore" and call[2] != "v9"]
-    monkeypatch.setattr(agent_router, "is_user_admin", lambda uid: False)
+    monkeypatch.setattr(agent_router, "audit_allowed", lambda uid: False)
     assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 403
 
 
@@ -92,7 +93,7 @@ def test_the_next_message_is_told_once(admin_api, fake_vm):
     contexts = []
     for request_id in ("after-1", "after-2"):
         payload = {"chat_id": chat, "question": "Go on.", "client_request_id": request_id, "bookmark_id": "agent_test",
-                   "agent_preferences": {"vm": "on"}}
+                   "agent_preferences": {"audit": "on"}}
         assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
         turn = store._turn_ref(UID, chat, agent_router._idempotent_turn_id(chat, request_id)).get().to_dict()
         contexts.append(turn["app_context"])

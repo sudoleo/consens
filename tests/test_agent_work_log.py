@@ -269,10 +269,10 @@ def test_tool_results_are_logged_for_the_agent_but_not_for_the_apps_own_review(s
 # --- Reading, deleting, retention ---------------------------------------------------
 
 @pytest.mark.parametrize("admin", [True, False])
-def test_only_admins_read_the_log(api, monkeypatch, admin):
+def test_only_accounts_with_audit_read_the_log(api, monkeypatch, admin):
     from app.api.routers import agent as agent_router
     client, store, _ = api
-    monkeypatch.setattr(agent_router, "is_user_admin", lambda uid: admin)
+    monkeypatch.setattr(agent_router, "audit_allowed", lambda uid: admin)
     chat_id, turn = pending(store)
     response = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log", headers=AUTH)
     if admin:

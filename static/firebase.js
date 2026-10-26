@@ -394,6 +394,8 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       if (data.is_admin === true) window.consensioAnalytics?.excludeOperator?.();
       // Token and cost figures (.admin-only) are for the operator only (Apple-Audit H4).
       document.body.classList.toggle("viewer-is-admin", data.is_admin === true);
+      // Audit with its own VM (Pro and admins): its settings, work log and restore.
+      document.body.classList.toggle("viewer-can-audit", data.audit_access === true);
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
       window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });
@@ -891,7 +893,7 @@ onIdTokenChanged(auth, async (user) => {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
         window.App?.accountTier?.set?.("free");
-        document.body.classList.remove("viewer-is-admin");
+        document.body.classList.remove("viewer-is-admin", "viewer-can-audit");
         publishAuthState(null);
         // Only now is the session known to be gone. The field was drawn
         // above while the page still expected the account this browser

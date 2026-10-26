@@ -211,7 +211,8 @@ describe("VM calls in the activity", () => {
     activity.renderTurn(host, turn, { vmRestore: () => { restored += 1; } });
     const button = host.querySelector(".agent-vm-restore");
     expect(button.hidden).toBe(false);
-    expect(button.classList.contains("admin-only")).toBe(true);
+    // Audit with its VM is Pro and admins (style.css .audit-only).
+    expect(button.classList.contains("audit-only")).toBe(true);
     expect(button.textContent).toBe("Restore the VM to before this message");
     button.click();
     expect(restored).toBe(1);

@@ -387,7 +387,7 @@
     sidebar._list = list;
     // The work log (agent-work-log.js, admins): the list's last child, so it
     // scrolls with the rows; rows are inserted before it.
-    sidebar._workLog = node("div", "agent-work-log-host admin-only");
+    sidebar._workLog = node("div", "agent-work-log-host audit-only");
     sidebar._workLog.hidden = true;
     list.append(sidebar._workLog);
     sidebar.append(header, overview, status, list);

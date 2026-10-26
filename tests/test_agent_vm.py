@@ -189,7 +189,7 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     # The chat names its VM before the provider creates it; the VM gets the egress rules.
     chat = store._chat_ref(UID, loop.chat_id).get().to_dict()
     assert chat["agent_vm"]["name"] == name and chat["agent_vm"]["provider"] == "fake"
-    assert fake_vm.vms[name]["policy"] == [{"include": "defaults"}]
+    assert fake_vm.vms[name]["policy"] == [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}, {"domain": "*", "action": "allow"}]
     # One checkpoint for the message, before its first call ran.
     operations = [call[0] for call in fake_vm.calls]
     assert operations[:3] == ["ensure", "checkpoint", "write"] and operations.count("checkpoint") == 1
@@ -546,18 +546,28 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
 
 # --- Admins only ------------------------------------------------------------------
 
+# The VM comes with Audit, for Pro accounts and admins (2026-10-26): a saved
+# "vm" without Audit no longer turns it on.
 @pytest.mark.parametrize("admin", [True, False])
-def test_only_an_admins_message_gets_the_vm(api, monkeypatch, admin):
+def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, admin):
     from app.api.routers import agent
     client, store, calls = api
-    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
+    monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
+    alone = store.create_chat(UID, execution_mode="agent")["id"]
+    assert client.post("/agent", json={"chat_id": alone, "question": "Hi", "client_request_id": "r0", "bookmark_id": "bm0",
+                                       "agent_preferences": {"vm": "on"}}, headers=AUTH).status_code == 200
+    first = next(t for t in store.list_turns(UID, alone)["turns"] if t["question"] == "Hi")
+    assert store.get_turn(UID, alone, first["id"])["agent_settings"]["agent_preferences"]["vm"] == "off"
+    calls.clear()
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
-               "agent_preferences": {"vm": "on"}}
+               "agent_preferences": {"audit": "on", "judges": "off"}}
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
     settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
     assert settings["agent_preferences"]["vm"] == ("on" if admin else "off")
+    # Audit always has its reviewers: no answer-check choice turns them off.
+    assert settings["agent_preferences"]["judges"] == ("on" if admin else "off")
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
     assert ("vm_exec" in names) is admin
     assert (prompt_defaults.AGENT_VM_PROMPT in calls[0]["messages"][0]["content"]) is admin
@@ -658,7 +668,7 @@ def test_sprites_creates_a_missing_vm_and_applies_the_egress_rules():
     assert seen == [("GET", "/v1/sprites/consens-abc", None),
                     ("POST", "/v1/sprites", json.dumps({"name": "consens-abc"}, separators=(",", ":"))),
                     ("POST", "/v1/sprites/consens-abc/policy/network",
-                     json.dumps({"rules": [{"include": "defaults"}]}, separators=(",", ":")))]
+                     json.dumps({"rules": [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}, {"domain": "*", "action": "allow"}]}, separators=(",", ":")))]
 
 
 def test_sprites_failures_are_one_kind_of_error():

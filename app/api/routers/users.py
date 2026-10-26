@@ -114,6 +114,8 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # Only the operator's own browsers switch analytics off with it
             # (analytics-opt-out.js); same cached flags as the tier above.
             "is_admin": is_user_admin(uid),
+            # Audit with its own VM (routers/agent.py audit_allowed): Pro and admins.
+            "audit_access": entitlements.tier == "pro" or is_user_admin(uid),
         }
 
     except HTTPException:

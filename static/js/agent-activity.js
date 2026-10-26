@@ -563,7 +563,7 @@
   }
 
   // A message the user sent into the running response (agent-chat.js
-  // addNote): the user's own words, never translated, under a quiet "You".
+  // steer): the user's own words, never translated, under a quiet "You".
   function userNote(className, text) {
     const p = document.createElement('p');
     p.className = className;
@@ -667,7 +667,7 @@
       // restoreVm, admins): a quiet action under the usage line.
       const vmRestoreEl = document.createElement("button");
       vmRestoreEl.type = "button";
-      vmRestoreEl.className = "agent-vm-restore admin-only";
+      vmRestoreEl.className = "agent-vm-restore audit-only";
       vmRestoreEl.textContent = "Restore the VM to before this message";
       vmRestoreEl.hidden = true;
       const preview = document.createElement('div'); preview.className = 'agent-progress';

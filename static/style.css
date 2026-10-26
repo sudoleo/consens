@@ -57,6 +57,11 @@
    reader's (Apple-Audit H4): they show only while an admin is signed in
    (firebase.js sets body.viewer-is-admin from /user_status). */
 body:not(.viewer-is-admin) .admin-only { display: none !important; }
+/* Audit with its own VM: Pro and admins (firebase.js, /user_status audit_access). */
+body:not(.viewer-can-audit) .audit-only { display: none !important; }
+/* Only the settings of the chosen way of working (agent-preferences.js). */
+#agentSettingsSection.is-audit .agent-comparison-setting,
+#agentSettingsSection:not(.is-audit) .agent-audit-setting { display: none; }
 .u-display-block { display: block; }
 .u-position-relative { position: relative; }
 .u-m-0 { margin: 0 !important; }

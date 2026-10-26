@@ -36,16 +36,14 @@ it("saves every choice, restores them and ignores unknown stored values", () => 
   // Answer check off: the judges skip the agent's answer.
   const judges = d.getElementById("agentJudgesSelect");
   judges.value = "off"; judges.dispatchEvent(new w.Event("change"));
-  // Audit instead of comparison (admins): the comparison models review the answer.
+  // The way of working (Pro and admins): Audit brings its own VM, so vm
+  // follows audit and has no choice of its own (2026-10-26).
   const audit = d.getElementById("agentAuditSelect");
   audit.value = "on"; audit.dispatchEvent(new w.Event("change"));
-  // Agent VM (admins): the agent's own Linux VM.
-  const vm = d.getElementById("agentVmSelect");
-  vm.value = "on"; vm.dispatchEvent(new w.Event("change"));
   expect(w.App.agentPreferences.get())
     .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on", vm: "on" });
   expect(JSON.parse(w.localStorage.getItem("consensio.agentPreferences.v2")))
-    .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on", vm: "on" });
+    .toEqual({ depth: "full", quorum: "fast", autonomy: "free", judges: "off", audit: "on" });
   // Unknown stored values fall back to the defaults.
   w.localStorage.setItem("consensio.agentPreferences.v2", JSON.stringify({ depth: "deep", quorum: "fast", judges: "maybe", audit: "yes", vm: "maybe" }));
   w.App.agentPreferences.sync();
@@ -79,17 +77,22 @@ it("offers the settings tab only to accounts with Agent Beta", () => {
   expect(denied.window.App.settingsTabs.setTabAvailable).toHaveBeenLastCalledWith("agentSettingsSection", false);
 });
 
-// One reviewer is enough in audit mode, which runs for admins only: the chip
-// and Send learn of a change at once (model-picker.js, agent-chat.js).
-it("audits only for an admin and redraws the chip when audit changes", () => {
+// One reviewer is enough in audit mode, which runs for Pro accounts and
+// admins: the chip and Send learn of a change at once (model-picker.js,
+// agent-chat.js), and the settings show only what the way of working uses.
+it("audits only for an account allowed it and redraws the chip when audit changes", () => {
   const { window: w, document: d } = boot(true);
   w.syncCustomModelPickers = vi.fn();
   w.updateQuestionInputAccess = vi.fn();
+  const section = d.createElement("section"); section.id = "agentSettingsSection"; d.body.append(section);
   const audit = d.getElementById("agentAuditSelect");
   audit.value = "on"; audit.dispatchEvent(new w.Event("change"));
   expect(w.App.agentPreferences.auditing()).toBe(false);
-  d.body.classList.add("viewer-is-admin");
+  expect(section.classList.contains("is-audit")).toBe(false);
+  d.body.classList.add("viewer-can-audit");
   expect(w.App.agentPreferences.auditing()).toBe(true);
+  w.App.agentPreferences.sync();
+  expect(section.classList.contains("is-audit")).toBe(true);
   expect(w.syncCustomModelPickers).toHaveBeenCalledTimes(1);
   expect(w.updateQuestionInputAccess).toHaveBeenCalledTimes(1);
   // Another setting leaves the chip alone.

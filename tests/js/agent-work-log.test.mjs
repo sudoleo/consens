@@ -41,7 +41,8 @@ describe("Agent work log", () => {
     d.querySelector(".agent-sidebar-toggle").click();
     const host = d.querySelector(".agent-work-log-host");
     expect(host.hidden).toBe(false);
-    expect(host.classList.contains("admin-only")).toBe(true);
+    // Audit with its VM is Pro and admins (style.css .audit-only).
+    expect(host.classList.contains("audit-only")).toBe(true);
     // The rows go above it: it stays the list's last section.
     expect(d.querySelector(".agent-session-list").lastElementChild).toBe(host);
     expect(host.querySelector(".agent-work-log-summary").textContent).toContain("Work log");
