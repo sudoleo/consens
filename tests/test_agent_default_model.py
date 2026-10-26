@@ -64,6 +64,21 @@ def test_free_accounts_may_chat_with_the_default_but_not_compare_against_it(monk
         raise AssertionError("Sonnet as a comparison model must stay Pro")
 
 
+def test_a_migrated_id_does_not_open_its_premium_successor(monkeypatch):
+    # kimi-k3 became Kimi K3.1 Pro (2026-10-25): the old ID is no longer in
+    # the premium list itself, but comparison_selection runs its Pro successor.
+    import pytest
+    from fastapi import HTTPException
+    import app.core.config as cfg
+    from app.api.routers import agent as agent_router
+    monkeypatch.setattr(agent_router, "_premium_allowed", lambda uid: False)
+    successor = cfg.canonical_model_id(cfg.KIMI_K3_MODEL, "kimi")
+    assert successor != cfg.KIMI_K3_MODEL and successor in cfg.PREMIUM_MODELS
+    with pytest.raises(HTTPException) as refused:
+        agent_router.require_model_access("free-user", [cfg.KIMI_K3_MODEL])
+    assert refused.value.status_code == 403
+
+
 def test_catalog_maps_migrated_ids_to_listed_successors(monkeypatch):
     # The browser maps a saved, migrated chat model (grok-4.3-no-reasoning)
     # like resolve_agent_model instead of resetting it to the default.

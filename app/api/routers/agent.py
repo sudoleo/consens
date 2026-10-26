@@ -72,7 +72,10 @@ def _premium_allowed(uid):
 
 
 def require_model_access(uid, model_ids):
-    """Premium models stay Pro in Agent exactly as in Compare and Consensus."""
+    """Premium models stay Pro in Agent exactly as in Compare and Consensus.
+    Checks the current form of a migrated ID, the model the run uses
+    (comparison_selection): kimi-k3 runs as Kimi K3.1 Pro since 2026-10-25."""
+    model_ids = [cfg.canonical_model_id(model_id) for model_id in model_ids if model_id]
     premium = [model_id for model_id in model_ids if model_id and model_id in cfg.PREMIUM_MODELS]
     if premium and not _premium_allowed(uid):
         labels = ", ".join(cfg.get_model_label(model_id) for model_id in premium)
