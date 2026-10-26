@@ -10,8 +10,10 @@ from app.services import agent_audit, prompt_defaults
 from app.services.agent_answer_mode import SIDE_TOOLS
 from app.services.agent_compaction import describe
 from app.services.agent_plan import UpdatePlanArgs
+from app.services.llm.agent_client import AgentCompletion, measured_usage
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import (ANSWER, Agent, _admin_allowance, fake_vm, results, tool_events,  # noqa: F401  (fixtures)
+                           vm_loop)
 
 PLAN = [{"content": "Read the  data", "status": "completed"}, {"content": "Fit the model", "status": "in_progress"},
         {"content": "Plot the result", "status": "pending"}]
@@ -64,6 +66,43 @@ def test_one_step_at_a_time_and_a_bounded_list(store, fake_vm):
         UpdatePlanArgs(items=[{"content": "x", "status": "pending"}] * 21)
     with pytest.raises(ValueError):
         UpdatePlanArgs(items=[{"content": "x", "status": "skipped"}])
+
+
+class Saying(Agent):
+    """A scripted agent whose steps may also say something: ``steps[N]`` is
+    (text, calls); the step after the last one answers ANSWER."""
+
+    def factory(self):
+        script = self
+
+        class Completion(AgentCompletion):
+            def stream(self, *, model, messages, **kwargs):
+                self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                index = int(self.step_id.split(":")[1])
+                text, calls = script.steps[index] if index < len(script.steps) else (ANSWER, [])
+                if text:
+                    self.text = text
+                    yield {"type": "delta", "text": text}
+                self.tool_calls = [{"id": f"call_{index}_{n}", "type": "function",
+                                    "function": {"name": name, "arguments": json.dumps(arguments)}}
+                                   for n, (name, arguments) in enumerate(calls)]
+                self.finish_reason = "tool_calls" if calls else "stop"
+        return Completion()
+
+
+def test_a_note_with_a_plan_update_mid_task_is_no_answer(store, fake_vm):
+    # Claude says a sentence before it updates the plan as it goes: that is
+    # a preamble and the run goes on. Only a finished plan comes with the answer.
+    done = [{**step, "status": "completed"} for step in PLAN]
+    script = Saying([("Data is read. Next I fit the model.", [("update_plan", {"items": PLAN})]),
+                     ("", [("vm_exec", {"command": "python fit.py"})]),
+                     ("The model is fitted: slope 0.4.", [("update_plan", {"items": done})])])
+    loop = vm_loop(store, script, audit="off")
+    list(loop.run())
+    assert any(call["arguments"] == '{"command": "python fit.py"}' for m in loop.messages
+               for call in (c["function"] for c in m.get("tool_calls") or []))
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == "The model is fitted: slope 0.4."
 
 
 def test_the_plan_may_come_with_the_answer_and_the_reviewers_compare_it():

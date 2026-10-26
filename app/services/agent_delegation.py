@@ -152,6 +152,20 @@ def _thought_only(value):
         value.finish_reason in {"length", "max_tokens"} and not value.text.strip() and not value.tool_calls)
 
 
+def _plan_finished(call):
+    """An update_plan call may come with the answer only when it closes the
+    plan: one with steps still to do is the agent going on with its task,
+    and the sentence before it a preamble. Any other call passes."""
+    function = call.get("function") or {}
+    if function.get("name") != "update_plan":
+        return True
+    try:
+        items = json.loads(function.get("arguments") or "").get("items")
+        return bool(items) and all(item.get("status") == "completed" for item in items)
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def _searched(value):
     """The step's own web search returned pages into its context."""
     count = (value.usage or {}).get("web_search_requests")
@@ -1865,6 +1879,7 @@ class DelegationLoop(AgentLoop):
         names = {(call.get("function") or {}).get("name") for call in value.tool_calls}
         shown = getattr(value, "published", "") or getattr(value, "short_reply", False)
         return bool(shown and value.text.strip() and names <= SIDE_TOOLS
+                    and all(_plan_finished(call) for call in value.tool_calls)
                     and value.finish_reason not in {"length", "max_tokens"})
 
     def _side_results_accepted(self, value, results):

@@ -573,7 +573,10 @@ Arbeitsprotokoll steht der Aufruf im `step` des Agenten, das Ergebnis als
 `tool` mit Herkunft `agent`, der letzte Plan im `end`-Eintrag (`plan`); der
 Prüfer-Prompt sagt, Plan und Protokoll gegeneinander zu halten (als erledigt
 markiert, aber nicht getan; Abweichung ohne Grund). Eine Antwort mit einem
-letzten `update_plan` im selben Schritt bleibt stehen (`SIDE_TOOLS`); der
+letzten `update_plan` im selben Schritt bleibt stehen (`SIDE_TOOLS`), aber nur,
+wenn dieser den Plan abschließt (alle Schritte `completed`,
+`agent_delegation._plan_finished`): ein Satz vor einem Update mit offenen
+Schritten ist Einleitung, der Lauf geht weiter; der
 Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
 steps done, now: …“).
 
