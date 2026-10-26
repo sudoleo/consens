@@ -178,13 +178,13 @@ def _localized(build):
 # iOS Mail, Outlook.com); the cx-* class on an element names its role.
 # ---------------------------------------------------------------------------
 
-GROUND = "#fafafa"      # --ground
-RAISE = "#efeff0"       # a filled object (goal, code, source chip) on --ground
-INK = "#222428"         # --ink
-INK_SOFT = "#4a4d53"    # --ink-2
-MUTED = "#606369"       # --ink-3
-BORDER = "#dcdcdd"      # --line over --ground
-LINE_SOFT = "#ebebec"   # --line-soft over --ground
+GROUND = "#ffffff"      # --ground
+RAISE = "#f3f3f3"       # a filled object (goal, code, source chip) on --ground
+INK = "#0a0a0a"         # --ink
+INK_SOFT = "#5e5e5e"    # --ink-2 (the one grey)
+MUTED = "#5e5e5e"       # --ink-3
+BORDER = "#dfdfdf"      # --line over --ground
+LINE_SOFT = "#eeeeee"   # --line-soft over --ground
 BUTTON_TEXT = "#ffffff"
 MAIL_PALETTE = {
     "ink": INK, "ink_2": INK_SOFT, "ink_3": MUTED,
@@ -192,15 +192,15 @@ MAIL_PALETTE = {
 }
 # The dark tokens of the app, per role.
 _DARK_ROLES = {
-    ".cx-bg": "background:#191a1c",
-    ".cx-ink": "color:#ededed",
-    ".cx-soft": "color:#b0b2b6",
-    ".cx-muted": "color:#94979b",
-    ".cx-raise": "background:#26282b",
-    ".cx-line": "border-color:#3a3b3e",
-    ".cx-line-soft": "border-color:#2b2c2f",
-    ".cx-btn": "background:#ededed",
-    ".cx-btn-label": "color:#191a1c",
+    ".cx-bg": "background:#050505",
+    ".cx-ink": "color:#f5f5f5",
+    ".cx-soft": "color:#a1a1a1",
+    ".cx-muted": "color:#a1a1a1",
+    ".cx-raise": "background:#161616",
+    ".cx-line": "border-color:#282828",
+    ".cx-line-soft": "border-color:#171717",
+    ".cx-btn": "background:#f5f5f5",
+    ".cx-btn-label": "color:#050505",
 }
 MAIL_DARK_CSS = (
     "@media (prefers-color-scheme: dark){"

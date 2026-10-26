@@ -172,7 +172,7 @@
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-sm);
   font-style: normal;
   line-height: var(--line-height-ui);

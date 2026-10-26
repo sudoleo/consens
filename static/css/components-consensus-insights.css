@@ -51,7 +51,7 @@
   gap: 10px;
   padding: 3px 0;
   font-size: var(--font-size-sm);
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 
 .claims-fallback-text {
@@ -94,7 +94,7 @@
 .insight-preview,
 .claim-popover {
   --cx-card-bg: #fff;
-  --cx-card-chip: #f0f0f1;
+  --cx-card-chip: #f0f0f0;
   position: absolute;
   box-sizing: border-box;
   width: max-content;
@@ -121,8 +121,8 @@
 
 .dark-mode .insight-preview,
 .dark-mode .claim-popover {
-  --cx-card-bg: #2c2e32;
-  --cx-card-chip: #3b3d42;
+  --cx-card-bg: #1c1c1c;
+  --cx-card-chip: #2b2b2b;
   filter: drop-shadow(0 0 0.5px rgba(255, 255, 255, 0.34)) drop-shadow(0 14px 34px rgba(0, 0, 0, 0.55));
 }
 
@@ -490,7 +490,7 @@ button.cx-card-logo:focus-visible {
 }
 
 .dark-mode .claim-popover.is-modal {
-  --cx-card-bg: #26282b;
+  --cx-card-bg: #1c1c1c;
   filter: none;
   box-shadow: 0 -0.5px 0 rgba(255, 255, 255, 0.12), 0 -10px 40px rgba(0, 0, 0, 0.5);
 }
@@ -1079,7 +1079,7 @@ button.cx-card-logo:focus-visible {
 
 .diff-verify b {
   font-weight: var(--font-weight-semibold);
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 
 /* --- Resolve-Ergebnis in der Widerspruchs-Karte (gespeicherte Antworten) - */
@@ -1095,7 +1095,7 @@ button.cx-card-logo:focus-visible {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-ui);
-  color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
+  color: var(--text-color);
   overflow-wrap: anywhere;
 }
 
@@ -1149,11 +1149,11 @@ button.cx-card-logo:focus-visible {
 }
 
 .resolve-model-toggle:focus-visible .resolve-disclosure {
-  color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 @media (hover: hover) and (pointer: fine) {
   .resolve-model-toggle:hover .resolve-disclosure {
-    color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+    color: var(--text-color);
   }
 }
 
@@ -1188,7 +1188,7 @@ button.cx-card-logo:focus-visible {
 .resolve-model-name {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
-  color: color-mix(in srgb, var(--text-color) 82%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 
 .resolve-decision {
@@ -1222,7 +1222,7 @@ button.cx-card-logo:focus-visible {
   margin-top: 2px;
   font-size: var(--font-size-xs);
   line-height: var(--line-height-ui);
-  color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted));
+  color: var(--text-color);
   overflow-wrap: anywhere;
 }
 
@@ -1257,11 +1257,11 @@ button.cx-card-logo:focus-visible {
 }
 
 .resolve-prompt-toggle:focus-visible {
-  color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 @media (hover: hover) and (pointer: fine) {
   .resolve-prompt-toggle:hover {
-    color: color-mix(in srgb, var(--text-color) 70%, var(--sidebar-text-muted));
+    color: var(--text-color);
   }
 }
 
@@ -1282,7 +1282,7 @@ button.cx-card-logo:focus-visible {
   margin: 6px 0 3px;
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-bold);
-  color: color-mix(in srgb, var(--text-color) 75%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 
 .resolve-prompt-text {

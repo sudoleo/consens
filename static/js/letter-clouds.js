@@ -119,7 +119,7 @@
     const cs = getComputedStyle(body);
     let bg = cs.backgroundColor;
     if (!bg || bg === "transparent" || /rgba\(.*,\s*0\)$/.test(bg)) bg = getComputedStyle(document.documentElement).backgroundColor;
-    return { bg: bg || "rgb(250, 250, 250)", ink: cs.getPropertyValue("--ink").trim() || cs.color || "#222428" };
+    return { bg: bg || "rgb(255, 255, 255)", ink: cs.getPropertyValue("--ink").trim() || cs.color || "#0a0a0a" };
   }
   function rgbOf(color) {
     f.fillStyle = "#000";

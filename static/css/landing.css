@@ -521,6 +521,11 @@ img { display: block; max-width: 100%; }
   overflow: hidden;
 }
 
+/* On the near-black page no shadow shows, so the hairline carries the edge. */
+.dark-mode :is(.lp-app, .lp-window) {
+  box-shadow: var(--lift), 0 0 0 1px var(--line);
+}
+
 /* The app has no topbar any more. What is left at the top of the shell is the
    wordmark on the left and the allowance ring on the right, so that is what
    the mock shows — quiet, on the same canvas, separated by a horizon that
@@ -1545,7 +1550,7 @@ img { display: block; max-width: 100%; }
 
 .consensus-main > h2 img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
 
-.consensus-main-text { margin: 0; color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted)); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
+.consensus-main-text { margin: 0; color: var(--text-color); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
 .consensus-main-text p { margin: 0 0 0.8em; }
 .consensus-main-text p:last-child { margin-bottom: 0; }
 .consensus-main-text strong { color: var(--text-color); font-weight: var(--font-weight-bold); }
@@ -1591,7 +1596,7 @@ img { display: block; max-width: 100%; }
   gap: 10px;
   padding: 4px 0;
   font-size: var(--font-size-sm);
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 .claims-fallback-text { min-width: 0; overflow-wrap: anywhere; }
 
@@ -1831,7 +1836,7 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-mark-sample {
-  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-ui);
 }
@@ -1928,7 +1933,7 @@ img { display: block; max-width: 100%; }
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-ui);
-  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  color: var(--text-color);
   overflow-wrap: anywhere;
 }
 
@@ -1940,13 +1945,13 @@ img { display: block; max-width: 100%; }
   margin-bottom: 1px;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  color: color-mix(in srgb, var(--text-color) 84%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 
 .diff-position-stance {
   font-size: var(--font-size-xs);
   line-height: var(--line-height-ui);
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
   overflow-wrap: anywhere;
 }
 
@@ -1972,7 +1977,7 @@ img { display: block; max-width: 100%; }
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 82%, transparent);
   border-radius: var(--radius-2xs);
   background: color-mix(in srgb, var(--text-color) 4%, transparent);
-  color: color-mix(in srgb, var(--text-color) 82%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-semibold);
   font-family: inherit;
@@ -2013,7 +2018,7 @@ img { display: block; max-width: 100%; }
 
 .diff-verify b {
   font-weight: var(--font-weight-semibold);
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
 }
 
 /* Resolve round: quiet ghost button with the gold Pro chip, like the /app. */
@@ -2030,7 +2035,7 @@ img { display: block; max-width: 100%; }
   border-radius: var(--radius-2xs);
   border: 1px solid color-mix(in srgb, var(--sidebar-border) 90%, transparent);
   background: transparent;
-  color: color-mix(in srgb, var(--text-color) 88%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   font-family: inherit;

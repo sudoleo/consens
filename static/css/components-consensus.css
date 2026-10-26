@@ -606,7 +606,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .consensus-box.is-synthesizing .consensus-differences-summary {
-  color: color-mix(in srgb, var(--text-color) 72%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-wide);
@@ -672,7 +672,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 /* Render target for consensus prose; shared answer typography lives in shell.css. */
 .consensus-main > .consensus-answer-body {
   margin: 0;
-  color: color-mix(in srgb, var(--text-color) 92%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-base);
   line-height: var(--line-height-reading);
   overflow-wrap: anywhere;
@@ -690,7 +690,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .consensus-differences > p {
   margin: 0;
-  color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted));
+  color: var(--text-color);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-ui);
   overflow-wrap: anywhere;

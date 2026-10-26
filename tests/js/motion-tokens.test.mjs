@@ -186,7 +186,11 @@ describe("focus ring and press (E4, E11)", () => {
     expect(foundation).toMatch(/:root,\s*\.dark-mode \{\s*--focus-ring-color: var\(--ink-2\);\s*--focus-ring: 2px solid var\(--focus-ring-color\);/);
     const variables = read("static/css/variables.css");
     const dark = variables.slice(variables.indexOf(".dark-mode {"));
-    const hex = (name, css) => css.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i"))[1];
+    // --ink-2 names the one grey (var(--ink-3)); follow the alias to its value.
+    const hex = (name, css) => {
+      const value = css.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6}|var\\(--[\\w-]+\\))`, "i"))[1];
+      return value.startsWith("var(") ? hex(value.slice(6, -1), css) : value;
+    };
     const luminance = (h) => {
       const [r, g, b] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
         .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));

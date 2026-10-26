@@ -183,7 +183,7 @@ def test_every_mail_has_the_app_look_and_a_dark_mode():
                      'name="supported-color-schemes" content="light dark"'):
             assert meta in head, (name, meta)
         assert re.search(r"<title>[^<]+</title>", head), name
-        assert "@media (prefers-color-scheme: dark)" in head and ".cx-ink{color:#ededed!important}" in head
+        assert "@media (prefers-color-scheme: dark)" in head and ".cx-ink{color:#f5f5f5!important}" in head
         lowered = markup.lower()
         assert "#335cff" not in lowered and "text-transform:uppercase" not in lowered, name
         # The one filled button is black with white text, as in the app.

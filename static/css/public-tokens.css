@@ -23,15 +23,16 @@
   /* Surface scale — the same five values as static/css/variables.css. The
      marketing pages and the product mockups they contain must be made of the
      same material as /app, otherwise the screenshots stop being screenshots. */
-  --ground: #fafafa;
-  --raise: #eeeeee;
+  --ground: #ffffff;
+  --raise: #f3f3f3;
   --well: #fff;
-  --ink: #222428;
-  --ink-2: #4a4d53;
-  --ink-3: #606369;
-  --line: rgba(34, 36, 40, 0.14);
-  --line-soft: rgba(34, 36, 40, 0.07);
-  --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
+  --ink: #0a0a0a;
+  --ink-2: var(--ink-3);
+  --ink-3: #5e5e5e;
+  --line: rgba(10, 10, 10, 0.13);
+  --line-soft: rgba(10, 10, 10, 0.07);
+  --lift: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 34px rgba(0, 0, 0, 0.08);
+  --side: #f8f8f8;
 
   --agree: #217863;
   --agree-bg: #e0efea;
@@ -41,12 +42,12 @@
   --dispute-bg: #fbe7e8;
 
   /* Interaction steps and the raised field: same values as variables.css. */
-  --hover-mix: 6%;
-  --selected-mix: 10%;
+  --hover-mix: 5%;
+  --selected-mix: 9%;
   --field: var(--well);
-  --field-line: rgba(34, 36, 40, 0.11);
-  --field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
-  --field-lift-active: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
+  --field-line: rgba(10, 10, 10, 0.11);
+  --field-lift: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 32px -16px rgba(0, 0, 0, 0.24);
+  --field-lift-active: 0 2px 4px rgba(0, 0, 0, 0.06), 0 20px 42px -18px rgba(0, 0, 0, 0.3);
 
   --text-primary: var(--ink);
   --text-secondary: var(--ink-3);
@@ -62,13 +63,14 @@
   --panel-soft: var(--raise);
 
   --accent: var(--ink);
-  --accent-hover: #151617;
-  --accent-contrast: #171819;
+  --accent-hover: #000000;
+  --accent-contrast: #0a0a0a;
   --accent-secondary: var(--agree);
   --accent-tertiary: var(--partial);
-  --button-bg: #1d2126;
+  --button-bg: #0a0a0a;
   --button-text: #ffffff;
 
+  --sidebar-bg: var(--side);
   --sidebar-text-muted: var(--text-secondary);
   --sidebar-border: var(--line-soft);
   --sidebar-hover: var(--hover);
@@ -110,15 +112,16 @@
   color-scheme: dark;
 
   /* Same five values as .dark-mode in static/css/variables.css. */
-  --ground: #191a1c;
-  --raise: #212325;
-  --well: #26282b;
-  --ink: #ededed;
-  --ink-2: #b0b2b6;
-  --ink-3: #94979b;
+  --ground: #050505;
+  --raise: #151515;
+  --well: #161616;
+  --ink: #f5f5f5;
+  --ink-2: var(--ink-3);
+  --ink-3: #a1a1a1;
   --line: rgba(255, 255, 255, 0.14);
   --line-soft: rgba(255, 255, 255, 0.07);
-  --lift: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
+  --lift: 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 36px rgba(0, 0, 0, 0.6);
+  --side: #101010;
 
   --agree: #6dc0a4;
   --agree-bg: rgba(109, 192, 164, 0.17);
@@ -127,8 +130,8 @@
   --dispute: #f07f76;
   --dispute-bg: rgba(240, 127, 118, 0.17);
 
-  --hover-mix: 4.5%;
-  --selected-mix: 8%;
+  --hover-mix: 7%;
+  --selected-mix: 12%;
   --field: var(--well);
   --field-line: rgba(255, 255, 255, 0.11);
   --field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
@@ -149,12 +152,13 @@
 
   --accent: var(--ink);
   --accent-hover: #ffffff;
-  --accent-contrast: #141414;
+  --accent-contrast: #0a0a0a;
   --accent-secondary: var(--agree);
   --accent-tertiary: var(--partial);
-  --button-bg: #f0f0f0;
-  --button-text: #141414;
+  --button-bg: #f5f5f5;
+  --button-text: #0a0a0a;
 
+  --sidebar-bg: var(--side);
   --sidebar-border: var(--line-soft);
   --sidebar-hover: var(--hover);
   --slider-bg: #636363;

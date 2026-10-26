@@ -58,8 +58,8 @@ def contrast(a, b):
     return (la + 0.05) / (lb + 0.05)
 
 
-def oklab(value):
-    r, g, b = (_lin(c) for c in rgb(value))
+def oklab(value, flare=0.0):
+    r, g, b = (_lin(c) + flare for c in rgb(value))
     l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
     m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
     s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
@@ -70,6 +70,17 @@ def oklab(value):
 
 def distance(a, b):
     return 100 * math.dist(oklab(a), oklab(b))
+
+
+# The 1% viewing flare of the sRGB reference: a screen never shows true black,
+# so two near-black tones sit closer than the bare formula says (#050505 to
+# #151515 is 8.1 on paper, 3.4 on a screen). Surface steps are seen, so they
+# are measured with it; the light theme barely moves.
+FLARE = 0.01
+
+
+def step(a, b):
+    return 100 * math.dist(oklab(a, FLARE), oklab(b, FLARE))
 
 
 def hue(value):
@@ -111,7 +122,7 @@ def test_app_and_public_pages_are_made_of_the_same_material():
     public = read("public-tokens.css")
     public_light = block(public, ":root")
     public_dark = block(public, ":root.dark-mode, .dark-mode")
-    for name in ("--ground", "--raise", "--well", "--ink", "--ink-2", "--ink-3", "--line", "--line-soft",
+    for name in ("--ground", "--raise", "--well", "--side", "--ink", "--ink-2", "--ink-3", "--line", "--line-soft",
                  "--agree", "--agree-bg", "--partial", "--partial-bg", "--dispute", "--dispute-bg",
                  "--hover-mix", "--selected-mix", "--field", "--field-line", "--field-lift", "--field-lift-active"):
         assert public_light[name] == LIGHT[name], name
@@ -130,19 +141,40 @@ def test_the_app_shell_no_longer_paints_its_own_surface():
 
 
 def test_a_raised_surface_lifts_the_same_in_light_and_dark():
-    light = distance(LIGHT["--ground"], LIGHT["--raise"])
-    dark = distance(DARK["--ground"], DARK["--raise"])
+    light = step(LIGHT["--ground"], LIGHT["--raise"])
+    dark = step(DARK["--ground"], DARK["--raise"])
     assert light >= 3.0 and dark >= 3.0, (light, dark)
     assert abs(light - dark) <= 0.5, (light, dark)
 
 
-def test_the_grey_ladder_has_three_distinct_rungs_and_stays_readable():
+def test_the_sidebar_is_one_quiet_step_off_the_page():
+    """Darker than the white page, lighter than the black one, by the same
+    seen amount, and less than a raised surface."""
+    for tokens in THEMES.values():
+        assert tokens["--sidebar-bg"] == "var(--side)"
+    light = step(LIGHT["--ground"], LIGHT["--side"])
+    dark = step(DARK["--ground"], DARK["--side"])
+    assert 1.5 <= light < step(LIGHT["--ground"], LIGHT["--raise"]), light
+    assert 1.5 <= dark < step(DARK["--ground"], DARK["--raise"]), dark
+    assert luminance(LIGHT["--side"]) < luminance(LIGHT["--ground"])
+    assert luminance(DARK["--side"]) > luminance(DARK["--ground"])
+    assert abs(light - dark) <= 0.5, (light, dark)
+    sidebar = block(read("shell.css"), ".sidebar")
+    assert sidebar["--ground"] == "var(--sidebar-bg)"
+
+
+def test_text_has_two_tones_and_the_grey_stays_readable():
+    """The ink and one grey (Max, 2026-10-26: fewer greys in the text);
+    --ink-2 is only a name for the grey. No tint in either."""
     for theme, tokens in THEMES.items():
-        ink, ink2, ink3 = tokens["--ink"], tokens["--ink-2"], tokens["--ink-3"]
-        assert distance(ink2, ink3) >= 7, (theme, distance(ink2, ink3))
-        assert distance(ink, ink2) >= 12, (theme, distance(ink, ink2))
+        ink, ink3 = tokens["--ink"], tokens["--ink-3"]
+        assert tokens["--ink-2"] == "var(--ink-3)", theme
+        for value in (ink, ink3, tokens["--ground"], tokens["--raise"], tokens["--well"], tokens["--side"]):
+            assert len(set(rgb(value))) == 1, (theme, value)
+        assert distance(ink, ink3) >= 20, (theme, distance(ink, ink3))
         hover = mix(ink, percent(tokens["--hover-mix"]), tokens["--raise"])
-        for surface in (tokens["--ground"], tokens["--raise"], tokens["--well"], hover):
+        selected_row = mix(ink, percent(tokens["--selected-mix"]), tokens["--side"])
+        for surface in (tokens["--ground"], tokens["--raise"], tokens["--well"], tokens["--side"], hover, selected_row):
             assert contrast(ink3, surface) >= 4.5, (theme, ink3, surface, contrast(ink3, surface))
 
 
@@ -151,9 +183,9 @@ def test_hover_is_one_tone_step_in_both_themes():
     for theme, tokens in THEMES.items():
         hover = mix(tokens["--ink"], percent(tokens["--hover-mix"]), tokens["--ground"])
         selected = mix(tokens["--ink"], percent(tokens["--selected-mix"]), tokens["--ground"])
-        steps[theme] = distance(tokens["--ground"], hover)
-        assert distance(hover, selected) >= 2, theme
-    assert all(3 <= step <= 5 for step in steps.values()), steps
+        steps[theme] = step(tokens["--ground"], hover)
+        assert step(hover, selected) >= 2, theme
+    assert all(3 <= value <= 5 for value in steps.values()), steps
     assert abs(steps["light"] - steps["dark"]) <= 0.6, steps
     foundation = block(read("foundation.css"), ":root, .dark-mode")
     assert "var(--hover-mix" in foundation["--hover"]

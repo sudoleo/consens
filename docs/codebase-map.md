@@ -760,7 +760,7 @@ Regel zeichnet für beide, außerhalb des Kontrastmodus in der Farbe der Stufe.
 Block `:root, .dark-mode` in `foundation.css` leitet aus den Themenwerten ab
 (auch auf `body.dark-mode` deklariert, sonst erbt der dunkle App-Body die helle
 Tinte): `--hover` / `--selected` (Tinten-Waschung `--ink` in `--hover-mix` 6 %
-/ `--selected-mix` 10 %, dunkel 4,5 % / 8 %; für Ghost-Knöpfe, Menü- und
+/ `--selected-mix` 9 % hell, 7 % / 12 % dunkel; für Ghost-Knöpfe, Menü- und
 Listenzeilen, transparent in Ruhe), `--raise-hover` / `--raise-selected`
 (deckend, für Flächen, die in Ruhe `--raise` tragen), `--button-bg-hover`
 (gefüllter Knopf, ein Tonschritt Richtung Seite), `--field-focus-border` +
@@ -1255,21 +1255,32 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Highlights und Schatten mehr. `static/css/public-tokens.css` spiegelt die
   identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
   wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
-  überschreibt die Grundwerte + die Ampel. **Gemessene Stufen (seit
-  2026-10-20, Apple-Audit G7/G13/G15, Vertrag `tests/test_material_tokens.py`
-  mit OKLab- und WCAG-Rechnung):** Grund → `--raise` 3,6 hell (`#eeeeee`) und
-  3,7 dunkel (`#212325`), vorher 1,5 hell und 10,3 in der dunklen App;
-  `shell.css` überschreibt `--raise` nicht mehr (die bläuliche App-Fläche
-  `#303338` ist weg, `--app-surface*` sind nur noch Aliasse auf
-  `--raise`/`--raise-hover`/`--raise-selected`). Graustufen gespreizt:
-  `--ink-2` `#4a4d53` / dunkel `#b0b2b6`, `--ink-3` `#606369` / `#94979b`
-  (Abstand ink-2 → ink-3 8 bzw. 9, vorher 2,8), `--ink-3` hält ≥ 4,5:1 auf
-  Grund, `--raise` und gehovertem `--raise`; Text bekommt seinen Ton aus der
-  Farbe, nicht aus `opacity`. Die Ampel ist textsicher auf Grund und `--raise`
-  (`--agree #217863`, `--partial #896512`, `--dispute #ad4b57`; dunkel
-  `--dispute #f07f76`, ein Rot statt des Korall, das neben Bernstein braun
-  wirkte), die `-bg`-Töne sitzen auf demselben Farbton. Die Mail-Palette
-  (`app/services/mailer.py`) zieht die Graustufen mit.
+  überschreibt die Grundwerte + die Ampel. **Palette seit 2026-10-26 (nach
+  Max' Referenz, T3 Code):** neutrale Grautöne ohne Stich, dunkel fast
+  schwarz (`--ground #050505`, `--raise #151515`, `--well #161616`, Tinte
+  `#f5f5f5`), hell dasselbe Bild invertiert (`#ffffff`, `#f3f3f3`, `#fff`,
+  Tinte `#0a0a0a`). Die Sidebar steht eine leise Stufe neben der Seite:
+  sechster Grundwert `--side` (hell `#f8f8f8`, dunkel `#101010`,
+  `--sidebar-bg: var(--side)`); in `.sidebar` ist `--ground` auf diesen Ton
+  umgebunden, damit alles, was dort bündig die Grundfläche malt (Suchfeld,
+  Ausblendungen), bündig bleibt. **Zwei Texttöne:** die Tinte und ein Grau
+  (`--ink-3`, hell `#5e5e5e`, dunkel `#a1a1a1`); `--ink-2` ist nur noch ein
+  Name dafür (`var(--ink-3)`), und Mischungen aus Tinte und Grau als
+  Textfarbe gibt es nicht mehr (sie ergaben Dutzende Zwischengraus).
+  **Gemessen (Vertrag `tests/test_material_tokens.py`, OKLab ×100 mit 1 %
+  Streulicht der sRGB-Referenz, `step()`; ohne Streulicht wirkt eine Stufe
+  nahe Schwarz auf dem Papier doppelt so groß wie am Bildschirm):** Grund →
+  `--raise` 3,6 hell / 3,4 dunkel, Grund → `--side` 2,1 / 2,2, Hover 3,6 in
+  beiden Themes; das Grau hält ≥ 4,5:1 auf Grund, Sidebar, `--raise`,
+  `--well`, gehovertem `--raise` und gewählter Sidebar-Zeile; Text bekommt
+  seinen Ton aus der Farbe, nicht aus `opacity`. Die Ampel ist textsicher
+  auf Grund und `--raise` (`--agree #217863`, `--partial #896512`,
+  `--dispute #ad4b57`; dunkel `--dispute #f07f76`, ein Rot statt des
+  Korall, das neben Bernstein braun wirkte), die `-bg`-Töne sitzen auf
+  demselben Farbton. `shell.css` überschreibt `--raise` nicht (die bläuliche
+  App-Fläche `#303338` von früher ist weg, `--app-surface*` sind nur
+  Aliasse auf `--raise`/`--raise-hover`/`--raise-selected`). Die
+  Mail-Palette (`app/services/mailer.py`) zieht die Töne mit.
   Seit 2026-09-06 hebt `shell.css` Chat-Fragen (auch historische) mit dem
   lokalen Token `--chat-surface` ab (seit 2026-10-20 = `--raise`); die Karte
   einer Marke (Vorschau und festgehaltene Karte) trägt seit 2026-10-23 ihre

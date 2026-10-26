@@ -28,23 +28,29 @@
      Depth is carried by tone, not by borders and glass. Only genuinely
      floating layers (popover, modal, menu) get --lift.
      ------------------------------------------------------------------ */
-  --ground: #fafafa;
-  --raise: #eeeeee;
+  --ground: #ffffff;
+  --raise: #f3f3f3;
   --well: #fff;
-  --ink: #222428;
-  --ink-2: #4a4d53;
-  --ink-3: #606369;
-  --line: rgba(34, 36, 40, 0.14);
-  --line-soft: rgba(34, 36, 40, 0.07);
-  --lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
+  --ink: #0a0a0a;
+  --ink-2: var(--ink-3);
+  --ink-3: #5e5e5e;
+  --line: rgba(10, 10, 10, 0.13);
+  --line-soft: rgba(10, 10, 10, 0.07);
+  --lift: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 34px rgba(0, 0, 0, 0.08);
+  /* The sidebar sits one quiet step off the page: a shade darker here,
+     a shade lighter in dark. */
+  --side: #f8f8f8;
 
-  /* The steps are measured, not guessed (OKLab distance x100, Apple-Audit
-     G7/G13): ground -> raise 3.6 here and 3.7 in dark, so a surface lifts
-     the same in both themes (it was 1.5 light, 10.3 in the dark app). The
-     text ladder is spread so each rung is its own grey: ink -> ink-2 16,
-     ink-2 -> ink-3 8 (dark 18 / 9; it was 2.8 light). ink-3 keeps >= 4.5:1
-     for small text on ground, raise and a hovered raise in both themes, so
-     no text needs opacity to look secondary. */
+  /* Neutral greys, no tint, and two tones of text: the ink and one grey
+     for everything secondary (--ink-2 is kept as a name for the grey).
+     White page, black ink here; the dark theme is the same picture
+     inverted. The steps are measured, not guessed (OKLab distance x100
+     with the 1% viewing flare of the sRGB reference, Apple-Audit G7):
+     ground -> raise 3.6 here and 3.4 in dark, ground -> side 2.1 and 2.2,
+     so a surface lifts the same in both themes. Without the flare a step
+     near black looks bigger on paper than on a screen. The grey keeps
+     >= 4.5:1 for small text on every surface and on a hovered raise in
+     both themes, so no text needs opacity to look secondary. */
 
   /* Agreement traffic light — shared by run, marks, dots and diff rails.
      One meaning, one hue: the sentence marks (components-consensus-visuals.css)
@@ -62,19 +68,19 @@
 
   /* Interaction tone steps. foundation.css turns them into --hover and
      --selected (an ink wash, so the step reads on any surface). */
-  --hover-mix: 6%;
-  --selected-mix: 10%;
+  --hover-mix: 5%;
+  --selected-mix: 9%;
 
   /* The raised field: the composer in /app and on the landing page is the
      well lifted by a hairline and a soft shadow (Apple-Audit G8). */
   --field: var(--well);
-  --field-line: rgba(34, 36, 40, 0.11);
-  --field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
-  --field-lift-active: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
+  --field-line: rgba(10, 10, 10, 0.11);
+  --field-lift: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 32px -16px rgba(0, 0, 0, 0.24);
+  --field-lift-active: 0 2px 4px rgba(0, 0, 0, 0.06), 0 20px 42px -18px rgba(0, 0, 0, 0.3);
   /* The same field on the empty start screen, a step higher (shell.css). */
   --field-start: var(--well);
-  --field-lift-start: 0 2px 6px rgba(28, 30, 33, 0.05), 0 26px 56px -22px rgba(28, 30, 33, 0.3);
-  --field-lift-start-active: 0 2px 6px rgba(28, 30, 33, 0.06), 0 30px 60px -22px rgba(28, 30, 33, 0.36);
+  --field-lift-start: 0 2px 6px rgba(0, 0, 0, 0.05), 0 26px 56px -22px rgba(0, 0, 0, 0.28);
+  --field-lift-start-active: 0 2px 6px rgba(0, 0, 0, 0.06), 0 30px 60px -22px rgba(0, 0, 0, 0.34);
 
   /* Colors - Light Mode */
   --bg-color: var(--ground);
@@ -82,11 +88,11 @@
   --text-color: var(--ink);
   --input-bg: var(--well);
   --input-border: var(--line-soft);
-  --button-bg: #1d2126;
+  --button-bg: #0a0a0a;
   --button-text: #ffffff;
   --response-bg: var(--raise);
   /* Additional UI Colors */
-  --sidebar-bg: var(--bg-color);
+  --sidebar-bg: var(--side);
   --sidebar-border: var(--line-soft);
   --sidebar-text-muted: var(--ink-3);
   --sidebar-hover: var(--hover);
@@ -102,15 +108,15 @@
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
   --consensus-button-text: #333;
   --checkbox-border: #ccc;
-  --checkbox-checked: #1d2126;
-  --icon-color: #111; /* For Burger/Clear Icons */
+  --checkbox-checked: #0a0a0a;
+  --icon-color: #0a0a0a; /* For Burger/Clear Icons */
   --help-button-color: #4e4e4e;
-  --help-button-hover: #1d2126;
+  --help-button-hover: #0a0a0a;
   --link-color: color-mix(in srgb, var(--text-color) 85%, transparent);
-  
+
   /* Vote Badge Colors */
   --vote-model-bg: #eaeaea;
-  --vote-model-color: #3c3f43;
+  --vote-model-color: #3d3d3d;
   --vote-best-bg: #e6ffed;
   --vote-best-color: #2c7a2c;
   --vote-exclude-bg: var(--clear-button-bg);
@@ -120,7 +126,7 @@
      surface so the ~400 existing call sites keep working — it just no
      longer paints translucency, blur, inner highlights or drop shadows. */
   --accent: var(--ink);
-  --accent-contrast: #171819;
+  --accent-contrast: #0a0a0a;
   --accent-secondary: var(--agree);
   --accent-tertiary: var(--partial);
   --glass-bg: var(--raise);
@@ -171,15 +177,16 @@
   color-scheme: dark;
   /* Only the five surface values + the traffic light flip; everything
      downstream is already expressed in terms of them. */
-  --ground: #191a1c;
-  --raise: #212325;
-  --well: #26282b;
-  --ink: #ededed;
-  --ink-2: #b0b2b6;
-  --ink-3: #94979b;
+  --ground: #050505;
+  --raise: #151515;
+  --well: #161616;
+  --ink: #f5f5f5;
+  --ink-2: var(--ink-3);
+  --ink-3: #a1a1a1;
   --line: rgba(255, 255, 255, 0.14);
   --line-soft: rgba(255, 255, 255, 0.07);
-  --lift: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 36px rgba(0, 0, 0, 0.34);
+  --lift: 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 36px rgba(0, 0, 0, 0.6);
+  --side: #101010;
 
   /* Dispute is a red, not a coral: next to the amber it used to read as
      the same brown (Apple-Audit G15). */
@@ -192,8 +199,8 @@
   /* On the dark ground the light is brighter than the ink it cools to. */
   --stream-light: color-mix(in oklab, var(--agree) 70%, white);
 
-  --hover-mix: 4.5%;
-  --selected-mix: 8%;
+  --hover-mix: 7%;
+  --selected-mix: 12%;
 
   --field: var(--well);
   --field-line: rgba(255, 255, 255, 0.11);
@@ -209,11 +216,11 @@
   --text-color: var(--ink);
   --input-bg: var(--well);
   --input-border: var(--line-soft);
-  --button-bg: #f0f0f0;
-  --button-text: #141414;
+  --button-bg: #f5f5f5;
+  --button-text: #0a0a0a;
   --response-bg: var(--raise);
 
-  --sidebar-bg: var(--bg-color);
+  --sidebar-bg: var(--side);
   --sidebar-border: var(--line-soft);
   --sidebar-text-muted: var(--ink-3);
   --sidebar-hover: var(--hover);
@@ -244,7 +251,7 @@
   --vote-exclude-color: var(--clear-button-text);
   
   --accent: var(--ink);
-  --accent-contrast: #141414;
+  --accent-contrast: #0a0a0a;
   --accent-secondary: var(--agree);
   --accent-tertiary: var(--partial);
   --glass-bg: var(--raise);

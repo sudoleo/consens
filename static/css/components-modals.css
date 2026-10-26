@@ -1551,7 +1551,7 @@ dialog#shareModal[open] { display: flex; }
   scrollbar-color: color-mix(in srgb, var(--sidebar-text-muted) 34%, transparent) transparent;
 }
 .share-modal-content p { margin: 0 0 12px; }
-.share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: var(--font-size-sm); line-height: var(--line-height-ui); color: color-mix(in srgb, var(--text-color) 86%, var(--sidebar-text-muted)); }
+.share-modal-notes { margin: 12px 0; padding-left: 18px; font-size: var(--font-size-sm); line-height: var(--line-height-ui); color: var(--text-color); }
 .share-modal-notes li { margin-bottom: 6px; padding-left: 2px; }
 .share-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
 .share-modal-actions .share-link-btn { margin-left: auto; }

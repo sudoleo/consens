@@ -62,8 +62,12 @@ body:not(.dark-mode) {
    follows as a full-width navigation row; .app-nav-float supplies the toggle
    only while the sidebar is closed.
    -------------------------------------------------------------------------- */
+/* The sidebar is one quiet step off the page (variables.css --side). Inside
+   it that step is the ground, so whatever paints the ground to sit flush
+   (the search field, a fade, a sticky head) keeps sitting flush. */
 .sidebar {
   --sidebar-text-muted: var(--ink);
+  --ground: var(--sidebar-bg);
   background: var(--ground);
   color: var(--ink);
   border-right: 1px solid var(--line-soft);
