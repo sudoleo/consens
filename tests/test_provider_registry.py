@@ -134,7 +134,7 @@ class RegistryCoverageTests(unittest.TestCase):
 
     def test_qwen_is_the_tenth_family_and_thinks_low(self):
         qwen = cfg.PROVIDERS["qwen"]
-        self.assertEqual(list(cfg.PROVIDERS)[-1], "qwen")
+        self.assertEqual(list(cfg.PROVIDERS)[9], "qwen")
         self.assertEqual(qwen.openrouter_prefix, "qwen/")
         self.assertEqual((qwen.base_model, qwen.pro_model), (cfg.QWEN_BASE_MODEL, cfg.QWEN_PRO_MODEL))
         self.assertEqual((qwen.ask_endpoint, qwen.response_id, qwen.checkbox_id),
@@ -147,6 +147,28 @@ class RegistryCoverageTests(unittest.TestCase):
             self.assertTrue(cfg.MODEL_CONFIGS[model].accepts_attachments)
         self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Qwen"], ("qwen", cfg.QWEN_BASE_MODEL))
         self.assertIn(cfg.QWEN_BASE_MODEL, cfg.CONSENSUS_PRESET_MODELS["balanced"]["answers"].values())
+
+    def test_xiaomi_is_the_eleventh_family_and_answers_without_thinking(self):
+        mimo = cfg.PROVIDERS["xiaomi"]
+        self.assertEqual(list(cfg.PROVIDERS)[-1], "xiaomi")
+        self.assertEqual(mimo.openrouter_prefix, "xiaomi/")
+        self.assertEqual((mimo.base_model, mimo.pro_model), (cfg.MIMO_BASE_MODEL, cfg.MIMO_PRO_MODEL))
+        self.assertEqual((mimo.ask_endpoint, mimo.response_id, mimo.checkbox_id),
+                         ("/ask_mimo", "mimoResponse", "selectMiMo"))
+        self.assertEqual(cfg.get_model_label(cfg.MIMO_BASE_MODEL), "MiMo V2.6 Flash")
+        self.assertEqual(cfg.get_model_label(cfg.MIMO_PRO_MODEL), "MiMo V2.6 Pro")
+        self.assertEqual(cfg.MODEL_CONFIGS[cfg.MIMO_BASE_MODEL].api_model, "xiaomi/mimo-v2.6-flash")
+        # Both searched without thinking; with it, Flash emptied an answer at the limit.
+        for model in (cfg.MIMO_BASE_MODEL, cfg.MIMO_PRO_MODEL):
+            self.assertEqual(cfg.MODEL_CONFIGS[model].request_config, {"reasoning": {"enabled": False}})
+            self.assertTrue(cfg.MODEL_CONFIGS[model].accepts_attachments)
+        self.assertIn(cfg.MIMO_PRO_MODEL, cfg.PREMIUM_MODELS)
+        self.assertNotIn(cfg.MIMO_BASE_MODEL, cfg.PREMIUM_MODELS)
+        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Xiaomi"], ("xiaomi", cfg.MIMO_BASE_MODEL))
+        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Xiaomi-Pro"], ("xiaomi", cfg.MIMO_PRO_MODEL))
+        # Added on top: no preset changes with the family.
+        for preset in cfg.CONSENSUS_PRESET_MODELS.values():
+            self.assertNotIn("xiaomi", preset["answers"])
 
     def test_open_models_have_labels_and_gpt_oss_reads_text_only(self):
         # gpt-oss-120b is the one text-only model of an attachment-capable

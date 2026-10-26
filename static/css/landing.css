@@ -734,6 +734,7 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="kimi"],
 .dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="meta.svg"],
 .dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="qwen"],
+.dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="xiaomi"],
 .dark-mode .lp-live-pulse .lp-model-pulse-icon img[src*="zai"] {
   filter: invert(1);
 }
@@ -2390,6 +2391,7 @@ img { display: block; max-width: 100%; }
   .dark-mode .lp-logo:hover .lp-logo-mark img[src*="kimi"],
   .dark-mode .lp-logo:hover .lp-logo-mark img[src*="meta.svg"],
   .dark-mode .lp-logo:hover .lp-logo-mark img[src*="qwen"],
+  .dark-mode .lp-logo:hover .lp-logo-mark img[src*="xiaomi"],
   .dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
 }
 
@@ -2842,9 +2844,9 @@ main > .lp-scene-02::before { display: none; }
 /* L8 — A button as wide as its words: the result is the loud part here. */
 .lp-bench-aside .lp-btn { align-self: flex-start; width: auto; }
 
-/* L9 — Ten marks, one optical size, one row; no wordmarks. */
+/* L9 — Eleven marks, one optical size, one row; no wordmarks. */
 @media (min-width: 900px) {
-  .lp-logos { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+  .lp-logos { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
   .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
 }
 .lp-logo { gap: 12px; padding: 18px 4px; }
@@ -2877,8 +2879,12 @@ main > .lp-scene-02::before { display: none; }
   .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
 }
-/* Below 900px the marks stand three to a row; the tenth, left over, sits in
-   the middle column instead of hanging at the left edge. */
+/* Below 900px the marks stand three to a row on a six-column grid, so a
+   last row of one or two marks sits in the middle instead of hanging at the
+   left edge. */
 @media (max-width: 899px) {
-  .lp-logos > .lp-logo:last-child:nth-child(3n + 1) { grid-column: 2; }
+  .lp-logos { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .lp-logos > .lp-logo { grid-column: span 2; }
+  .lp-logos > .lp-logo:nth-child(3n + 1):nth-last-child(2) { grid-column: 2 / span 2; }
+  .lp-logos > .lp-logo:last-child:nth-child(3n + 1) { grid-column: 3 / span 2; }
 }

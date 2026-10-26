@@ -286,7 +286,7 @@ _DIFFERENCE_TAGS = {
     "": ("Contradiction", "Contradiction", "is-warn"),
 }
 _MODEL_ALIASES = {"Claude": "Anthropic", "ChatGPT": "OpenAI", "Google": "Gemini", "xAI": "Grok"}
-_MONO_PROVIDERS = {"OpenAI", "Grok", "Kimi", "GLM", "Meta", "Qwen"}
+_MONO_PROVIDERS = {"OpenAI", "Grok", "Kimi", "GLM", "Meta", "Qwen", "Xiaomi"}
 
 
 def _difference_rank(diff) -> int:

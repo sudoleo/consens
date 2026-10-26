@@ -547,7 +547,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Reader-Inhalte. Keine gestapelten Vollantworten im Chat-Verlauf.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
-- [ ] Der Custom-Picker listet alle zehn Familien (inkl. Kimi, GLM, Muse und Qwen); sind
+- [ ] Der Custom-Picker listet alle elf Familien (inkl. Kimi, GLM, Muse, Qwen und MiMo); sind
       sechs gewaehlt, ist die siebte sichtbar gesperrt. Eine Familie abwaehlen
       gibt die gesperrten wieder frei, und jede Handauswahl schaltet die
       Kopfzeile von Daily/Open Models/High Quality auf die Custom-Anzeige um.
@@ -565,6 +565,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Qwen liefert eine echte Antwort mit Quellen: Qwen3.8 27B (Free, in Open
       Models statt gpt-oss-120b) und Qwen3.8 Max Prime (Pro, langsam: nur bei
       Alibaba). Ein Bild im Anhang erreicht beide.
+- [ ] MiMo liefert eine echte Antwort mit Quellen: MiMo V2.6 Flash (Free) und
+      MiMo V2.6 Pro (Pro, langsam). Ein Bild im Anhang erreicht beide; das Logo
+      ist im Dark Mode hell.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 - [ ] „Ask about this“ auf einem markierten Abschnitt einer Antwort: das Zitat
       steht über dem Eingabefeld, der Fokus liegt im Feld, das × entfernt es

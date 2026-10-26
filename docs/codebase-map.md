@@ -253,11 +253,11 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   `.python-version` (Render, CI, Dependabot und `dev.ps1` lesen sie). Direkte
   Abhängigkeiten in `requirements.in`, daraus erzeugt die voll gepinnte
   `requirements.txt` (pip-compile, mit `# via`); Ablauf in `docs/testing.md`.
-- **LLM-Modelle**: zehn Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
-  DeepSeek, Grok, Kimi, GLM, Meta/Muse, Qwen), alle über einen OpenRouter-Chat-
+- **LLM-Modelle**: elf Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
+  DeepSeek, Grok, Kimi, GLM, Meta/Muse, Qwen, Xiaomi/MiMo), alle über einen OpenRouter-Chat-
   Completions-Transport mit einem Routing (schnellster Endpunkt ohne
   Datensammlung, ZDR nur in Google-Chats). Ein Lauf wählt davon höchstens sechs.
-  Provider-Label-Konvention: Claude = `Anthropic`, Muse = `Meta`.
+  Provider-Label-Konvention: Claude = `Anthropic`, Muse = `Meta`, MiMo = `Xiaomi`.
 - **Auth & Daten**: Firebase Auth (ID-Token) + Firestore (`firebase-admin`).
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
   `static/js/`, überwiegend als klassische `<script defer>`-Tags. `window.App`
@@ -8919,6 +8919,19 @@ Output-Limit; `low` suchte 8 von 8 Mal, Median 12 s (gpt-oss-120b 4 s). Die
 Max-Modelle brauchten 24–138 s, das offene 2.4T-A95B brach zwei von drei
 Antworten am Limit ab. Bilder nativ (`PROVIDER_IMAGE_SUPPORT`), PDFs über den
 Text-Fallback.
+
+**Xiaomi (seit 2026-10-26, elfte Familie):** Key `xiaomi`, Label `Xiaomi`,
+in der App „MiMo“ (`dom_key` `mimo`: `/ask_mimo`, `selectMiMo`,
+Consensus-Aliasse `Xiaomi`/`Xiaomi-Pro`). Basis `xiaomi/mimo-v2.6-flash`
+(0,14/0,28 $ je Mio., zehn Anbieter), Pro `xiaomi/mimo-v2.6-pro` (0,43/0,87 $);
+beide mit offenen Gewichten, Text/Bild/Video/Audio. Beide laufen mit
+`reasoning.enabled=false` (`MODEL_REQUEST_CONFIG`; die Modelle kennen nur an/aus).
+Live-Probe mit dem echten Vergleichs-Payload: ohne Denken suchten beide in 6 von
+6 Antworten, Flash in 5–11 s, Pro in 53–127 s (DeepInfra); mit Denken leerte
+Flash eine von drei Antworten am Output-Limit, Pro schnitt eine ab, ohne
+schneller oder genauer zu werden. Die Presets bleiben unverändert (MiMo ist wie
+Kimi/GLM bei ihrer Aufnahme zusätzlich wählbar). Bilder nativ, PDFs über den
+Text-Fallback. Das Logo (`xiaomi.svg`, „mi“-Marke, einfarbig) ist von Hand gezeichnet.
 
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,

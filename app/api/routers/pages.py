@@ -309,6 +309,7 @@ _LEADERBOARD_FAMILY_BY_PROVIDER = {
     "glm": "Z.ai / GLM",
     "meta": "Meta / Muse",
     "qwen": "Alibaba / Qwen",
+    "xiaomi": "Xiaomi / MiMo",
 }
 # Familien, die spaeter dazugekommen sind, tragen ihr Startdatum. Der
 # gemeinsame Vergleichszeitraum (_MODEL_PULSE_PERIOD) bleibt der aelteste
@@ -319,6 +320,7 @@ _LEADERBOARD_AVAILABLE_SINCE = {
     "glm": "2026-08-31",
     "meta": "2026-09-02",
     "qwen": "2026-10-22",
+    "xiaomi": "2026-10-26",
 }
 _LEADERBOARD_FAMILY_VIEW = {
     family: {
@@ -352,6 +354,8 @@ def _leaderboard_family(model: str) -> str:
         return "Meta / Muse"
     if "qwen" in key or "alibaba" in key:
         return "Alibaba / Qwen"
+    if "mimo" in key or "xiaomi" in key:
+        return "Xiaomi / MiMo"
     return "Other"
 
 

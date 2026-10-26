@@ -49,6 +49,7 @@ FAMILY_NAMES = {
     "glm": "Z.ai / GLM",
     "meta": "Meta / Muse",
     "qwen": "Alibaba / Qwen",
+    "xiaomi": "Xiaomi / MiMo",
 }
 # The short name the landing page and sentences use.
 FAMILY_SHORT = {key: provider.title for key, provider in cfg.PROVIDERS.items()}

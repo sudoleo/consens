@@ -76,6 +76,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             "glm": "z-ai/",
             "meta": "meta/",
             "qwen": "qwen/",
+            "xiaomi": "xiaomi/",
         }
         for provider, model_ids in cfg._provider_allowed_sets().items():
             for model_id in model_ids:

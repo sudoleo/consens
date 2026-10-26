@@ -205,6 +205,12 @@ MUSE_PRO_MODEL = "muse-spark-1.3"
 # 2.4T-A95B brach zwei von drei Antworten am Output-Limit ab).
 QWEN_BASE_MODEL = "qwen3.8-27b"
 QWEN_PRO_MODEL = "qwen3.8-max-prime"
+# Xiaomis MiMo (elfte Familie seit 2026-10-26). Beide Modelle haben offene
+# Gewichte, lesen Text, Bilder, Video und Audio. Basis ist MiMo V2.6 Flash
+# (0,14/0,28 $ je Mio. Token, zehn Anbieter), Pro MiMo V2.6 Pro (0,43/0,87 $).
+# Live-Probe mit Suche: Flash 5-11 s, Pro 53-127 s (DeepInfra).
+MIMO_BASE_MODEL = "mimo-v2.6-flash"
+MIMO_PRO_MODEL = "mimo-v2.6-pro"
 
 # Modelle, die OpenRouter unter der frueheren Pflicht-Regel provider.zdr=true
 # (bis 2026-10-17) nicht bedienen konnte: kein Endpunkt in GET
@@ -395,6 +401,12 @@ PROVIDERS: dict[str, ProviderConfig] = {
             {QWEN_BASE_MODEL, QWEN_PRO_MODEL},
             icon="qwen.svg", icon_class="mono-logo", citation_label="Alibaba Qwen",
         ),
+        _provider(
+            "xiaomi", "Xiaomi", "xiaomi/", MIMO_BASE_MODEL, MIMO_PRO_MODEL,
+            {MIMO_BASE_MODEL, MIMO_PRO_MODEL},
+            dom_key="mimo", title="MiMo", short_label="MiMo",
+            icon="xiaomi.svg", icon_class="mono-logo", citation_label="Xiaomi MiMo",
+        ),
     )
 }
 
@@ -475,7 +487,7 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 # Eintrag haengen in Registry-Reihenfolge hinten an.
 _CONSENSUS_ALIAS_ORDER = [
     "grok", "openai", "anthropic", "mistral", "gemini", "deepseek", "kimi", "glm",
-    "meta", "qwen",
+    "meta", "qwen", "xiaomi",
 ]
 
 
@@ -836,6 +848,8 @@ MODEL_LABEL_OVERRIDES = {
     MUSE_PRO_MODEL: "Muse Spark 1.3",
     QWEN_BASE_MODEL: "Qwen3.8 27B",
     QWEN_PRO_MODEL: "Qwen3.8 Max Prime",
+    MIMO_BASE_MODEL: "MiMo V2.6 Flash",
+    MIMO_PRO_MODEL: "MiMo V2.6 Pro",
     OPENAI_OSS_MODEL: "gpt-oss-120b",
     GEMMA_MODEL: "Gemma 4 31B",
 }
@@ -874,6 +888,12 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     # 8 von 8 Mal (Median 12 s, gpt-oss-120b 4 s).
     QWEN_BASE_MODEL: {"reasoning": {"effort": "low"}},
     QWEN_PRO_MODEL: {"reasoning": {"effort": "low"}},
+    # MiMo sucht auch ohne Denken (Live-Probe 2026-10-26: 6 von 6 Antworten mit
+    # Quellen). Mit Denken leerte Flash eine von drei Antworten am Output-Limit,
+    # Pro schnitt eine ab, ohne schneller oder genauer zu werden. Die Modelle
+    # kennen nur an/aus, keine Stufen.
+    MIMO_BASE_MODEL: {"reasoning": {"enabled": False}},
+    MIMO_PRO_MODEL: {"reasoning": {"enabled": False}},
 }
 
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.

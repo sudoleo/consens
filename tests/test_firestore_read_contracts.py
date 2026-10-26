@@ -87,7 +87,7 @@ def test_leaderboard_sdk_uses_indexed_counts_and_one_read_only_snapshot(selectio
     catalog = rpc.run_query.call_args.kwargs["request"]["structured_query"]
     assert catalog.from_[0].collection_id == "leaderboard"
     assert not catalog._pb.HasField("where")
-    assert rpc.run_aggregation_query.call_count == 10
+    assert rpc.run_aggregation_query.call_count == 11
     for call in rpc.run_aggregation_query.call_args_list:
         assert call.kwargs["retry"] is None
         assert call.kwargs["timeout"] == 10

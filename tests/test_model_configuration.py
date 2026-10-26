@@ -587,6 +587,7 @@ class ModelConfigurationTests(unittest.TestCase):
                 cfg.KIMI_PRO_MODEL,
                 cfg.GLM_PRO_MODEL,
                 cfg.QWEN_PRO_MODEL,
+                cfg.MIMO_PRO_MODEL,
             }),
         )
 
