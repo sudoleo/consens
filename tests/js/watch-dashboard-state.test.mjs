@@ -516,4 +516,36 @@ describe("details and wrong matches", () => {
     });
     expect(patch[2]).not.toHaveProperty("condition");
   });
+
+  it("keeps the details already set when a wrong match is ruled out", async () => {
+    const reached = extra => ({
+      id: "w1", status: "resolved", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
+      condition: "A new pair is offered for under 140 EUR", goal_state: "reached",
+      requirements: "Size 44.5, only new",
+      resolution: {
+        at: "2026-10-13T07:30:00+00:00", reason: "A new pair is listed on Kleinanzeigen.",
+        sources: [{ url: "https://www.kleinanzeigen.de/s-adios/k0", title: "Kleinanzeigen" }]
+      },
+      history: [],
+      ...extra
+    });
+    async function rejectWith(text) {
+      const { window, calls } = dashboard([reached()]);
+      await window.App.watchDashboard.render();
+      const card = window.document.querySelector(".wd-item");
+      [...card.querySelectorAll(".wd-action")].find(button => button.textContent === "Not what I wanted").click();
+      card.querySelector(".wd-goal-input.is-reject").value = text;
+      [...card.querySelectorAll(".wd-button")].find(button => button.textContent === "Keep watching").click();
+      await vi.waitFor(() => expect(calls.some(call => call[0] === "PATCH")).toBe(true));
+      return calls.find(call => call[0] === "PATCH")[2];
+    }
+
+    // Nothing typed: the details stay as they are (2026-10-26 they were wiped).
+    const silent = await rejectWith("  ");
+    expect(silent).toMatchObject({ status: "active", reject_match: true });
+    expect(silent).not.toHaveProperty("requirements");
+    // What was wrong adds to the details instead of replacing them.
+    const said = await rejectWith("No private sellers.");
+    expect(said.requirements).toBe("Size 44.5, only new. No private sellers.");
+  });
 });

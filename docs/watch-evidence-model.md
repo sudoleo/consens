@@ -148,7 +148,9 @@ nie gesehen (sie bekommt nur die Frage).
   damit wieder öffnen. Ändern sich die Details während eines Checks, bewertet
   dieser das Ziel nicht.
 * **„Not what I wanted“** = `PATCH /api/watch/{id}` mit `{status: "active",
-  reject_match: true, requirements?}`, nur auf `resolved`: Das Ziel bleibt, die
+  reject_match: true, requirements?}`, nur auf `resolved` (das Dashboard hängt
+  den Grund an die schon gesetzten Details an und schickt ohne Grund keine
+  `requirements`, die Details bleiben dann): Das Ziel bleibt, die
   Quellen der `resolution` landen in `rejected_sources` (kanonische URL,
   höchstens 10, neueste zuletzt). Die Suche bekommt sie als „Already ruled
   out“, der Judge sieht sie als `ruled_out` markiert, und `evidence_change.verify`

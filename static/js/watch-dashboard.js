@@ -967,9 +967,14 @@
       const row = el("div", "wd-goal-actions");
       const keep = ui().makeButton("Keep watching", "wd-button is-primary", async () => {
         const text = rejectInput.value.replace(/\s+/g, " ").trim();
+        // What was wrong adds to the details already set; nothing typed
+        // leaves them as they are (requirements replaces, "" wipes them).
+        const saved = String(entry.watch.requirements || "").replace(/\s+/g, " ").trim();
+        const changes = { status: "active", reject_match: true };
+        if (text) changes.requirements = saved ? saved + (/[.!?;:]$/.test(saved) ? " " : ". ") + text : text;
         keep.disabled = true;
         try {
-          const data = await patchWatch(entry.watch, { status: "active", reject_match: true, requirements: text });
+          const data = await patchWatch(entry.watch, changes);
           window.App?.trackAppEvent?.("app_watch_match_rejected", { with_details: Boolean(text) });
           updateCard(entry.id, data.watch);
           cardNote(entry, "Watching again. That match won’t count again.");

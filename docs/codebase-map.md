@@ -3034,7 +3034,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   How often/Day/Time, Notify me, Send to, Watch page, Google-Listing,
   Bild und Pause/Delete auf; eine
   abgeschlossene Watch bietet „Not what I wanted“ (PATCH `status=active`,
-  `reject_match: true`, optional `requirements`; Ziel bleibt, der Treffer zählt
+  `reject_match: true`, mit Grund `requirements` = bisherige Details + Grund;
+  Ziel bleibt, der Treffer zählt
   nie wieder) und „Watch for something new“ (PATCH `status=active` + neues oder
   leeres Ziel); es ist immer nur das Feld des gewählten Wegs sichtbar. Kein
   Agreement-Score im Dashboard.
