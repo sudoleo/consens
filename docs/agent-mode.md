@@ -395,8 +395,8 @@ Account-Turns, nie in Chats mit Google-Daten, wie `read_source`):
 `vm_exec` (`command`, `cwd`, Standard `/home/sprite`, `timeout_seconds`,
 Standard 60, höchstens `EXEC_TIMEOUT_MAX` = 300; Ergebnis `stdout`, `stderr`,
 `exit_code`, `duration_ms`, `timed_out`, `cwd`), `vm_read_file` (`path`,
-`offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, Binärdateien nur als
-Hinweis), `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
+`offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, eine längere einzelne
+Zeile gekürzt mit `note`, Binärdateien nur als Hinweis), `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
 Ordner an), seit 2026-10-26 `vm_edit_file` (`path`, `old_string`,
 `new_string`, optional `replace_all`; wie Claude Codes Edit: Der Text muss
 genau einmal vorkommen, sonst sagt der Fehler, wie oft, oder `replace_all`

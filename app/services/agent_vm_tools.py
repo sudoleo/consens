@@ -558,8 +558,17 @@ class VMTools:
                 break
             text += line + "\n"
             shown += 1
+        note = None
+        if chosen and not shown:
+            # A single line over the page (minified JSON) is shown cut, and
+            # reading goes on after it: "offset=<the same>" made a loop.
+            text, shown = chosen[0][:READ_CHARS] + "\n", 1
+            note = (f"Line {args.offset} is longer than {READ_CHARS} characters and is cut here: "
+                    "read the rest with vm_exec (cut -c, head -c, python).")
         last = args.offset - 1 + shown
         result = {"path": path, "first_line": args.offset, "last_line": last, "content": text}
+        if note:
+            result["note"] = note
         if complete:
             result["total_lines"] = len(lines)
         if last < len(lines):

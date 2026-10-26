@@ -480,6 +480,25 @@ def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
         agent_vm_tools.VmEditFileArgs(path="a.txt", old_string="", new_string="b")
 
 
+def test_a_line_longer_than_a_page_is_read_cut_and_reading_goes_on(store, fake_vm):
+    """One line over READ_CHARS (minified JSON) used to come back empty with
+    "read on with offset=<the same offset>": the agent read it again and again."""
+    long_line = "x" * (agent_vm_tools.READ_CHARS + 500)
+    script = Agent([[("vm_read_file", {"path": "data.json"})],
+                    [("vm_read_file", {"path": "data.json", "offset": 2})]])
+    loop = vm_loop(store, script)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]["/home/sprite/data.json"] = (
+        f"short\n{long_line}\nend\n".encode())
+    list(loop.run())
+    first, cut = results(loop)
+    assert first["content"] == "short\n" and first["more"] == "More lines follow: read on with offset=2."
+    assert cut["first_line"] == 2 and cut["last_line"] == 2
+    assert cut["content"] == long_line[:agent_vm_tools.READ_CHARS] + "\n"
+    assert "longer than" in cut["note"] and "vm_exec" in cut["note"]
+    assert cut["more"] == "More lines follow: read on with offset=3."
+
+
 def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, fake_vm, tmp_path, monkeypatch):
     """vm_share_file (2026-10-26): the file goes into the chat's private store
     as the turn's ``vm_file``; a picture only by its bytes, never by its name."""
