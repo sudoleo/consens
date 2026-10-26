@@ -517,6 +517,46 @@ describe("details and wrong matches", () => {
     expect(patch[2]).not.toHaveProperty("condition");
   });
 
+  it("saves the goal picked after typing another one, not the typed one", async () => {
+    const goal = "A new pair is offered for under 140 EUR";
+    async function typeThenPick(condition, pick) {
+      const watch = active({ signal: "stable", trigger: "stable" }, {
+        id: "w1", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",
+        condition, goal_state: condition ? "pending" : ""
+      });
+      const { window, calls } = dashboard([watch]);
+      const listed = window.fetch;
+      // A save is on its way for a moment and answers with what it stored.
+      window.fetch = vi.fn(async (path, options = {}) => {
+        if (options.method !== "PATCH") return listed(path, options);
+        calls.push(["PATCH", String(path), JSON.parse(options.body)]);
+        Object.assign(watch, JSON.parse(options.body));
+        const stored = { ...watch };
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return { ok: true, json: async () => ({ watch: stored }) };
+      });
+      await window.App.watchDashboard.render();
+      const card = window.document.querySelector(".wd-item");
+      const input = card.querySelector(".wd-goal-input.is-goal");
+      input.focus();
+      input.value = "Any shop has it in 44.5";
+      input.dispatchEvent(new window.Event("input", { bubbles: true }));
+      // A click on a radio takes the focus first: the field's change and
+      // blur run before the radio's own change.
+      input.dispatchEvent(new window.Event("change", { bubbles: true }));
+      input.blur();
+      await new Promise(resolve => setTimeout(resolve, 5));
+      pick(card).click();
+      await new Promise(resolve => setTimeout(resolve, 120));
+      return calls.filter(call => call[0] === "PATCH").map(call => call[2].condition);
+    }
+
+    const kept = await typeThenPick(goal, card => card.querySelector(".watch-goal-suggestions input"));
+    expect(kept.at(-1) ?? goal).toBe(goal);
+    const none = await typeThenPick("", card => card.querySelector('input[value="none"]'));
+    expect(none.at(-1) ?? "").toBe("");
+  });
+
   it("keeps the details already set when a wrong match is ruled out", async () => {
     const reached = extra => ({
       id: "w1", status: "resolved", question: "Adios Pro 4 in 44.5 under 140 euros?", share_path: "/s/a",

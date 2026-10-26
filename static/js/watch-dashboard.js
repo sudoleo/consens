@@ -758,13 +758,19 @@
     }
     goals.root.addEventListener("change", event => {
       if (event.target === goals.input) return;
-      // Another choice drops what was typed for "Something else".
-      if (event.target !== goals.customChoice) dirty.delete("condition");
-      if (event.target === goals.anyChoice && goals.anyChoice.checked) {
-        if (entry.watch.condition) saveGoal("");
-      } else if (event.target === goals.customChoice) {
+      if (event.target === goals.customChoice) {
         goals.input.focus();
+        return;
       }
+      // Another choice drops what was typed for "Something else". Clicking
+      // it took the focus from the field first, whose change already sent
+      // the typed goal: the choice then goes after it and wins.
+      dirty.delete("condition");
+      if (!event.target.checked) return;
+      const chosen = event.target === goals.anyChoice ? "" : String(event.target.dataset.goal || "").trim();
+      const saved = String(entry.watch.condition || "").trim();
+      const typed = goals.input.value.replace(/\s+/g, " ").trim();
+      if (chosen !== saved || (typed && typed !== saved)) saveGoal(chosen);
     });
     goals.input.addEventListener("focus", () => { goals.customChoice.checked = true; });
     goals.input.addEventListener("input", () => {
