@@ -601,6 +601,27 @@ describe("the checked sentences of the user's text", () => {
     env.dom.window.close();
   });
 
+  it("keeps a checked sentence's card open while an answer is marked under No highlights", async () => {
+    const env = boot({ mode: "none" });
+    const { window, document } = env;
+    window.App.passageCheck.apply(env.body, passage);
+    document.querySelector(".passage-check-quote .pc-claim").click();
+    const popover = document.getElementById("claimPopover");
+    expect(popover.hidden).toBe(false);
+    const close = popover.querySelector(".claim-popover-close");
+    close.focus();
+    // Meanwhile another answer is marked (a run ends, a turn reloads).
+    const other = document.createElement("div");
+    document.body.appendChild(other);
+    other.innerHTML = "<p>The tower is 330 metres tall.</p>";
+    window.renderStoredConsensusClaims(other, { models_compared: ["OpenAI", "Gemini"], differences: [],
+      claims: [{ anchor: "The tower is 330 metres tall.", agree: ["OpenAI", "Gemini"], dissent: [] }] },
+    document.createElement("div"), []);
+    expect(popover.hidden).toBe(false);
+    expect(document.activeElement).toBe(close);
+    env.dom.window.close();
+  });
+
   it("previews nothing on a sentence the Highlights setting leaves unpainted", async () => {
     const env = boot({ mode: "concerns" });
     env.window.App.passageCheck.apply(env.body, passage);

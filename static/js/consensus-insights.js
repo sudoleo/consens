@@ -126,6 +126,9 @@
           const DEFAULT_HIGHLIGHT_MODE = "concerns";
           let highlightMode = DEFAULT_HIGHLIGHT_MODE;
           let markersVisible = true;
+          // What applyConsensusMarkerVisibility last put on the page;
+          // readMarkerPreferences changes markersVisible before that.
+          let appliedMarkersVisible = null;
           const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
           const claimCountsToggle = $("claimCountsSwitch");
 
@@ -271,7 +274,11 @@
               box.classList.toggle("is-marker-filtered", rows.length > 0
                 && rows.every(row => row.classList.contains("is-marker-filtered")));
             });
-            if (!show || dismiss) {
+            // Only on the way to hidden: under "No highlights" every render
+            // came by here and closed a checked sentence's card (passage-check.js).
+            const hiding = !show && appliedMarkersVisible !== false;
+            appliedMarkersVisible = show;
+            if (hiding || dismiss) {
               closeClaimPopover();
               hideHoverPreview();
             }
