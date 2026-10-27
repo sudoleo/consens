@@ -91,6 +91,8 @@ BRANCH = r"^[A-Za-z0-9._/-]{1,100}$"
 NAME = r"^[A-Za-z0-9._-]{1,100}$"
 REPOS_DIR = "/home/sprite/repos"
 IMPORT_RECORD = ".git/consens-import.json"
+# The VM's own commit of the import, what a pull request's changes are read against.
+IMPORT_REF = "refs/consens/import"
 WORKFLOWS = ".github/workflows/"
 
 NOT_SET_UP = "GitHub is not set up on this installation. Say so; the user cannot connect it yet."
@@ -419,22 +421,24 @@ def unpack_command(archive, dest, repo, ref, sha_):
             "cd \"$dest\"; if command -v git >/dev/null; then git init -q; "
             f"printf '%s\\n' {q(record)} > {IMPORT_RECORD}; git add -A; "
             "git -c user.name=consens.io -c user.email=agent@consens.io commit -q --no-verify "
-            f"-m {q(f'consens.io import of {repo}@{sha_[:12]}')}; "
+            f"-m {q(f'consens.io import of {repo}@{sha_[:12]}')}; git update-ref {IMPORT_REF} HEAD; "
             "else echo 'git is not installed: the files are there without a repository' >&2; fi")
 
 
-def changes_command(path, commit):
-    """Stages everything and lists the changes against the imported commit:
-    ``git diff --raw`` and ``--numstat``, NUL-separated, between markers."""
+def changes_command(path):
+    """Stages everything and lists the changes against the import
+    (IMPORT_REF): ``git diff --raw`` and ``--numstat``, NUL-separated,
+    between markers. GitHub's commit is no object in the VM, whose
+    repository starts with its own commit of the same tree."""
     q = shlex.quote
     return (f"set -e; cd {q(path)}; git add -A; printf 'consens-raw\\0'; "
-            f"git diff --cached --no-renames --raw -z {q(commit)}; printf 'consens-numstat\\0'; "
-            f"git diff --cached --no-renames --numstat -z {q(commit)}")
+            f"git diff --cached --no-renames --raw -z {IMPORT_REF}; printf 'consens-numstat\\0'; "
+            f"git diff --cached --no-renames --numstat -z {IMPORT_REF}")
 
 
-def diff_command(path, commit, chars=DIFF_CHARS):
+def diff_command(path, chars=DIFF_CHARS):
     q = shlex.quote
-    return f"cd {q(path)}; git diff --cached --no-renames {q(commit)} | head -c {int(chars) + 1}"
+    return f"cd {q(path)}; git diff --cached --no-renames {IMPORT_REF} | head -c {int(chars) + 1}"
 
 
 def parse_changes(text):
@@ -598,7 +602,7 @@ class GitHubTools:
             raise ValueError("branch must be a new branch name (letters, digits, . _ - /), not the base.")
         if app.request("GET", f"/repos/{repo}/branches/{branch}", token=token, missing_ok=True) is not None:
             raise ValueError(f"The branch {branch} already exists in {repo}. Choose another name.")
-        code, text = self._run(changes_command(path, commit), cancellation)
+        code, text = self._run(changes_command(path), cancellation)
         if code != 0:
             raise ValueError("git could not list the changes in the VM.")
         files = parse_changes(text)
@@ -618,7 +622,7 @@ class GitHubTools:
             if total > PR_BYTES:
                 raise ValueError(f"The changed files are larger than {PR_BYTES // (1024 * 1024)} MB together.")
             item.update(size=len(content), sha256=hashlib.sha256(content).hexdigest())
-        _, diff = self._run(diff_command(path, commit), cancellation)
+        _, diff = self._run(diff_command(path), cancellation)
         report({"repo": repo, "files": len(files)})
         proposal = {"id": secrets.token_hex(8), "status": "pending", "repo": repo, "base": base, "branch": branch,
                     "title": " ".join(args.title.split()), "body": args.body.strip(), "path": path,

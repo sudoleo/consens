@@ -682,13 +682,15 @@ Installation fällt aus der Verbindung; danach „not connected“. Kein Webhook
 Default-Branch) zum Commit auf, lädt dessen Tarball (höchstens 50 MB gepackt;
 die Weiterleitung zu codeload trägt ihr eigenes Kurzzeit-Token,
 `Authorization` geht nur an api.github.com), schreibt ihn in die VM und packt
-ihn nach `/home/sprite/repos/<name>` aus, als Git-Repo mit einem Commit und
-`.git/consens-import.json` (Repo, Ref, Commit). Ein vorhandener Ordner wird nie
-überschrieben.
+ihn nach `/home/sprite/repos/<name>` aus, als Git-Repo mit einem Commit (unter
+`refs/consens/import`, `IMPORT_REF`) und `.git/consens-import.json` (Repo, Ref,
+Commit). Ein vorhandener Ordner wird nie überschrieben.
 
 *`prepare_pull_request`* (`path`, `title`, `body`, optional `branch`, `base`):
 nur für einen Ordner aus `github_import`. Das Backend staged in der VM alles
-(`git add -A`), liest die Änderungen gegen den importierten Commit
+(`git add -A`), liest die Änderungen gegen den Import (`IMPORT_REF`: GitHubs
+Commit-SHA kennt das Repo in der VM nicht, es beginnt mit einem eigenen Commit
+desselben Trees; bis 2026-10-27 scheiterte daran jeder Vorschlag)
 (`--raw`/`--numstat`, ohne Umbenennungen), höchstens 200 Dateien und 20 MB, je
 Datei 5 MB, liest jede Datei und merkt sich ihren SHA-256, dazu einen
 Diff-Auszug (12.000 Zeichen). Änderungen unter `.github/workflows` lehnt es ab

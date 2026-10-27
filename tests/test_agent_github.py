@@ -10,6 +10,8 @@ GitHub before the user confirms the card.
 import base64
 import io
 import json
+import shutil
+import subprocess
 import tarfile
 
 import httpx
@@ -272,6 +274,30 @@ RAW = ("consens-raw\0:100644 100644 aaaa bbbb M\0src/main.py\0:000000 100755 000
 PATH = "/home/sprite/repos/app"
 
 
+@pytest.mark.skipif(not all(shutil.which(tool) for tool in ("bash", "git", "tar")), reason="needs bash, git, tar")
+def test_the_vm_commands_list_changes_against_the_import_with_real_git(tmp_path):
+    # The VM's repository is a fresh git init with its own commit: GitHub's
+    # commit SHA from the import record is no object there ("bad object").
+    # The fake VM above only matches command strings; this runs them.
+    source = tmp_path / "src" / "maxl-app-abc"
+    source.mkdir(parents=True)
+    (source / "greeting.txt").write_text("hi\n")
+    with tarfile.open(tmp_path / "arch.tgz", "w:gz") as archive:
+        archive.add(source, arcname="maxl-app-abc")
+
+    def run(command):
+        done = subprocess.run(["bash", "-c", command], cwd=tmp_path, capture_output=True)
+        assert done.returncode == 0, done.stderr.decode(errors="replace")
+        return done.stdout.decode()
+
+    run(unpack_command("arch.tgz", "repo", "maxl/app", "main", SHA))
+    (tmp_path / "repo" / "greeting.txt").write_text("hello\n")
+    (tmp_path / "repo" / "new.txt").write_text("new\n")
+    changes = parse_changes(run(changes_command("repo")))
+    assert [(item["path"], item["change"]) for item in changes] == [("greeting.txt", "modified"), ("new.txt", "added")]
+    assert "+hello" in run(diff_command("repo"))
+
+
 def test_git_changes_are_read_with_their_modes_and_counts():
     assert parse_changes(RAW) == [
         {"path": "src/main.py", "change": "modified", "mode": "100644", "additions": 3, "deletions": 1},
@@ -289,8 +315,8 @@ def prepared(store, fake_vm, github, *, raw=RAW, args=None):
     files[f"{PATH}/.git/consens-import.json"] = json.dumps({"repo": "maxl/app", "ref": "main", "commit": SHA}).encode()
     files[f"{PATH}/src/main.py"] = b"print('hello')\n"
     files[f"{PATH}/bin/run"] = b"#!/bin/sh\necho run\n"
-    fake_vm.commands[changes_command(PATH, SHA)] = ([("stdout", raw.encode())], 0, .1)
-    fake_vm.commands[diff_command(PATH, SHA)] = ([("stdout", b"--- a/src/main.py\n+++ b/src/main.py\n-hi\n+hello\n")], 0, .1)
+    fake_vm.commands[changes_command(PATH)] = ([("stdout", raw.encode())], 0, .1)
+    fake_vm.commands[diff_command(PATH)] = ([("stdout", b"--- a/src/main.py\n+++ b/src/main.py\n-hi\n+hello\n")], 0, .1)
     list(loop.run())
     return loop, files
 
