@@ -169,3 +169,78 @@ describe("the workspace view", () => {
       .toBe("The workspace browser is logged out everywhere."));
   });
 });
+
+describe("the workspace beside the chat", () => {
+  function wide(env, width = 1600) {
+    Object.defineProperty(env.window, "innerWidth", { value: width, configurable: true });
+    // jsdom lays nothing out: the window without a scrollbar is as wide.
+    Object.defineProperty(env.document.documentElement, "clientWidth", { value: width, configurable: true });
+    env.window.matchMedia = (query) => ({ matches: /min-width: (\d+)px/.test(query) && width >= Number(query.match(/(\d+)px/)[1]) });
+  }
+
+  it("docks at half of the room beside the chat and leaves the chat its lane", async () => {
+    const env = setup();
+    wide(env);
+    await env.workspace.open();
+    const body = env.document.body;
+    expect(body.classList.contains("workspace-view-docked")).toBe(true);
+    expect(env.workspace.width()).toBe(800);
+    expect(body.style.getPropertyValue("--workspace-width")).toBe("800px");
+    const resizer = env.document.querySelector(".workspace-view-resizer");
+    expect(resizer.hidden).toBe(false);
+    expect(resizer.getAttribute("role")).toBe("separator");
+    expect(resizer.getAttribute("aria-valuenow")).toBe("800");
+    env.workspace.close();
+    expect(body.classList.contains("workspace-view-docked")).toBe(false);
+    expect(body.style.getPropertyValue("--workspace-width")).toBe("");
+  });
+
+  it("resizes with the arrow keys within bounds that keep the chat readable, and remembers the width", async () => {
+    const env = setup();
+    wide(env);
+    await env.workspace.open();
+    const resizer = env.document.querySelector(".workspace-view-resizer");
+    const key = (name) => resizer.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: name, bubbles: true }));
+    key("ArrowLeft");
+    expect(env.workspace.width()).toBe(840);
+    key("Home");
+    // The chat keeps at least 520px beside it.
+    expect(env.workspace.width()).toBe(1600 - 520);
+    key("End");
+    expect(env.workspace.width()).toBe(380);
+    expect(env.window.localStorage.getItem("consens.workspaceWidth")).toBe("380");
+    env.workspace.close();
+    await env.workspace.open();
+    expect(env.workspace.width()).toBe(380);
+    // A double click goes back to half and half and forgets the choice.
+    resizer.ownerDocument.querySelector(".workspace-view-resizer")
+      .dispatchEvent(new env.window.MouseEvent("dblclick", { bubbles: true }));
+    expect(env.workspace.width()).toBe(800);
+    expect(env.window.localStorage.getItem("consens.workspaceWidth")).toBeNull();
+  });
+
+  it("moves aside when the Agent activity panel opens next to it", async () => {
+    const env = setup();
+    wide(env);
+    await env.workspace.open();
+    const panel = env.document.querySelector(".workspace-view");
+    expect(panel.style.getPropertyValue("--workspace-right")).toBe("0px");
+    env.document.body.classList.add("agent-sidebar-open");
+    await vi.waitFor(() => expect(panel.style.getPropertyValue("--workspace-right")).toBe("346px"));
+    // Both panels and the chat's 520px do not fit at 800: the workspace gives way.
+    expect(env.workspace.width()).toBe(1600 - 346 - 520);
+    // A narrower window takes it from the workspace, never from the chat.
+    wide(env, 1400);
+    env.window.dispatchEvent(new env.window.Event("resize"));
+    expect(env.workspace.width()).toBe(1400 - 346 - 520);
+  });
+
+  it("covers the screen on narrow windows, without an edge to drag", async () => {
+    const env = setup();
+    wide(env, 900);
+    await env.workspace.open();
+    expect(env.document.body.classList.contains("workspace-view-docked")).toBe(false);
+    expect(env.document.querySelector(".workspace-view-resizer").hidden).toBe(true);
+    expect(env.document.body.style.getPropertyValue("--workspace-width")).toBe("0px");
+  });
+});

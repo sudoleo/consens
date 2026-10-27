@@ -196,6 +196,17 @@
 .agent-answer-activity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); }
 .agent-sidebar-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
 .agent-sidebar-toggle[aria-expanded="true"] { color: var(--ink); }
+/* The workspace's shortcut beside it, once a VM step stands in the run (agent-delegation.js). */
+.agent-answer-activity .agent-inline-models .agent-workspace-toggle {
+  display: none; width: 28px; min-height: 28px; padding: 0; border: 0; background: none; color: var(--ink-3); cursor: pointer;
+}
+.agent-answer-activity:has(.agent-vm) .agent-inline-models .agent-workspace-toggle { display: inline-grid; place-items: center; }
+.agent-workspace-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
+body.workspace-view-open .agent-workspace-toggle { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-answer-activity .agent-inline-models .agent-workspace-toggle:hover { color: var(--ink); }
+}
+.agent-workspace-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 6px; }
 .agent-model-stack .agent-inline-model, .agent-answer-activity .agent-model-stack .agent-inline-model {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
   width: 25px; height: 25px; min-height: 25px; padding: 3px; margin-left: -6px;

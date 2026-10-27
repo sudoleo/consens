@@ -754,7 +754,20 @@
         glyph.append(frame); toggle.append(glyph);
         toggle.addEventListener("click", () => view.closed ? show(null, toggle) : hide(true));
         inline._toggle = toggle;
-        inline.replaceChildren(inline._stack, toggle);
+        // The workspace beside it once the run worked there (workspace-view.js):
+        // agent-chat.css shows it when the activity holds a VM step.
+        const workspace = node("button", "agent-workspace-toggle workspace-only");
+        workspace.type = "button";
+        workspace.setAttribute("aria-label", "Open the workspace");
+        workspace.title = "Workspace";
+        const screen = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        screen.setAttribute("viewBox", "0 0 16 16"); screen.setAttribute("aria-hidden", "true");
+        const outline = document.createElementNS(screen.namespaceURI, "path");
+        outline.setAttribute("d", "M2.5 3h11v7.5h-11zM6 13.5h4M8 10.5v3");
+        screen.append(outline); workspace.append(screen);
+        workspace.addEventListener("click", () => App.workspaceView?.open());
+        inline._workspace = workspace;
+        inline.replaceChildren(inline._stack, toggle, workspace);
       }
       const models = new Map();
       for (const agent of view.agents.values()) {
@@ -914,6 +927,7 @@
     const view = current, old = inline;
     inline = null;
     old._toggle?.remove();
+    old._workspace?.remove();
     old.addEventListener("click", event => {
       const button = event.target.closest?.(".agent-inline-model");
       event.preventDefault(); event.stopPropagation();

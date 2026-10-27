@@ -1180,6 +1180,22 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   color: var(--ink-3);
 }
 
+/* A narrow column on a wide screen (beside the workspace or the activity
+   panel, .container is the inline-size container) wraps the note in two
+   even lines, as on a phone (components-model-picker.css). */
+@container (max-width: 560px) {
+  .feedback-line {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .feedback-note {
+    flex: 1 1 100%;
+    text-align: center;
+    text-wrap: balance;
+  }
+}
+
 .consensus-model {
   display: inline-flex;
   align-items: center;

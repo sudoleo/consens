@@ -773,3 +773,24 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 });
+
+describe('the workspace shortcut in the run header (workspace-view.js)', () => {
+  it('stands beside the activity toggle for accounts with a workspace and opens it', async () => {
+    const {window:w,document:d,dom} = bootNarrow();
+    const opened = [];
+    w.App.workspaceView = { open: () => opened.push(true) };
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    const row = d.querySelector('.agent-inline-models');
+    const shortcut = row.querySelector('.agent-workspace-toggle');
+    // agent-chat.css shows it once a VM step stands in the run; style.css hides it without a workspace.
+    expect(shortcut.classList.contains('workspace-only')).toBe(true);
+    expect(shortcut.previousElementSibling).toBe(row.querySelector('.agent-sidebar-toggle'));
+    expect(shortcut.getAttribute('aria-label')).toBe('Open the workspace');
+    shortcut.click();
+    expect(opened).toEqual([true]);
+    // It opens the workspace, not the activity panel.
+    expect(d.getElementById('agentSidebar').hidden).toBe(true);
+    dom.window.close();
+  });
+});

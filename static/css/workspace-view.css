@@ -1,18 +1,136 @@
-/* The account's workspace live (workspace-view.js): a panel at the right
-   edge on wide screens, the whole screen on phones. Monochrome and without
-   frames like the rest; the screen itself is the only picture. */
+/* The account's workspace live (workspace-view.js). From 1100px it docks at
+   the right edge in its own lane (--workspace-width, set by the script) and
+   the chat narrows and re-centres beside it, like the Agent activity panel;
+   below that it covers the screen. Monochrome and without frames like the
+   rest; the screen itself is the only picture. */
+/* Narrow screens: a sheet over everything, the app's floating controls too
+   (dialogs still open above it, in the top layer). */
 .workspace-view {
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(58vw, 1040px);
+  left: 0;
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
   background: var(--side);
   color: var(--ink);
-  box-shadow: var(--lift);
+}
+
+@media (min-width: 1100px) {
+  /* Below dialogs and menus, like the activity panel; next to it when that is open. */
+  body.workspace-view-docked .workspace-view {
+    left: auto;
+    right: var(--workspace-right, 0px);
+    width: var(--workspace-width);
+    z-index: 120;
+    border-left: 1px solid var(--line-soft);
+  }
+
+  /* The chat's lane: the body's content box ends where the panel begins, so
+     the column (layout.css) narrows and re-centres in what is left. */
+  body.workspace-view-docked {
+    padding-right: calc(10px + var(--workspace-width));
+  }
+
+  /* What stands over the column stays over it: the Chat | Watches switch
+     (components-watch.css) in the middle of the lane, a guest's Log in at its
+     right edge. */
+  body.workspace-view-docked .view-switch {
+    left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--workspace-width) / 2);
+  }
+
+  body.workspace-view-docked .auth-top-actions {
+    right: calc(var(--workspace-width) + 16px);
+  }
+
+  /* The Agent chat column counts the window, not the body: it gets the lane
+     the same way (agent-chat.css), with the activity panel beside it too. */
+  body.single-agent-active.workspace-view-docked:not(.answer-reader-docked) .container {
+    --agent-chat-width: min(var(--app-container-width),
+      calc(100vw - var(--app-sidebar-offset) - var(--workspace-width) - 48px));
+  }
+}
+
+@media (min-width: 1200px) {
+  body.single-agent-active.agent-sidebar-open.workspace-view-docked:not(.answer-reader-docked) .container {
+    --agent-chat-width: min(var(--app-container-width),
+      calc(100vw - var(--app-sidebar-offset) - var(--workspace-width) - 346px - 48px));
+  }
+
+  body.agent-sidebar-open.workspace-view-docked .auth-top-actions {
+    right: calc(346px + var(--workspace-width) + 16px);
+  }
+
+  body.agent-sidebar-open.workspace-view-docked .view-switch {
+    left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--workspace-width) / 2 - 173px);
+  }
+}
+
+/* A drag follows the pointer at once; the chat's width eases otherwise. */
+body.workspace-view-resizing,
+body.workspace-view-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.workspace-view-resizing .container {
+  transition: none !important;
+}
+
+/* The edge to the chat: a wide grip, a hairline that strengthens on hover and while dragging. */
+.workspace-view-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.workspace-view-resizer[hidden] {
+  display: none;
+}
+
+.workspace-view-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--dur-state, 160ms) var(--ease-standard, ease);
+}
+
+body.workspace-view-resizing .workspace-view-resizer::after,
+.workspace-view-resizer:focus-visible::after {
+  background: var(--ink-3);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-view-resizer:hover::after {
+    background: var(--line);
+  }
+}
+
+.workspace-view-resizer:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-view {
+    animation: workspace-view-enter var(--dur-state, 160ms) var(--ease-out, ease-out) both;
+  }
+
+  @keyframes workspace-view-enter {
+    from { opacity: 0; transform: translateX(12px); }
+  }
 }
 
 .workspace-view-head {
@@ -128,10 +246,6 @@
 }
 
 @media (max-width: 760px) {
-  .workspace-view {
-    width: 100vw;
-  }
-
   .workspace-view-hint {
     display: none;
   }

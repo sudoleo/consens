@@ -597,7 +597,20 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   Startbildschirm über den Knopf in der Werkzeugleiste
   (`#composerWorkspaceButton`; die Leiste gibt es nur dort), an jedem
   `browser`-Schritt des Agenten über „Live ansehen“ (`agent-activity.js`
-  `.agent-vm-watch`) und in Einstellungen → Agent → Workspace. Alles
+  `.agent-vm-watch`), über das Bildschirm-Symbol in der Kopfzeile des Laufs
+  neben dem Aktivitäts-Knopf, sobald ein VM-Schritt im Lauf steht
+  (`agent-delegation.js` `.agent-workspace-toggle`, per CSS `:has(.agent-vm)`),
+  und in Einstellungen → Agent → Workspace.
+- **Neben dem Chat** (ab 1100 px): Das Panel dockt rechts an, der Chat rückt
+  in die verbleibende Spur und zentriert sich dort (`body.workspace-view-docked`,
+  `--workspace-width`: Body-Innenabstand rechts, die Agent-Spalte rechnet die
+  Breite mit; neben der offenen Aktivitäts-Leiste steht es links von ihr). Die
+  Grenze zieht sich mit der Maus, mit den Pfeiltasten (40 px) und Pos1/Ende;
+  Doppelklick setzt auf halb/halb zurück; die Breite merkt sich der Browser
+  (`localStorage` `consens.workspaceWidth`). Der Chat behält immer mindestens
+  520 px, ein kleineres Fenster nimmt die Breite dem Arbeitsplatz. Darunter
+  deckt es den Bildschirm ganz ab. Schmale Spalten brechen den Hinweis unter dem
+  Feld per Container Query um (`components-consensus.css`). Alles
   `.workspace-only`: Körperklasse `viewer-has-workspace` aus `/user_status`,
   `audit_access` und `vm_time`. Ein WebSocket
   `/agent/workspace/view`: Die erste Nachricht meldet an (`{"id_token"}`, nie in

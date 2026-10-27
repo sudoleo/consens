@@ -145,7 +145,11 @@ all need Agent access and audit (`audit_allowed`) on a server with a VM provider
 `static/vendor/novnc/1.7.0` on first open and wires `#composerWorkspaceButton`
 (start screen), the (+) menu's `#attachWorkspaceOption` (in a chat) and
 `#agentWorkspaceSettings`; `agent-activity.js` adds "Watch live"
-(`.agent-vm-watch`) to each `browser` step. All `.workspace-only` (body class
+(`.agent-vm-watch`) to each `browser` step and `agent-delegation.js` the run
+header's shortcut (`.agent-workspace-toggle`, shown once a VM step stands in
+the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
+`--workspace-width`, a draggable `.workspace-view-resizer` remembered in
+`localStorage`). All `.workspace-only` (body class
 `viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
 ("Arbeitsplatz").
 

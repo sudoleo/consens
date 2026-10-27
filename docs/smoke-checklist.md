@@ -151,7 +151,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 - [ ] Arbeitsplatz (2026-10-27, Pro- oder Admin-Konto mit Audit, echter
       Provider): (+) → „Workspace“ (im Chat) bzw. der Knopf „Workspace“ auf
       dem Startbildschirm öffnet das Panel, ebenso „Live ansehen“ an einem
-      `browser`-Schritt des Agenten; beim allerersten Mal
+      `browser`-Schritt des Agenten und das Bildschirm-Symbol in der Kopfzeile
+      des Laufs. Am Desktop steht es neben dem Chat: Grenze ziehen, die Breite
+      bleibt nach dem Neuladen, Doppelklick halbiert wieder, der Chat wird nie
+      schmaler als gut lesbar, Aktivitäts-Leiste daneben öffnen; beim allerersten Mal
       „Der Browser wird eingerichtet …“ (~1 min), dann Chrome im Bild, „Du
       schaust zu“. Ein Klick ins Bild übernimmt („Zurückgeben“), Tippen und
       Klicken kommen an; bei einer Website anmelden. Agent-Frage im Audit:

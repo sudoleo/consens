@@ -778,6 +778,8 @@
   "The workspace browser is logged out everywhere.": "Der Browser des Arbeitsplatzes ist überall abgemeldet.",
   "Open workspace": "Arbeitsplatz öffnen",
   "Watch live": "Live ansehen",
+  "Resize the workspace": "Breite des Arbeitsplatzes ändern",
+  "Drag to resize": "Ziehen, um die Breite zu ändern",
   "Watch and steer the agent’s browser": "Dem Browser des Agenten zusehen und ihn steuern",
   "Open the workspace first.": "Öffne zuerst den Arbeitsplatz.",
   "The workspace is not reachable right now. Try again.": "Der Arbeitsplatz ist gerade nicht erreichbar. Versuch es noch mal.",
