@@ -3489,7 +3489,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   sichtbaren Lauf: „Working… · <Titel>“, danach „Answer ready“ bzw. „Run
   stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
-  schon vor dem Verlassen fertig war, wird nicht gemeldet. Für Screenreader
+  schon vor dem Verlassen fertig war, wird nicht gemeldet. Jede Projektion
+  setzt den Titel neu (`App.setAppTitle`, direkt nach dem Registry-Ereignis);
+  `setAppTitle` schreibt deshalb über `App.tabStatus.titled(title)`, das ein
+  stehendes Label vorn hält und den neuen Titel als Basis nimmt (seit
+  2026-10-27; vorher löschte ein Compare-Lauf „Working…“ mit dem ersten
+  Stück Text und „Answer ready“ sofort wieder). Für Screenreader
   schreibt es außerdem „Answer ready“ in die Statuszeile `#answerStatus`
   (`role="status"`, in `main#appMain`), sobald der sichtbare Lauf von
   `starting`/`running` auf `succeeded` wechselt; der Start leert sie.

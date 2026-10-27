@@ -57,6 +57,15 @@
     document.title = next ? `${window.App.t(next)} · ${baseTitle}` : baseTitle;
   }
 
+  // The page's own title, as App.setAppTitle sets it. Every projection of
+  // the visible run sets it again, right after the registry event: while a
+  // label stands in front, it stays there and the new title is its base.
+  function titled(title) {
+    if (shown === null) return title;
+    baseTitle = title;
+    return `${window.App.t(shown)} · ${title}`;
+  }
+
   function sync() {
     if (!document.hidden) { apply(null); return; }
     const next = label(visibleRun());
@@ -69,4 +78,6 @@
   window.addEventListener("consensio:run-registry-change", sync);
   window.addEventListener("consensio:run-registry-change", announce);
   document.addEventListener("visibilitychange", sync);
+  window.App = window.App || {};
+  window.App.tabStatus = Object.freeze({ titled });
 })();

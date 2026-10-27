@@ -72,8 +72,10 @@
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
     // The page's one h1, for screen readers (index.html #appHeading).
     const heading = document.getElementById("appHeading");
+    // A hidden tab keeps the run's label in front (tab-status.js).
+    const setTitle = title => { document.title = window.App.tabStatus?.titled?.(title) ?? title; };
     if (!normalized) {
-      document.title = DEFAULT_APP_TITLE;
+      setTitle(DEFAULT_APP_TITLE);
       if (heading) heading.textContent = DEFAULT_APP_TITLE;
       return;
     }
@@ -82,7 +84,7 @@
     const shortened = normalized.length > maxQuestionLength
       ? `${normalized.slice(0, maxQuestionLength - 1).trimEnd()}…`
       : normalized;
-    document.title = `${shortened} | consens.io`;
+    setTitle(`${shortened} | consens.io`);
     if (heading) heading.textContent = shortened;
   }
 
