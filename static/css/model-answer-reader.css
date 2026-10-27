@@ -605,6 +605,13 @@ body.comparison-layout-changing .input-section { transition: none; }
   padding-left: 14px;
   padding-right: 20px;
 }
+/* The reader over the page keeps no room for a scrollbar (padding-right 0
+   in the expanded reading view): with the same 14px on both sides the card
+   lies centred and its chevrons end on the edge of the header and the other
+   tabs. */
+.answer-reader-dialog:not(.is-docked) .answer-reader-scroll:has(.answer-reader-inspector .diff-card) {
+  padding-right: 14px;
+}
 @media (forced-colors: active) {
   .answer-reader-inspector .diff-card[open] { border: 1px solid CanvasText; }
 }
