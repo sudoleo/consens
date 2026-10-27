@@ -215,6 +215,105 @@ describe("consensusAnchor.locateAnchor", () => {
 
     expect(anchor.locateAnchor(root, "A claim that was never made.")).toBeNull();
   });
+
+  // The server counts anchor_occurrence over whole equal sentences
+  // (consensus_engine._sentence_reference). A sentence that merely contains
+  // the anchor is not one of them; counting it put the mark on the sentence
+  // before.
+  function answer(html) {
+    const { document, anchor } = boot();
+    const root = document.createElement("div");
+    root.innerHTML = html;
+    document.body.appendChild(root);
+    const marked = (hit) => {
+      const bounds = anchor.sentenceBounds(hit.flat, hit.start, hit.end, hit.breaks);
+      return hit.flat.slice(bounds.start, bounds.end);
+    };
+    return { root, anchor, marked };
+  }
+
+  it("counts whole sentences for the occurrence, not one that contains the anchor", () => {
+    const { root, anchor } = answer(
+      "<p>In short, the tower is 330 m tall. The tower is 330 m tall.</p>"
+    );
+
+    const hit = anchor.locateAnchor(root, "The tower is 330 m tall.", 0);
+
+    expect(hit.start).toBe(hit.flat.indexOf("The tower"));
+  });
+
+  it("finds the second whole sentence past one that only contains it", () => {
+    const { root, anchor } = answer(
+      "<p>The tower is 330 m tall. In short, the tower is 330 m tall. The tower is 330 m tall.</p>"
+    );
+
+    const hit = anchor.locateAnchor(root, "The tower is 330 m tall.", 1);
+
+    expect(hit.start).toBe(hit.flat.lastIndexOf("The tower"));
+  });
+
+  it("keeps the first hit for an old anchor without a sentence reference", () => {
+    const { root, anchor } = answer(
+      "<p>In short, the tower is 330 m tall. The tower is 330 m tall.</p>"
+    );
+
+    const hit = anchor.locateAnchor(root, "The tower is 330 m tall.");
+
+    expect(hit.start).toBe(hit.flat.indexOf("the tower"));
+  });
+
+  it("marks a sentence with inline code, and only that sentence", () => {
+    const { root, anchor, marked } = answer(
+      "<p>The CLI is fast. <code>npm</code> installs packages quickly.</p>"
+    );
+
+    const hit = anchor.locateAnchor(root, "`npm` installs packages quickly.", 0);
+
+    expect(hit).not.toBeNull();
+    expect(marked(hit)).toBe("npm installs packages quickly.");
+    // The code itself is never wrapped: it has no slice of its own.
+    expect(hit.slices.map((slice) => slice.node.nodeValue)).toEqual([
+      "The CLI is fast. ",
+      " installs packages quickly.",
+    ]);
+  });
+
+  it("tells two sentences apart that differ only in their code", () => {
+    const { root, anchor } = answer(
+      "<p><code>npm</code> is a tool. <code>pip</code> is a tool.</p>"
+    );
+
+    const hit = anchor.locateAnchor(root, "`pip` is a tool.", 0);
+
+    expect(hit.flat.slice(hit.start, hit.end)).toBe("pip is a tool.");
+  });
+
+  it.each([
+    ["code", "<code>useEffect</code> runs after render."],
+    ["a lower-case link", '<a href="https://example.com/">iOS</a> runs on the phone.'],
+    ["lower-case bold", "<strong>npm</strong> ships with Node."],
+  ])("ends the sentence before one that starts with %s", (_kind, second) => {
+    const { root, anchor, marked } = answer(`<p>The tower is tall. ${second}</p>`);
+
+    const first = anchor.locateAnchor(root, "The tower is tall.", 0);
+
+    expect(marked(first)).toBe("The tower is tall.");
+    const text = root.textContent.slice("The tower is tall. ".length);
+    const hit = anchor.locateAnchor(root, text, 0);
+    expect(marked(hit)).toBe(text);
+  });
+
+  it("still joins a sentence that goes on in lower case after a source chip", () => {
+    // [S1] sits between the full stop and the space; the server does not split
+    // there when a lower-case word follows, so the chip is no boundary.
+    const { root, anchor, marked } = answer(
+      '<p>The tower is tall.<sup class="src-ref">1</sup> and so on, it said.</p>'
+    );
+
+    const hit = anchor.locateAnchor(root, "The tower is tall.", 0);
+
+    expect(marked(hit)).toBe("The tower is tall. and so on, it said.");
+  });
 });
 
 describe("consensusAnchor.sentenceBounds", () => {

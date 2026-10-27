@@ -444,6 +444,23 @@
             return Boolean(link) && Boolean(window.isBareSourceLink?.(link));
           }
 
+          // First offset in [start, end) that wrapFlatRange would wrap and that
+          // is not white space; -1 when that part holds no letter or digit.
+          function wrappableStart(slices, start, end) {
+            let first = -1;
+            let words = false;
+            slices.forEach(function (slice) {
+              if (slice.end <= start || slice.start >= end) return;
+              if (insideBareSourceLink(slice.node)) return;
+              const from = Math.max(start, slice.start);
+              const part = slice.node.nodeValue.slice(from - slice.start, Math.min(end, slice.end) - slice.start);
+              const lead = part.search(/\S/);
+              if (first < 0 && lead >= 0) first = from + lead;
+              if (/[\p{L}\p{N}]/u.test(part)) words = true;
+            });
+            return words ? first : -1;
+          }
+
           function wrapFlatRange(slices, start, end, className) {
             const spans = [];
             slices.forEach(function (slice) {
@@ -1299,7 +1316,7 @@
             const hit = locateAnchor(container, anchor, occurrence);
             if (!hit) return null;
 
-            const bounds = sentenceBounds(hit.flat, hit.start, hit.end);
+            const bounds = sentenceBounds(hit.flat, hit.start, hit.end, hit.breaks);
             if (bounds.end <= bounds.start) return null;
 
             // Derselbe Satz wird nicht zweimal dekoriert (ein Widerspruch und
@@ -1318,8 +1335,13 @@
               return { spans: existing.spans, block: hit.block };
             }
 
+            // Inline code is never wrapped: a sentence that starts with it is
+            // marked from its first word after it, and one that is nothing but
+            // code and a full stop is not marked at all.
+            const from = wrappableStart(hit.slices, bounds.start, bounds.end);
+            if (from < 0) return null;
             const spans = wrapFlatRange(
-              hit.slices, bounds.start, bounds.end, "cx-claim " + severityClass
+              hit.slices, from, bounds.end, "cx-claim " + severityClass
             );
             // Nothing left to wrap (the sentence is a bare source link): no
             // mark, the claim goes to the list like any unanchored one.

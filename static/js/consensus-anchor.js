@@ -129,6 +129,16 @@
     // sieht aus wie ein Fehler, nicht wie eine Quellenangabe.
     const MARK_SKIP_SELECTOR =
       ".claim-badge, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
+    const UI_SKIP_SELECTOR = ".claim-badge, .source-link, .src-ref, .src-ref-sep";
+    // Inline-Code wird nie umwickelt, ist aber Satztext: der Anker traegt ihn
+    // ("`npm` installs ..."), und der Server zaehlt gleiche Saetze mit ihm.
+    // Ohne ihn in der flachen Sicht fand ein solcher Satz nie seine Stelle.
+    const SEARCH_ONLY_SELECTOR = "code";
+    // Im Markdown beginnt hier ein Satz mit `, [, * oder $, nicht mit einem
+    // Kleinbuchstaben: der Server trennt davor (_sentence_spans), auch wenn
+    // der sichtbare Text klein weitergeht. Quellenchips sind keine solche
+    // Grenze, ein [S1] steht dort schon vor dem Leerraum.
+    const MARKUP_SELECTOR = "a, strong, b, em, i, del, s, code, .katex";
     const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";
     
     // --- Inline-Marker: Satzgrenzen und Text-Wrapping -----------------
@@ -182,8 +192,10 @@
       return CURRENCY_AFTER_QUANTITY.test(text.slice(dotIndex + 1).trimStart());
     }
     
-    // Ist text[i] ("." / "!" / "?") ein echtes Satzende?
-    function isSentenceEnd(text, i) {
+    // Ist text[i] ("." / "!" / "?") ein echtes Satzende? `breaks` sind die
+    // Stellen der flachen Sicht, an denen eine Auszeichnung beginnt
+    // (collectTextSlices).
+    function isSentenceEnd(text, i, breaks) {
       const ch = text[i];
       if (ch === ".") {
         const prev = text[i - 1] || "";
@@ -204,37 +216,42 @@
       let k = j;
       while (k < text.length && /\s/.test(text[k])) k++;
       if (k >= text.length) return true;
+      // Beginnt dahinter Code, ein Link oder Fettes, ist das ein Satzanfang,
+      // wie klein der sichtbare Text auch weitergeht.
+      if (breaks) {
+        for (let p = j; p <= k; p++) if (breaks.has(p)) return true;
+      }
       // Kleinbuchstabe danach spricht gegen einen Satzanfang.
       return !/[a-zäöüß]/.test(text[k]);
     }
-    
+
     // Endet [.., end) bereits auf einem Satzende? Seit der Anker die
     // Satznummer aufloest (statt eines 5-12-Wort-Ausschnitts) ist das der
     // Normalfall — und dann darf nicht weitergedehnt werden, sonst
     // verschluckt der erste Satz den zweiten und beide Claims landen auf
     // derselben Markierung.
-    function endsAtSentenceBoundary(text, end) {
+    function endsAtSentenceBoundary(text, end, breaks) {
       let i = end - 1;
       while (i >= 0 && /["'”’»)\]]/.test(text[i])) i--;
-      return i >= 0 && /[.!?…]/.test(text[i]) && isSentenceEnd(text, i);
+      return i >= 0 && /[.!?…]/.test(text[i]) && isSentenceEnd(text, i, breaks);
     }
-    
+
     // Dehnt [start,end) auf die umgebenden Satzgrenzen aus.
-    function sentenceBounds(text, start, end) {
+    function sentenceBounds(text, start, end, breaks) {
       let s = start;
       while (s > 0) {
         const i = s - 1;
         if (text[i] === "\n") break;
-        if (/[.!?…]/.test(text[i]) && isSentenceEnd(text, i)) break;
+        if (/[.!?…]/.test(text[i]) && isSentenceEnd(text, i, breaks)) break;
         s--;
       }
       while (s < end && /\s/.test(text[s])) s++;
-    
+
       let e = end;
-      while (!endsAtSentenceBoundary(text, e) && e < text.length) {
+      while (!endsAtSentenceBoundary(text, e, breaks) && e < text.length) {
         const ch = text[e];
         if (ch === "\n") break;
-        if (/[.!?…]/.test(ch) && isSentenceEnd(text, e)) {
+        if (/[.!?…]/.test(ch) && isSentenceEnd(text, e, breaks)) {
           e++;
           while (e < text.length && /["'”’»)\]]/.test(text[e])) e++;
           break;
@@ -257,24 +274,49 @@
     
     // Flache Textsicht eines Blocks: alle markierbaren Textknoten in
     // Dokumentreihenfolge mit ihren Offsets im zusammengesetzten Text.
+    // Inline-Code steht mit im Text, aber ohne Slice: gesucht wird darin,
+    // umwickelt nie. `breaks` haelt fest, wo eine Auszeichnung beginnt.
     function collectTextSlices(block) {
       const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
       const slices = [];
+      const breaks = new Set();
       let flat = "";
+      let markup = null;
       let node;
       while ((node = walker.nextNode())) {
         const raw = node.nodeValue || "";
         if (!raw) continue;
-        if (node.parentElement?.closest(MARK_SKIP_SELECTOR)) continue;
+        const parent = node.parentElement;
+        if (parent?.closest(UI_SKIP_SELECTOR)) continue;
+        const element = parent?.closest(MARKUP_SELECTOR);
+        const current = element && block.contains(element) ? element : null;
+        if (current && current !== markup) breaks.add(flat.length);
+        markup = current;
+        if (parent?.closest(MARK_SKIP_SELECTOR)) {
+          if (parent.closest(SEARCH_ONLY_SELECTOR) && !parent.closest("pre, .katex")) flat += raw;
+          continue;
+        }
         slices.push({ node, start: flat.length, end: flat.length + raw.length });
         flat += raw;
       }
-      return { slices, flat };
+      return { slices, flat, breaks };
+    }
+
+    // Deckt der Treffer genau einen ganzen Satz ab? Nur solche zaehlt der
+    // Server fuer anchor_occurrence (_sentence_reference).
+    function isWholeSentence(hit) {
+      const bounds = sentenceBounds(hit.flat, hit.start, hit.end, hit.breaks);
+      return bounds.start === hit.start && bounds.end === hit.end;
     }
     
     // Anker -> konkreter Bereich in der flachen Textsicht seines Blocks.
+    // Mit Vorkommensnummer (Satzanker des Servers) zaehlen zuerst nur
+    // Treffer, die einen ganzen Satz abdecken: "The tower is 330 m tall."
+    // steckt auch in "In short, the tower is 330 m tall.", ist dort aber
+    // nicht der gemeinte Satz. Passt so keiner, gilt die alte Zaehlung.
     function locateAnchor(container, anchor, occurrence) {
-      const wanted = Number.isInteger(occurrence) && occurrence >= 0 ? occurrence : 0;
+      const sentenceReference = Number.isInteger(occurrence) && occurrence >= 0;
+      const wanted = sentenceReference ? occurrence : 0;
       const blocks = [];
       const seenBlocks = new Set();
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
@@ -298,11 +340,16 @@
               block: block,
               slices: view.slices,
               flat: view.flat,
+              breaks: view.breaks,
               start: range.start,
               end: range.end
             });
           });
         });
+        if (sentenceReference) {
+          const whole = hits.filter(isWholeSentence);
+          if (whole[wanted]) return whole[wanted];
+        }
         if (hits[wanted]) return hits[wanted];
         if (occurrence == null && hits[0]) return hits[0];
       }
