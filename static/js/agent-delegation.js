@@ -568,7 +568,8 @@
       if (note.kind) item.dataset.kind = note.kind;
       const head = node("span", "agent-review-note-where");
       if (note.kind) head.append(node("strong", "", noteKinds[note.kind] || note.kind));
-      if (note.entry) head.append(node("span", "", App.t("Step {entry}", { entry: note.entry })));
+      // The work log's number: for those who can open the log (admins).
+      if (note.entry) head.append(node("span", "admin-only", App.t("Step {entry}", { entry: note.entry })));
       if (head.childElementCount) item.append(head);
       if (note.quote) {
         // The words of the answer it is about.

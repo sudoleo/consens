@@ -573,13 +573,18 @@
     entry.dataset.kind = item.kind;
     entry.append(node('span', 'agent-audit-kind', AUDIT_KINDS[item.kind] || 'Doubtful'));
     if (item.entry) {
-      // Which entry of the work log: its number, kind and name.
+      // Which part of the work: in the activity's words ("Command", "Agent
+      // step"); the work log's number and raw name only for those who can
+      // open the log (admins). Before 2026-10-27 every reader saw
+      // "#7 Tool vm_exec".
       const ref = node('span', 'agent-audit-entry');
-      const kind = App.agentWorkLog?.KINDS?.[item.entry_kind] || item.entry_kind;
-      ref.append(node('span', 'agent-audit-entry-seq', `#${item.entry}`));
+      const what = item.entry_kind === 'tool' && item.entry_name ? App.agentActivity?.toolName?.(item.entry_name)
+        : item.entry_kind === 'step' ? 'Agent step' : null;
+      const kind = what || App.agentWorkLog?.KINDS?.[item.entry_kind] || item.entry_kind;
       if (kind) ref.append(node('span', '', kind));
+      ref.append(node('span', 'agent-audit-entry-seq admin-only', `#${item.entry}`));
       if (item.entry_name) {
-        const name = node('code', '', String(item.entry_name));
+        const name = node('code', 'admin-only', String(item.entry_name));
         name.setAttribute('data-i18n-skip', '');
         ref.append(name);
       }

@@ -5604,8 +5604,14 @@ eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
 `failed`. Eigene Suchtreffer sperren Memory für die Nachricht
 (`memory_locked`). Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
-`window.renderStoredAuditMarks`. Details: `docs/agent-mode.md`, „Audit statt
-Vergleich“.
+`window.renderStoredAuditMarks`; seit 2026-10-27 nennt Notes den Schritt
+eines Befunds zur Arbeit über `App.agentActivity.toolName` („Command“,
+„Agent step“), `#seq` und Rohname nur `.admin-only` (auch „Step n“ in der
+Prüfer-Zeitleiste von `agent-delegation.js`), und eine Nachricht nach dem
+Fixieren der Antwort wartet auf das Laufende (`agent-chat.js`
+`readsMessages`). Browser-Test der ganzen Ansicht:
+`tests/e2e/test_agent_audit_frontend.py`. Details: `docs/agent-mode.md`,
+„Audit statt Vergleich“.
 
 **Aussteuern** (seit 2026-10-26, Details `docs/agent-mode.md` „Aussteuern“):
 Eine Live-Runde darf `halt` setzen (`HALT_KINDS`: safety, harm, off_goal,
@@ -5622,9 +5628,12 @@ Antwort; `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
 an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach
 `HOLD_TIMEOUT_SECONDS` Stop. Der Agent sieht nur Nutzer-Stopps und
 -Nachrichten (`HOLD_STEERED`). Browser: `agent-chat.js` (`hold`-Handler,
-`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`),
+`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`; die
+Protokollnummer der Karte `.admin-only`, Auszug bis vier Zeilen, Knöpfe bis
+520 px untereinander, seit 2026-10-27),
 `agent-activity.js` (`holdView`, „Paused for your decision“, wartende Pause
-faltet nie), `tab-status.js` („Paused“).
+faltet nie und nennt ihren Grund erst nach der Entscheidung, die Karte tut es
+davor), `tab-status.js` („Paused“).
 
 **Arbeitsprotokoll** (`docs/agent-work-log.md`, seit 2026-10-25): Im
 Audit-Modus hält `DelegationLoop.work_log` (`agent_work_log.WorkLog`) live

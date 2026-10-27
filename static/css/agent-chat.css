@@ -417,12 +417,21 @@
 .agent-hold-reason { margin: 4px 0 0; color: var(--ink); font-size: var(--font-size-sm); line-height: var(--line-height-ui); overflow-wrap: anywhere; }
 .agent-hold-meta { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-hold-meta > span + span::before { content: "·"; margin-right: 8px; }
+/* What the agent did, the decision's evidence: up to four lines, so a
+   command keeps its target (the address at its end) on a phone too. */
 .agent-hold-excerpt {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; margin: 0;
   color: var(--ink-3); font-family: var(--font-mono); font-size: var(--font-size-micro); line-height: 1.5; overflow-wrap: anywhere;
 }
 .agent-hold-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .agent-hold-actions button:disabled { opacity: .55; cursor: default; }
+/* Narrow: one button per row across the card, like an action sheet, the
+   decision first (before, the third button wrapped onto a row of its own,
+   and "Dem Agenten schreiben" no longer fit half a card). */
+@media (max-width: 520px) {
+  .agent-hold-actions { display: grid; grid-template-columns: 1fr; }
+  .agent-hold-actions > button { width: 100%; min-width: 0; min-height: 44px; justify-content: center; }
+}
 .agent-hold-clock { margin: 0; color: var(--ink-3); font-size: var(--font-size-micro); font-variant-numeric: tabular-nums; }
 .agent-queue-remove:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 @media (hover: hover) and (pointer: fine) { .agent-queue-remove:hover { background: var(--hover); color: var(--ink); } }
@@ -534,6 +543,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-review-note { color: var(--ink-3); line-height: 1.6; margin: 6px 0 12px; }
 /* Agent audit: each reviewer's notes in the reader (agent-review.js auditPanel). */
 .agent-audit-reviewer + .agent-audit-reviewer { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+/* "Unmarked text means no objection" belongs to every reviewer below it, not
+   to the first one: a breath before their names. */
+.answer-reader-inspector .agent-audit-panel > .agent-review-note + .agent-audit-reviewer { margin-top: 16px; }
 .agent-audit-reviewer-name { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--font-size-ui); font-weight: 550; }
 /* The model's logo at icon size: an SVG logo without its own size (Z.ai,
    Kimi, Qwen) otherwise fills the whole panel. */
@@ -542,6 +554,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-audit-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .agent-audit-note { display: grid; gap: 2px; }
 .agent-audit-kind { font-weight: 550; color: var(--ink-2); }
+/* The kind in the colour of its mark in the answer, as in the reviewer's
+   timeline (.agent-review-note): wrong red, doubtful amber. */
+.agent-audit-note[data-kind="wrong"] .agent-audit-kind { color: var(--dispute); }
+.agent-audit-note[data-kind="doubtful"] .agent-audit-kind { color: var(--partial); }
 .agent-audit-quote { color: var(--ink-2); }
 .agent-audit-text { margin: 0; color: var(--ink); }
 .agent-audit-source { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.2em; justify-self: start; }

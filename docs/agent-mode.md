@@ -345,7 +345,9 @@ Agent antwortet allein, ohne Review, und der Prompt sagt es
 
 **Anzeige** (`agent-review.js` `renderAudit`, `consensus-insights.js`
 `renderStoredAuditMarks`): Während die Prüfer arbeiten, läuft der bekannte
-Schimmer („Checking the answer…“). Die Marken erscheinen erst, wenn alle
+Schimmer, die Zeile darunter sagt seit 2026-10-27 dasselbe wie die Aktivität
+(„Reviewing the answer…“, `setAnswerChecking(…, { audit })`; vorher
+„Checking the answer…“ unter der Antwort und „Reviewing…“ darüber). Die Marken erscheinen erst, wenn alle
 fertig sind, und nur auf genau diesem Text: falsch `is-major` (rot),
 zweifelhaft `is-split` (gelb), unvollständig `is-minor` (grau), dazu
 `is-audit`; die zitierten Worte tragen die Farbe (`wrapSpots`). Die Karte der
@@ -355,8 +357,10 @@ Quote, kein Score. Die Highlight-Einstellung zeigt unter „Disagreements &
 issues“ (Standard) und „All“ jede Marke, unter „Contradictions“ und
 „Critical“ nur `wrong`. Nicht platzierte Anmerkungen stehen unter der Antwort
 („Other notes“). Die Leiste bietet **Notes** (Leser mit den Anmerkungen je
-Prüfer, darunter „On the work“ die Befunde zur Arbeit mit `#seq`, Art und
-Name des Eintrags, Live-Befunde als „During the run“, Ausfällen samt Grund
+Prüfer, die Art in der Farbe ihrer Marke, darunter „On the work“ die Befunde
+zur Arbeit mit dem Schritt in den Worten der Aktivität, etwa „Command“ oder
+„Agent step“ (`App.agentActivity.toolName`, seit 2026-10-27); `#seq` und
+Rohname des Eintrags nur für Admins, Live-Befunde als „During the run“, Ausfällen samt Grund
 und „Unmarked text means no objection, not confirmed.“) und Sources; die
 Aktivität zeigt eine Karte „Review · n models“ mit markierten Stellen und
 Befunden zur Arbeit, die auch bei `cancelled`/`missing` endet („Review
@@ -399,7 +403,13 @@ mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
 (`tab-status.js`). Die Karte zeigt den Eintrag lesbar (`halt_step`: Befehl,
-Adresse oder Suche statt Protokoll-JSON).
+Adresse oder Suche statt Protokoll-JSON), seit 2026-10-27 bis zu vier Zeilen,
+damit das Ziel eines Befehls auch auf dem Handy sichtbar bleibt; die
+Protokollnummer („Step 12“) sehen nur Admins (`.admin-only`), die das
+Protokoll öffnen können. Bis 520 px stehen die drei Knöpfe untereinander,
+die Entscheidung zuerst, je 44 px hoch. Solange die Pause wartet, nennt die
+Aktivität ihren Grund nicht ein zweites Mal (er steht in der Karte); nach der
+Entscheidung steht er dort mit ihr.
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
@@ -412,7 +422,10 @@ Prompts, Route, Aussteuern), `tests/js/audit-marks.test.mjs`, die Halt-Fälle
 in `agent-chat.test.mjs`, `agent-vm-activity.test.mjs` und
 `tab-status.test.mjs`, die Audit-Fälle in
 `tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
-`model-answer-reader.test.mjs` und `agent-preferences.test.mjs`.
+`model-answer-reader.test.mjs` und `agent-preferences.test.mjs`; die gebaute
+Ansicht (Marken, Notes, Aktivität, Prüfer-Zeitleiste, Prüfung läuft,
+Pause-Karte auf Desktop und Handy) ohne Modellkosten in
+`tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`).
 
 ### Agent VM (seit 2026-10-25; seit 2026-10-26 Teil von Audit)
 
@@ -543,7 +556,10 @@ VM:
   Nachricht steht sofort als Zeile in `#agentQueue` über dem Feld: „Read
   before the next step“, bis die Aktivität sie unter „You“ zeigt
   (`note-<id>`). Ohne VM (oder vor dem Start) wartet sie dort als „Sends
-  after this response“ (mit ×). Was der Lauf nicht las, geht nach seinem
+  after this response“ (mit ×), seit 2026-10-27 auch, sobald die Antwort
+  fixiert ist (eine Version in der Review, `readsMessages`): Danach macht der
+  Agent keinen Schritt mehr, die Nachricht ging vorher als „Read before the
+  next step“ an den Lauf und kam erst nach der Prüfung zurück. Was der Lauf nicht las, geht nach seinem
   Ende als nächste Nachricht raus; nach Stop oder Fehler steht es wieder im
   Feld (`flushQueue`). `POST /agent/chats/{chat}/requests/{request_id}/notes`
   (`text` 1–4.000 Zeichen) prüft laufenden Turn und VM-Einstellung und legt die

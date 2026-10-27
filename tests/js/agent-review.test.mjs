@@ -969,10 +969,19 @@ it('lists the notes on the work with their log entry, also those of a failed fin
   const [openai, , gemini] = panel.querySelectorAll('.agent-audit-reviewer');
   expect(openai.querySelector('.agent-audit-work-head').textContent).toBe('On the work');
   const work = openai.querySelectorAll('.agent-audit-notes')[1];
-  expect(work.querySelector('.agent-audit-entry').textContent).toBe('#9Toolread_source');
+  // The step in the activity's words; the log's number and name for admins only.
+  w.App.agentActivity = { toolName: name => ({ read_source: 'Read source' })[name] || 'Tool' };
+  const again = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const entry = again.querySelectorAll('.agent-audit-reviewer')[0].querySelectorAll('.agent-audit-notes')[1]
+    .querySelector('.agent-audit-entry');
+  expect([...entry.children].map(el => [el.textContent, el.classList.contains('admin-only')])).toEqual([
+    ['Read source', false], ['#9', true], ['read_source', true]]);
+  // Without the activity's words, the log's kind names it.
+  expect(work.querySelector('.agent-audit-entry').firstChild.textContent).toBe('Tool');
   expect(work.textContent).toContain('The lookup names no source.');
   // Its final round failed: its notes from the run stand, marked as such.
   expect(gemini.textContent).toContain('No final review: its review could not be read.');
+  expect(gemini.querySelector('.agent-audit-entry').firstChild.textContent).toBe('Agent step');
   expect(gemini.querySelector('.agent-audit-live').textContent).toBe('During the run');
   expect(gemini.textContent).toContain('The step skipped the file.');
   const details = d.createElement('div');

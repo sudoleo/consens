@@ -640,7 +640,12 @@
   // evidence row will stand, one quiet line says it in words: the only sign
   // with reduced motion or forced colors, and as tall as that row, so the row
   // takes its place in the same frame without a jump (agent-chat.css).
-  function setAnswerChecking(body, checking, { fade = true } = {}) {
+  // In audit mode the reviewers do it, in the activity's words (agent-activity.js
+  // reviewStage): one word for one state on screen at a time.
+  function setAnswerChecking(body, checking, { fade = true, audit = false } = {}) {
+    const words = audit ? 'Reviewing the answer…' : App.words?.checking || 'Checking the answer…';
+    // Announced before the review said its mode: the line takes the review's words.
+    if (checking && body?._checkStatus && body._checkStatus.textContent !== App.t(words)) body._checkStatus.textContent = words;
     if (!body || body.classList.contains('is-answer-checking') === checking) return;
     body.classList.toggle('is-answer-checking', checking);
     clearTimeout(body._answerCheckFade);
@@ -652,7 +657,7 @@
     const line = document.createElement('p');
     line.className = 'agent-check-status';
     line.setAttribute('role', 'status');
-    line.textContent = App.words?.checking || 'Checking the answer…';
+    line.textContent = words;
     // Under the answer's pictures, where the evidence row will stand.
     (App.answerTail?.(body) || body).after(line);
     body._checkStatus = line;
@@ -871,7 +876,8 @@
       && ['required', 'running'].includes(liveReview.status));
     // "off": the answer check is switched off, the fixed answer is final.
     const checked = fixed && ['succeeded', 'partial', 'off'].includes(liveReview.status);
-    setAnswerChecking(answerBody, checking);
+    setAnswerChecking(answerBody, checking, { audit: liveReview?.mode === 'audit'
+      || (!liveReview && context.config.agentPreferences?.audit === 'on') });
     if (checking) context.metadata.revealMarks = true;
     if (!running || framed || checked) {
       const live = running && !checked;
@@ -1310,8 +1316,13 @@
   function queueOf(context) {
     return context?.metadata ? (context.metadata.queue ||= []) : [];
   }
+  // Once the answer is fixed (a version under review) the run takes no more
+  // steps: a message then waits for its end like any other (2026-10-27;
+  // before, it went to the run as "Read before the next step" and came back
+  // only when the review was done).
   function readsMessages(context) {
-    return context?.config?.agentPreferences?.audit === "on" || context?.config?.agentPreferences?.vm === "on";
+    return (context?.config?.agentPreferences?.audit === "on" || context?.config?.agentPreferences?.vm === "on")
+      && !context?.metadata?.agentReview?.versions?.length;
   }
   // What Send does now: null when it stops the response (an empty field).
   function steering() {
@@ -1537,12 +1548,15 @@
     meta.className = "agent-hold-meta";
     const kind = document.createElement("span");
     kind.textContent = holdKinds[hold.kind] || "Needs your decision";
-    const step = document.createElement("span");
-    step.textContent = App.t("Step {entry}", { entry: hold.entry });
     const reviewer = document.createElement("span");
     reviewer.dataset.i18nSkip = "";
     reviewer.textContent = String(hold.reviewer || "");
-    meta.append(...[kind, step, hold.reviewer ? reviewer : null].filter(Boolean));
+    // The work log's number names the step only for those who can open the
+    // log (admins); the excerpt below says what it did (2026-10-27).
+    const step = document.createElement("span");
+    step.className = "admin-only";
+    step.textContent = App.t("Step {entry}", { entry: hold.entry });
+    meta.append(...[kind, hold.reviewer ? reviewer : null, step].filter(Boolean));
     card.append(alert, meta);
     if (hold.step) {
       // What the agent was doing, as the reviewers read it (the work log).

@@ -595,6 +595,9 @@
     node._head.textContent = item.reviewer ? App.t('Paused by {reviewer}', { reviewer: String(item.reviewer) })
       : 'Paused by a reviewer';
     node._reason.textContent = String(item.reason || '').slice(0, 400);
+    // While it waits, the card above the field says why; the history keeps
+    // the reason once the user decided (on a phone both stood one above the other).
+    node._reason.hidden = state === 'waiting';
     node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t(holdStates[state])}`;
   }
 
@@ -1039,5 +1042,5 @@
       review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings,
       vm: turn?.agent_vm, vmRestore: options.vmRestore || null });
   }
-  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration };
+  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration, toolName };
 })();
