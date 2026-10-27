@@ -155,7 +155,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   white-space: nowrap;
 }
 
-.workspace-view-toggle {
+.workspace-view-toggle,
+.workspace-view-paste {
   flex: none;
   padding: 6px 14px;
   border: 0;
@@ -189,7 +190,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 
 @media (hover: hover) and (pointer: fine) {
   .workspace-view-close:hover,
-  .workspace-view-toggle:hover {
+  .workspace-view-toggle:hover,
+  .workspace-view-paste:hover {
     background: var(--hover, var(--raise));
   }
 
@@ -243,6 +245,22 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-cover:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
+}
+
+/* Takes the browser's paste for a moment (workspace-view.js onPasteKey):
+   never seen, 16px so iOS does not zoom in on it. */
+.workspace-view-paste-target {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
+  font-size: 16px;
 }
 
 @media (max-width: 760px) {

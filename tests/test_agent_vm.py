@@ -48,6 +48,8 @@ class FakeVM:
 
     def __init__(self, clock=None):
         self.vms, self.calls, self.commands, self.fail = {}, [], {}, set()
+        # Commands the server ran for the workspace itself, without the agent's mark.
+        self.unmarked = []
         self.clock = clock or Clock()
         self.backends = 0
 
@@ -72,8 +74,10 @@ class _FakeBackend(VMBackend):
         self.vm.vms.setdefault(name, {"files": {}, "checkpoints": [], "created": len(self.vm.calls)})
         self.vm.vms[name]["policy"] = agent_vm.EGRESS_RULES
 
-    def exec(self, name, command, *, cwd, timeout, on_output, cancellation):
+    def exec(self, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
         self._call("exec", name, command, cwd, timeout)
+        if not agent:
+            self.vm.unmarked.append(command)
         chunks, exit_code, seconds = self.vm.commands.get(command, ([("stdout", b"ok\n")], 0, .5))
         for stream, chunk in chunks:
             self.vm.clock.now += seconds / max(1, len(chunks))
@@ -619,6 +623,52 @@ def test_a_reviewers_halt_ends_the_running_command_as_if_the_user_stopped_it(sto
     assert tools.exec(VmExecArgs(command="ls"), cancellation=cancellation)["exit_code"] == 0
 
 
+def test_while_the_user_has_the_browser_nothing_of_the_agent_reaches_the_vm(store, fake_vm, monkeypatch):
+    """Their takeover in the view (agent_workspace.set_control): a VM call
+    waits until they hand back and then runs; a takeover that lasts gives
+    the agent a calm note, and nothing ran."""
+    import time
+    loop = vm_loop(store, Agent())
+    tools = loop.vm_tools
+    session = tools.session
+    session.clock = fake_vm.clock
+    # The wait's own limit, not the answer's time, ends it here.
+    loop.answer_time_left = lambda: None
+    plain = _FakeBackend.exec
+
+    def exec(backend, name, command, *, cancellation, **kwargs):
+        cancellation.raise_if_cancelled()  # as SpritesBackend.exec does first
+        return plain(backend, name, command, cancellation=cancellation, **kwargs)
+    monkeypatch.setattr(_FakeBackend, "exec", exec)
+    agent_workspace.record_for_view(store, UID, provider="fake")
+    agent_workspace.ref(store.db, UID).update({"control": {"holder": "user", "until": time.time() + 60}})
+    seen = []
+
+    def sleep(seconds):
+        seen.append(list(fake_vm.calls))
+        fake_vm.clock.now += seconds
+        if len(seen) == 3:
+            agent_workspace.ref(store.db, UID).update({"control": {"holder": "agent", "until": 0}})
+    session.sleep = sleep
+    result = tools.exec(VmExecArgs(command="ls"), cancellation=ProviderCancellation())
+    assert result["exit_code"] == 0 and seen == [[], [], []]
+    assert ("exec", NAME, "ls", agent_vm.chat_dir(loop.chat_id), 60) in fake_vm.calls
+    # A takeover that lasts: after USER_WAIT_SECONDS the agent hears so, the VM nothing.
+    agent_workspace.ref(store.db, UID).update({"control": {"holder": "user", "until": time.time() + 600}})
+    fake_vm.calls.clear()
+    session.sleep = lambda seconds: setattr(fake_vm.clock, "now", fake_vm.clock.now + seconds)
+    started = fake_vm.clock.now
+    with pytest.raises(ValueError) as waited:
+        tools.read(agent_vm_tools.VmReadFileArgs(path="notes.txt"), cancellation=ProviderCancellation())
+    assert str(waited.value) == agent_vm_tools.VM_USER_HAS_BROWSER and fake_vm.calls == []
+    assert fake_vm.clock.now - started == agent_vm_tools.USER_WAIT_SECONDS
+    # A reviewer's halt ends the wait; the command then stops (VMTools.exec).
+    assert loop.request_hold({"reviewer": "Claude Haiku 4.5", "provider": "anthropic", "kind": "harm",
+                              "reason": "Reads the password field", "entry": 1})
+    stopped = tools.exec(VmExecArgs(command="cat /proc/*/environ"), cancellation=ProviderCancellation())
+    assert stopped["stopped"] and not [call for call in fake_vm.calls if call[0] == "exec"]
+
+
 def test_a_halt_while_the_vm_starts_stops_the_command_it_starts_for(store, fake_vm, monkeypatch):
     # The halt comes after the VM came up for the command, before it runs:
     # interrupt() finds no running command, and the command ran anyway with
@@ -1020,9 +1070,9 @@ def test_sprites_exec_streams_the_frames_and_never_sends_the_token_to_the_vm():
     assert url.startswith("wss://api.sprites.dev/v1/sprites/consens-abc/exec?")
     # Under the VM-side limit, with the login environment loaded silently (the
     # Sprites .bashrc warned about bind in every command, live 2026-10-25);
-    # no environment from the backend, the token only in the header.
-    assert query.get_list("cmd") == ["timeout", "--kill-after=5", "60", "bash", "-c", agent_vm.SHELL_PRELUDE,
-                                     "bash", "make && echo 'done'"]
+    # no environment from the backend but the agent's mark, the token only in the header.
+    assert query.get_list("cmd") == ["timeout", "--kill-after=5", "60", "env", "CONSENS_AGENT=1", "bash", "-c",
+                                     agent_vm.SHELL_PRELUDE, "bash", "make && echo 'done'"]
     assert query["dir"] == "/home/sprite/app" and query["stdin"] == "false" and "env" not in query
     assert token == "secret-token" and "secret-token" not in url
 

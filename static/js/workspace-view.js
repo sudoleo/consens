@@ -2,10 +2,17 @@
 // docs/agent-mode.md "Arbeitsplatz"): its Chrome in a panel beside the chat,
 // through noVNC (static/vendor/novnc, loaded when the panel first opens).
 // The user watches; a click on the screen takes the browser over, and the
-// agent waits (workspace_vm/browser.py) until "Hand back". While the user has
-// it, the panel refreshes the takeover every REFRESH_MS; a closed tab lets it
-// expire by itself. Sign-ins happen here, by the user: the agent never types
-// a password.
+// agent pauses completely (agent_workspace.py, workspace_vm/pause.py) until
+// "Hand back". While the user has it, the panel refreshes the takeover every
+// REFRESH_MS; a closed tab lets it expire by itself. Sign-ins happen here, by
+// the user: the agent never types a password.
+//
+// Pasting (Ctrl+V, ⌘V, Shift+Insert or "Paste", only while the user has the
+// browser): the text goes in as key presses, as if typed, never through the
+// workspace's clipboard, where it would stay for the agent to read later. So
+// a password from the user's own password manager reaches the page and
+// nothing else. The shortcut never reaches noVNC: a hidden field takes the
+// browser's paste.
 //
 // Wide screens (DOCK_QUERY) dock the panel at the right edge beside the
 // chat, which narrows and re-centres in the space left of it (the body's
@@ -39,6 +46,13 @@
   const MIN_CHAT = 520;
   const KEY_STEP = 40;
   const STORAGE_KEY = 'consens.workspaceWidth';
+  // Typed in key by key: enough for a password or a few lines, not a document.
+  const PASTE_MAX = 2000;
+  const XK_RETURN = 0xff0d;
+  const XK_TAB = 0xff09;
+  // Shift, Control, Meta, Alt and Super, left and right: still down in the VM
+  // from the shortcut, they would turn the text into shortcuts.
+  const MODIFIERS = [0xffe1, 0xffe2, 0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffe9, 0xffea, 0xffeb, 0xffec];
   let view = null;
   let loadRFB = () => import(NOVNC).then(module => module.default);
 
@@ -153,15 +167,24 @@
     closer.setAttribute('aria-label', 'Close workspace');
     closer.title = 'Close workspace';
     closer.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
-    head.append(title, status, toggle, closer);
+    const paster = button('workspace-view-paste', 'Paste', pasteClipboard);
+    paster.title = 'Type your clipboard into the page';
+    paster.hidden = true;
+    head.append(title, status, paster, toggle, closer);
     const hint = node('p', 'workspace-view-hint',
-      'Log in to sites here yourself: the agent then works there as you, and never types a password.');
+      'Log in to sites here yourself, typing or pasting your password: the agent pauses meanwhile, then works there as you, and never types a password.');
     const screen = node('div', 'workspace-view-screen');
     const cover = button('workspace-view-cover', '', takeOver);
     cover.setAttribute('aria-label', 'Take over the browser');
     cover.title = 'Click to take over';
     cover.hidden = true;
-    screen.append(cover);
+    // Where the browser pastes a shortcut's text (onPasteKey), out of sight.
+    const pasteTarget = node('textarea', 'workspace-view-paste-target');
+    pasteTarget.tabIndex = -1;
+    pasteTarget.setAttribute('aria-hidden', 'true');
+    screen.append(cover, pasteTarget);
+    screen.addEventListener('keydown', onPasteKey, true);
+    panel.addEventListener('paste', onPaste);
     // The edge to the chat: drag it, or move it with the arrow keys; a double click goes back to half and half.
     const resizer = node('div', 'workspace-view-resizer');
     resizer.setAttribute('role', 'separator');
@@ -176,8 +199,65 @@
       resizeTo(preferredWidth(), { save: false });
     });
     panel.append(resizer, head, hint, screen);
-    return { panel, status, toggle, cover, screen, resizer, socket: null, rfb: null, holder: 'agent', refresh: null,
-      width: 0 };
+    return { panel, status, toggle, paster, cover, pasteTarget, screen, resizer, socket: null, rfb: null,
+      holder: 'agent', refresh: null, width: 0 };
+  }
+
+  // ---- Pasting as key presses ---------------------------------------------
+  function pasting() { return Boolean(view?.rfb) && view.holder === 'user'; }
+  // Latin-1 is its own keysym, the rest X11's Unicode keysyms (noVNC's keysymdef.js).
+  function keysym(codePoint) {
+    return codePoint >= 0x20 && codePoint <= 0xff ? codePoint : 0x01000000 | codePoint;
+  }
+  function typeIn(text) {
+    if (!pasting()) return;
+    // A copied line often ends in a line break: pasted, it would send the form.
+    const clean = String(text || '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+    if (!clean) return;
+    if ([...clean].length > PASTE_MAX) {
+      say('That is too long to type in. Paste at most 2,000 characters at a time.');
+      return;
+    }
+    const { rfb } = view;
+    for (const modifier of MODIFIERS) rfb.sendKey(modifier, null, false);
+    for (const char of clean) {
+      const code = char.codePointAt(0);
+      if (char === '\n') rfb.sendKey(XK_RETURN, null);
+      else if (char === '\t') rfb.sendKey(XK_TAB, null);
+      else if (code >= 0x20 && !(code >= 0x7f && code < 0xa0)) rfb.sendKey(keysym(code), null);
+    }
+    rfb.focus();
+  }
+  function onPasteKey(event) {
+    if (!pasting()) return;
+    const key = String(event.key || '').toLowerCase();
+    const shortcut = ((event.ctrlKey || event.metaKey) && !event.altKey && key === 'v')
+      || (event.shiftKey && key === 'insert');
+    if (!shortcut) return;
+    // Not to noVNC, which would press it in the VM: the browser pastes into the hidden field.
+    event.stopPropagation();
+    view.pasteTarget.value = '';
+    view.pasteTarget.focus({ preventScroll: true });
+    // Nothing to paste: back to the screen, so keys reach the VM again.
+    setTimeout(() => {
+      if (view && document.activeElement === view.pasteTarget) view.rfb?.focus();
+    }, 400);
+  }
+  function onPaste(event) {
+    if (!pasting()) return;
+    event.preventDefault();
+    typeIn(event.clipboardData?.getData('text/plain') || '');
+  }
+  async function pasteClipboard() {
+    if (!pasting()) return;
+    let text = '';
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (error) {
+      say('Your browser did not share the clipboard. Press Ctrl+V (⌘V on a Mac) on the screen instead.');
+      return;
+    }
+    typeIn(text);
   }
 
   function say(text) {
@@ -193,11 +273,12 @@
     view.toggle.hidden = !view.rfb;
     view.toggle.textContent = user ? 'Hand back' : 'Take over';
     view.toggle.classList.toggle('is-user', user);
+    view.paster.hidden = !view.rfb || !user || !navigator.clipboard?.readText;
     view.cover.hidden = !view.rfb || user;
     view.panel.classList.toggle('is-user', user);
     if (view.rfb) {
       view.rfb.viewOnly = !user;
-      say(user ? 'You have the browser. The agent waits until you hand it back.'
+      say(user ? 'You have the browser. The agent is paused until you hand it back.'
         : 'Watching. Click the screen to take over.');
     }
   }

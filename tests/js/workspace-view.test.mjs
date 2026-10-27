@@ -23,16 +23,25 @@ class FakeRFB {
   constructor(target, channel, options) {
     Object.assign(this, { target, channel, options, viewOnly: false, focused: 0, disconnected: false });
     this.listeners = {};
+    this.keys = [];
+    // noVNC's canvas, where its keyboard listens.
+    this.canvas = target.ownerDocument.createElement("canvas");
+    this.canvas.tabIndex = -1;
+    this.noVNCKeys = [];
+    this.canvas.addEventListener("keydown", (event) => this.noVNCKeys.push(event.key));
+    target.append(this.canvas);
     // noVNC takes over the socket's handlers at once (rfb.js _connect).
     channel.onmessage = (event) => { this.received = event.data; };
     FakeRFB.made.push(this);
   }
   addEventListener(name, handler) { this.listeners[name] = handler; }
-  focus() { this.focused += 1; }
+  // As noVNC: nothing goes to the VM while only watching.
+  sendKey(keysym, code, down) { if (!this.viewOnly) this.keys.push([keysym, down]); }
+  focus() { this.focused += 1; this.canvas.focus(); }
   disconnect() { this.disconnected = true; }
 }
 
-function setup() {
+function setup({ clipboard } = {}) {
   FakeSocket.last = null;
   FakeRFB.made = [];
   const app = loadScripts(["static/js/workspace-view.js"], {
@@ -43,6 +52,7 @@ function setup() {
       window.auth = { currentUser: { uid: "u1", getIdToken: async () => "token" } };
       window.App = { t: (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => values?.[key] ?? "") };
       window.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
+      if (clipboard) Object.defineProperty(window.navigator, "clipboard", { value: clipboard, configurable: true });
     },
   });
   const { window } = app;
@@ -119,6 +129,16 @@ describe("the workspace view", () => {
     }
   });
 
+  it("says the agent is paused while the user has the browser", async () => {
+    const env = setup();
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    env.document.querySelector(".workspace-view-cover").click();
+    await vi.waitFor(() => expect(FakeRFB.made[0].viewOnly).toBe(false));
+    expect(env.document.querySelector(".workspace-view-status").textContent)
+      .toBe("You have the browser. The agent is paused until you hand it back.");
+  });
+
   it("gives the browser back when it closes while the user has it", async () => {
     const env = setup();
     const socket = await opened(env);
@@ -167,6 +187,101 @@ describe("the workspace view", () => {
     expect(env.window.fetch.mock.calls[0][0]).toBe("/agent/workspace/reset-browser");
     await vi.waitFor(() => expect(env.document.querySelector(".agent-workspace-status").textContent)
       .toBe("The workspace browser is logged out everywhere."));
+  });
+});
+
+describe("pasting into the workspace", () => {
+  // Shift, Control, Meta, Alt and Super, released in the VM before the text.
+  const RELEASED = [0xffe1, 0xffe2, 0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffe9, 0xffea, 0xffeb, 0xffec]
+    .map((keysym) => [keysym, false]);
+  const pressed = (text) => [...text].map((char) => [char === "\n" ? 0xff0d : char.codePointAt(0) <= 0xff
+    ? char.codePointAt(0) : 0x01000000 | char.codePointAt(0), undefined]);
+
+  async function holding(env) {
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    const [rfb] = FakeRFB.made;
+    env.document.querySelector(".workspace-view-cover").click();
+    await vi.waitFor(() => expect(rfb.viewOnly).toBe(false));
+    return rfb;
+  }
+  function shortcut(env, rfb, init = { key: "v", ctrlKey: true }) {
+    const event = new env.window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    rfb.canvas.dispatchEvent(event);
+    return event;
+  }
+  function paste(env, target, text) {
+    const event = new env.window.Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { getData: (type) => (type === "text/plain" ? text : "") } });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  it("types the pasted text in as keys, never through the VM's clipboard, without the line break at its end", async () => {
+    const env = setup();
+    const rfb = await holding(env);
+    const pressedShortcut = shortcut(env, rfb);
+    // The shortcut never reaches noVNC, which would press it in the VM; the browser pastes into the hidden field.
+    expect(rfb.noVNCKeys).toEqual([]);
+    expect(pressedShortcut.defaultPrevented).toBe(false);
+    const target = env.document.querySelector(".workspace-view-paste-target");
+    expect(env.document.activeElement).toBe(target);
+    const focused = rfb.focused;
+    const event = paste(env, target, "Pa$$wörd€\r\n");
+    expect(event.defaultPrevented).toBe(true);
+    expect(rfb.keys).toEqual([...RELEASED, ...pressed("Pa$$wörd€")]);
+    // Back on the screen, so the next keys reach the VM again.
+    expect(rfb.focused).toBe(focused + 1);
+    expect(env.document.activeElement).toBe(rfb.canvas);
+    rfb.keys = [];
+    shortcut(env, rfb, { key: "Insert", shiftKey: true });
+    paste(env, target, "line one\nline two\n\n");
+    expect(rfb.keys).toEqual([...RELEASED, ...pressed("line one\nline two")]);
+  });
+
+  it("leaves the keys to noVNC and pastes nothing while the user only watches", async () => {
+    const env = setup();
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    const [rfb] = FakeRFB.made;
+    shortcut(env, rfb);
+    expect(rfb.noVNCKeys).toEqual(["v"]);
+    const event = paste(env, rfb.canvas, "secret");
+    expect(event.defaultPrevented).toBe(false);
+    expect(rfb.keys).toEqual([]);
+    expect(env.document.querySelector(".workspace-view-paste").hidden).toBe(true);
+  });
+
+  it("refuses a paste too long to type in, and says so", async () => {
+    const env = setup();
+    const rfb = await holding(env);
+    shortcut(env, rfb);
+    paste(env, env.document.querySelector(".workspace-view-paste-target"), "x".repeat(2001));
+    expect(rfb.keys).toEqual([]);
+    expect(env.document.querySelector(".workspace-view-status").textContent)
+      .toBe("That is too long to type in. Paste at most 2,000 characters at a time.");
+  });
+
+  it("pastes with the Paste button too, which shows only while the user has the browser", async () => {
+    const readText = vi.fn(async () => "hunter2");
+    const env = setup({ clipboard: { readText } });
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    const button = env.document.querySelector(".workspace-view-paste");
+    expect(button.hidden).toBe(true);
+    env.document.querySelector(".workspace-view-cover").click();
+    const [rfb] = FakeRFB.made;
+    await vi.waitFor(() => expect(button.hidden).toBe(false));
+    button.click();
+    await vi.waitFor(() => expect(rfb.keys).toEqual([...RELEASED, ...pressed("hunter2")]));
+    readText.mockRejectedValueOnce(new Error("denied"));
+    rfb.keys = [];
+    button.click();
+    await vi.waitFor(() => expect(env.document.querySelector(".workspace-view-status").textContent)
+      .toBe("Your browser did not share the clipboard. Press Ctrl+V (⌘V on a Mac) on the screen instead."));
+    expect(rfb.keys).toEqual([]);
+    env.document.querySelector(".workspace-view-toggle").click();
+    await vi.waitFor(() => expect(button.hidden).toBe(true));
   });
 });
 

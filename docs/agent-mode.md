@@ -597,6 +597,9 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   `status`. Jede Aktion druckt die Seite neu. Es arbeitet immer im Tab, den der
   Nutzer sieht (`visibilityState`). Nie in Passwort- oder Code-Felder (Exit 2),
   nie solange der Nutzer übernommen hat (Exit 3, `control.json` mit Ablauf).
+  Bildschirm, Chrome und VNC startet es ohne die Agenten-Marke
+  (`unmarked()`, `display.sh` mit `unset CONSENS_AGENT`), damit die Pause
+  sie nie einfriert.
   Chrome meldet sich nicht als ferngesteuert (`navigator.webdriver` false, kein
   `--enable-automation`).
 - **Live-Ansicht** (`routers/agent_workspace.py`, `workspace-view.js`): im
@@ -638,9 +641,52 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   `{"holder": "user"}` schreibt `control.json` mit Ablauf in
   `CONTROL_SECONDS` = 90 s, die offene Ansicht erneuert alle 30 s),
   „Zurückgeben“ oder Schließen setzt `agent`. Ein geschlossener Tab lässt die
-  Übernahme einfach ablaufen. Solange sie gilt, liest `browser` weiter, handelt
-  aber nicht (Exit 3, `browser wait`). Die Prüfer folgen dem Agenten, nicht dem
+  Übernahme einfach ablaufen. Die Prüfer folgen dem Agenten, nicht dem
   Nutzer.
+- **Der Agent pausiert ganz, solange der Nutzer übernommen hat** (seit
+  2026-10-27), damit nichts von ihm sieht, was der Nutzer dort tippt, etwa ein
+  Passwort. Drei Schichten, alle aus `agent_workspace.set_control`:
+  1. *Server:* Der Datensatz des Kontos trägt `control {holder, until}` (nur
+     der Server schreibt ihn). Jeder VM-Aufruf des Agenten wartet vorher
+     (`VMSession.wait_for_user`, alle `USER_POLL_SECONDS` = 2 s, höchstens
+     `USER_WAIT_SECONDS` = 120 s, nie in die Zeit der Antwort), dann läuft er;
+     dauert die Übernahme länger, hört der Agent `VM_USER_HAS_BROWSER`, und in
+     der VM lief nichts. Ein Halt der Prüfer beendet das Warten. Ein
+     Lesefehler lässt den Aufruf durch: Schicht 3 friert ihn dann ein.
+  2. *Browser:* `browser` handelt nicht (Exit 3), liest aber weiter.
+  3. *VM:* Jeder Befehl des Agenten läuft mit `CONSENS_AGENT=1` in der
+     Umgebung (`agent_vm.AGENT_MARK`, in `wrapped_command` per `env`), und
+     alles, was er startet, erbt sie, auch Hintergrundprozesse samt Aufseher.
+     Bei jeder Übernahme (und jeder Auffrischung) startet der Server ohne
+     Marke `workspace_vm/pause.py` (`PAUSE_COMMAND`, eine Sperrdatei hält es
+     einmalig): Es friert jeden markierten Prozess ein (SIGSTOP), sucht alle
+     0,5 s nach neuen und setzt sie fort (SIGCONT), sobald `control.json`
+     nicht mehr den Nutzer nennt, also nach „Zurückgeben“ oder dem Ablauf.
+     Die Zeitgrenzen bleiben: `timeout` ist nicht markiert und schickt nach
+     dem Signal selbst SIGCONT. Eigene Befehle des Servers (`pause.py` starten,
+     „Überall abmelden“) laufen mit `agent=False` ohne Marke.
+  Grenze: Ein Prozess, der die Marke absichtlich ablegt (`env -u`, leere
+  Umgebung), wird nicht eingefroren. Solche Befehle stehen im
+  Arbeitsprotokoll der Prüfer. Nach dem Zurückgeben gehört die Sitzung
+  (Cookies) wie vorher dem Agenten. Das Passwort selbst kommt nie in eine Datei
+  der VM, denn Chrome speichert keine Passwörter (Richtlinie in `setup.sh`).
+- **Einfügen** (seit 2026-10-27, `workspace-view.js`): Solange der Nutzer
+  übernommen hat, tippen Strg+V, ⌘V, Umschalt+Einfg oder der Knopf
+  „Paste“ (`navigator.clipboard.readText`, nur sichtbar, wenn der Browser es
+  kann) den Text als Tastendrücke ein (`rfb.sendKey`, Latin-1 als eigener
+  Keysym, sonst `0x01000000 | Codepoint`, Zeilenumbruch als Return,
+  Zeilenumbrüche am Ende fallen weg), höchstens `PASTE_MAX` = 2.000 Zeichen.
+  Vorher lässt es Shift, Strg, Meta, Alt und Super in der VM los. Nie über die
+  Zwischenablage der VM (`clipboardPasteFrom`), denn dort bliebe das Passwort
+  für den Agenten liegen. So kommt ein Passwort aus dem eigenen
+  Passwortmanager in die Seite und nirgends sonst hin. Die Tastenkombination
+  erreicht noVNC nie (Capture-Listener am Bildschirm, `stopPropagation`).
+  Der Browser fügt in ein verstecktes Feld ein
+  (`.workspace-view-paste-target`, 16 px gegen den iOS-Zoom), dessen
+  `paste`-Ereignis tippt den Text ein und gibt den Fokus ans Bild zurück.
+  Geprüft 2026-10-27 in Chromium mit einem nachgebauten noVNC (echte Tasten,
+  echtes `ClipboardEvent`). Gegen eine echte Sprite (x11vnc, deutsche
+  Sonderzeichen über `-add_keysyms`) ist es noch ungeprüft.
 - **Überall abmelden** (`POST /agent/workspace/reset-browser`, nach
   Rückfrage): beendet Chrome und löscht das Profil, nie während ein Chat den
   Arbeitsplatz nutzt (409 `running`).

@@ -82,14 +82,17 @@ def workspace_status(request: Request):
 @limiter.limit("30/minute")
 def workspace_control(request: Request, payload: Control):
     """The user takes the browser over (refreshed by the open view every
-    CONTROL_REFRESH_SECONDS, else it expires) or hands it back."""
+    CONTROL_REFRESH_SECONDS, else it expires) or hands it back. Meanwhile
+    the agent pauses completely (agent_workspace.set_control)."""
+    from app.services.llm.provider_runtime import ProviderCancellation
     uid = owner(request)
     if not agent_workspace.record(db_firestore, uid).get("name"):
         raise HTTPException(status_code=404, detail="Open the workspace first.")
     try:
         vm = _backend()
         try:
-            agent_workspace.set_control(vm, agent_vm.workspace_name(uid), payload.holder)
+            agent_workspace.set_control(db_firestore, uid, vm, agent_vm.workspace_name(uid), payload.holder,
+                                        ProviderCancellation())
         finally:
             vm.close()
     except agent_vm.VMUnavailable as exc:

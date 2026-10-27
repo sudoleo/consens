@@ -24,9 +24,13 @@ the first VM result of every message (read_notes), as data; the user's memory
 (agent_memory.py) stays what the user said about themselves.
 
 Takeover: ``control.json`` in the VM says the user has the browser until a
-time the open view keeps moving on (CONTROL_SECONDS); while it holds,
-``browser`` does nothing but wait. The reviewers follow what the agent does,
-never what the user does.
+time the open view keeps moving on (CONTROL_SECONDS), and the account's
+record says the same (``control``). While it holds, the agent pauses
+completely, so nothing of it sees what the user types there: the server holds
+its VM calls (user_has_browser, VMSession.wait_for_user), ``browser`` refuses
+to act, and pause.py freezes whatever of the agent already runs in the VM
+(agent_vm.AGENT_MARK) until the user hands back or the takeover expires. The
+reviewers follow what the agent does, never what the user does.
 """
 from __future__ import annotations
 
@@ -61,7 +65,11 @@ GATEWAY_SERVICE = "view"
 # CONTROL_REFRESH_SECONDS while the user has the browser).
 CONTROL_SECONDS = 90
 CONTROL_REFRESH_SECONDS = 30
-TOOL_FILES = ("browser.py", "display.sh", "gateway.py", "setup.sh")
+TOOL_FILES = ("browser.py", "display.sh", "gateway.py", "pause.py", "setup.sh")
+# Started at every takeover, without the agent's mark (a second one ends at once).
+PAUSE_COMMAND = (f"env -u {agent_vm.AGENT_MARK.split('=')[0]} setsid nohup python3 {WORKSPACE_DIR}/pause.py "
+                 ">/dev/null 2>&1 </dev/null &")
+PAUSE_START_SECONDS = 30
 _FILES = Path(__file__).with_name("workspace_vm")
 WRAPPER = b'#!/bin/sh\nexec python3 "$HOME/.consens/workspace/browser.py" "$@"\n'
 
@@ -294,15 +302,40 @@ def control_payload(holder, *, now=None):
     return json.dumps({"holder": holder, "until": until}).encode()
 
 
-def set_control(vm, name, holder):
-    vm.write_file(name, CONTROL_PATH, control_payload(holder))
+def set_control(db, uid, vm, name, holder, cancellation):
+    """The user takes the browser over (again at every refresh of the view)
+    or hands it back. Taking over closes the server's way first (the record),
+    then the browser's (control.json), then freezes what already runs
+    (pause.py); handing back opens them in the other order."""
+    now = time.time()
+    control = {"holder": holder, "until": now + CONTROL_SECONDS if holder == "user" else 0}
+    if holder == "user":
+        ref(db, uid).update({"control": control})
+        vm.write_file(name, CONTROL_PATH, control_payload(holder, now=now))
+        vm.exec(name, PAUSE_COMMAND, cwd=HOME, timeout=PAUSE_START_SECONDS, on_output=_quiet,
+                cancellation=cancellation, agent=False)
+        return
+    vm.write_file(name, CONTROL_PATH, control_payload(holder, now=now))
+    ref(db, uid).update({"control": control})
+
+
+def user_has_browser(db, uid, now=None):
+    """Whether the user has the workspace's browser now (the record's
+    ``control``, which only the server writes)."""
+    control = record(db, uid).get("control")
+    if not isinstance(control, dict) or control.get("holder") != "user":
+        return False
+    try:
+        return float(control.get("until") or 0) > (now or time.time())
+    except (TypeError, ValueError):
+        return False
 
 
 def reset_browser(vm, name, cancellation):
     """Ends the browser and deletes its profile: every sign-in, cookie and
     open tab. The next use starts a fresh one."""
     vm.exec(name, f"pkill -f '[u]ser-data-dir={BROWSER_PROFILE}'; sleep 1; rm -rf {BROWSER_PROFILE}", cwd=HOME,
-            timeout=60, on_output=_quiet, cancellation=cancellation)
+            timeout=60, on_output=_quiet, cancellation=cancellation, agent=False)
 
 
 def delete_for_account(db, uid, *, factory=None):

@@ -10,7 +10,10 @@ text does not tell enough.
 
 Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
-browser (CONTROL, written by consens.io's server): it waits with `wait`.
+browser (CONTROL, written by consens.io's server, which also holds the
+agent's commands meanwhile and freezes what of it runs: pause.py). The
+browser and its screen start without the agent's mark (CONSENS_AGENT), so
+that freeze never stops them.
 
 Exit codes: 0 done, 1 failed, 2 refused, 3 the user has the browser, 4 the
 browser is still being set up.
@@ -158,18 +161,25 @@ def user_control():
     return control.get("holder") == "user" and float(control.get("until") or 0) > time.time()
 
 
+def unmarked():
+    """This environment without the agent's mark, for the workspace's own programs."""
+    return {key: value for key, value in os.environ.items() if key != "CONSENS_AGENT"}
+
+
 def ensure_browser():
     """Installs the browser once, then starts it unless it runs."""
     if not os.path.exists(SETUP_MARKER):
         subprocess.Popen(["setsid", "bash", os.path.join(HERE, "setup.sh")], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, start_new_session=True)
+                         stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, start_new_session=True,
+                         env=unmarked())
         for _ in range(45):
             if os.path.exists(SETUP_MARKER):
                 break
             time.sleep(1)
         else:
             raise SettingUp("The browser is being set up (once, about a minute). Run the command again in a minute.")
-    started = subprocess.run(["bash", os.path.join(HERE, "display.sh")], capture_output=True, text=True, timeout=60)
+    started = subprocess.run(["bash", os.path.join(HERE, "display.sh")], capture_output=True, text=True, timeout=60,
+                             env=unmarked())
     if started.returncode != 0:
         raise RuntimeError("The browser did not start: " + (started.stderr.strip() or "no reason given"))
 
@@ -278,7 +288,8 @@ def run(args):
                          "close-tab"}
     if acting and user_control():
         raise UserHasControl("The user has taken over the browser in the workspace view. Do not act in it now: "
-                             "wait with `browser wait 60` until they hand it back, or answer with what you have.")
+                             "your next VM call waits until they hand it back, so read the page again then, or "
+                             "answer with what you have.")
     ensure_browser()
     from playwright.sync_api import sync_playwright
     with sync_playwright() as playwright:

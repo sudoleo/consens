@@ -104,6 +104,13 @@ VM_UNAVAILABLE = ("The VM is not available right now. Continue without it for th
 VM_NO_TIME = ("Not enough time is left in this message for a command. Write the answer from what you have.")
 VM_DAY_LIMIT = ("The VM time of this account for today is used up. Continue without the VM for this message and "
                 "tell the user that the VM is available again tomorrow (the day starts at midnight UTC).")
+# While the user has the workspace's browser (their takeover in the view), a
+# VM call waits until they hand it back, looking every USER_POLL_SECONDS, at
+# most USER_WAIT_SECONDS (agent_workspace.user_has_browser).
+USER_WAIT_SECONDS = 120
+USER_POLL_SECONDS = 2
+VM_USER_HAS_BROWSER = ("The user has taken over the workspace's browser and still has it, so nothing ran in the VM: "
+                       "the workspace waits for them. Call the tool again to wait on, or answer with what you have.")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
@@ -296,10 +303,11 @@ class VMSession:
     """The VM of one message (thread-safe). ``factory`` returns a backend or
     None without a configured provider (tests pass a fake)."""
 
-    def __init__(self, loop, factory=None, clock=time.monotonic):
+    def __init__(self, loop, factory=None, clock=time.monotonic, sleep=time.sleep):
         self.loop = loop
         self._factory = factory or agent_vm.backend
         self.clock = clock
+        self.sleep = sleep
         self.name = agent_vm.workspace_name(loop.uid)
         # The chat's own folder: where commands start and relative paths lead.
         self.dir = agent_vm.chat_dir(loop.chat_id)
@@ -371,6 +379,31 @@ class VMSession:
                 _unexpected(exc, "start")
                 self.state = "unavailable"
                 raise _VMOff(VM_UNAVAILABLE) from None
+
+    def wait_for_user(self, cancellation):
+        """While the user has the workspace's browser, nothing of the agent's
+        reaches the VM, so nothing sees what they type there: the call waits
+        until they hand it back, at most USER_WAIT_SECONDS and never into the
+        time the answer needs, then says so. A reviewer's halt ends the wait
+        (the command then stops, VMTools.exec). A failed read lets the call
+        go: the VM freezes the agent's commands meanwhile by itself
+        (workspace_vm/pause.py)."""
+        from app.services import agent_workspace
+        deadline = self.clock() + USER_WAIT_SECONDS
+        left = getattr(self.loop, "answer_time_left", lambda: None)()
+        if left is not None:
+            deadline = min(deadline, self.clock() + left - MIN_COMMAND_SECONDS)
+        while getattr(self.loop, "hold", None) is None:
+            try:
+                if not agent_workspace.user_has_browser(self.loop.store.db, self.loop.uid):
+                    return
+            except Exception as exc:
+                logging.warning("Agent workspace control unavailable category=%s", safe_exception(exc))
+                return
+            if self.clock() >= deadline:
+                raise ValueError(VM_USER_HAS_BROWSER)
+            cancellation.raise_if_cancelled()
+            self.sleep(USER_POLL_SECONDS)
 
     def renew(self):
         """Moves the lease on when it runs low (between VM calls); a lease
@@ -568,6 +601,7 @@ class VMTools:
             raise ValueError(VM_DAY_LIMIT)
         with self.session._lock:
             self.session.calls += 1
+        self.session.wait_for_user(cancellation)
         self.session.ready(cancellation)
         self.session.renew()
 

@@ -115,8 +115,21 @@ def test_taking_over_and_handing_back_write_the_vms_control_file(view_api, fake_
     assert taken.status_code == 200 and taken.json() == {"holder": "user", "seconds": agent_workspace.CONTROL_SECONDS}
     control = json.loads(fake_vm.vms[NAME]["files"][agent_workspace.CONTROL_PATH])
     assert control == {"holder": "user", "until": 5000.0 + agent_workspace.CONTROL_SECONDS}
+    # The agent pauses completely: the server holds its VM calls (the record),
+    # the browser refuses (control.json), then the VM freezes what of it runs,
+    # started without the agent's mark so it is not frozen itself.
+    assert agent_workspace.record(store.db, UID)["control"] == control
+    assert agent_workspace.user_has_browser(store.db, UID, now=5000.0)
+    assert [call for call in fake_vm.calls if call[0] in {"write", "exec"}] == [
+        ("write", NAME, agent_workspace.CONTROL_PATH),
+        ("exec", NAME, agent_workspace.PAUSE_COMMAND, agent_vm.HOME, agent_workspace.PAUSE_START_SECONDS)]
+    assert fake_vm.unmarked == [agent_workspace.PAUSE_COMMAND]
     assert client.post("/agent/workspace/control", json={"holder": "agent"}, headers=AUTH).status_code == 200
     assert json.loads(fake_vm.vms[NAME]["files"][agent_workspace.CONTROL_PATH])["holder"] == "agent"
+    assert agent_workspace.record(store.db, UID)["control"] == {"holder": "agent", "until": 0}
+    assert not agent_workspace.user_has_browser(store.db, UID, now=5000.0)
+    # Handing back starts nothing: pause.py sees control.json and lets go.
+    assert fake_vm.unmarked == [agent_workspace.PAUSE_COMMAND]
     assert client.post("/agent/workspace/control", json={"holder": "root"}, headers=AUTH).status_code == 422
     allowed.clear()
     assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 403

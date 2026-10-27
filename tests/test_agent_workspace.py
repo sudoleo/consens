@@ -82,7 +82,7 @@ def test_a_deleted_chat_takes_no_lease(store):
 
 def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes():
     files = agent_workspace.tool_files()
-    assert set(files) == {"browser.py", "display.sh", "gateway.py", "setup.sh"}
+    assert set(files) == {"browser.py", "display.sh", "gateway.py", "pause.py", "setup.sh"}
     assert all(b"\r\n" not in data for data in files.values())
     assert agent_workspace.VERSION == agent_workspace._version() and len(agent_workspace.VERSION) == 16
     gateway = load("gateway")
@@ -121,6 +121,77 @@ def test_the_browser_refuses_to_act_while_the_user_has_it(tmp_path, monkeypatch,
     assert "taken over the browser" in capsys.readouterr().out
     monkeypatch.setattr(browser.sys, "argv", ["browser", "--help"])
     assert browser.main() == 0 and "screenshot" in capsys.readouterr().out
+
+
+def test_a_takeover_freezes_the_agents_processes_until_the_user_hands_back(tmp_path, monkeypatch):
+    """pause.py: what carries the agent's mark (agent_vm.AGENT_MARK) stops
+    while the user has the browser, also what appears meanwhile, and goes on
+    when they hand back or the takeover expires, also after a failure."""
+    import os
+    pause = load("pause")
+    proc = tmp_path / "proc"
+    environs = {"101": b"PATH=/bin\0CONSENS_AGENT=1\0", "102": b"PATH=/bin\0DISPLAY=:1\0",
+                "103": b"CONSENS_AGENT=10\0", str(os.getpid()): b"CONSENS_AGENT=1\0", "self": b"CONSENS_AGENT=1\0"}
+    for pid, environ in environs.items():
+        (proc / pid).mkdir(parents=True)
+        (proc / pid / "environ").write_bytes(environ)
+    # A process that ended between the listing and the read.
+    (proc / "104").mkdir()
+    assert pause.marked(str(proc)) == [101]
+    assert agent_vm.AGENT_MARK.encode() == pause.MARK
+    sent, turns = [], iter([True, True, False])
+
+    def appears():
+        # Started in the moment of the takeover: frozen at the next look.
+        if len(sent) == 1:
+            (proc / "105").mkdir()
+            (proc / "105" / "environ").write_bytes(b"CONSENS_AGENT=1\0")
+        return pause.marked(str(proc))
+    pause.pause(held=lambda: next(turns), find=appears, kill=lambda pid, sig: sent.append((pid, sig)),
+                sleep=lambda seconds: None)
+    assert sent == [(101, pause.STOP), (101, pause.STOP), (105, pause.STOP), (101, pause.CONT), (105, pause.CONT)]
+    # A process gone meanwhile stops nothing; a failure still continues the others.
+    sent.clear()
+
+    def kill(pid, sig):
+        if pid == 101:
+            raise ProcessLookupError(pid)
+        sent.append((pid, sig))
+
+    def failing():
+        raise RuntimeError("lost")
+    with pytest.raises(RuntimeError):
+        pause.pause(held=failing, find=lambda: pause.marked(str(proc)), kill=kill, sleep=lambda seconds: None)
+    assert sent == [(105, pause.CONT)]
+    # It reads the takeover as the browser does.
+    control = tmp_path / "control.json"
+    monkeypatch.setattr(pause, "CONTROL", str(control))
+    assert pause.user_control() is False
+    control.write_bytes(agent_workspace.control_payload("user"))
+    assert pause.user_control() is True
+    control.write_bytes(agent_workspace.control_payload("agent"))
+    assert pause.user_control() is False
+
+
+def test_the_workspaces_own_programs_never_carry_the_agents_mark(monkeypatch):
+    import os
+    browser = load("browser")
+    monkeypatch.setenv("CONSENS_AGENT", "1")
+    assert "CONSENS_AGENT" not in browser.unmarked() and browser.unmarked()["PATH"] == os.environ["PATH"]
+    assert "unset CONSENS_AGENT" in agent_workspace.tool_files()["display.sh"].decode()
+    assert agent_workspace.PAUSE_COMMAND.startswith("env -u CONSENS_AGENT setsid nohup python3 ")
+    assert agent_vm.wrapped_command("ls", 30)[3:6] == ["env", agent_vm.AGENT_MARK, "bash"]
+    assert agent_vm.wrapped_command("ls", 30, agent=False)[3:5] == ["bash", "-c"]
+
+
+def test_the_record_says_whether_the_user_has_the_browser(store):
+    agent_workspace.record_for_view(store, UID, provider="fake")
+    assert agent_workspace.user_has_browser(store.db, UID) is False
+    for control, held in (({"holder": "user", "until": 2000.0}, True), ({"holder": "user", "until": 1000.0}, False),
+                          ({"holder": "agent", "until": 0}, False), ({"holder": "user", "until": "soon"}, False),
+                          ("user", False)):
+        agent_workspace.ref(store.db, UID).update({"control": control})
+        assert agent_workspace.user_has_browser(store.db, UID, now=1500.0) is held
 
 
 def test_long_pages_are_read_in_pieces():

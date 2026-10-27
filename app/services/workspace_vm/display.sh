@@ -6,6 +6,9 @@
 # Every daemon gets its own output and none of this script's descriptors
 # (8>&-): an inherited pipe would keep the caller waiting, an inherited lock
 # would block the next call.
+# None of them is the agent's: a takeover freezes what carries its mark
+# (pause.py), and the user is in this browser then.
+unset CONSENS_AGENT
 dir="$HOME/.consens/browser"
 profile="$dir/profile"
 mkdir -p "$profile/Default"

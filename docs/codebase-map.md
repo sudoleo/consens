@@ -135,7 +135,9 @@ access, reading and disconnecting only the owner) and the pull request card's
 ("GitHub aus der VM") and `docs/github-app-setup.md`.
 
 The account's workspace live (27.10.2026): `routers/agent_workspace.py` exposes
-`GET /agent/workspace`, `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`),
+`GET /agent/workspace`, `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`;
+while the user holds the browser the agent pauses completely: its VM calls wait
+and `workspace_vm/pause.py` freezes its marked processes),
 `POST /agent/workspace/reset-browser` and the WebSocket `/agent/workspace/view`
 (sign-in by its first message, then carried through to the VM gateway over the
 Sprite's private address with `SPRITES_TOKEN`, which never reaches the browser);
@@ -5737,7 +5739,14 @@ Chat-Ordner an, den Checkpoint der Nachricht und kopiert ihre Anhänge in den
 (`agent_vm.vm_name`), behalten sie bis zu ihrer Löschung. Der Agent bedient
 den Chrome des Arbeitsplatzes mit `browser` über `vm_exec`, als Text
 (`read`/`click e12`/`type`, nie in Passwortfelder, nie während der Nutzer
-übernommen hat). Live-Ansicht: `routers/agent_workspace.py` (WebSocket `/agent/workspace/view` bis zum
+übernommen hat). Während der Übernahme pausiert der Agent ganz (seit
+2026-10-27): `control` im Konto-Dokument lässt jeden VM-Aufruf warten
+(`VMSession.wait_for_user`, höchstens 120 s, dann `VM_USER_HAS_BROWSER`),
+und `workspace_vm/pause.py` friert in der VM alles mit der Marke
+`CONSENS_AGENT=1` ein (`agent_vm.AGENT_MARK`, jeder Agenten-Befehl per
+`wrapped_command`; Server-eigene Befehle mit `exec(..., agent=False)`).
+Einfügen in der Ansicht tippt die Zwischenablage als Tasten ein, nie über die
+Zwischenablage der VM. Details in `docs/agent-mode.md`, „Arbeitsplatz“. Live-Ansicht: `routers/agent_workspace.py` (WebSocket `/agent/workspace/view` bis zum
 Gateway der VM, `POST /agent/workspace/control` für Übernehmen/Zurückgeben,
 `POST /agent/workspace/reset-browser`, `GET /agent/workspace`) und
 `workspace-view.js` (`window.App.workspaceView`, noVNC aus `static/vendor/novnc`,
@@ -8315,8 +8324,8 @@ app/services/
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget)
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete, seit 2026-10-27 delete_path/chmod/put_service/url) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES), workspace_name je Konto und chat_dir je Chat (vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner bzw. alte VM) und delete_workspace; ein Anbieterwechsel betrifft nur diese Datei
-  agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27): Konto-Dokument users/{uid}/chat_state/agent_workspace mit Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab), prepare (Werkzeuge workspace_vm/* bei neuer VERSION, Dienst view), Übernahme (control.json), reset_browser, delete_for_account; Ordnernamen (.consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
-  workspace_vm/              Läuft in der VM (LF per .gitattributes): browser.py (Befehl browser des Agenten, Playwright über CDP, Seite als Text mit Refs), display.sh (Xvfb, openbox, Chrome mit dauerhaftem Profil, x11vnc), setup.sh (einmalige Installation, Chrome-Richtlinie ohne Passwörter/Karten), gateway.py (Dienst auf 6080: WebSocket /vnc, Zustände, dann VNC-Bytes; nur Standardbibliothek)
+  agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27): Konto-Dokument users/{uid}/chat_state/agent_workspace mit Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab), prepare (Werkzeuge workspace_vm/* bei neuer VERSION, Dienst view), Übernahme (set_control: control im Konto-Dokument + control.json + pause.py; user_has_browser), reset_browser, delete_for_account; Ordnernamen (.consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
+  workspace_vm/              Läuft in der VM (LF per .gitattributes): browser.py (Befehl browser des Agenten, Playwright über CDP, Seite als Text mit Refs), display.sh (Xvfb, openbox, Chrome mit dauerhaftem Profil, x11vnc), setup.sh (einmalige Installation, Chrome-Richtlinie ohne Passwörter/Karten), gateway.py (Dienst auf 6080: WebSocket /vnc, Zustände, dann VNC-Bytes; nur Standardbibliothek), pause.py (während der Übernahme: Prozesse mit CONSENS_AGENT=1 per SIGSTOP einfrieren, danach SIGCONT)
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit

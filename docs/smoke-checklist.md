@@ -160,7 +160,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Klicken kommen an; bei einer Website anmelden. Agent-Frage im Audit:
       „Öffne <die Website> in deinem Browser und sag mir, was auf der
       Startseite steht.“ Der Agent nutzt `browser`, die Ansicht zeigt es live,
-      er ist eingeloggt. Während du übernommen hast, wartet er („browser wait“).
+      er ist eingeloggt. Während du übernommen hast, pausiert er ganz: Sein
+      nächster Schritt läuft erst nach „Zurückgeben“, ein laufender
+      Hintergrundprozess (z. B. `vm_start_process` mit `while true; do date;
+      sleep 1; done`) schreibt in der Zeit keine Zeile. Passwort aus dem
+      eigenen Passwortmanager kopieren und im Bild mit Strg+V (⌘V) oder
+      „Einfügen“ einfügen: Es landet im Feld, auch mit Umlauten und Sonderzeichen,
+      und schickt das Formular nicht ab.
       Er tippt kein Passwort (auf einer Login-Seite bittet er dich). Zweiter
       Chat, während der erste läuft: „Übersprungen · Arbeitsplatz gerade in
       einem anderen Chat“, die Antwort kommt. Datei im ersten Chat schreiben,

@@ -117,11 +117,14 @@ class VMBackend:
         """Create the VM if it does not exist yet and apply EGRESS_RULES."""
         raise NotImplementedError
 
-    def exec(self, name, command, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation):
+    def exec(self, name, command, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation,
+             agent=True):
         """Run ``command`` with bash in ``cwd`` for at most ``timeout`` seconds.
         ``on_output(stream, chunk)`` gets stdout/stderr as they arrive.
         Returns ExecOutcome; raises ProviderCancelled on Stop (the command
-        is then ended in the VM as well)."""
+        is then ended in the VM as well). ``agent``: the command and what it
+        starts carry AGENT_MARK; only the server's own commands for the
+        workspace go without it."""
         raise NotImplementedError
 
     def read_file(self, name, path, *, limit):
@@ -175,11 +178,19 @@ SHELL_PRELUDE = ('for __profile in /etc/profile "$HOME/.profile"; do [ -r "$__pr
                  'done >/dev/null 2>&1; __command=$1; set --; eval "$__command"')
 
 
-def wrapped_command(command, timeout):
+# In the environment of every command of the agent and of all it starts
+# (its background processes too): while the user has the workspace's browser,
+# the VM freezes whatever carries it (workspace_vm/pause.py). The workspace's
+# own programs (Chrome, its screen, the VNC server, the gateway) never do.
+AGENT_MARK = "CONSENS_AGENT=1"
+
+
+def wrapped_command(command, timeout, agent=True):
     """The argv the VM runs: bash with the login environment (SHELL_PRELUDE)
     under coreutils ``timeout``, so a command never outlives its limit, also
-    when the backend's connection is gone."""
-    return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), "bash", "-c", SHELL_PRELUDE,
+    when the backend's connection is gone; the agent's with AGENT_MARK."""
+    mark = ["env", AGENT_MARK] if agent else []
+    return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), *mark, "bash", "-c", SHELL_PRELUDE,
             "bash", command]
 
 
@@ -347,9 +358,9 @@ class SpritesBackend(VMBackend):
                        open_timeout=WS_OPEN_SECONDS, ping_interval=15, ping_timeout=45, close_timeout=0,
                        max_size=WS_MAX_FRAME)
 
-    def exec(self, name, command, *, cwd, timeout, on_output, cancellation):
+    def exec(self, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
         from websockets.exceptions import ConnectionClosed, InvalidStatus
-        argv = wrapped_command(command, timeout)
+        argv = wrapped_command(command, timeout, agent)
         query = urlencode([*(("cmd", arg) for arg in argv), ("path", argv[0]), ("dir", cwd), ("stdin", "false")])
         url = "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + query
         cancellation.raise_if_cancelled()
