@@ -4424,7 +4424,12 @@ Memory-Änderung der Nachricht (`agent_memory.MEMORY_LOCKED`). Eigene Recherche 
 `_consensus_search_handoff` (oben), danach hält `_tool_reminder` eine Antwort
 über `DIRECT_REPLY_CHARS` (800) Zeichen einmal zurück (`TOOL_REMINDERS`);
 kürzere Rückfragen stehen sofort, nach der Erinnerung steht auch eine lange
-Antwort. Ungeprüfte Worker-Ergebnisse halten die Antwort zurück (`_retract`
+Antwort. Mit VM-Werkzeugen hält `_workspace_reminder` (seit 2026-10-27) eine
+Antwort einmal zurück, die den Arbeitsplatz betrifft, obwohl in der Nachricht
+kein Arbeitsplatz-Werkzeug lief (`agent_vm_tools.workspace_signals`,
+`WORKSPACE_REMINDER`); fragt der Nutzer nach dem Arbeitsplatz, streamt sie vor
+dem ersten Aufruf nicht (`_workspace_hold`); steht sie nach der Erinnerung,
+bekommt das Arbeitsprotokoll `app`/`no_workspace_call`. Ungeprüfte Worker-Ergebnisse halten die Antwort zurück (`_retract`
 plus Aufforderung zu `review_agent`). `_finish_merged` gleicht den sichtbaren
 Text an (`_show_answer`, auch nach `_drop_presearch_text`), fixiert ihn
 (`freeze_for_synthesis`, `capture`) und führt nach Vergleichen über
@@ -5775,7 +5780,13 @@ als `tool`-Eintrag mit Herkunft `vm` im Arbeitsprotokoll. Der Turn speichert
 `agent_vm` (`checkpoint`, `calls`, `commands`, `seconds`; `finish_run`,
 `turn_detail`). VM-Werkzeuge sind `REPEATABLE_TOOLS`, `vm_exec`/`vm_read_file`
 sperren Memory. Ein Ausfall (`VMUnavailable`) schaltet die VM für die
-Nachricht ab, die Antwort läuft weiter. Anzeige: `agent-activity.js` `vmView`
+Nachricht ab, die Antwort läuft weiter. Kein Arbeitsplatz-Ergebnis ohne Aufruf
+(seit 2026-10-27, `DelegationLoop._workspace_reminder`): Lief in der Nachricht
+kein Werkzeug aus `agent_vm_tools.WORKSPACE_TOOLS` (Herkunft `vm` in
+`agent_work_log.TOOL_DATA`), wird eine Antwort einmal zurückgehalten, wenn die
+Worte des Nutzers etwas in den Arbeitsplatz legen oder ein VM-Werkzeug nennen
+oder die Antwort ein VM-Werkzeug, `/home/sprite`, `.consens-chat` oder
+`ls -l`-Zeilen zeigt (`workspace_signals`). Anzeige: `agent-activity.js` `vmView`
 (kompakter Block, offen während der Befehl läuft, danach eingeklappt;
 Befehl/Ausgabe in `<code>`/`<pre>`); live faltet `foldPast` frühere Schritte in
 eine Zeile („Ran 3 commands“). Der Plan (`update_plan`, seit 2026-10-26) steht
@@ -8346,7 +8357,7 @@ app/services/
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete, seit 2026-10-27 delete_path/chmod/put_service/url) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES), workspace_name je Konto und chat_dir je Chat (vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner bzw. alte VM) und delete_workspace; ein Anbieterwechsel betrifft nur diese Datei
   agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27): Konto-Dokument users/{uid}/chat_state/agent_workspace mit Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab), prepare (Werkzeuge workspace_vm/* bei neuer VERSION, Dienst view), Übernahme (set_control: control im Konto-Dokument + control.json + pause.py; user_has_browser), reset_browser, delete_for_account; Ordnernamen (.consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
   workspace_vm/              Läuft in der VM (LF per .gitattributes): browser.py (Befehl browser des Agenten, Playwright über CDP, Seite als Text mit Refs), display.sh (Xvfb, openbox, Chrome mit dauerhaftem Profil, x11vnc), setup.sh (einmalige Installation, Chrome-Richtlinie ohne Passwörter/Karten), gateway.py (Dienst auf 6080: WebSocket /vnc, Zustände, dann VNC-Bytes; nur Standardbibliothek), pause.py (während der Übernahme: Prozesse mit CONSENS_AGENT=1 per SIGSTOP einfrieren, danach SIGCONT)
-  agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge
+  agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge; workspace_signals/WORKSPACE_REMINDER für DelegationLoop._workspace_reminder (seit 2026-10-27: Antwort zum Arbeitsplatz ohne Arbeitsplatz-Aufruf der Nachricht einmal zurückgehalten)
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import, prepare_pull_request (Vorschlag am Turn agent_pull_request) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)

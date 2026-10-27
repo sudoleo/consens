@@ -281,6 +281,8 @@ class DelegationLoop(AgentLoop):
         self.merged = comparison_models is not None
         # Text replies held back because a tool had to come first (_tool_reminder).
         self.tool_reminders = 0
+        # Replies about the workspace held back without a workspace call (_workspace_reminder).
+        self.workspace_reminders = 0
         # Saved sources of the chat's earlier messages: read_source may open them.
         self.chat_sources = list(chat_sources or [])
         # This message's own search results (provider citations of its steps):
@@ -2171,7 +2173,66 @@ class DelegationLoop(AgentLoop):
         text reply now would not be sent (_tool_reminder, unchecked workers)."""
         from app.services.agent_answer_mode import TOOL_REMINDERS
         return (not self._workers_ready() or bool(self.mailbox)
-                or (self._research_unchecked() and self.tool_reminders < TOOL_REMINDERS))
+                or (self._research_unchecked() and self.tool_reminders < TOOL_REMINDERS)
+                or self._workspace_hold())
+
+    def _user_words(self):
+        """The user's words of this message: its question and what they
+        wrote into the running response (USER_NOTE_OPEN)."""
+        words = [self.answer_conversation[-1]["content"]] if (
+            self.answer_conversation and self.answer_conversation[-1]["role"] == "user") else []
+        words += [message["content"][len(USER_NOTE_OPEN):] for message in self.messages[self.turn_start:]
+                  if message.get("role") == "user" and isinstance(message.get("content"), str)
+                  and message["content"].startswith(USER_NOTE_OPEN)]
+        return "\n".join(str(word) for word in words)
+
+    def _workspace_called(self):
+        """Whether the agent called a workspace tool in this message, also
+        one that failed or did not run (the VM busy or unavailable)."""
+        from app.services.agent_vm_tools import WORKSPACE_TOOLS
+        return any((call.get("function") or {}).get("name") in WORKSPACE_TOOLS
+                   for message in self.messages[self.turn_start:] if message.get("role") == "assistant"
+                   for call in message.get("tool_calls") or [])
+
+    def _workspace_unbacked(self, value):
+        """Why ``value``, a text reply, concerns the workspace although no
+        workspace tool ran in this message (agent_vm_tools.workspace_signals),
+        or ``()``."""
+        if self.vm_tools is None or value.tool_calls or not value.text.strip() or self._workspace_called():
+            return ()
+        from app.services.agent_vm_tools import workspace_signals
+        return workspace_signals(self._user_words(), value.text)
+
+    def _workspace_hold(self):
+        """Whether the user's words ask for the workspace and no workspace
+        tool has run yet: a text reply now would be held back
+        (_workspace_reminder), so it does not stream."""
+        if self.vm_tools is None:
+            return False
+        from app.services.agent_vm_tools import WORKSPACE_REMINDERS, asks_workspace
+        return (self.workspace_reminders < WORKSPACE_REMINDERS and not self._workspace_called()
+                and asks_workspace(self._user_words()))
+
+    def _workspace_reminder(self, value):
+        """A reply about the workspace in a message in which no workspace
+        tool ran is held back WORKSPACE_REMINDERS times: nothing in it can
+        come from the workspace as it is now (agent_vm_tools.py). After that
+        it stands, so the turn still ends with an answer, and the work log
+        tells the reviewers (WORKSPACE_UNBACKED)."""
+        from app.services.agent_vm_tools import WORKSPACE_REMINDER, WORKSPACE_REMINDERS, WORKSPACE_UNBACKED
+        signals = self._workspace_unbacked(value)
+        if not signals:
+            return False
+        if self.workspace_reminders >= WORKSPACE_REMINDERS:
+            logging.warning("Agent reply about the workspace without a workspace call stands model=%s signals=%s",
+                            self._routing_model().model, ",".join(signals))
+            if self.work_log is not None:
+                self.work_log.app("no_workspace_call", {"note": WORKSPACE_UNBACKED, "signals": list(signals)},
+                                  step=value.step_id)
+            return False
+        self.workspace_reminders += 1
+        self.messages.append({"role": "user", "content": WORKSPACE_REMINDER})
+        return True
 
     def _tool_reminder(self, value):
         """An answer after the agent's own research and before any
@@ -2199,8 +2260,12 @@ class DelegationLoop(AgentLoop):
         check of exactly its visible text (_finish_merged, _finish_review): a
         complete answer, shown in full, without tool calls, after
         comparisons, with the answer check on and nothing left that would
-        take the text back (_workers_ready, mailbox)."""
+        take the text back (_workers_ready, mailbox, _workspace_reminder)."""
         comparison = self.comparison
+        if self._workspace_unbacked(value):
+            from app.services.agent_vm_tools import WORKSPACE_REMINDERS
+            if self.workspace_reminders < WORKSPACE_REMINDERS:
+                return False
         # The reviewers of audit mode check the text like the judges do.
         return bool(comparison is not None and (comparison.comparisons or comparison.auditor is not None)
                     and not comparison.text
@@ -2415,7 +2480,8 @@ class DelegationLoop(AgentLoop):
                     answered_with_tools = False
                     if self.merged:
                         # Text that is no answer after all goes back out of view.
-                        if self._consensus_search_handoff(value) or self._tool_reminder(value):
+                        if (self._consensus_search_handoff(value) or self._tool_reminder(value)
+                                or self._workspace_reminder(value)):
                             yield from self._retract(value)
                             continue
                         if value.tool_calls:

@@ -163,16 +163,16 @@ ANSWER = "The script printed 42: the mean of the column is 42."
 
 
 def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on", file_context=None,
-            google_data=False):
+            google_data=False, question="Analyse my data.", judges="off"):
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
-        messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
+        messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences(audit=audit, judges="off", vm=vm), file_context=file_context,
+        agent_preferences=AgentPreferences(audit=audit, judges=judges, vm=vm), file_context=file_context,
         google_data=google_data)
 
 
@@ -497,6 +497,144 @@ def test_the_same_command_may_run_again(store, fake_vm):
     loop = vm_loop(store, script)
     list(loop.run())
     assert [r.get("exit_code") for r in results(loop)] == [0, 0, 0, 0]
+
+
+# --- A reply about the workspace without a call -----------------------------------
+
+class Replies:
+    """A scripted agent whose steps are text replies (a string, streamed in
+    pieces) or tool calls (a list of (name, arguments)); after the last one it
+    answers ANSWER. Every other call is a reviewer without objection."""
+
+    def __init__(self, steps):
+        self.steps = list(steps)
+        self.requests = []
+
+    def factory(self):
+        script = self
+
+        class Completion(AgentCompletion):
+            def stream(self, *, model, messages, **kwargs):
+                self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                if not self.step_id.startswith("completion:"):
+                    self.text, self.finish_reason = json.dumps({"marks": []}), "stop"
+                    yield {"type": "delta", "text": self.text}
+                    return
+                script.requests.append(list(messages))
+                index = int(self.step_id.split(":")[1])
+                step = script.steps[index] if index < len(script.steps) else ANSWER
+                if isinstance(step, list):
+                    self.tool_calls = [{"id": f"call_{index}_{n}", "type": "function",
+                                        "function": {"name": name, "arguments": json.dumps(arguments)}}
+                                       for n, (name, arguments) in enumerate(step)]
+                    self.finish_reason = "tool_calls"
+                    return
+                for start in range(0, len(step), 80):
+                    self.text += step[start:start + 80]
+                    yield {"type": "delta", "text": step[start:start + 80]}
+                self.finish_reason = "stop"
+        return Completion()
+
+
+# Prod 2026-10-27 (MiMo V2.6 Pro, reasoning off): replies to follow-up messages
+# that never called a tool.
+MADE_UP_LISTING = ("```\ntotal 36\ndrwxr-xr-x 2 sprite sprite 4096 Okt 27 17:22 .\n"
+                   "drwxr-xr-x 1 sprite sprite 4096 Okt 27 17:21 ..\n"
+                   "-rwxr-xr-x 1 sprite sprite  359 Okt 27 17:18 .consens-chat\n"
+                   "-rw-r--r-- 1 sprite sprite   32 Okt 27 17:22 notes.txt\n```\n\n" + "The folder holds two files. " * 12)
+MADE_UP_FILE = "Die Datei `notiz.txt` wurde angelegt und enthält die Notiz: „Die Lieferung verschiebt sich auf November.“"
+
+
+def hints(loop):
+    return [m["content"] for m in loop.messages
+            if m.get("role") == "user" and m["content"] == agent_vm_tools.WORKSPACE_REMINDER]
+
+
+def test_which_replies_concern_the_workspace():
+    signals = agent_vm_tools.workspace_signals
+    # The user's words put something in the workspace or name a VM tool (prod's four messages).
+    for words in ("Hol mit curl im Arbeitsplatz diese Seite und sag mir, was dort steht",
+                  "Führ im Arbeitsplatz curl -s -o notiz.txt aus und lies notiz.txt mit cat",
+                  "Führ ls -la jetzt wirklich mit vm_exec aus", "Was liegt in deinem Arbeitsplatz?",
+                  "Run the tests in the workspace", "What is in your workspace?"):
+        assert signals(words, "Done.") == ("asked",), words
+    # The app's name alone, in another sense, does not.
+    for words in ("Wie gehe ich mit Stress am Arbeitsplatz um?", "How do I set up Google Workspace mail?",
+                  "Analyse my data."):
+        assert signals(words, "Here is how.") == (), words
+    # What only the workspace returns: a VM tool, its home or a folder's marker, ls -l lines.
+    assert signals("Show me the files.", MADE_UP_LISTING) == ("path", "listing")
+    assert signals("x", "Jetzt das echte Ergebnis von `vm_exec`:") == ("tool",)
+    assert signals("x", "It is in /home/sprite/chats/abc/notes.txt.") == ("path",)
+    assert signals("x", "chmod 644 gives -rw-r--r-- as ls -l shows it.") == ()
+    assert signals("Analyse my data.", ANSWER) == ()
+
+
+def test_a_reply_with_workspace_output_but_no_call_is_held_back_once(store, fake_vm):
+    """The listing streams (nothing in the question warns), then goes back out
+    of view: the agent gets the app's rule, runs the command and answers from
+    it. The answer check is not announced for the reply held back."""
+    # Long enough to stream (ANSWER_HOLD_CHARS), so that its check is announced.
+    answer = "The folder holds what ls printed: " + "ok. " * 80
+    script = Replies([MADE_UP_LISTING, [("vm_exec", {"command": "ls -la"})], answer])
+    loop = vm_loop(store, script, question="Show me the files.", judges="on")
+    events = list(loop.run())
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == answer
+    assert len(hints(loop)) == 1 and script.requests[1][-1]["content"] == agent_vm_tools.WORKSPACE_REMINDER
+    assert ("exec", NAME, "ls -la", agent_vm.chat_dir(loop.chat_id), agent_vm_tools.EXEC_TIMEOUT_DEFAULT) in fake_vm.calls
+    retract = next(i for i, e in enumerate(events) if e.get("kind") == "status" and e.get("id", "").endswith("/retract"))
+    assert "".join(e["text"] for e in events[:retract] if e.get("type") == "delta").startswith("```\ntotal 36")
+    assert not any(e.get("type") == "answer_check" for e in events[:retract])
+    assert any(e.get("type") == "answer_check" for e in events[retract:])
+    names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert "retract" in names and "no_workspace_call" not in names
+
+
+def test_a_question_about_the_workspace_holds_the_reply_until_a_call_ran(store, fake_vm):
+    """Asked for the workspace, a reply before any VM call never streams: the
+    made-up file never shows. After the call the answer streams as usual."""
+    # Long enough that it would stream (ANSWER_HOLD_CHARS).
+    made_up = MADE_UP_FILE + " Der Rest der Notiz ist erledigt." * 12
+    script = Replies([made_up, [("vm_exec", {"command": "curl -s -o notiz.txt https://example.org"})]])
+    loop = vm_loop(store, script, question="Führ im Arbeitsplatz curl -s -o notiz.txt aus und lies die Notiz.")
+    events = list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == ANSWER
+    assert "".join(e["text"] for e in events if e.get("type") == "delta") == ANSWER
+    assert len(hints(loop)) == 1
+
+
+def test_after_one_reminder_the_reply_stands_and_the_work_log_tells_the_reviewers(store, fake_vm, caplog):
+    script = Replies([MADE_UP_FILE, MADE_UP_FILE])
+    loop = vm_loop(store, script, question="Leg im Arbeitsplatz notiz.txt an.")
+    events = list(loop.run())
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == MADE_UP_FILE
+    # Held once; the second reply streams and stands, so the turn ends with an answer.
+    assert len(hints(loop)) == 1 and len(script.requests) == 2
+    assert "".join(e["text"] for e in events if e.get("type") == "delta") == MADE_UP_FILE
+    entries = [(entry, text) for entry, text in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    names = [entry["name"] for entry, _ in entries]
+    assert names.index("no_workspace_call") < names.index("answer_fixed")
+    note = json.loads(dict((entry["name"], text) for entry, text in entries)["no_workspace_call"])
+    assert note == {"note": agent_vm_tools.WORKSPACE_UNBACKED, "signals": ["asked"]}
+    assert "Agent reply about the workspace without a workspace call stands" in caplog.text
+    assert fake_vm.calls == []
+
+
+def test_a_reply_after_a_workspace_call_or_without_a_workspace_stands(store, fake_vm):
+    # A call that could not run counts: the agent may say that the workspace is down.
+    fake_vm.fail.add("ensure")
+    script = Replies([[("vm_exec", {"command": "ls"})], "The workspace is not available right now."])
+    loop = vm_loop(store, script, question="Run ls in the workspace.")
+    list(loop.run())
+    assert results(loop) == [{"error": VM_UNAVAILABLE}] and hints(loop) == []
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == "The workspace is not available right now."
+    # Without the VM nothing of it can be claimed: the rule has nothing to hold.
+    script = Replies([MADE_UP_LISTING])
+    loop = vm_loop(store, script, request_id="off", vm="off", question="Run ls in the workspace.")
+    list(loop.run())
+    assert hints(loop) == [] and store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == MADE_UP_LISTING
 
 
 # --- Limits and output ------------------------------------------------------------
