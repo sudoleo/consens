@@ -35,11 +35,12 @@ OFFICIAL = [{'title': 'Official race results', 'url': 'https://example.invalid/r
 
 
 def seed_reader(page, direct=False, *, insights=False, question=None, differences=None, agreement=None, sources=None,
-                consensus=None):
+                consensus=None, answers=None):
     """A Compare result (direct) or a saved Consensus chat of two turns.
 
     The browser runs no Consensus since 2026-10-25; a Consensus answer on
-    screen is a saved chat, opened through the real bookmark path."""
+    screen is a saved chat, opened through the real bookmark path.
+    ``answers`` replaces the newer turn's model answers ({provider: answer})."""
     page.route('**/api/topics/favicon?*', lambda route: route.fulfill(content_type='image/svg+xml', body=FAVICON))
     if direct:
         page.evaluate("""() => {
@@ -73,8 +74,9 @@ def seed_reader(page, direct=False, *, insights=False, question=None, difference
     current = {'id': 'reader-current', 'position': 2, 'status': 'completed', 'mode': 'Standard', 'execution_mode': 'consensus',
                'question': question or 'What changes in the next question?', 'consensus': consensus or 'The current consensus.',
                'sources': (sources if sources is not None else OFFICIAL) if insights else [],
-               'model_answers': {key: {'answer': f'## Original answer {i}\n\n' + 'A readable paragraph. ' * 160,
-                                       'model_label': f'{key} test model'} for i, key in enumerate((first, second))}}
+               'model_answers': answers if answers is not None else {
+                   key: {'answer': f'## Original answer {i}\n\n' + 'A readable paragraph. ' * 160,
+                         'model_label': f'{key} test model'} for i, key in enumerate((first, second))}}
     if insights:
         old['differences_data'] = {**data, 'differences': DIFFERENCES}
         current['differences_data'] = data

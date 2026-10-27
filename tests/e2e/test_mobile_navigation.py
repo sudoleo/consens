@@ -32,7 +32,8 @@ def with_agent_access(page):
 
 
 # The composer is the raised field (--field = --well, Apple-Audit G8).
-COMPOSER_SURFACE = {'light': 'rgb(255, 255, 255)', 'dark': 'rgb(38, 40, 43)'}
+# Dark: --well since the black/white palette (79778ccd, 2026-10-26).
+COMPOSER_SURFACE = {'light': 'rgb(255, 255, 255)', 'dark': 'rgb(22, 22, 22)'}
 
 # iPhone Safari (iOS 26; WebKit LocalFrameView::fixedContainerEdges) paints
 # the strips behind its status bar and bottom bar: it hit-tests the middle of
@@ -124,7 +125,9 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         assert composer.bounding_box()['height'] <= 52
 
         fade = "() => getComputedStyle(document.querySelector('.app-mobile-header'), '::before').opacity"
-        assert page.evaluate(fade) == '0'
+        # Back at the top the fade leaves with a transition; wait for its
+        # end instead of reading it mid-way (nightly 2026-10-27: 0.0018).
+        page.wait_for_function(f"() => ({fade})() === '0'")
         page.evaluate('window.scrollTo(0, 900)')
         expect(header).to_be_hidden()
         page.evaluate('window.scrollBy(0, -100)')

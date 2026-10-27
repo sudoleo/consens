@@ -6,6 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+from test_model_answer_reader import seed_reader
 from test_phase4_frontend import _real_firebase_page, phase4_server  # noqa: F401
 from test_touch_targets import _agent_answer_with_sources, _pro_account
 
@@ -64,22 +65,16 @@ def test_a_tap_on_a_phone_lists_every_source_of_the_pill(browser, phase4_server)
 
 
 def _reader_with_sources(page):
-    """The answer reader open on a model answer with a grouped pill."""
-    page.evaluate("""() => {
-      const registry = window.App.runRegistry;
-      const providers = window.App.modelPrefs.slice(0, 2).map(p => ({provider: p.key, modelLabel: p.key + ' test model'}));
-      const sources = [{id:'S1', title:'UCI regulations', url:'https://www.uci.org/rules'},
-        {id:'S2', title:'Analysis', url:'https://example.org/analysis'},
-        {id:'S3', title:'Race report', url:'https://news.example.com/report'}];
-      const ctx = registry.create({runId:'sheet-reader', question:'Where does the race start?',
-        config:{agentMode:true, providers}});
-      ctx.status = 'succeeded'; ctx.phase = 'answers_ready';
-      providers.forEach(p => { ctx.modelResults[p.provider] = {status:'complete',
-        text:'The race starts in Monaco [S1][S2][S3]. ' + 'A readable paragraph. '.repeat(40), sources}; });
-      Object.assign(ctx.consensus, {status:'complete', text:'The race starts in Monaco.',
-        completedTurn:{turn_id:'sheet-reader-turn', question:ctx.question, consensus:'The race starts in Monaco.'}});
-      registry.renderVisible();
-    }""")
+    """The answer reader open on a model answer with a grouped pill, behind
+    "Compare answers" of a saved Consensus chat (the browser runs no
+    Consensus since 2026-10-25)."""
+    sources = [{'id': 'S1', 'title': 'UCI regulations', 'url': 'https://www.uci.org/rules'},
+               {'id': 'S2', 'title': 'Analysis', 'url': 'https://example.org/analysis'},
+               {'id': 'S3', 'title': 'Race report', 'url': 'https://news.example.com/report'}]
+    keys = page.evaluate("() => App.modelPrefs.slice(0, 2).map(p => p.key)")
+    seed_reader(page, question='Where does the race start?', consensus='The race starts in Monaco.', answers={
+        key: {'answer': 'The race starts in Monaco [S1][S2][S3]. ' + 'A readable paragraph. ' * 40,
+              'model_label': key + ' test model', 'sources': sources} for key in keys})
     page.locator("#agentModeAnswersToggle").click()
     expect(page.locator("#modelAnswerReader")).to_be_visible()
     pill = page.locator("#modelAnswerReader .src-ref").first
