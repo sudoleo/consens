@@ -33,7 +33,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 |---|---|---|
 | `start` | Beginn von `DelegationLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
 | `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App und Nachrichten von Workern, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
-| `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`), Abschlussgrund, Verbrauch |
+| `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`, nur wenn der Anbieter sie schickt), Abschlussgrund, Verbrauch (mit der Zahl der Suchen) |
 | `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler |
 | `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis). Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
@@ -124,7 +124,15 @@ Prompt-Cache, bezahlt wird im Wesentlichen nur das Neue. Die Prüfer lesen aus
 dem Speicher des Laufs, nicht aus Firestore. Gekürzt mit Hinweis: der
 Systemprompt des Agenten (mit Memory) über 60.000 Zeichen, jeder andere
 Eintrag über 12.000 (sein ganzes JSON, Listen bis 20 Einträge; `_fit`).
-Strukturierte Einträge bleiben JSON, ohne Verbrauch. Das Gespräch eines
+Strukturierte Einträge bleiben JSON, ohne Verbrauch; ein `step` behält aber
+die Zahl seiner Websuchen (`searches`, seit 2026-10-27). Die Suche läuft im
+Schritt selbst, und ihre Treffer stehen nur dann in `sources`/
+`search_excerpts`, wenn der Anbieter sie schickt: GPT-6 Luna schickt seit
+mindestens 2026-10-23 keine, und ein Prüfer schrieb deshalb, der Agent habe
+nichts recherchiert und seine Links nie geöffnet (Chat „Harry Kane und der
+Ballon d'Or“, 2026-10-26). Der Prüfer-Prompt erklärt das; `AgentCompletion`
+loggt solche Schritte mit den Feldnamen ihrer Chunks („Agent search without
+citations“), um die Treffer ohne bezahlte Probe zu finden. Das Gespräch eines
 Prüfers fasst 60 % des Kontextfensters seines Modells nach der Antwort, zu 3
 Zeichen je Token, höchstens 400.000 Zeichen (`session_budget`); der Rest
 bleibt für Suchtreffer. Gezählt wird, was jede weitere Runde erneut sendet,

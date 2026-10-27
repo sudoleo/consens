@@ -549,7 +549,13 @@
       const count = window.App.getSelectedModelCount?.() || 0;
       const minimum = comparisonMinimum();
       const linked = state.linkedAriaLabel || pending?.options?.ariaLabel || select.getAttribute("aria-label");
-      displayLabel = window.App.words.crossCheck(count, minimum);
+      // In audit mode the reviewers have their own control under the field
+      // (agent-mode.js renderComposerMode), so the chip names the chat model
+      // that does the work; while its list loads, the name the first frame
+      // painted (app-bootstrap.js).
+      displayLabel = window.App.agentPreferences?.auditing?.() === true
+        ? (select.dataset.catalog === "ready" ? selectedLabel : window.App.firstFrame?.agentModel?.() || selectedLabel)
+        : window.App.words.crossCheck(count, minimum);
       displayTitle = count < minimum
         ? (minimum === 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
           : `${selectedLabel} writes the answer. Choose at least 2 models to cross-check it.`)
@@ -1261,6 +1267,8 @@
       state.displayButton.setAttribute("aria-expanded", "false");
     }
 
+    state.anchor?.setAttribute("aria-expanded", "false");
+    state.anchor = null;
     if (expandedModelPicker === select) {
       expandedModelPicker = null;
       composerPickerResize?.disconnect();
@@ -1271,7 +1279,10 @@
   // the virtual keyboard. Keep the existing menu host and keyboard handlers.
   function fitComposerPicker(state) {
     if (!state?.menu.classList.contains('is-open') || !state.host.closest('.chat-input-container')) return;
-    const trigger = (state.displayButton || state.host).getBoundingClientRect();
+    // A menu opened from another control (the models under the field) comes
+    // out of that control while it is on screen.
+    const anchor = state.anchor?.isConnected && state.anchor.getClientRects().length ? state.anchor : null;
+    const trigger = (anchor || state.displayButton || state.host).getBoundingClientRect();
     const parent = state.menu.offsetParent;
     if (!parent) return;
     const bounds = parent.getBoundingClientRect();
@@ -1309,7 +1320,9 @@
   // `secondary` opens the reasoning level, `level: "models"` the chat model
   // list. A linked companion opens inside its parent's menu, on its own level.
   // `trigger`: the control that asked (the login dialog gives the focus back).
-  function openModelPicker(select, { secondary = false, level = secondary ? "secondary" : null, trigger = null } = {}) {
+  // `anchor`: the control the menu comes out of, when not the chip (the
+  // models under the field and the reviewers beside the chip).
+  function openModelPicker(select, { secondary = false, level = secondary ? "secondary" : null, trigger = null, anchor = null } = {}) {
     let state = getModelPickerState(select);
     // A guest cannot choose models yet. Every way into the composer's
     // pickers (the chip, Reasoning, Comparison models, a notice) is this
@@ -1359,17 +1372,22 @@
 
     if (state.companion && level === "companion") enterCompanion(state);
     else renderCustomModelPicker(select);
+    if (state.anchor && state.anchor !== anchor) state.anchor.setAttribute("aria-expanded", "false");
+    state.anchor = anchor;
+    anchor?.setAttribute("aria-expanded", "true");
     // One of the app's popovers (App.popover): every other menu closes, and
     // the menu comes out of its chip (overlays.css).
     if (!state.menu.classList.contains("is-open")) {
-      window.App.popover?.opened(state.menu, { trigger: state.displayButton || state.host });
+      window.App.popover?.opened(state.menu, { trigger: anchor || state.displayButton || state.host });
     }
     state.host.classList.add("is-expanded", "is-open");
     if (!state.displayButton) state.host.setAttribute("aria-expanded", "true");
     state.menu.classList.add("is-open");
 
     if (state.displayButton) {
-      state.displayButton.setAttribute("aria-expanded", "true");
+      // Opened from another control, the menu is that control's: the chip
+      // stays at rest.
+      state.displayButton.setAttribute("aria-expanded", String(!anchor));
     }
 
     expandedModelPicker = select;
@@ -1510,8 +1528,10 @@
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
+          // Back to the control the menu came out of.
+          const anchor = getModelPickerState(select).anchor;
           collapseExpandedModelPicker(select);
-          (displayButton || host).focus();
+          (anchor?.isConnected ? anchor : displayButton || host).focus();
         } else if (navigateModelGroup(select, event)) {
           event.preventDefault();
         } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {

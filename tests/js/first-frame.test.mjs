@@ -38,7 +38,7 @@ const BODY = `
         <button id="sendButton" aria-disabled="true" disabled></button>
       </div>
     </div>
-    <div id="composerModeBar"><span id="composerReasoningState">Off</span><span id="composerModelIcons"></span></div>
+    <div id="composerModeBar"><span id="composerReasoningState">Off</span><button id="composerModelPicker"><span id="composerModelLabel" hidden></span><span id="composerModelIcons"></span></button></div>
     <div id="composerStarters"><button class="composer-starter" data-starter="check">Check an AI answer</button></div>
   </div>`;
 
@@ -158,6 +158,24 @@ describe("the composer's first frame (B1, B2, B13)", () => {
     expect(marks.map(mark => mark.dataset.provider)).toEqual(["openai", "gemini"]);
     expect(marks[0].querySelector("img").getAttribute("src")).toBe("/static/openai.svg");
     expect(marks[0].querySelector("img").classList.contains("chatgpt-logo")).toBe(true);
+  });
+
+  // Audit (Max, 2026-10-27): the chip names the chat model, the reviewers
+  // say their words next to their marks under the field (agent-mode.js).
+  it("draws the chat model on the chip and the reviewers' words in the bar in audit mode", () => {
+    const look = JSON.stringify({ uid: "u1", agentModel: "Claude Opus 5.5", agentEffort: "High", audit: true });
+    const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": look,
+      pref_check_Grok: "false" } });
+    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Opus 5.5");
+    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5");
+    const label = document.getElementById("composerModelLabel");
+    expect(label.hidden).toBe(false);
+    expect(label.textContent).toBe("2 AIs cross-check");
+    expect(document.getElementById("composerModelPicker").getAttribute("aria-label")).toBe("2 AIs cross-check");
+    // Without audit the bar keeps only its marks.
+    const plain = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": JSON.stringify({ uid: "u1" }) } }).document;
+    expect(plain.getElementById("composerModelLabel").hidden).toBe(true);
+    expect(chip(plain).querySelector(".model-picker-display-text").textContent).toBe("3 AIs cross-check");
   });
 
   it("names the default model without a remembered look, and never another account's words", () => {

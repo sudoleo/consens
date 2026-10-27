@@ -518,7 +518,11 @@
              .composer-lead    links:  (+), darin der Modus (App.runMode)
              .composer-models  rechts: wer antwortet, EIN Chip je Modus (Agent:
                                Chatmodell + Vergleichsmodelle in einem Menue,
-                               sonst die antwortenden Modelle)
+                               sonst die antwortenden Modelle). Im Audit-Modus
+                               nennt der Chip das Chatmodell; die Pruefer
+                               stehen mit "2 KIs pruefen mit" in der Leiste
+                               darunter, im Chat (ohne Leiste) als Icons vor
+                               dem Chip (#composerReviewers, agent-mode.js)
              .input-actions-container rechts aussen: Demo und Senden -->
         <div class="composer-lead">
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Mode, files and options" aria-label="Mode, files and options">
@@ -529,6 +533,9 @@
           </button>
         </div>
         <div class="composer-models">
+          <button type="button" id="composerReviewers" class="composer-reviewers" aria-haspopup="listbox" aria-expanded="false" hidden>
+            <span id="composerReviewerIcons" class="composer-model-icons"></span>
+          </button>
           <div id="agentModelControls" class="agent-model-controls" hidden>
             <div class="select-wrapper agent-model-picker">
               <select id="agentModelDropdown" aria-label="Chat model" disabled>
@@ -580,7 +587,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
             <span class="composer-tool-label">Attach</span>
           </button>
-          <button type="button" id="composerModelPicker" class="composer-agent-toggle composer-mode-models" aria-label="Configure models for your next question" aria-haspopup="listbox" title="Configure models">
+          <button type="button" id="composerModelPicker" class="composer-agent-toggle composer-mode-models" aria-label="Configure models for your next question" aria-haspopup="listbox" aria-expanded="false" title="Configure models">
+            <!-- Vor den Icons im Markup, damit das erste Bild (app-bootstrap.js)
+                 es mit ihnen vorfindet; shell.css stellt es dahinter. -->
+            <span id="composerModelLabel" class="composer-tool-label" hidden></span>
             <span id="composerModelIcons" class="composer-model-icons"></span>
           </button>
         </div>

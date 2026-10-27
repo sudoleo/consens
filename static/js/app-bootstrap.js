@@ -159,6 +159,9 @@
       look.agentModel = text(agent.selectedOptions?.[0]);
       look.agentEffort = text(document.getElementById("agentReasoningEffort")?.selectedOptions?.[0]);
     }
+    // In audit mode the chip names the chat model and the reviewers say
+    // their words under the field (agent-mode.js renderReviewers).
+    if (window.App.agentPreferences?.auditing?.() === true) look.audit = true;
     try { window.localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private mode */ }
   }
   window.App.firstFrame = Object.freeze({
@@ -405,7 +408,12 @@
       const effortWrapper = document.getElementById("agentReasoningEffort")?.parentElement;
       if (effortWrapper) effortWrapper.hidden = true;
       const crossCheck = window.App.words.crossCheck(checkedFamilies().length);
-      seedPickerChip(agentControls.querySelector(".agent-model-picker"), crossCheck, crossCheck);
+      if (rememberedLook()?.audit === true) {
+        // The chat model's name; its tooltip and full name follow with the
+        // model list (model-picker.js).
+        const model = window.App.firstFrame.agentModel();
+        seedPickerChip(agentControls.querySelector(".agent-model-picker"), model);
+      } else seedPickerChip(agentControls.querySelector(".agent-model-picker"), crossCheck, crossCheck);
     }
     const consensusChip = once("consensusChip", document.querySelector(".consensus-model .select-wrapper select") && document.querySelector(".consensus-model"));
     if (consensusChip) {
@@ -430,7 +438,18 @@
       reasoning.dataset.seeded = "true";
     }
     const icons = once("icons", document.getElementById("composerModelIcons"));
-    if (icons) seedModelIcons(icons);
+    if (icons) {
+      seedModelIcons(icons);
+      // The reviewers' words stand before their marks in the markup (CSS
+      // puts them after), so they are parsed by now.
+      const label = document.getElementById("composerModelLabel");
+      if (label && agentLook && rememberedLook()?.audit === true) {
+        const words = window.App.words.crossCheck(checkedFamilies().length, 1);
+        label.textContent = words;
+        label.hidden = false;
+        label.parentElement.setAttribute("aria-label", words);
+      }
+    }
     // On a phone the Watches hint is a still dot on the menu island until
     // Watches is opened once (watch.js): there from the first frame, not
     // added a second later (Apple-Audit B2). Above the overlay width it is a

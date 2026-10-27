@@ -215,6 +215,65 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('composerComparisonStatus').hidden).toBe(true);
     dom.window.close();
   });
+  // Audit (Max, 2026-10-27): the reviewers say what they do next to their
+  // marks under the field; in a chat, where the bar steps aside, their marks
+  // stand before the chip, which names the chat model (model-picker.js).
+  it("gives the reviewers their own control in audit mode", () => {
+    const { window, document, dom } = loadScripts(["static/js/app-text.js", "static/js/user-settings.js",
+      "static/js/run-mode.js", "static/js/agent-mode.js"], {
+      body: BODY + `<button id="composerModelPicker" aria-label="Configure models for your next question" title="Configure models">
+        <span id="composerModelLabel" hidden></span></button>
+        <button id="composerReviewers" hidden><span id="composerReviewerIcons"></span></button>`,
+      before(window) {
+        window.App = { modelPrefs: [{ key: "OpenAI", label: "OpenAI", provider: "openai", checkId: "openaiCheck",
+          selectId: "openaiModelSelect", textId: "openaiModelText", responseId: "openaiResponse" }],
+          getModelOptionLabel: option => option?.textContent || "", getSelectedModelCount: () => 1,
+          initCustomModelPicker: vi.fn(), trackAppEvent: vi.fn() };
+        window.localStorage.setItem("runMode", "agent");
+        window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
+      }
+    });
+    let audit = false;
+    window.App.agentPreferences = { auditing: () => audit };
+    window.App.agentChat = { isSelected: () => true, looksAgent: () => true,
+      modeState: () => ({ family: "agent", canUse: true, pending: false }) };
+    const picker = document.getElementById("composerModelPicker");
+    const label = document.getElementById("composerModelLabel");
+    const reviewers = document.getElementById("composerReviewers");
+    document.body.classList.add("is-hero");
+    window.App.renderComposerMode();
+    expect(label.hidden).toBe(true);
+    expect(reviewers.hidden).toBe(true);
+    expect(picker.getAttribute("aria-label")).toBe("Configure models for your next question");
+
+    audit = true;
+    window.App.renderComposerMode();
+    expect(label.hidden).toBe(false);
+    expect(label.textContent).toBe("1 AI cross-checks");
+    expect(picker.getAttribute("aria-label")).toBe("1 AI cross-checks");
+    expect(picker.title).toBe("Choose the models that review the agent's work");
+    // The start screen has the bar: no second control in the field.
+    expect(reviewers.hidden).toBe(true);
+
+    document.body.classList.remove("is-hero");
+    window.App.renderComposerMode();
+    expect(document.getElementById("composerModeBar").hidden).toBe(true);
+    expect(reviewers.hidden).toBe(false);
+    expect(reviewers.getAttribute("aria-label")).toBe("1 AI cross-checks");
+    const [mark] = reviewers.querySelectorAll(".composer-model-icon");
+    expect(mark.dataset.provider).toBe("openai");
+    // Named once, by the button.
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.hasAttribute("role")).toBe(false);
+
+    audit = false;
+    window.App.renderComposerMode();
+    expect(reviewers.hidden).toBe(true);
+    expect(label.hidden).toBe(true);
+    expect(picker.title).toBe("Configure models");
+    dom.window.close();
+  });
+
   it("previews the chosen models and marks the view by the run on screen", () => {
     const { window, document, dom } = boot();
     const syncPreview = vi.fn();

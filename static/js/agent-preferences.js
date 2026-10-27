@@ -54,6 +54,8 @@
     // Also when set from code (the Agent's settings card): the select follows.
     sync();
     window.syncCustomModelPickers?.();
+    // The reviewers' own control under the field (agent-mode.js).
+    App.renderComposerMode?.();
     window.updateQuestionInputAccess?.();
   }
 

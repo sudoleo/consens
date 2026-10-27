@@ -154,6 +154,14 @@ ANSWER_SOURCES_MAX = 10
 CITATION_CONTENT_CHARS = 4000
 # Citation records per call; providers repeat cumulative annotation snapshots.
 CITATIONS_MAX = 40
+# The fields of a streamed chunk this client reads or knows to ignore. Any
+# other field of a step that searched without a URL citation is logged by
+# name (AgentCompletion._note_shapes).
+_KNOWN_CHUNK_FIELDS = frozenset({"id", "object", "created", "model", "provider", "choices", "usage",
+                                 "system_fingerprint", "service_tier", "error"})
+_KNOWN_CHOICE_FIELDS = frozenset({"index", "delta", "finish_reason", "native_finish_reason", "logprobs", "message"})
+_KNOWN_DELTA_FIELDS = frozenset({"role", "content", "reasoning", "reasoning_content", "reasoning_details",
+                                 "tool_calls", "annotations", "refusal"})
 # OpenAI's own citation marks, private-use characters in the text: U+E200
 # opens, U+E202 separates, U+E201 closes, as in [E200]cite[E202]turn2search0
 # [E201] or [E200]cite[E202]https://...[E201]; sometimes URLs only and without
@@ -648,6 +656,8 @@ class AgentCompletion:
         # cites it. Transient evidence for the source excerpts (see _annotations).
         self.citations = []
         self._citation_keys = set()
+        # Field names of a searching step's chunks (_note_shapes).
+        self._shapes = set()
         # Text length when the first search results arrived (see _drop_presearch_text).
         self._results_at = None
         # Citation marks (CITE_MARK): an unfinished one held back, the
@@ -931,6 +941,33 @@ class AgentCompletion:
         if limit and type(count) is int and count > limit:
             record_metric("search_overrun", model.model, processed=count - limit)
 
+    def _note_shapes(self, data, choice, delta):
+        """Field names of a chunk beyond the known ones, and the kinds of its
+        annotations: where a provider's search hits arrive when they are not
+        URL citations (_record_missing_citations). Names only, never values."""
+        shapes = self._shapes
+        if len(shapes) >= 40:
+            return
+        shapes.update(f"chunk.{key}" for key in data if key not in _KNOWN_CHUNK_FIELDS)
+        shapes.update(f"choice.{key}" for key in choice if key not in _KNOWN_CHOICE_FIELDS)
+        shapes.update(f"delta.{key}" for key in delta if key not in _KNOWN_DELTA_FIELDS)
+        for where, raw in (("delta", delta.get("annotations")), ("message", (choice.get("message") or {}).get("annotations"))):
+            for annotation in raw[:5] if isinstance(raw, list) else []:
+                if isinstance(annotation, dict):
+                    shapes.add(f"{where}.annotation:{str(annotation.get('type'))[:40]}:{','.join(sorted(annotation)[:8])}")
+
+    def _record_missing_citations(self, model):
+        """A step that searched but kept no hit (GPT-6 Luna in every logged
+        step since at least 2026-10-23): its sources, the source excerpts and
+        the reviewers' log have nothing of the search (agent_audit.review_entry
+        says it searched). Logged with the chunk shapes seen, to find where
+        the hits went; never fails the step."""
+        count = (self.usage or {}).get("web_search_requests")
+        if type(count) is int and count > 0 and not self.sources and not self.citations:
+            record_metric("search_without_citations", model.model, processed=count)
+            logging.warning("Agent search without citations model=%s searches=%s shapes=%s",
+                            model.model, count, ";".join(sorted(self._shapes))[:1500])
+
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None):
         """``session_id`` keeps the request on the endpoint of the chat's
@@ -1085,6 +1122,8 @@ class AgentCompletion:
                         # position includes the claim it arrived with.
                         self._annotations(delta.get("annotations"), before)
                         self._annotations((choice.get("message") or {}).get("annotations"), before)
+                        if native_searches:
+                            self._note_shapes(data, choice, delta)
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
                 # A mark still held at the end ends with the stream: its URLs
@@ -1117,3 +1156,5 @@ class AgentCompletion:
                 # Also the partial text of a stream that broke off.
                 self._drop_presearch_text(model)
                 self._record_search_overrun(model, native_searches)
+                if native_searches:
+                    self._record_missing_citations(model)

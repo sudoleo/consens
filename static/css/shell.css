@@ -3779,6 +3779,8 @@ body .theme-toggle:focus-visible {
   .composer-agent-toggle:hover { background: var(--hover); }
 }
 .composer-agent-toggle:disabled { opacity: .45; cursor: default; background: transparent; }
+/* The models' menu comes out of this button (model-picker.js anchor). */
+.composer-agent-toggle[aria-expanded="true"] { background: var(--hover); }
 .composer-agent-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .composer-tool { margin-left: 0; font-weight: 500; }
 .composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
@@ -3788,6 +3790,10 @@ body .theme-toggle:focus-visible {
 .composer-agent-state { color: var(--ink-3); font-size: inherit; font-weight: var(--font-weight-regular); }
 .composer-mode-bar { --mode-active: var(--agree); }
 .composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
+/* Audit: the reviewers say what they do next to their marks ("2 AIs
+   cross-check"), in the words of the tools beside them. */
+.composer-mode-models .composer-tool-label { order: 1; color: var(--ink); font-weight: 500; }
+.composer-mode-models:has(.composer-tool-label:not([hidden])) { padding-right: 6px; }
 .composer-model-icons { display: flex; align-items: center; padding-left: 8px; }
 .composer-model-icon {
   display: grid;

@@ -24,7 +24,10 @@
      .composer-models          who answers, one chip per mode: in Agent the
                                chat model with its comparison models (one
                                menu), else the comparison or consensus
-                               models
+                               models. In audit mode the chip names the chat
+                               model and the reviewers' marks stand before
+                               it in a chat (.composer-reviewers); on the
+                               start screen they sit in the bar below
      .input-actions-container  Demo (onboarding only), Send
    Everything above the field (files, quote, run notice, Google chips) is a
    full-width row of its own.
@@ -89,6 +92,25 @@
 }
 
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 230px; flex: 1 1 auto; }
+/* Audit in a chat: the reviewers' marks before the chip, which names the
+   chat model (agent-mode.js renderReviewers). The start screen shows them
+   in the bar under the field instead. Built like the chip beside it. */
+.composer-reviewers {
+  position: relative;
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  min-height: 36px; padding: 0 8px 0 6px;
+  border: 0; border-radius: var(--radius-xs); background: transparent;
+  cursor: pointer; transition: background var(--dur-press) var(--ease-standard);
+}
+.composer-reviewers[hidden] { display: none; }
+.composer-reviewers[aria-expanded="true"] { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  .composer-reviewers:hover { background: var(--hover); }
+}
+.composer-reviewers:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .composer-reviewers::before { content: ""; position: absolute; inset: var(--hit-slop); }
+}
 .agent-effort-control { display: flex; min-width: 0; flex: 0 0 auto; }
 .consensus-model { min-width: 0; margin: 0; }
 :is(.agent-model-controls, .agent-effort-control, .consensus-model)[hidden] { display: none; }

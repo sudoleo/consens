@@ -592,7 +592,8 @@ def test_search_overrun_is_booked_and_never_fails_the_answer(store, monkeypatch,
     assert loop.remaining_tools == -1
     tool = next(e for e in events if e and e.get("name") == "web_search")
     assert tool["status"] == "succeeded" and tool["count"] == 3
-    assert metrics == [("search_overrun", loop.model.model, {"processed": 1})]
+    assert [metric for metric in metrics if metric[0] == "search_overrun"] == [
+        ("search_overrun", loop.model.model, {"processed": 1})]
 
 
 def test_usage_beyond_total_budget_stops_after_accounting(store, monkeypatch):

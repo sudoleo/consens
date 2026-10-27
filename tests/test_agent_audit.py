@@ -874,6 +874,24 @@ def test_a_log_entry_is_read_structured_and_shortened():
     assert review_entry(broken, "{not json")["content"] == "{not json"
 
 
+def test_a_step_that_searched_without_hits_says_so():
+    """GPT-6 Luna's searches arrive without hits: the reviewer read a step
+    without tool calls and search excerpts as unresearched and marked the
+    answer's links as never opened (Max, 2026-10-27). The step now says how
+    often it searched; the prompt explains it."""
+    step = {"seq": 4, "actor": "agent", "kind": "step", "name": "m", "data": "agent", "format": "json"}
+    content = {"text": "t", "tool_calls": [], "sources": [], "search_excerpts": [],
+               "usage": {"web_search_requests": 5, "cost": 1}}
+    assert review_entry(step, json.dumps(content))["content"] == {
+        "text": "t", "tool_calls": [], "sources": [], "search_excerpts": [], "searches": 5}
+    for usage in ({"web_search_requests": 0}, {"web_search_requests": None}, {}, None):
+        assert "searches" not in review_entry(step, json.dumps({**content, "usage": usage}))["content"]
+    # The run's end carries the turn's usage, not a step's searches.
+    end = {**step, "kind": "end", "actor": "app", "data": "app"}
+    assert "searches" not in review_entry(end, json.dumps(content))["content"]
+    assert '"searches" counts them' in agent_audit.review_system_prompt("UTC")
+
+
 def test_a_round_message_carries_new_entries_and_in_the_end_the_answer():
     entries = [({"seq": 1, "actor": "app", "kind": "start", "data": "app", "format": "text"}, "x" * 3000)]
     live = round_message(2, entries)

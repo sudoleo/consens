@@ -2454,7 +2454,9 @@ describe('one Agent chip for the chat model and its comparison models', () => {
 
     audit = true;
     w.syncCustomModelPickers();
-    expect(chipText()).toBe('1 AI cross-checks');
+    // The reviewers have their own control under the field (agent-mode.js),
+    // so the chip names the chat model (Max, 2026-10-27).
+    expect(chipText()).toBe('DeepSeek V4.1 Flash');
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 1 AI cross-checks it.');
     expect(w.App.agentChat.sendBlocker()).toBeNull();
 
@@ -2471,8 +2473,23 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     expect(count().textContent).toBe('At least 1 · 0 selected');
     expect(count().classList.contains('is-invalid')).toBe(true);
     expect(menu.querySelectorAll('.model-picker-row').length).toBe(rows);
-    expect(chipText()).toBe('No cross-check');
+    expect(chipText()).toBe('DeepSeek V4.1 Flash');
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer. Choose a model to review it.');
     expect(w.App.agentChat.sendBlocker().message).toBe('Select between one and 6 reviewers to send your message.');
+
+    // The reviewers' control opens their level, and the menu comes out of
+    // it: it says open and closed like the chip.
+    w.App.collapseExpandedModelPicker();
+    const anchor = d.createElement('button');
+    d.body.append(anchor);
+    w.App.openModelPicker(d.getElementById('consensusModelDropdown'), { anchor });
+    expect(menu.classList.contains('is-open')).toBe(true);
+    expect(anchor.getAttribute('aria-expanded')).toBe('true');
+    expect(menu.querySelector('[data-picker-level]')).toBeNull();
+    expect(menu.querySelector('.model-picker-row')).not.toBeNull();
+    w.App.collapseExpandedModelPicker();
+    expect(menu.classList.contains('is-open')).toBe(false);
+    expect(anchor.getAttribute('aria-expanded')).toBe('false');
     dom.window.close();
   });
 

@@ -425,6 +425,7 @@
       icons.dataset.models = key;
       icons.dataset.providers = providers;
     }
+    renderReviewers(beta, start, models.length);
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
     // The comparison on screen says how far it got. (Its "Shown: Compare
@@ -434,6 +435,54 @@
     status.textContent = summary ? `${summary}.` : "";
     status.title = status.textContent;
     status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
+  }
+
+  // In audit mode the comparison models review the agent's work and get a
+  // control of their own (Max, 2026-10-27): on the start screen the marks
+  // in the bar say "2 AIs cross-check", in a chat (no bar) the marks stand
+  // before the chip, which then names the chat model (model-picker.js).
+  // Both open the reviewers' level of the Agent menu.
+  function renderReviewers(beta, start, count) {
+    const auditing = beta && window.App.agentPreferences?.auditing?.() === true;
+    const words = auditing ? window.App.words.crossCheck(count, 1) : "";
+    // One write, and only of a change: i18n.js translates what is written.
+    const write = (node, name, value) => {
+      const current = name === "text" ? node.textContent : node.getAttribute(name);
+      if (current === (window.App.t?.(value) ?? value)) return;
+      if (name === "text") node.textContent = value;
+      else node.setAttribute(name, value);
+    };
+    const picker = document.getElementById("composerModelPicker");
+    const label = document.getElementById("composerModelLabel");
+    if (label) {
+      label.hidden = !auditing;
+      if (auditing) write(label, "text", words);
+    }
+    if (picker) {
+      // The name holds the words on screen (WCAG 2.5.3).
+      write(picker, "aria-label", auditing ? words : "Configure models for your next question");
+      write(picker, "title", auditing ? "Choose the models that review the agent's work" : "Configure models");
+    }
+    const reviewers = document.getElementById("composerReviewers");
+    if (!reviewers) return;
+    reviewers.hidden = !auditing || start;
+    if (reviewers.hidden) return;
+    write(reviewers, "aria-label", words);
+    write(reviewers, "title", "Choose the models that review the agent's work");
+    // The bar's marks, the same nodes: they are drawn there in every mode.
+    const marks = document.getElementById("composerModelIcons");
+    const own = document.getElementById("composerReviewerIcons");
+    if (marks && own && own.dataset.models !== marks.dataset.models) {
+      own.replaceChildren(...Array.from(marks.children, mark => {
+        const copy = mark.cloneNode(true);
+        // Named once, by the button.
+        copy.removeAttribute("role");
+        copy.removeAttribute("aria-label");
+        copy.setAttribute("aria-hidden", "true");
+        return copy;
+      }));
+      own.dataset.models = marks.dataset.models || "";
+    }
   }
 
   function revealBar(bar) {

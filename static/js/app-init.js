@@ -1229,7 +1229,7 @@
         // Models remains one compact sidebar row. Its detailed controls open
         // on the composer's existing run picker instead of expanding the
         // navigation into a six-row settings panel.
-        document.querySelectorAll("#sidebarModelPicker, #composerModelPicker").forEach(trigger => {
+        document.querySelectorAll("#sidebarModelPicker, #composerModelPicker, #composerReviewers").forEach(trigger => {
           trigger.addEventListener("click", function (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -1237,18 +1237,25 @@
               window.App.askToLogIn("Log in to choose your models.", { trigger, source: "models" });
               return;
             }
+            // A second click closes: the menu left as this click took the
+            // focus from it (model-picker.js focusout).
+            if (window.App.popover?.recentTrigger?.(400) === trigger) return;
             // Kein Choice-State mehr, den die Modellwahl stoeren koennte: eine
             // Folgefrage ist der Default, und die Modelle duerfen dabei jederzeit
             // gewechselt werden (der naechste Lauf nutzt die neue Auswahl).
             const consensusSelect = document.getElementById("consensusModelDropdown");
             if (!consensusSelect) return;
 
+            // The composer's own controls are the menu's anchor: it comes out
+            // of the control that was clicked, not out of the chip.
+            const anchor = trigger.id === "sidebarModelPicker" ? null : trigger;
             const openPicker = () => {
-              window.App.openModelPicker(consensusSelect);
+              window.App.openModelPicker(consensusSelect, { anchor });
               consensusSelect._customModelPicker?.displayButton?.focus({ preventScroll: true });
             };
 
-            const source = trigger.id === "sidebarModelPicker" ? "sidebar" : "composer_toolbar";
+            const source = trigger.id === "sidebarModelPicker" ? "sidebar"
+              : trigger.id === "composerReviewers" ? "composer_reviewers" : "composer_toolbar";
             if (source === "sidebar" && usesOverlaySidebar()) {
               closeOverlaySidebar();
               window.setTimeout(openPicker, 180);

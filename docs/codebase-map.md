@@ -4142,7 +4142,9 @@ Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
 was die Vergleichsmodelle tun: „6 AIs cross-check“ („6 KIs prüfen mit“,
 `App.words.crossCheck`, unter 2 Modellen „No cross-check“); das Chatmodell
 steht im Tooltip („<Chatmodell> writes the answer, 6 AIs cross-check it.“)
-und im Menü. Vorher „<Chatmodell> +6“, das Neulingen nichts sagte. Der erste
+und im Menü. Vorher „<Chatmodell> +6“, das Neulingen nichts sagte. Im
+Audit-Modus nennt der Chip seit 2026-10-27 das Chatmodell, und die Prüfer
+haben ein eigenes Element (siehe „Audit statt Vergleich“). Der erste
 Frame (`app-bootstrap.js`) zeichnet dasselbe Label; `App.firstFrame` merkt
 sich den Namen des Chatmodells aus dessen Select. `renderControls` verknüpft
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
@@ -5538,7 +5540,17 @@ streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
 Die Vergleichsmodelle sind hier Prüfer, also reicht eines
 (`comparison_selection(..., audit=True)`: 1 bis `MAX_RUN_FAMILIES`, sonst 2;
 im Browser `App.agentPreferences.auditing()` für Chip, Menü und Senden, seit
-2026-10-26).
+2026-10-26). Seit 2026-10-27 haben die Prüfer im Composer ein eigenes
+Bedienelement: Der Agent-Chip nennt im Audit-Modus das Chatmodell
+(`model-picker.js` `syncCustomModelPicker`, während die Liste lädt
+`App.firstFrame.agentModel()`), im Startbildschirm steht „2 AIs cross-check“
+(`#composerModelLabel`) neben den Marken der Leiste (`#composerModelPicker`),
+im Chat (ohne Leiste) stehen dieselben Marken vor dem Chip
+(`#composerReviewers`, `agent-mode.js` `renderReviewers`). Beide öffnen die
+Prüfer-Ebene des Agent-Menüs, das aus dem geklickten Knopf kommt
+(`openModelPicker(…, { anchor })`, `fitComposerPicker`, `aria-expanded` am
+Anker, der Chip bleibt in Ruhe). Der erste Frame zeichnet das nach
+`App.firstFrame` (`look.audit`).
 Ab dem Start des Laufs folgt jedes Vergleichsmodell dem Arbeitsprotokoll
 (`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
 Thread, eine Sitzung Art `audit`, Runden über
@@ -5557,6 +5569,11 @@ Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
 `unplaced`); scheitert die Schlussrunde eines Prüfers, gelten seine
 Live-Befunde (`live`). Runden passen in den Platz des Prüfergesprächs
 (`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
+`review_entry` lässt den Verbrauch weg, nennt aber die Suchen eines Schritts
+(`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und
+der Prüfer hielt den Schritt sonst für unrecherchiert (`AgentCompletion`
+loggt solche Schritte mit den Feldnamen der Chunks, „Agent search without
+citations“, Metrik `search_without_citations`);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
 Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört

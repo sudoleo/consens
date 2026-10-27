@@ -74,7 +74,44 @@ def test_comparison_answer_that_overruns_its_search_limit_completes(monkeypatch)
     assert completion.usage["web_search_requests"] == 3
     assert completion.usage["estimated_cost_nano_usd"] == 31_000_000 and completion.usage["cost_source"] == "provider"
     # Counted once per answer and model: two searches beyond the limit.
-    assert metrics == [("search_overrun", "anthropic/claude-haiku-4.5", {"processed": 2})]
+    assert [metric for metric in metrics if metric[0] == "search_overrun"] == [
+        ("search_overrun", "anthropic/claude-haiku-4.5", {"processed": 2})]
+
+
+def test_a_search_without_citations_is_logged_with_the_chunk_shapes(monkeypatch, caplog):
+    """GPT-6 Luna searched in every logged step since at least 2026-10-23 and
+    kept no hit (2026-10-27): the log names the fields its chunks carried,
+    never their values, so the hits can be found without a paid probe."""
+    from app.services.agent_tools import search_tools
+    from app.services.llm import agent_client
+    model = resolve_agent_model("claude-haiku-4-5")
+    metrics = []
+    monkeypatch.setattr(agent_client, "record_metric", lambda *args, **kwargs: metrics.append((*args, kwargs)))
+    chunk = packet({"content": "Answer.", "annotations": [{"type": "url_citation", "url": "https://a.example/x"}]},
+                   finish="stop")
+    chunk["citations"] = ["https://a.example/x"]
+    transport(monkeypatch, [[chunk, packet(usage={"prompt_tokens": 900, "completion_tokens": 50, "cost": .01,
+                                                  "server_tool_use_details": {"web_search_requests": 2}})]])
+    completion = AgentCompletion()
+    with caplog.at_level("WARNING"):
+        list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key",
+                               tools=search_tools(model, 2), native_searches=2))
+    assert completion.text == "Answer." and completion.sources == []
+    assert ("search_without_citations", "anthropic/claude-haiku-4.5", {"processed": 2}) in metrics
+    [line] = [record.getMessage() for record in caplog.records if "without citations" in record.getMessage()]
+    assert "searches=2" in line and "chunk.citations" in line and "delta.annotation:url_citation:type,url" in line
+    assert "a.example" not in line
+
+    # A step whose hits arrived as URL citations says nothing.
+    metrics.clear()
+    transport(monkeypatch, [[packet({"content": "Answer.", "annotations": [
+        {"type": "url_citation", "url_citation": {"url": "https://a.example/x", "title": "A"}}]}, finish="stop"),
+        packet(usage={"prompt_tokens": 900, "completion_tokens": 50, "cost": .01,
+                      "server_tool_use_details": {"web_search_requests": 1}})]])
+    completion = AgentCompletion()
+    list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key",
+                           tools=search_tools(model, 2), native_searches=2))
+    assert completion.sources and not [metric for metric in metrics if metric[0] == "search_without_citations"]
 
 
 @pytest.mark.parametrize("value", [True, False, -1, "NaN", "Infinity", 1e100, "no", {}, None])
