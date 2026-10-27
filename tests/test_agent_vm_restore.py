@@ -86,6 +86,28 @@ def test_restore_is_refused_while_a_response_runs_without_a_checkpoint_or_for_ot
     assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 403
 
 
+def test_the_workspace_is_restored_only_while_no_chat_uses_it_and_every_chat_hears_of_it(admin_api, fake_vm):
+    """Since 2026-10-27 the VM is the account's workspace: restoring it
+    reaches every chat's folder, so no other chat's message may be running,
+    and the other chats' next messages are told too (agent_workspace)."""
+    from datetime import datetime, timedelta, timezone
+    from app.services import agent_workspace
+    client, store, _ = admin_api
+    chat, turn_id, _ = vm_turn(store)
+    other, _ = pending(store, request_id="other-chat")
+    agent_workspace.claim(store, UID, chat, "earlier", provider="fake")
+    agent_workspace.release(store, UID, "earlier")
+    agent_workspace.claim(store, UID, other, "running", provider="fake")
+    busy = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
+    assert busy.status_code == 409 and busy.json()["code"] == "running"
+    agent_workspace.ref(store.db, UID).update({"lease": {
+        "chat_id": other, "turn_id": "running", "until": datetime.now(timezone.utc) - timedelta(seconds=1)}})
+    done = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
+    assert done.status_code == 200 and ("restore", agent_vm.workspace_name(UID), "v3") in fake_vm.calls
+    assert agent_workspace.record(store.db, UID)["restores"] == 1
+    assert agent_workspace.claim(store, UID, other, "next", provider="fake") is True
+
+
 def test_the_next_message_is_told_once(admin_api, fake_vm):
     client, store, _ = admin_api
     chat, turn_id, _ = vm_turn(store)

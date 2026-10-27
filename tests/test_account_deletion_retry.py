@@ -83,6 +83,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "auth": 0,
         "outbox": 0,
         "tier_audit": 0,
+        "workspace": 0,
     }
 
     monkeypatch.setattr(
@@ -94,6 +95,11 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         service,
         "_delete_api_access",
         lambda uid: calls.__setitem__("api", calls["api"] + 1),
+    )
+    monkeypatch.setattr(
+        service,
+        "_delete_agent_workspace",
+        lambda uid: calls.__setitem__("workspace", calls["workspace"] + 1),
     )
     monkeypatch.setattr(
         service,
@@ -171,6 +177,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["shares"] == 2
     assert calls["api"] == 1
     assert calls["subcollections"] == 1
+    # The account's workspace VM (agent_workspace.py) goes with it, once.
+    assert calls["workspace"] == 1
     assert calls["chats"] == 1
     assert calls["watches"] == 1
     # R09: stored /ask answers are owner data and go with the account.

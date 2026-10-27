@@ -225,7 +225,7 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     events = list(loop.run())
     imported, hidden = results(loop)
     assert imported == {"repo": "maxl/app", "ref": "main", "commit": SHA, "path": "/home/sprite/repos/app",
-                        "files": 2, "bytes": len(ARCHIVE)}
+                        "files": 2, "bytes": len(ARCHIVE), "chat_folder": agent_vm.chat_dir(loop.chat_id)}
     assert hidden == {"error": NO_ACCESS.format(repo="org/hidden")}
     [grant] = [r for r in github.requests if r[2].endswith("/access_tokens")]
     assert grant[2] == "/app/installations/9/access_tokens"
@@ -233,7 +233,7 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     claims = jwt.decode(grant[3].removeprefix("Bearer "), KEY.public_key(), algorithms=["RS256"],
                         options={"verify_exp": False, "verify_iat": False})
     assert claims["iss"] == "123"
-    name = agent_vm.vm_name(UID, loop.chat_id)
+    name = agent_vm.workspace_name(UID)
     archive = f"/tmp/consens-import-{SHA[:12]}.tar.gz"
     assert fake_vm.vms[name]["files"][archive] == ARCHIVE
     command = next(call[2] for call in fake_vm.calls if call[0] == "exec")
@@ -311,7 +311,7 @@ def prepared(store, fake_vm, github, *, raw=RAW, args=None):
                                                "body": "Says hello.", **(args or {})})]])
     loop = vm_loop(store, script, audit="off")
     loop.vm_tools.session.ready(agent_vm_tools_cancellation())
-    files = fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]
+    files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
     files[f"{PATH}/.git/consens-import.json"] = json.dumps({"repo": "maxl/app", "ref": "main", "commit": SHA}).encode()
     files[f"{PATH}/src/main.py"] = b"print('hello')\n"
     files[f"{PATH}/bin/run"] = b"#!/bin/sh\necho run\n"

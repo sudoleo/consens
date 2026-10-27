@@ -747,7 +747,7 @@ class PullRequests:
         from app.services import agent_vm
         chat = self.store._chat_ref(uid, chat_id).get().to_dict() or {}
         record = chat.get("agent_vm") or {}
-        if record.get("name") != agent_vm.vm_name(uid, chat_id):
+        if record.get("name") not in {agent_vm.workspace_name(uid), agent_vm.vm_name(uid, chat_id)}:
             raise ValueError("The chat's VM is gone. Prepare the pull request again.")
         vm = (self._vm_factory or agent_vm.backend)()
         if vm is None:

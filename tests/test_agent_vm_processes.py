@@ -50,9 +50,9 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert read == {"id": PID, "status": "running", "output": "GET / 200\n"}
     assert stopped == {"id": PID, "status": "exited", "output": "GET / 200\nbye\n", "exit_code": 143}
     # The supervisor, the command in its folder and login environment, the command for listing.
-    files = fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]
+    files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
     assert files[f"{directory}/run.sh"].decode() == RUNNER
-    assert files[f"{directory}/command.sh"].decode() == command_script("npm run dev", "/home/sprite/app")
+    assert files[f"{directory}/command.sh"].decode() == command_script("npm run dev", agent_vm.chat_dir(loop.chat_id) + "/app")
     assert files[f"{directory}/command"] == b"npm run dev"
     # The activity shows the command and its first output, later the process by its id.
     assert [e for e in tool_events(events, "vm_start_process") if e["status"] == "running"][0]["command"] == "npm run dev"
@@ -104,7 +104,8 @@ def test_without_an_id_the_processes_are_listed(store, fake_vm):
     list(loop.run())
     assert results(loop)[0] == {"processes": [
         {"id": "abcd1234", "status": "running", "command": "npm run dev"},
-        {"id": "0000ffff", "status": "exited", "exit_code": 1, "command": "pytest -q"}]}
+        {"id": "0000ffff", "status": "exited", "exit_code": 1, "command": "pytest -q"}],
+        "chat_folder": agent_vm.chat_dir(loop.chat_id)}
 
 
 def test_a_process_the_vm_stopped_is_said_to_be_lost():

@@ -10,6 +10,8 @@ import json
 
 import pytest
 
+from app.services import agent_vm
+
 from app.services import agent_compaction, agent_quota
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_compaction import (CONTENT_CLEARED, OUTPUT_CLEARED, WORK_RECORD_CLOSE, WORK_RECORD_OPEN,
@@ -354,7 +356,7 @@ def test_the_next_message_is_told_what_the_vm_turn_did(store, fake_vm):
     record = stored(store, first)["agent_work_record"]
     # The browser never gets it (chat_store's turn fields).
     assert "agent_work_record" not in saved(store, first)
-    assert record.splitlines() == [WORK_RECORD_OPEN, "1. vm_write_file /home/sprite/app.py (8 bytes)",
+    assert record.splitlines() == [WORK_RECORD_OPEN, f"1. vm_write_file {agent_vm.chat_dir(first.chat_id)}/app.py (8 bytes)",
                                    "2. vm_exec $ pytest -q -> exit 1, 2.0 s: 1 failed, 2 passed", WORK_RECORD_CLOSE]
     script = LongAgent()
     second = loop_after(store, script, first.chat_id, "two", "Fix the failing test.")

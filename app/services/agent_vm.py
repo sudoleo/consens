@@ -1,4 +1,10 @@
-"""The agent's own Linux VM, one per chat (docs/agent-mode.md, "Agent VM").
+"""The agent's own Linux VM (docs/agent-mode.md, "Agent VM").
+
+Since 2026-10-27 one per account, the workspace (agent_workspace.py): the
+account's chats share it, one at a time, each in its own folder (chat_dir),
+and its user sees and steers its browser live. Before, each chat had a VM of
+its own (vm_name); chats that still record one keep it until they are
+deleted.
 
 A small interface (``VMBackend``) with one implementation on Fly.io Sprites
 (``SpritesBackend``). Everything that knows the provider lives in this file:
@@ -26,6 +32,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from typing import Callable, Optional
 from urllib.parse import quote, urlencode
@@ -77,9 +84,26 @@ class ExecOutcome:
 
 
 def vm_name(uid, chat_id):
-    """The chat's VM name: stable, so every message (and the chat's
-    deletion) finds the same VM, and free of the account id."""
+    """The name of a chat's own VM (before 2026-10-27): only to delete it
+    with its chat."""
     return "consens-" + hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:32]
+
+
+def workspace_name(uid):
+    """The account's workspace VM: stable, so every chat, the live view and
+    the account's deletion find the same VM, and free of the account id."""
+    return "consens-w-" + hashlib.sha256(f"workspace:{uid}".encode("utf-8")).hexdigest()[:32]
+
+
+CHATS_DIR = HOME + "/chats"
+
+
+def chat_dir(chat_id):
+    """A chat's own folder in the workspace: where its commands start and its
+    attachments land, deleted with the chat."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(chat_id or "")):
+        raise ValueError("chat id")
+    return f"{CHATS_DIR}/{chat_id}"
 
 
 class VMBackend:
@@ -119,6 +143,24 @@ class VMBackend:
 
     def delete(self, name):
         """Delete the VM and its disk; a VM that is already gone is fine."""
+        raise NotImplementedError
+
+    def delete_path(self, name, path):
+        """Delete a file or folder with everything in it; gone is fine."""
+        raise NotImplementedError
+
+    def chmod(self, name, path, mode):
+        """Set a file's mode (``mode`` as octal text, like "755")."""
+        raise NotImplementedError
+
+    def put_service(self, name, service, spec):
+        """Create or replace a service: a process the VM starts again
+        whenever it wakes (``spec``: cmd, args, http_port)."""
+        raise NotImplementedError
+
+    def url(self, name):
+        """The VM's private HTTPS address (only the provider's token opens
+        it), which reaches the service with an ``http_port``."""
         raise NotImplementedError
 
     def close(self):
@@ -265,6 +307,30 @@ class SpritesBackend(VMBackend):
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
 
+    def delete_path(self, name, path):
+        self._request("delete path", "DELETE", self._sprite(name) + "/fs/delete", missing_ok=True,
+                      json={"path": path, "workingDir": HOME, "recursive": True, "asRoot": False})
+
+    def chmod(self, name, path, mode):
+        self._request("chmod", "POST", self._sprite(name) + "/fs/chmod",
+                      json={"path": path, "workingDir": HOME, "mode": mode, "recursive": False, "asRoot": False})
+
+    def put_service(self, name, service, spec):
+        # An existing service is neither replaced (409 with another config)
+        # nor restarted (the same config): it goes first, so the new one runs
+        # the files as they are now. Answers once it started, with its first
+        # log lines.
+        path = f"{self._sprite(name)}/services/{quote(service, safe='')}"
+        self._request("service", "DELETE", path, missing_ok=True)
+        self._request("service", "PUT", path, params={"duration": 1}, json={"needs": [], **spec},
+                      timeout=CHECKPOINT_SECONDS)
+
+    def url(self, name):
+        address = str(self._request("get", "GET", self._sprite(name)).json().get("url") or "")
+        if not address.startswith("https://"):
+            raise VMUnavailable("url: none")
+        return address
+
     def close(self):
         self._http.close()
 
@@ -380,9 +446,10 @@ VM_RESTORED_NOTE = ("Before this message the user restored your VM to how it was
 
 
 def restore_chat_vm(uid, chat_id, record, checkpoint, *, factory=None):
-    """Return the chat's VM (chat field ``agent_vm``) to ``checkpoint``.
-    Raises VMUnavailable when there is none or the provider fails."""
-    if not isinstance(record, dict) or record.get("name") != vm_name(uid, chat_id):
+    """Return the VM the chat recorded (chat field ``agent_vm``: the account's
+    workspace, or the chat's own VM from before) to ``checkpoint``. Raises
+    VMUnavailable when there is none or the provider fails."""
+    if not isinstance(record, dict) or record.get("name") not in {workspace_name(uid), vm_name(uid, chat_id)}:
         raise VMUnavailable("restore: no VM of this chat")
     vm = (factory or backend)()
     if vm is None:
@@ -394,13 +461,21 @@ def restore_chat_vm(uid, chat_id, record, checkpoint, *, factory=None):
 
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None):
-    """Delete the VM a chat recorded (chat field ``agent_vm``) with the chat.
-    Raises when the provider fails or is not configured: the chat's deletion
-    job then retries (chat_store.run_chat_deletion), so no VM with the
-    user's files outlives their chat."""
+    """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
+    folder in the account's workspace, or its own VM from before. Raises
+    when the provider fails or is not configured: the chat's deletion job
+    then retries (chat_store.run_chat_deletion), so none of the chat's files
+    outlives it. A workspace already deleted (with its account) is fine."""
     if not isinstance(record, dict) or not record.get("name"):
         return
-    if record["name"] != vm_name(uid, chat_id):
+    name = record["name"]
+    if name == workspace_name(uid):
+        def operation(vm):
+            vm.delete_path(name, chat_dir(chat_id))
+    elif name == vm_name(uid, chat_id):
+        def operation(vm):
+            vm.delete(name)
+    else:
         # Written by this app only; anything else is not ours to delete.
         logging.warning("Agent VM record does not match its chat")
         return
@@ -408,6 +483,18 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
     if vm is None:
         raise VMUnavailable("delete: no provider configured")
     try:
-        vm.delete(record["name"])
+        operation(vm)
+    finally:
+        vm.close()
+
+
+def delete_workspace(uid, *, factory=None):
+    """Delete the account's workspace with its account (agent_workspace.py):
+    every chat's folder, the browser and its sign-ins."""
+    vm = (factory or backend)()
+    if vm is None:
+        raise VMUnavailable("delete: no provider configured")
+    try:
+        vm.delete(workspace_name(uid))
     finally:
         vm.close()

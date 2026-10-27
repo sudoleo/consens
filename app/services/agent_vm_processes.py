@@ -74,7 +74,7 @@ PROCESSES_NOTE = ("It runs in the background: read its output with vm_process_ou
 class VmStartProcessArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash in the background.")
-    cwd: str = Field(default="", max_length=1024, description=f"Working directory; default {HOME}.")
+    cwd: str = Field(default="", max_length=1024, description="Working directory; default this chat's folder.")
     max_seconds: int = Field(default=DEFAULT_SECONDS, ge=10, le=MAX_SECONDS,
                              description="The process is ended after this long.")
 
@@ -207,7 +207,7 @@ class ProcessTools:
         from app.services.agent_vm_tools import vm_path
         report = report or (lambda fields: None)
         from app.services.agent_vm_tools import VM_DAY_LIMIT
-        cwd = vm_path(args.cwd) if args.cwd.strip() else HOME
+        cwd = vm_path(args.cwd, self.vm.session.dir) if args.cwd.strip() else self.vm.session.dir
         self.vm._start(cancellation)
         session = self.vm.session
         # It holds the VM awake for up to its time limit, after the message

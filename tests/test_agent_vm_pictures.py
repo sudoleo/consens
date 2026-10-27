@@ -26,23 +26,24 @@ def sees(monkeypatch):
 
 def put(fake_vm, loop, path, data):
     loop.vm_tools.session.ready(ProviderCancellation())
-    fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"][path] = data
+    fake_vm.vms[agent_vm.workspace_name(UID)]["files"][path] = data
 
 
 def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
     script = LongAgent([[("vm_view_image", {"path": "chart.png"}), ("vm_exec", {"command": "ls"})]])
     loop = vm_loop(store, script)
-    put(fake_vm, loop, "/home/sprite/chart.png", PNG)
+    put(fake_vm, loop, f"{agent_vm.chat_dir(loop.chat_id)}/chart.png", PNG)
     list(loop.run())
     assert "vm_view_image" in script.offered[0]
     viewed = results(loop)[0]
-    assert viewed == {"path": "/home/sprite/chart.png", "mime": "image/png", "bytes": len(PNG),
+    chart = f"{agent_vm.chat_dir(loop.chat_id)}/chart.png"
+    assert viewed == {"path": chart, "mime": "image/png", "bytes": len(PNG), "chat_folder": agent_vm.chat_dir(loop.chat_id),
                       "note": "The picture follows as an image after these results."}
     # The next step: both results first (every call answered), then the picture.
     after = script.seen[1]
     assert [m["role"] for m in after[-3:]] == ["tool", "tool", "user"]
     text, image = after[-1]["content"]
-    assert text == {"type": "text", "text": PICTURE_INTRO.format(path="/home/sprite/chart.png")}
+    assert text == {"type": "text", "text": PICTURE_INTRO.format(path=chart)}
     assert image == {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(PNG).decode()}}
     # What the agent saw is outside content: memory locks; the reviewers see it is a VM picture.
     assert loop.memory_locked is True
@@ -53,8 +54,8 @@ def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
 def test_only_pictures_and_only_for_a_model_that_takes_them(store, fake_vm, sees, monkeypatch):
     loop = vm_loop(store, LongAgent([[("vm_view_image", {"path": "notes.txt"})],
                                      [("vm_view_image", {"path": "big.png"})]]))
-    put(fake_vm, loop, "/home/sprite/notes.txt", b"just text")
-    put(fake_vm, loop, "/home/sprite/big.png", b"\x89PNG\r\n\x1a\n" + b"0" * agent_vm_tools.PICTURE_BYTES)
+    put(fake_vm, loop, f"{agent_vm.chat_dir(loop.chat_id)}/notes.txt", b"just text")
+    put(fake_vm, loop, f"{agent_vm.chat_dir(loop.chat_id)}/big.png", b"\x89PNG\r\n\x1a\n" + b"0" * agent_vm_tools.PICTURE_BYTES)
     list(loop.run())
     text, big = results(loop)
     assert "no PNG, JPEG, WebP or GIF" in text["error"] and "larger than 5 MB" in big["error"]

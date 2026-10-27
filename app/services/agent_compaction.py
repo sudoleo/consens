@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import re
 
 COMPACT_ABOVE_CHARS = 150_000
 KEEP_RECENT_CHARS = 40_000
@@ -227,7 +228,8 @@ def describe(name, arguments, result):
     if name == "vm_exec":
         line = f"vm_exec $ {_short(args.get('command'), 200)}"
         cwd = data.get("cwd") or args.get("cwd")
-        if cwd and cwd != "/home/sprite":
+        # Said only when it is not where commands start: home, or a chat's folder.
+        if cwd and not re.fullmatch(r"/home/sprite(/chats/[A-Za-z0-9_-]+)?", str(cwd)):
             line += f" (in {cwd})"
         if data.get("timed_out"):
             line += f" -> timed out after {_seconds(data.get('duration_ms'))}"

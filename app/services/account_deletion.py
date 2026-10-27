@@ -94,6 +94,9 @@ class FirestoreAccountDeletion:
 
         areas = (
             ("api_access", lambda: self._delete_api_access(uid)),
+            # The account's workspace VM (agent_workspace.py): every chat's
+            # folder, the browser and the sign-ins in it, before its record.
+            ("agent_workspace", lambda: self._delete_agent_workspace(uid)),
             ("user_subcollections", lambda: self._delete_user_subcollections(uid)),
             ("chats", lambda: ChatStore(self._db).delete_all_chats(uid)),
             ("waitlist_feedback", lambda: self._delete_uid_queries(uid)),
@@ -227,6 +230,10 @@ class FirestoreAccountDeletion:
         errors = self._api_cleanup.cleanup_uid(uid)
         if errors:
             raise AccountDeletionError("API cleanup failed: " + ", ".join(errors))
+
+    def _delete_agent_workspace(self, uid: str) -> None:
+        from app.services import agent_workspace
+        agent_workspace.delete_for_account(self._db, uid)
 
     def _delete_user_subcollections(self, uid: str) -> None:
         user_ref = self._db.collection("users").document(uid)

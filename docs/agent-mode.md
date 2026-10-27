@@ -485,23 +485,73 @@ Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
 Dateizeilen) bringen Fremdinhalt und sperren Memory wie `read_file`
 (`MEMORY_LOCKING_TOOLS`).
 
-**Lebenszyklus.** Eine VM pro Chat, Name `vm_name(uid, chat)` (stabil, ohne
-Konto-ID). Erst der erste VM-Aufruf einer Nachricht weckt sie
-(`VMSession.ready`): Der Chat bekommt `agent_vm: {provider, name, created_at}`
-in einer Transaktion mit Kontosperre und aktivem Chat, bevor der Anbieter sie
-anlegt (so findet die Löschung sie immer); dann `ensure` (anlegen, falls es sie
-nicht gibt, und die Egress-Regeln setzen), der Checkpoint der Nachricht
+**Lebenszyklus.** Seit 2026-10-27 eine VM pro Konto, der Arbeitsplatz (siehe
+„Arbeitsplatz“ unten), Name `workspace_name(uid)` (stabil, ohne Konto-ID);
+davor eine pro Chat (`vm_name(uid, chat)`), die solche Chats bis zu ihrer
+Löschung behalten. Erst der erste VM-Aufruf einer Nachricht weckt sie
+(`VMSession.ready`): In einer Transaktion mit Kontosperre und aktivem Chat
+nimmt die Nachricht die Sperre des Arbeitsplatzes und schreibt ihn ins
+Konto-Dokument und als `agent_vm: {provider, name, workspace, created_at,
+used_at}` an den Chat, bevor der Anbieter ihn anlegt (so finden Konto- und
+Chat-Löschung ihn immer); dann `ensure` (anlegen, falls es ihn nicht gibt, und
+die Egress-Regeln setzen), `agent_workspace.prepare` (die Werkzeuge der VM, nur
+bei neuer Version), der Ordner des Chats, der Checkpoint der Nachricht
 (Kommentar `consens.io message <turn>`, also der Stand, bevor diese Nachricht
 etwas änderte; scheitert er, geht es ohne weiter) und die Anhänge dieser
-Nachricht nach `/home/sprite/input` (`FileContext.attachment`, gleiche Namen
-werden zu `name (2).ext`; das erste Ergebnis nennt sie dem Agenten). Wird der
-Chat beim Anlegen gelöscht, löscht der Lauf die VM selbst
-(`_still_active`). Eine Nachricht ohne VM-Aufruf weckt die VM nicht und legt
-keinen Checkpoint an. Der Turn speichert `agent_vm: {provider, checkpoint,
-calls, commands, seconds}` (Summe der Befehlslaufzeiten; `unavailable: true`,
-wenn die VM ausfiel). Wiederherstellen in der Oberfläche seit 2026-10-26
-(siehe „Eingreifen“); die Sprite pausiert nach etwa 30 s Leerlauf ohne
-Rechenkosten.
+Nachricht in den `input`-Ordner des Chats (`FileContext.attachment`, gleiche
+Namen werden zu `name (2).ext`; das erste Ergebnis nennt dem Agenten den
+Chat-Ordner und die Anhänge). Wird der Chat dabei gelöscht, löscht der Lauf
+den Ordner selbst (`_still_active`). Eine Nachricht ohne VM-Aufruf weckt die
+VM nicht und legt keinen Checkpoint an. Der Turn speichert `agent_vm:
+{provider, checkpoint, calls, commands, seconds}` (Summe der
+Befehlslaufzeiten; `unavailable: true`, wenn die VM ausfiel, `busy: true`,
+wenn ein anderer Chat sie hatte). Wiederherstellen in der Oberfläche seit
+2026-10-26 (siehe „Eingreifen“), seit dem Arbeitsplatz nur, solange kein
+Chat ihn nutzt, und mit Hinweis an jeden Chat, der ihn vorher nutzte
+(`restores`/`restores_seen`). Die Sprite friert nach einigen Sekunden
+Leerlauf ein („warm“, ohne Rechenkosten, laufende Prozesse bleiben, gemessen
+2026-10-27); erst nach längerem Schlaf („cold“) sind sie weg.
+
+### Arbeitsplatz (seit 2026-10-27)
+
+Max' Entscheidung 2026-10-27: Der Agent arbeitet in den Konten der Nutzer, und
+Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
+`agent_workspace.py` (Server), `workspace_vm/` (läuft in der VM).
+
+- **Ein Chat zur Zeit.** Die Sperre (`lease {chat_id, turn_id, until}`,
+  `LEASE_SECONDS` = 10 min) hält, solange die Nachricht die VM nutzt; jeder
+  VM-Aufruf verlängert sie, wenn weniger als 2 min übrig sind; das
+  Nachrichtenende gibt sie frei, ein abgestürzter Lauf blockiert höchstens bis
+  zu ihrem Ablauf. Ein anderer Chat bekommt in der Zeit `VM_BUSY` und
+  antwortet ohne VM. Dieselbe Chat-Folge (eine Nachricht zur Zeit) übernimmt
+  ihre eigene Sperre.
+- **Ordner pro Chat.** `/home/sprite/chats/<chat>`: Befehle starten dort,
+  relative Pfade führen dorthin, Anhänge liegen in `input`. Home, installierte
+  Pakete, `~/repos` (GitHub) und der Browser sind gemeinsam. Chat löschen löscht
+  nur seinen Ordner (`delete_path`), Konto löschen den ganzen Arbeitsplatz
+  (`account_deletion` Bereich `agent_workspace`, vor den Chats).
+- **Werkzeuge in der VM.** `prepare` schreibt `workspace_vm/*` nach
+  `~/.consens/workspace`, `browser` nach `~/.local/bin` (chmod über die
+  Datei-API) und legt den Dienst `view` neu an (Gateway auf Port 6080; Sprites
+  startet einen Dienst bei gleicher Konfiguration sonst nicht neu), nur wenn
+  `VERSION` (Hash der Dateien) in der VM eine andere ist: sonst ein Lesezugriff.
+- **Browser.** Google Chrome auf Xvfb mit openbox, dauerhaftes Profil unter
+  `~/.consens/browser/profile` („Weitermachen, wo ich aufgehört habe“, damit
+  auch Sitzungs-Cookies einen Neustart überstehen), CDP nur auf 127.0.0.1:9222,
+  x11vnc nur auf localhost:5900. `setup.sh` installiert das einmal (~70 s,
+  Sperre gegen doppelte Läufe) und setzt eine Chrome-Richtlinie ohne
+  Passwortmanager, Karten und Adressen: Der Agent kann jede Datei der VM lesen,
+  gespeicherte Passwörter wären für ihn lesbar. `display.sh` startet, was
+  nicht läuft (eingefrorene Prozesse überstehen die Pausen).
+- **`browser` für den Agenten** (`browser.py`, Playwright über CDP): `open`,
+  `read` (Überschriften und bedienbare Elemente mit Refs `e12`), `click`,
+  `type`, `select`, `upload`, `key`, `scroll`, `back`, `tabs`, `text`,
+  `screenshot` (nur wenn Text nicht reicht, dann `vm_view_image`), `wait`,
+  `status`. Jede Aktion druckt die Seite neu. Es arbeitet immer im Tab, den der
+  Nutzer sieht (`visibilityState`). Nie in Passwort- oder Code-Felder (Exit 2),
+  nie solange der Nutzer übernommen hat (Exit 3, `control.json` mit Ablauf).
+  Chrome meldet sich nicht als ferngesteuert (`navigator.webdriver` false, kein
+  `--enable-automation`).
 
 **Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
 erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM

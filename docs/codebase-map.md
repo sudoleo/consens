@@ -5672,13 +5672,30 @@ VM-Werkzeug, kein Prompt und kein `vm_time` in `/user_status`, seit
 2026-10-26) registriert
 `DelegationLoop` auf Account-Turns ohne Google-Daten `agent_vm_tools.VMTools`
 (`vm_exec`, `vm_read_file`, `vm_write_file`, `vm_share_file`) und hängt `AGENT_VM_PROMPT` vor
-dem Memory-Block an; in beiden Modi. Eine VM pro Chat (Fly.io Sprites über
-`agent_vm.SpritesBackend`, Token `SPRITES_TOKEN` nur im Backend), angelegt
-beim ersten VM-Aufruf, über Nachrichten wiederverwendet. Der erste Aufruf
-einer Nachricht schreibt das Chat-Feld `agent_vm`, ruft `ensure` (anlegen,
+dem Memory-Block an; in beiden Modi. Seit 2026-10-27 **eine VM pro Konto,
+der Arbeitsplatz** (`agent_workspace.py`, Name `agent_vm.workspace_name(uid)`;
+Fly.io Sprites über `agent_vm.SpritesBackend`, Token `SPRITES_TOKEN` nur im
+Backend), angelegt beim ersten VM-Aufruf, über Nachrichten und Chats
+wiederverwendet, jeder Chat in seinem Ordner `/home/sprite/chats/<chat>`
+(`agent_vm.chat_dir`: Startordner der Befehle, Ziel relativer Pfade). Immer
+nur ein Chat: Der erste Aufruf einer Nachricht nimmt die Sperre
+(`agent_workspace.claim`, Dokument `users/{uid}/chat_state/agent_workspace`
+mit `lease {chat_id, turn_id, until}`, 10 min, bei VM-Aufrufen verlängert,
+am Nachrichtenende freigegeben); hält sie ein anderer Chat, sagt
+`VM_BUSY` das dem Agenten (Aktivität `outcome: busy`), die Antwort läuft
+weiter. Derselbe Aufruf schreibt das Konto-Dokument und das Chat-Feld
+`agent_vm` (`workspace: true`), ruft `ensure` (anlegen,
 Egress ins offene Web außer Flys internem Netz, `EGRESS_RULES`, seit
-2026-10-26; Tageskonto `agent_vm_time.py`, Pro 2 h Befehls- und Prozesszeit), legt den Checkpoint der
-Nachricht an und kopiert ihre Anhänge nach `/home/sprite/input`. Befehle
+2026-10-26; Tageskonto `agent_vm_time.py`, Pro 2 h Befehls- und Prozesszeit),
+bringt die Werkzeuge der VM auf Stand (`agent_workspace.prepare`, nur bei
+neuer `VERSION`: `workspace_vm/*` nach `~/.consens/workspace`, `browser` nach
+`~/.local/bin`, Dienst `view` mit dem Gateway auf Port 6080), legt den
+Chat-Ordner an, den Checkpoint der Nachricht und kopiert ihre Anhänge in den
+`input`-Ordner des Chats. Chats, die noch eine eigene VM von vorher haben
+(`agent_vm.vm_name`), behalten sie bis zu ihrer Löschung. Der Agent bedient
+den Chrome des Arbeitsplatzes mit `browser` über `vm_exec`, als Text
+(`read`/`click e12`/`type`, nie in Passwortfelder, nie während der Nutzer
+übernommen hat); Details `docs/agent-mode.md`, „Arbeitsplatz“. Befehle
 laufen unter einem Limit (60 s, höchstens 300 s, nie über `answer_time_left`)
 mit VM-seitigem `timeout`; Ausgaben gehen gekürzt (Ende bleibt) an das Modell.
 Jeder Aufruf ist ein Tool-Event mit `command`/`path`, live `output`
@@ -8250,7 +8267,9 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget)
-  agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES "defaults"), vm_name je Chat, delete_chat_vm für die Chat-Löschung; ein Anbieterwechsel betrifft nur diese Datei
+  agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete, seit 2026-10-27 delete_path/chmod/put_service/url) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES), workspace_name je Konto und chat_dir je Chat (vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner bzw. alte VM) und delete_workspace; ein Anbieterwechsel betrifft nur diese Datei
+  agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27): Konto-Dokument users/{uid}/chat_state/agent_workspace mit Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab), prepare (Werkzeuge workspace_vm/* bei neuer VERSION, Dienst view), Übernahme (control.json), reset_browser, delete_for_account
+  workspace_vm/              Läuft in der VM (LF per .gitattributes): browser.py (Befehl browser des Agenten, Playwright über CDP, Seite als Text mit Refs), display.sh (Xvfb, openbox, Chrome mit dauerhaftem Profil, x11vnc), setup.sh (einmalige Installation, Chrome-Richtlinie ohne Passwörter/Karten), gateway.py (Dienst auf 6080: WebSocket /vnc, Zustände, dann VNC-Bytes; nur Standardbibliothek)
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Checkpoint der Nachricht, Anhänge nach /home/sprite/input), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
@@ -8362,8 +8381,11 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
     Altbestände initialisieren ihn beim ersten Schreibzugriff aus dem begrenzten
     Owner-Bestand. Seit 2026-10-25 optional `agent_vm` (`{provider, name,
     created_at}`): die Agent-VM des Chats, geschrieben vor ihrem Anlegen
-    (`agent_vm_tools.VMSession._record`); `_purge_chat` löscht sie zuerst
-    (`agent_vm.delete_chat_vm`, ein Fehler hält den Lösch-Job). Create und das Setzen von `status=deleting` erhöhen bzw.
+    (`agent_vm_tools.VMSession._record`); seit 2026-10-27 der Arbeitsplatz
+    des Kontos (`workspace: true`, `used_at`, `restores_seen`,
+    `agent_workspace.claim`). `_purge_chat` löscht zuerst den Ordner des Chats im
+    Arbeitsplatz oder seine alte eigene VM (`agent_vm.delete_chat_vm`, ein
+    Fehler hält den Lösch-Job). Create und das Setzen von `status=deleting` erhöhen bzw.
     verringern ihn in derselben Transaktion. Erst danach löscht die idempotente
     Kaskade Turns, Modellantworten, Context-Versionen und zuletzt den Chat.
     Bei erreichtem Limit (`MAX_CHATS_PER_OWNER`, 403 `chat_limit_reached`)

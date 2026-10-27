@@ -769,7 +769,10 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
         return JSONResponse({"error": "This message has no VM state to go back to.", "code": "no_checkpoint"},
                             status_code=409)
     lock = chat.get("agent_lock_until")
-    if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)):
+    from app.services import agent_workspace
+    # The workspace is the account's: no chat's message may be using it.
+    if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)) or \
+            agent_workspace.held_by(db_firestore, uid):
         return JSONResponse({"error": "Wait until the response is done, then restore the VM.", "code": "running"},
                             status_code=409)
     try:
@@ -786,6 +789,9 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
                                                              "at": datetime.now(timezone.utc).isoformat()}}})
     try:
         store._transaction(record)
+        # The other chats' next messages in the workspace are told too.
+        if (chat.get("agent_vm") or {}).get("workspace"):
+            agent_workspace.mark_restored(store, uid)
     except Exception as exc:
         # Restored all the same; only the next message's note is missing.
         logging.warning("Agent VM restore not recorded category=%s", safe_exception(exc))

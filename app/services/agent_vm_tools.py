@@ -1,14 +1,20 @@
 """The agent's VM tools: vm_exec, vm_read_file, vm_write_file, vm_edit_file
 and vm_share_file (agent_vm.py).
 
-Admins only (AgentPreferences.vm, routers/agent.py effective_preferences),
-never in chats with Google data, in turns with comparison or audit tools on
-the account's token ledger (DelegationLoop). One VMSession per message: on
-the first VM call it records the VM on the chat (before the provider creates
-it, so the chat's deletion always finds it), wakes or creates it, takes the
-message's checkpoint (the state before this message changed anything) and
-copies the message's attachments into INPUT_DIR. Messages that never call a
-VM tool neither wake the VM nor take a checkpoint.
+With audit (Pro and admins; AgentPreferences.vm, routers/agent.py
+effective_preferences), never in chats with Google data, in turns with
+comparison or audit tools on the account's token ledger (DelegationLoop).
+Since 2026-10-27 the VM is the account's workspace (agent_workspace.py),
+shared by its chats one message at a time, each chat in its own folder
+(agent_vm.chat_dir), where commands start and relative paths lead. One
+VMSession per message: on the first VM call it leases the workspace and
+records it on the account and the chat (before the provider creates it, so
+deleting either always finds it), wakes or creates it, brings its tools up to
+date, takes the message's checkpoint (the state before this message changed
+anything) and copies the message's attachments into the chat folder's
+``input``. Another chat holding the workspace costs the VM tools for this
+message (VM_BUSY), never the answer. Messages that never call a VM tool
+neither wake the VM nor take a checkpoint.
 
 Each call is one activity event of its tool (agent-activity.js): what ran,
 its output's end while it runs (``report``, at most every REPORT_SECONDS),
@@ -57,7 +63,8 @@ from app.services.error_alerts import report_server_exception
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
 HOME = agent_vm.HOME
-INPUT_DIR = HOME + "/input"
+# The message's attachments, in the chat's folder.
+INPUT_FOLDER = "input"
 EXEC_TIMEOUT_DEFAULT = 60
 EXEC_TIMEOUT_MAX = 300
 # A command needs at least this long before the answer must start
@@ -104,7 +111,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 class VmExecArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash with your login environment.")
-    cwd: str = Field(default="", max_length=1024, description=f"Working directory; default {HOME}.")
+    cwd: str = Field(default="", max_length=1024, description="Working directory; default this chat's folder.")
     timeout_seconds: int = Field(default=EXEC_TIMEOUT_DEFAULT, ge=1, le=EXEC_TIMEOUT_MAX)
 
 
@@ -157,14 +164,15 @@ def _unexpected(exc, operation):
         report_server_exception(exc, where=f"agent_vm.{operation}", phase="tool")
 
 
-def vm_path(path):
-    """An absolute, normalized path in the VM; relative paths start at HOME."""
+def vm_path(path, base=HOME):
+    """An absolute, normalized path in the VM; relative paths start at
+    ``base`` (the chat's folder for the agent's tools), ``~`` at HOME."""
     if "\x00" in path:
         raise ValueError("The path contains a NUL character.")
     if path == "~" or path.startswith("~/"):
         path = HOME + path[1:]
     if not path.startswith("/"):
-        path = HOME + "/" + path
+        path = base + "/" + path
     return posixpath.normpath(path)
 
 
@@ -292,8 +300,15 @@ class VMSession:
         self.loop = loop
         self._factory = factory or agent_vm.backend
         self.clock = clock
-        self.name = agent_vm.vm_name(loop.uid, loop.chat_id)
+        self.name = agent_vm.workspace_name(loop.uid)
+        # The chat's own folder: where commands start and relative paths lead.
+        self.dir = agent_vm.chat_dir(loop.chat_id)
         self._lock = threading.Lock()
+        # The workspace's lease (agent_workspace.claim): held from the first
+        # VM call, moved on by later ones, released when the message ends.
+        self.leased = False
+        self._leased_at = 0.0
+        self.restored = False
         self.backend = None
         self.state = "idle"
         # Set once the VM was ready in this message, also if it fails later:
@@ -309,13 +324,16 @@ class VMSession:
         self._day = None
         self.reserved = 0.0
         # The first result after the VM became ready tells the agent which
-        # attachments are in INPUT_DIR.
+        # folder is the chat's and which attachments are in its input folder.
         self._announced = False
 
     def ready(self, cancellation):
+        from app.services import agent_workspace
         with self._lock:
             if self.state == "unavailable":
                 raise _VMOff(VM_UNAVAILABLE)
+            if self.state == "busy":
+                raise _VMOff(agent_workspace.VM_BUSY)
             if self.state == "ready":
                 return
             try:
@@ -325,6 +343,8 @@ class VMSession:
                 self._record()
                 cancellation.raise_if_cancelled()
                 self.backend.ensure(self.name)
+                agent_workspace.prepare(self.backend, self.name)
+                agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id)
                 self._still_active()
                 try:
                     self.checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
@@ -336,10 +356,34 @@ class VMSession:
                 self.started = True
             except ProviderCancelled:
                 raise
+            except agent_workspace.WorkspaceBusy:
+                self.state = "busy"
+                raise _VMOff(agent_workspace.VM_BUSY) from None
             except Exception as exc:
                 _unexpected(exc, "start")
                 self.state = "unavailable"
                 raise _VMOff(VM_UNAVAILABLE) from None
+
+    def renew(self):
+        """Moves the lease on when it runs low (between VM calls); a lease
+        that is gone (expired, another chat took it) turns the VM off."""
+        from app.services import agent_workspace
+        if not self.leased or self.clock() - self._leased_at < agent_workspace.LEASE_RENEW_SECONDS:
+            return
+        try:
+            held = agent_workspace.renew(self.loop.store, self.loop.uid, self.loop.turn_id)
+        except Exception as exc:
+            # Kept for its remaining time; the next call tries again.
+            logging.warning("Agent workspace renew failed category=%s", safe_exception(exc))
+            return
+        with self._lock:
+            if held:
+                self._leased_at = self.clock()
+            else:
+                self.leased = False
+                self.state = "busy"
+        if not held:
+            raise _VMOff(agent_workspace.VM_BUSY)
 
     def failed(self):
         """The VM failed during a call: off for the rest of the message."""
@@ -347,37 +391,29 @@ class VMSession:
             self.state = "unavailable"
 
     def _record(self):
-        """The chat names its VM before the provider creates it."""
-        from app.services import persistence_guard
-        from app.services.chat_store import ChatNotFound
-        store, uid, chat_id = self.loop.store, self.loop.uid, self.loop.chat_id
-        ref = store._chat_ref(uid, chat_id)
-        record = {"provider": self.backend.provider, "name": self.name}
-
-        def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=store.db, transaction=tx)
-            data = ref.get(transaction=tx).to_dict() or {}
-            if data.get("status") != "active":
-                raise ChatNotFound("Chat not found")
-            current = data.get("agent_vm") or {}
-            if {key: current.get(key) for key in record} != record:
-                tx.update(ref, {"agent_vm": {**record, "created_at": _now()}})
+        """The account and the chat name the workspace before the provider
+        creates it, and this message leases it (agent_workspace.claim)."""
+        from app.services import agent_workspace
         try:
-            store._transaction(operation)
+            self.restored = agent_workspace.claim(self.loop.store, self.loop.uid, self.loop.chat_id,
+                                                  self.loop.turn_id, provider=self.backend.provider)
+        except agent_workspace.WorkspaceBusy:
+            raise
         except Exception as exc:
             logging.warning("Agent VM record failed category=%s", safe_exception(exc))
             raise agent_vm.VMUnavailable("record") from None
+        self.leased, self._leased_at = True, self.clock()
 
     def _still_active(self):
-        """A chat deleted while its VM was being created already looked for
-        the VM (chat_store._purge_chat): this run deletes it instead."""
+        """A chat deleted while its folder was being made already looked for
+        it (chat_store._purge_chat): this run deletes the folder instead."""
         try:
             data = self.loop.store._chat_ref(self.loop.uid, self.loop.chat_id).get().to_dict() or {}
         except Exception as exc:
             logging.warning("Agent VM chat check failed category=%s", safe_exception(exc))
             raise agent_vm.VMUnavailable("chat check") from None
         if data.get("status") != "active":
-            self.backend.delete(self.name)
+            self.backend.delete_path(self.name, self.dir)
             raise agent_vm.VMUnavailable("chat deleted")
 
     def _copy_inputs(self, cancellation):
@@ -391,19 +427,28 @@ class VMSession:
                 logging.info("Agent VM input unavailable category=%s", safe_exception(exc))
                 self.skipped.append(file_id)
                 continue
-            path = f"{INPUT_DIR}/{_safe_name(data.get('name'), used)}"
+            path = f"{self.input_dir}/{_safe_name(data.get('name'), used)}"
             self.backend.write_file(self.name, path, raw)
             self.inputs.append(path)
 
+    @property
+    def input_dir(self):
+        return f"{self.dir}/{INPUT_FOLDER}"
+
     def announce(self, result):
-        """``result`` with the inputs, once per message."""
+        """``result`` with the chat's folder and the inputs, once per message."""
+        from app.services import agent_workspace
         with self._lock:
             if self._announced:
                 return result
             self._announced = True
-        extra = {"input_dir": INPUT_DIR, "inputs": list(self.inputs)} if self.inputs else {}
+        extra = {"chat_folder": self.dir}
+        if self.inputs:
+            extra.update(input_dir=self.input_dir, inputs=list(self.inputs))
         if self.skipped:
             extra["inputs_unavailable"] = len(self.skipped)
+        if self.restored:
+            extra["workspace_note"] = agent_workspace.RESTORED_NOTE
         return {**result, **extra}
 
     def summary(self):
@@ -414,6 +459,8 @@ class VMSession:
                 "calls": self.calls, "commands": self.commands, "seconds": round(self.seconds, 1)}
         if self.state == "unavailable":
             data["unavailable"] = True
+        if self.state == "busy":
+            data["busy"] = True
         return data
 
     def left(self):
@@ -434,6 +481,10 @@ class VMSession:
         if self.state != "idle":
             from app.services import agent_vm_time
             agent_vm_time.charge(self.loop.store, self.loop.uid, self.seconds + self.reserved)
+        if self.leased:
+            from app.services import agent_workspace
+            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id)
+            self.leased = False
         if self.backend is not None:
             try:
                 self.backend.close()
@@ -507,6 +558,7 @@ class VMTools:
         with self.session._lock:
             self.session.calls += 1
         self.session.ready(cancellation)
+        self.session.renew()
 
     def _provider(self, operation, call):
         """One call to the provider: any failure turns the VM off for the rest
@@ -548,7 +600,7 @@ class VMTools:
         report = report or (lambda fields: None)
         self._start(cancellation)
         timeout = self._timeout(args.timeout_seconds)
-        cwd = vm_path(args.cwd) if args.cwd.strip() else HOME
+        cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
         output = _Output()
         reported = [self.session.clock()]
         # Its own stop, part of the run's: a halt ends only this command.
@@ -608,7 +660,7 @@ class VMTools:
 
     def read(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path)
+        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
         try:
             raw, complete = self._provider("read", lambda: self.session.backend.read_file(
@@ -652,7 +704,7 @@ class VMTools:
 
     def write(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path)
+        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
         size = self._provider("write", lambda: self.session.backend.write_file(
             self.session.name, path, args.content.encode("utf-8")))
@@ -663,7 +715,7 @@ class VMTools:
         """Exact replacement on the file's bytes: everything else, line
         endings and encoding included, stays as it was."""
         report = report or (lambda fields: None)
-        path = vm_path(args.path)
+        path = vm_path(args.path, self.session.dir)
         if args.old_string == args.new_string:
             raise ValueError("old_string and new_string are the same: there is nothing to change.")
         self._start(cancellation)
@@ -695,7 +747,7 @@ class VMTools:
 
     def view(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path)
+        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
         try:
             raw, complete = self._provider("view", lambda: self.session.backend.read_file(
@@ -723,7 +775,7 @@ class VMTools:
 
     def share(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path)
+        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
         try:
             raw, complete = self._provider("share", lambda: self.session.backend.read_file(
@@ -761,19 +813,21 @@ class VMTools:
 
     @staticmethod
     def _outcome(result):
+        from app.services.agent_workspace import VM_BUSY
         error = (result or {}).get("error") if isinstance(result, dict) else None
-        return {"outcome": "unavailable"} if error == VM_UNAVAILABLE else {"outcome": "no_time"} \
-            if error == VM_NO_TIME else {"outcome": "day_limit"} if error == VM_DAY_LIMIT else {}
+        outcomes = {VM_UNAVAILABLE: "unavailable", VM_NO_TIME: "no_time", VM_DAY_LIMIT: "day_limit",
+                    VM_BUSY: "busy"}
+        return {"outcome": outcomes[error]} if error in outcomes else {}
 
     def _exec_activity(self, args, result):
         command = args.command if len(args.command) <= COMMAND_VIEW_CHARS else \
             args.command[:COMMAND_VIEW_CHARS - 1] + "…"
-        return {"command": command, "cwd": vm_path(args.cwd) if args.cwd.strip() else HOME,
-                **self._outcome(result)}
+        cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
+        return {"command": command, "cwd": cwd, **self._outcome(result)}
 
     def _path_activity(self, args, result):
         try:
-            path = vm_path(args.path)
+            path = vm_path(args.path, self.session.dir)
         except ValueError:
             path = ""
         return {"path": path, **self._outcome(result)}

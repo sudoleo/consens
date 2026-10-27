@@ -1,8 +1,10 @@
-"""Agent VM (AgentPreferences.vm, admin accounts only): the agent's own Linux
-VM per chat, created at its first VM call and reused across messages, with
-shell commands and files (agent_vm_tools.py) over a small provider interface
-(agent_vm.py). These tests never call Sprites: the loop runs against FakeVM,
-SpritesBackend against httpx.MockTransport and a fake WebSocket.
+"""Agent VM (AgentPreferences.vm, with audit): since 2026-10-27 the account's
+workspace, one Linux VM for all of its chats (agent_workspace.py), created at
+the first VM call and reused across messages and chats, each chat in its own
+folder, with shell commands and files (agent_vm_tools.py) over a small
+provider interface (agent_vm.py). These tests never call Sprites: the loop
+runs against FakeVM, SpritesBackend against httpx.MockTransport and a fake
+WebSocket.
 """
 import base64
 import json
@@ -10,7 +12,7 @@ import json
 import httpx
 import pytest
 
-from app.services import agent_vm, agent_vm_tools, prompt_defaults
+from app.services import agent_vm, agent_vm_tools, agent_workspace, prompt_defaults
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
@@ -103,6 +105,23 @@ class _FakeBackend(VMBackend):
         self._call("delete", name)
         self.vm.vms.pop(name, None)
 
+    def delete_path(self, name, path):
+        self._call("delete_path", name, path)
+        files = self.vm.vms.get(name, {}).get("files", {})
+        for file in [file for file in files if file == path or file.startswith(path + "/")]:
+            del files[file]
+
+    def chmod(self, name, path, mode):
+        self._call("chmod", name, path, mode)
+
+    def put_service(self, name, service, spec):
+        self._call("service", name, service)
+        self.vm.vms[name].setdefault("services", {})[service] = spec
+
+    def url(self, name):
+        self._call("url", name)
+        return f"https://{name}-test.sprites.app"
+
     def close(self):
         self.vm.calls.append(("close",))
 
@@ -161,6 +180,17 @@ def fake_vm(monkeypatch):
     return vm
 
 
+NAME = agent_vm.workspace_name(UID)
+
+
+def workspace_files(vm, name=NAME):
+    """The workspace's files without its own tools (agent_workspace.prepare)
+    and the chats' folder markers."""
+    return {path: data for path, data in vm.vms[name]["files"].items()
+            if not path.startswith(("/home/sprite/.consens/", "/home/sprite/.local/"))
+            and not path.endswith("/" + agent_workspace.CHAT_MARKER)}
+
+
 def tool_events(events, name=None):
     return [e for e in events if e.get("type") == "activity" and e.get("kind") == "tool"
             and (name is None or e.get("name") == name)]
@@ -177,29 +207,36 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
                                             ("stdout", b"mean 42\n")], 0, 3.0)
     script = Agent([[("vm_write_file", {"path": "stats.py", "content": "print(42)"})],
                     [("vm_exec", {"command": "python3 stats.py", "timeout_seconds": 120})],
-                    [("vm_read_file", {"path": "~/stats.py"})]])
+                    [("vm_read_file", {"path": "stats.py"})]])
     loop = vm_loop(store, script)
     loop.vm_tools.session.clock = fake_vm.clock
     events = list(loop.run())
     turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    # The agent is told about its VM and offered its three tools.
+    # The agent is told about its workspace and offered its three tools.
     assert prompt_defaults.AGENT_VM_PROMPT in script.systems[0]
     assert {"vm_exec", "vm_read_file", "vm_write_file"} <= set(script.offered[0])
-    name = agent_vm.vm_name(UID, loop.chat_id)
-    # The chat names its VM before the provider creates it; the VM gets the egress rules.
+    folder = agent_vm.chat_dir(loop.chat_id)
+    assert folder == f"/home/sprite/chats/{loop.chat_id}"
+    # The account and the chat name the workspace before the provider creates it; it gets the egress rules.
     chat = store._chat_ref(UID, loop.chat_id).get().to_dict()
-    assert chat["agent_vm"]["name"] == name and chat["agent_vm"]["provider"] == "fake"
-    assert fake_vm.vms[name]["policy"] == [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}, {"domain": "*", "action": "allow"}]
-    # One checkpoint for the message, before its first call ran.
+    assert chat["agent_vm"]["name"] == NAME and chat["agent_vm"]["provider"] == "fake"
+    assert chat["agent_vm"]["workspace"] is True
+    workspace = agent_workspace.record(store.db, UID)
+    assert workspace["name"] == NAME and workspace["provider"] == "fake"
+    assert fake_vm.vms[NAME]["policy"] == [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}, {"domain": "*", "action": "allow"}]
+    # Its tools, the chat's folder, then one checkpoint for the message, before its first call ran.
     operations = [call[0] for call in fake_vm.calls]
-    assert operations[:3] == ["ensure", "checkpoint", "write"] and operations.count("checkpoint") == 1
-    assert fake_vm.calls[1][2] == f"consens.io message {loop.turn_id}"
-    # The command ran under its limit in the home folder; no environment from the backend.
-    assert ("exec", name, "python3 stats.py", "/home/sprite", 120) in fake_vm.calls
-    # What the model read: each stream, exit code and duration.
+    assert operations[0] == "ensure" and operations.count("checkpoint") == 1
+    checkpoint = operations.index("checkpoint")
+    assert ("write", NAME, f"{folder}/{agent_workspace.CHAT_MARKER}") in fake_vm.calls[:checkpoint]
+    assert fake_vm.calls.index(("write", NAME, f"{folder}/stats.py")) > checkpoint
+    assert fake_vm.calls[checkpoint][2] == f"consens.io message {loop.turn_id}"
+    # The command ran under its limit in the chat's folder; no environment from the backend.
+    assert ("exec", NAME, "python3 stats.py", folder, 120) in fake_vm.calls
+    # What the model read: each stream, exit code and duration; the first result names the folder.
     write, run, read = results(loop)
-    assert write == {"path": "/home/sprite/stats.py", "bytes": 9}
+    assert write == {"path": f"{folder}/stats.py", "bytes": 9, "chat_folder": folder}
     assert run["exit_code"] == 0 and run["duration_ms"] == 3000 and run["timed_out"] is False
     assert run["stdout"] == "reading\nmean 42\n" and run["stderr"] == "warning: old numpy\n"
     assert read["content"] == "print(42)\n" and read["total_lines"] == 1 and "more" not in read
@@ -211,14 +248,38 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     saved = next(e for e in turn["agent_activity"] if e.get("name") == "vm_exec")
     assert saved["status"] == "succeeded" and saved["exit_code"] == 0 and saved["duration_ms"] == 3000
     assert saved["output"] == "reading\nwarning: old numpy\nmean 42\n" and saved["output_truncated"] is False
-    assert saved["command"] == "python3 stats.py" and saved["cwd"] == "/home/sprite"
+    assert saved["command"] == "python3 stats.py" and saved["cwd"] == folder
     paths = {e["name"]: e["path"] for e in turn["agent_activity"] if e.get("name") in {"vm_read_file", "vm_write_file"}}
-    assert paths == {"vm_write_file": "/home/sprite/stats.py", "vm_read_file": "/home/sprite/stats.py"}
+    assert paths == {"vm_write_file": f"{folder}/stats.py", "vm_read_file": f"{folder}/stats.py"}
     # The message's summary: its checkpoint and the commands' run time.
     assert turn["agent_vm"] == {"provider": "fake", "checkpoint": "v1", "calls": 3, "commands": 1, "seconds": 3.0}
     # Command output is outside content: memory is locked from then on.
     assert loop.memory_locked is True
+    # The message's lease ended with it.
+    assert agent_workspace.record(store.db, UID)["lease"] is None
     assert fake_vm.calls[-1] == ("close",)
+
+
+def test_the_workspace_gets_its_tools_once_per_version(store, fake_vm):
+    """browser, the browser's setup and start and the live view's gateway
+    (a service on the VM's private address), written only when they changed."""
+    first = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(first.run())
+    files = fake_vm.vms[NAME]["files"]
+    for name, data in agent_workspace.tool_files().items():
+        assert files[f"{agent_workspace.WORKSPACE_DIR}/{name}"] == data and b"\r\n" not in data
+    assert files[agent_workspace.BROWSER_COMMAND] == agent_workspace.WRAPPER
+    assert ("chmod", NAME, agent_workspace.BROWSER_COMMAND, "755") in fake_vm.calls
+    assert files[agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+    assert fake_vm.vms[NAME]["services"]["view"] == {
+        "cmd": "python3", "args": [f"{agent_workspace.WORKSPACE_DIR}/gateway.py"], "http_port": 6080}
+    fake_vm.calls.clear()
+    second = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=first.chat_id, request_id="two")
+    list(second.run())
+    # Up to date: one read of the version, nothing written.
+    assert ("read", NAME, agent_workspace.VERSION_PATH) in fake_vm.calls
+    assert not [call for call in fake_vm.calls if call[0] in {"service", "chmod"}
+                or (call[0] == "write" and call[2].startswith(agent_workspace.WORKSPACE_DIR))]
 
 
 def test_the_work_log_holds_every_vm_call_as_data_for_the_reviewers(store, fake_vm):
@@ -241,16 +302,84 @@ def test_the_vm_is_created_once_and_each_message_takes_its_own_checkpoint(store,
     second = vm_loop(store, Agent([[("vm_read_file", {"path": "notes.txt"})]]), chat_id=first.chat_id,
                      request_id="two")
     list(second.run())
-    name = agent_vm.vm_name(UID, first.chat_id)
-    assert list(fake_vm.vms) == [name]
-    assert fake_vm.vms[name]["checkpoints"] == [f"consens.io message {first.turn_id}",
+    assert list(fake_vm.vms) == [NAME]
+    assert fake_vm.vms[NAME]["checkpoints"] == [f"consens.io message {first.turn_id}",
                                                 f"consens.io message {second.turn_id}"]
     # The second message reads what the first one wrote.
     assert results(second)[0]["content"] == "a\n"
     assert store.get_turn(UID, first.chat_id, first.turn_id)["agent_vm"]["checkpoint"] == "v1"
     assert store.get_turn(UID, first.chat_id, second.turn_id)["agent_vm"]["checkpoint"] == "v2"
-    # Another chat has a VM of its own.
-    assert agent_vm.vm_name(UID, "other") != name and agent_vm.vm_name("other-user", first.chat_id) != name
+    # Another account has a workspace of its own.
+    assert agent_vm.workspace_name("other-user") != NAME
+
+
+def test_the_accounts_chats_share_one_workspace_each_in_its_own_folder(store, fake_vm):
+    first = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "first"})]]))
+    list(first.run())
+    second = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "second"})],
+                                   [("vm_read_file", {"path": f"{agent_vm.chat_dir(first.chat_id)}/notes.txt"})]]),
+                     request_id="other-chat")
+    list(second.run())
+    assert first.chat_id != second.chat_id and list(fake_vm.vms) == [NAME]
+    assert workspace_files(fake_vm) == {f"{agent_vm.chat_dir(first.chat_id)}/notes.txt": b"first",
+                                        f"{agent_vm.chat_dir(second.chat_id)}/notes.txt": b"second"}
+    # The same computer: a chat can read another chat's folder when it is asked to.
+    assert results(second)[1]["content"] == "first\n"
+
+
+def test_one_chat_at_a_time_another_chat_works_on_without_the_vm(store, fake_vm):
+    """A lease of another chat's message: the VM tools say so calmly, the
+    answer comes all the same, and the lease is left as it was."""
+    from datetime import datetime, timedelta, timezone
+    holder = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(holder.run())
+    agent_workspace.ref(store.db, UID).update({"lease": {
+        "chat_id": holder.chat_id, "turn_id": "running", "until": datetime.now(timezone.utc) + timedelta(minutes=5)}})
+    fake_vm.calls.clear()
+    other = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]),
+                    request_id="busy")
+    events = list(other.run())
+    turn = store.get_turn(UID, other.chat_id, other.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert results(other) == [{"error": agent_workspace.VM_BUSY}, {"error": agent_workspace.VM_BUSY}]
+    assert fake_vm.calls == [("close",)]
+    ended = [e for e in tool_events(events, "vm_exec") if e["status"] != "running"]
+    assert {e["outcome"] for e in ended} == {"busy"}
+    assert turn["agent_vm"]["busy"] is True
+    assert agent_workspace.record(store.db, UID)["lease"]["turn_id"] == "running"
+    # A lease past its time (a run that died) blocks nobody.
+    agent_workspace.ref(store.db, UID).update({"lease": {
+        "chat_id": holder.chat_id, "turn_id": "dead", "until": datetime.now(timezone.utc) - timedelta(seconds=1)}})
+    later = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=other.chat_id, request_id="later")
+    list(later.run())
+    assert results(later)[0]["exit_code"] == 0
+
+
+def test_a_long_message_keeps_its_lease_and_loses_it_only_to_expiry(store, fake_vm):
+    script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
+    loop = vm_loop(store, script)
+    session = loop.vm_tools.session
+    session.clock = fake_vm.clock
+    original = _FakeBackend.exec
+
+    def slow(self, name, command, **kwargs):
+        # Each command takes longer than the lease needs renewing.
+        self.vm.clock.now += agent_workspace.LEASE_RENEW_SECONDS + 1
+        return original(self, name, command, **kwargs)
+    _FakeBackend.exec = slow
+    renewals = []
+    real_renew = agent_workspace.renew
+
+    def counting(store_, uid, turn_id):
+        renewals.append(turn_id)
+        return real_renew(store_, uid, turn_id)
+    agent_workspace.renew = counting
+    try:
+        list(loop.run())
+    finally:
+        _FakeBackend.exec = original
+        agent_workspace.renew = real_renew
+    assert renewals == [loop.turn_id] and [r["exit_code"] for r in results(loop)] == [0, 0]
 
 
 def test_a_message_without_vm_calls_never_wakes_the_vm(store, fake_vm):
@@ -272,12 +401,11 @@ def test_the_messages_attachments_are_in_the_input_folder_at_first_use(store, fa
     script = Agent([[("vm_exec", {"command": "ls input"})], [("vm_exec", {"command": "wc -l input/data.csv"})]])
     loop = vm_loop(store, script, chat_id=chat_id, file_context=context)
     list(loop.run())
-    name = agent_vm.vm_name(UID, chat_id)
-    assert fake_vm.vms[name]["files"] == {"/home/sprite/input/data.csv": b"a,b\n1,2\n",
-                                          "/home/sprite/input/data (2).csv": b"a,b\n1,2\n"}
+    inputs = agent_vm.chat_dir(chat_id) + "/input"
+    assert workspace_files(fake_vm) == {f"{inputs}/data.csv": b"a,b\n1,2\n", f"{inputs}/data (2).csv": b"a,b\n1,2\n"}
     first, second = results(loop)
-    assert first["inputs"] == ["/home/sprite/input/data.csv", "/home/sprite/input/data (2).csv"]
-    assert first["input_dir"] == "/home/sprite/input" and "inputs" not in second
+    assert first["inputs"] == [f"{inputs}/data.csv", f"{inputs}/data (2).csv"]
+    assert first["input_dir"] == inputs and "inputs" not in second
 
 
 def test_an_unreachable_vm_costs_its_tools_never_the_answer(store, fake_vm):
@@ -419,8 +547,9 @@ def test_reading_a_missing_or_long_file(store, fake_vm):
     script = Agent([[("vm_read_file", {"path": "/nope"})], [("vm_read_file", {"path": "big.txt", "offset": 3,
                                                                                 "limit": 2})]])
     loop = vm_loop(store, script)
+    D = agent_vm.chat_dir(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
-    fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]["/home/sprite/big.txt"] = lines
+    fake_vm.vms[NAME]["files"][f"{D}/big.txt"] = lines
     list(loop.run())
     missing, page = results(loop)
     assert missing == {"error": "No file at /nope."}
@@ -435,22 +564,23 @@ def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm)
     script = Agent([[("vm_edit_file", {"path": "calc.py", "old_string": "total = a - b",
                                        "new_string": "total = a + b\nprint(total)"})]])
     loop = vm_loop(store, script)
+    D = agent_vm.chat_dir(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
-    files = fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]
-    files["/home/sprite/calc.py"] = source.encode()
+    files = fake_vm.vms[NAME]["files"]
+    files[f"{D}/calc.py"] = source.encode()
     events = list(loop.run())
     assert "vm_edit_file" in script.offered[0]
     assert "vm_edit_file changes part of a file" in prompt_defaults.AGENT_VM_PROMPT
-    assert files["/home/sprite/calc.py"].decode() == source.replace("total = a - b\n", "total = a + b\nprint(total)\n")
+    assert files[f"{D}/calc.py"].decode() == source.replace("total = a - b\n", "total = a + b\nprint(total)\n")
     [result] = results(loop)
-    assert result["path"] == "/home/sprite/calc.py" and result["replacements"] == 1
+    assert result["path"] == f"{D}/calc.py" and result["replacements"] == 1
     assert result["first_line"] == 2 and result["last_line"] == 9
     assert result["snippet"].splitlines() == ["     2\tline 2", "     3\tline 3", "     4\tline 4",
                                               "     5\ttotal = a + b", "     6\tprint(total)", "     7\tline 6",
                                               "     8\tline 7", "     9\tline 8"]
     # The activity names the file; the lines it shows again are file content: memory locks.
     edit = next(e for e in tool_events(events, "vm_edit_file") if e["status"] == "succeeded")
-    assert edit["path"] == "/home/sprite/calc.py" and loop.memory_locked is True
+    assert edit["path"] == f"{D}/calc.py" and loop.memory_locked is True
     entry = next(e for e, _ in loop.work_log.entries_after(0) if e["kind"] == "tool" and e["name"] == "vm_edit_file")
     assert entry["data"] == "vm"
 
@@ -513,6 +643,7 @@ def test_a_halt_while_the_vm_starts_stops_the_command_it_starts_for(store, fake_
 
 def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
     loop = vm_loop(store, Agent())
+    D = agent_vm.chat_dir(loop.chat_id)
     tools, cancellation = loop.vm_tools, ProviderCancellation()
 
     def edit(**kwargs):
@@ -524,17 +655,17 @@ def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
     # The same text on both sides changes nothing and never wakes the VM.
     assert "nothing to change" in edit(old_string="x", new_string="x")["error"] and fake_vm.calls == []
     tools.session.ready(cancellation)
-    files = fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]
+    files = fake_vm.vms[NAME]["files"]
     assert edit(path="none.txt", old_string="a", new_string="b")["error"] == (
-        "No file at /home/sprite/none.txt. Create it with vm_write_file.")
+        f"No file at {D}/none.txt. Create it with vm_write_file.")
     # Windows line endings and bytes that are no UTF-8 stay exactly as they were.
-    files["/home/sprite/a.txt"] = b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
+    files[f"{D}/a.txt"] = b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
     assert "was not found" in edit(old_string="x = 2", new_string="x = 3")["error"]
     assert "occurs 2 times" in edit(old_string="= 1", new_string="= 2")["error"]
-    assert files["/home/sprite/a.txt"] == b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
+    assert files[f"{D}/a.txt"] == b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
     done = edit(old_string="= 1", new_string="= 2", replace_all=True)
-    assert done["replacements"] == 2 and files["/home/sprite/a.txt"] == b"x = 2\r\ny = 2\r\n\xff\xfe raw\r\n"
-    files["/home/sprite/b.bin"] = b"\x00\x01binary"
+    assert done["replacements"] == 2 and files[f"{D}/a.txt"] == b"x = 2\r\ny = 2\r\n\xff\xfe raw\r\n"
+    files[f"{D}/b.bin"] = b"\x00\x01binary"
     assert "binary file" in edit(path="b.bin", old_string="binary", new_string="text")["error"]
     with pytest.raises(ValueError):
         agent_vm_tools.VmEditFileArgs(path="a.txt", old_string="", new_string="b")
@@ -547,8 +678,9 @@ def test_a_line_longer_than_a_page_is_read_cut_and_reading_goes_on(store, fake_v
     script = Agent([[("vm_read_file", {"path": "data.json"})],
                     [("vm_read_file", {"path": "data.json", "offset": 2})]])
     loop = vm_loop(store, script)
+    D = agent_vm.chat_dir(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
-    fake_vm.vms[agent_vm.vm_name(UID, loop.chat_id)]["files"]["/home/sprite/data.json"] = (
+    fake_vm.vms[NAME]["files"][f"{D}/data.json"] = (
         f"short\n{long_line}\nend\n".encode())
     list(loop.run())
     first, cut = results(loop)
@@ -572,10 +704,11 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
                     [("vm_share_file", {"path": "/tmp/chart.png"}), ("vm_share_file", {"path": "/tmp/fake.png"}),
                      ("vm_share_file", {"path": "big.bin"}), ("vm_share_file", {"path": "/nope"})]])
     loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    D = agent_vm.chat_dir(chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
-    fake_vm.vms[agent_vm.vm_name(UID, chat_id)]["files"].update({
-        "/tmp/chart.png": png, "/home/sprite/notes.txt": b"mean 42\n", "/tmp/fake.png": b"<svg onload=alert(1)>",
-        "/home/sprite/big.bin": b"x" * (agent_vm_tools.SHARE_BYTES + 1)})
+    fake_vm.vms[NAME]["files"].update({
+        "/tmp/chart.png": png, f"{D}/notes.txt": b"mean 42\n", "/tmp/fake.png": b"<svg onload=alert(1)>",
+        f"{D}/big.bin": b"x" * (agent_vm_tools.SHARE_BYTES + 1)})
     events = list(loop.run())
     chart, notes, again, fake, big, missing = results(loop)
     assert "vm_share_file" in script.offered[0]
@@ -586,7 +719,7 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     assert again["file"] == chart["file"]
     # A name never makes a file a picture.
     assert fake["shown_as"] == "download" and fake["file"]["mime"] == "application/octet-stream"
-    assert big == {"error": "/home/sprite/big.bin is larger than 5 MB. Share a smaller file (compress, split or "
+    assert big == {"error": f"{D}/big.bin is larger than 5 MB. Share a smaller file (compress, split or "
                             "shrink it)."}
     assert missing == {"error": "No file at /nope."}
     saved = {file["name"]: file for file in files.list(UID, chat_id)}
@@ -598,7 +731,7 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     shared = [file["name"] for event in events if event.get("type") == "resources" for file in event["files"]]
     assert shared == ["chart.png", "Results.txt", "fake.png"]
     assert [event["path"] for event in tool_events(events, "vm_share_file") if event["status"] == "succeeded"] == [
-        "/tmp/chart.png", "/home/sprite/notes.txt", "/tmp/chart.png", "/tmp/fake.png"]
+        "/tmp/chart.png", f"{D}/notes.txt", "/tmp/chart.png", "/tmp/fake.png"]
 
 
 def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(store, fake_vm, monkeypatch):
@@ -710,23 +843,48 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
 
 # --- Deletion -----------------------------------------------------------------------
 
-def test_deleting_the_chat_deletes_its_vm(store, fake_vm):
-    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
-    list(loop.run())
-    name = agent_vm.vm_name(UID, loop.chat_id)
-    store._purge_chat(UID, loop.chat_id)
-    assert name not in fake_vm.vms and ("delete", name) in fake_vm.calls
-    assert not store._chat_ref(UID, loop.chat_id).get().exists
+def test_deleting_the_chat_deletes_its_folder_and_keeps_the_workspace(store, fake_vm):
+    gone = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "a"})]]))
+    list(gone.run())
+    kept = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "b"})]]), request_id="kept")
+    list(kept.run())
+    store._purge_chat(UID, gone.chat_id)
+    assert ("delete_path", NAME, agent_vm.chat_dir(gone.chat_id)) in fake_vm.calls
+    assert ("delete", NAME) not in fake_vm.calls
+    assert workspace_files(fake_vm) == {f"{agent_vm.chat_dir(kept.chat_id)}/notes.txt": b"b"}
+    assert not store._chat_ref(UID, gone.chat_id).get().exists
+
+
+def test_a_chat_with_its_own_vm_from_before_deletes_that_vm(store, fake_vm):
+    chat_id, _ = pending(store)
+    legacy = agent_vm.vm_name(UID, chat_id)
+    fake_vm.vms[legacy] = {"files": {}, "checkpoints": []}
+    store._chat_ref(UID, chat_id).update({"agent_vm": {"provider": "fake", "name": legacy}})
+    store._purge_chat(UID, chat_id)
+    assert legacy not in fake_vm.vms and ("delete", legacy) in fake_vm.calls
 
 
 def test_a_failed_vm_deletion_keeps_the_chats_deletion_job_retrying(store, fake_vm):
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(loop.run())
-    fake_vm.fail.add("delete")
+    fake_vm.fail.add("delete_path")
     with pytest.raises(VMUnavailable):
         store._purge_chat(UID, loop.chat_id)
     # Nothing of the chat is gone yet: the job retries all of it.
     assert store._chat_ref(UID, loop.chat_id).get().exists
+
+
+def test_deleting_the_account_deletes_its_workspace(store, fake_vm):
+    from app.services.account_deletion import FirestoreAccountDeletion as AccountDeletion
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    AccountDeletion(store.db)._delete_agent_workspace(UID)
+    assert NAME not in fake_vm.vms and ("delete", NAME) in fake_vm.calls
+    assert not agent_workspace.ref(store.db, UID).get().exists
+    # Nothing to do (and no provider call) for an account without one.
+    fake_vm.calls.clear()
+    AccountDeletion(store.db)._delete_agent_workspace(UID)
+    assert fake_vm.calls == []
 
 
 def test_a_chat_without_a_vm_is_deleted_without_asking_the_provider(store, monkeypatch):
@@ -738,7 +896,7 @@ def test_a_chat_without_a_vm_is_deleted_without_asking_the_provider(store, monke
     assert not store._chat_ref(UID, chat_id).get().exists
 
 
-def test_a_chat_deleted_while_its_vm_was_created_deletes_the_vm(store, fake_vm):
+def test_a_chat_deleted_while_its_folder_was_made_deletes_the_folder(store, fake_vm):
     loop = vm_loop(store, Agent())
     original = _FakeBackend.ensure
 
@@ -751,7 +909,8 @@ def test_a_chat_deleted_while_its_vm_was_created_deletes_the_vm(store, fake_vm):
             loop.vm_tools.session.ready(ProviderCancellation())
     finally:
         _FakeBackend.ensure = original
-    assert fake_vm.vms == {} and ("delete", agent_vm.vm_name(UID, loop.chat_id)) in fake_vm.calls
+    assert ("delete_path", NAME, agent_vm.chat_dir(loop.chat_id)) in fake_vm.calls
+    assert workspace_files(fake_vm) == {}
 
 
 # --- SpritesBackend (no network) -----------------------------------------------------

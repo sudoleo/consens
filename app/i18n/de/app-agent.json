@@ -784,6 +784,7 @@
   "VM not available": "VM gerade nicht verfügbar",
   "Skipped · no time left": "Übersprungen · keine Zeit mehr",
   "Skipped · VM time for today used up": "Übersprungen · VM-Zeit für heute aufgebraucht",
+  "Skipped · workspace in use by another chat": "Übersprungen · Arbeitsplatz gerade in einem anderen Chat",
   "VM time today: {used} min, no daily limit": "VM-Zeit heute: {used} Min., ohne Tageslimit",
   "VM time today: {used} of {limit} min": "VM-Zeit heute: {used} von {limit} Min.",
   "Running…": "Läuft…",

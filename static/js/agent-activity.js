@@ -461,7 +461,7 @@
     vm_stop_process: ['Stopping process', 'Stopped process'],
     vm_view_image: ['Looking at the picture', 'Looked at the picture'] };
   const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left',
-    day_limit: 'Skipped · VM time for today used up' };
+    day_limit: 'Skipped · VM time for today used up', busy: 'Skipped · workspace in use by another chat' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
     if (item.status === 'running') return item.name === 'vm_exec' ? App.t('Running…') : '';
