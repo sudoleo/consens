@@ -14,7 +14,7 @@ from app.services.agent_vm_tools import PICTURE_INTRO, picture_message
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_long_runs import LongAgent
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import NO_NOTES, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"chart" * 20
 
@@ -37,7 +37,7 @@ def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
     assert "vm_view_image" in script.offered[0]
     viewed = results(loop)[0]
     chart = f"{agent_vm.chat_dir(loop.chat_id)}/chart.png"
-    assert viewed == {"path": chart, "mime": "image/png", "bytes": len(PNG), "chat_folder": agent_vm.chat_dir(loop.chat_id),
+    assert viewed == {"path": chart, "mime": "image/png", "bytes": len(PNG), "chat_folder": agent_vm.chat_dir(loop.chat_id), "workspace_notes": NO_NOTES,
                       "note": "The picture follows as an image after these results."}
     # The next step: both results first (every call answered), then the picture.
     after = script.seen[1]

@@ -16,6 +16,13 @@ a VM service on GATEWAY_PORT that the VM's private address leads to. They are
 written again whenever their VERSION changed (prepare), at the first VM call
 of a message or when the view opens.
 
+Folders and notes (like Claude Code's memory): each chat's folder names its
+chat in CHAT_MARKER (title, start, id), so a chat finds another's files; and
+NOTES_PATH is the agent's own notebook of the workspace across chats (what is
+where, what is in progress, a project's conventions). Its beginning comes with
+the first VM result of every message (read_notes), as data; the user's memory
+(agent_memory.py) stays what the user said about themselves.
+
 Takeover: ``control.json`` in the VM says the user has the browser until a
 time the open view keeps moving on (CONTROL_SECONDS); while it holds,
 ``browser`` does nothing but wait. The reviewers follow what the agent does,
@@ -23,6 +30,7 @@ never what the user does.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -43,6 +51,10 @@ VERSION_PATH = WORKSPACE_DIR + "/version"
 CONTROL_PATH = WORKSPACE_DIR + "/control.json"
 BROWSER_COMMAND = HOME + "/.local/bin/browser"
 BROWSER_PROFILE = HOME + "/.consens/browser/profile"
+NOTES_PATH = HOME + "/NOTES.md"
+# What of the notes comes with a message's first VM result; the rest the agent
+# reads itself.
+NOTES_CHARS = 6000
 GATEWAY_PORT = 6080
 GATEWAY_SERVICE = "view"
 # How long a takeover holds without the view refreshing it (it does every
@@ -64,6 +76,13 @@ RESTORED_NOTE = ("The user restored the workspace to how it was before an earlie
 
 class WorkspaceBusy(Exception):
     """Another chat's message holds the workspace."""
+
+
+@dataclass(frozen=True)
+class Claim:
+    restored: bool
+    title: str = ""
+    started: str = ""
 
 
 def tool_files():
@@ -105,8 +124,9 @@ def claim(store, uid, chat_id, turn_id, *, provider):
     """In one transaction: the account may write, the chat is still active,
     the account's workspace is recorded on the account and the chat (before
     the provider creates it) and leased to this message. Raises WorkspaceBusy
-    when another chat's message holds it. Returns whether the workspace was
-    restored since this chat last used it."""
+    when another chat's message holds it. Returns a Claim: whether the
+    workspace was restored since this chat last used it, and the chat's title
+    and start for its folder (make_chat_dir)."""
     from app.services import persistence_guard
     from app.services.chat_store import ChatNotFound
     name = agent_vm.workspace_name(uid)
@@ -126,6 +146,9 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         # Restores of the workspace so far, and how many this chat was told of.
         restores = int(record.get("restores") or 0)
         outcome["restored"] = bool(used.get("workspace")) and restores > int(used.get("restores_seen") or 0)
+        started = chat_data.get("created_at")
+        outcome["title"] = str(chat_data.get("title") or "")
+        outcome["started"] = started.date().isoformat() if isinstance(started, datetime) else ""
         tx.set(workspace, {**{key: value for key, value in record.items() if key != "lease"},
                            "provider": provider, "name": name,
                            "created_at": record.get("created_at") or now.isoformat(),
@@ -137,7 +160,8 @@ def claim(store, uid, chat_id, turn_id, *, provider):
                                       "created_at": used.get("created_at") or now.isoformat(), "used_at": now,
                                       "restores_seen": restores}})
     store._transaction(operation)
-    return outcome.get("restored", False)
+    return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
+                 started=outcome.get("started", ""))
 
 
 def renew(store, uid, turn_id):
@@ -231,13 +255,37 @@ def prepare(vm, name):
     return True
 
 
-# Makes the chat's folder (the file API creates the folders a file needs);
-# commands start there.
+# Makes the chat's folder (the file API creates the folders a file needs),
+# where commands start, and names its chat there: the folders themselves are
+# ids, so `cat ~/chats/*/.consens-chat` tells the agent which is which.
 CHAT_MARKER = ".consens-chat"
+TITLE_CHARS = 200
 
 
-def make_chat_dir(vm, name, chat_id):
-    vm.write_file(name, f"{agent_vm.chat_dir(chat_id)}/{CHAT_MARKER}", b"")
+def chat_marker(chat_id, title="", started=""):
+    title = " ".join(str(title or "").split())[:TITLE_CHARS] or "(untitled)"
+    return (f"chat: {title}\nstarted: {started or 'unknown'}\nid: {chat_id}\n"
+            "This folder holds the files of that chat; it is deleted with the chat.\n").encode("utf-8")
+
+
+def make_chat_dir(vm, name, chat_id, title="", started=""):
+    """Written at every message's first VM call: the title follows a rename."""
+    vm.write_file(name, f"{agent_vm.chat_dir(chat_id)}/{CHAT_MARKER}", chat_marker(chat_id, title, started))
+
+
+def read_notes(vm, name):
+    """The beginning of the workspace's notes for the agent, or that there
+    are none yet: ``{"path", "text", "more"}``. Data, never instructions
+    (AGENT_VM_PROMPT)."""
+    try:
+        raw, complete = vm.read_file(name, NOTES_PATH, limit=NOTES_CHARS * 4)
+    except agent_vm.VMFileMissing:
+        return {"path": NOTES_PATH, "text": "", "note": "No notes yet: start them when something lasting comes up."}
+    text = raw.decode("utf-8", "replace")
+    notes = {"path": NOTES_PATH, "text": text[:NOTES_CHARS]}
+    if len(text) > NOTES_CHARS or not complete:
+        notes["more"] = f"The notes go on: read the rest with vm_read_file {NOTES_PATH}, and keep them shorter."
+    return notes
 
 
 def control_payload(holder, *, now=None):

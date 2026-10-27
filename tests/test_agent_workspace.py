@@ -32,7 +32,7 @@ def load(name):
 def test_one_chats_message_at_a_time_and_a_lease_ends_or_expires(store):
     first, _ = pending(store)
     second, _ = pending(store, request_id="second")
-    assert agent_workspace.claim(store, UID, first, "turn-1", provider="fake") is False
+    assert agent_workspace.claim(store, UID, first, "turn-1", provider="fake").restored is False
     workspace = agent_workspace.record(store.db, UID)
     assert workspace["name"] == agent_vm.workspace_name(UID) and workspace["lease"]["chat_id"] == first
     assert agent_workspace.held_by(store.db, UID) == first
@@ -61,12 +61,12 @@ def test_a_restore_is_told_once_to_every_chat_that_used_the_workspace_before(sto
         agent_workspace.claim(store, UID, chat, f"turn-{chat}", provider="fake")
         agent_workspace.release(store, UID, f"turn-{chat}")
     agent_workspace.mark_restored(store, UID)
-    assert agent_workspace.claim(store, UID, second, "again", provider="fake") is True
+    assert agent_workspace.claim(store, UID, second, "again", provider="fake").restored is True
     agent_workspace.release(store, UID, "again")
-    assert agent_workspace.claim(store, UID, second, "once-more", provider="fake") is False
+    assert agent_workspace.claim(store, UID, second, "once-more", provider="fake").restored is False
     agent_workspace.release(store, UID, "once-more")
     # A chat that never used it has nothing to be told.
-    assert agent_workspace.claim(store, UID, fresh, "new", provider="fake") is False
+    assert agent_workspace.claim(store, UID, fresh, "new", provider="fake").restored is False
 
 
 def test_a_deleted_chat_takes_no_lease(store):

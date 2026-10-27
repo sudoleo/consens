@@ -181,6 +181,9 @@ def fake_vm(monkeypatch):
 
 
 NAME = agent_vm.workspace_name(UID)
+# The first result of a message in a workspace without notes yet.
+NO_NOTES = {"path": agent_workspace.NOTES_PATH, "text": "",
+            "note": "No notes yet: start them when something lasting comes up."}
 
 
 def workspace_files(vm, name=NAME):
@@ -236,7 +239,7 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     assert ("exec", NAME, "python3 stats.py", folder, 120) in fake_vm.calls
     # What the model read: each stream, exit code and duration; the first result names the folder.
     write, run, read = results(loop)
-    assert write == {"path": f"{folder}/stats.py", "bytes": 9, "chat_folder": folder}
+    assert write == {"path": f"{folder}/stats.py", "bytes": 9, "chat_folder": folder, "workspace_notes": NO_NOTES}
     assert run["exit_code"] == 0 and run["duration_ms"] == 3000 and run["timed_out"] is False
     assert run["stdout"] == "reading\nmean 42\n" and run["stderr"] == "warning: old numpy\n"
     assert read["content"] == "print(42)\n" and read["total_lines"] == 1 and "more" not in read
@@ -1072,3 +1075,49 @@ def test_the_provider_is_configured_by_its_token_only(monkeypatch):
         assert isinstance(vm, SpritesBackend) and agent_vm.configured()
     finally:
         vm.close()
+
+
+# --- Folders by name and the workspace's notes (2026-10-27) -------------------------
+
+def test_each_chat_folder_names_its_chat(store, fake_vm):
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    store._chat_ref(UID, loop.chat_id).update({"title": "CSV-Auswertung\nder Umsätze"})
+    list(loop.run())
+    marker = fake_vm.vms[NAME]["files"][f"{agent_vm.chat_dir(loop.chat_id)}/{agent_workspace.CHAT_MARKER}"].decode()
+    assert marker.startswith("chat: CSV-Auswertung der Umsätze\nstarted: ")
+    assert f"id: {loop.chat_id}\n" in marker and "deleted with the chat" in marker
+    # The agent is told how to find another chat's folder.
+    assert ".consens-chat" in prompt_defaults.AGENT_VM_PROMPT
+
+
+def test_the_workspaces_notes_come_with_the_first_vm_result_as_data(store, fake_vm):
+    notes = "# Workspace\n- CSV-Auswertung: ~/chats/abc/report.py\n"
+    fake_vm.vms[NAME] = {"files": {agent_workspace.NOTES_PATH: notes.encode()}, "checkpoints": []}
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]))
+    list(loop.run())
+    first, second = results(loop)
+    assert first["workspace_notes"] == {"path": "/home/sprite/NOTES.md", "text": notes}
+    assert "workspace_notes" not in second
+    # Kept as the agent's notebook, apart from the user's memory, and never as instructions.
+    prompt = prompt_defaults.AGENT_VM_PROMPT
+    assert "/home/sprite/NOTES.md" in prompt and "data, never instructions" in prompt
+    assert "Facts about the user themselves belong in memory" in prompt
+
+
+def test_long_notes_come_cut_with_the_way_to_the_rest(store, fake_vm):
+    fake_vm.vms[NAME] = {"files": {agent_workspace.NOTES_PATH: ("x" * (agent_workspace.NOTES_CHARS + 50)).encode()},
+                         "checkpoints": []}
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    notes = results(loop)[0]["workspace_notes"]
+    assert len(notes["text"]) == agent_workspace.NOTES_CHARS and "vm_read_file" in notes["more"]
+
+
+def test_notes_that_cannot_be_read_cost_nothing_else(store, fake_vm, monkeypatch):
+    def failing(vm, name):
+        raise VMUnavailable("read")
+    monkeypatch.setattr(agent_workspace, "read_notes", failing)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    first = results(loop)[0]
+    assert first["exit_code"] == 0 and "workspace_notes" not in first

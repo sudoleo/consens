@@ -105,7 +105,7 @@ def test_the_workspace_is_restored_only_while_no_chat_uses_it_and_every_chat_hea
     done = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
     assert done.status_code == 200 and ("restore", agent_vm.workspace_name(UID), "v3") in fake_vm.calls
     assert agent_workspace.record(store.db, UID)["restores"] == 1
-    assert agent_workspace.claim(store, UID, other, "next", provider="fake") is True
+    assert agent_workspace.claim(store, UID, other, "next", provider="fake").restored is True
 
 
 def test_the_next_message_is_told_once(admin_api, fake_vm):

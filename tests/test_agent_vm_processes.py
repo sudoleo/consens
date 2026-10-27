@@ -19,7 +19,7 @@ from app.services.agent_compaction import describe
 from app.services.agent_vm_processes import (MAX_RUNNING, RUNNER, command_script, list_command, parse_status,
                                              process_dir, start_command, status_command, stop_command, task_name)
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
 
 PID = "abcd1234"
 
@@ -105,7 +105,7 @@ def test_without_an_id_the_processes_are_listed(store, fake_vm):
     assert results(loop)[0] == {"processes": [
         {"id": "abcd1234", "status": "running", "command": "npm run dev"},
         {"id": "0000ffff", "status": "exited", "exit_code": 1, "command": "pytest -q"}],
-        "chat_folder": agent_vm.chat_dir(loop.chat_id)}
+        "chat_folder": agent_vm.chat_dir(loop.chat_id), "workspace_notes": NO_NOTES}
 
 
 def test_a_process_the_vm_stopped_is_said_to_be_lost():

@@ -308,7 +308,9 @@ class VMSession:
         # VM call, moved on by later ones, released when the message ends.
         self.leased = False
         self._leased_at = 0.0
-        self.restored = False
+        self.claim = None
+        # The workspace's notes (agent_workspace.read_notes), with the first result.
+        self.notes = None
         self.backend = None
         self.state = "idle"
         # Set once the VM was ready in this message, also if it fails later:
@@ -344,7 +346,8 @@ class VMSession:
                 cancellation.raise_if_cancelled()
                 self.backend.ensure(self.name)
                 agent_workspace.prepare(self.backend, self.name)
-                agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id)
+                agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id,
+                                              self.claim.title, self.claim.started)
                 self._still_active()
                 try:
                     self.checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
@@ -352,6 +355,11 @@ class VMSession:
                     # Works on without it: the checkpoint only marks a state to return to.
                     logging.warning("Agent VM checkpoint unavailable")
                 self._copy_inputs(cancellation)
+                try:
+                    self.notes = agent_workspace.read_notes(self.backend, self.name)
+                except agent_vm.VMUnavailable:
+                    # Works on without them, like without a checkpoint.
+                    logging.warning("Agent workspace notes unavailable")
                 self.state = "ready"
                 self.started = True
             except ProviderCancelled:
@@ -395,7 +403,7 @@ class VMSession:
         creates it, and this message leases it (agent_workspace.claim)."""
         from app.services import agent_workspace
         try:
-            self.restored = agent_workspace.claim(self.loop.store, self.loop.uid, self.loop.chat_id,
+            self.claim = agent_workspace.claim(self.loop.store, self.loop.uid, self.loop.chat_id,
                                                   self.loop.turn_id, provider=self.backend.provider)
         except agent_workspace.WorkspaceBusy:
             raise
@@ -436,7 +444,8 @@ class VMSession:
         return f"{self.dir}/{INPUT_FOLDER}"
 
     def announce(self, result):
-        """``result`` with the chat's folder and the inputs, once per message."""
+        """``result`` with the chat's folder, the inputs and the workspace's
+        notes, once per message."""
         from app.services import agent_workspace
         with self._lock:
             if self._announced:
@@ -447,7 +456,9 @@ class VMSession:
             extra.update(input_dir=self.input_dir, inputs=list(self.inputs))
         if self.skipped:
             extra["inputs_unavailable"] = len(self.skipped)
-        if self.restored:
+        if self.notes is not None:
+            extra["workspace_notes"] = self.notes
+        if self.claim is not None and self.claim.restored:
             extra["workspace_note"] = agent_workspace.RESTORED_NOTE
         return {**result, **extra}
 

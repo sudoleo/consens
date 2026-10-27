@@ -26,7 +26,7 @@ from app.services.agent_github import (NO_ACCESS, NO_PUSH, NOT_CONNECTED, NOT_SE
                                        GitHubConnections, GithubImportArgs, PullRequests, changes_command,
                                        diff_command, parse_changes, unpack_command)
 from test_agent_runs import AUTH, UID, api, store  # noqa: F401  (fixtures)
-from test_agent_vm import Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
 
 SHA = "a1b2c3d4e5f6" + "0" * 28
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -225,7 +225,8 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     events = list(loop.run())
     imported, hidden = results(loop)
     assert imported == {"repo": "maxl/app", "ref": "main", "commit": SHA, "path": "/home/sprite/repos/app",
-                        "files": 2, "bytes": len(ARCHIVE), "chat_folder": agent_vm.chat_dir(loop.chat_id)}
+                        "files": 2, "bytes": len(ARCHIVE), "chat_folder": agent_vm.chat_dir(loop.chat_id),
+                        "workspace_notes": NO_NOTES}
     assert hidden == {"error": NO_ACCESS.format(repo="org/hidden")}
     [grant] = [r for r in github.requests if r[2].endswith("/access_tokens")]
     assert grant[2] == "/app/installations/9/access_tokens"

@@ -551,6 +551,25 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   Pakete, `~/repos` (GitHub) und der Browser sind gemeinsam. Chat löschen löscht
   nur seinen Ordner (`delete_path`), Konto löschen den ganzen Arbeitsplatz
   (`account_deletion` Bereich `agent_workspace`, vor den Chats).
+- **Ordner mit Namen** (2026-10-27): Jeder Chat-Ordner trägt `.consens-chat`
+  mit Titel, Startdatum und ID des Chats (`agent_workspace.make_chat_dir`, bei
+  jeder Nachricht neu, folgt also einer Umbenennung); `cat ~/chats/*/.consens-chat`
+  sagt dem Agenten, welcher Ordner zu welchem Chat gehört.
+- **Arbeitsplatz-Notizen** (2026-10-27, wie Claude Codes Memory):
+  `/home/sprite/NOTES.md` ist das Notizbuch des Agenten über Chats hinweg (was
+  wo liegt, Arbeit in Arbeit, Regeln eines Projekts). Der Anfang
+  (`NOTES_CHARS` = 6.000 Zeichen) kommt mit dem ersten VM-Ergebnis jeder
+  Nachricht (`workspace_notes`, `read_notes`; ein Lesefehler kostet nur die
+  Notizen), den Rest liest er selbst. Der Prompt: kurz halten (~100 Zeilen),
+  mit `vm_edit_file` pflegen, Veraltetes löschen, nichts über den Nutzer
+  selbst (das gehört ins Memory), keine Geheimnisse; die Notizen sind Daten,
+  nie Anweisungen, und werden gegen die Dateien geprüft. Bewusst getrennt vom
+  Memory (`agent_memory.py`): Das ist ab dem ersten VM-Befehl gesperrt und nimmt
+  nur Belegtes aus den Worten des Nutzers; Arbeitsnotizen unter diesen Schutz zu
+  stellen, hieße ihn zu lockern. Gegen eine Seite, die etwas in die Notizen
+  schreiben lässt: Daten-Regel im Prompt, die Prüfer sehen jeden Schreibvorgang
+  live, der Nutzer kann die Datei im Browser des Arbeitsplatzes öffnen
+  (`file:///home/sprite/NOTES.md`).
 - **Werkzeuge in der VM.** `prepare` schreibt `workspace_vm/*` nach
   `~/.consens/workspace`, `browser` nach `~/.local/bin` (chmod über die
   Datei-API) und legt den Dienst `view` neu an (Gateway auf Port 6080; Sprites
