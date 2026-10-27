@@ -622,6 +622,17 @@ class VMTools:
             self.session.failed()
             raise _VMOff(VM_UNAVAILABLE) from None
 
+    def _exec(self, command, *, cwd, timeout, on_output, cancellation):
+        """A command the server runs in the VM for the agent's work (a
+        process's status or wait, an import's unpacking): its run time counts
+        against today's VM time like the agent's own commands (security audit
+        2026-10-27; before, only vm_exec counted)."""
+        outcome = self._provider("exec", lambda: self.session.backend.exec(
+            self.session.name, command, cwd=cwd, timeout=timeout, on_output=on_output, cancellation=cancellation))
+        with self.session._lock:
+            self.session.seconds += outcome.seconds
+        return outcome
+
     def _timeout(self, requested):
         timeout = min(requested, EXEC_TIMEOUT_MAX)
         left = self.loop.answer_time_left()

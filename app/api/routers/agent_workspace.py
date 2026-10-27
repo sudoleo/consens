@@ -7,7 +7,10 @@ The view is a WebSocket the server carries through to the VM's gateway
 provider's token opens; the token never leaves the server. The browser
 signs in with its first message ({"id_token"}), never in the URL. After the
 gateway's text states (setup, starting, ready) both ways carry VNC bytes. A
-view ends after VIEW_SECONDS: an open view keeps the VM awake.
+view ends after VIEW_SECONDS: an open view keeps the VM awake. Since the
+security audit of 2026-10-27 an account has one view at a time (the newest
+wins, agent_workspace.claim_view), its time counts against the day's VM time
+(agent_vm_time.py) and never runs past it, and opening is rate limited.
 """
 from __future__ import annotations
 
@@ -24,13 +27,15 @@ from pydantic import Field
 from app.api.routers.agent import require_agent_access, vm_allowed
 from app.api.routers.chat_history import _chat_uid
 from app.core.observability import safe_exception
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import db_firestore, verify_user_token
-from app.services import agent_vm, agent_workspace
+from app.services import agent_vm, agent_vm_time, agent_workspace
 from app.services.agent_documents import Strict
 
 router = APIRouter()
 VIEW_SECONDS = 60 * 60
+# Views an account may open per minute (a reload or a second window, not a loop).
+VIEWS_PER_MINUTE = 6
 SIGN_IN_SECONDS = 15
 UPSTREAM_OPEN_SECONDS = 30
 NO_STORE = {"Cache-Control": "private, no-store"}
@@ -168,6 +173,35 @@ async def _state(websocket, state):
     await websocket.send_text(json.dumps({"state": state}))
 
 
+def _view_seconds(uid):
+    """How long this view may stay open: VIEW_SECONDS, at most what is left
+    of today's VM time (agent_vm_time.py); a failed read leaves the hour."""
+    try:
+        limit = agent_vm_time.daily_limit(uid)
+        if limit is None:
+            return VIEW_SECONDS
+        return min(VIEW_SECONDS, int(limit - agent_vm_time.used(db_firestore, uid)))
+    except Exception as exc:
+        logging.warning("Agent workspace view time unavailable category=%s", safe_exception(exc))
+        return VIEW_SECONDS
+
+
+def _charge(uid, seconds):
+    agent_vm_time.charge(_store(), uid, seconds)
+
+
+# Why the server closed a view (workspace-view.js CLOSED): once noVNC has the
+# socket, text states would reach it as VNC bytes, so the reason is the code.
+CLOSE_ENDED, CLOSE_REPLACED, CLOSE_NO_TIME, CLOSE_TOO_MANY = 4410, 4409, 4402, 4429
+
+
+async def _end(websocket, code):
+    try:
+        await websocket.close(code=code)
+    except Exception:
+        pass
+
+
 @router.websocket("/agent/workspace/view")
 async def workspace_view(websocket: WebSocket):
     await websocket.accept()
@@ -180,10 +214,20 @@ async def workspace_view(websocket: WebSocket):
     if uid is None:
         await websocket.close(code=4403)
         return
+    try:
+        api_uid_limiter.check(uid, "agent:workspace_view", VIEWS_PER_MINUTE)
+    except ApiUidRateLimitExceeded:
+        await _end(websocket, CLOSE_TOO_MANY)
+        return
+    seconds = await asyncio.to_thread(_view_seconds, uid)
+    if seconds < 1:
+        await _end(websocket, CLOSE_NO_TIME)
+        return
     await _state(websocket, "connecting")
     started = time.monotonic()
     try:
         url = await asyncio.to_thread(_open, uid)
+        view_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds)
         upstream = await connect_upstream("wss://" + url.split("://", 1)[1].rstrip("/") + "/vnc")
     except Exception as exc:
         logging.warning("Agent workspace view unavailable category=%s", safe_exception(exc))
@@ -206,19 +250,30 @@ async def workspace_view(websocket: WebSocket):
             else:
                 await websocket.send_text(message)
 
-    tasks = [asyncio.ensure_future(to_vm()), asyncio.ensure_future(to_browser())]
-    done, _ = await asyncio.wait(tasks, timeout=VIEW_SECONDS, return_when=asyncio.FIRST_COMPLETED)
+    async def replaced():
+        # A newer view of the account took over: this one ends.
+        while True:
+            await asyncio.sleep(agent_workspace.VIEW_CHECK_SECONDS)
+            try:
+                if not await asyncio.to_thread(agent_workspace.holds_view, db_firestore, uid, view_id):
+                    return
+            except Exception as exc:
+                logging.info("Agent workspace view check failed category=%s", safe_exception(exc))
+
+    watcher = asyncio.ensure_future(replaced())
+    tasks = [asyncio.ensure_future(to_vm()), asyncio.ensure_future(to_browser()), watcher]
+    done, _ = await asyncio.wait(tasks, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
     for task in tasks:
         task.cancel()
     try:
         await upstream.close()
     except Exception:
         pass
-    try:
-        if not done:
-            await _state(websocket, "ended")
-        await websocket.close()
-    except Exception:
-        pass
-    # Open views keep the VM awake: their length, to watch what they cost.
-    logging.info("Agent workspace view closed seconds=%d", int(time.monotonic() - started))
+    # Open views keep the VM awake: their time counts as VM time.
+    elapsed = time.monotonic() - started
+    await asyncio.to_thread(_charge, uid, elapsed)
+    logging.info("Agent workspace view closed seconds=%d", int(elapsed))
+    # Its hour, or today's VM time, is over; or a newer view took over.
+    code = (CLOSE_ENDED if seconds >= VIEW_SECONDS else CLOSE_NO_TIME) if not done \
+        else CLOSE_REPLACED if watcher in done else 1000
+    await _end(websocket, code)

@@ -239,6 +239,8 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     assert fake_vm.vms[name]["files"][archive] == ARCHIVE
     command = next(call[2] for call in fake_vm.calls if call[0] == "exec")
     assert command == unpack_command(archive, "/home/sprite/repos/app", "maxl/app", "main", SHA)
+    # The unpacking ran in the VM: its time counts (security audit 2026-10-27).
+    assert loop.vm_tools.session.seconds == .5
     everything = repr(fake_vm.calls) + repr(fake_vm.vms)
     assert "ghs_" not in everything and "ghu_" not in everything and "client-secret" not in everything
     assert [r[3] for r in github.requests if r[1] == "codeload.github.com"] == [None]

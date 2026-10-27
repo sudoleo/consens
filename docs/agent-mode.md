@@ -678,10 +678,18 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   Werkzeuge auf Stand und verbindet sich mit dem Token über die private
   Adresse der VM mit dem Gateway (`wss://<sprite>.sprites.app/vnc`, ohne Token
   leitet Sprites auf die Anmeldung um). Text-Zustände `connecting`, `setup`,
-  `starting`, `ready`, `error`, `ended`, danach VNC-Bytes in beide Richtungen.
-  Nach `VIEW_SECONDS` (1 h) endet eine Ansicht, weil sie die VM wach hält; das
-  Log nennt ihre Dauer („Agent workspace view closed seconds=…“), um die
-  Kosten zu beobachten. Der Browser lädt noVNC 1.7.0 (MPL-2.0,
+  `starting`, `ready`, `error`, danach VNC-Bytes in beide Richtungen. Nach
+  `VIEW_SECONDS` (1 h) endet eine Ansicht, weil sie die VM wach hält; das
+  Log nennt ihre Dauer („Agent workspace view closed seconds=…“). Seit dem
+  Sicherheitsaudit 2026-10-27: Pro Konto ist eine Ansicht offen, die neueste
+  gewinnt (`agent_workspace.claim_view`, Feld `view` am Konto-Dokument; eine
+  ältere sieht das binnen `VIEW_CHECK_SECONDS` und endet). Ihre offene Zeit
+  zählt als VM-Zeit (`agent_vm_time.charge`) und läuft nie über den Rest des
+  Tages. Öffnen ist auf `VIEWS_PER_MINUTE` (6) je Konto begrenzt
+  (`api_uid_limiter`). Den Grund des Endes trägt der Close-Code, weil noVNC
+  nach `ready` die Nachrichten des Sockets hat: 4410 Stunde um, 4409 andere
+  Ansicht, 4402 Tageszeit aufgebraucht, 4429 zu oft geöffnet
+  (`workspace-view.js` `CLOSED`). Der Browser lädt noVNC 1.7.0 (MPL-2.0,
   `static/vendor/novnc/1.7.0/core/rfb.js`) erst beim ersten Öffnen und übergibt
   ihm den Socket synchron beim Zustand `ready`, damit kein VNC-Byte verloren
   geht.
@@ -792,7 +800,11 @@ je Task wach halten (Kosten), am Tageskonto vorbei.
 zwischen zwei Schritten des Agenten pausiert sie nach Sekunden. Deshalb zählt
 `agent_vm_time.py` je Konto und UTC-Tag die Befehlszeit plus Hintergrundprozesse
 mit ihrem ganzen Zeitlimit (beim Start abgebucht, sie überdauern die Nachricht):
-Pro `PRO_DAILY_SECONDS` = 2 Stunden, Admins ohne Grenze. Ein Befehl läuft nie
+Pro `PRO_DAILY_SECONDS` = 2 Stunden, Admins ohne Grenze. Seit dem
+Sicherheitsaudit 2026-10-27 zählt jeder Befehl, den der Server für die Arbeit
+des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
+`vm_process_output` (gedeckelt auf den Rest), das Entpacken von
+`github_import` und die offene Live-Ansicht. Ein Befehl läuft nie
 über den Rest (`VMTools._timeout`), ein Prozess höchstens so lange; ist nichts
 mehr übrig, bekommt der Agent `VM_DAY_LIMIT` und arbeitet ohne VM weiter, die
 Aktivität sagt „Skipped · VM time for today used up“. Gebucht wird beim Ende der

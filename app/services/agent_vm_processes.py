@@ -183,12 +183,11 @@ class ProcessTools:
         ]
 
     def _run(self, command, cancellation, timeout):
-        """One command in the VM; ``(exit_code, stdout)``."""
+        """One command in the VM, counted as VM time (VMTools._exec);
+        ``(exit_code, stdout)``."""
         from app.services.agent_vm_tools import _Output
-        session = self.vm.session
         output = _Output()
-        outcome = self.vm._provider("exec", lambda: session.backend.exec(
-            session.name, command, cwd=HOME, timeout=timeout, on_output=output.add, cancellation=cancellation))
+        outcome = self.vm._exec(command, cwd=HOME, timeout=timeout, on_output=output.add, cancellation=cancellation)
         return outcome.exit_code, bytes(output.streams["stdout"]).decode("utf-8", "replace")
 
     def _result(self, process_id, text, extra=None):
@@ -255,6 +254,10 @@ class ProcessTools:
         left = self.vm.loop.answer_time_left() if hasattr(self.vm.loop, "answer_time_left") else None
         if left is not None:
             wait = max(0, min(wait, int(left) - 15))
+        # The wait runs in the VM and counts as VM time: never past today's.
+        day = self.vm.session.left()
+        if day is not None:
+            wait = max(0, min(wait, int(day)))
         code, text = self._run(status_command(process_dir(args.id), wait=wait), cancellation, wait + 30)
         if code == 5:
             raise ValueError(f"No background process {args.id}. List them with vm_process_output without an id.")

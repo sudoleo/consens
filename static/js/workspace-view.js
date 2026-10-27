@@ -35,7 +35,14 @@
     starting: 'Starting the browser…',
     error: 'The workspace is not reachable right now. Try again in a moment.',
     ended: 'The view closed after an hour. Open it again to go on.',
+    // One view per account, its time counts as VM time (routers/agent_workspace.py).
+    replaced: 'The workspace opened in another window, so this view closed.',
+    no_time: 'The workspace’s time for today is used up. It is back tomorrow.',
+    too_many: 'The workspace was opened many times in a row. Try again in a minute.',
   };
+  // Why the server closed the view, by close code: noVNC owns the socket's
+  // messages once it is ready, so these come as codes, not states.
+  const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many' };
   // Docked beside the chat from the width where the app's sidebar pushes the column (layout.css).
   const DOCK_QUERY = '(min-width: 1100px)';
   const WIDE_QUERY = '(min-width: 1200px)';
@@ -353,9 +360,13 @@
     socket.onclose = (event) => {
       if (!view || view.socket !== socket || view.rfb) return;
       say(event.code === 4403 ? 'The workspace is not available on your account.'
-        : view.status.textContent === STATES.ended ? STATES.ended
-          : 'The connection to the workspace ended. Close and open it again.');
+        : 'The connection to the workspace ended. Close and open it again.');
     };
+    // After noVNC's own handler (it takes over onclose): the reason wins
+    // over its general "ended".
+    socket.addEventListener('close', (event) => {
+      if (view && view.socket === socket && CLOSED[event.code]) say(STATES[CLOSED[event.code]]);
+    });
   }
 
   async function open() {

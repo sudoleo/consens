@@ -79,8 +79,22 @@ def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(sto
     list(loop.run())
     started = results(loop)[0]
     assert started["status"] == "running" and started["max_seconds"] == 1000
-    # The start itself is the app's own call, not command time.
-    assert agent_vm_time.used(store.db, UID) == 1000
+    # Its limit, and the start's own 2 s: every command the server runs for
+    # the agent counts (VMTools._exec, security audit 2026-10-27).
+    assert agent_vm_time.used(store.db, UID) == 1002
+
+
+def test_waiting_for_a_process_counts_and_never_runs_past_the_days_vm_time(store, fake_vm, fixed_id, monkeypatch):
+    """Security audit 2026-10-27: vm_process_output with wait_seconds ran in
+    the VM without counting. The wait is VM time now, capped by what is left."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 70)
+    fake_vm.commands[status_command(process_dir(PID), wait=30)] = (status("running", "Still going\n"), 0, 25.0)
+    loop = vm_loop(store, Agent([[("vm_process_output", {"id": PID, "wait_seconds": 60})]]))
+    list(loop.run())
+    assert results(loop)[0]["status"] == "running"
+    assert agent_vm_time.used(store.db, UID) == 70 + 25
 
 
 def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed_id):

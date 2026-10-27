@@ -141,7 +141,7 @@ and `workspace_vm/pause.py` freezes its marked processes),
 `POST /agent/workspace/reset-browser` and the WebSocket `/agent/workspace/view`
 (sign-in by its first message, then carried through to the VM gateway over the
 Sprite's private address with `SPRITES_TOKEN`, which never reaches the browser);
-all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
+one view per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
 since 2026-10-27, `AGENT_VM_ACCESS=pro` for every account with audit) on a
 server with a VM provider.
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:

@@ -40,6 +40,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+import secrets
 import time
 
 from app.core.observability import safe_exception
@@ -237,6 +238,31 @@ def record_for_view(store, uid, *, provider):
             tx.set(workspace, {**current, "provider": provider, "name": agent_vm.workspace_name(uid),
                                "created_at": current.get("created_at") or _now().isoformat()})
     store._transaction(operation)
+
+
+# The live view (routers/agent_workspace.py): one per account, the newest
+# wins, and an older one ends within VIEW_CHECK_SECONDS once it sees that
+# (security audit 2026-10-27; before, any number stayed open for an hour
+# each). An open view keeps the VM awake: its time counts as VM time.
+VIEW_CHECK_SECONDS = 30
+
+
+def claim_view(store, uid, seconds):
+    """This view is the account's one from now on (record_for_view made the
+    record): its id, which the view checks (holds_view)."""
+    view_id = secrets.token_hex(8)
+    workspace = ref(store.db, uid)
+
+    def operation(tx):
+        if workspace.get(transaction=tx).exists:
+            tx.update(workspace, {"view": {"id": view_id, "until": _now() + timedelta(seconds=seconds)}})
+    store._transaction(operation)
+    return view_id
+
+
+def holds_view(db, uid, view_id):
+    """Whether ``view_id`` is still the account's view (no newer one took over)."""
+    return (record(db, uid).get("view") or {}).get("id") == view_id
 
 
 def _quiet(stream, chunk):

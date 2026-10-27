@@ -535,9 +535,9 @@ class GitHubTools:
         archive = f"/tmp/consens-import-{commit[:12]}.tar.gz"
         self.vm._provider("write", lambda: session.backend.write_file(session.name, archive, raw))
         said = []
-        outcome = self.vm._provider("exec", lambda: session.backend.exec(
-            session.name, unpack_command(archive, dest, repo, ref, commit), cwd=agent_vm_tools.HOME,
-            timeout=UNPACK_SECONDS, on_output=lambda stream, chunk: said.append(chunk), cancellation=cancellation))
+        outcome = self.vm._exec(unpack_command(archive, dest, repo, ref, commit), cwd=agent_vm_tools.HOME,
+                                timeout=UNPACK_SECONDS, on_output=lambda stream, chunk: said.append(chunk),
+                                cancellation=cancellation)
         if outcome.exit_code != 0:
             text = b"".join(said).decode("utf-8", "replace").strip()[-500:]
             if outcome.exit_code == 3:
@@ -566,10 +566,8 @@ class GitHubTools:
 
     def _run(self, command, cancellation, timeout=120):
         from app.services.agent_vm_tools import HOME, _Output
-        session = self.vm.session
         output = _Output()
-        outcome = self.vm._provider("exec", lambda: session.backend.exec(
-            session.name, command, cwd=HOME, timeout=timeout, on_output=output.add, cancellation=cancellation))
+        outcome = self.vm._exec(command, cwd=HOME, timeout=timeout, on_output=output.add, cancellation=cancellation)
         return outcome.exit_code, bytes(output.streams["stdout"]).decode("utf-8", "replace")
 
     def prepare(self, args, *, cancellation, report=None):

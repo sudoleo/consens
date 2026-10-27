@@ -10,10 +10,14 @@ class FakeSocket {
     this.url = url;
     this.sent = [];
     this.closed = false;
+    this.closeListeners = [];
     FakeSocket.last = this;
   }
   send(data) { this.sent.push(data); }
+  addEventListener(name, handler) { if (name === "close") this.closeListeners.push(handler); }
   close() { this.closed = true; this.onclose?.({ code: 1000 }); }
+  // The server closes it: the handler first (noVNC's once it has the socket), then the listeners.
+  closedBy(code) { this.onclose?.({ code }); for (const handler of this.closeListeners) handler({ code }); }
   // A message from the server.
   deliver(data) { this.onmessage?.({ data }); }
 }
@@ -171,6 +175,22 @@ describe("the workspace view", () => {
     socket.onclose({ code: 4403 });
     expect(status.textContent).toBe("The workspace is not available on your account.");
     expect(FakeRFB.made).toEqual([]);
+  });
+
+  it("says why the server closed a view, also over the picture", async () => {
+    // One view per account, its time counts as VM time (security audit 2026-10-27).
+    const env = setup();
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    expect(FakeRFB.made.length).toBe(1);
+    socket.closedBy(4409);
+    const status = env.document.querySelector(".workspace-view-status");
+    expect(status.textContent).toBe("The workspace opened in another window, so this view closed.");
+    const again = setup();
+    const refused = await opened(again);
+    refused.closedBy(4402);
+    expect(again.document.querySelector(".workspace-view-status").textContent)
+      .toBe("The workspace’s time for today is used up. It is back tomorrow.");
   });
 
   it("logs the browser out everywhere only after asking", async () => {
