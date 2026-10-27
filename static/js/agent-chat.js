@@ -1518,8 +1518,31 @@
     button.type = "button";
     button.className = className;
     button.textContent = label;
-    button.addEventListener("click", onClick);
+    if (onClick) button.addEventListener("click", onClick);
     return button;
+  }
+  // Where the reviewer saw it, in the activity's words, and the words
+  // themselves (agent_audit.halt_step: the reviewer's quote where the entry
+  // holds it). A pause saved before 2026-10-27 has no step_kind: "name: text".
+  function holdEvidence(hold) {
+    const box = document.createElement("figure");
+    box.className = "agent-hold-evidence";
+    const label = document.createElement("figcaption");
+    label.className = "agent-hold-evidence-label";
+    const kind = hold.step_kind;
+    if (kind === "file" && hold.step_source) {
+      label.dataset.i18nSkip = "";
+      label.textContent = App.t("In the file {name}", { name: String(hold.step_source) });
+    } else {
+      label.textContent = kind === "result" ? App.agentActivity?.toolName?.(hold.step_name) || "Tool result"
+        : kind === "context" || kind === "file" ? "What the agent received" : "The agent’s step";
+    }
+    const text = document.createElement("pre");
+    text.className = "agent-hold-evidence-text";
+    text.dataset.i18nSkip = "";
+    text.textContent = kind ? String(hold.step) : `${hold.step_name ? `${hold.step_name}: ` : ""}${hold.step}`;
+    box.append(label, text);
+    return box;
   }
   function holdCard(context, hold) {
     const card = document.createElement("section");
@@ -1527,23 +1550,19 @@
     card.setAttribute("aria-labelledby", "agentHoldTitle");
     // Said once when it appears: the title and the reviewer's reason.
     const alert = document.createElement("div");
+    alert.className = "agent-hold-alert";
     alert.setAttribute("role", "alert");
     const head = document.createElement("div");
     head.className = "agent-hold-head";
     const icon = document.createElement("span");
     icon.className = "agent-hold-icon";
-    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"></path></svg>';
+    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>';
+    const heading = document.createElement("div");
+    heading.className = "agent-hold-heading";
     const title = document.createElement("h2");
     title.id = "agentHoldTitle";
     title.className = "agent-hold-title";
     title.textContent = "A reviewer paused the work";
-    head.append(icon, title);
-    const reason = document.createElement("p");
-    reason.className = "agent-hold-reason";
-    // The reviewer's own sentence, already in the user's language.
-    reason.dataset.i18nSkip = "";
-    reason.textContent = String(hold.reason || "");
-    alert.append(head, reason);
     const meta = document.createElement("p");
     meta.className = "agent-hold-meta";
     const kind = document.createElement("span");
@@ -1552,32 +1571,89 @@
     reviewer.dataset.i18nSkip = "";
     reviewer.textContent = String(hold.reviewer || "");
     // The work log's number names the step only for those who can open the
-    // log (admins); the excerpt below says what it did (2026-10-27).
+    // log (admins); the evidence below says what it was (2026-10-27).
     const step = document.createElement("span");
     step.className = "admin-only";
     step.textContent = App.t("Step {entry}", { entry: hold.entry });
     meta.append(...[kind, hold.reviewer ? reviewer : null, step].filter(Boolean));
-    card.append(alert, meta);
-    if (hold.step) {
-      // What the agent was doing, as the reviewers read it (the work log).
-      const excerpt = document.createElement("p");
-      excerpt.className = "agent-hold-excerpt";
-      excerpt.dataset.i18nSkip = "";
-      excerpt.textContent = `${hold.step_name ? `${hold.step_name}: ` : ""}${hold.step}`;
-      card.append(excerpt);
-    }
-    const actions = document.createElement("div");
-    actions.className = "agent-hold-actions";
-    actions.append(
-      holdButton("Let it continue", "btn agent-hold-continue", () => decideHold(context, "continue")),
-      holdButton("Write to the agent", "run-blocked-btn agent-hold-write", () => {
-        document.getElementById("questionInput")?.focus({ preventScroll: true });
-      }),
-      holdButton("Stop", "run-blocked-btn agent-hold-stop", () => registry.cancel(context.runId, "user")));
+    heading.append(title, meta);
+    head.append(icon, heading);
+    const reason = document.createElement("p");
+    reason.className = "agent-hold-reason";
+    // The reviewer's own sentence, already in the user's language.
+    reason.dataset.i18nSkip = "";
+    reason.textContent = String(hold.reason || "");
+    alert.append(head, reason);
+    card.append(alert);
+    if (hold.step) card.append(holdEvidence(hold));
     const clock = document.createElement("p");
     clock.className = "agent-hold-clock";
-    card.append(actions, clock);
+    // As on the app's other decision cards: one filled button, the other ways as links.
+    const reply = holdReply(context);
+    const actions = document.createElement("div");
+    actions.className = "agent-hold-actions";
+    const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
+    actions.append(
+      holdButton("Let it continue", "btn agent-hold-continue", () => decideHold(context, "continue")),
+      write,
+      holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user")));
+    reply.bind(actions, write);
+    card.append(clock, reply.form, actions);
     return card;
+  }
+  // "Write to the agent": the answer in the sheet itself. Send goes on with
+  // the user's words as their message to the agent (decideHold "steer");
+  // Cancel, or Escape, brings the three buttons back. Enter sends where it
+  // sends in the field (a keyboard; on a phone it starts a new line).
+  function holdReply(context) {
+    const form = document.createElement("form");
+    form.className = "agent-hold-reply";
+    form.hidden = true;
+    const input = document.createElement("textarea");
+    input.className = "agent-hold-reply-input";
+    input.rows = 2;
+    input.maxLength = 4000;
+    input.placeholder = "Tell the agent how to go on…";
+    input.setAttribute("aria-label", "Your message to the agent");
+    const send = holdButton("Send and continue", "btn agent-hold-send");
+    send.type = "submit";
+    send.disabled = true;
+    const cancel = holdButton("Cancel", "agent-hold-link agent-hold-cancel");
+    const buttons = document.createElement("div");
+    buttons.className = "agent-hold-reply-actions";
+    buttons.append(send, cancel);
+    form.append(input, buttons);
+    let actions = null, write = null;
+    const close = () => {
+      form.hidden = true;
+      if (actions) actions.hidden = false;
+      write?.focus({ preventScroll: true });
+    };
+    input.addEventListener("input", () => { send.disabled = !input.value.trim() || Boolean(openHold(context)?.deciding); });
+    input.addEventListener("keydown", event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
+      const phone = window.matchMedia?.("(max-width: 768px)")?.matches;
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing && !phone) {
+        event.preventDefault();
+        form.requestSubmit?.(send);
+      }
+    });
+    cancel.addEventListener("click", close);
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      if (!(await decideHold(context, "steer", text))) input.focus({ preventScroll: true });
+    });
+    return {
+      form,
+      bind(row, button) { actions = row; write = button; },
+      open() {
+        form.hidden = false;
+        if (actions) actions.hidden = true;
+        input.focus({ preventScroll: true });
+      },
+    };
   }
   function renderHold() {
     if (!window.document?.body) return;
@@ -1600,6 +1676,13 @@
     const time = holdClock(hold);
     if (clock.textContent !== App.t(time)) clock.textContent = time;
     for (const button of host.querySelectorAll("button")) button.disabled = Boolean(hold.deciding);
+    // Send waits for words in the sheet's field.
+    const reply = host.querySelector(".agent-hold-reply-input");
+    if (reply) {
+      reply.disabled = Boolean(hold.deciding);
+      const send = host.querySelector(".agent-hold-send");
+      if (send) send.disabled = Boolean(hold.deciding) || !reply.value.trim();
+    }
     holdTimer = setTimeout(renderHold, 15000);
   }
   // Stop is explicit: closing the connection no longer ends a turn. The

@@ -64,7 +64,9 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
         expect(chip).to_contain_text('offer.txt')
         chip.click()
         viewer = page.locator('#attachmentViewerModal')
-        expect(viewer.locator('iframe')).to_have_count(1)
+        # A text file reads in the app's colours, not in a frame (2026-10-27).
+        expect(viewer.locator('.attachment-viewer-text')).to_have_text('Price 42 EUR')
+        expect(viewer.locator('iframe')).to_have_count(0)
         # In the middle of the window, not in its top left corner (2026-10-22).
         # Measured against the dialog: the scroll lock keeps the page's
         # scrollbar gutter, so the dialog is that much narrower than the page.

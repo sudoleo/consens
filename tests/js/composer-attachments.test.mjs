@@ -166,7 +166,10 @@ describe("composer attachment tray", () => {
     expect(window.App.agentWorkspace.openFile).toHaveBeenCalledWith(id);
     const body = document.getElementById("attachmentViewerBody");
     expect(body.textContent).toContain("Loading preview");
-    await vi.waitFor(() => expect(body.querySelector("iframe")).not.toBeNull());
+    // A text file reads in the app's own colours, not in a frame whose white
+    // page took the dark theme's light text (2026-10-27).
+    await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-text")?.textContent).toBe("hello"));
+    expect(body.querySelector("iframe")).toBeNull();
     const actions = body.querySelector(".attachment-viewer-actions");
     expect([...actions.querySelectorAll("button")].map(b => b.textContent)).toEqual(["Download", "Remove from chat"]);
     actions.querySelectorAll("button")[1].click();

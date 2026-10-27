@@ -246,7 +246,9 @@
     // This persistent control must not move between pointerdown and click.
     // The Agent notices of the composer carry their own action ("Choose
     // models", "Review"); a tap there is that action, not a tap on the field.
-    if (event.target.closest(".composer-mode-bar, .chat-scroll-latest, #attachTrigger, #attachMenu, .agent-composer-notice")) return;
+    // So do a reviewer's pause and the waiting messages above the field
+    // (2026-10-27: a tap on "Write to the agent" went to the field instead).
+    if (event.target.closest(".composer-mode-bar, .chat-scroll-latest, #attachTrigger, #attachMenu, .agent-composer-notice, .agent-hold, .agent-queue")) return;
 
     // Waehrend eines Laufs ist der Senden-Knopf der Abbrechen-Knopf: der
     // einzige Griff, der eingeklappt sichtbar bleibt und seine eigene Wirkung
@@ -273,7 +275,7 @@
   // das eine Frage vorbefuellt).
   document.addEventListener("focusin", function (event) {
     if (event.target.closest?.("#sendButton.is-cancel-action")) return;
-    if (event.target.closest?.(".composer-mode-bar, .chat-scroll-latest, #attachTrigger, #attachMenu, .agent-composer-notice")) return;
+    if (event.target.closest?.(".composer-mode-bar, .chat-scroll-latest, #attachTrigger, #attachMenu, .agent-composer-notice, .agent-hold, .agent-queue")) return;
     if (event.target.closest?.(".input-section")) expand();
   });
 

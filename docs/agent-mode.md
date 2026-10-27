@@ -402,14 +402,35 @@ mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
-(`tab-status.js`). Die Karte zeigt den Eintrag lesbar (`halt_step`: Befehl,
-Adresse oder Suche statt Protokoll-JSON), seit 2026-10-27 bis zu vier Zeilen,
-damit das Ziel eines Befehls auch auf dem Handy sichtbar bleibt; die
-Protokollnummer („Step 12“) sehen nur Admins (`.admin-only`), die das
-Protokoll öffnen können. Bis 520 px stehen die drei Knöpfe untereinander,
-die Entscheidung zuerst, je 44 px hoch. Solange die Pause wartet, nennt die
-Aktivität ihren Grund nicht ein zweites Mal (er steht in der Karte); nach der
-Entscheidung steht er dort mit ihr.
+(`tab-status.js`). Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
+(`halt_step`, seit 2026-10-27 als `step_kind`/`step_source`/`step`): den
+Aufruf eines Modellschritts (Befehl, Adresse oder Suche), eine Datei mit ihrem
+Namen („In the file tabelle.csv“), das Ergebnis eines Werkzeugs mit dessen
+Namen, sonst „What the agent received“. Text ist das wörtliche Zitat des
+Prüfers (`halt.quote`, im Prompt verlangt), wenn der Eintrag es enthält
+(Groß/klein und Leerraum zählen nicht; ein erfundenes Zitat zeigt sie nie),
+sonst der Anfang des Eintrags; Zeilen bleiben, ein langer Beleg scrollt im
+Feld. Anlass: Am 2026-10-27 stand dort zu einer CSV mit eingeschleustem
+Upload-Befehl deren ID und Hash. Die Protokollnummer („Step 12“) sehen nur
+Admins (`.admin-only`), die das Protokoll öffnen können.
+**Gestaltung (seit 2026-10-27, vorher beiger Kasten mit gerahmten Knöpfen in
+drei Arten, die es sonst nirgends in consens gab; Max: „clunky“):** die
+Sprache der anderen Entscheidungskarten (vorbereitete Watch, Einstellung):
+rahmenloser `--raise`-Block, Worte in zwei Tönen, **ein** gefüllter Knopf für
+die Entscheidung (`.btn` „Let it continue“), die anderen Wege als
+unterstrichene Links daneben (`.agent-hold-link` „Write to the agent“,
+„Stop“, 44 px per Touch); Farbe nur am Pause-Zeichen (`--partial`); der Beleg
+im Feld einer VM-Ausgabe; die Frist als kleine Zeile darüber. **„Write to the
+agent“ öffnet die Antwort in der Karte** (`holdReply`: Feld, „Send and
+continue“ erst mit Text, „Cancel“ und Escape bringen die Wege zurück, Enter
+sendet mit Tastatur, auf dem Handy neue Zeile); vorher fokussierte der Knopf
+nur das Eingabefeld, und ein Klick schien nichts zu tun. Auf dem Handy
+verschluckte zudem das eingeklappte Eingabefeld jeden Tipp in der Karte
+(`composer-collapse.js` nimmt `.agent-hold` und `.agent-queue` seitdem aus,
+wie die Agent-Hinweise). Text im Eingabefeld bleibt ebenfalls die
+Steer-Entscheidung. Solange die Pause wartet, nennt die Aktivität ihren Grund
+nicht ein zweites Mal (er steht in der Karte); nach der Entscheidung steht er
+dort mit ihr.
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
@@ -853,7 +874,9 @@ trägt die Summe. `agent-activity.js` zeigt jeden Aufruf kompakt wie ein
 Terminal (`vmView`): `$ Befehl` bzw. „Read the file“/„Wrote the file“/„Edited the file“ mit
 Pfad, rechts Exit-Code (nur ≠ 0), „Timed out“ und Dauer (ab 1 s), darunter
 die Ausgabe in einem getönten Feld, offen, solange der Befehl läuft, danach
-eingeklappt (eine Wahl des Lesers bleibt). Befehl und Ausgabe stehen in
+eingeklappt (eine Wahl des Lesers bleibt); der Pfeil bleibt seit 2026-10-27
+auf der ersten Zeile, auch wenn ein mehrzeiliger Befehl aufklappt (vorher
+rutschte er in dessen Mitte). Befehl und Ausgabe stehen in
 `<code>`/`<pre>` und werden nie übersetzt. Live erscheint der Block in den
 Fortschrittszeilen, danach in der Zeitleiste; die Admin-Verbrauchszeile nennt
 „VM 12s“. Wie bei Claude Code falten die Fortschrittszeilen ab zwei früheren

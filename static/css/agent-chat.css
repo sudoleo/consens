@@ -395,44 +395,73 @@
   border: 0; border-radius: 9px; background: transparent; color: var(--ink-3); cursor: pointer;
 }
 .agent-queue-remove svg { width: 14px; height: 14px; }
-/* A reviewer paused the work (agent-chat.js renderHold): the card above the
-   field, tinted like the queue (no frame), in the warning tone of
-   .run-blocked (shell.css). A pause is a question, not a refusal: --partial,
-   never --dispute. Its secondary buttons wear .run-blocked-btn, the primary
-   one .btn. */
+/* A reviewer paused the work (agent-chat.js renderHold): the decision card
+   above the field, in the language of the app's other decision cards (the
+   prepared Watch, the settings change): a frameless raised block, the words
+   in two tones, ONE filled button for the decision (.btn) and the other
+   ways as underlined links beside it. Colour only as the signal: the pause
+   mark in --partial (a question, not a refusal, never --dispute). Since
+   2026-10-27; before, a beige box with framed buttons of three kinds that
+   the app used nowhere else. */
 .agent-hold { margin: 0 0 8px; min-width: 0; text-align: left; }
 .agent-hold[hidden] { display: none; }
-.agent-hold-card { display: grid; gap: 6px; padding: 14px 16px; border-radius: var(--radius-md); background: var(--partial-bg); }
+.agent-hold-card {
+  display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--radius-md);
+  background: var(--raise); color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.45;
+}
 @media (prefers-reduced-motion: no-preference) {
   .agent-hold-card { animation: agent-hold-in var(--dur-state) var(--ease-out) both; }
 }
 @keyframes agent-hold-in { from { opacity: 0; transform: translateY(3px); } }
-.agent-hold-head { display: flex; align-items: center; gap: 9px; }
-.agent-hold-icon { display: inline-flex; flex: none; color: var(--partial); }
-.agent-hold-icon svg { width: 17px; height: 17px; }
+.agent-hold-alert { display: grid; gap: 6px; }
+.agent-hold-head { display: flex; align-items: flex-start; gap: 8px; }
+.agent-hold-icon { display: inline-flex; flex: none; margin-top: 1px; color: var(--partial); }
+.agent-hold-icon svg { width: 16px; height: 16px; }
+.agent-hold-heading { display: grid; min-width: 0; }
 .agent-hold-title {
-  flex: 1 1 auto; min-width: 0; margin: 0; text-align: left;
-  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); letter-spacing: var(--tracking-tight); color: var(--ink);
+  margin: 0; text-align: left; color: var(--ink);
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); letter-spacing: var(--tracking-tight);
 }
-.agent-hold-reason { margin: 4px 0 0; color: var(--ink); font-size: var(--font-size-sm); line-height: var(--line-height-ui); overflow-wrap: anywhere; }
-.agent-hold-meta { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-hold-meta > span + span::before { content: "·"; margin-right: 8px; }
-/* What the agent did, the decision's evidence: up to four lines, so a
-   command keeps its target (the address at its end) on a phone too. */
-.agent-hold-excerpt {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; margin: 0;
-  color: var(--ink-3); font-family: var(--font-mono); font-size: var(--font-size-micro); line-height: 1.5; overflow-wrap: anywhere;
+.agent-hold-meta { display: flex; flex-wrap: wrap; gap: 0 6px; margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-hold-meta > span + span::before { content: "·"; margin-right: 6px; }
+.agent-hold-reason { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+/* The evidence: where the reviewer saw it, then its words in the field a
+   VM command's output wears (.agent-vm-output). Lines stay; a long one
+   scrolls inside instead of growing the card. */
+.agent-hold-evidence { display: grid; gap: 4px; margin: 0; }
+.agent-hold-evidence-label { color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-hold-evidence-text {
+  box-sizing: border-box; max-height: calc(6 * 1.55em + 16px); overflow: auto; margin: 0; padding: 8px 10px;
+  border: 0; border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink-2); font: var(--font-size-xs)/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.agent-hold-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.agent-hold-actions button:disabled { opacity: .55; cursor: default; }
-/* Narrow: one button per row across the card, like an action sheet, the
-   decision first (before, the third button wrapped onto a row of its own,
-   and "Dem Agenten schreiben" no longer fit half a card). */
-@media (max-width: 520px) {
-  .agent-hold-actions { display: grid; grid-template-columns: 1fr; }
-  .agent-hold-actions > button { width: 100%; min-width: 0; min-height: 44px; justify-content: center; }
+.agent-hold-clock { margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+/* The decision and the other ways, as on the Watch and settings cards. */
+.agent-hold-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 2px; }
+.agent-hold-actions[hidden] { display: none; }
+.agent-hold-link {
+  min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2);
+  font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
-.agent-hold-clock { margin: 0; color: var(--ink-3); font-size: var(--font-size-micro); font-variant-numeric: tabular-nums; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-hold-link:hover:not(:disabled) { color: var(--ink); }
+}
+@media (pointer: coarse) { .agent-hold-link { min-height: 44px; } }
+.agent-hold-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.agent-hold-card button:disabled { opacity: .5; cursor: default; }
+/* "Write to the agent" opens the answer in the card itself: the field, then
+   Send and Cancel in the same pair (before, the button only focused the
+   composer, and a click seemed to do nothing). */
+.agent-hold-reply { display: grid; gap: 10px; }
+.agent-hold-reply[hidden] { display: none; }
+.agent-hold-reply-input {
+  box-sizing: border-box; width: 100%; min-height: 64px; max-height: 40vh; resize: vertical; margin: 0;
+  padding: 8px 10px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink); font: inherit; line-height: var(--line-height-ui);
+}
+.agent-hold-reply-input::placeholder { color: var(--ink-3); }
+.agent-hold-reply-input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.agent-hold-reply-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
 .agent-queue-remove:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 @media (hover: hover) and (pointer: fine) { .agent-queue-remove:hover { background: var(--hover); color: var(--ink); } }
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
@@ -759,9 +788,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-vm-watch:hover { color: var(--ink-2); }
 }
 .agent-vm-watch:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
-/* The app's one chevron (foundation.css --chevron-mask): right while folded, down when open. */
+/* The app's one chevron (foundation.css --chevron-mask): right while folded,
+   down when open. It keeps to the first line (centred in its 1.65em line box)
+   like the time beside it: centred on the summary, it slid to the middle of
+   a command that unfolds over several lines (2026-10-27). */
 .agent-vm.has-output > summary::after {
-  content: ""; flex: none; align-self: center; width: 1em; height: 1em; color: var(--ink-3); background: currentColor;
+  content: ""; flex: none; align-self: flex-start; margin-top: .325em;
+  width: 1em; height: 1em; color: var(--ink-3); background: currentColor;
   -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
   transform: rotate(-90deg);
 }

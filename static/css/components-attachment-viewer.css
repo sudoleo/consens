@@ -70,12 +70,41 @@ dialog.modal.attachment-viewer-dialog[open] {
   object-fit: contain;
 }
 
+/* A PDF or a large text file: a light page in every theme. The page inside
+   follows the frame's color-scheme, so the dark theme's would give it light
+   text on this white (2026-10-27). */
 .attachment-viewer-frame {
   width: 100%;
   height: min(72dvh, 680px);
   border: none;
   border-radius: var(--radius-xs);
   background: #fff;
+  color-scheme: light;
+}
+
+/* A text file in the app's colours (attachments.js textPreview): the whole
+   width, lines wrapped, scrolling inside like the frame. */
+.attachment-viewer-text {
+  box-sizing: border-box;
+  align-self: stretch;
+  width: 100%;
+  max-height: min(72dvh, 680px);
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--hover);
+  color: var(--ink);
+  font: var(--font-size-xs)/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.attachment-viewer-text:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .attachment-viewer-notice {

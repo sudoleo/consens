@@ -2316,7 +2316,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   vollstaendige Aussage; der Consensus-Renderpfad ruft diese Reparatur nicht auf.
 - **`attachments.js`** — Attachment-UI/Payload (ab Plus), inklusive Bild-Paste im
   Fragefeld und Drag-and-drop aller unterstützten Dateitypen auf den
-  Input-Container. Bilder bis 15 MB werden vor der Base64-Kodierung auf
+  Input-Container. Die Vorschau zeigt Textdateien bis 2 MB seit 2026-10-27 als
+  `.attachment-viewer-text` in den Farben der App (`textPreview`; im Frame
+  übernahm die weiße Seite die helle Schrift des Dunkelmodus), PDFs und
+  größere Texte im Frame mit `color-scheme: light`. Bilder bis 15 MB werden vor der Base64-Kodierung auf
   höchstens 1568 px Kantenlänge als JPEG verkleinert; kleine Screenshots
   bleiben unverändert. Der Server wiederholt die Aufbereitung innerhalb
   seines 5-MB-Eingangslimits, prüft vor dem Dekodieren zusätzlich ein festes
@@ -5648,9 +5651,13 @@ Antwort; `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
 an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach
 `HOLD_TIMEOUT_SECONDS` Stop. Der Agent sieht nur Nutzer-Stopps und
 -Nachrichten (`HOLD_STEERED`). Browser: `agent-chat.js` (`hold`-Handler,
-`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`; die
-Protokollnummer der Karte `.admin-only`, Auszug bis vier Zeilen, Knöpfe bis
-520 px untereinander, seit 2026-10-27),
+`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`; seit
+2026-10-27 in der Sprache der Watch-/Einstellungskarten (ein `.btn`, sonst
+`.agent-hold-link`), Beleg `holdEvidence` aus `step_kind`/`step_source`/`step`
+von `halt_step` (Zitat des Prüfers `halt.quote`, nur wenn der Eintrag es
+enthält), Antwort direkt in der Karte `holdReply`, Protokollnummer
+`.admin-only`; `composer-collapse.js` lässt Tipps auf `.agent-hold`/
+`.agent-queue` durch),
 `agent-activity.js` (`holdView`, „Paused for your decision“, wartende Pause
 faltet nie und nennt ihren Grund erst nach der Entscheidung, die Karte tut es
 davor), `tab-status.js` („Paused“).

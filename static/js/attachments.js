@@ -304,6 +304,28 @@
       return new Blob([bytes], { type: mime });
     }
 
+    // A text file (.txt, .csv, .md) reads in the app's own colours and type,
+    // its lines wrapped: in a frame the browser drew it with the dark theme's
+    // light text on the frame's white page, unreadable (2026-10-27). Larger
+    // files keep the frame (on a light page, components-attachment-viewer.css).
+    const TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
+    function textPreview(text, name) {
+      const pre = document.createElement("pre");
+      pre.className = "attachment-viewer-text";
+      pre.setAttribute("data-i18n-skip", "");
+      pre.tabIndex = 0;
+      pre.setAttribute("aria-label", name);
+      pre.textContent = text;
+      return pre;
+    }
+
+    function base64Text(base64Data) {
+      const binary = atob(base64Data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    }
+
     function viewerNotice(label, message) {
       const notice = document.createElement("div");
       notice.className = "attachment-viewer-notice";
@@ -318,11 +340,15 @@
     }
 
     function readDataUrl(blob) {
+      return readBlob(blob, "readAsDataURL");
+    }
+
+    function readBlob(blob, how) {
       return new Promise(function (resolve, reject) {
         const reader = new FileReader();
         reader.onload = function () { resolve(String(reader.result || "")); };
         reader.onerror = function () { reject(new Error("Preview is not available in this browser.")); };
-        reader.readAsDataURL(blob);
+        reader[how](blob);
       });
     }
 
@@ -399,6 +425,10 @@
           img.alt = att.name;
           img.src = image;
           viewerBody.appendChild(img);
+        } else if (mime.indexOf("text/") === 0 && file.blob.size <= TEXT_PREVIEW_BYTES) {
+          const text = await readBlob(file.blob, "readAsText");
+          if (token !== viewerToken) return;
+          viewerBody.appendChild(textPreview(text, att.name));
         } else if (mime === "application/pdf" || mime.indexOf("text/") === 0) {
           viewerObjectUrl = URL.createObjectURL(mime.indexOf("text/") === 0
             ? new Blob([file.blob], { type: "text/plain;charset=utf-8" }) : file.blob);
@@ -459,6 +489,12 @@
         img.alt = att.name;
         img.src = "data:" + att.mime + ";base64," + att.data;
         viewerBody.appendChild(img);
+      } else if (att.mime.indexOf("text/") === 0 && att.data.length * 3 / 4 <= TEXT_PREVIEW_BYTES) {
+        try {
+          viewerBody.appendChild(textPreview(base64Text(att.data), att.name));
+        } catch (e) {
+          viewerBody.appendChild(viewerNotice(chipIconLabel(att.mime), "Preview is not available in this browser."));
+        }
       } else {
         try {
           viewerObjectUrl = URL.createObjectURL(base64ToBlob(att.data, att.mime));
