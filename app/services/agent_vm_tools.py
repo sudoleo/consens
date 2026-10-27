@@ -556,6 +556,10 @@ class VMTools:
         unregister = cancellation.register(command)
         with self.session._lock:
             self._running = command
+            # A halt that came while the VM started found nothing to end
+            # (interrupt): this command is stopped before it runs.
+            if getattr(self.loop, "hold", None) is not None:
+                command.cancel()
         started = self.session.clock()
 
         def on_output(stream, chunk):
