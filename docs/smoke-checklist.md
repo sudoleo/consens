@@ -164,7 +164,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       nächster Schritt läuft erst nach „Zurückgeben“, ein laufender
       Hintergrundprozess (z. B. `vm_start_process` mit `while true; do date;
       sleep 1; done`) schreibt in der Zeit keine Zeile. Passwort aus dem
-      eigenen Passwortmanager kopieren und im Bild mit Strg+V (⌘V) oder
+      eigenen Passwortmanager kopieren und im Bild mit Strg+V (Cmd+V) oder
       „Einfügen“ einfügen: Es landet im Feld, auch mit Umlauten und Sonderzeichen,
       und schickt das Formular nicht ab.
       Er tippt kein Passwort (auf einer Login-Seite bittet er dich). Zweiter

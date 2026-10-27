@@ -278,7 +278,7 @@ describe("pasting into the workspace", () => {
     rfb.keys = [];
     button.click();
     await vi.waitFor(() => expect(env.document.querySelector(".workspace-view-status").textContent)
-      .toBe("Your browser did not share the clipboard. Press Ctrl+V (⌘V on a Mac) on the screen instead."));
+      .toBe("Your browser did not share the clipboard. Press Ctrl+V (Cmd+V on a Mac) on the screen instead."));
     expect(rfb.keys).toEqual([]);
     env.document.querySelector(".workspace-view-toggle").click();
     await vi.waitFor(() => expect(button.hidden).toBe(true));

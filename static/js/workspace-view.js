@@ -7,7 +7,7 @@
 // REFRESH_MS; a closed tab lets it expire by itself. Sign-ins happen here, by
 // the user: the agent never types a password.
 //
-// Pasting (Ctrl+V, ⌘V, Shift+Insert or "Paste", only while the user has the
+// Pasting (Ctrl+V, Cmd+V, Shift+Insert or "Paste", only while the user has the
 // browser): the text goes in as key presses, as if typed, never through the
 // workspace's clipboard, where it would stay for the agent to read later. So
 // a password from the user's own password manager reaches the page and
@@ -254,7 +254,7 @@
     try {
       text = await navigator.clipboard.readText();
     } catch (error) {
-      say('Your browser did not share the clipboard. Press Ctrl+V (⌘V on a Mac) on the screen instead.');
+      say('Your browser did not share the clipboard. Press Ctrl+V (Cmd+V on a Mac) on the screen instead.');
       return;
     }
     typeIn(text);

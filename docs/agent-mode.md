@@ -673,7 +673,7 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   (Cookies) wie vorher dem Agenten. Das Passwort selbst kommt nie in eine Datei
   der VM, denn Chrome speichert keine Passwörter (Richtlinie in `setup.sh`).
 - **Einfügen** (seit 2026-10-27, `workspace-view.js`): Solange der Nutzer
-  übernommen hat, tippen Strg+V, ⌘V, Umschalt+Einfg oder der Knopf
+  übernommen hat, tippen Strg+V, Cmd+V, Umschalt+Einfg oder der Knopf
   „Paste“ (`navigator.clipboard.readText`, nur sichtbar, wenn der Browser es
   kann) den Text als Tastendrücke ein (`rfb.sendKey`, Latin-1 als eigener
   Keysym, sonst `0x01000000 | Codepoint`, Zeilenumbruch als Return,

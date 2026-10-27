@@ -777,7 +777,7 @@
   "Paste": "Einfügen",
   "Type your clipboard into the page": "Tippt deine Zwischenablage in die Seite",
   "That is too long to type in. Paste at most 2,000 characters at a time.": "Das ist zu lang zum Eintippen. Füge höchstens 2.000 Zeichen auf einmal ein.",
-  "Your browser did not share the clipboard. Press Ctrl+V (⌘V on a Mac) on the screen instead.": "Dein Browser hat die Zwischenablage nicht freigegeben. Drück stattdessen im Bild Strg+V (⌘V auf dem Mac).",
+  "Your browser did not share the clipboard. Press Ctrl+V (Cmd+V on a Mac) on the screen instead.": "Dein Browser hat die Zwischenablage nicht freigegeben. Drück stattdessen im Bild Strg+V (Cmd+V auf dem Mac).",
   "Take over the browser": "Browser übernehmen",
   "Click to take over": "Klicken zum Übernehmen",
   "You have the browser. The agent is paused until you hand it back.": "Du steuerst den Browser. Der Agent pausiert, bis du ihn zurückgibst.",
