@@ -6053,7 +6053,12 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
 für den Standard-Systemprompt der Einzelantworten, Agent, Consensus-Synthese
 und Differences. Er enthält Datum/Wochentag, Uhrzeit bei Prompt-Erzeugung sowie
 die konfigurierte Referenzzeitzone (Default `Europe/Berlin`) inklusive Sommer-/Winterzeit-Offset. Es ist
-kein beim Serverstart eingefrorener Wert. Eigene Client-Systemprompts behalten
+kein beim Serverstart eingefrorener Wert. Agent-Nachrichten nehmen seit
+2026-10-27 die Zeitzone des Geräts (`AgentRequest.timezone`, aus
+`Intl.DateTimeFormat` in `agent-chat.js`; ein unbekannter Name zählt als keiner)
+für den App-Kontext (`get_agent_turn_context(device_timezone=…)`,
+`get_date_context(device=True)`); Vergleichsmodelle und Prüfer bleiben bei der
+Referenzzeitzone. Eigene Client-Systemprompts behalten
 ihren bisherigen Vorrang; der Standard wird nicht ungefragt angehängt.
 Ohne persönliche Anweisungen sendet `query-send.currentSystemPrompt` einen leeren
 Wert; `/prepare` setzt den konfigurierten Einzelantwort-Standard und den frischen

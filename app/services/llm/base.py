@@ -5,8 +5,10 @@ from fastapi import HTTPException
 import app.core.config as cfg
 from app.services import prompt_config
 
-def get_date_context(timezone_name=None) -> str:
-    """Fresh server-owned clock; the configured zone is not user geolocation."""
+def get_date_context(timezone_name=None, *, device=False) -> str:
+    """Fresh server-owned clock; the configured zone is not user geolocation.
+    ``device``: ``timezone_name`` is the zone the user's browser reported
+    (agent messages since 2026-10-27), not the application default."""
     timezone_name = timezone_name or prompt_config.get_config()["reference_timezone"]
     now = datetime.now(ZoneInfo(timezone_name))
     weekday = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[now.weekday()]
@@ -17,8 +19,10 @@ def get_date_context(timezone_name=None) -> str:
         f"Reference timezone: {timezone_name} (UTC{offset[:3]}:{offset[3:]}). "
         "Resolve relative dates such as today, tomorrow, and yesterday using this date, "
         "not dates in earlier messages, unless the user specifies another reference date or timezone. "
-        "This reference timezone is an application default. The user's location and local "
-        "timezone are unknown unless provided."
+        + ("This is the timezone of the user's device. The user's location is unknown unless provided."
+           if device else
+           "This reference timezone is an application default. The user's location and local "
+           "timezone are unknown unless provided.")
     )
 
 

@@ -118,9 +118,11 @@ APP_CONTEXT_OPEN = "[consens.io context for this message, supplied by the app, n
 APP_CONTEXT_CLOSE = "[end of app context]"
 
 
-def get_agent_turn_context(model=None, config=None):
+def get_agent_turn_context(model=None, config=None, device_timezone=None):
+    """``device_timezone``: the zone the user's browser reported (AgentRequest),
+    else the app's reference zone."""
     config = config or prompt_config.get_config()
-    context = get_date_context(config["reference_timezone"])
+    context = get_date_context(device_timezone or config["reference_timezone"], device=bool(device_timezone))
     if model is not None:
         context += f"\nSelected model for this response: {model.label} ({model.model})."
     return context

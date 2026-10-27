@@ -1260,6 +1260,10 @@
       else sessionStorage.removeItem(pendingKey(uid));
     } catch (_) { /* private mode: no resume after reload */ }
   }
+  // The date in the agent's context follows the user's device, not the app's zone.
+  function deviceTimezone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (_) { return null; }
+  }
   function rememberPending(context, body) {
     const uid = context.auth.uid;
     if (!uid) return;
@@ -2277,6 +2281,7 @@
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
+        timezone: deviceTimezone(),
       };
       rememberPending(context, body);
       const result = await follow(context, body, signal, { headers });

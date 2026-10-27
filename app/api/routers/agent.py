@@ -145,6 +145,18 @@ class AgentRequest(BaseModel):
     google_selection: GoogleSelection | None = None
     google_data_consent: bool = False
     agent_preferences: AgentPreferences = Field(default_factory=AgentPreferences)
+    # The browser's IANA zone (Intl): the date in the message's app context.
+    # A name the server does not know counts as none (the app's zone).
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def known_timezone(cls, value):
+        from zoneinfo import ZoneInfo
+        try:
+            return value if value and ZoneInfo(value) else None
+        except Exception:
+            return None
 
     @field_validator("file_ids")
     @classmethod
@@ -389,7 +401,7 @@ def run_agent(request: Request, payload: AgentRequest):
         memory = _memory_snapshot(uid)
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
-        app_context = get_agent_turn_context(model, config)
+        app_context = get_agent_turn_context(model, config, payload.timezone)
         # The user restored the VM since the last message (restore_agent_vm):
         # this message's context says so, once.
         restored = (chat_data.get("agent_vm") or {}).get("restored") if preferences.vm == "on" else None

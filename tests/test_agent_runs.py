@@ -243,6 +243,25 @@ def api(monkeypatch, store):
     return TestClient(app), store, calls
 
 
+def test_the_date_follows_the_users_device_and_an_unknown_zone_the_apps(api):
+    """Harness review 2026-10-27: the date was always Berlin's, wherever the
+    user was. The browser sends its zone; one the server does not know (or
+    none, an older tab) leaves the app's reference zone."""
+    client, _, calls = api
+    chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
+    contexts = []
+    for request_id, zone in (("zone-1", "America/New_York"), ("zone-2", "Mars/Olympus"), ("zone-3", None)):
+        payload = {"chat_id": chat_id, "question": "What day is it?", "client_request_id": request_id,
+                   "bookmark_id": "agent_test", **({"timezone": zone} if zone else {})}
+        assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+        contexts.append(next(m["content"] for m in reversed(calls[-1]["messages"])
+                             if str(m["content"]).startswith(APP_CONTEXT_OPEN)))
+    device, unknown, absent = contexts
+    assert "Reference timezone: America/New_York (UTC-0" in device and "timezone of the user's device" in device
+    for context in (unknown, absent):
+        assert "Reference timezone: Europe/Berlin" in context and "application default" in context
+
+
 def test_the_next_message_repeats_the_question_exactly_as_it_was_sent(api):
     """With OpenRouter's search tool a Claude request caches only at its end
     (live probe 2026-10-23): the next message reads the previous one's first
