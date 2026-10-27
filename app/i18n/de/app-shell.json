@@ -54,6 +54,7 @@
   "Mode": "Modus",
   "<0>Add files</0> <1>PDF, Word, text, images · max. 5 MB</1>": "<0>Dateien hinzufügen</0> <1>PDF, Word, Text, Bilder · max. 5 MB</1>",
   "<0>Add from Google Drive</0> <1>Docs, Sheets, Slides, PDFs · max. 5 MB</1>": "<0>Aus Google Drive hinzufügen</0> <1>Docs, Tabellen, Präsentationen, PDFs · max. 5 MB</1>",
+  "<0>Workspace</0> <1>Watch and steer the agent’s browser</1>": "<0>Arbeitsplatz</0> <1>Dem Browser des Agenten zusehen und ihn steuern</1>",
   "<0>Reasoning</0><1>Auto</1>": "<0>Nachdenken</0><1>Auto</1>",
   "Comparison models": "Vergleichsmodelle",
   "Reasoning · Models think longer before they answer": "Nachdenken · Modelle denken länger nach, bevor sie antworten",
@@ -528,7 +529,7 @@
   "Comparison": "Vergleich",
   "Audit": "Audit",
   "<0>GitHub</0> <1>Connect GitHub so the Agent can bring your repositories into its VM and propose pull requests. You choose the repositories when you install the consens.io app on GitHub. Nothing goes to GitHub until you confirm a pull request, and the VM never holds a GitHub key.</1>": "<0>GitHub</0> <1>Verbinde GitHub, damit der Agent deine Repositories in seine VM holen und Pull Requests vorschlagen kann. Welche Repositories, wählst du beim Installieren der consens.io-App auf GitHub. Nichts geht zu GitHub, bevor du einen Pull Request bestätigst, und die VM bekommt nie einen GitHub-Schlüssel.</1>",
-  "<0>Workspace</0> <1>The Agent and you share one Linux computer across your chats. Open it to watch the Agent's browser, take it over and sign in to sites yourself: the Agent then works there as you, asks before it sends, buys or deletes anything, and never types a password.</1>": "<0>Arbeitsplatz</0> <1>Der Agent und du teilt euch über alle Chats einen Linux-Rechner. Öffne ihn, um dem Browser des Agenten zuzusehen, ihn zu übernehmen und dich selbst auf Websites anzumelden: Der Agent arbeitet dort dann in deinem Namen, fragt nach, bevor er etwas sendet, kauft oder löscht, und tippt nie ein Passwort.</1>",
+  "<0>Workspace</0> <1>The Agent and you share one Linux computer across your chats. Open it to watch the Agent’s browser, take it over and log in to sites yourself: the Agent then works there as you, asks before it sends, buys or deletes anything, and never types a password.</1>": "<0>Arbeitsplatz</0> <1>Der Agent und du teilt euch über alle Chats einen Linux-Rechner. Öffne ihn, um dem Browser des Agenten zuzusehen, ihn zu übernehmen und dich selbst auf Websites anzumelden: Der Agent arbeitet dort dann in deinem Namen, fragt nach, bevor er etwas sendet, kauft oder löscht, und tippt nie ein Passwort.</1>",
   "<0>Way of working</0> <1>Comparison: Agent asks your comparison models and writes the answer from what they found. Audit: Agent works on its own, also on longer tasks; your comparison models follow every step live and review the finished answer.</1>": "<0>Arbeitsweise</0> <1>Vergleich: Agent fragt deine Vergleichsmodelle und schreibt die Antwort aus dem, was sie gefunden haben. Audit: Agent arbeitet selbstständig, auch an längeren Aufgaben; deine Vergleichsmodelle verfolgen jeden Schritt live und prüfen die fertige Antwort.</1>",
   "In Audit, Agent has its own Linux VM and the open web.": "Im Audit hat Agent eine eigene Linux-VM und das offene Web."
 }

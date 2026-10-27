@@ -1288,7 +1288,7 @@
   // restore_agent_vm, admins): asked first, since later changes are lost.
   async function restoreVm(chatId, turnId) {
     const confirmed = await App.confirm?.({ title: "Restore the VM?", danger: true, confirmLabel: "Restore",
-      body: "Your workspace goes back to how it was before this message: every chat’s folder and the browser with its sign-ins. Everything changed there since is lost, and running background processes stop." });
+      body: "Your workspace goes back to how it was before this message: every chat’s folder and the browser with the sites it is logged in to. Everything changed there since is lost, and running background processes stop." });
     if (!confirmed) return;
     let message = "The VM is back to how it was before this message.";
     try {

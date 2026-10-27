@@ -7,8 +7,9 @@
 // expire by itself. Sign-ins happen here, by the user: the agent never types
 // a password.
 //
-// window.App.workspaceView: open(), close(), isOpen(), init() (the composer's
-// Workspace button and the row in Settings → Agent).
+// window.App.workspaceView: open(), close(), isOpen(), init() (the start
+// screen's Workspace button, the (+) menu's row, the row in Settings → Agent);
+// agent-activity.js opens it from a browser step ("Watch live").
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -65,7 +66,7 @@
     closer.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     head.append(title, status, toggle, closer);
     const hint = node('p', 'workspace-view-hint',
-      'Sign in to sites here yourself: the agent then works there as you, and never types a password.');
+      'Log in to sites here yourself: the agent then works there as you, and never types a password.');
     const screen = node('div', 'workspace-view-screen');
     const cover = button('workspace-view-cover', '', takeOver);
     cover.setAttribute('aria-label', 'Take over the browser');
@@ -204,24 +205,29 @@
     document.body.classList.remove('workspace-view-open');
   }
 
-  // ---- Settings → Agent: open the workspace, sign its browser out -----------
+  // ---- Settings → Agent: open the workspace, log its browser out -----------
   async function resetBrowser(status) {
-    const confirmed = await App.confirm?.({ title: 'Sign the workspace browser out?', danger: true,
-      confirmLabel: 'Sign out everywhere',
-      body: 'The workspace’s browser forgets every sign-in, cookie and open tab. The agent then reaches your accounts again only after you sign in there anew.' });
+    const confirmed = await App.confirm?.({ title: 'Log the workspace browser out everywhere?', danger: true,
+      confirmLabel: 'Log out everywhere',
+      body: 'The workspace’s browser forgets every site you are logged in to, its cookies and open tabs. The agent then reaches your accounts again only after you log in there anew.' });
     if (!confirmed) return;
-    status.textContent = 'Signing out…';
+    status.textContent = 'Logging out…';
     try {
       await post('/agent/workspace/reset-browser');
-      status.textContent = 'The workspace browser is signed out everywhere.';
+      status.textContent = 'The workspace browser is logged out everywhere.';
     } catch (error) {
       status.textContent = error.message || 'Try again.';
     }
   }
   function init() {
-    const opener = document.getElementById('composerWorkspaceButton');
-    if (opener && !opener._workspace) {
-      opener.addEventListener('click', open);
+    // The start screen's tool bar, and in a chat the (+) menu.
+    for (const id of ['composerWorkspaceButton', 'attachWorkspaceOption']) {
+      const opener = document.getElementById(id);
+      if (!opener || opener._workspace) continue;
+      opener.addEventListener('click', () => {
+        App.closeAttachMenu?.();
+        open();
+      });
       opener._workspace = true;
     }
     const host = document.getElementById('agentWorkspaceSettings');
@@ -230,7 +236,7 @@
     status.setAttribute('role', 'status');
     const actions = node('div', 'agent-github-actions');
     actions.append(button('agent-github-link', 'Open workspace', open),
-      button('agent-github-link', 'Sign out everywhere', () => resetBrowser(status)));
+      button('agent-github-link', 'Log out everywhere', () => resetBrowser(status)));
     host.append(status, actions);
     host._workspace = true;
   }

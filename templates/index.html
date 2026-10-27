@@ -489,6 +489,14 @@
               <span class="attach-menu-hint">Docs, Sheets, Slides, PDFs &middot; max. 5 MB</span>
             </span>
           </button>
+          <!-- The account's workspace live (workspace-view.js): in a chat the composer's tools live here. -->
+          <button type="button" id="attachWorkspaceOption" class="attach-menu-item workspace-only">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span class="attach-menu-text">
+              <span class="attach-menu-label">Workspace</span>
+              <span class="attach-menu-hint">Watch and steer the agent’s browser</span>
+            </span>
+          </button>
           <div class="attach-menu-divider"></div>
           <!-- Reasoning lebt im (+)-Kontextmenü: im Agent-Modus der
                Effort-Picker, sonst der Schalter darunter (für alle Stufen). -->
@@ -588,7 +596,7 @@
             <span class="composer-tool-label">Attach</span>
           </button>
           <!-- The account's workspace live (workspace-view.js): Pro and admins on a server with a VM provider. -->
-          <button type="button" id="composerWorkspaceButton" class="composer-agent-toggle composer-tool workspace-only" aria-label="Open the workspace" title="Workspace: watch and steer the agent's browser">
+          <button type="button" id="composerWorkspaceButton" class="composer-agent-toggle composer-tool workspace-only" aria-label="Open the workspace" title="Workspace: watch and steer the agent’s browser">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
             <span class="composer-tool-label">Workspace</span>
           </button>
@@ -1305,7 +1313,7 @@
               <!-- The account's workspace (workspace-view.js): one Linux computer for the Agent and you. -->
               <div class="settings-section workspace-only agent-audit-setting agent-workspace-settings" id="agentWorkspaceSettings" data-settings-keywords="workspace arbeitsplatz browser chrome vm sign in anmelden login cookies">
                 <strong>Workspace</strong>
-                <small>The Agent and you share one Linux computer across your chats. Open it to watch the Agent's browser, take it over and sign in to sites yourself: the Agent then works there as you, asks before it sends, buys or deletes anything, and never types a password.</small>
+                <small>The Agent and you share one Linux computer across your chats. Open it to watch the Agent’s browser, take it over and log in to sites yourself: the Agent then works there as you, asks before it sends, buys or deletes anything, and never types a password.</small>
               </div>
             </div>
           </section>

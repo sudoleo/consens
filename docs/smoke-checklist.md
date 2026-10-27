@@ -149,7 +149,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Sprites-Dashboard weg. Chat mit Gmail/Kalender: keine VM-Werkzeuge.
       Automatisiert: `test_agent_vm.py`, `agent-vm-activity.test.mjs`.
 - [ ] Arbeitsplatz (2026-10-27, Pro- oder Admin-Konto mit Audit, echter
-      Provider): Composer → „Workspace“ öffnet das Panel; beim allerersten Mal
+      Provider): (+) → „Workspace“ (im Chat) bzw. der Knopf „Workspace“ auf
+      dem Startbildschirm öffnet das Panel, ebenso „Live ansehen“ an einem
+      `browser`-Schritt des Agenten; beim allerersten Mal
       „Der Browser wird eingerichtet …“ (~1 min), dann Chrome im Bild, „Du
       schaust zu“. Ein Klick ins Bild übernimmt („Zurückgeben“), Tippen und
       Klicken kommen an; bei einer Website anmelden. Agent-Frage im Audit:

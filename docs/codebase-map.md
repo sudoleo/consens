@@ -143,7 +143,9 @@ all need Agent access and audit (`audit_allowed`) on a server with a VM provider
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
 `open`, `close`, `init`, `isOpen`) renders the panel, imports noVNC from
 `static/vendor/novnc/1.7.0` on first open and wires `#composerWorkspaceButton`
-and `#agentWorkspaceSettings` (`.workspace-only`, body class
+(start screen), the (+) menu's `#attachWorkspaceOption` (in a chat) and
+`#agentWorkspaceSettings`; `agent-activity.js` adds "Watch live"
+(`.agent-vm-watch`) to each `browser` step. All `.workspace-only` (body class
 `viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
 ("Arbeitsplatz").
 

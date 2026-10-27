@@ -476,6 +476,8 @@
     if (Number.isFinite(item.duration_ms) && item.duration_ms >= 1000) parts.push(App.format.duration(item.duration_ms));
     return parts.join(' · ');
   }
+  // A command that uses the workspace's browser (workspace_vm/browser.py).
+  const browserStep = /(^|[;&|(]\s*)browser\s+[a-z-]+/;
   function vmView(className) {
     const details = document.createElement('details');
     details.className = className;
@@ -485,7 +487,15 @@
     const verb = document.createElement('span'); verb.className = 'agent-vm-verb';
     const target = document.createElement('code'); target.className = 'agent-vm-target'; target.translate = false;
     const meta = document.createElement('span'); meta.className = 'agent-vm-meta';
-    summary.append(verb, target, meta);
+    // A step in the workspace's browser: watch it live (workspace-view.js).
+    const watch = document.createElement('button'); watch.type = 'button'; watch.className = 'agent-vm-watch';
+    watch.hidden = true;
+    watch.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      App.workspaceView?.open();
+    });
+    summary.append(verb, target, meta, watch);
     const output = document.createElement('pre'); output.className = 'agent-vm-output'; output.translate = false;
     output.hidden = true;
     details.append(summary, output);
@@ -511,6 +521,10 @@
     target.textContent = String((['vm_exec', 'vm_start_process'].includes(item.name) ? item.command
       : item.path || item.process) || '');
     meta.textContent = vmMeta(item);
+    const watch = details.firstElementChild.children[3];
+    watch.hidden = !(item.name === 'vm_exec' && browserStep.test(String(item.command || ''))
+      && document.body.classList.contains('viewer-has-workspace') && Boolean(App.workspaceView));
+    watch.textContent = App.t('Watch live');
     const output = details.lastElementChild;
     const text = String(item.output || '');
     output.textContent = text && item.output_truncated ? `…\n${text}` : text;

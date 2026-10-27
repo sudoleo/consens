@@ -36,7 +36,8 @@ function setup() {
   FakeSocket.last = null;
   FakeRFB.made = [];
   const app = loadScripts(["static/js/workspace-view.js"], {
-    body: '<button id="composerWorkspaceButton"></button><div id="agentWorkspaceSettings"></div>',
+    body: '<button id="composerWorkspaceButton"></button><button id="attachWorkspaceOption"></button>'
+      + '<div id="agentWorkspaceSettings"></div>',
     before(window) {
       window.WebSocket = FakeSocket;
       window.auth = { currentUser: { uid: "u1", getIdToken: async () => "token" } };
@@ -132,6 +133,15 @@ describe("the workspace view", () => {
     expect(env.workspace.isOpen()).toBe(false);
   });
 
+  it("opens from the (+) menu in a chat and closes the menu", async () => {
+    const env = setup();
+    env.window.App.closeAttachMenu = vi.fn();
+    env.document.getElementById("attachWorkspaceOption").click();
+    expect(env.window.App.closeAttachMenu).toHaveBeenCalled();
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    expect(env.workspace.isOpen()).toBe(true);
+  });
+
   it("says when the account has no workspace or the server cannot reach it", async () => {
     const env = setup();
     const socket = await opened(env);
@@ -143,11 +153,11 @@ describe("the workspace view", () => {
     expect(FakeRFB.made).toEqual([]);
   });
 
-  it("signs the browser out everywhere only after asking", async () => {
+  it("logs the browser out everywhere only after asking", async () => {
     const env = setup();
     env.window.App.confirm = vi.fn(async () => false);
     const [, signOut] = env.document.querySelectorAll("#agentWorkspaceSettings button");
-    expect(signOut.textContent).toBe("Sign out everywhere");
+    expect(signOut.textContent).toBe("Log out everywhere");
     signOut.click();
     await vi.waitFor(() => expect(env.window.App.confirm).toHaveBeenCalled());
     expect(env.window.fetch).not.toHaveBeenCalled();
@@ -156,6 +166,6 @@ describe("the workspace view", () => {
     await vi.waitFor(() => expect(env.window.fetch).toHaveBeenCalled());
     expect(env.window.fetch.mock.calls[0][0]).toBe("/agent/workspace/reset-browser");
     await vi.waitFor(() => expect(env.document.querySelector(".agent-workspace-status").textContent)
-      .toBe("The workspace browser is signed out everywhere."));
+      .toBe("The workspace browser is logged out everywhere."));
   });
 });

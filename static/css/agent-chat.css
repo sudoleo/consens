@@ -747,6 +747,18 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm[open] > summary .agent-vm-target { white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-vm-meta { flex: none; padding-left: .25em; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-vm-meta:empty { display: none; }
+/* Watch a browser step live (workspace-view.js): a quiet text action at the
+   end of its line, like the restore action, no frame. */
+.agent-vm-watch {
+  flex: none; padding: 0 0 0 .5em; border: 0; background: none; color: var(--ink-3);
+  font: inherit; font-size: var(--font-size-xs); cursor: pointer; text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px;
+}
+.agent-vm-watch[hidden] { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-vm-watch:hover { color: var(--ink-2); }
+}
+.agent-vm-watch:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
 /* The app's one chevron (foundation.css --chevron-mask): right while folded, down when open. */
 .agent-vm.has-output > summary::after {
   content: ""; flex: none; align-self: center; width: 1em; height: 1em; color: var(--ink-3); background: currentColor;

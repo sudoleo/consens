@@ -278,3 +278,40 @@ describe("VM calls in the activity", () => {
     expect(host.querySelector(".agent-usage").textContent).toBe("1,200 tokens · VM 1m 15s");
   });
 });
+
+describe("a step in the workspace's browser", () => {
+  it("offers to watch it live, only for browser commands and accounts with a workspace", () => {
+    const { app, host, activity } = setup();
+    const opened = [];
+    app.window.App.workspaceView = { open: () => opened.push(true) };
+    app.document.body.classList.add("viewer-has-workspace");
+    const events = [];
+    activity.receive(events, vm({ status: "running", command: "browser open github.com" }));
+    activity.receive(events, vm({ id: "completion:1:call_2/tool", status: "succeeded", command: "pip install x",
+      exit_code: 0, output: "ok\n" }));
+    activity.render(host, { running: true, status: "running", events });
+    const [browserStep, otherStep] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    const watch = browserStep.querySelector(".agent-vm-watch");
+    expect(watch.hidden).toBe(false);
+    expect(watch.textContent).toBe("Watch live");
+    expect(otherStep.querySelector(".agent-vm-watch").hidden).toBe(true);
+    // Opens the view without folding the step open or shut.
+    const wasOpen = browserStep.open;
+    watch.click();
+    expect(opened).toEqual([true]);
+    expect(browserStep.open).toBe(wasOpen);
+    // Also after cd and for a step that only reads.
+    activity.receive(events, vm({ id: "completion:1:call_3/tool", status: "running", command: "cd app && browser read" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelectorAll(".agent-activity-content .agent-vm")[2].querySelector(".agent-vm-watch").hidden)
+      .toBe(false);
+  });
+
+  it("offers nothing without a workspace on the account", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, vm({ status: "running", command: "browser open github.com" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelector(".agent-vm .agent-vm-watch").hidden).toBe(true);
+  });
+});

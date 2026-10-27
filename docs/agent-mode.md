@@ -552,10 +552,14 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   nie solange der Nutzer übernommen hat (Exit 3, `control.json` mit Ablauf).
   Chrome meldet sich nicht als ferngesteuert (`navigator.webdriver` false, kein
   `--enable-automation`).
-- **Live-Ansicht** (`routers/agent_workspace.py`, `workspace-view.js`): Knopf
-  „Workspace“ im Composer (`#composerWorkspaceButton`, `.workspace-only`:
-  Körperklasse `viewer-has-workspace` aus `/user_status`, `audit_access` und
-  `vm_time`) und Einstellungen → Agent → Workspace. Ein WebSocket
+- **Live-Ansicht** (`routers/agent_workspace.py`, `workspace-view.js`): im
+  Chat über (+) → „Workspace“ (`#attachWorkspaceOption`), auf dem
+  Startbildschirm über den Knopf in der Werkzeugleiste
+  (`#composerWorkspaceButton`; die Leiste gibt es nur dort), an jedem
+  `browser`-Schritt des Agenten über „Live ansehen“ (`agent-activity.js`
+  `.agent-vm-watch`) und in Einstellungen → Agent → Workspace. Alles
+  `.workspace-only`: Körperklasse `viewer-has-workspace` aus `/user_status`,
+  `audit_access` und `vm_time`. Ein WebSocket
   `/agent/workspace/view`: Die erste Nachricht meldet an (`{"id_token"}`, nie in
   der URL), dann legt der Server den Arbeitsplatz bei Bedarf an
   (`record_for_view`, ohne Sperre: es ist der Rechner des Nutzers), bringt die
