@@ -1464,7 +1464,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `#viewSwitch` und der schwebende `.app-nav-float` aus dem Lesebereich;
   Aufwärtsscrollen, Seitenanfang und Tastatur-Navigation blenden sie wieder ein.
   Der Zustand ist rein transient als `body.is-reading-chrome-hidden` und
-  verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten.
+  verändert weder Sidebar-Persistenz noch Watch-/Consensus-Daten. Agent-Chats
+  blenden nichts aus; seit 2026-10-27 deckt dafür ab 1100 px bei eingeklappter
+  Sidebar der Rand `.app-mobile-header-edge` (fixiert, 76 px, `--ground`, ab
+  46 px ausgeblendet, z-index 100 unter den Seitenpanels mit 120) den oberen
+  Streifen ab, sobald etwas darunter liegt (`.app-mobile-header.is-scrolled`,
+  `mobile-header.js`): Die Antwort lief sonst durch Logo und Sidebar-Knopf.
 - **Mobile Kopfleiste** — `header.app-mobile-header` zeigt bei ≤1099 px seit
   2026-10-13 keine Leiste mehr, sondern zwei Gruppen: links das Menü als
   44-px-Knopf, rechts New chat und, für die fertige Antwort, Watch und „…“.

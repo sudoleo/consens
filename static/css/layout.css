@@ -93,6 +93,34 @@ body:has(.sidebar.collapsed) .app-nav-float {
   }
 }
 
+/* Scroll edge on a wide screen (2026-10-27): with the sidebar folded, the
+   floating toggle and brand sit over the thread, and an Agent chat never
+   hides them while reading (initReadingChrome follows the Consensus answer
+   only), so the answer ran through the logo. Once the page has moved beneath
+   them (.app-mobile-header.is-scrolled, mobile-header.js), the phone bar's
+   edge element covers the top in the page's ground and fades out below the
+   controls. Under the side panels (agent sidebar, docked workspace: z 120),
+   so it never veils them; nothing to see before anything scrolls. */
+@media (min-width: 1100px) {
+  body:has(.sidebar.collapsed) .app-mobile-header > .app-mobile-header-edge {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 100;
+    height: 76px;
+    pointer-events: none;
+    background: var(--ground);
+    -webkit-mask-image: linear-gradient(180deg, #000 46px, transparent);
+    mask-image: linear-gradient(180deg, #000 46px, transparent);
+    opacity: 0;
+    transition: opacity var(--dur-state) var(--ease-standard);
+  }
+
+  body:has(.sidebar.collapsed):not(.is-reading-chrome-hidden) .app-mobile-header.is-scrolled > .app-mobile-header-edge {
+    opacity: 1;
+  }
+}
+
 /* Reading mode: fixed navigation yields to the answer while scrolling down.
    JS removes this state near the top, on upward travel and before keyboard
    focus moves into the controls. Visibility follows the fade so an invisible

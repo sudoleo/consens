@@ -269,3 +269,41 @@ def test_a_reviewers_pause_asks_the_user_above_the_field(browser, phase4_server,
         assert errors == []
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_the_folded_sidebars_brand_fades_the_thread_beneath_it(browser, phase4_server, dark):
+    """2026-10-27: with the sidebar folded, an Agent answer scrolled straight
+    through the floating toggle and brand (an Agent chat never hides them
+    while reading). Once the page moves beneath them, the top fades out in
+    the page's ground, under the side panels."""
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, dark, finished_events())
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.locator("#sidebarToggleInner").click()
+        page.wait_for_function("() => document.querySelector('.sidebar').classList.contains('collapsed')")
+        edge = page.locator(".app-mobile-header-edge")
+        # Nothing beneath the controls yet: no veil over the question.
+        page.evaluate("() => window.scrollTo(0, 0)")
+        page.wait_for_timeout(400)
+        assert edge.evaluate("el => getComputedStyle(el).opacity") == "0"
+        # A long answer scrolled until its first line sits level with the brand.
+        page.evaluate("""() => { const body = document.getElementById('agentAnswerBody');
+            body.insertAdjacentHTML('beforeend', body.innerHTML.repeat(8)); }""")
+        page.wait_for_timeout(300)
+        line_top = """() => document.getElementById('agentAnswerBody').getBoundingClientRect().top"""
+        page.evaluate(f"() => window.scrollBy(0, ({line_top})() - 24)")
+        page.wait_for_function("() => document.querySelector('.app-mobile-header').classList.contains('is-scrolled')")
+        page.wait_for_timeout(500)
+        assert 16 <= page.evaluate(line_top) <= 48, page.evaluate(
+            f"() => ({{line: ({line_top})(), y: scrollY, height: document.documentElement.scrollHeight}})")
+        style = edge.evaluate("""el => { const s = getComputedStyle(el), box = el.getBoundingClientRect();
+            return {opacity: s.opacity, z: s.zIndex, top: box.top, height: box.height, width: box.width}; }""")
+        assert style["opacity"] == "1" and style["top"] == 0 and style["height"] >= 70 and style["width"] >= 1200, style
+        # Beneath the floating controls, above the thread, under the side panels (z 120).
+        nav_z = page.locator(".app-nav-float").evaluate("el => getComputedStyle(el).zIndex")
+        assert int(style["z"]) < 120 < int(nav_z)
+        _snapshot(page, f"nav-scroll-edge-{'dark' if dark else 'light'}")
+        assert errors == []
+    finally:
+        context.close()
