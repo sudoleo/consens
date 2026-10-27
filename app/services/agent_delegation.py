@@ -283,6 +283,9 @@ class DelegationLoop(AgentLoop):
         self.tool_reminders = 0
         # Saved sources of the chat's earlier messages: read_source may open them.
         self.chat_sources = list(chat_sources or [])
+        # This message's own search results (provider citations of its steps):
+        # read_source opens them in audit mode (SourceReader.cited).
+        self.search_sources = []
         # Freeze the actual conversation before runtime instructions, tool
         # transcripts or private continuation data are appended to messages:
         # the user's own words for memory evidence and readable links. The
@@ -1511,6 +1514,8 @@ class DelegationLoop(AgentLoop):
                 # Persist the partial answer the user saw, only after the
                 # mandatory settlement.
                 self.comparison.capture(value.published)
+        if value.sources:
+            self.search_sources.extend(value.sources)
         self.costs.check()
         if not worker:
             yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.costs.total()})

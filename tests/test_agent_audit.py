@@ -61,11 +61,12 @@ class Audit:
     its own search. Every other call is a reviewer: its final round replies
     with ``reviews[family]``, a live round with ``live[family]`` (a text, an
     exception or "wait": until it is stopped). ``step_tools``: another tool
-    for some of the tool steps, {index: name}."""
+    for some of the tool steps, {index: name}; ``step_args``: its arguments."""
 
     def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None, on_lookup=None,
-                 on_answer=None, step_tools=None):
+                 on_answer=None, step_tools=None, step_args=None):
         self.step_tools = dict(step_tools or {})
+        self.step_args = dict(step_args or {})
         self.reviews = dict(REVIEWS if reviews is None else reviews)
         self.on_lookup = on_lookup
         self.on_answer = on_answer
@@ -96,7 +97,8 @@ class Audit:
                         # Each step looks up something else: identical calls are refused.
                         self.tool_calls = [{"id": f"call_{index}", "type": "function",
                                             "function": {"name": script.step_tools.get(index, "lookup"),
-                                                         "arguments": json.dumps({"step": index})}}]
+                                                         "arguments": json.dumps(
+                                                             script.step_args.get(index, {"step": index}))}}]
                         self.finish_reason = "tool_calls"
                         return
                     if script.on_answer:
@@ -758,6 +760,34 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
     assert {"read_source", "update_memory"} <= names and not {"compare_models", "check_text"} & names
     assert "Call it first" in loop.registry.tools["update_memory"].description
     assert "comparison answer" not in loop.registry.tools["read_source"].description
+
+
+def test_the_agent_reads_a_result_of_its_own_search_but_never_another_page(store, monkeypatch):
+    """Harness review 2026-10-27: in audit mode no comparison answer cites a
+    page, so the agent could open nothing it found itself in this message,
+    although the same results become readable as an earlier message's sources
+    with the next one. Its own search results count now; other URLs do not."""
+    from test_agent_web_fetch import PAGE, fake_fetch
+    from app.services.agent_read_source import LABEL_SEARCH
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    calls = fake_fetch(monkeypatch)
+    found, other = "https://www.toureiffel.paris/en", "https://evil.example/collect?d=1"
+
+    def read(url):
+        return {"url": url, "purpose": "exact_wording", "point": "The visitor count",
+                "status_update": "Checking the visitor count."}
+    script = Audit(tool_steps=2, step_tools={0: "read_source", 1: "read_source"},
+                   step_args={0: read(found), 1: read(other)})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    tool = loop.registry.tools["read_source"]
+    assert "own web search" in tool.description and "comparison answer" not in json.dumps(tool.schema())
+    assert [s["url"] for s in loop.search_sources] == [found] * 3
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert results[0]["status"] == "completed" and results[0]["cited_by"] == [LABEL_SEARCH]
+    assert results[0]["untrusted_page_text"] == PAGE
+    assert results[1]["status"] == "refused" and "own search results" in results[1]["reason"]
+    assert len(calls) == 1
 
 
 def test_every_memory_rule_without_comparisons_replaces_a_sentence_that_exists():

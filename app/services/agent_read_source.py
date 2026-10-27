@@ -118,6 +118,12 @@ _URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
 LABEL_USER = "your message"
 LABEL_EARLIER = "an earlier message's sources"
+# Audit mode (2026-10-27): the agent researches itself, and no comparison
+# answer cites a page. Its own search results are provider citations like
+# the earlier messages' sources, which they become with the next message
+# anyway: no page wrote them. Not in comparison mode, where the answers'
+# sources cover them and a read before the comparison would end it.
+LABEL_SEARCH = "your search in this message"
 
 
 def user_urls(conversation):
@@ -232,6 +238,19 @@ class ReadSourceArgs(ProgressArgs):
     @classmethod
     def _clip_point(cls, value):
         return value[:300] if isinstance(value, str) else value
+
+
+# ReadSourceArgs in audit mode (no docstring: it would become the schema's
+# description): the agent's own search results instead of comparison answers.
+class AuditReadSourceArgs(ReadSourceArgs):
+    url: str = Field(min_length=1, max_length=2048, description=
+        "One URL exactly as it appears in your own search results of this message, in the sources of an earlier "
+        "message of this chat or in the user's messages.")
+    purpose: Literal["user_request", "settle_contradiction", "exact_wording"] = Field(description=
+        "user_request: the user asks what this page says, asks you to read or check it, or limits the answer to "
+        "the source it belongs to (such as only the official site). "
+        "settle_contradiction: sources disagree on a fact that matters and this page decides it. "
+        "exact_wording: the answer will quote a key figure, date, definition or official statement from it.")
 
 
 class PageFetch(AgentCompletion):
@@ -350,8 +369,10 @@ class SourceReader:
         self._steps = {}
         self._user_urls = None
         # Audit mode (agent_audit.py) has no comparison answers that cite sources.
-        what = ("a source of an earlier message of this chat or a page the user linked, to answer what it says, "
-                if getattr(comparison, "audit_mode", False) else
+        audit = getattr(comparison, "audit_mode", False)
+        what = ("a result of your own web search in this message, a source of an earlier message of this chat or a "
+                "page the user linked, to answer what it says, to settle a concrete contradiction, "
+                if audit else
                 "a source that a comparison answer of this message cited, a source of an earlier "
                 "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
                 "contradiction, ")
@@ -359,13 +380,14 @@ class SourceReader:
             "read_source",
             "Open one page: " + what + "to check a source the user asks about or to get the exact wording of a "
             f"key figure, definition or statement. At most {READS_PER_MESSAGE} per message; returns the page text.",
-            ReadSourceArgs, self.read, activity=self.activity)
+            AuditReadSourceArgs if audit else ReadSourceArgs, self.read, activity=self.activity)
 
     # --- What may be read -------------------------------------------------
     def cited(self):
         """Canonical URL -> {url, title, cited_by}: every source of every
-        answer of this message, then the chat's earlier sources and the
-        user's links (see _CHAT_URL)."""
+        answer of this message, in audit mode the agent's own search results
+        (LABEL_SEARCH), then the chat's earlier sources and the user's links
+        (see _CHAT_URL)."""
         cited = {}
         for comparison in self.comparison.comparisons:
             for answer in comparison.get("answers") or []:
@@ -379,6 +401,13 @@ class SourceReader:
                           "label": answer.get("provider_label") or answer.get("provider")}
                     if by not in entry["cited_by"]:
                         entry["cited_by"].append(by)
+        if getattr(self.comparison, "audit_mode", False):
+            for source in list(getattr(self.loop, "search_sources", None) or ()):
+                url = source.get("url") if isinstance(source, dict) else None
+                key = url_key(url) if _safe_url(url) else ""
+                if key:
+                    cited.setdefault(key, {"url": url, "title": str(source.get("title") or ""), "cited_by": [
+                        {"comparison_id": None, "provider": "search", "label": LABEL_SEARCH}]})
         for source in getattr(self.loop, "chat_sources", None) or ():
             url = source.get("url") if isinstance(source, dict) else None
             key = url_key(url) if _safe_url(url) else ""
@@ -444,6 +473,10 @@ class SourceReader:
                 budget = self._time_budget()
                 key = url_key(args.url)
                 entry = self.cited().get(key) if key else None
+                if entry is None and getattr(self.comparison, "audit_mode", False):
+                    raise ValueError("read_source opens only a URL from your own search results in this message, "
+                                     "the sources of an earlier message of this chat, or one the user wrote, copied "
+                                     "exactly; not URLs from an answer's text or a page.")
                 if entry is None:
                     raise ValueError("read_source opens only a URL listed in the sources of a comparison answer of "
                                      "this message or of an earlier message of this chat, or one the user wrote, "

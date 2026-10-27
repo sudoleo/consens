@@ -254,7 +254,11 @@ Tiefe, Answer start, `_consensus_search_handoff` und `_tool_reminder`
 den Vergleichen (`agent_memory.without_comparisons`: Entscheidung über
 `update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
 (`AGENT_AUDIT_READ_SOURCE_PROMPT` statt `AGENT_READ_SOURCE_PROMPT`; lesbar
-bleiben Seiten, die der Nutzer verlinkt, und Quellen früherer Nachrichten).
+sind Seiten, die der Nutzer verlinkt, Quellen früherer Nachrichten und seit
+2026-10-27 die eigenen Suchtreffer dieser Nachricht: `DelegationLoop.search_sources`
+sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
+`LABEL_SEARCH` auf. Sie hätte keine Seite schreiben können, und mit der
+nächsten Nachricht wären sie als frühere Quellen ohnehin lesbar).
 Der Agent sucht in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS` (5) Runden;
 passt die Reservierung nicht, geht `smaller_search` 5 → 3 → 1 → 0. Sein Text
 streamt wie jede Antwort (`research=False`), auch nach eigenen Suchtreffern.

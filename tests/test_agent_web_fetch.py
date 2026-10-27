@@ -371,6 +371,19 @@ def test_refused_for_uncited_urls_and_after_the_answer(store, monkeypatch, enabl
     assert calls == [] and loop.comparison.reader.reads == []
 
 
+def test_own_search_results_stay_unreadable_with_comparisons(store, monkeypatch, enabled):
+    """Only audit mode reads the agent's own search results
+    (test_agent_audit): here the answers' sources cover them, and a read
+    before the comparison would end it."""
+    calls = fake_fetch(monkeypatch)
+    searched = "https://example.org/found-by-search"
+    plan = Plan(steps=[[read_call(searched)]], searches={0: [{"url": searched, "title": "Found"}]})
+    loop, _, _ = run(store, plan)
+    assert [s["url"] for s in loop.search_sources] == [searched]
+    refused(results(loop)[0], "not URLs from your own search")
+    assert calls == []
+
+
 def test_user_urls_are_the_links_the_user_wrote():
     conversation = [
         {"role": "user", "content": "Check https://example.org/a. And (https://example.org/b), ok?"},
