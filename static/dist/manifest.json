@@ -1,5 +1,5 @@
 {
-  "sources": "9e19d70e138d",
+  "sources": "474ee4622f47",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -298,14 +298,14 @@
     }
   ],
   "styles": {
-    "app": "/static/dist/app.6f39144634bc.css",
+    "app": "/static/dist/app.718c26cc945b.css",
     "landing": "/static/dist/landing.a5b0b3003065.css",
     "public": "/static/dist/public.3cc36181a86f.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "122c3af021b1",
+      "hash": "adecbec0fe20",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -377,8 +377,8 @@
     }
   },
   "previous_assets": [
+    "app.6f39144634bc.css",
     "app.c345b30c288b.css",
-    "app.9eb4ad4c7fe9.css",
     "app.3716a9dfbf85.js",
     "app.4aa988082e44.js",
     "auth.ec6e4e8d116c.js",

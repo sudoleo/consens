@@ -454,6 +454,9 @@ body.answer-reader-modal { overflow: hidden; }
 }
 /* Direct comparison is an open document, with every model visible at once. */
 body.direct-comparison-active .consensus-section { display: none; }
+/* Its answers start on the column's edges, like the composer: the question
+   ends on the right one, as in an Agent chat (agent-chat.css). */
+body.direct-comparison-active .thread-ask { margin-inline: 0; }
 .model-answer-reader.is-direct { border: 0; border-radius: 0; padding: 0; margin: 0 0 32px; background: transparent; }
 .is-direct :is(.answer-reader-context, .answer-reader-toolbar, .answer-reader-models,
   .answer-reader-single, .answer-reader-pair, .answer-reader-mobile-tabs) { display: none !important; }

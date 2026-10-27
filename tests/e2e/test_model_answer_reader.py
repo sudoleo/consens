@@ -501,19 +501,29 @@ def test_direct_comparison_shares_chat_shell_and_fits_picker(browser, phase4_ser
           return [selector, {x:r.x, width:r.width, font:s.fontSize, background:s.backgroundColor,
             radius:s.borderRadius, padding:s.padding, minHeight:s.minHeight}];
         }))"""
+        def shell(state):
+            # The question ends on its own answers' edge: a comparison's
+            # answers fill the column, a saved Consensus answer is inset by
+            # 6px (shell.css). Everything else about it is shared.
+            ask = state.pop('#threadAskText')
+            return state, {key: value for key, value in ask.items() if key not in ('x', 'width')}
+        ends_with_answers = """() => Math.abs(document.querySelector('.thread-ask-bubble').getBoundingClientRect().right
+          - document.getElementById('modelAnswerReader').getBoundingClientRect().right) <= 1"""
         page.wait_for_timeout(600)
         direct = page.evaluate(measure)
+        assert page.evaluate(ends_with_answers)
         reader_screenshot(page, f'direct-waiting-{width}-{theme}')
         page.evaluate('exitHeroMode()')
         normal = page.evaluate(measure)
-        assert direct == normal
+        assert shell(direct) == shell(normal)
         page.evaluate('enterDirectComparisonView()')
         if width >= 1100:
             page.locator('#sidebarToggleInner').click()
             page.wait_for_timeout(400)
             collapsed_direct = page.evaluate(measure)
+            assert page.evaluate(ends_with_answers)
             page.evaluate('exitHeroMode()')
-            assert page.evaluate(measure) == collapsed_direct
+            assert shell(page.evaluate(measure)) == shell(collapsed_direct)
             page.evaluate('enterDirectComparisonView()')
         # No band of its own behind the composer. Below 1100px the fixed
         # section carries the page colour on purpose, so iPhone Safari finds
