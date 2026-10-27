@@ -1470,8 +1470,11 @@
   // nothing for it, a message written now reaches it like any message
   // written while it works, and Stop is the Stop button. Without a decision
   // the response stops after timeout_seconds (30 min).
+  // A pause with `gate` (since 2026-10-27, agent_gate.py) comes before a step
+  // that acts outside the workspace runs: it runs only if the user lets it.
+  // "unchecked": no reviewer could answer for it, so no reviewer and no reason.
   const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
-    injection: "Prompt injection" };
+    injection: "Prompt injection", unchecked: "Not checked" };
   let holdTimer = null;
   function openHold(context) {
     const hold = context?.metadata?.hold;
@@ -1539,7 +1542,8 @@
       label.textContent = App.t("In the file {name}", { name: String(hold.step_source) });
     } else {
       label.textContent = kind === "result" ? App.agentActivity?.toolName?.(hold.step_name) || "Tool result"
-        : kind === "context" || kind === "file" ? "What the agent received" : "The agent’s step";
+        : kind === "context" || kind === "file" ? "What the agent received"
+        : hold.gate ? "The step that has not run yet" : "The agent’s step";
     }
     const text = document.createElement("pre");
     text.className = "agent-hold-evidence-text";
@@ -1566,7 +1570,9 @@
     const title = document.createElement("h2");
     title.id = "agentHoldTitle";
     title.className = "agent-hold-title";
-    title.textContent = "A reviewer paused the work";
+    const unchecked = hold.kind === "unchecked";
+    title.textContent = unchecked ? "No reviewer could check this step"
+      : hold.gate ? "A reviewer stopped a step before it ran" : "A reviewer paused the work";
     const meta = document.createElement("p");
     meta.className = "agent-hold-meta";
     const kind = document.createElement("span");
@@ -1582,12 +1588,22 @@
     meta.append(...[kind, hold.reviewer ? reviewer : null, step].filter(Boolean));
     heading.append(title, meta);
     head.append(icon, heading);
-    const reason = document.createElement("p");
-    reason.className = "agent-hold-reason";
-    // The reviewer's own sentence, already in the user's language.
-    reason.dataset.i18nSkip = "";
-    reason.textContent = String(hold.reason || "");
-    alert.append(head, reason);
+    // The reviewer's own sentence, already in the user's language; with
+    // several halting reviewers each one's, under its name.
+    const reasons = Array.isArray(hold.reasons) && hold.reasons.length > 1 ? hold.reasons : null;
+    const lines = unchecked ? [null] : reasons || [{ reason: hold.reason }];
+    alert.append(head, ...lines.map(item => {
+      const reason = document.createElement("p");
+      reason.className = "agent-hold-reason";
+      if (!item) {
+        reason.textContent = "It acts outside the workspace and runs only if you let it.";
+        return reason;
+      }
+      reason.dataset.i18nSkip = "";
+      reason.textContent = reasons ? `${String(item.reviewer || "")}: ${String(item.reason || "")}`
+        : String(item.reason || "");
+      return reason;
+    }));
     card.append(alert);
     if (hold.step) card.append(holdEvidence(hold));
     const clock = document.createElement("p");
@@ -1598,7 +1614,8 @@
     actions.className = "agent-hold-actions";
     const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
     actions.append(
-      holdButton("Let it continue", "btn agent-hold-continue", () => decideHold(context, "continue")),
+      holdButton(hold.gate ? "Let it run" : "Let it continue", "btn agent-hold-continue",
+        () => decideHold(context, "continue")),
       write,
       holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user")));
     reply.bind(actions, write);

@@ -5684,6 +5684,20 @@ enthält), Antwort direkt in der Karte `holdReply`, Protokollnummer
 faltet nie und nennt ihren Grund erst nach der Entscheidung, die Karte tut es
 davor), `tab-status.js` („Paused“).
 
+**Vorab-Prüfung** (seit 2026-10-27, Details `docs/agent-mode.md` „Vorab-Prüfung
+vor Außenwirkung“): `agent_gate.outward` erkennt nach fester Liste Aufrufe, die
+den Arbeitsplatz verlassen (Netzwerkbefehle in `vm_exec`/`vm_start_process`,
+`browser click/upload/key Enter/type --enter`). `DelegationLoop._step` öffnet
+dafür vor dem Protokolleintrag `AnswerAudit.open_gate` (`Gate`), danach
+`ready_gate(entry)` (`WorkLog.step` gibt die Nummer zurück); jeder antwortfähige
+Prüfer macht eine Gate-Runde ohne Websuche (`ReviewerSession._gate_round`,
+`GATE_NOTE`, `parse_gate`). Die Batch-Schleife ruft vor so einem Aufruf
+`_gate_wait`: alle go → läuft; ein Halt oder keine Antwort (`GATE_UNCHECKED`) →
+`request_hold` mit `gate: true` (`gate_hold`, mehrere Gründe in `reasons`),
+`continue` lässt laufen, `steer` nicht (`HOLD_STEERED`). Karte in
+`agent-chat.js` (`holdCard`: „Let it run“, „The step that has not run yet“,
+Art `unchecked`), Aktivität `agent-activity.js` („Paused before a step ran“).
+
 **Arbeitsprotokoll** (`docs/agent-work-log.md`, seit 2026-10-25): Im
 Audit-Modus hält `DelegationLoop.work_log` (`agent_work_log.WorkLog`) live
 fest, was der Agent sieht und tut; die Prüfer lesen es aus dem Speicher
@@ -8327,7 +8341,8 @@ app/services/
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
-  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget)
+  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate)
+  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach fester Liste Aufrufe, die den Arbeitsplatz verlassen (Netzwerkbefehle in vm_exec/vm_start_process, browser click/upload/key Enter/type --enter); solche Aufrufe laufen erst nach dem Go aller Prüfer
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (ensure/exec/read_file/write_file/checkpoint/delete, seit 2026-10-27 delete_path/chmod/put_service/url) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets; EGRESS_RULES), workspace_name je Konto und chat_dir je Chat (vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner bzw. alte VM) und delete_workspace; ein Anbieterwechsel betrifft nur diese Datei
   agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27): Konto-Dokument users/{uid}/chat_state/agent_workspace mit Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab), prepare (Werkzeuge workspace_vm/* bei neuer VERSION, Dienst view), Übernahme (set_control: control im Konto-Dokument + control.json + pause.py; user_has_browser), reset_browser, delete_for_account; Ordnernamen (.consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
   workspace_vm/              Läuft in der VM (LF per .gitattributes): browser.py (Befehl browser des Agenten, Playwright über CDP, Seite als Text mit Refs), display.sh (Xvfb, openbox, Chrome mit dauerhaftem Profil, x11vnc), setup.sh (einmalige Installation, Chrome-Richtlinie ohne Passwörter/Karten), gateway.py (Dienst auf 6080: WebSocket /vnc, Zustände, dann VNC-Bytes; nur Standardbibliothek), pause.py (während der Übernahme: Prozesse mit CONSENS_AGENT=1 per SIGSTOP einfrieren, danach SIGCONT)

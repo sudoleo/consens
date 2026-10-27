@@ -277,6 +277,13 @@ Agent-Panel.
    Injection); der Agent erfährt nichts davon. Im Protokoll stehen die
    App-Einträge `paused` und `decision`, so lesen die Prüfer die Entscheidung
    mit. Ablauf: [agent-mode.md](agent-mode.md), „Aussteuern“.
+5. **Vor dem Aufruf** (umgesetzt 2026-10-27, Max: Veto eines Prüfers reicht,
+   der Agent erfährt nur die Entscheidung des Nutzers, feste Liste): Aufrufe,
+   die den Arbeitsplatz verlassen (`agent_gate.py`), laufen erst, wenn jeder
+   antwortfähige Prüfer in einer Gate-Runde ohne Websuche „go“ sagt. Ein Halt
+   oder keine verwertbare Antwort fragt den Nutzer. Im Protokoll: App-Eintrag
+   `checked` bei Freigabe, sonst `paused`/`decision` wie beim Aussteuern.
+   Ablauf: [agent-mode.md](agent-mode.md), „Vorab-Prüfung vor Außenwirkung“.
 
 ## Entscheidungen (Max, 2026-10-25)
 

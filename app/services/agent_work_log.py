@@ -266,7 +266,8 @@ class WorkLog:
             self.incomplete = True
 
     def step(self, actor, step, model, value, status):
-        """A finished (or failed, or stopped) model step: what it thought, wrote and called."""
+        """A finished (or failed, or stopped) model step: what it thought,
+        wrote and called. Returns its entry's number (None if not written)."""
         try:
             citations = {}
             for citation in getattr(value, "citations", None) or []:
@@ -287,10 +288,12 @@ class WorkLog:
                 content["shown"] = True
             # Model output, the agent's or a worker's: data for every later
             # reader, never instructions.
-            self.add("step", actor=actor, name=getattr(model, "model", ""), data="agent", step=step, content=content)
+            return self.add("step", actor=actor, name=getattr(model, "model", ""), data="agent", step=step,
+                            content=content)
         except Exception as exc:
             logging.warning("Agent work log step dropped category=%s", safe_exception(exc))
             self.incomplete = True
+            return None
 
     def tool(self, actor, step, call, message):
         """A tool result as it goes into the actor's conversation (where the

@@ -436,6 +436,45 @@ Steer-Entscheidung. Solange die Pause wartet, nennt die Aktivität ihren Grund
 nicht ein zweites Mal (er steht in der Karte); nach der Entscheidung steht er
 dort mit ihr.
 
+**Vorab-Prüfung vor Außenwirkung** (seit 2026-10-27, Max' Entscheidung nach
+der Harness-Kritik): Ein Halt kam bisher erst nach dem Aufruf, denn die App
+schreibt einen Schritt ins Protokoll und führt ihn sofort aus, die Runde
+eines Prüfers dauert Sekunden. Jetzt warten Aufrufe, die den Arbeitsplatz
+verlassen, auf die Prüfer. Welche, entscheidet die App nach einer festen
+Liste (`agent_gate.outward`, nie ein Modell): ein Befehl von `vm_exec` oder
+`vm_start_process`, der an einer Befehlsstelle `curl`, `wget`, `ssh`, `scp`,
+`nc`, `sendmail` u. Ä. startet (auch hinter `sudo`/`env`/`xargs`, per Pfad oder
+in `$(…)`), `rsync` zu einem fremden Rechner, `git push`, `npm publish`,
+`gh …`, `/dev/tcp/`, Inline-Code (`python -c`, `node -e`, Here-Doc) mit
+`requests`/`socket`/`fetch(` u. Ä., und im Browser `click`, `upload`,
+`key Enter` und `type … --enter` (Tippen allein sendet nichts; der Klick
+danach wird mit ihm im Blick geprüft). `pip install`, `git clone`,
+`browser open`/`read` sind normale Arbeit. Ein Skript, das der Agent vorher
+geschrieben hat und nur noch startet, sieht die Liste nicht: Dafür bleiben die
+Live-Runden das zweite Netz.
+
+Ablauf: `DelegationLoop._step` öffnet das Gate (`AnswerAudit.open_gate`) vor
+dem Protokolleintrag des Schritts, damit kein Prüfer ihn zuerst in einer
+gewöhnlichen Runde liest; `ready_gate` nennt danach den Eintrag und die
+Prüfer, die antworten können (folgend, nicht in der Fehlerpause, Thread
+lebt). Jeder davon bekommt eine Gate-Runde (`ReviewerSession._gate_round`):
+die neuen Einträge plus `GATE_NOTE` mit den Aufrufen, **ohne Websuche**, im
+selben Gespräch. Antwort `"gate": "go"` oder ein Halt (`parse_gate`; Marken
+dürfen dabei sein, ohne Entscheidung zählt sie als ausgefallen). Der Aufruf
+wartet in `_gate_wait` (Aktivität „The reviewers check this step before it
+runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`. **Ein
+Halt reicht** → die Karte (`request_hold` mit `gate: true`, „A reviewer
+stopped a step before it ran“, Knopf „Let it run“; halten mehrere an, steht
+jeder mit seinem Grund in `reasons`). **Kann kein Prüfer antworten** (alle
+ausgefallen oder unlesbar) → Karte der Art `unchecked` („No reviewer could
+check this step“), ohne Prüfer und Grund. Der Agent erfährt nur die
+Entscheidung des Nutzers: `continue` lässt die Aufrufe des Schritts laufen,
+`steer` lässt sie ungelaufen (`HOLD_STEERED`) und gibt ihm die Nachricht, Stop
+stoppt. Die Entscheidung gilt für die gelisteten Aufrufe dieses einen
+Schritts (`Gate.decision`), nicht für spätere gleicher Art. Ein Halt der
+Gate-Runde zählt in `AnswerAudit.halts`, eine spätere Runde hält denselben
+Eintrag nicht noch einmal an. Ohne Prüfer (Answer check aus) gibt es kein Gate.
+
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
 Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;

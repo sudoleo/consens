@@ -582,8 +582,10 @@
   // A reviewer's halt (agent_audit.py): who paused the work, why (the
   // reviewer's own sentence) and what the user decided (agent-chat.js
   // renderHold has the card).
+  // "unchecked" (agent_gate.py, since 2026-10-27): a step that acts outside
+  // the workspace that no reviewer could check before it ran.
   const holdKinds = { safety: 'Security-critical step', harm: 'Possible damage', off_goal: 'Far off your request',
-    injection: 'Prompt injection' };
+    injection: 'Prompt injection', unchecked: 'Not checked' };
   const holdStates = { waiting: 'Waiting for your decision', continue: 'You let the work go on',
     steer: 'You wrote to the agent', stop: 'You stopped the response',
     timeout: 'Stopped after 30 minutes without a decision', ended: 'Over when the response ended' };
@@ -607,7 +609,7 @@
     node.dataset.signature = signature;
     node.dataset.state = state;
     node._head.textContent = item.reviewer ? App.t('Paused by {reviewer}', { reviewer: String(item.reviewer) })
-      : 'Paused by a reviewer';
+      : item.halt === 'unchecked' ? 'Paused before a step ran' : 'Paused by a reviewer';
     node._reason.textContent = String(item.reason || '').slice(0, 400);
     // While it waits, the card above the field says why; the history keeps
     // the reason once the user decided (on a phone both stood one above the other).

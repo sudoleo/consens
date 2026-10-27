@@ -1492,9 +1492,19 @@ class DelegationLoop(AgentLoop):
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
                 if log_actor:
-                    # What the step thought, wrote, called and found, also
-                    # when it failed or was stopped.
-                    self.work_log.step(log_actor, step, model, value, log_status or status)
+                    # Outward calls of the agent's step wait for the
+                    # reviewers (agent_gate): the gate opens before the
+                    # entry, so no reviewer reads it in an ordinary round first.
+                    gate = self._open_gate(value) if log_actor == "agent" and status == "succeeded" else None
+                    entry = None
+                    try:
+                        # What the step thought, wrote, called and found, also
+                        # when it failed or was stopped.
+                        entry = self.work_log.step(log_actor, step, model, value, log_status or status)
+                    finally:
+                        if gate is not None:
+                            self.comparison.auditor.ready_gate(gate, entry)
+                            value.gate = gate
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
@@ -1730,11 +1740,69 @@ class DelegationLoop(AgentLoop):
         self.outgoing.put_nowait({"type": "hold", "hold": hold})
         self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                                 **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
+                                                **({"gate": True} if hold.get("gate") else {}),
                                                 "halt": hold["kind"], "state": "waiting"}))
         if self.work_log is not None:
-            self.work_log.app("paused", f"{details['reviewer']} paused the work for the user ({details['kind']}, "
-                                        f"entry {details['entry']}): {details['reason']}")
+            before = " before its calls ran" if details.get("gate") else ""
+            self.work_log.app("paused", (
+                f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
+                f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
+                f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."))
         return True
+
+    def _open_gate(self, value):
+        """The gate for this agent step's calls that act outside the
+        workspace (agent_gate.outward), when reviewers follow the work
+        (agent_audit.AnswerAudit.open_gate); else None."""
+        auditor = self.comparison.auditor if self.comparison is not None else None
+        if auditor is None or not auditor.sessions or not getattr(value, "tool_calls", None):
+            return None
+        from app.services.agent_gate import outward
+        calls = [call for call in value.tool_calls if outward(call)]
+        return auditor.open_gate(calls) if calls else None
+
+    def _gate_wait(self, gate):
+        """An outward call waits for the reviewers' verdicts on its step. All
+        say "go": it runs. One halt is enough, and so is no reviewer able to
+        answer: the user decides on the card (request_hold, ``gate``). The
+        agent learns only the user's decision: "continue" runs the call, a
+        message ("steer") leaves it unrun, Stop ends the response. Once per
+        step: the decision covers the step's outward calls, no others."""
+        if gate.decision is not None:
+            return gate.decision
+        auditor = self.comparison.auditor
+        announced = False
+        while True:
+            result = auditor.gate_result(gate)
+            if result is not None:
+                break
+            if not announced:
+                announced = True
+                yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
+                                     "text": "The reviewers check this step before it runs."})
+            auditor.gate_wait(.2)
+            if self.watch_error:
+                raise self.watch_error
+            self.cancellation.raise_if_cancelled()
+            yield from self._events()
+        verdict, halts = result
+        if verdict == "go":
+            gate.decision = "continue"
+            if self.work_log is not None:
+                self.work_log.app("checked", f"The reviewers let the calls of entry {gate.entry} run.")
+            return gate.decision
+        details = auditor.gate_hold(gate, halts)
+        while True:
+            # A reviewer's ordinary halt may be open: it comes first.
+            decision = yield from self._hold_wait()
+            self.cancellation.raise_if_cancelled()
+            if decision == "steer" or self.closed.is_set():
+                gate.decision = "steer"
+                return gate.decision
+            if self.request_hold(details):
+                break
+        gate.decision = "steer" if (yield from self._hold_wait()) == "steer" else "continue"
+        return gate.decision
 
     def _receive_hold(self, root):
         """The user's decision on the open hold, from the run's root (the watcher)."""
@@ -2387,6 +2455,14 @@ class DelegationLoop(AgentLoop):
                                              "times in this message and is not run again. Its results are above: use them "
                                              "and continue with a different step. Repeating it ends the response."})}
                                 last_accepted = False
+                                continue
+                            gate = getattr(value, "gate", None)
+                            if gate is not None and call["id"] in gate.call_ids \
+                                    and (yield from self._gate_wait(gate)) == "steer":
+                                # Not run: the user wrote to the agent instead.
+                                steered = True
+                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
+                                                       "content": json.dumps({"error": HOLD_STEERED})}
                                 continue
                             result = yield from self._execute_stream(value, call)
                             results[call["id"]] = result
