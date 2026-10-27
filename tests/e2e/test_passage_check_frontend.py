@@ -137,10 +137,15 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         expect(quotes).to_have_text("You always need underfloor heating for that.")
         assert quotes.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
         # Under the sentence: who disagrees and what one of them says instead,
-        # in the reading colour; no grey rows between the quotes.
+        # readable, not a footnote; no grey rows between the quotes. Since the
+        # palette of 2026-10-26 there is one grey for text: the verdict stands
+        # out from the note by its size and the name in ink.
         verdict = card.locator(".passage-check-verdict")
         expect(verdict).to_have_text("2 of 3 models disagree – OpenAI: “Larger radiators are often enough.”")
-        assert verdict.evaluate("el => getComputedStyle(el).color") != card.locator(".passage-check-note").evaluate(
+        note = card.locator(".passage-check-note")
+        size = "el => parseFloat(getComputedStyle(el).fontSize)"
+        assert verdict.evaluate(size) > note.evaluate(size)
+        assert verdict.locator(".passage-check-who").first.evaluate("el => getComputedStyle(el).color") != note.evaluate(
             "el => getComputedStyle(el).color")
         expect(card.locator(".passage-check-quotes > *")).to_have_count(1)
         expect(card).to_contain_text("Checked against 3 models that answered “Do heat pumps make sense in old buildings?” "
