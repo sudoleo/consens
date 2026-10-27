@@ -25,6 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.expanduser("~")
 SETUP_MARKER = os.path.join(HOME, ".consens/workspace/setup-done-2")
 CONTROL = os.path.join(HOME, ".consens/workspace/control.json")
+# The last ref given in this workspace: refs are never given twice.
+REF_COUNTER = os.path.join(HOME, ".consens/workspace/ref-count")
 CDP = "http://127.0.0.1:9222"
 READ_CHARS = 6000
 AFTER_ACTION_CHARS = 4000
@@ -49,9 +51,12 @@ USAGE = """usage: browser <command>
   wait [seconds]           wait (up to 120 s), also until the user hands the browser back
   status                   setup, page and who has the browser"""
 
+# A ref stays with its element, and a new element takes the next number of
+# the workspace (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
+# the page from e1 again, so a ref from an older read could name another
+# element without an error; now it names its element or none.
 SNAPSHOT_JS = r"""
-() => {
-  document.querySelectorAll('[data-consens-ref]').forEach(el => el.removeAttribute('data-consens-ref'));
+start => {
   const ACT = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=link],' +
     '[role=checkbox],[role=radio],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=option],' +
     '[role=switch],[role=combobox],[role=textbox],[role=searchbox],[role=slider],[contenteditable=""],' +
@@ -78,10 +83,14 @@ SNAPSHOT_JS = r"""
     ({A: 'link', BUTTON: 'button', SELECT: 'list', TEXTAREA: 'textbox', SUMMARY: 'button'})[el.tagName] ||
     (el.tagName === 'INPUT' ? (TYPES[el.type] || 'textbox') : el.isContentEditable ? 'textbox' : 'element');
   const lines = [];
-  let count = 0;
+  let count = start;
+  // The element listed last: what lies inside it is part of it. Listed
+  // elements never nest, and the walk is in document order.
+  let listed = null;
+  const given = new Set();
   const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_ELEMENT);
   for (let el = walker.currentNode; el; el = walker.nextNode()) {
-    if (el.parentElement && el.parentElement.closest('[data-consens-ref]')) continue;
+    if (listed && listed !== el && listed.contains(el)) continue;
     if (/^H[1-6]$/.test(el.tagName) || el.getAttribute('role') === 'heading') {
       if (shown(el) && clean(el.innerText)) lines.push('heading "' + clip(clean(el.innerText), 120) + '"');
       continue;
@@ -91,8 +100,14 @@ SNAPSHOT_JS = r"""
       continue;
     }
     if (!el.matches(ACT) || !shown(el)) continue;
-    const ref = 'e' + (++count);
-    el.setAttribute('data-consens-ref', ref);
+    listed = el;
+    let ref = el.getAttribute('data-consens-ref');
+    // A copied element (a framework's clone) brings its original's ref along.
+    if (!/^e\d+$/.test(ref || '') || given.has(ref)) {
+      ref = 'e' + (++count);
+      el.setAttribute('data-consens-ref', ref);
+    }
+    given.add(ref);
     const kind = role(el);
     let label = name(el) || clean(el.value && el.type !== 'password' ? el.value : '');
     if (!label && el.tagName === 'A') label = clip(clean(el.getAttribute('href')), 60);
@@ -112,7 +127,7 @@ SNAPSHOT_JS = r"""
     if (el.getAttribute('aria-expanded')) line += el.getAttribute('aria-expanded') === 'true' ? ' expanded' : ' collapsed';
     lines.push(line);
   }
-  return lines;
+  return {lines, count};
 }
 """
 
@@ -193,7 +208,17 @@ def header(page):
 
 
 def page_lines(page):
-    return page.evaluate(SNAPSHOT_JS)
+    try:
+        with open(REF_COUNTER, encoding="utf-8") as handle:
+            start = int(handle.read().strip() or 0)
+    except (OSError, ValueError):
+        start = 0
+    result = page.evaluate(SNAPSHOT_JS, start)
+    if result["count"] != start:
+        os.makedirs(os.path.dirname(REF_COUNTER), exist_ok=True)
+        with open(REF_COUNTER, "w", encoding="utf-8") as handle:
+            handle.write(str(result["count"]))
+    return result["lines"]
 
 
 def paged(lines, offset, limit_chars):

@@ -588,7 +588,10 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   gespeicherte Passwörter wären für ihn lesbar. `display.sh` startet, was
   nicht läuft (eingefrorene Prozesse überstehen die Pausen).
 - **`browser` für den Agenten** (`browser.py`, Playwright über CDP): `open`,
-  `read` (Überschriften und bedienbare Elemente mit Refs `e12`), `click`,
+  `read` (Überschriften und bedienbare Elemente mit Refs `e12`; ein Ref bleibt
+  seit 2026-10-27 bei seinem Element, neue Elemente zählen über
+  `~/.consens/workspace/ref-count` weiter, keine Nummer wird zweimal vergeben,
+  ein alter Ref trifft also sein Element oder keins), `click`,
   `type`, `select`, `upload`, `key`, `scroll`, `back`, `tabs`, `text`,
   `screenshot` (nur wenn Text nicht reicht, dann `vm_view_image`), `wait`,
   `status`. Jede Aktion druckt die Seite neu. Es arbeitet immer im Tab, den der
