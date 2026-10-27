@@ -45,6 +45,20 @@ describe("the pull request card", () => {
     expect(card.querySelector(".agent-pr-open").hidden).toBe(true);
   });
 
+  it("lists every file when the diff is cut, otherwise the first 20", () => {
+    // Security audit 2026-10-27: nothing goes up unseen.
+    const { document, github } = setup();
+    const answer = document.getElementById("answer");
+    const files = Array.from({ length: 25 }, (_, n) => ({ path: `docs/${n}.md`, change: "added" }));
+    github.render(answer, { key: "c:t", proposal: proposal({ files }), chatId: "c", turnId: "t" });
+    const card = answer.nextElementSibling;
+    expect(card.querySelectorAll(".agent-pr-files li").length).toBe(20);
+    expect(card.querySelector(".agent-pr-more").textContent).toBe("and 5 more files");
+    github.render(answer, { key: "c:t", proposal: proposal({ files, diff_truncated: true }), chatId: "c", turnId: "t" });
+    expect(card.querySelectorAll(".agent-pr-files li").length).toBe(25);
+    expect(card.querySelector(".agent-pr-more").hidden).toBe(true);
+  });
+
   it("creates the pull request with the exact preview and then links to it", async () => {
     const { window, document, github } = setup();
     window.fetch = vi.fn(async () => reply({ pull_request: { status: "succeeded",

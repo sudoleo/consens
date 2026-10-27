@@ -978,12 +978,23 @@ Commit). Ein vorhandener Ordner wird nie überschrieben.
 
 *`prepare_pull_request`* (`path`, `title`, `body`, optional `branch`, `base`):
 nur für einen Ordner aus `github_import`. Das Backend staged in der VM alles
-(`git add -A`), liest die Änderungen gegen den Import (`IMPORT_REF`: GitHubs
-Commit-SHA kennt das Repo in der VM nicht, es beginnt mit einem eigenen Commit
-desselben Trees; bis 2026-10-27 scheiterte daran jeder Vorschlag)
-(`--raw`/`--numstat`, ohne Umbenennungen), höchstens 200 Dateien und 20 MB, je
-Datei 5 MB, liest jede Datei und merkt sich ihren SHA-256, dazu einen
-Diff-Auszug (12.000 Zeichen). Änderungen unter `.github/workflows` lehnt es ab
+(`git add -A`) und lässt sich von git die geänderten Pfade nennen (gegen
+`IMPORT_REF`: GitHubs Commit-SHA kennt das Repo in der VM nicht, es beginnt mit
+einem eigenen Commit desselben Trees; `--raw`, ohne Umbenennungen). Diese
+Liste begrenzt nur, was hochgeht. Seit dem Sicherheitsaudit 2026-10-27 kommt
+alles Weitere nicht mehr aus der VM: Das Backend liest jede genannte Datei
+über die Datei-API (die Bytes, die hochgehen, mit SHA-256), holt den Tree des
+Import-Commits von GitHub (`_base_tree`), bestimmt daraus selbst, ob eine
+Datei neu, geändert, gelöscht oder unverändert ist (git-Blob-SHA,
+`blob_sha`), und bildet den Diff aus genau diesen Bytes gegen GitHubs Blobs
+(`file_diff`, git-artig mit Modus-Zeilen, Binärdateien als eine Zeile).
+Vorher kamen Diff und Liste aus git in der VM; ein Filter in `.gitattributes`,
+eine umgesetzte Ref oder ein eigenes git über `~/.profile` zeigten eine
+harmlose Änderung, während mehr hochging. Symbolische Links lehnt es ab.
+Höchstens 200 Dateien und 20 MB, je Datei 5 MB; der Diff-Auszug hat 12.000
+Zeichen, GitHubs Blobs holt es nur, solange der Platz reicht. Ist der Diff
+gekürzt (`diff_truncated`), zeigt die Karte alle Dateien statt der ersten
+20. Änderungen unter `.github/workflows` lehnt es ab
 (die App hat kein Workflows-Recht, `WORKFLOWS_REFUSED`). `base` muss ein
 Branch sein (Standard: der importierte), `branch` ein neuer Name (Standard
 `consens/<titel>-<4 hex>`). Der Vorschlag liegt am Turn

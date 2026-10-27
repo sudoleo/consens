@@ -186,14 +186,16 @@
     view.description.textContent = proposal.body || '';
     view.description.hidden = !proposal.body;
     const list = Array.isArray(proposal.files) ? proposal.files : [];
-    view.files.replaceChildren(...list.slice(0, MAX_FILES_SHOWN).map(file => {
+    // With a cut diff every file is listed: nothing goes up unseen.
+    const shown = proposal.diff_truncated ? list : list.slice(0, MAX_FILES_SHOWN);
+    view.files.replaceChildren(...shown.map(file => {
       const li = node('li');
       li.dataset.change = file.change;
       const counts = Number.isInteger(file.additions) ? ` +${file.additions} −${file.deletions ?? 0}` : '';
       li.textContent = `${MARKS[file.change] || '~'} ${file.path}${counts}`;
       return li;
     }));
-    view.more.textContent = list.length > MAX_FILES_SHOWN ? App.t('and {count} more files', { count: list.length - MAX_FILES_SHOWN }) : '';
+    view.more.textContent = list.length > shown.length ? App.t('and {count} more files', { count: list.length - shown.length }) : '';
     view.more.hidden = !view.more.textContent;
     view.diff.textContent = (proposal.diff || '') + (proposal.diff_truncated ? '\n…' : '');
     view.details.hidden = !proposal.diff;

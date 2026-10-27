@@ -23,8 +23,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from app.api.routers import agent_github as github_router
 from app.services import agent_github, agent_vm, prompt_defaults
 from app.services.agent_github import (NO_ACCESS, NO_PUSH, NOT_CONNECTED, NOT_SET_UP, WORKFLOWS_REFUSED, GitHubApp,
-                                       GitHubConnections, GithubImportArgs, PullRequests, changes_command,
-                                       diff_command, parse_changes, unpack_command)
+                                       GitHubConnections, GithubImportArgs, PullRequests, blob_sha, changes_command,
+                                       parse_changes, unpack_command)
 from test_agent_runs import AUTH, UID, api, store  # noqa: F401  (fixtures)
 from test_agent_vm import NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
 
@@ -47,6 +47,8 @@ def tarball(files):
 
 
 ARCHIVE = tarball({"README.md": b"# App\n", "src/main.py": b"print('hi')\n"})
+# The import commit's files as GitHub's tree and blobs give them (the base of a pull request's diff).
+BASE = {"README.md": b"# App\n", "src/main.py": b"print('hi')\n", "old.txt": b"old\n" * 5}
 
 
 class FakeGitHub:
@@ -97,6 +99,12 @@ class FakeGitHub:
             return httpx.Response(404, json={"message": "Branch not found"})
         if path == f"/repos/maxl/app/git/commits/{SHA}":
             return httpx.Response(200, json={"tree": {"sha": "tree0"}})
+        if method == "GET" and path == "/repos/maxl/app/git/trees/tree0":
+            return httpx.Response(200, json={"truncated": False, "tree": [
+                {"path": name, "mode": "100644", "type": "blob", "sha": blob_sha(data)} for name, data in BASE.items()]})
+        if method == "GET" and path.startswith("/repos/maxl/app/git/blobs/"):
+            data = next(data for data in BASE.values() if blob_sha(data) == path.rsplit("/", 1)[1])
+            return httpx.Response(200, json={"content": base64.b64encode(data).decode(), "encoding": "base64"})
         if method == "POST" and path == "/repos/maxl/app/git/blobs":
             return httpx.Response(201, json={"sha": "blob-" + base64.b64decode(body["content"]).decode()[:6]})
         if method == "POST" and path == "/repos/maxl/app/git/trees":
@@ -298,7 +306,6 @@ def test_the_vm_commands_list_changes_against_the_import_with_real_git(tmp_path)
     (tmp_path / "repo" / "new.txt").write_text("new\n")
     changes = parse_changes(run(changes_command("repo")))
     assert [(item["path"], item["change"]) for item in changes] == [("greeting.txt", "modified"), ("new.txt", "added")]
-    assert "+hello" in run(diff_command("repo"))
 
 
 def test_git_changes_are_read_with_their_modes_and_counts():
@@ -308,7 +315,7 @@ def test_git_changes_are_read_with_their_modes_and_counts():
         {"path": "old.txt", "change": "deleted", "mode": "100644", "additions": 0, "deletions": 5}]
 
 
-def prepared(store, fake_vm, github, *, raw=RAW, args=None):
+def prepared(store, fake_vm, github, *, raw=RAW, args=None, extra=None):
     connected(store, github)
     script = Agent([[("prepare_pull_request", {"path": "repos/app", "title": "Fix  the greeting",
                                                "body": "Says hello.", **(args or {})})]])
@@ -319,7 +326,8 @@ def prepared(store, fake_vm, github, *, raw=RAW, args=None):
     files[f"{PATH}/src/main.py"] = b"print('hello')\n"
     files[f"{PATH}/bin/run"] = b"#!/bin/sh\necho run\n"
     fake_vm.commands[changes_command(PATH)] = ([("stdout", raw.encode())], 0, .1)
-    fake_vm.commands[diff_command(PATH)] = ([("stdout", b"--- a/src/main.py\n+++ b/src/main.py\n-hi\n+hello\n")], 0, .1)
+    for name, data in (extra or {}).items():
+        files[f"{PATH}/{name}"] = data
     list(loop.run())
     return loop, files
 
@@ -343,7 +351,11 @@ def test_a_prepared_pull_request_is_a_card_and_nothing_goes_to_github(store, fak
     assert [(f["path"], f["change"]) for f in proposal["files"]] == [("src/main.py", "modified"), ("bin/run", "added"),
                                                                     ("old.txt", "deleted")]
     assert proposal["files"][0]["sha256"] and "sha256" not in proposal["files"][2]
-    assert proposal["diff"].startswith("--- a/src/main.py") and len(proposal["hash"]) == 64
+    # The backend's diff of the bytes that go up, against GitHub's import commit.
+    assert proposal["diff"].startswith("diff --git a/src/main.py b/src/main.py\n--- a/src/main.py\n+++ b/src/main.py")
+    assert "-print('hi')\n+print('hello')\n" in proposal["diff"] and "new file mode 100755" in proposal["diff"]
+    assert [(f["additions"], f["deletions"]) for f in proposal["files"]] == [(1, 1), (2, 0), (0, 5)]
+    assert proposal["diff_truncated"] is False and len(proposal["hash"]) == 64
     # Before the card: read only. No blob, tree, commit, branch or pull request.
     assert not [r for r in github.requests if r[0] == "POST" and "/repos/" in r[2]]
     grants = [r[4] for r in github.requests if r[2].endswith("/access_tokens")]
@@ -421,3 +433,34 @@ def test_account_deletion_removes_the_connection():
     source = inspect.getsource(account_deletion.AccountDeletionJob._delete_user_subcollections) \
         if hasattr(account_deletion, "AccountDeletionJob") else inspect.getsource(account_deletion)
     assert '"github_connections", "github_oauth_states"' in source
+
+
+def test_the_card_shows_what_goes_up_whatever_the_vms_git_says(store, fake_vm, github):
+    """Security audit 2026-10-27: the card's diff came from git in the VM,
+    the upload from the files. A filter, a moved ref or another git showed
+    a harmless change while more went up. Now the VM's git only names the
+    paths; their bytes, the kind of change and the diff come from the file
+    API and GitHub."""
+    raw = ("consens-raw\0:100644 100644 a b M\0src/main.py\0:100644 100644 a b M\0README.md\0"
+           ":100644 000000 a 0 D\0old.txt\0consens-numstat\0")
+    loop, files = prepared(store, fake_vm, github, raw=raw,
+                           extra={"src/main.py": b"print('hello')\nsend_everything()\n", "README.md": BASE["README.md"],
+                                  "old.txt": BASE["old.txt"] + b"more\n"})
+    proposal = turn_of(store, loop)["agent_pull_request"]
+    # README.md is unchanged (GitHub's blob), old.txt is there: modified, not deleted.
+    assert [(f["path"], f["change"]) for f in proposal["files"]] == [("src/main.py", "modified"), ("old.txt", "modified")]
+    assert "+send_everything()" in proposal["diff"] and "+more" in proposal["diff"]
+    done = PullRequests(store.db, vm_factory=fake_vm.backend).confirm(UID, loop.chat_id, loop.turn_id, proposal["hash"])
+    blobs = [base64.b64decode(r[4]["content"]) for r in github.requests if r[0] == "POST" and r[2].endswith("/git/blobs")]
+    assert done["status"] == "succeeded" and b"print('hello')\nsend_everything()\n" in blobs
+
+
+def test_a_long_change_shows_every_file_and_says_its_diff_is_cut(store, fake_vm, github, monkeypatch):
+    monkeypatch.setattr(agent_github, "DIFF_CHARS", 300)
+    names = [f"docs/page{n}.md" for n in range(8)]
+    raw = "consens-raw\0" + "".join(f":000000 100644 0 a A\0{name}\0" for name in names) + "consens-numstat\0"
+    loop, _ = prepared(store, fake_vm, github, raw=raw,
+                       extra={name: (f"line of {name}\n" * 10).encode() for name in names})
+    proposal = turn_of(store, loop)["agent_pull_request"]
+    assert [f["path"] for f in proposal["files"]] == names and proposal["diff_truncated"] is True
+    assert len(proposal["diff"]) <= 300

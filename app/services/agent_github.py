@@ -35,9 +35,14 @@ GitHub shows at the next use: the token request fails, the tool says
 
 Tools (with the VM, GitHubTools): ``github_import`` downloads a commit's
 tarball and unpacks it in the VM as a git repository with one commit, named
-in ``.git/consens-import.json``; ``prepare_pull_request`` reads the changes
-against that commit from the VM and saves a proposal on the turn
-(``agent_pull_request``, the card under the answer). Nothing goes to GitHub
+in ``.git/consens-import.json``; ``prepare_pull_request`` takes the list of
+changed paths from the VM's git (it only limits what goes up), reads each
+file's bytes through the provider's file API and diffs them in the backend
+against the import commit's tree, fetched from GitHub; it saves a proposal
+on the turn (``agent_pull_request``, the card under the answer). The card's
+diff and the upload are the same bytes: nothing in the VM (its git, a filter,
+a moved ref) can show one change and send another (security audit
+2026-10-27). Nothing goes to GitHub
 until the user confirms the card (PullRequests.confirm): the backend reads
 the files again, checks them against the preview, and creates blobs, tree,
 commit, a new branch and the pull request, never a push to an existing
@@ -48,6 +53,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timedelta, timezone
+import difflib
 import hashlib
 import io
 import json
@@ -436,9 +442,37 @@ def changes_command(path):
             f"git diff --cached --no-renames --numstat -z {IMPORT_REF}")
 
 
-def diff_command(path, chars=DIFF_CHARS):
-    q = shlex.quote
-    return f"cd {q(path)}; git diff --cached --no-renames {IMPORT_REF} | head -c {int(chars) + 1}"
+def blob_sha(data):
+    """git's id of a file's bytes, the one GitHub's tree names."""
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def _binary(data):
+    return data is not None and b"\0" in data[:8192]
+
+
+def file_diff(path, change, mode, before, after, base_mode=None):
+    """``(text, additions, deletions)``: one file's diff, git-style, made by
+    the backend from the bytes themselves (``before`` from GitHub, ``after``
+    what goes up); ``before`` None for an added file, ``after`` for a deleted
+    one. A binary file is one line and no counts."""
+    head = f"diff --git a/{path} b/{path}\n"
+    if change == "added":
+        head += f"new file mode {mode}\n"
+    elif change == "deleted":
+        head += f"deleted file mode {base_mode or mode}\n"
+    elif base_mode and base_mode != mode:
+        head += f"old mode {base_mode}\nnew mode {mode}\n"
+    if _binary(before) or _binary(after):
+        return head + f"Binary file {path} changed\n", None, None
+    old = (before or b"").decode("utf-8", "replace").splitlines(keepends=True)
+    new = (after or b"").decode("utf-8", "replace").splitlines(keepends=True)
+    lines = list(difflib.unified_diff(old, new, "/dev/null" if before is None else f"a/{path}",
+                                      "/dev/null" if after is None else f"b/{path}"))
+    body = "".join(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines)
+    additions = sum(1 for line in lines[2:] if line.startswith("+"))
+    deletions = sum(1 for line in lines[2:] if line.startswith("-"))
+    return head + body, additions, deletions
 
 
 def parse_changes(text):
@@ -603,29 +637,55 @@ class GitHubTools:
         code, text = self._run(changes_command(path), cancellation)
         if code != 0:
             raise ValueError("git could not list the changes in the VM.")
-        files = parse_changes(text)
+        # The VM's git names the paths, nothing more: what is not named does
+        # not go up. Which change it is, its bytes and its diff come from the
+        # file API and GitHub (security audit 2026-10-27).
+        claimed = {item["path"]: item for item in parse_changes(text)}
+        if len(claimed) > PR_FILES:
+            raise ValueError(f"{len(claimed)} files changed, at most {PR_FILES} go into one pull request. Leave "
+                             "build output out (.gitignore) or split the change.")
+        if any(name.startswith(WORKFLOWS) for name in claimed):
+            raise ValueError(WORKFLOWS_REFUSED)
+        tree = self._base_tree(app, repo, commit, token)
+        files, parts, total, shown = [], [], 0, 0
+        for name, item in claimed.items():
+            content = self._read(path, name, missing_ok=True)
+            base_entry = tree.get(name)
+            if content is None and base_entry is None:
+                continue
+            if "120000" in {item.get("mode"), (base_entry or {}).get("mode")}:
+                raise ValueError(f"{name} is a symbolic link: links cannot go into a pull request from the VM.")
+            mode = item.get("mode") if item.get("mode") in {"100644", "100755"} else \
+                (base_entry or {}).get("mode", "100644")
+            if content is not None and base_entry is not None and blob_sha(content) == base_entry["sha"] \
+                    and mode == base_entry["mode"]:
+                continue
+            change = "deleted" if content is None else "added" if base_entry is None else "modified"
+            entry = {"path": name, "change": change, "mode": (base_entry or {}).get("mode", mode)
+                     if change == "deleted" else mode, "additions": None, "deletions": None}
+            if content is not None:
+                total += len(content)
+                if total > PR_BYTES:
+                    raise ValueError(f"The changed files are larger than {PR_BYTES // (1024 * 1024)} MB together.")
+                entry.update(size=len(content), sha256=hashlib.sha256(content).hexdigest())
+            # The diff as far as the card shows it: GitHub's bytes of a file
+            # only while there is room, the list always whole.
+            if shown <= DIFF_CHARS:
+                before = self._base_blob(app, repo, base_entry, token) if base_entry is not None else None
+                part, entry["additions"], entry["deletions"] = file_diff(
+                    name, change, entry["mode"], before, content, (base_entry or {}).get("mode"))
+                parts.append(part)
+                shown += len(part)
+            files.append(entry)
         if not files:
             raise ValueError(f"There are no changes against the imported commit in {path}.")
-        if len(files) > PR_FILES:
-            raise ValueError(f"{len(files)} files changed, at most {PR_FILES} go into one pull request. Leave build "
-                             "output out (.gitignore) or split the change.")
-        if any(item["path"].startswith(WORKFLOWS) for item in files):
-            raise ValueError(WORKFLOWS_REFUSED)
-        total = 0
-        for item in files:
-            if item["change"] == "deleted":
-                continue
-            content = self._read(path, item["path"])
-            total += len(content)
-            if total > PR_BYTES:
-                raise ValueError(f"The changed files are larger than {PR_BYTES // (1024 * 1024)} MB together.")
-            item.update(size=len(content), sha256=hashlib.sha256(content).hexdigest())
-        _, diff = self._run(diff_command(path), cancellation)
+        diff = "".join(parts)
+        truncated = len(diff) > DIFF_CHARS or len(parts) < len(files)
         report({"repo": repo, "files": len(files)})
         proposal = {"id": secrets.token_hex(8), "status": "pending", "repo": repo, "base": base, "branch": branch,
                     "title": " ".join(args.title.split()), "body": args.body.strip(), "path": path,
                     "commit": commit, "files": files, "diff": diff[:DIFF_CHARS],
-                    "diff_truncated": len(diff) > DIFF_CHARS, "turn_id": loop.turn_id,
+                    "diff_truncated": truncated, "turn_id": loop.turn_id,
                     "created_at": now().isoformat(),
                     "approval_until": (now() + timedelta(minutes=APPROVAL_MINUTES)).isoformat()}
         proposal["hash"] = digest({key: value for key, value in proposal.items() if key not in {"status", "hash"}})
@@ -637,7 +697,26 @@ class GitHubTools:
                                                 "the pull request there. Nothing went to GitHub yet: never say a pull "
                                                 "request exists."})
 
-    def _read(self, path, name):
+    @staticmethod
+    def _base_tree(app, repo, commit, token):
+        """The import commit's files from GitHub: path -> {mode, sha}."""
+        tree_sha = app.request("GET", f"/repos/{repo}/git/commits/{commit}", token=token).json()["tree"]["sha"]
+        listed = app.request("GET", f"/repos/{repo}/git/trees/{tree_sha}?recursive=1", token=token).json()
+        if listed.get("truncated"):
+            raise ValueError(f"{repo} has too many files for a pull request from here.")
+        return {item["path"]: {"mode": str(item.get("mode") or ""), "sha": str(item.get("sha") or "")}
+                for item in listed.get("tree") or [] if isinstance(item, dict) and item.get("type") == "blob"}
+
+    @staticmethod
+    def _base_blob(app, repo, entry, token):
+        """A file's bytes at the import commit, from GitHub."""
+        data = app.request("GET", f"/repos/{repo}/git/blobs/{entry['sha']}", token=token).json()
+        try:
+            return base64.b64decode(data.get("content") or "")
+        except (ValueError, TypeError):
+            raise GitHubUnavailable(UNAVAILABLE) from None
+
+    def _read(self, path, name, *, missing_ok=False):
         from app.services import agent_vm
         session = self.vm.session
         full = posixpath.normpath(f"{path}/{name}")
@@ -647,6 +726,8 @@ class GitHubTools:
             content, complete = self.vm._provider("read", lambda: session.backend.read_file(
                 session.name, full, limit=PR_FILE_BYTES + 1))
         except agent_vm.VMFileMissing:
+            if missing_ok:
+                return None
             raise ValueError(f"{name} disappeared while preparing. Prepare again.") from None
         if not complete or len(content) > PR_FILE_BYTES:
             raise ValueError(f"{name} is larger than {PR_FILE_BYTES // (1024 * 1024)} MB.")
