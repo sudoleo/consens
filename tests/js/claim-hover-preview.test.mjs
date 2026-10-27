@@ -531,6 +531,32 @@ describe("reaching the pinned card with the keyboard", () => {
     expect(env.document.activeElement).toBe(mark);
     env.dom.window.close();
   });
+
+  it("leaves the focus where a click outside the card put it", async () => {
+    // A click into the composer closed the card and gave the focus back to
+    // the sentence: what was typed next went nowhere, and Space opened the
+    // card again.
+    const env = boot();
+    const { mark, popover } = opened(env, "pointer");
+    await wait(0);
+    const composer = env.document.createElement("textarea");
+    env.document.body.appendChild(composer);
+    composer.focus();
+    composer.dispatchEvent(new env.window.MouseEvent("click", { bubbles: true }));
+    expect(popover.hidden).toBe(true);
+    expect(env.document.activeElement).toBe(composer);
+
+    // A click on nothing that takes the focus still gives it back.
+    mark.dispatchEvent(new env.window.Event("pointerdown", { bubbles: true }));
+    mark.click();
+    expect(popover.hidden).toBe(false);
+    await wait(0);
+    env.document.activeElement.blur();
+    env.document.body.dispatchEvent(new env.window.MouseEvent("click", { bubbles: true }));
+    expect(popover.hidden).toBe(true);
+    expect(env.document.activeElement).toBe(mark);
+    env.dom.window.close();
+  });
 });
 
 describe("the checked sentences of the user's text", () => {

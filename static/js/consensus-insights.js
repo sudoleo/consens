@@ -648,8 +648,13 @@
           let pinnedCard = null;
 
           function closeClaimPopover(options) {
-            const restoreFocus = options?.restoreFocus !== false;
             const pop = $("claimPopover");
+            // The focus goes back to the sentence only where it would be lost:
+            // in the card, at the sentence, or nowhere. A click into the
+            // composer leaves it there, or what is typed next went to the mark.
+            const focused = document.activeElement;
+            const restoreFocus = options?.restoreFocus !== false && (!focused
+              || focused === document.body || focused === claimPopoverTrigger || !!pop?.contains(focused));
             const backdrop = $("claimSheetBackdrop");
             pinnedCard = null;
             if (pop) {
