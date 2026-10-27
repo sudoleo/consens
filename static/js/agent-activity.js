@@ -46,6 +46,10 @@
     vm_process_output: ['Background process', 'Reading a background process…', 'Read a background process'],
     vm_stop_process: ['Background process', 'Stopping a background process…', 'Stopped a background process'],
     vm_view_image: ['Picture', 'Looking at a picture…', 'Looked at a picture'],
+    vm_install_packages: ['Install', 'Installing packages…', 'Installed packages'],
+    // The workspace's browser, a computer of its own (agent_browser.py).
+    browser: ['Browser', 'Using the browser…', 'Used the browser'],
+    request_domain: ['Network', 'Asking for access…', 'Got access'],
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
@@ -451,7 +455,8 @@
   // in <code> and <pre>, which stay untranslated, and the line's own words go
   // through App.t (the line is data-i18n-skip).
   const vmTools = new Set(['vm_exec', 'vm_read_file', 'vm_write_file', 'vm_edit_file', 'vm_share_file',
-    'github_import', 'vm_start_process', 'vm_process_output', 'vm_stop_process', 'vm_view_image']);
+    'github_import', 'vm_start_process', 'vm_process_output', 'vm_stop_process', 'vm_view_image',
+    'vm_install_packages', 'browser', 'request_domain']);
   const vmVerbs = { vm_read_file: ['Reading the file', 'Read the file'],
     vm_write_file: ['Writing the file', 'Wrote the file'], vm_edit_file: ['Editing the file', 'Edited the file'],
     vm_share_file: ['Sharing the file', 'Shared the file'],
@@ -459,12 +464,32 @@
     vm_start_process: ['Starting in the background', 'Started in the background'],
     vm_process_output: ['Reading the output of process', 'Read the output of process'],
     vm_stop_process: ['Stopping process', 'Stopped process'],
-    vm_view_image: ['Looking at the picture', 'Looked at the picture'] };
+    vm_view_image: ['Looking at the picture', 'Looked at the picture'],
+    vm_install_packages: ['Installing', 'Installed'],
+    request_domain: ['Asking for access to', 'Access to'] };
+  // A browser step by its action (agent_browser.py): what it did and to what.
+  const browserVerbs = { open: ['Opening', 'Opened'], read: ['Reading the page', 'Read the page'],
+    text: ['Reading the page', 'Read the page'], click: ['Clicking', 'Clicked'], type: ['Typing into', 'Typed into'],
+    select: ['Choosing in', 'Chose in'], key: ['Pressing', 'Pressed'], scroll: ['Scrolling', 'Scrolled'],
+    back: ['Going back', 'Went back'], forward: ['Going forward', 'Went forward'],
+    tabs: ['Listing the tabs', 'Listed the tabs'], tab: ['Switching the tab', 'Switched the tab'],
+    screenshot: ['Taking a screenshot', 'Took a screenshot'], upload: ['Uploading', 'Uploaded'],
+    wait: ['Waiting for the page', 'Waited for the page'] };
+  function vmTarget(item) {
+    if (['vm_exec', 'vm_start_process'].includes(item.name)) return item.command;
+    if (item.name === 'vm_install_packages') return Array.isArray(item.packages) ? item.packages.join(' ') : '';
+    if (item.name === 'request_domain') return item.domain;
+    if (item.name === 'browser') {
+      return item.action === 'open' ? item.url : item.action === 'upload' ? item.file
+        : item.action === 'key' ? item.key : item.ref || item.title;
+    }
+    return item.path || item.process;
+  }
   const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left',
     day_limit: 'Skipped · VM time for today used up', busy: 'Skipped · workspace in use by another chat' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
-    if (item.status === 'running') return item.name === 'vm_exec' ? App.t('Running…') : '';
+    if (item.status === 'running') return ['vm_exec', 'vm_install_packages'].includes(item.name) ? App.t('Running…') : '';
     // A background process that still runs once its call is done.
     if (item.process_status === 'running') return App.t('Running in the background');
     if (item.status === 'cancelled') return App.t('Stopped');
@@ -476,8 +501,6 @@
     if (Number.isFinite(item.duration_ms) && item.duration_ms >= 1000) parts.push(App.format.duration(item.duration_ms));
     return parts.join(' · ');
   }
-  // A command that uses the workspace's browser (workspace_vm/browser.py).
-  const browserStep = /(^|[;&|(]\s*)browser\s+[a-z-]+/;
   function vmView(className) {
     const details = document.createElement('details');
     details.className = className;
@@ -509,24 +532,25 @@
   }
   function updateVm(details, item) {
     const signature = JSON.stringify([item.status, item.command, item.path, item.output, item.output_truncated,
-      item.exit_code, item.duration_ms, item.timed_out, item.outcome]);
+      item.exit_code, item.duration_ms, item.timed_out, item.outcome, item.action, item.url, item.ref, item.page,
+      item.title, item.packages, item.domain]);
     if (details.dataset.signature === signature) return;
     details.dataset.signature = signature;
     details.dataset.status = item.status;
     details.dataset.tool = item.name;
     const [verb, target, meta] = details.firstElementChild.children;
-    const verbs = vmVerbs[item.name];
+    const verbs = item.name === 'browser' ? browserVerbs[item.action] : vmVerbs[item.name];
     verb.hidden = !verbs;
     verb.textContent = verbs ? App.t(verbs[item.status === 'running' ? 0 : 1]) : '';
-    target.textContent = String((['vm_exec', 'vm_start_process'].includes(item.name) ? item.command
-      : item.path || item.process) || '');
+    target.textContent = String(vmTarget(item) || '');
     meta.textContent = vmMeta(item);
     const watch = details.firstElementChild.children[3];
-    watch.hidden = !(item.name === 'vm_exec' && browserStep.test(String(item.command || ''))
-      && document.body.classList.contains('viewer-has-workspace') && Boolean(App.workspaceView));
+    watch.hidden = !(item.name === 'browser' && document.body.classList.contains('viewer-has-workspace')
+      && Boolean(App.workspaceView));
     watch.textContent = App.t('Watch live');
     const output = details.lastElementChild;
-    const text = String(item.output || '');
+    // A browser step shows the page as it read it; a command its output.
+    const text = String((item.name === 'browser' ? item.page : item.output) || '');
     output.textContent = text && item.output_truncated ? `…\n${text}` : text;
     output.hidden = !text;
     details.classList.toggle('has-output', Boolean(text));
@@ -585,10 +609,12 @@
   // "unchecked" (agent_gate.py, since 2026-10-27): a step that acts outside
   // the workspace that not every reviewer could check before it ran.
   const holdKinds = { safety: 'Security-critical step', harm: 'Possible damage', off_goal: 'Far off your request',
-    injection: 'Prompt injection', unchecked: 'Not checked' };
+    injection: 'Prompt injection', unchecked: 'Not checked', domain: 'Network access' };
   const holdStates = { waiting: 'Waiting for your decision', continue: 'You let the work go on',
-    steer: 'You wrote to the agent', stop: 'You stopped the response',
+    steer: 'You wrote to the agent', stop: 'You stopped the response', deny: 'You did not allow it',
     timeout: 'Stopped after 30 minutes without a decision', ended: 'Over when the response ended' };
+  // A request for a domain (agent_domains.py) is the user's to decide, not a reviewer's pause.
+  const domainStates = { ...holdStates, continue: 'You allowed it for this chat' };
   function holdView(className) {
     const node = document.createElement('div');
     node.className = className;
@@ -604,17 +630,19 @@
   }
   function updateHold(node, item) {
     const state = holdStates[item.state] ? item.state : 'waiting';
-    const signature = JSON.stringify([item.reviewer, item.halt, item.reason, state]);
+    const signature = JSON.stringify([item.reviewer, item.halt, item.reason, state, item.domain]);
     if (node.dataset.signature === signature) return;
     node.dataset.signature = signature;
     node.dataset.state = state;
-    node._head.textContent = item.reviewer ? App.t('Paused by {reviewer}', { reviewer: String(item.reviewer) })
+    const domain = item.halt === 'domain' && item.domain;
+    node._head.textContent = domain ? App.t('The agent asked to reach {domain}', { domain: String(item.domain) })
+      : item.reviewer ? App.t('Paused by {reviewer}', { reviewer: String(item.reviewer) })
       : item.halt === 'unchecked' ? 'Paused before a step ran' : 'Paused by a reviewer';
     node._reason.textContent = String(item.reason || '').slice(0, 400);
     // While it waits, the card above the field says why; the history keeps
     // the reason once the user decided (on a phone both stood one above the other).
     node._reason.hidden = state === 'waiting';
-    node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t(holdStates[state])}`;
+    node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t((domain ? domainStates : holdStates)[state])}`;
   }
 
   function userNote(className, text) {
@@ -770,7 +798,8 @@
       && item.status === "unknown" && (item.server_tool || item.provider_native)
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
-    const holds = events.filter(item => item.kind === 'hold' && item.reason);
+    // A request for a domain has no reviewer's reason of its own, yet stays in the history.
+    const holds = events.filter(item => item.kind === 'hold' && (item.reason || item.domain));
     const textOnly = textOnlyReview(review);
     const latest = events.filter(item => item.kind === "status").at(-1);
     // Text the model writes before a tool call is a preamble, not the answer.

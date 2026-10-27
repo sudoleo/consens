@@ -1,10 +1,13 @@
 #!/bin/bash
-# consens.io workspace: installs the browser, its screen and the VNC server
-# once (agent_workspace.py). Called by browser.py and gateway.py; the lock
-# makes a second caller wait for the first, the marker makes later calls free.
+# consens.io browser VM: installs the browser, its screen and the VNC server
+# once (agent_browser.py). Called by browser.py and relay.py; the lock makes
+# a second caller wait for the first, the marker makes later calls free.
+# No code of the agent ever runs in this VM: the server calls browser.py with
+# typed arguments, and the user's live view reaches the VNC server only
+# through relay.py on the provider's exec API.
 set -e
-dir="$HOME/.consens/workspace"
-marker="$dir/setup-done-2"
+dir="$HOME/.consens/browser"
+marker="$dir/setup-done-1"
 [ -f "$marker" ] && exit 0
 mkdir -p "$dir"
 exec 9>"$dir/setup.lock"
@@ -19,8 +22,9 @@ if ! command -v google-chrome >/dev/null || ! command -v Xvfb >/dev/null || ! co
   rm -f /tmp/consens-chrome.deb
 fi
 python3 -c "import playwright" 2>/dev/null || pip3 install -q --disable-pip-version-check playwright==1.64.1
-# Chrome keeps no passwords, cards or addresses here: the agent can read
-# every file of the VM, and sign-ins stay what the user typed in the view.
+# Chrome keeps no passwords, cards or addresses: sign-ins stay what the user
+# typed in the view, and the agent reads pages only through browser.py,
+# which never shows a password field's value.
 sudo mkdir -p /etc/opt/chrome/policies/managed
 echo '{"PasswordManagerEnabled": false, "AutofillCreditCardEnabled": false, "AutofillAddressEnabled": false,
  "BrowserSignin": 0, "SyncDisabled": true, "MetricsReportingEnabled": false, "PromotionsEnabled": false}' \

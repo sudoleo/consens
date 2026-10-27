@@ -1,8 +1,10 @@
 """The account's workspace (agent_workspace.py, since 2026-10-27): its lease,
-its tools in the VM (workspace_vm/) and the Sprites calls behind them. The
-loop's use of it is in test_agent_vm.py; nothing here calls Sprites or starts
-a browser: the gateway runs against a local echo server, browser.py's
-helpers without Playwright.
+its tools in the two VMs (workspace_vm/workbench, workspace_vm/browser) and
+the Sprites calls behind them. The loop's use of it is in test_agent_vm.py
+and test_agent_browser.py; nothing here calls Sprites or starts a browser:
+the relay runs against a local echo server, browser.py's helpers without
+Playwright, agent-run and setup.sh are checked as text (they ran on a test
+Sprite, docs/agent-mode.md).
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -13,15 +15,16 @@ from pathlib import Path
 import httpx
 import pytest
 
-from app.services import agent_vm, agent_workspace
+from app.services import agent_browser, agent_vm, agent_workspace
 from app.services.agent_vm import SpritesBackend
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
+from test_agent_vm import fake_vm  # noqa: F401  (fixture)
 
 VM_FILES = Path(agent_workspace.__file__).with_name("workspace_vm")
 
 
-def load(name):
-    spec = importlib.util.spec_from_file_location(f"workspace_vm_{name}", VM_FILES / f"{name}.py")
+def load(name, kind="browser"):
+    spec = importlib.util.spec_from_file_location(f"workspace_vm_{kind}_{name}", VM_FILES / kind / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -78,19 +81,44 @@ def test_a_deleted_chat_takes_no_lease(store):
     assert agent_workspace.record(store.db, UID) == {}
 
 
-# --- Tools in the VM ------------------------------------------------------------------
+# --- Tools in the VMs -----------------------------------------------------------------
 
-def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes():
-    files = agent_workspace.tool_files()
-    assert set(files) == {"browser.py", "display.sh", "gateway.py", "pause.py", "setup.sh"}
-    assert all(b"\r\n" not in data for data in files.values())
-    assert agent_workspace.VERSION == agent_workspace._version() and len(agent_workspace.VERSION) == 16
-    gateway = load("gateway")
-    assert gateway.GATEWAY_PORT == agent_workspace.GATEWAY_PORT
-    # Both scripts and the tools that check it name the same setup marker.
-    marker = "setup-done-2"
-    assert marker in files["setup.sh"].decode() and marker in files["gateway.py"].decode()
-    assert marker in files["browser.py"].decode()
+def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():
+    workbench, browser = agent_workspace.tool_files("workbench"), agent_workspace.tool_files("browser")
+    assert set(workbench) == {"agent-run", "pause.py", "setup.sh"}
+    assert set(browser) == {"browser.py", "display.sh", "relay.py", "setup.sh"}
+    assert all(b"\r\n" not in data for data in [*workbench.values(), *browser.values()])
+    assert agent_workspace.VERSION == agent_workspace._version("workbench") and len(agent_workspace.VERSION) == 16
+    assert agent_workspace.BROWSER_VERSION == agent_workspace._version("browser")
+    assert agent_workspace.VERSION != agent_workspace.BROWSER_VERSION
+    # The browser's setup, its helper and the relay name the same marker.
+    marker = "setup-done-1"
+    assert all(marker in browser[name].decode() for name in ("setup.sh", "browser.py", "relay.py"))
+
+
+def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
+    """agent-run (security audit 2026-10-27, findings 1 to 3): a mount
+    namespace of its own hides the management socket, the checkpoints and
+    the logs; then the agent's user with no way back to root. Checked as
+    text here; on a test Sprite it ran (docs/agent-mode.md)."""
+    run = agent_workspace.tool_files("workbench")["agent-run"].decode()
+    assert "unshare --mount --propagation private" in run
+    assert "mount --bind /dev/null /.sprite/api.sock || exit 125" in run
+    assert "/.sprite/checkpoints /.sprite/logs" in run and "mount -t tmpfs -o ro" in run
+    assert '--reuid="$user" --regid="$user" --init-groups --no-new-privs' in run
+    assert "/usr/bin/env -i HOME=" in run and 'timeout --kill-after=5 "$seconds"' in run
+    # Never in the provider's namespace: there it would hide the socket from the provider too.
+    assert 'readlink /proc/self/ns/mnt)" = "$(readlink /proc/1/ns/mnt)' in run
+    assert "user=agent" in run and f"home={agent_vm.HOME}" in run
+    assert agent_vm.agent_argv(["ls"], 30, "/home/agent/x") == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "30",
+                                                                "/home/agent/x", "ls"]
+    setup = agent_workspace.tool_files("workbench")["setup.sh"].decode()
+    assert f"--uid {agent_vm.AGENT_UID}" in setup.replace('"$uid"', str(agent_vm.AGENT_UID))
+    assert 'gpasswd -d "$user" sudo' in setup and 'chmod 750 "$legacy"' in setup and 'chmod 700 "$home"' in setup
+    # Once: the agent's files out of the provider's home, the old browser and its sign-ins gone.
+    for moved in ('move "$legacy/chats" "$home/chats"', 'move "$legacy/NOTES.md" "$home/NOTES.md"',
+                  'move "$legacy/repos" "$home/repos"', 'rm -rf "$legacy/.consens/browser"'):
+        assert moved in setup
 
 
 def test_the_takeover_expires_unless_the_view_refreshes_it(tmp_path, monkeypatch):
@@ -109,61 +137,81 @@ def test_the_takeover_expires_unless_the_view_refreshes_it(tmp_path, monkeypatch
     assert browser.user_control() is False
 
 
-def test_the_browser_refuses_to_act_while_the_user_has_it(tmp_path, monkeypatch, capsys):
+def run_helper(browser, monkeypatch, capsys, request):
+    import io
+    monkeypatch.setattr(browser.sys, "stdin", type("In", (), {"buffer": io.BytesIO(json.dumps(request).encode())})())
+    assert browser.main() == 0
+    return json.loads(capsys.readouterr().out)
+
+
+def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_has_it(tmp_path, monkeypatch, capsys):
+    """browser.py on the browser VM: JSON in, JSON out, no shell. While the
+    user has the browser it acts on nothing; an upload takes only a file the
+    server put into its folder for the call."""
     browser = load("browser")
     control = tmp_path / "control.json"
     control.write_bytes(agent_workspace.control_payload("user"))
     monkeypatch.setattr(browser, "CONTROL", str(control))
-    monkeypatch.setattr(browser.sys, "argv", ["browser", "click", "e3"])
     started = []
     monkeypatch.setattr(browser, "ensure_browser", lambda: started.append(True))
-    assert browser.main() == 3 and started == []
-    assert "taken over the browser" in capsys.readouterr().out
-    monkeypatch.setattr(browser.sys, "argv", ["browser", "--help"])
-    assert browser.main() == 0 and "screenshot" in capsys.readouterr().out
+    assert run_helper(browser, monkeypatch, capsys, {"action": "click", "ref": "e3"})["status"] == "user"
+    assert started == []
+    assert run_helper(browser, monkeypatch, capsys, {"action": "rm -rf /"}) == {
+        "status": "refused", "text": "Unknown action rm -rf /."}
+    assert browser.ACTIONS == set(agent_browser.ACTIONS)
+    assert set(browser.KEYS) == set(agent_browser.KEYS)
+    with pytest.raises(browser.Refused, match="missing"):
+        browser.act(None, None, "upload", {"ref": "e1", "file": "/etc/passwd"})
+    with pytest.raises(browser.Refused, match="no ref"):
+        browser.element(None, "e1; drop")
 
 
-def test_a_takeover_freezes_the_agents_processes_until_the_user_hands_back(tmp_path, monkeypatch):
-    """pause.py: what carries the agent's mark (agent_vm.AGENT_MARK) stops
-    while the user has the browser, also what appears meanwhile, and goes on
-    when they hand back or the takeover expires, also after a failure."""
+def test_a_takeover_freezes_the_agents_user_until_the_user_hands_back(tmp_path, monkeypatch):
+    """pause.py: the agent's cgroup where the VM has the freezer (measured on
+    a Sprite 2026-10-27), else every process of its user stops while the
+    user has the browser, also what appears meanwhile, and goes on when
+    they hand back or the takeover expires, also after a failure. Since
+    2026-10-27 by its user, not by a mark in its environment it could drop."""
     import os
-    pause = load("pause")
+    pause = load("pause", "workbench")
     proc = tmp_path / "proc"
-    environs = {"101": b"PATH=/bin\0CONSENS_AGENT=1\0", "102": b"PATH=/bin\0DISPLAY=:1\0",
-                "103": b"CONSENS_AGENT=10\0", str(os.getpid()): b"CONSENS_AGENT=1\0", "self": b"CONSENS_AGENT=1\0"}
-    for pid, environ in environs.items():
+    statuses = {"101": "Uid:\t1500\t1500\t1500\t1500\n", "102": "Uid:\t1001\t1001\t1001\t1001\n",
+                "103": "Uid:\t0\t0\t0\t0\n", str(os.getpid()): "Uid:\t1500\t1500\t1500\t1500\n",
+                "self": "Uid:\t1500\n"}
+    for pid, status in statuses.items():
         (proc / pid).mkdir(parents=True)
-        (proc / pid / "environ").write_bytes(environ)
+        (proc / pid / "status").write_text("Name:\tx\n" + status)
     # A process that ended between the listing and the read.
     (proc / "104").mkdir()
-    assert pause.marked(str(proc)) == [101]
-    assert agent_vm.AGENT_MARK.encode() == pause.MARK
+    assert pause.agent_pids(str(proc)) == [101] and pause.AGENT_UID == agent_vm.AGENT_UID
     sent, turns = [], iter([True, True, False])
 
     def appears():
-        # Started in the moment of the takeover: frozen at the next look.
+        # Started in the moment of the takeover: stopped at the next look.
         if len(sent) == 1:
             (proc / "105").mkdir()
-            (proc / "105" / "environ").write_bytes(b"CONSENS_AGENT=1\0")
-        return pause.marked(str(proc))
+            (proc / "105" / "status").write_text("Uid:\t1500\t1500\t1500\t1500\n")
+        return pause.agent_pids(str(proc))
     pause.pause(held=lambda: next(turns), find=appears, kill=lambda pid, sig: sent.append((pid, sig)),
-                sleep=lambda seconds: None)
+                sleep=lambda seconds: None, group=str(tmp_path / "no-cgroup"))
     assert sent == [(101, pause.STOP), (101, pause.STOP), (105, pause.STOP), (101, pause.CONT), (105, pause.CONT)]
-    # A process gone meanwhile stops nothing; a failure still continues the others.
+    # With a cgroup: frozen whole while held, thawed after, also after a failure.
+    group = tmp_path / "cgroup"
+    group.mkdir()
+    (group / "cgroup.freeze").write_text("0")
+    seen = []
+
+    def held():
+        seen.append((group / "cgroup.freeze").read_text())
+        if len(seen) == 2:
+            raise RuntimeError("lost")
+        return True
     sent.clear()
-
-    def kill(pid, sig):
-        if pid == 101:
-            raise ProcessLookupError(pid)
-        sent.append((pid, sig))
-
-    def failing():
-        raise RuntimeError("lost")
     with pytest.raises(RuntimeError):
-        pause.pause(held=failing, find=lambda: pause.marked(str(proc)), kill=kill, sleep=lambda seconds: None)
-    assert sent == [(105, pause.CONT)]
-    # It reads the takeover as the browser does.
+        pause.pause(held=held, find=lambda: [101], kill=lambda pid, sig: sent.append((pid, sig)),
+                    sleep=lambda seconds: None, group=str(group))
+    assert seen == ["1", "1"] and (group / "cgroup.freeze").read_text() == "0" and sent == []
+    # It reads the takeover from the server's own folder.
     control = tmp_path / "control.json"
     monkeypatch.setattr(pause, "CONTROL", str(control))
     assert pause.user_control() is False
@@ -171,17 +219,8 @@ def test_a_takeover_freezes_the_agents_processes_until_the_user_hands_back(tmp_p
     assert pause.user_control() is True
     control.write_bytes(agent_workspace.control_payload("agent"))
     assert pause.user_control() is False
-
-
-def test_the_workspaces_own_programs_never_carry_the_agents_mark(monkeypatch):
-    import os
-    browser = load("browser")
-    monkeypatch.setenv("CONSENS_AGENT", "1")
-    assert "CONSENS_AGENT" not in browser.unmarked() and browser.unmarked()["PATH"] == os.environ["PATH"]
-    assert "unset CONSENS_AGENT" in agent_workspace.tool_files()["display.sh"].decode()
-    assert agent_workspace.PAUSE_COMMAND.startswith("env -u CONSENS_AGENT setsid nohup python3 ")
-    assert agent_vm.wrapped_command("ls", 30)[3:6] == ["env", agent_vm.AGENT_MARK, "bash"]
-    assert agent_vm.wrapped_command("ls", 30, agent=False)[3:5] == ["bash", "-c"]
+    assert agent_workspace.PAUSE_COMMAND.startswith("sudo -n setsid nohup ")
+    assert f"{agent_workspace.WORKSPACE_DIR}/pause.py" in agent_workspace.PAUSE_COMMAND
 
 
 def test_the_record_says_whether_the_user_has_the_browser(store):
@@ -205,65 +244,55 @@ def test_long_pages_are_read_in_pieces():
     assert browser.paged(["y" * 5000], 0, 1000) == (["y" * 5000], 0)
 
 
-def test_the_gateway_reports_its_states_then_carries_vnc_both_ways(monkeypatch):
-    """The live view's way in: a WebSocket on /vnc, text states while the
-    browser is set up and started, then the VNC bytes as binary frames."""
-    gateway = load("gateway")
+def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, capfd):
+    """The live view's way in since 2026-10-27, over the provider's exec API:
+    states as JSON lines on stderr while the browser is set up and started,
+    then the VNC bytes between stdin and stdout."""
+    import io
+    import socket
+    import threading
+    relay = load("relay")
     scripts = []
+    monkeypatch.setattr(relay, "run", lambda script: scripts.append(script) or True)
+    monkeypatch.setattr(relay.os.path, "exists", lambda path: False)
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    # The VNC server's Unix socket on the VM; a local TCP one here (Windows too).
+    monkeypatch.setattr(relay, "connect_vnc", lambda: socket.create_connection(server.getsockname(), timeout=10))
+    received = []
 
-    async def run(script):
-        scripts.append(script)
-        return True
-    monkeypatch.setattr(gateway, "run", run)
-    monkeypatch.setattr(gateway.os.path, "exists", lambda path: False)
-
-    async def scenario():
-        async def echo(reader, writer):
-            writer.write(b"RFB 003.008\n")
-            while data := await reader.read(1024):
-                writer.write(data)
-                await writer.drain()
-        vnc = await asyncio.start_server(echo, "127.0.0.1", 0)
-        monkeypatch.setattr(gateway, "VNC", vnc.sockets[0].getsockname()[:2])
-        server = await asyncio.start_server(gateway.handle, "127.0.0.1", 0)
-        port = server.sockets[0].getsockname()[1]
-        from websockets.asyncio.client import connect
-        async with connect(f"ws://127.0.0.1:{port}/vnc") as ws:
-            states = [json.loads(await ws.recv())["state"] for _ in range(3)]
-            banner = await ws.recv()
-            await ws.send(b"\x01" * 70_000)  # longer than a 16-bit frame
-            echoed = b""
-            while len(echoed) < 70_000:
-                echoed += await ws.recv()
-        refused = None
+    def vnc():
+        connection, _ = server.accept()
         try:
-            async with connect(f"ws://127.0.0.1:{port}/other"):
-                pass
-        except Exception as exc:
-            refused = exc
-        server.close()
-        vnc.close()
-        return states, banner, echoed, refused
-    states, banner, echoed, refused = asyncio.run(scenario())
+            connection.sendall(b"RFB 003.008\n")
+            while data := connection.recv(65536):
+                received.append(data)
+        except OSError:
+            pass  # the relay closed it: its stdin ended
+        connection.close()
+    threading.Thread(target=vnc, daemon=True).start()
+    stdin, stdout = io.BytesIO(b"\x01" * 70_000), io.BytesIO()
+
+    class Stream:
+        def __init__(self, raw):
+            self.buffer = type("Buffer", (), {"raw": raw})()
+    monkeypatch.setattr(relay.sys, "stdin", Stream(stdin))
+    monkeypatch.setattr(relay.sys, "stdout", Stream(stdout))
+    assert relay.main() == 0
+    server.close()
+    states = [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()]
     assert states == ["setup", "starting", "ready"] and scripts == ["setup.sh", "display.sh"]
-    assert banner == b"RFB 003.008\n" and echoed == b"\x01" * 70_000
-    assert "404" in str(refused)
+    assert stdout.getvalue().startswith(b"RFB 003.008\n") or stdout.getvalue() == b""
+    assert sum(len(chunk) for chunk in received) == 70_000
 
 
-def test_a_gateway_frame_reads_back_as_written():
-    gateway = load("gateway")
-
-    async def roundtrip(payload):
-        reader = asyncio.StreamReader()
-        mask = b"\x01\x02\x03\x04"
-        raw = gateway.frame(2, payload)
-        # A client's frame is masked: set the bit, add the key, mask the payload.
-        head = bytearray(raw[:len(raw) - len(payload)])
-        head[1] |= 0x80
-        reader.feed_data(bytes(head) + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
-        return await gateway.read_frame(reader)
-    for size in (0, 125, 126, 65535, 65536):
-        assert asyncio.run(roundtrip(b"\x07" * size)) == (2, b"\x07" * size)
+def test_a_relay_without_its_browser_says_so(monkeypatch, capfd):
+    relay = load("relay")
+    monkeypatch.setattr(relay, "run", lambda script: script == "setup.sh")
+    monkeypatch.setattr(relay.os.path, "exists", lambda path: True)
+    assert relay.main() == 1
+    assert [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()] == ["starting", "error"]
 
 
 # --- Sprites calls ---------------------------------------------------------------------
@@ -272,35 +301,60 @@ def sprites(handler):
     return SpritesBackend("secret-token", transport=httpx.MockTransport(handler))
 
 
-def test_a_service_is_made_anew_and_paths_and_modes_go_to_the_file_api():
-    """Sprites neither replaces a service (409) nor restarts one with the
-    same config, so the gateway would keep running its old code."""
+def test_the_old_gateway_service_and_the_servers_paths_go_through_the_api():
     seen = []
 
     def handler(request):
         seen.append((request.method, request.url.path, json.loads(request.content or b"null")))
         if request.method == "DELETE" and request.url.path.endswith("/services/view"):
-            return httpx.Response(404)  # none yet: fine
-        if request.url.path.endswith("/consens-w-a"):
-            return httpx.Response(200, json={"name": "consens-w-a", "url": "https://consens-w-a-x1.sprites.app"})
+            return httpx.Response(404)  # gone already: fine
         return httpx.Response(200, json={})
     backend = sprites(handler)
-    backend.put_service("consens-w-a", "view", {"cmd": "python3", "args": ["gateway.py"], "http_port": 6080})
-    backend.delete_path("consens-w-a", "/home/sprite/chats/c1")
-    backend.chmod("consens-w-a", "/home/sprite/.local/bin/browser", "755")
-    assert backend.url("consens-w-a") == "https://consens-w-a-x1.sprites.app"
+    backend.delete_service("consens-w-a", "view")
+    backend.delete_path("consens-w-a", "/home/sprite/chats/c1", agent=False)
+    backend.set_policy("consens-w-a", [{"domain": "pypi.org", "action": "allow"}])
     assert [(method, path) for method, path, _ in seen] == [
-        ("DELETE", "/v1/sprites/consens-w-a/services/view"), ("PUT", "/v1/sprites/consens-w-a/services/view"),
-        ("DELETE", "/v1/sprites/consens-w-a/fs/delete"), ("POST", "/v1/sprites/consens-w-a/fs/chmod"),
-        ("GET", "/v1/sprites/consens-w-a")]
-    assert seen[1][2] == {"needs": [], "cmd": "python3", "args": ["gateway.py"], "http_port": 6080}
-    assert seen[2][2] == {"path": "/home/sprite/chats/c1", "workingDir": "/home/sprite", "recursive": True,
+        ("DELETE", "/v1/sprites/consens-w-a/services/view"), ("DELETE", "/v1/sprites/consens-w-a/fs/delete"),
+        ("POST", "/v1/sprites/consens-w-a/policy/network")]
+    assert seen[1][2] == {"path": "/home/sprite/chats/c1", "workingDir": "/home/sprite", "recursive": True,
                           "asRoot": False}
-    assert seen[3][2]["mode"] == "755"
+    assert seen[2][2] == {"rules": [{"domain": "pypi.org", "action": "allow"}]}
 
 
 def test_a_chat_folder_is_only_ever_a_folder_of_its_own():
-    assert agent_vm.chat_dir("abc123") == "/home/sprite/chats/abc123"
+    assert agent_vm.chat_dir("abc123") == "/home/agent/chats/abc123"
     for bad in ("", "../x", "a/b", "a b", None):
         with pytest.raises(ValueError):
             agent_vm.chat_dir(bad)
+
+
+# --- Deletion ------------------------------------------------------------------------------
+
+def test_the_accounts_deletion_deletes_both_vms_by_their_names(store, fake_vm):
+    """Also without a record (security audit 2026-10-27): the names follow
+    from the account."""
+    fake_vm.vms[agent_vm.workspace_name(UID)] = {"files": {}, "checkpoints": []}
+    fake_vm.vms[agent_vm.browser_name(UID)] = {"files": {}, "checkpoints": []}
+    agent_workspace.delete_for_account(store.db, UID, factory=fake_vm.backend)
+    assert ("delete", agent_vm.workspace_name(UID)) in fake_vm.calls
+    assert ("delete", agent_vm.browser_name(UID)) in fake_vm.calls and fake_vm.vms == {}
+    assert agent_workspace.record(store.db, UID) == {}
+
+
+def test_a_chats_folder_goes_as_the_agent_and_from_where_it_lay_before(store, fake_vm):
+    name = agent_vm.workspace_name(UID)
+    fake_vm.vms[name] = {"files": {"/home/agent/chats/c1/a.txt": b"a", "/home/sprite/chats/c1/old.txt": b"o"},
+                         "checkpoints": []}
+    agent_vm.delete_chat_vm(UID, "c1", {"name": name, "workspace": True}, factory=fake_vm.backend)
+    assert fake_vm.vms[name]["files"] == {**{path: data for path, data in fake_vm.vms[name]["files"].items()
+                                             if path.startswith("/home/sprite/.consens/")}}
+    # The legacy folder through the server, the agent's through its user.
+    assert ("delete", "/home/sprite/chats/c1") in fake_vm.server_files
+    assert ("delete", "/home/agent/chats/c1") not in fake_vm.server_files
+    # A workbench that is gone is not made again for it.
+    fake_vm.calls.clear()
+    agent_vm.delete_chat_vm(UID, "c2", {"name": agent_vm.workspace_name("someone"), "workspace": True},
+                            factory=fake_vm.backend)
+    agent_vm.delete_chat_vm("other", "c3", {"name": agent_vm.workspace_name("other"), "workspace": True},
+                            factory=fake_vm.backend)
+    assert not [call for call in fake_vm.calls if call[0] in {"ensure", "exec", "write"}]

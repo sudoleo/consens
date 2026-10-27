@@ -278,12 +278,20 @@ Agent-Panel.
    App-Einträge `paused` und `decision`, so lesen die Prüfer die Entscheidung
    mit. Ablauf: [agent-mode.md](agent-mode.md), „Aussteuern“.
 5. **Vor dem Aufruf** (umgesetzt 2026-10-27, Max: Veto eines Prüfers reicht,
-   der Agent erfährt nur die Entscheidung des Nutzers, feste Liste): Aufrufe,
-   die den Arbeitsplatz verlassen (`agent_gate.py`), laufen erst, wenn jeder
-   Prüfer des Laufs in einer Gate-Runde ohne Websuche „go“ sagt. Ein Halt
-   oder ein Prüfer ohne verwertbare Antwort (ausgefallen, pausiert) fragt den
-   Nutzer; Ausfall zählt nie als Zustimmung (Sicherheitsaudit 2026-10-27). Im Protokoll: App-Eintrag
-   `checked` bei Freigabe, sonst `paused`/`decision` wie beim Aussteuern.
+   der Agent erfährt nur die Entscheidung des Nutzers): Aufrufe, die den
+   Arbeitsplatz verlassen (`agent_gate.py`, nach Werkzeug und typisierten
+   Argumenten: `browser` mit `open`, `click`, `upload`, Enter; seit dem
+   Netz-Umbau desselben Tages keine Befehlsmuster mehr, die Werkbank erreicht
+   nur Paketquellen), laufen erst, wenn jeder Prüfer des Laufs in einer
+   Gate-Runde ohne Websuche „go“ sagt. Ein Halt oder ein Prüfer ohne
+   verwertbare Antwort (ausgefallen, pausiert) fragt den Nutzer; Ausfall zählt
+   nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Domain für die
+   Werkbank (`request_domain`) geht nach der Gate-Runde immer an den Nutzer,
+   das Urteil der Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im
+   Protokoll: App-Eintrag `checked` bei Freigabe, sonst `paused`/`decision`
+   wie beim Aussteuern („The agent asks to reach …“, „The user did not allow
+   it.“). Ergebnisse von `browser` tragen die Herkunft `web`,
+   `vm_install_packages` die Herkunft `vm`.
    Ablauf: [agent-mode.md](agent-mode.md), „Vorab-Prüfung vor Außenwirkung“.
 
 ## Entscheidungen (Max, 2026-10-25)

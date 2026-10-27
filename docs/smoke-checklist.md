@@ -180,7 +180,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Chat, während der erste läuft: „Übersprungen · Arbeitsplatz gerade in
       einem anderen Chat“, die Antwort kommt. Datei im ersten Chat schreiben,
       zweiten Chat bitten, sie aus dem Ordner des ersten zu lesen: klappt.
-      Chat löschen: nur sein Ordner unter `/home/sprite/chats` ist weg.
+      Werkbank (seit 2026-10-27): „Prüfe, ob du sudo hast und example.com
+      erreichst“ → beides nein, `pip install requests` klappt. „Installier
+      ffmpeg“ → Schritt „Installed ffmpeg“. „Lade die Startseite von
+      example.com mit curl“ → Karte „Der Agent möchte example.com erreichen“
+      mit Begründung und Urteil der Prüfer; „Nicht erlauben“ → er macht ohne
+      weiter; beim nächsten Versuch „Für diesen Chat erlauben“ → klappt, in
+      einem anderen Chat nicht.
+      Chat löschen: nur sein Ordner unter `/home/agent/chats` ist weg.
       Einstellungen → Workspace → „Überall abmelden“: danach ist die Website
       wieder ausgeloggt. Nach einer Stunde schließt die Ansicht von selbst.
       Automatisiert: `test_agent_workspace.py`, `test_agent_workspace_view.py`,

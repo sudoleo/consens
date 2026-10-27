@@ -2,11 +2,13 @@
 server or a long test run under a supervisor that holds the VM awake while it
 runs, capped in time and number. The tool layer runs against FakeVM
 (test_agent_vm.py); the shell scripts themselves run in a real bash (on
-Windows with a stand-in for setsid), never in a VM.
+Windows with a stand-in for setsid), never in a VM, with a stand-in for
+agent-run (launch.sh), which ran on a test Sprite (docs/agent-mode.md).
 """
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -16,7 +18,7 @@ import pytest
 
 from app.services import agent_vm, agent_vm_processes
 from app.services.agent_compaction import describe
-from app.services.agent_vm_processes import (MAX_RUNNING, RUNNER, command_script, list_command, parse_status,
+from app.services.agent_vm_processes import (MAX_RUNNING, RUNNER, launch_script, list_command, parse_status,
                                              process_dir, start_command, status_command, stop_command, task_name)
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_vm import NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
@@ -35,7 +37,7 @@ def status(state, text):
 
 def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_id):
     directory = process_dir(PID)
-    fake_vm.commands[start_command(directory, 1800, task_name(PID))] = (status("running", "Listening on :3000\n"), 0, 2.0)
+    fake_vm.commands[start_command(directory, task_name(PID))] = (status("running", "Listening on :3000\n"), 0, 2.0)
     fake_vm.commands[status_command(directory, wait=5)] = (status("running", "GET / 200\n"), 0, 5.0)
     fake_vm.commands[stop_command(directory, task_name(PID))] = (status(143, "GET / 200\nbye\n"), 0, 1.0)
     script = Agent([[("vm_start_process", {"command": "npm run dev", "cwd": "app"})],
@@ -49,11 +51,21 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert started["max_seconds"] == 1800 and "vm_stop_process" in started["note"]
     assert read == {"id": PID, "status": "running", "output": "GET / 200\n"}
     assert stopped == {"id": PID, "status": "exited", "output": "GET / 200\nbye\n", "exit_code": 143}
-    # The supervisor, the command in its folder and login environment, the command for listing.
+    # The supervisor in the server's own folder, the command as the agent's
+    # user in its folder and login environment, the command for listing.
     files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
+    assert directory.startswith("/home/sprite/.consens/processes/")
     assert files[f"{directory}/run.sh"].decode() == RUNNER
-    assert files[f"{directory}/command.sh"].decode() == command_script("npm run dev", agent_vm.chat_dir(loop.chat_id) + "/app")
+    launch = files[f"{directory}/launch.sh"].decode()
+    assert launch == launch_script("npm run dev", agent_vm.chat_dir(loop.chat_id) + "/app", 1800)
+    assert shlex.split(launch)[1:7] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "1800",
+                                        agent_vm.chat_dir(loop.chat_id) + "/app"]
     assert files[f"{directory}/command"] == b"npm run dev"
+    assert {path for _, path in fake_vm.server_files if path.startswith(directory)} == {
+        f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command"}
+    # Started, read and stopped by the server, which holds the VM awake.
+    assert fake_vm.server[-3:] == [start_command(directory, task_name(PID)), status_command(directory, wait=5),
+                                   stop_command(directory, task_name(PID))]
     # The activity shows the command and its first output, later the process by its id.
     assert [e for e in tool_events(events, "vm_start_process") if e["status"] == "running"][0]["command"] == "npm run dev"
     # Saved as the browser merges the updates of each call.
@@ -74,7 +86,7 @@ def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(sto
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 1000)
     directory = process_dir(PID)
-    fake_vm.commands[start_command(directory, 1000, task_name(PID))] = (status("running", "Listening\n"), 0, 2.0)
+    fake_vm.commands[start_command(directory, task_name(PID))] = (status("running", "Listening\n"), 0, 2.0)
     loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev", "max_seconds": 1800})]]))
     list(loop.run())
     started = results(loop)[0]
@@ -99,7 +111,7 @@ def test_waiting_for_a_process_counts_and_never_runs_past_the_days_vm_time(store
 
 def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed_id):
     directory = process_dir(PID)
-    fake_vm.commands[start_command(directory, 60, task_name(PID))] = ([], 4, .1)
+    fake_vm.commands[start_command(directory, task_name(PID))] = ([], 4, .1)
     loop = vm_loop(store, Agent([[("vm_start_process", {"command": "sleep 1000", "max_seconds": 60})],
                                  [("vm_process_output", {"id": "ffffffff"})],
                                  [("vm_start_process", {"command": "x", "max_seconds": 7200})]]))
@@ -157,10 +169,13 @@ def shell(tmp_path):
     return run, root
 
 
-def prepare(root, process_id, command, cwd):
+def prepare(root, process_id, command, cwd, seconds=60):
+    """The process's files; launch.sh as agent-run would run it (folder,
+    limit), without sudo and the agent's user."""
     directory = f"{root}/{process_id}"
     Path(directory).mkdir(parents=True)
-    for name, content in (("run.sh", RUNNER), ("command.sh", command_script(command, cwd)), ("command", command)):
+    launch = f"cd {shlex.quote(cwd)} || exit 1\nexec timeout --kill-after=5 {seconds} bash -c {shlex.quote(command)}\n"
+    for name, content in (("run.sh", RUNNER), ("launch.sh", launch), ("command", command)):
         Path(directory, name).write_text(content, newline="\n")
     return directory
 
@@ -175,7 +190,7 @@ def wait_for(path, seconds=15):
 def test_the_supervisor_runs_a_command_to_its_end(shell, tmp_path):
     run, root = shell
     directory = prepare(root, "11111111", "echo hello; pwd; exit 3", tmp_path.as_posix())
-    code, text = run(start_command(directory, 30, "consens-11111111", wait=0, root=root))
+    code, text = run(start_command(directory, "consens-11111111", wait=0, root=root))
     assert code == 0 and text.startswith("consens-process ")
     assert wait_for(f"{directory}/exit_code")
     code, text = run(status_command(directory))
@@ -187,12 +202,12 @@ def test_the_supervisor_stops_a_process_and_counts_the_running_ones(shell, tmp_p
     run, root = shell
     directories = [prepare(root, f"2222222{n}", "sleep 30", tmp_path.as_posix()) for n in range(MAX_RUNNING + 1)]
     for directory in directories[:MAX_RUNNING]:
-        code, _ = run(start_command(directory, 60, "consens-x", wait=0, root=root))
+        code, _ = run(start_command(directory, "consens-x", wait=0, root=root))
         assert code == 0
         assert wait_for(f"{directory}/pid")
     time.sleep(.5)
     # One more is refused while three run.
-    code, _ = run(start_command(directories[-1], 60, "consens-x", wait=0, root=root))
+    code, _ = run(start_command(directories[-1], "consens-x", wait=0, root=root))
     assert code == 4
     listed = run(list_command(root=root))[1].splitlines()
     assert sorted(line.split("\t")[1] for line in listed) == ["lost", "running", "running", "running"]
@@ -206,8 +221,8 @@ def test_the_supervisor_stops_a_process_and_counts_the_running_ones(shell, tmp_p
 
 def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):
     run, root = shell
-    directory = prepare(root, "33333333", "echo started; sleep 30", tmp_path.as_posix())
-    run(start_command(directory, 1, "consens-33333333", wait=0, root=root))
+    directory = prepare(root, "33333333", "echo started; sleep 30", tmp_path.as_posix(), seconds=1)
+    run(start_command(directory, "consens-33333333", wait=0, root=root))
     assert wait_for(f"{directory}/exit_code", seconds=20)
     state, _, output = parse_status(run(status_command(directory))[1])
     # coreutils timeout: 124 after its limit.

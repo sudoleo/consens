@@ -42,6 +42,15 @@ copied into the chat's private file store (AgentFiles, kind ``vm_file``, the
 turn's id) and shown under the answer, a picture as a picture, anything else
 as a download (agent-workspace.js). The VM has no public address; nothing of
 it is ever a link.
+
+Since the security audit of 2026-10-27 every command and file operation of
+the agent runs as its own user without sudo (agent_vm.agent_argv), so its
+tools reach only what that user may; a path it may not use is the agent's
+error, never the VM's failure. System packages come through
+vm_install_packages: typed apt package names that the server installs as
+root. The browser is a VM of its own (agent_browser.py), and the
+workbench's network is closed but for the package registries and what the
+user allowed for the chat (request_domain, agent_domains.py).
 """
 from __future__ import annotations
 
@@ -111,6 +120,13 @@ USER_WAIT_SECONDS = 120
 USER_POLL_SECONDS = 2
 VM_USER_HAS_BROWSER = ("The user has taken over the workspace's browser and still has it, so nothing ran in the VM: "
                        "the workspace waits for them. Call the tool again to wait on, or answer with what you have.")
+# vm_install_packages: apt's names (Debian policy: lower case, digits, + - .).
+PACKAGE = r"^[a-z0-9][a-z0-9+.-]{0,99}$"
+MAX_PACKAGES = 30
+INSTALL_TIMEOUT = 300
+# The package lists are fetched again when older than a day.
+INSTALL_COMMAND = ("find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -mmin -1440 2>/dev/null | grep -q . || "
+                   "sudo -n apt-get update -qq; sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q -- {}")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
@@ -142,6 +158,12 @@ class VmEditFileArgs(BaseModel):
                             "including whitespace and indentation; it must occur exactly once unless replace_all.")
     new_string: str = Field(max_length=WRITE_CHARS, description="The text that replaces it.")
     replace_all: bool = Field(default=False, description="Replace every occurrence of old_string.")
+
+
+class VmInstallPackagesArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    packages: list[str] = Field(min_length=1, max_length=MAX_PACKAGES, description="Ubuntu package names for apt, "
+                                "like ffmpeg or libpq-dev.")
 
 
 class VmViewImageArgs(BaseModel):
@@ -244,11 +266,12 @@ def picture_type(raw):
     return "image/webp" if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP" else None
 
 
-def picture_message(path, mime, raw):
-    """The user message that shows the agent a picture of its VM."""
+def picture_message(path, mime, raw, intro=None):
+    """The user message that shows the agent a picture of its VM (or of its
+    browser, agent_browser.SCREENSHOT_INTRO)."""
     import base64
     return {"role": "user", "content": [
-        {"type": "text", "text": PICTURE_INTRO.format(path=path)},
+        {"type": "text", "text": intro or PICTURE_INTRO.format(path=path)},
         {"type": "image_url", "image_url": {"url": f"data:{mime};base64," + base64.b64encode(raw).decode()}}]}
 
 
@@ -319,6 +342,9 @@ class VMSession:
         self.claim = None
         # The workspace's notes (agent_workspace.read_notes), with the first result.
         self.notes = None
+        # The domains the user allowed for this chat, in the workbench's
+        # policy while this message has the workspace (agent_domains.py).
+        self.domains = []
         self.backend = None
         self.state = "idle"
         # Set once the VM was ready in this message, also if it fails later:
@@ -352,10 +378,12 @@ class VMSession:
                 self.backend = self._factory()
                 if self.backend is None:
                     raise agent_vm.VMUnavailable("no provider configured")
+                from app.services import agent_domains
                 self._record()
                 cancellation.raise_if_cancelled()
-                self.backend.ensure(self.name)
-                agent_workspace.prepare(self.backend, self.name)
+                self.domains = list(self.claim.domains)
+                self.backend.ensure(self.name, agent_domains.rules(self.domains))
+                agent_workspace.prepare(self.backend, self.name, cancellation)
                 agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id,
                                               self.claim.title, self.claim.started)
                 self._still_active()
@@ -389,9 +417,9 @@ class VMSession:
         until they hand it back, at most USER_WAIT_SECONDS and never into the
         time the answer needs, then says so. A reviewer's halt ends the wait
         (the command then stops, VMTools.exec). A failed read counts as the
-        user's: the VM freezes only what already runs (workspace_vm/pause.py),
-        and a short new command finishes before it looks (measured on a
-        Sprite 2026-10-27: 0.2 s)."""
+        user's: the workbench freezes only what already runs
+        (workspace_vm/workbench/pause.py), and a short new command finishes
+        before it looks (measured on a Sprite 2026-10-27: 0.2 s)."""
         from app.services import agent_workspace
         deadline = self.clock() + USER_WAIT_SECONDS
         left = getattr(self.loop, "answer_time_left", lambda: None)()
@@ -529,6 +557,13 @@ class VMSession:
         if self.state != "idle":
             from app.services import agent_vm_time
             agent_vm_time.charge(self.loop.store, self.loop.uid, self.seconds + self.reserved)
+        if self.leased and self.domains and self.backend is not None:
+            # The chat's domains leave the policy with its message (the next
+            # claim sets its own chat's); a failure leaves them until then.
+            try:
+                self.backend.set_policy(self.name, agent_vm.WORKBENCH_RULES)
+            except Exception as exc:
+                logging.warning("Agent workbench policy reset failed category=%s", safe_exception(exc))
         if self.leased:
             from app.services import agent_workspace
             agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id)
@@ -557,6 +592,8 @@ class VMTools:
 
     def tools(self):
         from app.services import agent_github
+        from app.services.agent_browser import BrowserTools
+        from app.services.agent_domains import DomainTools
         from app.services.agent_vm_processes import ProcessTools
         # GitHub through the user's own installation of the app (agent_github.py);
         # without the app's configuration the tools say "not set up".
@@ -565,6 +602,9 @@ class VMTools:
             ReadOnlyTool("vm_exec", "Run a shell command in your Linux VM (bash, your home folder by default). "
                          "Returns stdout, stderr (their ends when long), exit code and duration.",
                          VmExecArgs, self.exec, activity=self._exec_activity, reports=True),
+            ReadOnlyTool("vm_install_packages", "Install Ubuntu packages with apt in your VM (you have no sudo). "
+                         "For Python packages use pip or uv yourself, for Node npm in your project.",
+                         VmInstallPackagesArgs, self.install, activity=self._install_activity, reports=True),
             ReadOnlyTool("vm_read_file", "Read a text file in your VM by lines.", VmReadFileArgs, self.read,
                          activity=self._path_activity, reports=True),
             ReadOnlyTool("vm_write_file", "Write a text file in your VM (creates folders, replaces the file).",
@@ -584,6 +624,8 @@ class VMTools:
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",
                             VmViewImageArgs, self.view, activity=self._path_activity, reports=True)]
               if sees_pictures(self.loop.model) else []),
+            *BrowserTools(self).tools(),
+            *DomainTools(self).tools(),
             *github,
         ]
 
@@ -612,23 +654,29 @@ class VMTools:
     def _provider(self, operation, call):
         """One call to the provider: any failure turns the VM off for the rest
         of the message and becomes the agent's short message, never a failed
-        answer. A missing file and Stop pass through."""
+        answer. A missing file and Stop pass through, and a path the agent's
+        user may not use is the agent's error."""
         try:
             return call()
         except (ProviderCancelled, agent_vm.VMFileMissing):
             raise
+        except agent_vm.VMFileRefused as exc:
+            raise ValueError(str(exc)) from None
         except Exception as exc:
             _unexpected(exc, operation)
             self.session.failed()
             raise _VMOff(VM_UNAVAILABLE) from None
 
-    def _exec(self, command, *, cwd, timeout, on_output, cancellation):
+    def _exec(self, command, *, cwd, timeout, on_output, cancellation, agent=True):
         """A command the server runs in the VM for the agent's work (a
-        process's status or wait, an import's unpacking): its run time counts
-        against today's VM time like the agent's own commands (security audit
-        2026-10-27; before, only vm_exec counted)."""
+        process's status or wait, an import's unpacking, an installation):
+        its run time counts against today's VM time like the agent's own
+        commands (security audit 2026-10-27; before, only vm_exec counted).
+        ``agent``: as the agent's user (the default), or the server's own
+        step as the provider's user."""
         outcome = self._provider("exec", lambda: self.session.backend.exec(
-            self.session.name, command, cwd=cwd, timeout=timeout, on_output=on_output, cancellation=cancellation))
+            self.session.name, command, cwd=cwd, timeout=timeout, on_output=on_output, cancellation=cancellation,
+            agent=agent))
         with self.session._lock:
             self.session.seconds += outcome.seconds
         return outcome
@@ -714,6 +762,44 @@ class VMTools:
                   "stdout": output.for_model("stdout"), "stderr": output.for_model("stderr")}
         if outcome.timed_out:
             result["note"] = f"The command was stopped after its time limit of {timeout} seconds."
+        report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
+                "duration_ms": result["duration_ms"]})
+        return self.session.announce(result)
+
+    def install(self, args, *, cancellation, report=None):
+        """apt as root for the agent, which has no sudo: only package names
+        reach the command, each checked and quoted, after ``--``."""
+        import shlex
+        report = report or (lambda fields: None)
+        packages = []
+        for name in args.packages:
+            name = name.strip()
+            if not re.fullmatch(PACKAGE, name):
+                raise ValueError(f"{name!r} is no apt package name (lower case letters, digits, + - .).")
+            if name not in packages:
+                packages.append(name)
+        self._start(cancellation)
+        timeout = self._timeout(INSTALL_TIMEOUT)
+        output = _Output()
+        reported = [self.session.clock()]
+
+        def on_output(stream, chunk):
+            output.add(stream, chunk)
+            now = self.session.clock()
+            if now - reported[0] >= REPORT_SECONDS:
+                reported[0] = now
+                report(output.shown())
+        report({"started_at": _now()})
+        outcome = self._exec(INSTALL_COMMAND.format(" ".join(shlex.quote(name) for name in packages)),
+                             cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=on_output,
+                             cancellation=cancellation, agent=False)
+        with self.session._lock:
+            self.session.commands += 1
+        result = {"packages": packages, "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
+                  "duration_ms": int(outcome.seconds * 1000), "output": output.for_model("stdout"),
+                  "stderr": output.for_model("stderr")}
+        if outcome.timed_out:
+            result["note"] = f"The installation was stopped after {timeout} seconds."
         report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                 "duration_ms": result["duration_ms"]})
         return self.session.announce(result)
@@ -884,6 +970,9 @@ class VMTools:
             args.command[:COMMAND_VIEW_CHARS - 1] + "…"
         cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
         return {"command": command, "cwd": cwd, **self._outcome(result)}
+
+    def _install_activity(self, args, result):
+        return {"packages": [str(name)[:100] for name in args.packages[:MAX_PACKAGES]], **self._outcome(result)}
 
     def _path_activity(self, args, result):
         try:

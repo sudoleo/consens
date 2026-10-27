@@ -1,0 +1,53 @@
+#!/bin/bash
+# consens.io workbench: one command of the agent (agent_vm.agent_argv,
+# docs/agent-mode.md "Arbeitsplatz"). Started as root by the provider's user
+# (sudo -n), never by the agent, whose user cannot open this folder:
+#   agent-run <seconds> <folder> <program> [args...]
+# 1. joins the agent's cgroup, which a takeover freezes whole (pause.py);
+# 2. enters a mount namespace of its own without the provider's management
+#    socket (/.sprite/api.sock: checkpoints, services, the VM's lifetime),
+#    its checkpoints and its logs; the runtimes in /.sprite/bin stay;
+# 3. becomes the agent's user with no way back to root (setpriv
+#    --no-new-privs: no sudo, no setuid program) in a clean environment;
+# 4. goes to the folder and runs the program under coreutils timeout.
+# Exit 125: the namespace could not be made, so nothing ran.
+set -u
+user=agent
+home=/home/agent
+group=/sys/fs/cgroup/consens-agent
+
+if [ "${1:-}" = "--inside" ]; then
+  shift
+  # Only in a namespace of its own: here the mounts would hide the socket
+  # from the provider's own programs as well.
+  if [ "$(readlink /proc/self/ns/mnt)" = "$(readlink /proc/1/ns/mnt)" ]; then
+    echo "agent-run: not in a namespace of its own" >&2
+    exit 125
+  fi
+  seconds=$1
+  folder=$2
+  shift 2
+  mount --bind /dev/null /.sprite/api.sock || exit 125
+  for hidden in /.sprite/checkpoints /.sprite/logs; do
+    if [ -d "$hidden" ]; then
+      mount -t tmpfs -o ro,nosuid,nodev,noexec,size=4k,mode=0755 consens-hidden "$hidden" || exit 125
+    fi
+  done
+  umask 022
+  exec setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs --inh-caps=-all -- \
+    /usr/bin/env -i HOME="$home" USER="$user" LOGNAME="$user" SHELL=/bin/bash LANG=C.UTF-8 TERM=dumb \
+    PATH="$home/.local/bin:/.sprite/bin:/usr/local/bin:/usr/bin:/bin" \
+    /bin/bash -c 'cd -- "$1" 2>/dev/null || { echo "No such folder: $1" >&2; exit 1; }
+seconds=$2; shift 2; exec timeout --kill-after=5 "$seconds" "$@"' agent-run "$folder" "$seconds" "$@"
+fi
+
+if [ "$#" -lt 3 ] || [ "$(id -u)" != 0 ] || ! id -u "$user" >/dev/null 2>&1; then
+  echo "agent-run: usage: sudo agent-run <seconds> <folder> <program> [args...]" >&2
+  exit 125
+fi
+# The cgroup v2 freezer where the VM has one; pause.py stops the user's
+# processes one by one where it has not.
+if mkdir -p "$group" 2>/dev/null && [ -e "$group/cgroup.freeze" ]; then
+  echo $$ > "$group/cgroup.procs" 2>/dev/null || true
+fi
+exec unshare --mount --propagation private -- /bin/bash "$0" --inside "$@"

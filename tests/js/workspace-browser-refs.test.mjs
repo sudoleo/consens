@@ -1,5 +1,5 @@
 /**
- * The workspace browser's refs (app/services/workspace_vm/browser.py,
+ * The workspace browser's refs (app/services/workspace_vm/browser/browser.py,
  * SNAPSHOT_JS): a ref stays with its element and is never given twice, so a
  * ref from an older read names its element or none, never another one. Until
  * 2026-10-27 every read numbered the page from e1 again.
@@ -12,7 +12,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SOURCE = readFileSync(path.join(ROOT, "app/services/workspace_vm/browser.py"), "utf8");
+const SOURCE = readFileSync(path.join(ROOT, "app/services/workspace_vm/browser/browser.py"), "utf8");
 const SNAPSHOT_JS = SOURCE.match(/SNAPSHOT_JS = r"""\n([\s\S]*?)\n"""/)[1];
 
 function page(body) {

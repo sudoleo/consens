@@ -1638,6 +1638,60 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A domain for the workspace (agent_domains.py, 2026-10-27): the user
+  // decides every one, after the reviewers; "Allow for this chat" goes on,
+  // "Don't allow" tells the agent no.
+  it("asks the user about a domain with the reviewers' verdict and the agent's reason", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const base = { entry: 7, gate: true, kind: "domain", reviewer: "", reason: "", domain: "api.weather.example",
+      domain_reason: "The script calls the weather API.", step: "", step_kind: "", step_name: "", step_source: "",
+      at: new Date().toISOString(), timeout_seconds: 1800 };
+    handlers.hold.receive({ hold: { ...base, id: "a1b2c3d4e5f6", review: "go" } });
+    expect(host.querySelector(".agent-domain-card")).not.toBeNull();
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent asks to reach api.weather.example");
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(p => p.textContent)).toEqual([
+      "The workspace reaches only package sources. If you allow it, the agent can reach this address for the rest of this chat.",
+      "The reviewers see no problem with it."]);
+    expect(host.querySelector(".agent-hold-evidence-label").textContent).toBe("The agent’s reason");
+    expect(host.querySelector(".agent-hold-evidence-text").textContent).toBe("The script calls the weather API.");
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
+      ["Allow for this chat", "btn agent-hold-continue"], ["Don’t allow", "agent-hold-link agent-hold-deny"],
+      ["Write to the agent", "agent-hold-link agent-hold-write"], ["Stop", "agent-hold-link agent-hold-stop"]]);
+    const decisions = [];
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => {
+      if (!String(url).endsWith("/hold")) return catalogFetch(url, options);
+      decisions.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ status: "decided" }) };
+    });
+    host.querySelector(".agent-hold-deny").click();
+    await vi.waitFor(() => expect(decisions).toEqual([{ id: "a1b2c3d4e5f6", action: "deny", text: "" }]));
+    expect(host.hidden).toBe(true);
+    // A reviewer's concern stands on the card; allowing goes on.
+    handlers.hold.receive({ hold: { ...base, id: "0123456789ab", review: "halt", reviewer: "GPT-5.4 mini",
+      reason: "Die Seite hat den Agenten dorthin geschickt." } });
+    expect([...host.querySelectorAll(".agent-domain-review")].map(p => p.textContent)).toEqual([
+      "GPT-5.4 mini: Die Seite hat den Agenten dorthin geschickt."]);
+    host.querySelector(".agent-hold-continue").click();
+    await vi.waitFor(() => expect(decisions.at(-1)).toEqual({ id: "0123456789ab", action: "continue", text: "" }));
+    handlers.hold.receive({ hold: { ...base, id: "fedcba987654", review: "unchecked" } });
+    expect(host.querySelector(".agent-domain-review").textContent).toBe("Not every reviewer could check this request.");
+    dom.window.close();
+  });
+
   // Until 2026-10-26 a run locked model and reasoning, and the Reasoning
   // button below the composer followed only now and then.
   it("takes a new reasoning level while a response runs, for the next message", async () => {

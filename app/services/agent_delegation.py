@@ -87,7 +87,7 @@ THINKING_UPDATE_SECONDS = 3
 # its fourth unchanged plan.
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
-                              "vm_view_image", "update_plan"})
+                              "vm_view_image", "update_plan", "browser"})
 # Once a tool's result may have brought outside content into the agent's
 # context (model answers and their sources, pages, emails, calendars, files,
 # a VM's output or the workspace's notes, a worker's report), the message's
@@ -500,6 +500,9 @@ class DelegationLoop(AgentLoop):
         # allowed providers). A setting, so the prompt stays cacheable.
         self.vm_tools = None
         self.plan_tools = None
+        # Domains the user allowed on a card in this message: request_domain
+        # runs only for these (_domain_wait, agent_domains.py).
+        self.allowed_domains = set()
         from app.services import agent_vm
         # Without a provider (no SPRITES_TOKEN) the agent is not told of a
         # VM that would answer every call with "not available".
@@ -686,8 +689,8 @@ class DelegationLoop(AgentLoop):
         return None
 
     def _show_pictures(self):
-        """The pictures vm_view_image read in this batch follow its results
-        as user messages with the image; older ones leave the view
+        """The pictures vm_view_image read and the browser's screenshots of
+        this batch follow its results as user messages with the image; older ones leave the view
         (agent_compaction.older_pictures)."""
         if self.vm_tools is None:
             return
@@ -696,8 +699,8 @@ class DelegationLoop(AgentLoop):
             return
         from app.services import agent_compaction
         from app.services.agent_vm_tools import picture_message
-        for path, mime, raw in pictures:
-            self.messages.append(picture_message(path, mime, raw))
+        for path, mime, raw, *intro in pictures:
+            self.messages.append(picture_message(path, mime, raw, *intro))
         for index, message in agent_compaction.older_pictures(self.messages, self.turn_start):
             self.messages[index] = message
 
@@ -1742,10 +1745,13 @@ class DelegationLoop(AgentLoop):
         self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                                 **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
                                                 **({"gate": True} if hold.get("gate") else {}),
+                                                **({"domain": hold["domain"]} if hold.get("domain") else {}),
                                                 "halt": hold["kind"], "state": "waiting"}))
         if self.work_log is not None:
             before = " before its calls ran" if details.get("gate") else ""
             self.work_log.app("paused", (
+                f"The agent asks to reach {details['domain']} (entry {details['entry']}): the user decides."
+                if details.get("domain") else
                 f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
                 f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
                 f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."))
@@ -1805,6 +1811,71 @@ class DelegationLoop(AgentLoop):
         gate.decision = "steer" if (yield from self._hold_wait()) == "steer" else "continue"
         return gate.decision
 
+    def _domain_wait(self, gate, call):
+        """A request for a domain (request_domain) waits for the reviewers'
+        verdicts on its step, like any outward call, and then always for the
+        user: never allowed by the app, nor by the reviewers, nor because the
+        user's words named the domain (Max, 2026-10-27). The card shows the
+        domain, the agent's reason and what the reviewers made of it
+        (request_hold with ``domain``). Returns "allow" (the user let it,
+        the domain is in ``allowed_domains``), "deny", "steer" (the user
+        wrote to the agent) or "run" for a call whose arguments are not
+        valid (the tool then says why). Stop ends the response."""
+        from app.services import agent_domains
+        asked = agent_domains.requested(call)
+        if asked is None:
+            return "run"
+        domain, reason = asked
+        if domain in self.allowed_domains or agent_domains.open_already(domain):
+            return "allow"
+        try:
+            chat = self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}
+            if domain in agent_domains.granted(chat):
+                self.allowed_domains.add(domain)
+                return "allow"
+        except Exception as exc:
+            logging.info("Agent domains unreadable category=%s", safe_exception(exc))
+        auditor = self.comparison.auditor if self.comparison is not None else None
+        verdict, halts = "unchecked", []
+        if gate is not None and auditor is not None and call["id"] in gate.call_ids:
+            announced = False
+            while True:
+                result = auditor.gate_result(gate)
+                if result is not None:
+                    break
+                if not announced:
+                    announced = True
+                    yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
+                                         "text": "The reviewers check this request before you decide."})
+                auditor.gate_wait(.2)
+                if self.watch_error:
+                    raise self.watch_error
+                self.cancellation.raise_if_cancelled()
+                yield from self._events()
+            verdict, halts = result
+        details = {"reviewer": "", "provider": "", "kind": "domain", "reason": "", "gate": True,
+                   "entry": gate.entry if gate is not None else None, "step": "", "step_name": "",
+                   "step_kind": "", "step_source": "", "domain": domain, "domain_reason": reason,
+                   "review": verdict if verdict in {"go", "halt"} else "unchecked"}
+        if halts:
+            shown = auditor.gate_hold(gate, halts)
+            details.update(reviewer=shown.get("reviewer", ""), provider=shown.get("provider", ""),
+                           reason=shown.get("reason", ""),
+                           **({"reasons": shown["reasons"]} if shown.get("reasons") else {}))
+        while True:
+            # A reviewer's ordinary halt may be open: it comes first.
+            decision = yield from self._hold_wait()
+            self.cancellation.raise_if_cancelled()
+            if decision == "steer" or self.closed.is_set():
+                return "steer"
+            if self.request_hold(details):
+                break
+        decision = yield from self._hold_wait()
+        if decision == "continue":
+            self.allowed_domains.add(domain)
+            return "allow"
+        return "steer" if decision == "steer" else "deny"
+
     def _receive_hold(self, root):
         """The user's decision on the open hold, from the run's root (the watcher)."""
         decision = (root or {}).get("hold_decision") or {}
@@ -1844,6 +1915,7 @@ class DelegationLoop(AgentLoop):
                                                 "state": decision}))
         if self.work_log is not None:
             self.work_log.app("decision", {"continue": "The user let the work go on.",
+                                           "deny": "The user did not allow it.",
                                            "steer": "The user let the work go on with a message.",
                                            "stop": "The user stopped the work.",
                                            "timeout": "No decision in 30 minutes: the response stopped."}[decision])
@@ -2461,7 +2533,22 @@ class DelegationLoop(AgentLoop):
                                 last_accepted = False
                                 continue
                             gate = getattr(value, "gate", None)
-                            if gate is not None and call["id"] in gate.call_ids \
+                            if name == "request_domain":
+                                # The user decides every domain (_domain_wait).
+                                decision = yield from self._domain_wait(gate, call)
+                                if decision == "steer":
+                                    steered = True
+                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
+                                                           "content": json.dumps({"error": HOLD_STEERED})}
+                                    continue
+                                if decision == "deny":
+                                    from app.services.agent_domains import DOMAIN_DENIED, requested
+                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
+                                                           "content": json.dumps({"error": DOMAIN_DENIED.format(
+                                                               domain=requested(call)[0])})}
+                                    last_accepted = False
+                                    continue
+                            elif gate is not None and call["id"] in gate.call_ids \
                                     and (yield from self._gate_wait(gate)) == "steer":
                                 # Not run: the user wrote to the agent instead.
                                 steered = True

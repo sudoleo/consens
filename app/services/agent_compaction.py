@@ -46,10 +46,12 @@ MIN_GAIN_CHARS = 30_000
 # A result this short stays as it is: its stub would save next to nothing.
 MIN_RESULT_CHARS = 2_000
 TAIL_CHARS = 600
-COMPACTABLE = frozenset({"vm_exec", "vm_read_file", "vm_start_process", "vm_process_output", "vm_stop_process"})
+COMPACTABLE = frozenset({"vm_exec", "vm_read_file", "vm_start_process", "vm_process_output", "vm_stop_process",
+                         "vm_install_packages", "browser"})
 OUTPUT_CLEARED = ("Earlier output cleared to save context; only its end is kept. Run the command again if you "
                   "need all of it.")
 CONTENT_CLEARED = "File content cleared to save context. Read the file again if you need it."
+PAGE_CLEARED = "Earlier page text cleared to save context; read the page again if you need it."
 
 # The work record (``work_record``): at most RECORD_CHARS, each call's line
 # at most RECORD_LINE_CHARS; a longer record keeps its first RECORD_HEAD
@@ -141,6 +143,12 @@ def stub(name, content):
         kept = {key: result[key] for key in ("path", "first_line", "last_line", "total_lines", "binary", "bytes")
                 if key in result}
         return json.dumps({**kept, **inputs, "compacted": CONTENT_CLEARED}, ensure_ascii=False)
+    if name == "browser":
+        # The page's head (title, address) says where it was; the rest is read again.
+        kept = {key: result[key] for key in ("action", "error", "note") if key in result}
+        head = "\n".join(str(result.get("page") or "").split("\n")[:2])
+        return json.dumps({**kept, **({"page_start": head} if head else {}), **inputs, "compacted": PAGE_CLEARED},
+                          ensure_ascii=False)
     kept = {key: result[key] for key in ("exit_code", "timed_out", "duration_ms", "cwd", "error", "note", "id",
                                          "status", "max_seconds") if key in result}
     kept.update(inputs)
@@ -229,7 +237,7 @@ def describe(name, arguments, result):
         line = f"vm_exec $ {_short(args.get('command'), 200)}"
         cwd = data.get("cwd") or args.get("cwd")
         # Said only when it is not where commands start: home, or a chat's folder.
-        if cwd and not re.fullmatch(r"/home/sprite(/chats/[A-Za-z0-9_-]+)?", str(cwd)):
+        if cwd and not re.fullmatch(r"/home/(agent|sprite)(/chats/[A-Za-z0-9_-]+)?", str(cwd)):
             line += f" (in {cwd})"
         if data.get("timed_out"):
             line += f" -> timed out after {_seconds(data.get('duration_ms'))}"
@@ -270,6 +278,21 @@ def describe(name, arguments, result):
         line = f"vm_view_image {path}"
     elif name == "vm_share_file":
         line = f"vm_share_file {path} -> the user got {(data.get('file') or {}).get('name') or 'it'}"
+    elif name == "browser":
+        target = next((args[key] for key in ("url", "ref", "key", "file") if isinstance(args.get(key), str)
+                       and args[key].strip()), "")
+        line = f"browser {args.get('action') or ''} {_short(target, 200)}".rstrip()
+        title = str(data.get("page") or "").split("\n", 1)[0]
+        if title.startswith("Page: "):
+            line += f" -> {_short(title[6:], 120)}"
+    elif name == "vm_install_packages":
+        line = f"vm_install_packages {' '.join(str(n) for n in (args.get('packages') or [])[:30])}"
+        if "exit_code" in data:
+            line += f" -> exit {data['exit_code']}"
+    elif name == "request_domain":
+        line = f"request_domain {_short(args.get('domain'), 120)}"
+        if data.get("status"):
+            line += f" -> {data['status']}"
     else:
         detail = next((args[key] for key in ("task", "question", "repo", "url", "title", "query", "setting")
                        if isinstance(args.get(key), str) and args[key].strip()), "")

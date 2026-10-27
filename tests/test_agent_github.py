@@ -26,7 +26,7 @@ from app.services.agent_github import (NO_ACCESS, NO_PUSH, NOT_CONNECTED, NOT_SE
                                        GitHubConnections, GithubImportArgs, PullRequests, blob_sha, changes_command,
                                        parse_changes, unpack_command)
 from test_agent_runs import AUTH, UID, api, store  # noqa: F401  (fixtures)
-from test_agent_vm import NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import NO_NOTES, SETUP, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
 
 SHA = "a1b2c3d4e5f6" + "0" * 28
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -89,6 +89,15 @@ class FakeGitHub:
             return httpx.Response(201, json={"token": f"ghs_{self.tokens}", "expires_at": "2099-01-01T00:00:00Z"})
         if path == "/repos/maxl/app":
             return httpx.Response(200, json={"default_branch": "main"})
+        # Without a connection only what is public, and without a token.
+        if path == "/repos/pub/lib" and not request.headers.get("authorization"):
+            return httpx.Response(200, json={"full_name": "pub/lib", "private": False, "default_branch": "trunk"})
+        if path == "/repos/pub/lib/commits/trunk":
+            return httpx.Response(200, json={"sha": SHA})
+        if path == f"/repos/pub/lib/tarball/{SHA}":
+            return httpx.Response(302, headers={"Location": f"https://codeload.github.com/pub/lib/legacy.tar.gz/{SHA}"})
+        if path in {"/repos/org/hidden", "/repos/nobody/missing"}:
+            return httpx.Response(404, json={"message": "Not Found"})
         if path == "/repos/maxl/app/commits/main":
             return httpx.Response(200, json={"sha": SHA})
         if path == f"/repos/maxl/app/tarball/{SHA}":
@@ -125,8 +134,9 @@ def github(monkeypatch):
     fake = FakeGitHub()
     real = GitHubApp.__init__
 
-    def offline(self, config=None, *, transport=None, clock=None):
-        real(self, config, transport=httpx.MockTransport(fake), clock=clock or (lambda: 1_800_000_000.0))
+    def offline(self, config=None, *, transport=None, clock=None, public=False):
+        real(self, config, transport=httpx.MockTransport(fake), clock=clock or (lambda: 1_800_000_000.0),
+             public=public)
     monkeypatch.setattr(GitHubApp, "__init__", offline)
     return fake
 
@@ -206,6 +216,8 @@ def test_without_the_app_github_is_not_set_up(gh_api, fake_vm, monkeypatch):
     client, store, _ = gh_api
     for key in ENV:
         monkeypatch.delenv(key, raising=False)
+    # Not public either (here without a request to GitHub).
+    monkeypatch.setattr(agent_github.GitHubTools, "_public", lambda self, repo: None)
     assert client.post("/agent/github/connect", headers=AUTH).status_code == 503
     assert client.get("/agent/github/connection", headers=AUTH).json()["configured"] is False
     script = Agent([[("github_import", {"repo": "maxl/app"})]])
@@ -232,7 +244,7 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     loop = vm_loop(store, script)
     events = list(loop.run())
     imported, hidden = results(loop)
-    assert imported == {"repo": "maxl/app", "ref": "main", "commit": SHA, "path": "/home/sprite/repos/app",
+    assert imported == {"repo": "maxl/app", "ref": "main", "commit": SHA, "path": "/home/agent/repos/app",
                         "files": 2, "bytes": len(ARCHIVE), "chat_folder": agent_vm.chat_dir(loop.chat_id),
                         "workspace_notes": NO_NOTES}
     assert hidden == {"error": NO_ACCESS.format(repo="org/hidden")}
@@ -245,15 +257,33 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     name = agent_vm.workspace_name(UID)
     archive = f"/tmp/consens-import-{SHA[:12]}.tar.gz"
     assert fake_vm.vms[name]["files"][archive] == ARCHIVE
-    command = next(call[2] for call in fake_vm.calls if call[0] == "exec")
-    assert command == unpack_command(archive, "/home/sprite/repos/app", "maxl/app", "main", SHA)
+    command = next(call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] != SETUP)
+    assert command == unpack_command(archive, "/home/agent/repos/app", "maxl/app", "main", SHA)
+    # Written and unpacked as the agent's user, never through the provider's file API.
+    assert ("write", archive) not in fake_vm.server_files and command not in fake_vm.server
     # The unpacking ran in the VM: its time counts (security audit 2026-10-27).
     assert loop.vm_tools.session.seconds == .5
     everything = repr(fake_vm.calls) + repr(fake_vm.vms)
     assert "ghs_" not in everything and "ghu_" not in everything and "client-secret" not in everything
     assert [r[3] for r in github.requests if r[1] == "codeload.github.com"] == [None]
     done = [e for e in tool_events(events, "github_import") if e["status"] == "succeeded"][0]
-    assert done["repo"] == "maxl/app" and done["path"] == "/home/sprite/repos/app"
+    assert done["repo"] == "maxl/app" and done["path"] == "/home/agent/repos/app"
+
+
+def test_a_public_repository_comes_in_without_a_connection_or_a_token(store, fake_vm, github):
+    """Since 2026-10-27 the workbench does not reach github.com: a public
+    repository comes through github_import too, without the user's
+    connection; a private or missing one says how to connect."""
+    script = Agent([[("github_import", {"repo": "pub/lib"})], [("github_import", {"repo": "nobody/missing"})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    imported, missing = results(loop)
+    assert imported["repo"] == "pub/lib" and imported["ref"] == "trunk" and imported["commit"] == SHA
+    assert imported["path"] == "/home/agent/repos/lib"
+    assert missing == {"error": agent_github.NOT_CONNECTED}
+    # No token was made or sent for either.
+    assert not [r for r in github.requests if r[2].endswith("/access_tokens")]
+    assert {r[3] for r in github.requests if r[1] == "api.github.com"} == {None}
 
 
 def test_an_app_removed_on_github_shows_as_not_connected(store, fake_vm, github):
@@ -282,7 +312,7 @@ def test_import_arguments_are_checked_before_anything_runs(store, fake_vm, githu
 
 RAW = ("consens-raw\0:100644 100644 aaaa bbbb M\0src/main.py\0:000000 100755 0000 cccc A\0bin/run\0"
        ":100644 000000 dddd 0000 D\0old.txt\0consens-numstat\0" "3\t1\tsrc/main.py\0" "2\t0\tbin/run\0" "0\t5\told.txt\0")
-PATH = "/home/sprite/repos/app"
+PATH = "/home/agent/repos/app"
 
 
 @pytest.mark.skipif(not all(shutil.which(tool) for tool in ("bash", "git", "tar")), reason="needs bash, git, tar")

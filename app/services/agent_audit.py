@@ -155,13 +155,19 @@ HALT_QUOTE_CHARS = 400
 # What the card shows of an entry without such a quote.
 HALT_STEP_CHARS = 300
 
-# Before a call that acts outside the workspace (agent_gate.outward), each
+# Before a call that acts outside the workspace (agent_gate.outward: browser
+# actions that send or go somewhere, a request for a domain), each
 # reviewer that can answer gets one gate round, without web search: the
 # step's calls, which run only once every one of them said "go" (since
 # 2026-10-27). A halt, or no reviewer able to answer, asks the user.
 GATE_NOTE = ("Before it runs: the agent's step in entry {entry} calls these, which act outside its workspace and "
              "have not run yet:\n{calls}\nThey run only once every reviewer let them. Reply with your marks and "
              "\"gate\": \"go\", or with a halt for entry {entry}.")
+# A request for a domain (agent_domains.py) goes to the user whatever the
+# reviewers say: their verdict is what the user reads next to it.
+GATE_DOMAIN_NOTE = ("request_domain asks the user to let the agent's workspace reach that domain for this chat; the "
+                    "user decides in any case and sees your verdict. Say go when it fits the user's task, or halt "
+                    "with your reason.")
 GATE_GO = frozenset({"go", "run", "allow", "allowed", "yes", "ok", "continue", "proceed"})
 # The card's kind when no reviewer could answer (AnswerAudit.gate_hold).
 GATE_UNCHECKED = "unchecked"
@@ -261,8 +267,11 @@ BRIEF_HEAD = ("The app's instructions to the agent ({chars} characters of the ap
 BRIEF_TOOLS = (
     ("read_source", "read_source opens a web page that the user or a search result named."),
     ("prepare_", "A prepare_ tool changes nothing by itself: the user confirms or dismisses it on a card."),
-    ("vm_", "The VM is the agent's own Linux sandbox with internet access: installing packages and fetching "
-            "from the web there is normal work, the user's own systems are not in it."),
+    ("vm_", "The VM is the agent's own Linux workbench, as a user without sudo: installing packages there is "
+            "normal work. It reaches package registries only, another domain after the user allowed it "
+            "(request_domain); the user's own systems are not in it."),
+    ("browser", "browser acts in the user's Chrome on a computer of its own, signed in where the user signed in: "
+                "open, click, Enter and upload act outside and wait for the reviewers before they run."),
     ("update_memory", "update_memory saves lasting facts the user states about themselves, each with a quote of "
                       "the user's words, as the user allowed in their settings."),
     ("update_plan", "update_plan keeps the plan of a long task, as the app asks the agent to."),
@@ -579,7 +588,10 @@ class Gate:
     def note(self):
         lines = [_call_line((call.get("function") or {}).get("name") or "", (call.get("function") or {}).get("arguments"))
                  for call in self.calls]
-        return GATE_NOTE.format(entry=self.entry, calls=_dumps(lines))
+        note = GATE_NOTE.format(entry=self.entry, calls=_dumps(lines))
+        if any((call.get("function") or {}).get("name") == "request_domain" for call in self.calls):
+            note += "\n" + GATE_DOMAIN_NOTE
+        return note
 
 
 # What a call shows of itself on the halt's card: the command, the address or

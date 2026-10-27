@@ -1,14 +1,16 @@
 #!/bin/bash
-# consens.io workspace: starts the screen (Xvfb), a window manager, Chrome
+# consens.io browser VM: starts the screen (Xvfb), a window manager, Chrome
 # with its lasting profile and the VNC server, each unless it already runs.
 # They outlive this command and the VM's short pauses; after a long sleep the
 # VM has stopped them and the next call starts them again, sign-ins intact.
 # Every daemon gets its own output and none of this script's descriptors
 # (8>&-): an inherited pipe would keep the caller waiting, an inherited lock
-# would block the next call.
-# None of them is the agent's: a takeover freezes what carries its mark
-# (pause.py), and the user is in this browser then.
-unset CONSENS_AGENT
+# would block the next call. CDP listens on 127.0.0.1 only, the VNC server on
+# no network at all: a Unix socket in this folder (vnc.sock), which only the
+# provider's user opens (relay.py). -rfbport 0 alone still left [::]:5900;
+# -rfbportv6 -1 ends that, -noipv6 does nothing in x11vnc 0.9.17, and
+# -localhost took the VM's fdf::1, which /etc/hosts also names localhost
+# (measured on Sprites 2026-10-27).
 dir="$HOME/.consens/browser"
 profile="$dir/profile"
 mkdir -p "$profile/Default"
@@ -36,9 +38,11 @@ if ! runs "^/opt/google/chrome/chrome .*user-data-dir=$profile"; then
     >"$dir/chrome.log" 2>&1 </dev/null 8>&- &
 fi
 if ! runs "^x11vnc -display :1 "; then
-  setsid nohup x11vnc -display :1 -localhost -rfbport 5900 -shared -forever -nopw -quiet -noxdamage \
+  rm -f "$dir/vnc.sock"
+  setsid nohup x11vnc -display :1 -unixsock "$dir/vnc.sock" -rfbport 0 -rfbportv6 -1 -shared -forever -nopw \
+    -quiet -noxdamage \
     >"$dir/vnc.log" 2>&1 </dev/null 8>&- &
 fi
-for _ in $(seq 150); do listens 9222 && listens 5900 && exit 0; sleep 0.1; done
+for _ in $(seq 150); do listens 9222 && [ -S "$dir/vnc.sock" ] && exit 0; sleep 0.1; done
 echo "The browser did not start." >&2
 exit 1

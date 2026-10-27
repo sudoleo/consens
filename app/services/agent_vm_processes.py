@@ -9,6 +9,12 @@ background process here runs under a small supervisor script in the VM
 refreshed every HEARTBEAT_SECONDS, released when the process ends. A crashed
 supervisor's hold expires by itself.
 
+Since the security audit of 2026-10-27 the supervisor is the server's: it
+runs as the provider's user, its files lie in the provider's home, which the
+agent cannot open, and the socket stays out of the agent's reach. Only the
+command itself runs as the agent's user, through agent-run like every other
+command of the agent (``launch.sh``, agent_vm.agent_argv).
+
 Costs are capped: a process ends after ``max_seconds`` (default
 DEFAULT_SECONDS, at most MAX_SECONDS; coreutils ``timeout`` in the VM, so
 also without the backend), and at most MAX_RUNNING run at once. That bounds
@@ -16,9 +22,9 @@ what the VM can cost after the message is done to MAX_RUNNING x MAX_SECONDS
 of awake time. A process outlives its message: the next one finds it by its
 id (the work record names it, agent_compaction.work_record).
 
-Everything lives in ``~/.consens/processes/<id>``: the command, its combined
-output (``output.log``), the supervisor's pid file and, once it ended, its
-exit code. The VM holds no secret, so neither does any of it.
+Everything lives in PROCESSES_DIR/<id>: the command, its combined output
+(``output.log``), the supervisor's pid file and, once it ended, its exit
+code. The VM holds no secret, so neither does any of it.
 """
 from __future__ import annotations
 
@@ -33,7 +39,7 @@ from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
 
 HOME = agent_vm.HOME
-PROCESSES_DIR = HOME + "/.consens/processes"
+PROCESSES_DIR = agent_vm.SERVER_HOME + "/.consens/processes"
 DEFAULT_SECONDS = 1800
 MAX_SECONDS = 3600
 MAX_RUNNING = 3
@@ -46,15 +52,15 @@ ID = r"^[a-f0-9]{8}$"
 # The first line of every status: "consens-process <state> <bytes>".
 STATUS_LINE = re.compile(r"^consens-process (running|lost|-?\d+) (\d+)$")
 
-# The supervisor of one process (``bash run.sh <dir> <seconds> <task>``):
-# the command under its time limit, a Tasks API hold while it runs, its exit
-# code once it ended, then the hold released.
+# The supervisor of one process (``bash run.sh <dir> <task>``): the agent's
+# command (``launch.sh``, under its time limit), a Tasks API hold while it
+# runs, its exit code once it ended, then the hold released.
 RUNNER = r"""#!/bin/bash
 # consens.io: one background process of the agent (agent_vm_processes.py).
-dir="$1"; cap="$2"; task="$3"
+dir="$1"; task="$2"
 api() { curl -s --max-time 5 --unix-socket /.sprite/api.sock -H 'Content-Type: application/json' "$@" >/dev/null 2>&1; }
 hold() { api -X PUT "http://sprite/v1/tasks/$task" -d '{"expire": "%(expire)s"}'; }
-timeout --kill-after=5 "$cap" bash "$dir/command.sh" > "$dir/output.log" 2>&1 < /dev/null &
+bash "$dir/launch.sh" > "$dir/output.log" 2>&1 < /dev/null &
 child=$!
 echo "$child" > "$dir/pid"
 hold
@@ -99,11 +105,12 @@ def process_dir(process_id):
     return f"{PROCESSES_DIR}/{process_id}"
 
 
-def command_script(command, cwd):
-    """``command.sh``: the login environment, quietly (agent_vm.SHELL_PRELUDE),
-    then the command as written in ``cwd``."""
-    return ('for __profile in /etc/profile "$HOME/.profile"; do [ -r "$__profile" ] && . "$__profile"; '
-            f'done >/dev/null 2>&1\ncd {shlex.quote(cwd)} || exit 1\n{command}\n')
+def launch_script(command, cwd, seconds):
+    """``launch.sh``: the command as the agent's user in ``cwd``, with the
+    login environment and under its time limit (agent_vm.wrapped_command),
+    as one line of quoted words."""
+    argv = agent_vm.wrapped_command(command, seconds, True, cwd=cwd)
+    return "exec " + " ".join(shlex.quote(arg) for arg in argv) + "\n"
 
 
 def status_command(directory, chars=OUTPUT_CHARS, wait=0):
@@ -118,24 +125,31 @@ def status_command(directory, chars=OUTPUT_CHARS, wait=0):
             f"tail -c {int(chars)} \"$dir/output.log\" 2>/dev/null; true")
 
 
-def start_command(directory, seconds, task, *, wait=2, root=PROCESSES_DIR):
+def start_command(directory, task, *, wait=2, root=PROCESSES_DIR):
     """Refuses (exit 4) at MAX_RUNNING running processes, else starts the
-    supervisor detached from this command and reports after ``wait``."""
+    supervisor detached from this command (its own session, ``sid``) and
+    reports after ``wait``."""
     d = shlex.quote(directory)
     count = (f"running=0; for p in {shlex.quote(root)}/*/; do [ -f \"$p/pid\" ] && [ ! -f \"$p/exit_code\" ] "
              "&& kill -0 \"$(cat \"$p/pid\")\" 2>/dev/null && running=$((running+1)); done; "
              f"if [ \"$running\" -ge {MAX_RUNNING} ]; then exit 4; fi; ")
-    return (count + f"setsid nohup bash {d}/run.sh {d} {int(seconds)} {shlex.quote(task)} >/dev/null 2>&1 "
-            "< /dev/null & " + status_command(directory, wait=wait))
+    return (count + f"setsid nohup bash {d}/run.sh {d} {shlex.quote(task)} >/dev/null 2>&1 "
+            f"< /dev/null & echo $! > {d}/sid; " + status_command(directory, wait=wait))
 
 
 def stop_command(directory, task):
+    """TERM to the command (sudo hands it on to coreutils ``timeout``, which
+    ends the command's process group); after STOP_GRACE_SECONDS KILL to
+    everything in the supervisor's session, as root where there is sudo:
+    the command runs as the agent's user."""
     d = shlex.quote(directory)
     return (f"dir={d}; [ -d \"$dir\" ] || exit 5; pid=$(cat \"$dir/pid\" 2>/dev/null); "
+            "sid=$(cat \"$dir/sid\" 2>/dev/null); "
             "[ -f \"$dir/exit_code\" ] || { [ -n \"$pid\" ] && kill -TERM \"$pid\" 2>/dev/null; }; "
             f"for _ in $(seq {STOP_GRACE_SECONDS}); do [ -f \"$dir/exit_code\" ] && break; sleep 1; done; "
             "if [ ! -f \"$dir/exit_code\" ]; then [ -n \"$pid\" ] && kill -KILL \"$pid\" 2>/dev/null; "
-            "pkill -KILL -f \"$dir/command.sh\" 2>/dev/null; echo 137 > \"$dir/exit_code\"; "
+            "if [ -n \"$sid\" ]; then sudo -n pkill -KILL -s \"$sid\" 2>/dev/null || pkill -KILL -s \"$sid\" "
+            "2>/dev/null; fi; echo 137 > \"$dir/exit_code\"; "
             "curl -s --max-time 5 --unix-socket /.sprite/api.sock -X DELETE "
             f"http://sprite/v1/tasks/{shlex.quote(task)} >/dev/null 2>&1; fi; " + status_command(directory))
 
@@ -183,11 +197,12 @@ class ProcessTools:
         ]
 
     def _run(self, command, cancellation, timeout):
-        """One command in the VM, counted as VM time (VMTools._exec);
-        ``(exit_code, stdout)``."""
+        """One command of the server in the VM, counted as VM time
+        (VMTools._exec); ``(exit_code, stdout)``."""
         from app.services.agent_vm_tools import _Output
         output = _Output()
-        outcome = self.vm._exec(command, cwd=HOME, timeout=timeout, on_output=output.add, cancellation=cancellation)
+        outcome = self.vm._exec(command, cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=output.add,
+                                cancellation=cancellation, agent=False)
         return outcome.exit_code, bytes(output.streams["stdout"]).decode("utf-8", "replace")
 
     def _result(self, process_id, text, extra=None):
@@ -220,11 +235,11 @@ class ProcessTools:
             seconds = min(seconds, int(left))
         process_id = new_id()
         directory = process_dir(process_id)
-        for name, content in (("run.sh", RUNNER), ("command.sh", command_script(args.command, cwd)),
+        for name, content in (("run.sh", RUNNER), ("launch.sh", launch_script(args.command, cwd, seconds)),
                               ("command", args.command)):
             self.vm._provider("write", lambda name=name, content=content: session.backend.write_file(
-                session.name, posixpath.join(directory, name), content.encode("utf-8")))
-        code, text = self._run(start_command(directory, seconds, task_name(process_id)), cancellation, 30)
+                session.name, posixpath.join(directory, name), content.encode("utf-8"), agent=False))
+        code, text = self._run(start_command(directory, task_name(process_id)), cancellation, 30)
         if code == 4:
             raise ValueError(f"{MAX_RUNNING} background processes are already running. Stop one with "
                              "vm_stop_process first.")

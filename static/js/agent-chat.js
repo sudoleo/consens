@@ -1553,7 +1553,94 @@
     box.append(label, text);
     return box;
   }
+  // The agent asks for a domain its workspace may reach (since 2026-10-27,
+  // agent_domains.py, DelegationLoop._domain_wait): the user decides every
+  // one, after the reviewers judged it. The domain and the agent's reason
+  // are data (untranslated); "Allow for this chat" is the decision
+  // "continue", "Don't allow" is "deny".
+  function domainCard(context, hold) {
+    const card = document.createElement("section");
+    card.className = "agent-hold-card agent-domain-card";
+    card.setAttribute("aria-labelledby", "agentHoldTitle");
+    const alert = document.createElement("div");
+    alert.className = "agent-hold-alert";
+    alert.setAttribute("role", "alert");
+    const head = document.createElement("div");
+    head.className = "agent-hold-head";
+    const icon = document.createElement("span");
+    icon.className = "agent-hold-icon";
+    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.6 5.4 3.6 8.5s-1 6.1-3.6 8.5c-2.6-2.4-3.6-5.4-3.6-8.5s1-6.1 3.6-8.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>';
+    const heading = document.createElement("div");
+    heading.className = "agent-hold-heading";
+    const title = document.createElement("h2");
+    title.id = "agentHoldTitle";
+    title.className = "agent-hold-title";
+    title.dataset.i18nSkip = "";
+    title.textContent = App.t("The agent asks to reach {domain}", { domain: String(hold.domain || "") });
+    const meta = document.createElement("p");
+    meta.className = "agent-hold-meta";
+    const kind = document.createElement("span");
+    kind.textContent = "Network access";
+    const step = document.createElement("span");
+    step.className = "admin-only";
+    step.textContent = App.t("Step {entry}", { entry: hold.entry });
+    meta.append(...[kind, hold.entry ? step : null].filter(Boolean));
+    heading.append(title, meta);
+    head.append(icon, heading);
+    const what = document.createElement("p");
+    what.className = "agent-hold-reason";
+    what.textContent = "The workspace reaches only package sources. If you allow it, the agent can reach this address for the rest of this chat.";
+    // What the reviewers made of it: no concern, their concern, or that not
+    // every one could look.
+    const review = [];
+    const reasons = Array.isArray(hold.reasons) && hold.reasons.length > 1 ? hold.reasons : null;
+    if (hold.review === "halt") {
+      for (const item of reasons || [{ reviewer: hold.reviewer, reason: hold.reason }]) {
+        const line = document.createElement("p");
+        line.className = "agent-hold-reason agent-domain-review";
+        line.dataset.i18nSkip = "";
+        line.textContent = `${String(item.reviewer || "")}: ${String(item.reason || "")}`;
+        review.push(line);
+      }
+    } else {
+      const line = document.createElement("p");
+      line.className = "agent-hold-reason agent-domain-review";
+      line.textContent = hold.review === "go" ? "The reviewers see no problem with it."
+        : "Not every reviewer could check this request.";
+      review.push(line);
+    }
+    alert.append(head, what, ...review);
+    card.append(alert);
+    if (hold.domain_reason) {
+      const box = document.createElement("figure");
+      box.className = "agent-hold-evidence";
+      const label = document.createElement("figcaption");
+      label.className = "agent-hold-evidence-label";
+      label.textContent = "The agent’s reason";
+      const text = document.createElement("pre");
+      text.className = "agent-hold-evidence-text";
+      text.dataset.i18nSkip = "";
+      text.textContent = String(hold.domain_reason);
+      box.append(label, text);
+      card.append(box);
+    }
+    const clock = document.createElement("p");
+    clock.className = "agent-hold-clock";
+    const reply = holdReply(context);
+    const actions = document.createElement("div");
+    actions.className = "agent-hold-actions";
+    const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
+    actions.append(
+      holdButton("Allow for this chat", "btn agent-hold-continue", () => decideHold(context, "continue")),
+      holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
+      write,
+      holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user")));
+    reply.bind(actions, write);
+    card.append(clock, reply.form, actions);
+    return card;
+  }
   function holdCard(context, hold) {
+    if (hold.domain) return domainCard(context, hold);
     const card = document.createElement("section");
     card.className = "agent-hold-card";
     card.setAttribute("aria-labelledby", "agentHoldTitle");

@@ -1,9 +1,10 @@
 """Agent VM (AgentPreferences.vm, with audit): since 2026-10-27 the account's
-workspace, one Linux VM for all of its chats (agent_workspace.py), created at
-the first VM call and reused across messages and chats, each chat in its own
-folder, with shell commands and files (agent_vm_tools.py) over a small
-provider interface (agent_vm.py). These tests never call Sprites: the loop
-runs against FakeVM, SpritesBackend against httpx.MockTransport and a fake
+workspace, a workbench VM for all of its chats (agent_workspace.py) and a
+browser VM next to it, created at the first VM call and reused across
+messages and chats, each chat in its own folder, with shell commands and
+files as the agent's own user (agent_vm_tools.py) over a small provider
+interface (agent_vm.py). These tests never call Sprites: the loop runs
+against FakeVM, SpritesBackend against httpx.MockTransport and a fake
 WebSocket.
 """
 import base64
@@ -45,12 +46,18 @@ class Clock:
 class FakeVM:
     """The provider's state across messages; ``backend()`` is one message's
     backend. ``commands`` maps a command to ``(chunks, exit_code, seconds)``,
-    chunks as ``(stream, bytes)``; ``fail`` names operations that fail."""
+    chunks as ``(stream, bytes)``; ``fail`` names operations that fail.
+    ``server`` collects the commands the server ran as the provider's user,
+    ``server_files`` the paths it read or wrote that way (every other file
+    operation is the agent's, agent_vm.agent_argv). ``browser`` answers the
+    browser VM's helper: request -> answer (agent_browser.py)."""
 
     def __init__(self, clock=None):
         self.vms, self.calls, self.commands, self.fail = {}, [], {}, set()
-        # Commands the server ran for the workspace itself, without the agent's mark.
-        self.unmarked = []
+        self.server, self.server_files = [], []
+        self.requests = []
+        self.browser = lambda request: {"status": "ok", "text": 'Page: "Example"\nURL: https://example.com/\n'
+                                                                '[e1] link "More information"'}
         self.clock = clock or Clock()
         self.backends = 0
 
@@ -70,30 +77,55 @@ class _FakeBackend(VMBackend):
         if operation in self.vm.fail:
             raise VMUnavailable(operation)
 
-    def ensure(self, name):
+    def exists(self, name):
+        self._call("exists", name)
+        return name in self.vm.vms
+
+    def ensure(self, name, rules):
         self._call("ensure", name)
         self.vm.vms.setdefault(name, {"files": {}, "checkpoints": [], "created": len(self.vm.calls)})
-        self.vm.vms[name]["policy"] = agent_vm.EGRESS_RULES
+        self.vm.vms[name]["policy"] = list(rules)
+
+    def set_policy(self, name, rules):
+        self._call("policy", name)
+        self.vm.vms[name]["policy"] = list(rules)
 
     def exec(self, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
         self._call("exec", name, command, cwd, timeout)
         if not agent:
-            self.vm.unmarked.append(command)
+            self.vm.server.append(command)
         chunks, exit_code, seconds = self.vm.commands.get(command, ([("stdout", b"ok\n")], 0, .5))
         for stream, chunk in chunks:
             self.vm.clock.now += seconds / max(1, len(chunks))
             on_output(stream, chunk)
         return ExecOutcome(exit_code=exit_code, timed_out=exit_code is None, seconds=seconds)
 
-    def read_file(self, name, path, *, limit):
+    def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+        """Only the browser VM's helper runs this way (agent_browser.py)."""
+        self._call("run", name, argv[-1])
+        request = json.loads(input or b"{}")
+        self.vm.requests.append(request)
+        answer = self.vm.browser(request)
+        self.vm.clock.now += .5
+        on_output("stdout", json.dumps(answer).encode())
+        return ExecOutcome(exit_code=0, timed_out=False, seconds=.5)
+
+    def exec_url(self, name, argv, *, cwd, stdin):
+        return f"wss://api.sprites.dev/v1/sprites/{name}/exec?cmd=relay"
+
+    def read_file(self, name, path, *, limit, agent=True):
         self._call("read", name, path)
+        if not agent:
+            self.vm.server_files.append(("read", path))
         files = self.vm.vms[name]["files"]
         if path not in files:
             raise VMFileMissing(path)
         return files[path][:limit], len(files[path]) <= limit
 
-    def write_file(self, name, path, data):
+    def write_file(self, name, path, data, *, agent=True):
         self._call("write", name, path)
+        if not agent:
+            self.vm.server_files.append(("write", path))
         self.vm.vms[name]["files"][path] = data
         return len(data)
 
@@ -110,22 +142,16 @@ class _FakeBackend(VMBackend):
         self._call("delete", name)
         self.vm.vms.pop(name, None)
 
-    def delete_path(self, name, path):
+    def delete_path(self, name, path, *, agent=True):
         self._call("delete_path", name, path)
+        if not agent:
+            self.vm.server_files.append(("delete", path))
         files = self.vm.vms.get(name, {}).get("files", {})
         for file in [file for file in files if file == path or file.startswith(path + "/")]:
             del files[file]
 
-    def chmod(self, name, path, mode):
-        self._call("chmod", name, path, mode)
-
-    def put_service(self, name, service, spec):
-        self._call("service", name, service)
-        self.vm.vms[name].setdefault("services", {})[service] = spec
-
-    def url(self, name):
-        self._call("url", name)
-        return f"https://{name}-test.sprites.app"
+    def delete_service(self, name, service):
+        self._call("delete_service", name, service)
 
     def close(self):
         self.vm.calls.append(("close",))
@@ -186,6 +212,8 @@ def fake_vm(monkeypatch):
 
 
 NAME = agent_vm.workspace_name(UID)
+# The server's setup of the workbench as root (agent_workspace.prepare), once per version.
+SETUP = f"sudo -n bash {agent_workspace.WORKSPACE_DIR}/setup.sh"
 # The first result of a message in a workspace without notes yet.
 NO_NOTES = {"path": agent_workspace.NOTES_PATH, "text": "",
             "note": "No notes yet: start them when something lasting comes up."}
@@ -195,7 +223,7 @@ def workspace_files(vm, name=NAME):
     """The workspace's files without its own tools (agent_workspace.prepare)
     and the chats' folder markers."""
     return {path: data for path, data in vm.vms[name]["files"].items()
-            if not path.startswith(("/home/sprite/.consens/", "/home/sprite/.local/"))
+            if not path.startswith("/home/sprite/.consens/")
             and not path.endswith("/" + agent_workspace.CHAT_MARKER)}
 
 
@@ -225,14 +253,19 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     assert prompt_defaults.AGENT_VM_PROMPT in script.systems[0]
     assert {"vm_exec", "vm_read_file", "vm_write_file"} <= set(script.offered[0])
     folder = agent_vm.chat_dir(loop.chat_id)
-    assert folder == f"/home/sprite/chats/{loop.chat_id}"
-    # The account and the chat name the workspace before the provider creates it; it gets the egress rules.
+    assert folder == f"/home/agent/chats/{loop.chat_id}"
+    # The account and the chat name the workspace before the provider creates it; it reaches the registries only.
     chat = store._chat_ref(UID, loop.chat_id).get().to_dict()
     assert chat["agent_vm"]["name"] == NAME and chat["agent_vm"]["provider"] == "fake"
     assert chat["agent_vm"]["workspace"] is True
     workspace = agent_workspace.record(store.db, UID)
     assert workspace["name"] == NAME and workspace["provider"] == "fake"
-    assert fake_vm.vms[NAME]["policy"] == [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}, {"domain": "*", "action": "allow"}]
+    assert workspace["browser"] == agent_vm.browser_name(UID)
+    assert fake_vm.vms[NAME]["policy"] == agent_vm.WORKBENCH_RULES
+    assert {rule["domain"] for rule in agent_vm.WORKBENCH_RULES} >= {"pypi.org", "registry.npmjs.org"}
+    assert all(rule["action"] == "allow" and "*" != rule["domain"] for rule in agent_vm.WORKBENCH_RULES)
+    # The agent's files go through its own user; the server's own only to its home.
+    assert all(path.startswith("/home/sprite/.consens/") for _, path in fake_vm.server_files)
     # Its tools, the chat's folder, then one checkpoint for the message, before its first call ran.
     operations = [call[0] for call in fake_vm.calls]
     assert operations[0] == "ensure" and operations.count("checkpoint") == 1
@@ -272,25 +305,41 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
 
 
 def test_the_workspace_gets_its_tools_once_per_version(store, fake_vm):
-    """browser, the browser's setup and start and the live view's gateway
-    (a service on the VM's private address), written only when they changed."""
+    """agent-run, the setup (the agent's user, the move from the layout
+    before) and the pause, written to the provider's home and set up as root
+    only when they changed; the old live view's gateway service goes."""
     first = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(first.run())
     files = fake_vm.vms[NAME]["files"]
     for name, data in agent_workspace.tool_files().items():
         assert files[f"{agent_workspace.WORKSPACE_DIR}/{name}"] == data and b"\r\n" not in data
-    assert files[agent_workspace.BROWSER_COMMAND] == agent_workspace.WRAPPER
-    assert ("chmod", NAME, agent_workspace.BROWSER_COMMAND, "755") in fake_vm.calls
+        assert ("write", f"{agent_workspace.WORKSPACE_DIR}/{name}") in fake_vm.server_files
     assert files[agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
-    assert fake_vm.vms[NAME]["services"]["view"] == {
-        "cmd": "python3", "args": [f"{agent_workspace.WORKSPACE_DIR}/gateway.py"], "http_port": 6080}
+    assert ("delete_service", NAME, "view") in fake_vm.calls
+    assert fake_vm.server[0] == f"sudo -n bash {agent_workspace.WORKSPACE_DIR}/setup.sh"
+    # Set up before the version is written, so a failed setup runs again.
+    assert fake_vm.calls.index(("write", NAME, agent_workspace.VERSION_PATH)) > next(
+        index for index, call in enumerate(fake_vm.calls) if call[0] == "exec")
     fake_vm.calls.clear()
+    fake_vm.server.clear()
     second = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=first.chat_id, request_id="two")
     list(second.run())
-    # Up to date: one read of the version, nothing written.
+    # Up to date: one read of the version, nothing written, nothing set up.
     assert ("read", NAME, agent_workspace.VERSION_PATH) in fake_vm.calls
-    assert not [call for call in fake_vm.calls if call[0] in {"service", "chmod"}
-                or (call[0] == "write" and call[2].startswith(agent_workspace.WORKSPACE_DIR))]
+    assert not fake_vm.server and not [call for call in fake_vm.calls if call[0] == "delete_service"
+                                       or (call[0] == "write" and call[2].startswith(agent_workspace.WORKSPACE_DIR))]
+
+
+def test_a_failed_setup_leaves_the_vm_off_for_the_message(store, fake_vm):
+    """No command of the agent runs with the provider's rights: without its
+    user the workbench is not available."""
+    fake_vm.commands[f"sudo -n bash {agent_workspace.WORKSPACE_DIR}/setup.sh"] = ([("stderr", b"useradd: failed\n")],
+                                                                                   1, .5)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    assert results(loop)[0] == {"error": VM_UNAVAILABLE}
+    assert agent_workspace.VERSION_PATH not in fake_vm.vms[NAME]["files"]
+    assert not [call for call in fake_vm.calls if call[:3] == ("exec", NAME, "ls")]
 
 
 def test_the_work_log_holds_every_vm_call_as_data_for_the_reviewers(store, fake_vm):
@@ -374,8 +423,9 @@ def test_a_long_message_keeps_its_lease_and_loses_it_only_to_expiry(store, fake_
     original = _FakeBackend.exec
 
     def slow(self, name, command, **kwargs):
-        # Each command takes longer than the lease needs renewing.
-        self.vm.clock.now += agent_workspace.LEASE_RENEW_SECONDS + 1
+        # Each command of the agent takes longer than the lease needs renewing.
+        if command != SETUP:
+            self.vm.clock.now += agent_workspace.LEASE_RENEW_SECONDS + 1
         return original(self, name, command, **kwargs)
     _FakeBackend.exec = slow
     renewals = []
@@ -452,7 +502,7 @@ def test_a_vm_failing_mid_command_is_off_for_the_rest_of_the_message(store, fake
     finally:
         _FakeBackend.exec = original
     assert [r.get("error") for r in results(loop)] == [None, VM_UNAVAILABLE, VM_UNAVAILABLE]
-    assert [call[2] for call in fake_vm.calls if call[0] == "exec"] == ["ls", "make"]
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] != SETUP] == ["ls", "make"]
 
 
 @pytest.mark.parametrize("operation", ["ensure", "exec"])
@@ -463,7 +513,11 @@ def test_an_unexpected_vm_failure_also_costs_only_the_tools(store, fake_vm, monk
     monkeypatch.setattr(agent_vm_tools, "report_server_exception",
                         lambda exc, **kwargs: reported.append((type(exc).__name__, kwargs["where"])))
 
+    original = getattr(_FakeBackend, operation)
+
     def broken(self, *args, **kwargs):
+        if args[1:2] == (SETUP,):
+            return original(self, *args, **kwargs)
         raise ModuleNotFoundError("No module named 'websockets'")
     monkeypatch.setattr(_FakeBackend, operation, broken)
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]))
@@ -603,10 +657,10 @@ def test_a_reviewers_halt_ends_the_running_command_as_if_the_user_stopped_it(sto
     tools, cancellation = loop.vm_tools, ProviderCancellation()
     plain = _FakeBackend.exec
 
-    def exec(backend, name, command, *, cwd, timeout, on_output, cancellation):
+    def exec(backend, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
         if command != "sleep 600":
             return plain(backend, name, command, cwd=cwd, timeout=timeout, on_output=on_output,
-                         cancellation=cancellation)
+                         cancellation=cancellation, agent=agent)
         on_output("stdout", b"waiting\n")
         while not cancellation.cancelled:
             time.sleep(.01)
@@ -704,10 +758,10 @@ def test_a_halt_while_the_vm_starts_stops_the_command_it_starts_for(store, fake_
     tools, cancellation = loop.vm_tools, ProviderCancellation()
     plain_exec, plain_timeout = _FakeBackend.exec, VMTools._timeout
 
-    def exec(backend, name, command, *, cwd, timeout, on_output, cancellation):
+    def exec(backend, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
         cancellation.raise_if_cancelled()  # as SpritesBackend.exec does first
         return plain_exec(backend, name, command, cwd=cwd, timeout=timeout, on_output=on_output,
-                          cancellation=cancellation)
+                          cancellation=cancellation, agent=agent)
 
     def timeout(self, requested):
         assert loop.request_hold({"reviewer": "Claude Haiku 4.5", "provider": "anthropic", "kind": "harm",
@@ -1048,8 +1102,8 @@ def test_a_chat_deleted_while_its_folder_was_made_deletes_the_folder(store, fake
     loop = vm_loop(store, Agent())
     original = _FakeBackend.ensure
 
-    def deleted_meanwhile(self, name):
-        original(self, name)
+    def deleted_meanwhile(self, name, rules):
+        original(self, name, rules)
         store._chat_ref(UID, loop.chat_id).update({"status": "deleting"})
     _FakeBackend.ensure = deleted_meanwhile
     try:
@@ -1067,7 +1121,7 @@ def sprites(handler, **kwargs):
     return SpritesBackend("secret-token", transport=httpx.MockTransport(handler), **kwargs)
 
 
-def test_sprites_creates_a_missing_vm_and_applies_the_egress_rules():
+def test_sprites_creates_a_missing_vm_and_applies_its_network_rules():
     seen = []
 
     def handler(request):
@@ -1077,22 +1131,26 @@ def test_sprites_creates_a_missing_vm_and_applies_the_egress_rules():
             return httpx.Response(404)
         # Live 2026-10-25: the policy answers 204 without a body; any 2xx is success.
         return httpx.Response(201, json={}) if request.url.path == "/v1/sprites" else httpx.Response(204)
-    sprites(handler).ensure("consens-abc")
+    sprites(handler).ensure("consens-abc", agent_vm.WORKBENCH_RULES)
     assert seen == [("GET", "/v1/sprites/consens-abc", None),
                     ("POST", "/v1/sprites", json.dumps({"name": "consens-abc"}, separators=(",", ":"))),
                     ("POST", "/v1/sprites/consens-abc/policy/network",
-                     json.dumps({"rules": [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}, {"domain": "*", "action": "allow"}]}, separators=(",", ":")))]
+                     json.dumps({"rules": agent_vm.WORKBENCH_RULES}, separators=(",", ":")))]
+    # The browser VM reaches the open web, never Fly.io's private network.
+    assert agent_vm.BROWSER_RULES[:2] == [{"domain": "*.internal", "action": "deny"},
+                                          {"domain": "*.flycast", "action": "deny"}]
 
 
 def test_sprites_failures_are_one_kind_of_error():
     with pytest.raises(VMUnavailable):
-        sprites(lambda request: httpx.Response(500)).ensure("consens-abc")
+        sprites(lambda request: httpx.Response(500)).ensure("consens-abc", agent_vm.WORKBENCH_RULES)
 
     def offline(request):
         raise httpx.ConnectError("down")
     with pytest.raises(VMUnavailable):
-        sprites(offline).write_file("consens-abc", "/home/sprite/a", b"x")
+        sprites(offline).write_file("consens-abc", "/home/sprite/a", b"x", agent=False)
     sprites(lambda request: httpx.Response(404)).delete("consens-abc")  # Already gone.
+    assert sprites(lambda request: httpx.Response(404)).exists("consens-abc") is False
 
 
 def test_sprites_checkpoint_waits_for_completion_and_finds_its_id_by_comment():
@@ -1113,7 +1171,7 @@ def test_sprites_checkpoint_waits_for_completion_and_finds_its_id_by_comment():
         sprites(failing).checkpoint("consens-abc", "c")
 
 
-def test_sprites_files_read_up_to_their_limit_and_write_with_folders():
+def test_the_servers_own_files_go_through_the_file_api():
     def handler(request):
         if request.url.path.endswith("/fs/read"):
             if request.url.params["path"] == "/missing":
@@ -1123,11 +1181,50 @@ def test_sprites_files_read_up_to_their_limit_and_write_with_folders():
         assert request.url.params["mkdir"] == "true" and request.content == b"data"
         return httpx.Response(200, json={"path": "/home/sprite/a", "size": 4, "mode": "0644"})
     backend = sprites(handler)
-    assert backend.read_file("vm", "/home/sprite/a", limit=100) == (b"0123456789", True)
-    assert backend.read_file("vm", "/home/sprite/a", limit=4) == (b"0123", False)
+    assert backend.read_file("vm", "/home/sprite/a", limit=100, agent=False) == (b"0123456789", True)
+    assert backend.read_file("vm", "/home/sprite/a", limit=4, agent=False) == (b"0123", False)
     with pytest.raises(VMFileMissing):
-        backend.read_file("vm", "/missing", limit=10)
-    assert backend.write_file("vm", "/home/sprite/a", b"data") == 4
+        backend.read_file("vm", "/missing", limit=10, agent=False)
+    assert backend.write_file("vm", "/home/sprite/a", b"data", agent=False) == 4
+
+
+def test_the_agents_files_go_through_its_own_user_never_the_file_api():
+    """The file API runs as the provider's user, which may sudo: a path the
+    agent named would reach the server's own files (agent-run among them).
+    So the agent's reads and writes run as its user, the path an argument of
+    a fixed script and the bytes on stdin (security audit 2026-10-27)."""
+    sockets, sent = [], []
+
+    class Socket(FakeSocket):
+        def send(self, data):
+            sent.append(data)
+
+    answers = iter([[b"\x01hello", b"\x03\x00"], [b"\x03\x2c"], [b"\x03\x2e"], [b"\x03\x2d"],
+                    [b"\x01" + b"x" * 11, b"\x03\x00"], [b"\x013\n", b"\x03\x00"], [b"\x03\x2e"]])
+
+    def connect(url, token):
+        sockets.append(url)
+        return Socket(next(answers))
+    backend = sprites(lambda request: pytest.fail("no file API for the agent"), connect=connect)
+    assert backend.read_file("vm", "/home/agent/a", limit=10) == (b"hello", True)
+    with pytest.raises(VMFileMissing):
+        backend.read_file("vm", "/home/agent/b", limit=10)
+    with pytest.raises(agent_vm.VMFileRefused, match="Permission denied: /home/sprite/x"):
+        backend.read_file("vm", "/home/sprite/x", limit=10)
+    with pytest.raises(agent_vm.VMFileRefused, match="is a folder"):
+        backend.read_file("vm", "/home/agent", limit=10)
+    assert backend.read_file("vm", "/home/agent/big", limit=10) == (b"x" * 10, False)
+    assert backend.write_file("vm", "/home/agent/new/c.txt", b"abc") == 3
+    with pytest.raises(agent_vm.VMFileRefused):
+        backend.write_file("vm", "/home/sprite/.consens/workspace/agent-run", b"echo")
+    read = httpx.URL(sockets[0]).params.get_list("cmd")
+    assert read[:6] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, str(agent_vm.FILE_SECONDS), agent_vm.HOME]
+    assert read[6:] == ["bash", "-c", agent_vm.READ_SCRIPT, "read", "/home/agent/a", "11"]
+    write = httpx.URL(sockets[5]).params
+    assert write.get_list("cmd")[6:] == ["bash", "-c", agent_vm.WRITE_SCRIPT, "write", "/home/agent/new/c.txt"]
+    assert write["stdin"] == "true" and write["dir"] == "/"
+    # The bytes on stdin (0x00), then its end (0x04).
+    assert sent[:2] == [b"\x00abc", b"\x04"]
 
 
 class FakeSocket:
@@ -1135,6 +1232,10 @@ class FakeSocket:
 
     def __init__(self, messages):
         self.messages, self.closed = list(messages), False
+        self.sent = []
+
+    def send(self, data):
+        self.sent.append(data)
 
     def recv(self, timeout=None):
         from websockets.exceptions import ConnectionClosedOK
@@ -1155,7 +1256,7 @@ def test_sprites_exec_streams_the_frames_and_never_sends_the_token_to_the_vm():
                          b"\x01world\n", b"\x03\x02"])
     backend = sprites(lambda request: httpx.Response(200),
                       connect=lambda url, token: opened.append((url, token)) or socket)
-    outcome = backend.exec("consens-abc", "make && echo 'done'", cwd="/home/sprite/app", timeout=60,
+    outcome = backend.exec("consens-abc", "make && echo 'done'", cwd="/home/agent/app", timeout=60,
                            on_output=lambda stream, chunk: output.append((stream, chunk)),
                            cancellation=ProviderCancellation())
     assert outcome.exit_code == 2 and outcome.timed_out is False and socket.closed
@@ -1163,13 +1264,40 @@ def test_sprites_exec_streams_the_frames_and_never_sends_the_token_to_the_vm():
     [(url, token)] = opened
     query = httpx.URL(url).params
     assert url.startswith("wss://api.sprites.dev/v1/sprites/consens-abc/exec?")
-    # Under the VM-side limit, with the login environment loaded silently (the
-    # Sprites .bashrc warned about bind in every command, live 2026-10-25);
-    # no environment from the backend but the agent's mark, the token only in the header.
-    assert query.get_list("cmd") == ["timeout", "--kill-after=5", "60", "env", "CONSENS_AGENT=1", "bash", "-c",
-                                     agent_vm.SHELL_PRELUDE, "bash", "make && echo 'done'"]
-    assert query["dir"] == "/home/sprite/app" and query["stdin"] == "false" and "env" not in query
+    # As the agent's user through agent-run (as root by sudo), which goes to
+    # the folder and keeps the VM-side limit; with the login environment
+    # loaded silently (the Sprites .bashrc warned about bind in every
+    # command, live 2026-10-25); no environment from the backend, the token
+    # only in the header.
+    assert query.get_list("cmd") == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "60", "/home/agent/app", "bash",
+                                     "-c", agent_vm.SHELL_PRELUDE, "bash", "make && echo 'done'"]
+    assert query["dir"] == "/" and query["stdin"] == "false" and "env" not in query
     assert token == "secret-token" and "secret-token" not in url
+    # The server's own commands run as the provider's user under timeout.
+    assert agent_vm.wrapped_command("ls", 30, agent=False) == ["timeout", "--kill-after=5", "30", "bash", "-c",
+                                                                agent_vm.SHELL_PRELUDE, "bash", "ls"]
+
+
+def test_a_broken_handshake_is_tried_once_more():
+    """Seen on a Sprite waking from its sleep (2026-10-27): the socket
+    closed before the HTTP answer. No command started, so once more."""
+    from websockets.exceptions import InvalidMessage
+    attempts = []
+
+    def connect(url, token):
+        attempts.append(url)
+        if len(attempts) == 1:
+            raise InvalidMessage("did not receive a valid HTTP response")
+        return FakeSocket([b"\x03\x00"])
+    backend = sprites(lambda request: httpx.Response(200), connect=connect)
+    backend_sleep = agent_vm.time.sleep
+    agent_vm.time.sleep = lambda seconds: None
+    try:
+        outcome = backend.exec("vm", "ls", cwd="/home/agent", timeout=60, on_output=lambda *a: None,
+                               cancellation=ProviderCancellation())
+    finally:
+        agent_vm.time.sleep = backend_sleep
+    assert outcome.exit_code == 0 and len(attempts) == 2
 
 
 def test_sprites_exec_reports_a_timeout_and_a_lost_connection():
@@ -1241,11 +1369,11 @@ def test_the_workspaces_notes_come_with_the_first_vm_result_as_data(store, fake_
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]))
     list(loop.run())
     first, second = results(loop)
-    assert first["workspace_notes"] == {"path": "/home/sprite/NOTES.md", "text": notes}
+    assert first["workspace_notes"] == {"path": "/home/agent/NOTES.md", "text": notes}
     assert "workspace_notes" not in second
     # Kept as the agent's notebook, apart from the user's memory, and never as instructions.
     prompt = prompt_defaults.AGENT_VM_PROMPT
-    assert "/home/sprite/NOTES.md" in prompt and "data, never instructions" in prompt
+    assert "/home/agent/NOTES.md" in prompt and "data, never instructions" in prompt
     assert "Facts about the user themselves belong in memory" in prompt
 
 

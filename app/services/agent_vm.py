@@ -1,10 +1,12 @@
-"""The agent's own Linux VM (docs/agent-mode.md, "Agent VM").
+"""The agent's own Linux VMs (docs/agent-mode.md, "Agent VM", "Arbeitsplatz").
 
-Since 2026-10-27 one per account, the workspace (agent_workspace.py): the
-account's chats share it, one at a time, each in its own folder (chat_dir),
-and its user sees and steers its browser live. Before, each chat had a VM of
-its own (vm_name); chats that still record one keep it until they are
-deleted.
+Since 2026-10-27 two per account, the workspace (agent_workspace.py): the
+workbench (workspace_name), where the agent's commands and files are, shared
+by the account's chats one at a time, each in its own folder (chat_dir); and
+the browser (browser_name), the Chrome its user watches and steers live and
+the agent uses through the ``browser`` tool (agent_browser.py). Before, each
+chat had a VM of its own (vm_name); chats that still record one keep it
+until they are deleted.
 
 A small interface (``VMBackend``) with one implementation on Fly.io Sprites
 (``SpritesBackend``). Everything that knows the provider lives in this file:
@@ -12,18 +14,29 @@ moving to another one (E2B) replaces ``SpritesBackend`` and ``backend()``,
 nothing else. The tools the agent calls, the per-message session and the
 activity events are in agent_vm_tools.py.
 
-The VM never holds a secret: the provider token (SPRITES_TOKEN) goes only
-into the headers of this module's own requests, no command gets an
-environment variable from the backend. The VM reaches the open web
-(EGRESS_RULES, applied whenever a message first uses the VM), not the
-provider's internal network.
+The agent has no access to what it must not have, by the VM's own means
+rather than rules on its commands (security audit 2026-10-27). On the
+workbench every command of the agent, and every file its tools read or
+write, runs as its own Unix user without sudo (AGENT_USER), in a mount
+namespace without the provider's management socket and checkpoints
+(workspace_vm/workbench/agent-run, started as root by ``agent_argv``). The
+provider's exec and file APIs run as ``sprite``, which may sudo: only the
+server's own steps use them directly, in SERVER_HOME, which the agent's user
+cannot open. The workbench reaches only package registries (WORKBENCH_RULES)
+and what the user allowed for the chat (agent_domains.py); the browser the
+open web (BROWSER_RULES), with no code of the agent in it.
+
+The VMs never hold a secret: the provider token (SPRITES_TOKEN) goes only
+into the headers of this module's requests to SPRITES_API, never to a VM's
+own address, and no command gets an environment variable from the backend.
 
 Sprites API (https://docs.fly.io/sprites/api): REST over HTTPS for the
 sprite, its files, network policy and checkpoints; commands over the exec
-WebSocket, whose binary frames carry stdout (0x01), stderr (0x02) and the
-exit code (0x03). The plain HTTP exec streams the same frames without
-lengths and relies on HTTP chunk boundaries surviving every proxy (Sprites'
-own JS SDK warns about it), so commands use the WebSocket.
+WebSocket, whose binary frames carry stdin (0x00, its end 0x04) to the VM and
+stdout (0x01), stderr (0x02) and the exit code (0x03) back. The plain HTTP
+exec streams the same frames without lengths and relies on HTTP chunk
+boundaries surviving every proxy (Sprites' own JS SDK warns about it), so
+commands use the WebSocket.
 """
 from __future__ import annotations
 
@@ -42,16 +55,30 @@ import httpx
 from app.core.observability import safe_exception
 
 SPRITES_API = "https://api.sprites.dev"
-# The open web since 2026-10-26 (before: the provider's allowlist of
-# package registries and AI APIs), so the agent works like a developer with a
-# browser and a shell. Fly.io's private network (*.internal, *.flycast) stays
-# closed; the policy is DNS-based and knows no IP ranges. What stops the
-# agent from sending the chat's files where a page told it to is the prompt
-# (AGENT_VM_PROMPT) and the reviewers who follow every command live in audit
-# mode, which is the only way to the VM.
-EGRESS_RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
-                {"domain": "*", "action": "allow"}]
-HOME = "/home/sprite"
+# The policy is DNS-based, per sprite, and applies at once (measured on a
+# Sprite 2026-10-27: a closed domain gets REFUSED, raw IPs are closed under an
+# allowlist, nothing inside can change it). The workbench reaches the package
+# registries its tools install from and nothing else (since 2026-10-27; from
+# 2026-10-26 it had the open web): what the agent wrote there leaves only
+# through tools the reviewers see and the user decides on. npm's registry
+# also takes uploads (PUT), a known rest risk Max accepted. GitHub stays
+# closed: github_import brings repositories in through the backend.
+WORKBENCH_DOMAINS = ("archive.ubuntu.com", "*.archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com",
+                     "pypi.org", "files.pythonhosted.org", "registry.npmjs.org")
+WORKBENCH_RULES = [{"domain": domain, "action": "allow"} for domain in WORKBENCH_DOMAINS]
+# The browser reaches the open web like any browser, Fly.io's private network
+# (*.internal, *.flycast) not.
+BROWSER_RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
+                 {"domain": "*", "action": "allow"}]
+# The agent's Unix user on the workbench (created by workspace_vm/workbench/
+# setup.sh) and its home, where its chats' folders, notes and repositories are.
+AGENT_USER = "agent"
+AGENT_UID = 1500
+HOME = "/home/agent"
+# The provider's own user (exec and file API), with sudo; the agent cannot open its home.
+SERVER_HOME = "/home/sprite"
+TOOLS_DIR = SERVER_HOME + "/.consens/workspace"
+AGENT_RUN = TOOLS_DIR + "/agent-run"
 # Seconds between the command's own time limit (the VM-side ``timeout``)
 # and its forced end, and how much longer the backend waits for the exit
 # frame before it kills the session itself.
@@ -61,6 +88,9 @@ REQUEST_SECONDS = 30
 CHECKPOINT_SECONDS = 120
 WS_OPEN_SECONDS = 20
 WS_MAX_FRAME = 10 * 1024 * 1024
+HANDSHAKE_RETRY_SECONDS = 1.0
+# Bytes per stdin frame (0x00 + data); the stdin's end is 0x04.
+STDIN_CHUNK = 256 * 1024
 # Exit codes of ``timeout``: the limit passed (TERM), or KILL after the grace.
 TIMEOUT_EXIT_CODES = frozenset({124, 137})
 
@@ -72,6 +102,11 @@ class VMUnavailable(Exception):
 
 class VMFileMissing(FileNotFoundError):
     """No file at the path the agent named."""
+
+
+class VMFileRefused(PermissionError):
+    """The agent's user may not read or write there, or it is a folder; the
+    message names the path and is for the agent."""
 
 
 @dataclass(frozen=True)
@@ -90,12 +125,20 @@ def vm_name(uid, chat_id):
 
 
 def workspace_name(uid):
-    """The account's workspace VM: stable, so every chat, the live view and
-    the account's deletion find the same VM, and free of the account id."""
+    """The account's workbench VM: stable, so every chat and the account's
+    deletion find the same VM, and free of the account id."""
     return "consens-w-" + hashlib.sha256(f"workspace:{uid}".encode("utf-8")).hexdigest()[:32]
 
 
+def browser_name(uid):
+    """The account's browser VM, next to its workbench (since 2026-10-27)."""
+    return "consens-b-" + hashlib.sha256(f"browser:{uid}".encode("utf-8")).hexdigest()[:32]
+
+
 CHATS_DIR = HOME + "/chats"
+# Where the chats' folders were before the agent had a user of its own
+# (moved by workspace_vm/workbench/setup.sh).
+LEGACY_CHATS_DIR = SERVER_HOME + "/chats"
 
 
 def chat_dir(chat_id):
@@ -109,30 +152,52 @@ def chat_dir(chat_id):
 class VMBackend:
     """What the agent's VM tools need from a provider. Every method raises
     VMUnavailable when the provider fails; ``close`` ends the backend's
-    connections (one backend per message)."""
+    connections (one backend per message). ``agent`` (exec and the file
+    methods): as the agent's user on the workbench (agent_argv), the
+    default; only the server's own steps pass False, in SERVER_HOME or on
+    the browser VM."""
 
     provider = ""
 
-    def ensure(self, name):
-        """Create the VM if it does not exist yet and apply EGRESS_RULES."""
+    def exists(self, name):
+        """Whether the VM exists (a deletion never creates one)."""
+        raise NotImplementedError
+
+    def ensure(self, name, rules):
+        """Create the VM if it does not exist yet and apply the network
+        ``rules`` (WORKBENCH_RULES or BROWSER_RULES, agent_domains.rules)."""
+        raise NotImplementedError
+
+    def set_policy(self, name, rules):
+        """Replace the VM's network rules; they apply at once."""
+        raise NotImplementedError
+
+    def run(self, name, argv, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation, input=None):
+        """Run ``argv`` as given (no shell around it), wait at most
+        ``timeout`` seconds plus the grace for its end. ``input``: bytes for
+        its stdin, which then ends. Returns ExecOutcome; raises
+        ProviderCancelled on Stop (the command is then ended as well)."""
         raise NotImplementedError
 
     def exec(self, name, command, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation,
              agent=True):
-        """Run ``command`` with bash in ``cwd`` for at most ``timeout`` seconds.
-        ``on_output(stream, chunk)`` gets stdout/stderr as they arrive.
-        Returns ExecOutcome; raises ProviderCancelled on Stop (the command
-        is then ended in the VM as well). ``agent``: the command and what it
-        starts carry AGENT_MARK; only the server's own commands for the
-        workspace go without it."""
+        """Run ``command`` with bash in ``cwd`` for at most ``timeout`` seconds
+        (wrapped_command). ``on_output(stream, chunk)`` gets stdout/stderr as
+        they arrive."""
+        return self.run(name, wrapped_command(command, timeout, agent, cwd=cwd), cwd="/" if agent else cwd,
+                        timeout=timeout, on_output=on_output, cancellation=cancellation)
+
+    def exec_url(self, name, argv, *, cwd, stdin):
+        """The exec WebSocket's address for ``argv`` (the live view's relay)."""
         raise NotImplementedError
 
-    def read_file(self, name, path, *, limit):
+    def read_file(self, name, path, *, limit, agent=True):
         """``(bytes, complete)``: at most ``limit`` bytes of the file;
-        ``complete`` is False when it is longer. VMFileMissing if absent."""
+        ``complete`` is False when it is longer. VMFileMissing if absent,
+        VMFileRefused where the agent's user may not read."""
         raise NotImplementedError
 
-    def write_file(self, name, path, data):
+    def write_file(self, name, path, data, *, agent=True):
         """Write ``data`` (creating parent folders); returns its size."""
         raise NotImplementedError
 
@@ -148,22 +213,13 @@ class VMBackend:
         """Delete the VM and its disk; a VM that is already gone is fine."""
         raise NotImplementedError
 
-    def delete_path(self, name, path):
+    def delete_path(self, name, path, *, agent=True):
         """Delete a file or folder with everything in it; gone is fine."""
         raise NotImplementedError
 
-    def chmod(self, name, path, mode):
-        """Set a file's mode (``mode`` as octal text, like "755")."""
-        raise NotImplementedError
-
-    def put_service(self, name, service, spec):
-        """Create or replace a service: a process the VM starts again
-        whenever it wakes (``spec``: cmd, args, http_port)."""
-        raise NotImplementedError
-
-    def url(self, name):
-        """The VM's private HTTPS address (only the provider's token opens
-        it), which reaches the service with an ``http_port``."""
+    def delete_service(self, name, service):
+        """Remove a service of the VM (the live view's gateway before
+        2026-10-27); gone is fine."""
         raise NotImplementedError
 
     def close(self):
@@ -178,20 +234,56 @@ SHELL_PRELUDE = ('for __profile in /etc/profile "$HOME/.profile"; do [ -r "$__pr
                  'done >/dev/null 2>&1; __command=$1; set --; eval "$__command"')
 
 
-# In the environment of every command of the agent and of all it starts
-# (its background processes too): while the user has the workspace's browser,
-# the VM freezes whatever carries it (workspace_vm/pause.py). The workspace's
-# own programs (Chrome, its screen, the VNC server, the gateway) never do.
-AGENT_MARK = "CONSENS_AGENT=1"
+def agent_argv(argv, timeout, cwd=HOME):
+    """``argv`` as the agent on the workbench: the provider's user starts
+    AGENT_RUN as root (sudo), which hides the management socket and the
+    checkpoints in a mount namespace of its own, becomes the agent's user
+    with no way back (setpriv --no-new-privs), goes to ``cwd`` and runs
+    ``argv`` under coreutils ``timeout`` (workspace_vm/workbench/agent-run).
+    So a command never outlives its limit, also when the backend's
+    connection is gone, and nothing of it, nor anything it starts, has more
+    rights than that user."""
+    return ["sudo", "-n", "/bin/bash", AGENT_RUN, str(int(timeout)), cwd, *argv]
 
 
-def wrapped_command(command, timeout, agent=True):
-    """The argv the VM runs: bash with the login environment (SHELL_PRELUDE)
-    under coreutils ``timeout``, so a command never outlives its limit, also
-    when the backend's connection is gone; the agent's with AGENT_MARK."""
-    mark = ["env", AGENT_MARK] if agent else []
-    return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), *mark, "bash", "-c", SHELL_PRELUDE,
-            "bash", command]
+def wrapped_command(command, timeout, agent=True, *, cwd=HOME):
+    """The argv the VM runs for a shell command: bash with the login
+    environment (SHELL_PRELUDE), the agent's through agent_argv, the
+    server's own as the provider's user under ``timeout``."""
+    shell = ["bash", "-c", SHELL_PRELUDE, "bash", command]
+    if agent:
+        return agent_argv(shell, timeout, cwd)
+    return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), *shell]
+
+
+# The agent's file operations, as its user (agent_argv) with the path as an
+# argument, never in the command's text: 44 no such file, 45 a folder, 46
+# not allowed. The provider's file API runs as its own user, which may sudo,
+# so it never touches a path the agent named.
+READ_SCRIPT = ('[ -e "$1" ] || exit 44; [ -d "$1" ] && exit 45; [ -r "$1" ] || exit 46; '
+               'exec head -c "$2" -- "$1"')
+WRITE_SCRIPT = ('[ -d "$1" ] && exit 45; mkdir -p -- "$(dirname -- "$1")" 2>/dev/null || exit 46; '
+                'cat > "$1" 2>/dev/null || exit 46; stat -c %s -- "$1"')
+DELETE_SCRIPT = 'rm -rf -- "$1"'
+FILE_SECONDS = 120
+
+
+def _file_error(code, path):
+    if code == 44:
+        return VMFileMissing(path)
+    if code == 45:
+        return VMFileRefused(f"{path} is a folder, not a file.")
+    if code == 46:
+        return VMFileRefused(f"Permission denied: {path} (your user may not read or write there).")
+    return None
+
+
+# Closing without waiting for the server's close frame (above) makes the
+# library's reader log "unexpected internal error" with a trace for a socket
+# that ended as intended (seen on a Sprite 2026-10-27); this module logs the
+# failures that matter itself.
+_SOCKET_LOG = logging.getLogger("app.agent_vm.exec_socket")
+_SOCKET_LOG.setLevel(logging.CRITICAL)
 
 
 class SpritesBackend(VMBackend):
@@ -223,7 +315,10 @@ class SpritesBackend(VMBackend):
     def _sprite(self, name):
         return f"/v1/sprites/{quote(name, safe='')}"
 
-    def ensure(self, name):
+    def exists(self, name):
+        return self._request("get", "GET", self._sprite(name), missing_ok=True).status_code != 404
+
+    def ensure(self, name, rules):
         if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
             try:
                 self._request("create", "POST", "/v1/sprites", json={"name": name})
@@ -231,10 +326,34 @@ class SpritesBackend(VMBackend):
                 # Another message of the chat may have created it just now.
                 if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
                     raise
-        self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": EGRESS_RULES})
+        self.set_policy(name, rules)
 
-    def read_file(self, name, path, *, limit):
-        params = {"path": path, "workingDir": HOME}
+    def set_policy(self, name, rules):
+        self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": list(rules)})
+
+    def _collect(self, name, argv, *, limit, input=None, timeout=FILE_SECONDS):
+        """``(exit_code, stdout)`` of a short command, at most ``limit`` bytes kept."""
+        from app.services.llm.provider_runtime import ProviderCancellation
+        out = bytearray()
+
+        def keep(stream, chunk):
+            if stream == "stdout" and len(out) <= limit:
+                out.extend(chunk[:limit + 1 - len(out)])
+        outcome = self.run(name, argv, cwd="/", timeout=timeout, on_output=keep, cancellation=ProviderCancellation(),
+                           input=input)
+        return outcome.exit_code, bytes(out)
+
+    def read_file(self, name, path, *, limit, agent=True):
+        if agent:
+            code, data = self._collect(name, agent_argv(["bash", "-c", READ_SCRIPT, "read", path, str(limit + 1)],
+                                                        FILE_SECONDS), limit=limit + 1)
+            error = _file_error(code, path)
+            if error is not None:
+                raise error
+            if code != 0:
+                raise VMUnavailable(f"read: exit {code}")
+            return data[:limit], len(data) <= limit
+        params = {"path": path, "workingDir": SERVER_HOME}
         try:
             with self._http.stream("GET", self._sprite(name) + "/fs/read", params=params) as response:
                 if response.status_code == 404:
@@ -252,9 +371,21 @@ class SpritesBackend(VMBackend):
             logging.warning("Agent VM request failed operation=read category=%s", safe_exception(exc))
             raise VMUnavailable("read: no connection") from None
 
-    def write_file(self, name, path, data):
+    def write_file(self, name, path, data, *, agent=True):
+        if agent:
+            code, out = self._collect(name, agent_argv(["bash", "-c", WRITE_SCRIPT, "write", path], FILE_SECONDS),
+                                      limit=64, input=bytes(data))
+            error = _file_error(code, path)
+            if error is not None:
+                raise error
+            if code != 0:
+                raise VMUnavailable(f"write: exit {code}")
+            try:
+                return int(out.decode().strip())
+            except ValueError:
+                return len(data)
         response = self._request("write", "PUT", self._sprite(name) + "/fs/write", content=data,
-                                 params={"path": path, "workingDir": HOME, "mkdir": "true"},
+                                 params={"path": path, "workingDir": SERVER_HOME, "mkdir": "true"},
                                  headers={"Content-Type": "application/octet-stream"})
         try:
             return int(response.json().get("size", len(data)))
@@ -318,29 +449,18 @@ class SpritesBackend(VMBackend):
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
 
-    def delete_path(self, name, path):
+    def delete_path(self, name, path, *, agent=True):
+        if agent:
+            code, _ = self._collect(name, agent_argv(["bash", "-c", DELETE_SCRIPT, "delete", path], FILE_SECONDS),
+                                    limit=0)
+            if code != 0:
+                raise VMUnavailable(f"delete path: exit {code}")
+            return
         self._request("delete path", "DELETE", self._sprite(name) + "/fs/delete", missing_ok=True,
-                      json={"path": path, "workingDir": HOME, "recursive": True, "asRoot": False})
+                      json={"path": path, "workingDir": SERVER_HOME, "recursive": True, "asRoot": False})
 
-    def chmod(self, name, path, mode):
-        self._request("chmod", "POST", self._sprite(name) + "/fs/chmod",
-                      json={"path": path, "workingDir": HOME, "mode": mode, "recursive": False, "asRoot": False})
-
-    def put_service(self, name, service, spec):
-        # An existing service is neither replaced (409 with another config)
-        # nor restarted (the same config): it goes first, so the new one runs
-        # the files as they are now. Answers once it started, with its first
-        # log lines.
-        path = f"{self._sprite(name)}/services/{quote(service, safe='')}"
-        self._request("service", "DELETE", path, missing_ok=True)
-        self._request("service", "PUT", path, params={"duration": 1}, json={"needs": [], **spec},
-                      timeout=CHECKPOINT_SECONDS)
-
-    def url(self, name):
-        address = str(self._request("get", "GET", self._sprite(name)).json().get("url") or "")
-        if not address.startswith("https://"):
-            raise VMUnavailable("url: none")
-        return address
+    def delete_service(self, name, service):
+        self._request("service", "DELETE", f"{self._sprite(name)}/services/{quote(service, safe='')}", missing_ok=True)
 
     def close(self):
         self._http.close()
@@ -356,29 +476,52 @@ class SpritesBackend(VMBackend):
                        # exit frame; waiting for its close frame would add that
                        # to every command (the Sprites SDKs do not wait either).
                        open_timeout=WS_OPEN_SECONDS, ping_interval=15, ping_timeout=45, close_timeout=0,
-                       max_size=WS_MAX_FRAME)
+                       max_size=WS_MAX_FRAME, logger=_SOCKET_LOG)
 
-    def exec(self, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
-        from websockets.exceptions import ConnectionClosed, InvalidStatus
-        argv = wrapped_command(command, timeout, agent)
-        query = urlencode([*(("cmd", arg) for arg in argv), ("path", argv[0]), ("dir", cwd), ("stdin", "false")])
-        url = "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + query
+    def exec_url(self, name, argv, *, cwd, stdin):
+        """The exec WebSocket's address on SPRITES_API, the only place the
+        token goes (the live view uses it too, routers/agent_workspace.py)."""
+        query = urlencode([*(("cmd", arg) for arg in argv), ("path", argv[0]), ("dir", cwd),
+                           ("stdin", "true" if stdin else "false")])
+        return "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + query
+
+    def _connect_exec(self, url):
+        """The exec socket; a handshake that broke off (a sprite waking from
+        its sleep, seen 2026-10-27) is tried once more: no command started."""
+        from websockets.exceptions import InvalidHandshake, InvalidStatus
+        for attempt in (1, 2):
+            try:
+                return self._open(url)
+            except InvalidStatus as exc:
+                status = exc.response.status_code
+                logging.warning("Agent VM request refused operation=exec status=%s", status)
+                raise VMUnavailable(f"exec: HTTP {status}") from None
+            except (OSError, TimeoutError, InvalidHandshake) as exc:
+                logging.warning("Agent VM request failed operation=exec attempt=%s category=%s", attempt,
+                                safe_exception(exc))
+                if attempt == 2:
+                    raise VMUnavailable("exec: no connection") from None
+                time.sleep(HANDSHAKE_RETRY_SECONDS)
+
+    def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+        from websockets.exceptions import ConnectionClosed
+        url = self.exec_url(name, argv, cwd=cwd, stdin=input is not None)
         cancellation.raise_if_cancelled()
         started = self._clock()
-        try:
-            ws = self._open(url)
-        except InvalidStatus as exc:
-            status = exc.response.status_code
-            logging.warning("Agent VM request refused operation=exec status=%s", status)
-            raise VMUnavailable(f"exec: HTTP {status}") from None
-        except (OSError, TimeoutError) as exc:
-            logging.warning("Agent VM request failed operation=exec category=%s", safe_exception(exc))
-            raise VMUnavailable("exec: no connection") from None
+        ws = self._connect_exec(url)
         # Stop closes the socket at once; the loop below then ends the command.
         unregister = cancellation.register(ws)
         session, exit_code, killed = None, None, False
         deadline = started + timeout + KILL_GRACE_SECONDS + EXIT_WAIT_SECONDS
         try:
+            if input is not None:
+                try:
+                    for start in range(0, len(input), STDIN_CHUNK):
+                        ws.send(b"\x00" + input[start:start + STDIN_CHUNK])
+                    ws.send(b"\x04")
+                except (ConnectionClosed, OSError) as exc:
+                    logging.warning("Agent VM request failed operation=stdin category=%s", safe_exception(exc))
+                    raise VMUnavailable("exec: stdin not sent") from None
             while True:
                 left = deadline - self._clock()
                 if left <= 0:
@@ -478,13 +621,15 @@ def restore_workspace(uid, checkpoint, *, factory=None):
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None):
     """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
-    folder in the account's workspace, and the chat's own VM from before
+    folder in the account's workbench, and the chat's own VM from before
     2026-10-27. That one's name comes from the chat (vm_name), never from
     the record: a chat that moved to the workspace lost it there, and its VM
-    stayed (security audit 2026-10-27). Gone already is fine. Raises when
-    the provider fails or is not configured: the chat's deletion job then
-    retries (chat_store.run_chat_deletion), so none of the chat's files
-    outlives it."""
+    stayed (security audit 2026-10-27). The folder goes as the agent's user
+    (its tools brought up to date first, agent_workspace.prepare) and from
+    where it was before the agent had a user of its own (LEGACY_CHATS_DIR).
+    Gone already is fine. Raises when the provider fails or is not
+    configured: the chat's deletion job then retries
+    (chat_store.run_chat_deletion), so none of the chat's files outlives it."""
     if not isinstance(record, dict) or not record.get("name"):
         return
     name = record["name"]
@@ -496,8 +641,11 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
     if vm is None:
         raise VMUnavailable("delete: no provider configured")
     try:
-        if name == workspace_name(uid):
+        if name == workspace_name(uid) and vm.exists(name):
+            from app.services import agent_workspace
+            agent_workspace.prepare(vm, name)
             vm.delete_path(name, chat_dir(chat_id))
+            vm.delete_path(name, f"{LEGACY_CHATS_DIR}/{chat_dir(chat_id).rsplit('/', 1)[1]}", agent=False)
         vm.delete(vm_name(uid, chat_id))
     finally:
         vm.close()
@@ -505,13 +653,14 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
 
 def delete_workspace(uid, *, factory=None):
     """Delete the account's workspace with its account (agent_workspace.py):
-    every chat's folder, the browser and its sign-ins. By the name that
-    follows from the account, so a record already gone never hides it;
-    gone already is fine."""
+    the workbench with every chat's folder, and the browser with its
+    sign-ins. By the names that follow from the account, so a record
+    already gone never hides them; gone already is fine."""
     vm = (factory or backend)()
     if vm is None:
         raise VMUnavailable("delete: no provider configured")
     try:
         vm.delete(workspace_name(uid))
+        vm.delete(browser_name(uid))
     finally:
         vm.close()

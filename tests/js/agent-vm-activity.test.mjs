@@ -280,17 +280,22 @@ describe("VM calls in the activity", () => {
 });
 
 describe("a step in the workspace's browser", () => {
-  it("offers to watch it live, only for browser commands and accounts with a workspace", () => {
+  // Since 2026-10-27 the browser tool (agent_browser.py) with typed actions,
+  // no longer a browser command in the shell.
+  const step = fields => vm({ name: "browser", ...fields });
+  it("shows the action and what it was on, and offers to watch it live", () => {
     const { app, host, activity } = setup();
     const opened = [];
     app.window.App.workspaceView = { open: () => opened.push(true) };
     app.document.body.classList.add("viewer-has-workspace");
     const events = [];
-    activity.receive(events, vm({ status: "running", command: "browser open github.com" }));
+    activity.receive(events, step({ status: "running", action: "open", url: "https://github.com" }));
     activity.receive(events, vm({ id: "completion:1:call_2/tool", status: "succeeded", command: "pip install x",
       exit_code: 0, output: "ok\n" }));
     activity.render(host, { running: true, status: "running", events });
     const [browserStep, otherStep] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    expect(browserStep.querySelector(".agent-vm-verb").textContent).toBe("Opening");
+    expect(browserStep.querySelector(".agent-vm-target").textContent).toBe("https://github.com");
     const watch = browserStep.querySelector(".agent-vm-watch");
     expect(watch.hidden).toBe(false);
     expect(watch.textContent).toBe("Watch live");
@@ -300,18 +305,61 @@ describe("a step in the workspace's browser", () => {
     watch.click();
     expect(opened).toEqual([true]);
     expect(browserStep.open).toBe(wasOpen);
-    // Also after cd and for a step that only reads.
-    activity.receive(events, vm({ id: "completion:1:call_3/tool", status: "running", command: "cd app && browser read" }));
+    // A step that only reads, with the page as its output; a click by its ref.
+    activity.receive(events, step({ id: "completion:1:call_3/tool", status: "succeeded", action: "read",
+      title: "Example", page: 'Page: "Example"\n[e1] link "More"' }));
+    activity.receive(events, step({ id: "completion:1:call_4/tool", status: "succeeded", action: "click", ref: "e1" }));
     activity.render(host, { running: true, status: "running", events });
-    expect(host.querySelectorAll(".agent-activity-content .agent-vm")[2].querySelector(".agent-vm-watch").hidden)
-      .toBe(false);
+    const [, , read, click] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    expect(read.querySelector(".agent-vm-verb").textContent).toBe("Read the page");
+    expect(read.querySelector(".agent-vm-target").textContent).toBe("Example");
+    expect(read.querySelector(".agent-vm-output").textContent).toContain("[e1] link");
+    expect(read.querySelector(".agent-vm-watch").hidden).toBe(false);
+    expect(click.querySelector(".agent-vm-verb").textContent).toBe("Clicked");
+    expect(click.querySelector(".agent-vm-target").textContent).toBe("e1");
   });
 
-  it("offers nothing without a workspace on the account", () => {
-    const { host, activity } = setup();
+  it("offers nothing without a workspace on the account, and never for a shell command", () => {
+    const { app, host, activity } = setup();
     const events = [];
-    activity.receive(events, vm({ status: "running", command: "browser open github.com" }));
+    activity.receive(events, step({ status: "running", action: "open", url: "https://github.com" }));
     activity.render(host, { running: true, status: "running", events });
     expect(host.querySelector(".agent-vm .agent-vm-watch").hidden).toBe(true);
+    app.window.App.workspaceView = { open() {} };
+    app.document.body.classList.add("viewer-has-workspace");
+    activity.receive(events, vm({ id: "completion:1:call_5/tool", status: "running", command: "browser open x" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelectorAll(".agent-activity-content .agent-vm")[1].querySelector(".agent-vm-watch").hidden)
+      .toBe(true);
+  });
+});
+
+describe("installing and asking for a domain", () => {
+  it("shows the packages and the domain like a command", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, vm({ name: "vm_install_packages", status: "succeeded", packages: ["ffmpeg", "jq"],
+      exit_code: 0, duration_ms: 4200, output: "Setting up jq\n" }));
+    activity.receive(events, vm({ id: "completion:1:call_2/tool", name: "request_domain", status: "succeeded",
+      domain: "api.example.com", domain_status: "allowed" }));
+    activity.render(host, { running: false, status: "completed", events });
+    const [install, domain] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    expect(install.querySelector(".agent-vm-verb").textContent).toBe("Installed");
+    expect(install.querySelector(".agent-vm-target").textContent).toBe("ffmpeg jq");
+    expect(install.querySelector(".agent-vm-output").textContent).toBe("Setting up jq\n");
+    expect(domain.querySelector(".agent-vm-verb").textContent).toBe("Access to");
+    expect(domain.querySelector(".agent-vm-target").textContent).toBe("api.example.com");
+  });
+
+  it("keeps the user's decision on a domain in the history", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-abc", step_id: "hold", halt: "domain",
+      domain: "api.example.com", reviewer: "", reason: "", entry: 4, gate: true, state: "waiting" });
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-abc", step_id: "hold", state: "deny" });
+    activity.render(host, { running: false, status: "completed", events });
+    const step = host.querySelector(".agent-activity-content .agent-hold-step");
+    expect(step.querySelector("strong").textContent).toBe("The agent asked to reach api.example.com");
+    expect(step.querySelector(".agent-hold-step-state").textContent).toBe("Network access · You did not allow it");
   });
 });
