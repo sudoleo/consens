@@ -2119,6 +2119,8 @@ class SharePageRouteTests(unittest.TestCase):
         body = response.text
         self.assertIn('href="/s/frage-eins-abc"', body)
         self.assertIn("Frage eins?", body)
+        # A question is the asker's words: a German page keeps them as they are.
+        self.assertIn('<span class="hub-question" data-i18n-skip>Frage eins?</span>', body)
         self.assertIn('content="index, follow"', body)
         self.assertIn('rel="canonical" href="https://www.consens.io/questions"', body)
         self.assertIn('"@type": "CollectionPage"', body)

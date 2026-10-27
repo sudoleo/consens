@@ -8,6 +8,7 @@ leaves out what a direct answer does not have.
 import hashlib
 import html
 import json
+import re
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -338,3 +339,20 @@ def test_a_shared_agent_answer_cites_its_sources_as_the_app_does(share_app):
     assert '(mission status<a class="src-ref" href="https://science.nasa.gov/webb" target="_blank"' in body
     assert '<span class="src-ref-label">science.nasa.gov</span></a>).' in body
     assert ">mission status</a>" not in body
+
+
+def test_a_german_page_keeps_the_shared_question_in_its_titles(share_app):
+    """The server translated the question like interface text: "Price of
+    gold" became "Price von gold" in the tab title and the link previews."""
+    from app.core import i18n
+    client, database, store = share_app
+    chat_id, turn_id = _saved_turn(database, store)
+    database.documents[("users", UID, "chats", chat_id, "turns", turn_id)]["question"] = "Price of gold"
+    _, shared = _share(client, chat_id, turn_id)
+
+    german = html.unescape(i18n.translate_html(client.get(shared["path"]).text, "de"))
+
+    assert "Price von gold" not in german
+    assert re.search(r"<title[^>]*>Price of gold \| consens\.io</title>", german)
+    assert '<meta property="og:title" content="Price of gold" data-i18n-skip>' in german
+    assert '<meta name="twitter:title" content="Price of gold" data-i18n-skip>' in german

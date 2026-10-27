@@ -182,7 +182,7 @@ def test_direct_links_drop_site_signatures_and_doubled_titles():
 def test_titles_end_at_a_word_and_say_they_were_cut(client):
     question = "Does the new ChatGPT-linked Amp subscription actually include GPT-6 Astra in High mode for agents?"
     body = page(client, doc(question=question))
-    title = body.split("<title>", 1)[1].split("</title>", 1)[0]
+    title = re.search(r"<title[^>]*>(.*?)</title>", body).group(1)
     assert title.endswith("… | consens.io")
     assert "includ |" not in title and len(title.split(" | ")[0]) <= 70
     assert share_router.clip_words("short question", 70) == "short question"

@@ -10,16 +10,16 @@
   <!-- Die Frage ist das Keyword und steht vorn: ein Präfix wie "Consensus
        Watch:" schiebt sie im SERP hinter den abgeschnittenen Rand. Dass die
        Seite nachgeprüft wird, trägt die Meta-Description. -->
-  <title>{{ question | clip_words(70) }} | consens.io</title>
+  <title data-i18n-skip>{{ question | clip_words(70) }} | consens.io</title>
   <meta name="description" content="{{ meta_description }}">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="{{ question | clip_words(110) }}">
+  <meta property="og:title" content="{{ question | clip_words(110) }}" data-i18n-skip>
   <meta property="og:description" content="{{ meta_description }}">
   <meta property="og:url" content="{{ canonical_url }}">
   {% set og_card_image = og_image if og_is_card else "" %}{% set og_card_alt = question | clip_words(120) %}
   {% include "partials/og_card.html" %}
-  <meta name="twitter:title" content="{{ question | clip_words(110) }}">
+  <meta name="twitter:title" content="{{ question | clip_words(110) }}" data-i18n-skip>
   <meta name="twitter:description" content="{{ meta_description }}">
   <script type="application/ld+json">{{ jsonld | safe }}</script>
 <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">

@@ -95,7 +95,7 @@
             </span>
             {% endif %}
             <span class="hub-main">
-              <span class="hub-question">{{ entry.question }}</span>
+              <span class="hub-question" data-i18n-skip>{{ entry.question }}</span>
               <span class="hub-meta">
                 {% if entry.watch %}<span class="hub-meta-watch is-{{ entry.watch.tone }}"><span class="visually-hidden">Watch: </span>{{ entry.watch.headline }}</span>{% endif %}
                 {% if entry.model_count %}<span>{% if entry.model_count == 1 %}1 model{% else %}{{ entry.model_count }} models{% endif %}</span>{% endif %}

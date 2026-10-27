@@ -3,9 +3,13 @@
     og_card_alt before the include; every other page shows the brand card of
     the landing page, never the favicon, which the services draw as a tiny
     box beside the title. Tests: tests/test_og_cards.py. -#}
+{%- set og_card_skip = "" %}
 {%- if og_card_image is defined and og_card_image %}
   {%- set og_card_src = og_card_image %}
   {%- set og_card_text = og_card_alt if og_card_alt is defined and og_card_alt else "consens.io" %}
+  {#- The alt text of a page's own card is its question: words of the
+      asker, which a German page keeps as they are (data-i18n-skip). -#}
+  {%- set og_card_skip = " data-i18n-skip" if og_card_alt is defined and og_card_alt else "" %}
 {%- else %}
   {%- set og_card_src = "https://www.consens.io" ~ asset_url("/static/og-home-v2.png") %}
   {%- set og_card_text = "Six models answer. See where they disagree. | consens.io" %}
@@ -15,7 +19,7 @@
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="{{ og_card_text }}">
+  <meta property="og:image:alt" content="{{ og_card_text }}"{{ og_card_skip }}>
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="{{ og_card_src }}">
-  <meta name="twitter:image:alt" content="{{ og_card_text }}">
+  <meta name="twitter:image:alt" content="{{ og_card_text }}"{{ og_card_skip }}>
