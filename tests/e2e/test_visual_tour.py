@@ -519,12 +519,195 @@ def _app_agent(browser, server, view, shoot):
         context.close()
 
 
+COMPARE_QUESTION = "Postgres or MongoDB for an append-only event log with about 2,000 writes a second?"
+COMPARE_ANSWERS = (
+    "## Short answer\n\nPostgres. One table with a JSONB payload and a `bigserial` key carries "
+    "**2,000 writes a second** on a single node with room to spare.\n\n"
+    "- Transactions keep the log and its projections in step\n"
+    "- Monthly partitions keep old events cheap\n- Logical replication feeds consumers",
+    "## Recommendation\n\nGo with **Postgres** unless your event shapes change every week.\n\n"
+    "1. Append-only fits a heap table well\n2. Use `BRIN` indexes on the timestamp\n"
+    "3. Archive partitions older than a year\n\nMongoDB only wins if nobody wants migrations.",
+    "Both work at that rate. Postgres gives you stronger ordering guarantees; MongoDB gives you a "
+    "flexible schema and change streams out of the box. For a team that already runs Postgres, stay there.",
+    "## It depends on the read side\n\nIf most reads replay one stream, MongoDB's document model is "
+    "convenient. If you join events with other tables, **Postgres** is simpler.\n\n"
+    "> At 2,000 writes a second either database is far from its limits.",
+    "Postgres, with one caveat: plan snapshots once a stream passes a few thousand events, "
+    "otherwise rebuilding state gets slow.",
+)
+
+CONSENSUS_TEXT = (
+    "For an append-only event log at about 2,000 writes a second, Postgres is the safer default.\n\n"
+    "## Why Postgres\n\n"
+    "A single table with a JSONB payload handles tens of thousands of writes per second on one node.\n\n"
+    "- Transactions keep the log and its projections in step\n"
+    "- Monthly partitions keep old events cheap\n"
+    "- Logical replication streams events to consumers\n\n"
+    "MongoDB fits better when the event shapes change weekly and nobody wants migrations.\n\n"
+    "Either way, plan for snapshots once a stream passes a few thousand events."
+)
+SITE_ICON = ('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" rx="5" fill="#3a3a3a"/>'
+             '<path d="M5 6h10v2H5zm0 5h7v2H5z" fill="white"/></svg>')
+CONSENSUS_SOURCES = [
+    {"id": f"S{i}", "title": title, "url": url, "snippet": "An excerpt from the page the models cited."}
+    for i, (title, url) in enumerate((
+        ("PostgreSQL documentation: Table partitioning", "https://www.postgresql.org/docs/current/ddl-partitioning.html"),
+        ("MongoDB manual: Change streams", "https://www.mongodb.com/docs/manual/changeStreams/"),
+        ("Event sourcing with Postgres in practice", "https://example.org/event-sourcing-postgres"),
+        ("Benchmarking JSONB inserts at scale", "https://example.org/jsonb-benchmark"),
+    ), start=1)
+]
+
+
+def _saved_consensus(page):
+    """Ein gespeicherter Consensus-Chat aus zwei Turns, geoeffnet ueber den
+    echten Bookmark-Weg (Vorlage: test_model_answer_reader.seed_reader): Score,
+    Satzmarken, zwei Unterschiede, Quellen und fuenf Modellantworten."""
+    keys = page.evaluate("() => App.modelPrefs.slice(0, 5).map(p => p.key)")
+    labels = keys
+    claims = [
+        {"anchor": CONSENSUS_TEXT.split("\n\n")[0], "agree": labels, "dissent": []},
+        {"anchor": "A single table with a JSONB payload handles tens of thousands of writes per second on one node.",
+         "agree": labels[:3], "dissent": [{"model": labels[3], "quote": "closer to 5,000 writes a second without tuning",
+                                            "target": "tens of thousands of writes per second"}]},
+        {"anchor": "MongoDB fits better when the event shapes change weekly and nobody wants migrations.",
+         "agree": labels[:4], "dissent": [{"model": labels[4], "quote": "schema changes are cheap in both"}]},
+    ]
+    differences = [
+        {"claim": "How many writes a second one Postgres node takes", "type": "contradiction", "severity": "major",
+         "consensus_anchor": claims[1]["anchor"],
+         "positions": [{"models": labels[:3], "stance": "Tens of thousands a second on one node.", "quote": "tens of thousands of inserts per second"},
+                       {"models": labels[3:4], "stance": "Closer to 5,000 a second without tuning.", "quote": "closer to 5,000 writes a second"}],
+         "verify": "Run a short insert benchmark on your own hardware."},
+        {"claim": "When MongoDB is the better fit", "type": "emphasis",
+         "positions": [{"models": labels[:2], "stance": "When event shapes change often."},
+                       {"models": labels[2:4], "stance": "When reads replay one stream at a time."}]},
+    ]
+    data = {"models_compared": labels, "claims": claims, "differences": differences,
+            "agreement": {"score": 64, "model_count": len(labels), "scored_claims": 7, "total_claims": 10, "coverage_percent": 70}}
+    answers = {key: {"answer": text, "model_label": f"{key} model", "sources": CONSENSUS_SOURCES[:2]}
+               for key, text in zip(keys, COMPARE_ANSWERS)}
+    old = {"id": "tour-old", "position": 1, "status": "completed", "mode": "Standard", "execution_mode": "consensus",
+           "question": "Which database should hold our event log?",
+           "consensus": "It depends on the write rate and on how you read the events back.",
+           "sources": CONSENSUS_SOURCES[2:], "differences_data": {**data, "claims": [], "differences": differences[1:]},
+           "model_answers": {key: {"answer": "It depends on the write rate.", "model_label": f"{key} model"} for key in keys[:3]}}
+    current = {"id": "tour-current", "position": 2, "status": "completed", "mode": "Standard", "execution_mode": "consensus",
+               "question": COMPARE_QUESTION, "consensus": CONSENSUS_TEXT, "sources": CONSENSUS_SOURCES,
+               "differences_data": data, "model_answers": answers}
+    saved = "tour-saved"
+    bookmark = {"id": saved, "query": COMPARE_QUESTION, "title": "Postgres or MongoDB for an event log", "mode": "Standard",
+                "chat_id": "c" * 32, "responses": {"consensus": CONSENSUS_TEXT}}
+    page.route(f"**/bookmarks/{saved}/conversation*",
+               lambda route: _json(route, {"chat_id": "c" * 32, "turns": [old, current], "has_more": False}))
+    page.route(f"**/bookmarks/{saved}", lambda route: _json(route, {"bookmark": bookmark}))
+    page.route("**/api/topics/favicon?*", lambda route: route.fulfill(content_type="image/svg+xml", body=SITE_ICON))
+    page.evaluate("id => window.openBookmark(id)", saved)
+    _soft_wait(page, """() => App.followup?.lastExchange?.turn?.turn_id === 'tour-current'
+      && document.getElementById('runProvenance')?.hidden === false""")
+    # An opened chat scrolls to its newest question (chat-scroll.js).
+    page.evaluate("""() => new Promise(resolve => {
+      let last = scrollY, still = 0;
+      const tick = () => {
+        if (Math.abs(scrollY - last) < 1) still += 1; else { still = 0; last = scrollY; }
+        if (still >= 12) resolve(); else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    })""")
+
+
+def _app_compare(browser, server, view, shoot):
+    phone = view[0] < 768
+    context, page = _open(browser, server, view, init_script=(
+        "if (!sessionStorage.getItem('tourModeSeeded')) {"
+        " localStorage.setItem('runMode', 'compare'); sessionStorage.setItem('tourModeSeeded', '1'); }"))
+    try:
+        _soft_wait(page, "() => document.querySelectorAll('.is-preview .answer-reader-answer').length >= 2")
+        shoot(page, "vorschau")
+
+        # A run through the registry, like test_phase4_frontend: nothing is
+        # sent, the projection is the real one.
+        page.evaluate("""([question, texts]) => {
+          const registry = window.App.runRegistry;
+          const prefs = App.modelPrefs.filter(p => document.getElementById(p.checkId)?.checked).slice(0, 6);
+          const providers = prefs.map(p => ({provider: p.key,
+            modelLabel: document.getElementById(p.selectId)?.selectedOptions?.[0]?.textContent?.trim() || p.label}));
+          const run = registry.create({runId: 'tour-compare', question, config: {agentMode: false, providers}});
+          run.phase = 'answers';
+          providers.forEach((p, i) => {
+            run.modelResults[p.provider] = i < 2 ? {status: 'complete', text: texts[i], sources: []}
+              : i === 2 ? {status: 'streaming', streamText: texts[i].slice(0, 90)} : {status: 'pending'};
+          });
+          registry.setStatus(run.runId, 'running');
+          window.__tourRun = run; window.__tourProviders = providers;
+        }""", [COMPARE_QUESTION, list(COMPARE_ANSWERS)])
+        _soft_wait(page, "() => !!document.querySelector('.is-direct .answer-reader-answer')")
+        page.evaluate("() => window.scrollTo(0, 0)")
+        shoot(page, "lauf")
+
+        page.evaluate("""texts => {
+          const run = window.__tourRun;
+          window.__tourProviders.forEach((p, i) => {
+            run.modelResults[p.provider] = i === 5
+              ? {status: 'error', text: '', error: 'This model timed out.', sources: []}
+              : {status: 'complete', text: texts[i % texts.length], sources: []};
+          });
+          run.phase = 'done';
+          window.App.runRegistry.setStatus(run.runId, 'succeeded');
+          window.App.runRegistry.renderVisible();
+        }""", list(COMPARE_ANSWERS))
+        _soft_wait(page, "() => !document.querySelector('.is-direct .answer-skeleton')")
+        page.evaluate("() => window.scrollTo(0, 0)")
+        shoot(page, "ergebnis")
+        page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+        shoot(page, "ergebnis-ende")
+    finally:
+        context.close()
+
+    context, page = _open(browser, server, view)
+    try:
+        _saved_consensus(page)
+        page.mouse.move(0, 0)
+        shoot(page, "consensus")
+        page.evaluate("() => document.getElementById('runProvenance')?.scrollIntoView({block: 'start'})")
+        shoot(page, "consensus-score")
+        page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+        shoot(page, "consensus-fuss")
+        page.evaluate("() => document.querySelector('.thread-history-turn')?.scrollIntoView({block: 'start'})")
+        shoot(page, "verlauf")
+
+        page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.locator("#consensusDifferencesTab").click()
+        _soft_wait(page, "() => document.querySelectorAll('#answerReaderInspector .diff-card').length > 0")
+        shoot(page, "differences")
+        page.locator("#answerReaderInspector .diff-card summary").first.click()
+        _soft_wait(page, "() => document.querySelector('#answerReaderInspector .diff-card')?.open")
+        shoot(page, "differences-offen")
+        page.locator("#answerReaderSections [data-section='sources']").click()
+        _soft_wait(page, "() => !!document.querySelector('#answerReaderInspector .answer-reader-source-card')")
+        shoot(page, "quellen")
+        page.keyboard.press("Escape")
+        _soft_wait(page, "() => document.getElementById('modelAnswerReader')?.hidden !== false || !document.querySelector('#modelAnswerReader:not([hidden]) .answer-reader-dialog[open]')")
+
+        page.locator("#agentModeAnswersToggle").click()
+        _soft_wait(page, "() => !!document.querySelector('#modelAnswerReader:not([hidden]) .answer-reader-body')")
+        shoot(page, "antworten")
+        page.locator("#answerReaderCompare").click()
+        _soft_wait(page, "() => document.querySelector('.answer-reader-dialog')?.dataset.modal === 'true'")
+        if phone:
+            page.locator("#answerReaderSideB").click()
+        shoot(page, "antworten-vergleich")
+    finally:
+        context.close()
+
+
 AREAS = {
     "app-start": _app_start,
     # Die uebrigen Bereiche bekommen ihre Zustaende in dem Lauf, der sie als
     # Erster braucht (siehe Liste in der Aufgabe consens-visual-polish).
     "app-agent": _app_agent,
-    "app-compare": None,
+    "app-compare": _app_compare,
     "app-chrome": None,
     "watches": None,
     "landing": None,
