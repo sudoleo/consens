@@ -14,6 +14,9 @@ werden aber keine Runs mehr, sondern Tokens auf demselben Tageskonto wie Agent
   ``resolve``, API ``pipeline``) bucht ihre gemessenen Tokens genau einmal
   (``booked_operations``). Fehlt die Messung, bucht sie dieselbe begrenzte
   Schaetzung wie Agent. Ein Lauf darf das Konto dabei leicht ueberziehen.
+  Die letzte Operation gibt den Rest-Hold frei: ``final`` (Consensus, API) oder,
+  bei Compare, die Buchung, mit der alle bei ``/prepare`` angekuendigten
+  Antworten (``planned_operations``) gebucht sind.
 
 Firestore-Datenmodell (unter ``users/{uid}``):
 
@@ -194,7 +197,8 @@ class UsageRepository(Protocol):
 
     def reserve(
         self, uid: str, idempotency_key: str, kind: RunKind, admission: TokenAdmission,
-        *, request_fingerprint: str | None = None, now: datetime | None = None,
+        *, request_fingerprint: str | None = None, planned_operations: int | None = None,
+        now: datetime | None = None,
     ) -> UsageRunResult: ...
 
     def consume(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
@@ -259,8 +263,8 @@ class FirestoreUsageRepository:
             raise UsageCapacityExceeded(str(exc)) from None
         return ledger_ref, admitted
 
-    def _new_run(self, kind, admission, request_fingerprint, now):
-        return {
+    def _new_run(self, kind, admission, request_fingerprint, now, planned_operations=None):
+        run = {
             "schema_version": USAGE_SCHEMA_VERSION,
             "kind": kind.value,
             "utc_date": now.date().isoformat(),
@@ -275,6 +279,9 @@ class FirestoreUsageRepository:
             "booked_operations": {},
             "created_at": now,
         }
+        if planned_operations is not None:
+            run["planned_operations"] = planned_operations
+        return run
 
     def authorize_operation(
         self, uid: str, idempotency_key: str, kind: RunKind,
@@ -389,8 +396,15 @@ class FirestoreUsageRepository:
         admission: TokenAdmission,
         *,
         request_fingerprint: str | None = None,
+        planned_operations: int | None = None,
         now: datetime | None = None,
     ) -> UsageRunResult:
+        """Admit a new run (idempotent per key).
+
+        ``planned_operations`` is how many operations the run will book (the
+        models of a Compare run); the booking that completes them drops the
+        run's remaining hold, as ``final`` does.
+        """
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
         kind = _coerce_kind(kind)
@@ -398,6 +412,11 @@ class FirestoreUsageRepository:
             request_fingerprint
             or canonical_request_fingerprint({"internal_idempotency_hash": key_hash})
         )
+        if planned_operations is not None and (
+            isinstance(planned_operations, bool) or not isinstance(planned_operations, int)
+            or not 1 <= planned_operations <= MAX_BOOKED_OPERATIONS
+        ):
+            raise ValueError("planned_operations must be an integer within the booking limit")
         now = _as_utc(now)
         run_ref = self._run_ref(uid, key_hash)
 
@@ -427,7 +446,7 @@ class FirestoreUsageRepository:
                 )
 
             ledger_ref, admitted = self._admit(tx, uid, key_hash, kind, admission, now)
-            run_data = self._new_run(kind, admission, request_fingerprint, now)
+            run_data = self._new_run(kind, admission, request_fingerprint, now, planned_operations)
             tx.set(ledger_ref, admitted)
             tx.set(run_ref, {**run_data, "status": RunStatus.RESERVED.value, "updated_at": now})
             return UsageRunResult(
@@ -457,7 +476,9 @@ class FirestoreUsageRepository:
 
         ``final`` marks the last operation of a run (Consensus, API pipeline,
         Resolve): its remaining admission hold is dropped instead of waiting
-        for expiry. Returns the account's public snapshot after the booking.
+        for expiry. A run with ``planned_operations`` (Compare) ends the same
+        way with the booking that completes them. Returns the account's public
+        snapshot after the booking.
         """
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
@@ -495,7 +516,11 @@ class FirestoreUsageRepository:
             if len(booked) >= MAX_BOOKED_OPERATIONS:
                 raise UsageDataError("Too many booked operations for one run")
             ledger = agent_quota.book_run(ledger, key_hash, measured=measured, estimated=estimated, now=epoch)
-            if final:
+            planned = run_data.get("planned_operations")
+            # A Compare run has no closing step since the browser runs no
+            # Consensus (2026-10-25); without this its leftover hold read as
+            # "held for a message still running" for ten minutes.
+            if final or (type(planned) is int and len(booked) + 1 >= planned):
                 ledger = agent_quota.release_run(ledger, key_hash, now=epoch)
             tx.set(ledger_ref, ledger)
             tx.update(run_ref, {

@@ -228,6 +228,36 @@ def test_bookings_shrink_the_hold_and_final_drops_the_rest(usage_repo):
     assert ledger(db, "holder")["used"] == 15_000
 
 
+def test_a_compare_run_drops_its_hold_with_its_last_planned_answer(usage_repo):
+    # A Compare run has no closing Consensus since 2026-10-25: the answer that
+    # completes the models announced at /prepare ends it, not the expiry.
+    repo, db = usage_repo
+    repo.reserve("comparer", "run", RunKind.REGULAR, ADMISSION, planned_operations=2, now=UTC_NOON)
+    repo.consume("comparer", "run")
+    epoch = UTC_NOON.timestamp()
+
+    repo.book_operation("comparer", "run", "ask:openai", measured=1_000, estimated=0, now=UTC_NOON)
+    # A repeated booking of the same answer completes nothing.
+    repo.book_operation("comparer", "run", "ask:openai", measured=1_000, estimated=0, now=UTC_NOON)
+    assert agent_quota.held_tokens(ledger(db, "comparer"), epoch) == 29_000
+    snapshot = repo.book_operation("comparer", "run", "ask:mistral", measured=2_000, estimated=0, now=UTC_NOON)
+    assert agent_quota.held_tokens(ledger(db, "comparer"), epoch) == 0
+    assert snapshot["reserved"] == 0 and snapshot["used"] == 3_000
+
+    # Without the count (a run that skipped /prepare) the hold waits for its expiry.
+    consumed(repo, "comparer", "unplanned")
+    repo.book_operation("comparer", "unplanned", "ask:openai", measured=1_000, estimated=0, now=UTC_NOON)
+    assert agent_quota.held_tokens(ledger(db, "comparer"), epoch) == 29_000
+
+
+@pytest.mark.parametrize("planned", [0, -1, True, 1.5, "2", 33])
+def test_a_planned_count_outside_the_booking_limit_is_refused(usage_repo, planned):
+    repo, db = usage_repo
+    with pytest.raises(ValueError):
+        repo.reserve("comparer", "run", RunKind.REGULAR, ADMISSION, planned_operations=planned, now=UTC_NOON)
+    assert ledger(db, "comparer") == {}
+
+
 def test_expired_holds_stop_blocking_admissions(usage_repo):
     repo, _ = usage_repo
     for index in range(3):

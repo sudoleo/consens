@@ -409,6 +409,9 @@
         mode: context.mode,
         // Admission: the expected tokens of a typical Compare run.
         run_mode: "compare",
+        // The answer that books last frees what the admission still holds;
+        // otherwise the sidebar calls it held for a running message.
+        operations: context.config.providers.length,
         useOwnKeys: context.config.useOwnKeys,
         id_token: idToken
       };

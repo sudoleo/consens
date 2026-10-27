@@ -72,10 +72,12 @@ def _ledger(db):
     return db.documents.get(("users", UID, "chat_state", "agent_tokens_" + period)) or {}
 
 
-def _prepare(client, key, *, deep=False, mode=None):
+def _prepare(client, key, *, deep=False, mode=None, operations=None):
     body = {"question": "What changed?", "usage_run_key": key, "deep_search": deep}
     if mode:
         body["run_mode"] = mode
+    if operations is not None:
+        body["operations"] = operations
     return client.post("/prepare", headers=AUTH, json=body)
 
 
@@ -124,6 +126,19 @@ def test_compare_runs_are_admitted_against_the_compare_estimate(run_api):
     prepared = _prepare(client, "compare-run", mode="compare")
     assert prepared.status_code == 200
     assert prepared.json()["run_estimate"] == FREE_RUN["compare"]
+
+
+@pytest.mark.parametrize("operations,held", [(2, 0), (None, FREE_RUN["compare"] - 3_000),
+                                              (99, FREE_RUN["compare"] - 3_000), ("2", FREE_RUN["compare"] - 3_000)])
+def test_the_last_announced_answer_frees_what_a_compare_run_still_holds(run_api, operations, held):
+    # The sidebar read a finished Compare run's leftover hold as "held for a
+    # message still running" until it expired (nightly 2026-10-27).
+    client, _repository, db = run_api
+    assert _prepare(client, "compare-run", mode="compare", operations=operations).status_code == 200
+    for route, provider in [("/ask_openai", "openai"), ("/ask_mistral", "mistral")]:
+        assert _ask(client, route, provider, "compare-run").status_code == 200
+    assert agent_quota.held_tokens(_ledger(db)) == held
+    assert _ledger(db)["used"] == 3_000
 
 
 def test_prepare_is_refused_when_the_account_does_not_cover_a_run(run_api):

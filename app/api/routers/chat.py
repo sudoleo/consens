@@ -169,6 +169,7 @@ def reserve_usage_run(
     deep_think: bool,
     purpose: Optional[str] = None,
     mode=None,
+    planned_operations: Optional[int] = None,
 ):
     key = get_usage_run_key(data)
     kind = RunKind.DEEP_THINK if deep_think else RunKind.REGULAR
@@ -185,6 +186,7 @@ def reserve_usage_run(
                 deep_think=deep_think,
                 purpose=purpose,
             ),
+            planned_operations=planned_operations,
         )
     except UsageLimitExceeded as exc:
         raise HTTPException(status_code=403, detail=_token_limit_detail(exc, tier)) from None
@@ -681,6 +683,17 @@ for _provider_key, _provider_config in cfg.PROVIDERS.items():
     )
 
 
+def _planned_answers(value) -> Optional[int]:
+    """How many /ask_* answers the run will book (``operations`` of /prepare).
+
+    With it the last answer's booking drops the run's leftover admission hold;
+    without (older browsers, nonsense) the hold expires as before.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if 1 <= value <= cfg.MAX_RUN_FAMILIES else None
+
+
 @router.post("/prepare")
 def prepare(request: Request, data: dict = Body(...)):
     question = validate_text_size(
@@ -733,7 +746,8 @@ def prepare(request: Request, data: dict = Body(...)):
         # cost of a typical run of this mode (Compare, with or without
         # Reasoning).
         usage_key, reserved, admission = reserve_usage_run(
-            uid, data, tier=tier, deep_think=deep_think, mode=data.get("run_mode")
+            uid, data, tier=tier, deep_think=deep_think, mode=data.get("run_mode"),
+            planned_operations=_planned_answers(data.get("operations")),
         )
         # Consume once before fan-out so later authorization only reads the
         # run and writes the operation claim. The combined authorize path also

@@ -5968,7 +5968,9 @@ Consensus-Lauf danach (`/consensus`) kommt aus dem Browser nicht mehr.
    Auth sowie transaktionale Admission auf dem Tokenkonto (`run_mode`
    `compare`; der Server kennt weiter `consensus` für andere Aufrufer,
    Reasoning-Schätzung aus `deep_search`) und sofortiger Consume
-   des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
+   des vom Client erzeugten, kostenfreien `usage_run_key`; `operations` nennt
+   die Zahl der gefragten Modelle (1 bis `MAX_RUN_FAMILIES`, sonst ignoriert)
+   und landet als `planned_operations` am Run-Beleg. Antwort: finaler
    `system_prompt`, `token_budget` und `run_estimate`. Vorher blockt
    `usageLimit.blockIfExhausted` clientseitig mit derselben Regel.
    Echtzeitdaten holen sich die Modelle über das gemeinsame OpenRouter-Web-Tool
@@ -7223,7 +7225,11 @@ Agent.
     ihre Summe genau einmal über
     `usage_repository.book_operation` (`booked_operations` als Zaun) in die
     Kontoperiode ihrer Admission; `final=True` (Consensus, Resolve, API) gibt
-    den Rest-Hold frei. Gebucht wird vor dem `final`-Event (das das gebuchte
+    den Rest-Hold frei, bei Compare die Buchung, mit der alle bei `/prepare`
+    angekündigten Antworten (`planned_operations`) gebucht sind (seit
+    2026-10-27; vorher hielt ein fertiger Compare-Lauf seinen Rest bis zum
+    Ablauf, und die Sidebar nannte ihn „für eine laufende Nachricht
+    zurückgehalten“). Ohne Zahl (Legacy, eigene Keys) läuft der Hold ab. Gebucht wird vor dem `final`-Event (das das gebuchte
     `token_budget` trägt) bzw. beim Schließen des Streams. Ein Buchungsfehler
     bricht die Antwort nie ab, sondern wird als `Token booking failed` geloggt.
   - *Überziehen*: eine laufende Operation darf das Konto unter null drücken;
