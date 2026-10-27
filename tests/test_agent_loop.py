@@ -346,14 +346,77 @@ def test_invalid_or_unapproved_tool_never_executes_or_spawns_another_paid_call(s
     assert not store.active_ref(UID).get().to_dict()["leases"]
 
 
-@pytest.mark.parametrize("fragment", [[call(), {**call(), "index": 1}], [{**call(), "index": -1}],
-    [call(arguments="x" * 2049)], [call(identity="bad id")]])
-def test_malformed_streamed_tool_calls_close_transport(store, monkeypatch, fragment):
+@pytest.mark.parametrize("fragment,error", [([{**call(), "index": -1}], RuntimeError),
+                                            ([call(arguments="x" * 2049)], ValueError)])
+def test_malformed_streamed_tool_calls_close_transport(store, monkeypatch, fragment, error):
+    # Since 2026-10-27 a fragment no call of ours stands behind is skipped and
+    # an oversized call reaches the registry, which refuses it with its limit;
+    # neither executes, and the transport closes as before.
     _, _, closed = transport(monkeypatch, [[packet({"tool_calls": fragment}, finish="tool_calls", usage=usage())]])
-    loop = loop_for(store, registry=client_registry([]))
-    with pytest.raises(ValueError):
+    executed = []
+    loop = loop_for(store, registry=client_registry(executed))
+    with pytest.raises(error):
         list(loop.run())
-    assert closed == [0] and totals(store)["calls"] == 1
+    assert closed == [0] and totals(store)["calls"] == 1 and executed == []
+
+
+def tool_fragments(*chunks, limit=4, argument_limit=2048):
+    """The calls an AgentCompletion collects from streamed fragments."""
+    value = AgentCompletion()
+    value.tool_call_limit, value.tool_argument_limit = limit, argument_limit
+    for chunk in chunks:
+        value._tool_delta(chunk)
+    return value
+
+
+def test_a_call_after_the_providers_own_searches_keeps_its_stream_index():
+    """2026-10-27: after five web searches inside its step DeepSeek's next
+    call arrived as index 5, and the whole turn failed as a provider error."""
+    value = tool_fragments([{"index": 5, "id": "call_a", "type": "function", "function": {"name": "double", "arguments": ""}}],
+                           [{"index": 5, "function": {"arguments": '{"number":'}}], [{"function": {"arguments": "2}"}}])
+    assert value._completed_tool_calls() == [{"id": "call_a", "type": "function",
+                                              "function": {"name": "double", "arguments": '{"number":2}'}}]
+    assert value.skipped_tool_parts == 0
+
+
+def test_tool_fragments_that_name_no_call_of_ours_are_skipped_not_fatal():
+    calls = [{"index": i, "id": f"c{i}", "type": "function", "function": {"name": "double", "arguments": "{}"}} for i in range(6)]
+    value = tool_fragments(calls[:3], calls[3:],
+                           [{"index": 9, "type": "web_search", "function": {"name": "search"}}, "noise", {"index": "7"}],
+                           None)
+    # At most the step's limit of calls, in stream order; the rest are counted.
+    assert [c["id"] for c in value._completed_tool_calls()] == ["c0", "c1", "c2", "c3"]
+    assert value.skipped_tool_parts == 2 + 4
+
+
+def test_an_odd_id_or_an_oversized_call_still_completes_the_stream():
+    value = tool_fragments([{"index": 0, "id": "functions.double:0", "type": "function",
+                             "function": {"name": "double", "arguments": {"number": 2}}}],
+                           [{"index": 1, "id": "", "function": {"name": "double", "arguments": "x" * 100}}],
+                           argument_limit=50)
+    first, second = value._completed_tool_calls()
+    # Ids a provider takes back; arguments sent as an object are JSON text.
+    assert first["id"] == "functions_double_0" and first["function"]["arguments"] == '{"number": 2}'
+    assert second["id"].startswith("call_1_") and len(second["function"]["arguments"]) == 51
+    # The registry refuses the oversized call with its limit: the model reads why.
+    with pytest.raises(ValueError, match="at most 2048 characters"):
+        client_registry([]).validate({"function": {"name": "double", "arguments": "x" * 2049}})
+
+
+def test_calls_ended_with_stop_are_calls_and_a_writing_step_ignores_a_call(store, monkeypatch):
+    transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="stop", usage=usage())],
+                            [packet({"content": "Four."}), packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]])
+    value = AgentCompletion()
+    value.tool_call_limit = 4
+    list(value.stream(model=configured_model(resolve_agent_model("claude-haiku-4-5")),
+                      messages=[{"role": "user", "content": "Hi"}], api_key="test",
+                      tools=client_registry([]).schemas, allow_tool_calls=True))
+    assert value.finish_reason == "tool_calls" and [c["id"] for c in value.tool_calls] == ["call_one"]
+    answer = AgentCompletion()
+    list(answer.stream(model=configured_model(resolve_agent_model("claude-haiku-4-5")),
+                       messages=[{"role": "user", "content": "Hi"}], api_key="test",
+                       tools=client_registry([]).schemas, allow_tool_calls=False))
+    assert answer.finish_reason == "stop" and answer.text == "Four." and answer.tool_calls == []
 
 
 def test_repeated_tool_identity_stops_without_reexecution(store, monkeypatch):

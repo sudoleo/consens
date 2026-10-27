@@ -387,16 +387,18 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
         "client_request_id": "failed", "bookmark_id": "bm1"}, headers=AUTH)
     assert "event: error" in response.text and "event: final" not in response.text
     assert "event: delta" not in response.text
-    assert totals(store)["measured_calls"] == 1
-    assert totals(store)["estimated_cost_nano_usd"] == 132000
+    # The step broke off before the user saw a word, so it ran once more
+    # (since 2026-10-27); both attempts are paid.
+    assert totals(store)["measured_calls"] == 2
+    assert totals(store)["estimated_cost_nano_usd"] == 2 * 132000
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
     error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
-    # 800 fresh input + 200 cache reads at a quarter + 100 output (CACHED_INPUT_WEIGHT).
-    assert error["token_budget"]["used"] == 950
+    # 800 fresh input + 200 cache reads at a quarter + 100 output (CACHED_INPUT_WEIGHT), twice.
+    assert error["token_budget"]["used"] == 2 * 950
     assert error["token_budget"]["reserved"] == 0
-    assert error["token_budget"]["remaining"] == 249050
+    assert error["token_budget"]["remaining"] == 250000 - 2 * 950
     receipts = [r for r in store.db.documents.values() if isinstance(r, dict) and "quota_charged" in r]
-    assert [r["quota_charged"] for r in receipts] == [950]
+    assert [r["quota_charged"] for r in receipts] == [950, 950]
     assert error['recoverable'] is True
     count = len(store.db.documents)
     for _ in range(3):
@@ -407,10 +409,10 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
         assert retry.json()['turn']['status'] == 'failed'
         assert retry.json()['turn']['agent_failure']['code'] == 'provider_error'
     assert len(store.db.documents) == count
-    assert totals(store)['calls'] == 1
+    assert totals(store)['calls'] == 2
     turn = store.list_turns(UID, chat_id)["turns"][0]
     data = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/agents", headers=AUTH).json()
-    assert data["token_budget"]["remaining"] == 249050
+    assert data["token_budget"]["remaining"] == 250000 - 2 * 950
     assert data["token_budget"]["observed_at"] >= error["token_budget"]["observed_at"]
 
 

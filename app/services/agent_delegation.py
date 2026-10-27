@@ -72,6 +72,11 @@ ANSWER_RESERVE_SECONDS = {"none": 120, "minimal": 120, "low": 150, "medium": 240
 RATE_LIMIT_RETRY_SECONDS = 3
 RATE_LIMIT_RETRY_MAX_SECONDS = 10
 RATE_LIMIT_RETRY_MIN_TURN_SECONDS = 60
+# A chat model's step that broke off in passing (_passing_failure) before the
+# user saw any of its text runs once more after this pause, under the same
+# minimum of turn time; the broken attempt is settled with what it used.
+PASSING_RETRY_SECONDS = 2
+PASSING_RETRY_TEXT = "The model's reply broke off. Trying this step once more."
 # Pace of the reasoning excerpts a step that may answer shows while it thinks.
 THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
@@ -186,6 +191,23 @@ def _free_rate_limit(error, value):
     """A 429 the provider answered before generating anything: nothing billed."""
     return (getattr(error, "status_code", None) == 429 and not value.text
             and (value.usage or {}).get("source") == "provider_rejection")
+
+
+# Failures of a step that its next attempt may not meet: the provider failed
+# or fell silent mid-stream, or its stream ended without a usable result
+# (agent_provider_limits.agent_failure codes). Refusals (4xx), limits, rate
+# limits and stops are no such failure.
+PASSING_FAILURE_CODES = frozenset({"provider_error", "provider_timeout"})
+
+
+def _passing_failure(error):
+    """A step that broke off in passing: one more attempt may well succeed
+    (DelegationLoop._answer_attempt). Before 2026-10-27 such a step ended the
+    whole turn, minutes of paid work in the VM and the web included."""
+    from app.services.agent_provider_limits import agent_failure
+    if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
+        return False
+    return agent_failure(error).get("code") in PASSING_FAILURE_CODES
 
 
 class StrictArgs(BaseModel):
@@ -1181,7 +1203,7 @@ class DelegationLoop(AgentLoop):
                     "Use existing evidence, state uncertainty, and do not imply new web research.")
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
-              search_rounds=1, retry_rate_limit=False, retry_empty=False, check_cooldown=True,
+              search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False, research=False,
               allow_tools=True, answer_output=0):
         """One claimed, metered model call.
@@ -1197,7 +1219,10 @@ class DelegationLoop(AgentLoop):
         ``retry_rate_limit``: a free 429 (_free_rate_limit) returns the settled
         step with ``value.rate_limited`` instead of raising, so the caller can
         claim its one retry. ``check_cooldown=False`` is that retry, after its
-        wait (the 429 itself set the process cooldown). ``retry_empty``: a
+        wait (the 429 itself set the process cooldown). ``retry_passing``: a
+        step that broke off in passing (_passing_failure) before the user saw
+        any of its text returns, settled with what it used and logged as
+        failed, with ``value.passing_failure``, for the same one retry. ``retry_empty``: a
         worker whose answer ended without a word (ModelEmptyAnswer) settles
         like a finished step without text and returns ``value.empty_answer``
         instead of raising, so its caller can claim the next step. ``server_tools`` are
@@ -1265,6 +1290,8 @@ class DelegationLoop(AgentLoop):
             raise
         claimed = False
         provider_attempted = False
+        # What the work log says of the step, where it differs from its settlement.
+        log_status = None
         value = completion if completion is not None else self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         if not worker:
@@ -1423,13 +1450,21 @@ class DelegationLoop(AgentLoop):
             # round, never the agent's next step on the same model.
             if getattr(worker, "kind", None) != "audit":
                 self.cooldowns.record(model, self.api_key, exc)
-            if not (retry_rate_limit and claimed and _free_rate_limit(exc, value)):
+            if retry_rate_limit and claimed and _free_rate_limit(exc, value):
+                # Refused before writing anything, settled at zero cost like a
+                # finished step without text, so that the one retry can claim
+                # the next step (a failed step would block that claim).
+                value.rate_limited = exc
+                status = "succeeded"
+            elif (retry_passing and claimed and not value.published and not (publish_text and value.text)
+                  and _passing_failure(exc)):
+                # Broke off before the user saw a word of it: settled with what
+                # it used (usage, or its bounded estimate) so the retry can
+                # claim the next step; the work log keeps it as failed.
+                value.passing_failure = exc
+                status, log_status = "succeeded", "failed"
+            else:
                 raise
-            # Refused before writing anything, settled at zero cost like a
-            # finished step without text, so that the one retry can claim
-            # the next step (a failed step would block that claim).
-            value.rate_limited = exc
-            status = "succeeded"
         finally:
             if worker is not None:
                 worker.partial_text = value.text or ""
@@ -1456,7 +1491,7 @@ class DelegationLoop(AgentLoop):
                 if log_actor:
                     # What the step thought, wrote, called and found, also
                     # when it failed or was stopped.
-                    self.work_log.step(log_actor, step, model, value, status)
+                    self.work_log.step(log_actor, step, model, value, log_status or status)
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
@@ -1807,42 +1842,63 @@ class DelegationLoop(AgentLoop):
         """Output limit of a step that may write the answer."""
         return answer_output_limit(self.routing_lighter or self.model)
 
-    def _answer_attempt(self, model, messages, index, steps, registry, **step_args):
-        """One step after paid comparisons; a rate-limited start waits briefly and tries once more.
+    def _answer_attempt(self, model, messages, index, steps, registry, *, rate_limit=True, **step_args):
+        """One step of the chat model, with one retry.
 
-        The comparisons are already paid, a 429 before any output is free
-        (_free_rate_limit), and providers do rate-limit. The retry waits
-        for Retry-After (RATE_LIMIT_RETRY_SECONDS without one) and is skipped
-        when the provider asks for longer than RATE_LIMIT_RETRY_MAX_SECONDS
-        or the turn's hard stop is near. A second 429 ends the turn as before.
+        ``rate_limit`` (a step after paid comparisons): the comparisons are
+        already paid, a 429 before any output is free (_free_rate_limit), and
+        providers do rate-limit. The retry waits for Retry-After
+        (RATE_LIMIT_RETRY_SECONDS without one) and is skipped when the
+        provider asks for longer than RATE_LIMIT_RETRY_MAX_SECONDS or the
+        turn's hard stop is near. A second 429 ends the turn as before.
 
-        A step that may write the answer after paid comparisons
-        (``step_args`` as for _step)."""
+        In every turn, a step that broke off in passing before the user saw
+        any of its text (_passing_failure: the provider failed or fell silent
+        mid-stream, its stream could not be read) runs once more after
+        PASSING_RETRY_SECONDS, on the same conversation. Since 2026-10-27:
+        before, one such step threw away the whole turn's paid work.
+
+        ``step_args`` as for _step."""
         step = f"completion:{index}"
         try:
             value = yield from self._step(model, messages, step, registry, self.cancellation,
-                                          retry_rate_limit=True, **step_args)
+                                          retry_rate_limit=rate_limit, retry_passing=True, **step_args)
         except AgentProviderCooldown as exc:
             # The process gate refused before any claim: the step index is still free.
-            delay = self._rate_limit_delay(exc.retry_after)
+            delay = self._rate_limit_delay(exc.retry_after) if rate_limit else None
             if delay is None:
                 raise
-            cause = exc
+            cause, passing = exc, False
         else:
-            cause = getattr(value, "rate_limited", None)
+            cause, passing = getattr(value, "rate_limited", None), False
+            if cause is None and getattr(value, "passing_failure", None) is not None:
+                cause, passing = value.passing_failure, True
             if cause is None:
                 return value
-            delay = self._rate_limit_delay(getattr(cause, "retry_after", None))
+            delay = self._passing_delay() if passing else self._rate_limit_delay(getattr(cause, "retry_after", None))
             index = next(steps, None) if delay is not None else None
             if index is None:
                 raise cause
             step = f"completion:{index}"
-        logging.warning("Agent step rate limited model=%s retry_in=%s", model.model, delay)
-        yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
-                             "text": "The model's provider is busy right now. Trying again in a few seconds."})
+        if passing:
+            logging.warning("Agent step broke off, retrying model=%s category=%s retry_in=%s", model.model,
+                            safe_exception(cause), delay)
+            yield self.activity({"step_id": step, "id": "passing_retry", "kind": "progress", "text": PASSING_RETRY_TEXT})
+        else:
+            logging.warning("Agent step rate limited model=%s retry_in=%s", model.model, delay)
+            yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
+                                 "text": "The model's provider is busy right now. Trying again in a few seconds."})
         yield from self._pause(delay)
         return (yield from self._step(model, messages, step, registry, self.cancellation,
                                       check_cooldown=False, **step_args))
+
+    def _passing_delay(self):
+        """Seconds before the one retry of a step that broke off, or None
+        when the turn's hard stop is too near for it."""
+        left = self._hard_stop_left()
+        if left is not None and left < PASSING_RETRY_SECONDS + RATE_LIMIT_RETRY_MIN_TURN_SECONDS:
+            return None
+        return PASSING_RETRY_SECONDS
 
     def _rate_limit_delay(self, retry_after):
         """Seconds to wait before the one answer retry, or None for no retry."""
@@ -1903,18 +1959,15 @@ class DelegationLoop(AgentLoop):
     # --- Merged answer (agent_answer_mode) --------------------------------
     def _orchestrate(self, model, index, steps, search, research):
         """One steering step; in a merged turn its text may be the answer."""
+        # A step that broke off in passing runs once more in every turn; after
+        # paid comparisons a free 429 does too (_answer_attempt).
         if not self.merged:
-            return (yield from self._step(model, self.messages, f"completion:{index}", self.registry,
-                                          self.cancellation, **search))
+            return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
+                                                    rate_limit=False, **search))
         args = {**search, "answer_candidate": True, "research": research, "hold": self._hold_answer(),
                 "answer_output": self._answer_output()}
-        if self.comparison.comparisons:
-            # Paid comparisons: a free 429 before any output is retried once
-            # (_answer_attempt).
-            return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
-                                                    **args))
-        return (yield from self._step(model, self.messages, f"completion:{index}", self.registry,
-                                      self.cancellation, **args))
+        return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
+                                                rate_limit=bool(self.comparison.comparisons), **args))
 
     def _candidate_delta(self, value, research):
         """What of a merged step's text may show now, as one delta, or None.
@@ -2462,10 +2515,13 @@ class DelegationLoop(AgentLoop):
                 # and the commands' summed run time.
                 self.completion.vm = self.vm_tools.session.summary()
                 self.vm_tools.session.close()
-                if self._long_run():
-                    # What the next message is told this one did (agent_compaction).
-                    from app.services.agent_compaction import work_record
-                    self.completion.work_record = work_record(self.messages, self.turn_start)
+            if self._long_run() or status != "succeeded":
+                # What the next message is told this one did (agent_compaction):
+                # after a VM run, and since 2026-10-27 after any run that broke
+                # off or was stopped, so that "Retry" goes on from its work
+                # instead of starting over ("" without a single call).
+                from app.services.agent_compaction import work_record
+                self.completion.work_record = work_record(self.messages, self.turn_start)
             if self.work_log is not None:
                 # The log's last entry, saved before finish_run: a write after
                 # it finds the turn no longer pending (save_work_log).

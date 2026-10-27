@@ -250,7 +250,8 @@ def test_interrupted_routing_recovery_preserves_failure_without_publishing_uncon
         assert recovered.json()["response"] == ""
         assert recovered.json()["turn"]["agent_failure"]["code"] == "provider_timeout"
         assert recovered.json()["turn"]["status"] == "failed"
-    assert len(calls) == 1 and agent_quota.snapshot(store.db, UID)["used"] == before
+    # The step and its one retry after it broke off (since 2026-10-27); recovery adds no call.
+    assert len(calls) == 2 and agent_quota.snapshot(store.db, UID)["used"] == before
 
 
 def test_failure_before_answer_preserves_question_activity_and_bookmark(api, monkeypatch):
@@ -274,7 +275,8 @@ def test_failure_before_answer_preserves_question_activity_and_bookmark(api, mon
     assert bookmark.exists and bookmark.to_dict()['query'] == payload['question']
     recovered = client.post('/agent', json={**payload, 'recover_only': True}, headers=AUTH)
     assert recovered.status_code == 200 and recovered.json()['response'] == ''
-    assert len(calls) == 1
+    # The step and its one retry after it broke off (since 2026-10-27); recovery adds no call.
+    assert len(calls) == 2
 
 
 def test_recovery_reaps_expired_producer_and_restores_checkpoint_without_paid_retry(api):

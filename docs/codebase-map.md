@@ -4795,6 +4795,15 @@ Seit 2026-10-26 folgt auf die Antwort eines Turns mit VM-Arbeit dessen
 Arbeitsstand (`agent_work_record`, `agent_compaction.work_record`) als
 App-Nachricht, byte-gleich wie gespeichert (Prompt-Cache bleibt); er zählt zur
 Kontextgrenze und ist nie Nutzertext (`answer_conversation` lässt ihn aus).
+Seit 2026-10-27 speichert ihn auch jeder abgebrochene oder gestoppte Turn mit
+Werkzeugaufrufen, und sein Hinweis lautet dann `FAILED_TURN_RESUME` (darauf
+aufbauen statt wiederholen), damit „Erneut versuchen“ weitermacht. Ein Schritt
+des Chatmodells, der unterwegs abbricht, bevor der Nutzer Text sah, läuft
+vorher einmal neu (`DelegationLoop._answer_attempt`, `_passing_failure`), und
+der Stream-Client verwirft keinen Schritt mehr wegen eines einzelnen
+ungewöhnlichen Teilstücks (`AgentCompletion._tool_delta`,
+`_completed_tool_calls`, `TOOL_INDEX_BOUND`); Details `docs/agent-mode.md`,
+„Abbrüche mitten im Schritt“.
 `chat_store.turn_detail` liefert für Agent-Turns `assistant_response` und den
 Kompatibilitätsalias `consensus` unverändert aus. Kein Trimmen, NFKC-Normalisieren
 oder erneutes Kürzen beim Lesen: Schon abschließende Leerzeilen gehören zum
@@ -8305,7 +8314,7 @@ app/services/
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import, prepare_pull_request (Vorschlag am Turn agent_pull_request) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
-  agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
+  agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge

@@ -33,6 +33,12 @@ CONTEXT_CHAR_LIMIT = 120_000
 HISTORY_STEP_TURNS = 4
 HISTORY_OMITTED_NOTE = ("Earlier messages of this chat are not included: the chat is longer than what is sent to the model. "
                         "If the user refers to something you cannot see, say so.")
+# The answer of a turn that broke off before its answer, where its work
+# record follows (agent_compaction.work_record): the next message, mostly
+# "Retry" with the same question, goes on from that work.
+FAILED_TURN_RESUME = ("[This previous turn did not finish successfully. No assistant answer was saved. The work "
+                      "record below lists what it already did: build on it instead of repeating it, and run "
+                      "again only what you need fresh.]")
 OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
 # The saved activity of one turn, as JSON, within the turn document's 1 MiB
@@ -221,12 +227,15 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 question, answer = turn["question"], turn.get("assistant_response", turn.get("consensus", ""))
                 if isinstance(turn.get("app_context"), str) and turn["app_context"]:
                     question = with_app_context(question, turn["app_context"])
+                record = turn.get("agent_work_record")
                 if turn["status"] == "failed":
                     # Match the visible saved conversation without claiming that
                     # an interrupted answer or its review completed successfully.
+                    # With a work record (since 2026-10-27 after any broken-off
+                    # run with tool calls) the next attempt builds on it.
                     answer = ("[This previous turn did not finish successfully. The saved response below may be incomplete or unreviewed.]\n\n" + answer
-                              if answer else "[This previous turn did not finish successfully. No assistant answer was saved.]")
-                record = turn.get("agent_work_record")
+                              if answer else FAILED_TURN_RESUME if isinstance(record, str) and record
+                              else "[This previous turn did not finish successfully. No assistant answer was saved.]")
                 earlier.append((question, answer, turn.get("sources") or [],
                                 record if isinstance(record, str) else ""))
             cursor = page.get("next_cursor") or ""

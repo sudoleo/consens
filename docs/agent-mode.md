@@ -658,7 +658,10 @@ Präfix der vorigen liest. Es ist nie Nutzertext: `is_work_record` lässt es aus
 `answer_conversation` heraus (Memory-Belege, Links für `read_source`,
 Adressen für Gmail, Vergleichskontext), im Arbeitsprotokoll hat es die
 Herkunft `vm`. Auch ein Turn, der scheiterte oder gestoppt wurde, speichert
-es; ein Turn, dessen VM nie startete, nicht.
+es, seit 2026-10-27 auch ohne VM, sobald er ein Werkzeug aufrief; sein
+Hinweis im Verlauf sagt dann, darauf aufzubauen (`FAILED_TURN_RESUME`, siehe
+„Abbrüche mitten im Schritt“). Ein erfolgreicher Turn, dessen VM nie
+startete, speichert keins.
 
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
 dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von
@@ -2628,8 +2631,49 @@ Ein einzelner Provider-Aufruf ohne Text-, Reasoning-, Tool- oder Tokenfortschrit
 endet nach standardmäßig 180 Sekunden (`AGENT_PROVIDER_STALL_SECONDS`, 30–600).
 Reine Keepalives verlängern diese Frist nicht. Lange Aufrufe mit Fortschritt
 bleiben erlaubt; Modelle mit lange verborgenem Reasoning können einen höheren
-Wert benötigen. Fehlende finale Usage bleibt unbekannt, und kein solcher Aufruf
-wird automatisch wiederholt. Der Browser erkennt einen völlig stummen SSE-Kanal
+Wert benötigen. Fehlende finale Usage bleibt unbekannt.
+
+**Abbrüche mitten im Schritt (seit 2026-10-27).** Anlass: Zweimal brach ein
+Audit-Lauf mit DeepSeek V4.1 Flash nach 1–1,5 Minuten bezahlter VM- und
+Web-Arbeit als „The model provider could not finish this request“ ab. Der
+Stream nummeriert jeden Aufruf einer Antwort, auch die eigenen Websuchen des
+Anbieters; nach vier Suchen kam der nächste Befehl als Index 5, und der Client
+nahm nur 0–3 an. Seitdem:
+- *Der Stream-Client wirft bei keiner einzelnen Zeile mehr den Schritt weg*
+  (`AgentCompletion._tool_delta`): jeder Index unter `TOOL_INDEX_BOUND` (64)
+  nennt einen Aufruf, je Schritt bleiben höchstens `tool_call_limit` (4) in
+  Stream-Reihenfolge; ein Teilstück ohne Index setzt den letzten Aufruf fort;
+  Teile anderer Art (Werkzeuge des Anbieters), unlesbare Teile, Ereignisse
+  ohne Objekt und eine zweite Completion werden übersprungen und gezählt
+  („Agent tool call fragments skipped“). Ein Feld über seiner Grenze behält
+  ein Zeichen mehr, sodass `ToolRegistry.validate` den Aufruf mit seiner
+  Grenze ablehnt und das Modell den Grund liest (vorher scheiterte etwa ein
+  zu großes `vm_write_file` als Anbieterfehler). Argumente als Objekt werden
+  JSON-Text, IDs mit anderen Zeichen als `[A-Za-z0-9_-]`, zu lange oder
+  fehlende bekommen eine gültige (`_completed_tool_calls`). Aufrufe mit
+  `finish_reason` „stop“ gelten als Aufrufe; ein Schritt, der nur schreiben
+  darf und trotzdem aufruft, behält seinen Text als Antwort.
+- *Ein Schritt des Chatmodells, der unterwegs abbricht, läuft einmal neu*
+  (`_answer_attempt`, `_passing_failure`: Codes `provider_error`,
+  `provider_timeout`), in jedem Turn, sofern der Nutzer noch nichts von seinem
+  Text gesehen hat und mindestens `RATE_LIMIT_RETRY_MIN_TURN_SECONDS` bleiben:
+  nach `PASSING_RETRY_SECONDS` auf demselben Gespräch als nächster Schritt,
+  Aktivität „The model's reply broke off. Trying this step once more.“. Der
+  abgebrochene Versuch wird mit seinem Verbrauch abgerechnet (sonst sperrt er
+  den nächsten Claim), im Arbeitsprotokoll steht er als `failed`. Ein zweiter
+  Abbruch beendet den Turn wie bisher. Der 429-Retry bleibt auf Schritte nach
+  bezahlten Vergleichen beschränkt.
+- *Ein abgebrochener oder gestoppter Turn hinterlässt sein Arbeitsprotokoll*
+  (`agent_work_record`, vorher nur nach VM-Läufen): „Erneut versuchen“
+  schickt die Frage als nächste Nachricht, deren Verlauf nach dem
+  gescheiterten Turn `FAILED_TURN_RESUME` („build on it instead of repeating
+  it“) und das Protokoll trägt. Ohne einen Aufruf bleibt der alte Hinweis.
+- Die Fehler- und Fortschrittssätze des Servers (Anbieterfehler, Ausgabe
+  verbraucht, Retry-Hinweise) haben deutsche Fassungen in
+  `app/i18n/de/app-agent.json`; vorher erschienen sie auch auf Deutsch
+  englisch.
+
+Der Browser erkennt einen völlig stummen SSE-Kanal
 nach 45 Sekunden; kurze Steueranfragen laufen nach 15 Sekunden in einen
 wiederholbaren Fehler statt endlos im Ladezustand zu bleiben.
 

@@ -185,12 +185,14 @@ def test_incomplete_answer_is_saved_without_starting_judges(store, ending):
 
 def _empty_over_http(script, monkeypatch):
     """The answer step through the real client, which ends without text."""
-    transport(monkeypatch, [[packet({}, finish="stop", usage={"prompt_tokens": 50, "completion_tokens": 0})]])
+    empty = [packet({}, finish="stop", usage={"prompt_tokens": 50, "completion_tokens": 0})]
+    transport(monkeypatch, [empty, empty])
     base = type(script.factory())
 
     class Completion(base):
         def stream(self, **kwargs):
-            if self.step_id == "completion:1":
+            # The answer step and its one retry after an empty stop (since 2026-10-27).
+            if self.step_id in {"completion:1", "completion:2"}:
                 yield from AgentCompletion.stream(self, **kwargs)
             else:
                 yield from super().stream(**kwargs)

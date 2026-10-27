@@ -8,6 +8,7 @@ import logging
 import os
 import re
 from urllib.parse import urlsplit
+import uuid
 
 from app.core import config as cfg
 from app.core.observability import record_metric
@@ -154,6 +155,10 @@ ANSWER_SOURCES_MAX = 10
 CITATION_CONTENT_CHARS = 4000
 # Citation records per call; providers repeat cumulative annotation snapshots.
 CITATIONS_MAX = 40
+# Stream indices a tool call fragment may name (AgentCompletion._tool_delta):
+# a response numbers the provider's own calls (web searches) too, so the
+# agent's call may come after them. A step keeps tool_call_limit calls.
+TOOL_INDEX_BOUND = 64
 # The fields of a streamed chunk this client reads or knows to ignore. Any
 # other field of a step that searched without a URL citation is logged by
 # name (AgentCompletion._note_shapes).
@@ -666,6 +671,10 @@ class AgentCompletion:
         self._raw_chars = 0
         self._removed = []
         self._tool_parts = {}
+        # The stream index the last call fragment named (a fragment without
+        # one continues it) and the fragments that named no call of ours.
+        self._tool_last = None
+        self.skipped_tool_parts = 0
         self._raw_usage = {}
         self._final_usage_fields = set()
         self.tool_argument_limit = 2048
@@ -806,23 +815,67 @@ class AgentCompletion:
                        "id": event_id, "format": form, "text": unstored, "append": True, "transient": True}
 
     def _tool_delta(self, raw):
-        if not isinstance(raw, list) or len(raw) > self.tool_call_limit:
-            raise ValueError("Tool call batch exceeds the allowed limit")
+        """Collect the call fragments of one chunk. No fragment fails the
+        step: one that names no call of ours is skipped, a field past its
+        limit keeps one character more, so the registry refuses that call
+        with its limit and the model reads why (ToolRegistry.validate).
+
+        A stream numbers every call of a response, the provider's own tool
+        calls inside it included (its web search): after four searches the
+        agent's next call arrived as index 5 and failed the whole turn, which
+        read as "The model provider could not finish this request"
+        (2026-10-27, DeepSeek V4.1 Flash in audit mode, twice). Any index
+        below TOOL_INDEX_BOUND names a call; a step keeps at most
+        ``tool_call_limit`` of them, in stream order."""
+        if not isinstance(raw, list):
+            self.skipped_tool_parts += 1
+            return
         for part in raw:
-            if not isinstance(part, dict) or type(part.get("index")) is not int or not 0 <= part["index"] < self.tool_call_limit:
-                raise ValueError("Invalid tool call index")
-            target = self._tool_parts.setdefault(part["index"], {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-            if part.get("type", "function") != "function":
-                raise ValueError("Invalid tool call type")
-            function = part.get("function") or {}
-            if not isinstance(function, dict):
-                raise ValueError("Invalid tool call")
+            if not isinstance(part, dict):
+                self.skipped_tool_parts += 1
+                continue
+            index = part.get("index")
+            if index is None:
+                # A fragment without an index continues the call before it.
+                index = 0 if self._tool_last is None else self._tool_last
+            if (type(index) is not int or not 0 <= index < TOOL_INDEX_BOUND
+                    or (part.get("type") or "function") != "function"):
+                self.skipped_tool_parts += 1
+                continue
+            target = self._tool_parts.get(index)
+            if target is None:
+                if len(self._tool_parts) >= self.tool_call_limit:
+                    self.skipped_tool_parts += 1
+                    continue
+                target = self._tool_parts[index] = {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+            self._tool_last = index
+            function = part.get("function") if isinstance(part.get("function"), dict) else {}
             for key, source, output, limit in (("id", part, target, 160), ("name", function, target["function"], 64),
                                                 ("arguments", function, target["function"], self.tool_argument_limit)):
-                fragment = source.get(key, "")
-                if not isinstance(fragment, str) or len(output[key]) + len(fragment) > limit:
-                    raise ValueError("Tool call exceeds argument limit")
-                output[key] += fragment
+                fragment = source.get(key)
+                if key == "arguments" and isinstance(fragment, (dict, list)):
+                    # Arguments sent as an object instead of JSON text.
+                    fragment = json.dumps(fragment, ensure_ascii=False)
+                if not isinstance(fragment, str) or not fragment:
+                    continue
+                room = limit + 1 - len(output[key])
+                if room > 0:
+                    output[key] += fragment[:room]
+
+    def _completed_tool_calls(self):
+        """The step's calls in stream order, each with an id a provider takes
+        back (letters, digits, _ and -): an id with other characters, too
+        long or missing no longer fails the step; its tool result names it the
+        same way, so call and result still match."""
+        calls, seen = [], set()
+        for number, index in enumerate(sorted(self._tool_parts)):
+            call = self._tool_parts[index]
+            ident = re.sub(r"[^A-Za-z0-9_-]", "_", call["id"])[:64]
+            if not ident or ident in seen:
+                ident = f"call_{number}_{uuid.uuid4().hex[:12]}"
+            seen.add(ident)
+            calls.append({**call, "id": ident})
+        return calls
 
     def _annotations(self, raw, before):
         """URL citations of one chunk; ``before`` is the text length ahead of its own text."""
@@ -1036,7 +1089,8 @@ class AgentCompletion:
                         break
                     data = json.loads(encoded)
                     if not isinstance(data, dict):
-                        raise ValueError("Invalid provider event")
+                        # Not an event of this protocol: nothing in it to read.
+                        continue
                     # Comments, repeated counters and empty deltas prove only
                     # that the socket is alive. They cannot renew admission forever.
                     if any(any((choice.get("delta") or {}).get(key) for key in
@@ -1093,16 +1147,20 @@ class AgentCompletion:
                     if data.get("error"):
                         raise _ProviderResponseError(data["error"])
                     for choice in data.get("choices") or []:
-                        if choice.get("index", 0) != 0:
-                            raise ValueError("Unexpected parallel completion")
+                        if not isinstance(choice, dict) or choice.get("index", 0) != 0:
+                            # One completion was asked for; another is not this step's.
+                            continue
                         delta = choice.get("delta") or {}
                         before = len(self.text)
                         if allow_tool_calls:
                             self._preserve_reasoning(delta)
                         if delta.get("tool_calls"):
-                            if not allow_tool_calls:
-                                raise RuntimeError("Unexpected tool call")
-                            self._tool_delta(delta["tool_calls"])
+                            if allow_tool_calls:
+                                self._tool_delta(delta["tool_calls"])
+                            else:
+                                # A step that may only write (tool_choice none) and
+                                # calls anyway: the call is not run; its text stands.
+                                self.skipped_tool_parts += 1
                         yield from self.reasoning_events(delta)
                         chunk = delta.get("content")
                         if isinstance(chunk, str) and chunk:
@@ -1136,11 +1194,18 @@ class AgentCompletion:
                 self._drop_presearch_text(model)
                 if text_capped and self.finish_reason == "stop":
                     self.finish_reason = "length"
-                if self.finish_reason == "tool_calls" and allow_tool_calls:
-                    self.tool_calls = [self._tool_parts[i] for i in sorted(self._tool_parts)]
-                    if not self.tool_calls or any(not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", call["id"]) for call in self.tool_calls):
-                        raise ValueError("Invalid completed tool call")
-                elif self._output_limited():
+                if allow_tool_calls and self._tool_parts and self.finish_reason in {"tool_calls", "stop", "function_call"}:
+                    # Calls that ended with "stop" are calls too (some
+                    # providers say so instead of "tool_calls").
+                    self.finish_reason = "tool_calls"
+                    self.tool_calls = self._completed_tool_calls()
+                elif not allow_tool_calls and self.finish_reason == "tool_calls" and self.text.strip():
+                    # A call it was not offered (see above): its text is the answer.
+                    self.finish_reason = "stop"
+                if self.skipped_tool_parts:
+                    logging.warning("Agent tool call fragments skipped model=%s step=%s count=%s kept=%s",
+                                    model.model, self.step_id, self.skipped_tool_parts, len(self.tool_calls or []))
+                if not self.tool_calls and self._output_limited():
                     # The whole allowance went into reasoning, or into reasoning
                     # and a tool call cut in half. Not a provider fault: the
                     # same request would end the same way again. A stop
@@ -1149,7 +1214,8 @@ class AgentCompletion:
                     self.output_limited = True
                     raise (ModelOutputLimit() if self.finish_reason in {"length", "max_tokens"}
                            else ModelEmptyAnswer())
-                elif self._tool_parts or self.finish_reason not in {"stop", "length"} or not self.text.strip():
+                if not self.tool_calls and (self._tool_parts or self.finish_reason not in {"stop", "length"}
+                                            or not self.text.strip()):
                     raise RuntimeError("Agent stream ended without a completed answer")
             finally:
                 lines.close()

@@ -1133,7 +1133,8 @@ def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, qui
             base = type(super().factory())
             class Completion(base):
                 def stream(self, *, model, messages, **kwargs):
-                    if self.step_id == "completion:1":  # The step that writes the answer.
+                    # The step that writes the answer, and its one retry (since 2026-10-27).
+                    if self.step_id in {"completion:1", "completion:2"}:
                         raise RuntimeError("answer step failed")
                     yield from super().stream(model=model, messages=messages, **kwargs)
             return Completion()
