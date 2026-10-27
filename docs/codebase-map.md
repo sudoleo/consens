@@ -3092,7 +3092,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Wortlaut wählt `anchor_occurrence` das vom Judge gemeinte Vorkommen. Die
   Vorkommenszählung normalisiert dafür wie der Browser Markdown-Auszeichnung
   und Quellenchips, sodass etwa gleichlautende Sätze mit `[S1]`/`[S2]` nicht
-  beide an der ersten Passage landen. `sentenceBounds`
+  beide an der ersten Passage landen. Wie der Server zählt der Browser dabei
+  zuerst nur Treffer, die einen ganzen Satz abdecken, nicht einen Satz, der
+  den Anker bloß enthält. Inline-Code steht in der flachen Sicht
+  (`collectTextSlices`: gesucht, nie gewrappt), und wo Code, ein Link oder
+  Fettes beginnt (`breaks`), beginnt wie in `_sentence_spans` ein Satz, auch
+  wenn der sichtbare Text klein weitergeht. `sentenceBounds`
   dehnt ihn auf den umgebenden Satz aus, `wrapFlatRange` wrappt die
   betroffenen Textknoten in `<span class="cx-claim is-unanimous|is-minor|
   is-split|is-major">`. Seit dem Satz-Index (2026-08-07) ist der Anker in der
