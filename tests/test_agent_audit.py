@@ -60,10 +60,12 @@ class Audit:
     (completion:N) call the tool ``lookup``, the next one answers, each after
     its own search. Every other call is a reviewer: its final round replies
     with ``reviews[family]``, a live round with ``live[family]`` (a text, an
-    exception or "wait": until it is stopped)."""
+    exception or "wait": until it is stopped). ``step_tools``: another tool
+    for some of the tool steps, {index: name}."""
 
     def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None, on_lookup=None,
-                 on_answer=None):
+                 on_answer=None, step_tools=None):
+        self.step_tools = dict(step_tools or {})
         self.reviews = dict(REVIEWS if reviews is None else reviews)
         self.on_lookup = on_lookup
         self.on_answer = on_answer
@@ -93,7 +95,8 @@ class Audit:
                     if index < script.tool_steps:
                         # Each step looks up something else: identical calls are refused.
                         self.tool_calls = [{"id": f"call_{index}", "type": "function",
-                                            "function": {"name": "lookup", "arguments": json.dumps({"step": index})}}]
+                                            "function": {"name": script.step_tools.get(index, "lookup"),
+                                                         "arguments": json.dumps({"step": index})}}]
                         self.finish_reason = "tool_calls"
                         return
                     if script.on_answer:
@@ -280,9 +283,16 @@ def test_the_reviewers_read_the_work_log_and_the_whole_answer(store):
     assert [(name, data) for name, data, _ in context] == [
         ("system", "app"), ("user", "user"), ("assistant", "agent"), ("user", "user")]
     assert [content for _, _, content in context[1:]] == ["Paris trip?", "Yes, go in spring.", "And the tower?"]
-    assert context[0][2].startswith("Answer.")
+    # The agent's instructions, the app's own text, come as their brief.
+    brief = context[0][2]
+    instructions = loop.messages[0]["content"]
+    assert instructions.startswith("Answer.") and len(json.dumps(brief)) < len(instructions)
+    assert brief["instructions"].startswith(f"The app's instructions to the agent ({len(instructions)} characters")
+    assert brief["tools"] == sorted(loop.registry.tools) and brief["memory"] == agent_audit.BRIEF_NO_MEMORY
     [step] = [e for e in entries if e["kind"] == "step"]
-    assert step["actor"] == "agent" and step["content"]["text"] == ANSWER and "usage" not in step["content"]
+    # The answer comes once, as the fixed answer, not again in its step.
+    assert step["actor"] == "agent" and step["content"]["text"] == agent_audit.ANSWER_IN_STEP
+    assert "usage" not in step["content"]
     assert [e["seq"] for e in entries] == list(range(1, len(entries) + 1))
     assert [e["name"] for e in entries if e["kind"] == "app"][-1] == "answer_fixed"
 
@@ -306,7 +316,8 @@ def test_the_reviewers_follow_the_work_in_rounds_and_mark_its_entries(store):
     turn = saved(store, loop)
     review = turn["agent_review"]
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    assert script.rounds == {"anthropic": ["live", "final"], "openai": ["live", "final"]}
+    # OpenAI's provider failed in its final round, which tried once more.
+    assert script.rounds == {"anthropic": ["live", "final"], "openai": ["live", "final", "final"]}
     # One conversation per reviewer: the live round, its reply, the final round.
     system, live, reply, final = script.prompts["anthropic"]
     assert [m["role"] for m in (system, live, reply, final)] == ["system", "user", "assistant", "user"]
@@ -329,14 +340,15 @@ def test_the_reviewers_follow_the_work_in_rounds_and_mark_its_entries(store):
         ("Anthropic", tool, "tool", "lookup", "incomplete", 3, None),
         ("OpenAI", step, "step", loop.model.model, "doubtful", 4, True)]
     assert len(review["audit"]["claims"]) == 2 and review["audit"]["unplaced"] == []
-    # The panel shows each round: the live round's marks, then the final list.
+    # The panel shows each round: the live round's marks, then the final list;
+    # OpenAI's second attempt ran in a session of its own.
     sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
-    assert len(sessions) == 2
-    kinds = {}
+    assert len(sessions) == 3
+    kinds = []
     for session in sessions:
         messages = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=session["id"])["messages"]
-        kinds[session["title"]] = [m["kind"] for m in messages if m["kind"] in {"round", "result"}]
-    assert sorted(kinds.values()) == [["round"], ["round", "result"]]
+        kinds.append([m["kind"] for m in messages if m["kind"] in {"round", "result"}])
+    assert sorted(kinds) == [[], ["round"], ["round", "result"]]
 
 
 def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):
@@ -390,6 +402,7 @@ def test_failures_in_a_row_pause_a_reviewer_but_never_end_its_following(store, m
     paused = agent_audit.ReviewerSession.__new__(agent_audit.ReviewerSession)
     paused.live_rounds, paused.failures, paused.cursor, paused.tried = 1, 2, 5, 5
     paused.messages, paused.chars, paused.budget = [{}, {}], 0, 100_000
+    paused.audit = type("Audit", (), {"brief": staticmethod(lambda: None)})()
     paused._request = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down"))
     before = time.monotonic()
     paused._round([({"seq": 6, "actor": "agent", "kind": "step"}, "{}")])
@@ -546,6 +559,31 @@ def test_a_failed_or_unreadable_review_costs_only_its_marks(store, caplog):
     assert [(r["status"], r["failure"]["code"]) for r in review["audit"]["reviewers"]] == [
         ("failed", "provider_error"), ("failed", "review_unreadable")]
     assert {"code": "reviewers_unavailable", "count": 2} in review["audit"]["issues"]
+
+
+def test_an_unreadable_final_round_is_asked_once_more_on_its_session(store, caplog):
+    replies = []
+
+    def final(messages):
+        replies.append(messages[-1]["content"])
+        return "Looks fine to me." if len(replies) == 1 else REVIEWS["openai"]
+    script = Audit({"anthropic": json.dumps({"marks": []}), "openai": final})
+    loop = audit_loop(store, script)
+    with caplog.at_level(logging.WARNING):
+        list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    # The second request names the problem; the reply is read like any other.
+    assert script.rounds["openai"] == ["final", "final"]
+    assert not replies[0].endswith(agent_audit.REPAIR_NOTE) and replies[1].endswith(agent_audit.REPAIR_NOTE)
+    assert review["status"] == "succeeded"
+    assert [(r["provider"], r["status"], r["marks"]) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", 0), ("openai", "completed", 3)]
+    # One session for the reviewer: the attempt that could not be read is no failure in its row.
+    sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
+    assert sorted(a["status"] for a in sessions) == ["completed", "completed"]
+    assert any("shape=no_json" in r.getMessage() and "again=True" in r.getMessage() for r in caplog.records)
+    # The conversation keeps the request as it was answered.
+    assert script.prompts["openai"][-1]["content"].endswith(agent_audit.REPAIR_NOTE)
 
 
 def test_an_empty_or_cut_reply_is_described_without_its_words():
@@ -913,6 +951,31 @@ def test_only_a_step_that_calls_a_tool_starts_a_live_round():
     assert not work_goes_on([step(json.dumps({"tool_calls": [], "text": "The answer."}))])
     assert not work_goes_on([step(json.dumps({"tool_calls": [{"name": "x"}]}), kind="tool"), step("not json")])
     assert not work_goes_on([])
+    # A step that only reads or keeps its plan waits for the next round: for
+    # one that does more, or for the third such step in a row.
+    quiet = step(json.dumps({"tool_calls": [{"name": "update_plan"}, {"name": "vm_read_file"}]}))
+    assert not work_goes_on([quiet]) and not work_goes_on([quiet, quiet])
+    assert work_goes_on([quiet, quiet, quiet])
+    assert work_goes_on([quiet, step(json.dumps({"tool_calls": [{"name": "vm_exec"}]}))])
+    assert work_goes_on([step(json.dumps({"tool_calls": [{"name": "update_plan"}, {"name": "vm_exec"}]}))])
+    assert agent_audit.QUIET_TOOLS.isdisjoint({"vm_exec", "vm_write_file", "vm_edit_file", "vm_share_file",
+                                               "read_source", "update_memory", "github_import", "prepare_pull_request",
+                                               "prepare_gmail_draft", "create_document", "start_agent"})
+
+
+def test_a_quiet_step_rides_with_the_next_round(store):
+    """A step that only keeps its plan starts no round of its own: its entries
+    come with the next step that acts (the scripted lookup)."""
+    script = Audit(tool_steps=2, step_tools={0: "update_plan"})
+    loop = audit_loop(store, script)
+    plan = ReadOnlyTool("update_plan", "Keep the plan.", LookupArgs, lambda args, *, cancellation: {"text": "Saved."})
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), plan], argument_limit=loop.registry.argument_limit)
+    list(loop.run())
+    rounds = script.rounds["anthropic"]
+    assert rounds.count("live") == 1 and rounds[-1] == "final"
+    live = next(m for m in script.prompts["anthropic"] if m["role"] == "user" and m["content"].startswith("Round 1."))
+    names = [call["name"] for e in round_entries(live)[0] if e["kind"] == "step" for call in e["content"]["tool_calls"]]
+    assert names == ["update_plan", "lookup"]
 
 
 # --- A reviewer stops the work for the user (halt, since 2026-10-26) ------------------

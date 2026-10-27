@@ -5560,8 +5560,15 @@ Ab dem Start des Laufs folgt jedes Vergleichsmodell dem Arbeitsprotokoll
 (`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
 Thread, eine Sitzung Art `audit`, Runden über
 `ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde je
-neuem Schritt mit Tool-Aufrufen (`work_goes_on`, `round_message`), Befunde
-mit `entry`, ohne Rundengrenze über den ganzen Lauf. Ist das Gespräch eines
+neuem Schritt mit Tool-Aufrufen (`work_goes_on`, `round_message`; Schritte
+nur mit `QUIET_TOOLS` wie `update_plan` oder `vm_read_file` gehen seit
+2026-10-27 mit der nächsten Runde mit, spätestens beim dritten in Folge),
+Befunde mit `entry`, ohne Rundengrenze über den ganzen Lauf. Die
+Anweisungen des Agenten lesen die Prüfer als Kurzfassung mit seinen
+Werkzeugen und dem vollen Memory (`instructions_brief`, `AnswerAudit.brief`,
+an seinem ersten `system`-Eintrag; das Protokoll behält den ganzen Text),
+die fixierte Antwort steht in der Schlussrunde nur einmal
+(`ANSWER_IN_STEP`). Ist das Gespräch eines
 Prüfers voll, geht er in einem neuen weiter, mit dem Anfang des Laufs und
 seinen bisherigen Befunden (`ReviewerSession._carry`, `opening_entries`).
 Nach der Antwort fixiert `capture` die Version, `_finish_review`
@@ -5571,8 +5578,10 @@ seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
 ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
 `review.audit.reviewers/claims/unplaced/process/issues`, `dissent[].mark` je
 Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
-`unplaced`); scheitert die Schlussrunde eines Prüfers, gelten seine
-Live-Befunde (`live`). Runden passen in den Platz des Prüfergesprächs
+`unplaced`); eine unlesbare Schlussrunde fragt seit 2026-10-27 einmal in
+derselben Sitzung nach (`REPAIR_NOTE`), ein vorübergehender Anbieterfehler
+läuft einmal in neuer Sitzung (`ReviewerSession._mendable`); scheitert sie
+dann noch, gelten seine Live-Befunde (`live`). Runden passen in den Platz des Prüfergesprächs
 (`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
 `review_entry` lässt den Verbrauch weg, nennt aber die Suchen eines Schritts
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und

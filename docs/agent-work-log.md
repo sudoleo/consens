@@ -121,9 +121,22 @@ je Prüfer (`ReviewerSession`, ein Thread je Prüfer ab dem Start des Laufs,
 `AnswerAudit.follow`). Jede Runde ist eine Nutzernachricht mit den neuen
 Einträgen als JSON (`round_message`, `review_entry`); der Anfang kommt aus dem
 Prompt-Cache, bezahlt wird im Wesentlichen nur das Neue. Die Prüfer lesen aus
-dem Speicher des Laufs, nicht aus Firestore. Gekürzt mit Hinweis: der
-Systemprompt des Agenten (mit Memory) über 60.000 Zeichen, jeder andere
-Eintrag über 12.000 (sein ganzes JSON, Listen bis 20 Einträge; `_fit`).
+dem Speicher des Laufs, nicht aus Firestore. Die Anweisungen des Agenten
+(sein Systemprompt, in Prod rund 19.000 Zeichen und damit die Hälfte eines
+Protokolls) lesen sie seit 2026-10-27 als Kurzfassung (`instructions_brief`,
+`AnswerAudit.brief`): was die App dem Agenten erlaubt, je nach seinen
+Werkzeugen (Websuche, `read_source`, `prepare_…` ändern erst nach Bestätigung
+auf einer Karte, die VM ist seine eigene Sandbox mit Internet,
+`update_memory` mit Zitat und Erlaubnis des Nutzers, `update_plan`), die
+Namen seiner Werkzeuge in diesem Lauf und **das Memory des Nutzers
+vollständig** (Max' Entscheidung unten). Grund: Jede Runde schickt das ganze
+Gespräch des Prüfers erneut, und das Tageskonto zählt jedes Token davon; der
+volle App-Text war gut ein Drittel der Prüfer-Tokens (53 Audit-Turns,
+24.–27.10.). Das Protokoll selbst behält den ganzen Text. Ist der
+Systemprompt kürzer als die Kurzfassung (Tests), lesen sie ihn selbst. In der
+Schlussrunde steht die Antwort einmal: Der Schritt, der sie schrieb, verweist
+auf sie (`ANSWER_IN_STEP`). Gekürzt mit Hinweis wird jeder andere Eintrag
+über 12.000 Zeichen (sein ganzes JSON, Listen bis 20 Einträge; `_fit`).
 Strukturierte Einträge bleiben JSON, ohne Verbrauch; ein `step` behält aber
 die Zahl seiner Websuchen (`searches`, seit 2026-10-27). Die Suche läuft im
 Schritt selbst, und ihre Treffer stehen nur dann in `sources`/
@@ -161,6 +174,14 @@ je Live-Runde, bis zu 3 in der Schlussrunde.
 **Wann:** Eine Live-Runde beginnt, wenn das Protokoll einen Schritt des Agenten
 oder eines Workers mit Tool-Aufrufen hat, den der Prüfer noch nicht kennt, und
 der Prüfer frei ist (`work_goes_on`); alles, was inzwischen kam, geht mit.
+Ein Schritt, der nur liest oder seinen Plan pflegt (`QUIET_TOOLS`:
+`update_plan`, `read_settings`, `read_file`, `read_document`, `gmail_read`,
+`calendar_read`, `vm_read_file`, `vm_process_output`, `vm_view_image`,
+`wait_agents`), löst seit 2026-10-27 keine eigene Runde aus: Er geht mit der
+nächsten Runde mit, die ein handelnder Schritt auslöst, spätestens beim
+dritten solchen Schritt in Folge (`QUIET_STEPS`) oder in der Schlussrunde.
+Ein Halt könnte an ihnen nichts verhindern, und jede Runde kostet das ganze
+Gespräch des Prüfers.
 Es gibt keine Rundengrenze: Die Prüfer beobachten den ganzen Lauf, auch lange
 autonome Läufe (seit 2026-10-25, vorher höchstens 6 Live-Runden). Begrenzt
 wird nur durch die Dauer des Turns, denn ein Prüfer ist während seiner Runde
@@ -205,6 +226,15 @@ Agent-Panel.
 - Eine Sitzung, die zwischen zwei Runden wartet, endet mit dem Prüfer: bei
   Stop „stopped“, bei der Frist „failed“ (`no_time`), wenn der Lauf vor der
   Antwort endet „stopped“ (`run_ended`).
+- Die Schlussrunde bekommt seit 2026-10-27 einen zweiten Versuch, wenn noch
+  Zeit ist (`ReviewerSession._mendable`): Eine unlesbare Antwort
+  (`MENDABLE_SHAPES`, etwa Text statt JSON) wird in derselben Sitzung mit
+  `REPAIR_NOTE` noch einmal angefragt, das Panel zeigt keinen Fehlschlag;
+  ein vorübergehender Anbieterfehler (`PASSING_FAILURES`) läuft in einer
+  neuen Sitzung noch einmal („This attempt failed. The reviewer tries once
+  more in a new session.“). Eine leere Antwort hatte ihren zweiten Versuch
+  schon (`worker_request`), eine am Ausgabelimit abgeschnittene bekommt
+  keinen. Anlass: 2 von 87 Schlussrunden in Prod endeten `review_unreadable`.
 - Fällt ein Prüfer in der Schlussrunde aus, gelten seine Live-Befunde; ohne
   solche fehlen nur seine Befunde.
 - Stop beendet die Prüfer, die fixierte Antwort bleibt.
