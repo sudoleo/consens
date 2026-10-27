@@ -88,18 +88,19 @@ THINKING_UPDATE_SECONDS = 3
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
                               "vm_view_image", "update_plan"})
-# Tools that bring outside content into the agent's context: model answers
-# and their source excerpts, pages, emails, calendars, files. Once one of them
-# returned in a message, its memory can no longer change (memory_locked): a
-# page could otherwise steer update_memory, whose evidence check only proves
-# that some words of the user are quoted (review 2026-10-14).
-# A VM command's output and a file read in the VM are outside content too
-# (the user's files, downloaded packages, programs' output), and so are the
-# lines an edit shows again.
-MEMORY_LOCKING_TOOLS = frozenset({"compare_models", "check_text", "read_source", "calendar_read",
-                                  "gmail_read", "import_gmail_attachment", "read_file", "read_document",
-                                  "vm_exec", "vm_read_file", "vm_edit_file", "vm_start_process",
-                                  "vm_process_output", "vm_stop_process", "vm_view_image"})
+# Once a tool's result may have brought outside content into the agent's
+# context (model answers and their sources, pages, emails, calendars, files,
+# a VM's output or the workspace's notes, a worker's report), the message's
+# memory can no longer change (memory_locked): a page could otherwise steer
+# update_memory, whose evidence check only proves that some words of the user
+# are quoted (review 2026-10-14). Since the workspace's security audit
+# (2026-10-27) every result locks, an error too (its text may quote what a
+# command printed), except a call the app refused before it ran and the
+# results of the tools below, which return only the user's or the app's own
+# content: memory, settings, the agent's own plan and documents, a prepared
+# card's status. A new tool locks until shown otherwise.
+MEMORY_KEEPING_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
+                                  "update_plan", "create_document", "revise_document"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800
@@ -2135,16 +2136,18 @@ class DelegationLoop(AgentLoop):
         return True
 
     def _brought_outside_content(self, value, results):
-        """Whether a call of this batch returned outside content
-        (MEMORY_LOCKING_TOOLS) into the agent's context."""
+        """Whether a call of this batch returned a result that may hold
+        outside content: any tool but MEMORY_KEEPING_TOOLS, unless the app
+        refused the call before it ran ("refused", whose reason is the
+        app's own; a refused call comes again with its decision)."""
         for call in value.tool_calls:
-            if (call.get("function") or {}).get("name") not in MEMORY_LOCKING_TOOLS or call["id"] not in results:
+            if call["id"] not in results or (call.get("function") or {}).get("name") in MEMORY_KEEPING_TOOLS:
                 continue
             try:
                 content = json.loads(results[call["id"]]["content"])
             except (TypeError, ValueError):
                 return True
-            if not (isinstance(content, dict) and ("error" in content or content.get("status") == "refused")):
+            if not (isinstance(content, dict) and content.get("status") == "refused"):
                 return True
         return False
 
@@ -2405,10 +2408,11 @@ class DelegationLoop(AgentLoop):
                         if _thought_only(value):
                             raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
                     self.messages.append(value.assistant_message())
-                    if self.comparison is not None and self.comparison.audit_mode and _searched(value):
-                        # Audit mode searches in every step: web pages are in
-                        # view from here on, also for this step's own calls,
-                        # so memory locks as after read_source.
+                    if _searched(value):
+                        # The step's own web search (every step in audit mode,
+                        # on request in comparison mode): pages are in view
+                        # from here on, also for this step's own calls, so
+                        # memory locks as after read_source.
                         self._lock_memory("web_search", value.step_id)
                     # A step that wrote its answer and then only saved a
                     # memory or prepared a Watch: the text stands as the answer.

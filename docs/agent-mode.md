@@ -266,7 +266,7 @@ Watch, Einstellungen, Dateien, Dokumente, Google und Memory bleiben. Sobald
 ein Schritt eigene Suchtreffer hat (`_searched`), ist Memory für die
 Nachricht gesperrt (`memory_locked`, auch für die Aufrufe desselben
 Schritts), wie nach `read_source`: Seiten könnten sonst `update_memory`
-steuern. Der Memory-Prompt sagt deshalb „call update_memory first, before you
+steuern. Seit 2026-10-27 gilt das auch im Vergleichsmodus. Der Memory-Prompt sagt deshalb „call update_memory first, before you
 search“.
 
 **Die Vergleichsmodelle prüfen, während der Agent arbeitet.** Ab dem Start
@@ -552,9 +552,9 @@ Ab dem ersten VM-Start einer Nachricht ist sie ein langer Lauf mit eigenen
 Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
 unter „Tageskontingent“); VM-Aufrufe zählen nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
-Änderung sind Fortschritt). `vm_exec`, `vm_read_file` und `vm_edit_file` (zeigt
-Dateizeilen) bringen Fremdinhalt und sperren Memory wie `read_file`
-(`MEMORY_LOCKING_TOOLS`).
+Änderung sind Fortschritt). Jedes VM-Werkzeug sperrt Memory wie `read_file`
+(Memory-Sperre unten): Ausgaben, Dateien und die Notizen des Arbeitsplatzes
+sind Fremdinhalt.
 
 **Lebenszyklus.** Seit 2026-10-27 eine VM pro Konto, der Arbeitsplatz (siehe
 „Arbeitsplatz“ unten), Name `workspace_name(uid)` (stabil, ohne Konto-ID);
@@ -1569,10 +1569,19 @@ Prompt `update_memory` ohnehin verlangt (`agent_memory.MEMORY_WRITE_PROMPT`,
 Antwortschritt bekam die Erinnerungen als eigenen Block ohne IDs
 (`synthesis_prompt`); heute stehen sie nur im Systemprompt des Agenten.
 
-**Memory-Sperre (seit 2026-10-14).** Sobald in einer Nachricht ein Werkzeug
-fremden Inhalt in den Kontext gebracht hat (`MEMORY_LOCKING_TOOLS`: Vergleich,
-Textprüfung, gelesene Seite, Kalender, Gmail, Dateien), kann das Memory in dieser
-Nachricht nicht mehr geändert werden (`DelegationLoop.memory_locked`):
+**Memory-Sperre (seit 2026-10-14, umgekehrt 2026-10-27).** Sobald in einer
+Nachricht ein Werkzeug ein Ergebnis geliefert hat, kann das Memory in dieser
+Nachricht nicht mehr geändert werden (`DelegationLoop.memory_locked`), auch
+nach einem Fehler, dessen Text Ausgaben zitieren kann. Ausgenommen sind nur
+ein Aufruf, den die App vor dem Lauf abgelehnt hat (`status: refused`), und
+die Werkzeuge in `MEMORY_KEEPING_TOOLS`, die nachweislich nur Inhalte des
+Nutzers oder der App liefern (`update_memory`, `read_settings`,
+`prepare_settings_change`, `prepare_watch`, `update_plan`, `create_document`,
+`revise_document`); ein neues Werkzeug sperrt also, bis das Gegenteil belegt
+ist. Vorher zählte eine Liste die sperrenden Werkzeuge auf und übersah
+`vm_write_file`, `vm_share_file`, `github_import` und `prepare_pull_request`,
+deren erstes Ergebnis die Notizen des Arbeitsplatzes trägt (Sicherheitsaudit
+2026-10-27). Die eigene Websuche sperrt in jedem Modus (`_searched`).
 `update_memory` antwortet mit `MEMORY_LOCKED`, ein `memory`-Feld an einem
 späteren Vergleich wird nicht angewandt (Aktivität „blocked“,
 `untrusted_context`). Grund: Die Prüfung, dass die Evidenz ein wörtliches

@@ -493,6 +493,31 @@ def test_memory_cannot_change_once_outside_content_is_in_view(store):
     assert "evil.example" not in json.dumps(saved["agent_activity"])
 
 
+# Since the workspace's security audit (2026-10-27) every tool's result locks
+# memory, an error too, except a call the app refused before it ran and the
+# few tools that return only the user's or the app's own content. Before, a
+# list named the locking tools and missed the VM's writes, shares and GitHub,
+# whose first result carries the workspace's notes.
+@pytest.mark.parametrize("name,content,locks", [
+    ("vm_write_file", {"path": "/x", "workspace_notes": {"text": "notes"}}, True),
+    ("vm_share_file", {"files": []}, True),
+    ("github_import", {"repo": "a/b"}, True),
+    ("prepare_pull_request", {"status": "prepared"}, True),
+    ("vm_exec", {"error": "Unpacking failed in the VM: what a command printed"}, True),
+    ("wait_agents", {"agents": []}, True),
+    ("a_tool_added_later", {}, True),
+    ("check_text", {"status": "refused", "reason": "The text is the user's own question."}, False),
+    ("update_memory", {"changes": []}, False),
+    ("read_settings", {"settings": {}}, False),
+    ("update_plan", {"status": "updated"}, False),
+])
+def test_every_tool_result_locks_memory_but_the_apps_own(name, content, locks):
+    from types import SimpleNamespace
+    value = SimpleNamespace(tool_calls=[{"id": "c1", "function": {"name": name, "arguments": "{}"}}])
+    results = {"c1": {"role": "tool", "tool_call_id": "c1", "content": json.dumps(content)}}
+    assert DelegationLoop._brought_outside_content(None, value, results) is locks
+
+
 def test_a_link_the_user_sent_is_no_evidence(store):
     """Review 2026-10-12: a page the Agent read knows its own URL and could
     have it cited as the user's quote."""

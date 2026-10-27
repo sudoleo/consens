@@ -1370,6 +1370,9 @@ def test_a_long_reply_after_own_research_is_held_back_once_in_both_modes(store, 
     assert saved["consensus"] == ANSWER and not loop.comparison.direct
     # The unchecked reply never reached the reader.
     assert LONG_REPLY not in deltas(events) and deltas(events) == ANSWER
+    # Its own search put pages in view: memory locks in comparison mode too
+    # (workspace security audit 2026-10-27; before, only in audit mode).
+    assert loop.memory_locked is True
 
 
 def test_a_long_answer_without_research_or_comparison_is_one_streamed_unchecked_call(store):

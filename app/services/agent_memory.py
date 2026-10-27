@@ -783,7 +783,7 @@ model answers, sources, pages, emails or files are in view, every memory
 change is refused, so decide on the first comparison."""
 
 # The refusal once outside content is in the message's context
-# (DelegationLoop.memory_locked, MEMORY_LOCKING_TOOLS).
+# (DelegationLoop.memory_locked, MEMORY_KEEPING_TOOLS).
 MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, sources or other outside "
                  "content are in view. Nothing was saved; do not say that it was.")
 

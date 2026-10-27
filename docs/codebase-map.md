@@ -4421,7 +4421,9 @@ ihn als Fortschrittszeile `note` (höchstens `NOTE_CHARS` = 400 Zeichen); folgen
 nur `SIDE_TOOLS` (`update_memory`, `prepare_watch`), bleibt der Text die Antwort
 (`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
 (`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach einem Batch mit
-fremdem Inhalt (`MEMORY_LOCKING_TOOLS`) sperrt `memory_locked` jede weitere
+einem Ergebnis eines Werkzeugs außerhalb von `MEMORY_KEEPING_TOOLS` (seit 2026-10-27
+jedes, Fehler eingeschlossen; nur vor dem Lauf abgelehnte Aufrufe nicht) und nach
+eigener Websuche in jedem Modus sperrt `memory_locked` jede weitere
 Memory-Änderung der Nachricht (`agent_memory.MEMORY_LOCKED`). Eigene Recherche ohne Vergleich:
 `_consensus_search_handoff` (oben), danach hält `_tool_reminder` eine Antwort
 über `DIRECT_REPLY_CHARS` (800) Zeichen einmal zurück (`TOOL_REMINDERS`);
