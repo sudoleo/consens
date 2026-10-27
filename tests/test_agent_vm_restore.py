@@ -53,8 +53,8 @@ def vm_turn(store, *, checkpoint="v3", status="completed"):
 
 @pytest.fixture
 def admin_api(api, monkeypatch):
-    # Audit with its VM: Pro accounts and admins (routers/agent.py audit_allowed).
-    monkeypatch.setattr(agent_router, "audit_allowed", lambda uid: True)
+    # The VM: admins, or every account with audit (routers/agent.py vm_allowed).
+    monkeypatch.setattr(agent_router, "vm_allowed", lambda uid: True)
     return api
 
 
@@ -82,7 +82,7 @@ def test_restore_is_refused_while_a_response_runs_without_a_checkpoint_or_for_ot
     failed = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
     assert failed.status_code == 503 and failed.json()["code"] == "vm_unavailable"
     assert not [call for call in fake_vm.calls if call[0] == "restore" and call[2] != "v9"]
-    monkeypatch.setattr(agent_router, "audit_allowed", lambda uid: False)
+    monkeypatch.setattr(agent_router, "vm_allowed", lambda uid: False)
     assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 403
 
 

@@ -99,6 +99,8 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
         )
 
         audit_access = entitlements.tier == "pro" or is_user_admin(uid)
+        # Its VM: admins only unless AGENT_VM_ACCESS=pro (routers/agent.py vm_allowed).
+        vm_access = audit_access if agent_vm.open_to_pro() else is_user_admin(uid)
         return {
             "uid": uid,
             # is_pro heisst weiterhin "Frontier-Modelle" und ist
@@ -115,10 +117,11 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # Only the operator's own browsers switch analytics off with it
             # (analytics-opt-out.js); same cached flags as the tier above.
             "is_admin": is_user_admin(uid),
-            # Audit with its own VM (routers/agent.py audit_allowed): Pro and admins.
+            # Audit (routers/agent.py audit_allowed): Pro and admins.
             "audit_access": audit_access,
-            # Its VM time today (agent_vm_time.py), for the settings.
-            **({"vm_time": _vm_time(uid)} if audit_access and agent_vm.configured() else {}),
+            # Its VM time today (agent_vm_time.py), for the settings; only
+            # where the account's audit has a VM, which the settings then promise.
+            **({"vm_time": _vm_time(uid)} if vm_access and agent_vm.configured() else {}),
         }
 
     except HTTPException:

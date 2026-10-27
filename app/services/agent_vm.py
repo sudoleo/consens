@@ -443,6 +443,13 @@ def configured():
     return bool(os.getenv("SPRITES_TOKEN", "").strip())
 
 
+def open_to_pro():
+    """AGENT_VM_ACCESS=pro: the VM comes with every account's audit (Pro and
+    admins). Otherwise, the default since the workspace's security audit of
+    2026-10-27, only admins get it; Pro's audit runs without a VM."""
+    return os.getenv("AGENT_VM_ACCESS", "").strip().lower() == "pro"
+
+
 def backend():
     """The configured provider for one message, or None without one."""
     token = os.getenv("SPRITES_TOKEN", "").strip()

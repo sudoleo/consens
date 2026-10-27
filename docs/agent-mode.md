@@ -495,10 +495,17 @@ Pause-Karte auf Desktop und Handy) ohne Modellkosten in
 
 Seit 2026-10-26 gibt es keine eigene VM-Einstellung mehr: Einstellungen →
 Agent · Beta → **Way of working** = Audit bringt die VM mit
-(`AgentPreferences.vm` folgt `audit`, `routers/agent.py::effective_preferences`
-für Pro und Admins, `audit_allowed`); ohne Audit keine VM. Der Turn friert den
-wirksamen Wert ein. Die Prüfer verfolgen jeden VM-Schritt live im
-Arbeitsprotokoll.
+(`AgentPreferences.vm` folgt `audit`, `routers/agent.py::effective_preferences`);
+ohne Audit keine VM. Der Turn friert den wirksamen Wert ein. Die Prüfer
+verfolgen jeden VM-Schritt live im Arbeitsprotokoll.
+
+**Nur Admins (seit 2026-10-27).** Nach dem Sicherheitsaudit des Arbeitsplatzes
+bekommen nur Admins die VM (`routers/agent.py::vm_allowed`): Audit-Läufe von
+Pro-Konten laufen mit Prüfern, aber ohne VM, und Arbeitsplatz, Live-Ansicht,
+VM-Restore, VM-Zeit (`/user_status` `vm_time`, Body-Klasse
+`viewer-has-workspace`) und die GitHub-Zeile (`.workspace-only`) entfallen für
+sie. `AGENT_VM_ACCESS=pro` öffnet die VM wieder für jedes Konto mit Audit
+(`agent_vm.open_to_pro`); erst setzen, wenn die Fixes aus dem Audit live sind.
 
 **Was der Agent bekommt.** Eine eigene Linux-VM pro Chat (Fly.io Sprites,
 Ubuntu, bash, sudo) mit fünf Werkzeugen (`agent_vm_tools.py`, nur auf
@@ -902,11 +909,11 @@ App: `docs/github-app-setup.md`). Konfiguration: `GITHUB_APP_ID`,
 `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`,
 `GITHUB_APP_SLUG`; fehlt eine, sagen die Werkzeuge ruhig „GitHub is not set
 up“. Die Werkzeuge und der Prompt `AGENT_GITHUB_PROMPT` (Admin „Agent: GitHub“)
-kommen mit der VM, also mit Audit (Pro und Admins); die Verbindung selbst ist für
-jedes Konto mit Agent gebaut.
+kommen mit der VM (`vm_allowed`, seit 2026-10-27 nur Admins); die Verbindung
+selbst ist für jedes Konto mit Agent gebaut.
 
 *Verbinden* (Einstellungen → Agent · Beta → GitHub, Zeile `#agentGithubSettings`,
-`.audit-only`, nur bei Audit sichtbar): wie bei Google ein Popup.
+`.workspace-only`, nur sichtbar, wo Audit die VM hat): wie bei Google ein Popup.
 `POST /agent/github/connect` legt einen einmaligen `state` an
 (`users/{uid}/github_oauth_states/{sha(state)}`, 10 min) und setzt das
 HttpOnly-Cookie `consens_github_oauth` (Pfad `/agent/github`) mit dem

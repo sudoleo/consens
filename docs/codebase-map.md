@@ -141,7 +141,9 @@ and `workspace_vm/pause.py` freezes its marked processes),
 `POST /agent/workspace/reset-browser` and the WebSocket `/agent/workspace/view`
 (sign-in by its first message, then carried through to the VM gateway over the
 Sprite's private address with `SPRITES_TOKEN`, which never reaches the browser);
-all need Agent access and audit (`audit_allowed`) on a server with a VM provider.
+all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
+since 2026-10-27, `AGENT_VM_ACCESS=pro` for every account with audit) on a
+server with a VM provider.
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
 `open`, `close`, `init`, `isOpen`) renders the panel, imports noVNC from
 `static/vendor/novnc/1.7.0` on first open and wires `#composerWorkspaceButton`
@@ -5580,8 +5582,9 @@ Einstellung `agent_preferences.audit` (`off`/`on`, auf der Einstellungsseite
 wirksam (`routers/agent.py::audit_allowed`, `/user_status` `audit_access`,
 Body-Klasse `viewer-can-audit`, `.audit-only`; vorher nur Admins).
 `effective_preferences` setzt sie sonst vor der Request-Identität auf `off`,
-und mit `on` immer `vm: on` und `judges: on` (Audit hat stets VM und Prüfer;
-ohne Audit keine VM). Die Seite zeigt dann nur, was gilt
+und mit `on` immer `judges: on` und `vm: on`, wo das Konto die VM hat
+(`vm_allowed`: seit 2026-10-27 nur Admins, `AGENT_VM_ACCESS=pro` öffnet sie
+wieder für jedes Konto mit Audit; ohne Audit keine VM). Die Seite zeigt dann nur, was gilt
 (`#agentSettingsSection.is-audit`: Vergleichszeilen weg, GitHub da). Mit `on` schickt die Route
 `AGENT_AUDIT_SYSTEM_PROMPT` (`DEFAULT_PROMPTS["agent_audit"]`) statt des
 Agent-Prompts, `ComparisonTools.audit_mode` bietet keine Vergleichstools an,
@@ -9005,6 +9008,8 @@ alte Gemini-ADC-JSON ist entfernt.
   in der normalen `.env` deaktiviert.
 - Agent VM: `SPRITES_TOKEN` (Fly.io Sprites, nur im Backend, nie in einer
   VM); ohne ihn melden die VM-Werkzeuge „not available“ (`agent_vm.backend`).
+  `AGENT_VM_ACCESS`: leer = VM nur für Admins (seit 2026-10-27), `pro` = für
+  jedes Konto mit Audit (`agent_vm.open_to_pro`, `routers/agent.py::vm_allowed`).
   GitHub für die VM (seit 2026-10-26): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`,
   `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, nur im
   Backend (`agent_github.py`, Einrichtung `docs/github-app-setup.md`); fehlt

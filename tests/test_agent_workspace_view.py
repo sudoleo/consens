@@ -56,7 +56,7 @@ def view_api(monkeypatch, store, fake_vm):
     monkeypatch.setattr(workspace_router, "_store", lambda: store)
     monkeypatch.setattr(workspace_router, "require_agent_access", lambda uid: None)
     allowed = {UID}
-    monkeypatch.setattr(workspace_router, "audit_allowed", lambda uid: uid in allowed)
+    monkeypatch.setattr(workspace_router, "vm_allowed", lambda uid: uid in allowed)
     gateway = Gateway([json.dumps({"state": "starting"}), json.dumps({"state": "ready"}), b"RFB 003.008\n"])
 
     async def connect(url):

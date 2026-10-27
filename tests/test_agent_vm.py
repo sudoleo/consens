@@ -843,13 +843,17 @@ def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(sto
 
 # --- Admins only ------------------------------------------------------------------
 
-# The VM comes with Audit, for Pro accounts and admins (2026-10-26): a saved
-# "vm" without Audit no longer turns it on.
-@pytest.mark.parametrize("admin", [True, False])
-def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, admin):
+# The VM comes with Audit (2026-10-26): a saved "vm" without Audit no longer
+# turns it on. Since the workspace's security audit (2026-10-27) only admins'
+# audit has it unless AGENT_VM_ACCESS=pro; a Pro account's runs without.
+@pytest.mark.parametrize("audit,is_admin,access,vm", [
+    (True, True, "", True), (True, False, "", False), (True, False, "pro", True), (False, False, "pro", False)])
+def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, audit, is_admin, access, vm):
     from app.api.routers import agent
     client, store, calls = api
-    monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
+    monkeypatch.setattr(agent, "audit_allowed", lambda uid: audit)
+    monkeypatch.setattr(agent, "is_user_admin", lambda uid: is_admin)
+    monkeypatch.setenv("AGENT_VM_ACCESS", access)
     monkeypatch.setattr(agent_vm, "configured", lambda: True)
     alone = store.create_chat(UID, execution_mode="agent")["id"]
     assert client.post("/agent", json={"chat_id": alone, "question": "Hi", "client_request_id": "r0", "bookmark_id": "bm0",
@@ -863,12 +867,13 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, admin):
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
     settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
-    assert settings["agent_preferences"]["vm"] == ("on" if admin else "off")
+    assert settings["agent_preferences"]["audit"] == ("on" if audit else "off")
+    assert settings["agent_preferences"]["vm"] == ("on" if vm else "off")
     # Audit always has its reviewers: no answer-check choice turns them off.
-    assert settings["agent_preferences"]["judges"] == ("on" if admin else "off")
+    assert settings["agent_preferences"]["judges"] == ("on" if audit else "off")
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
-    assert ("vm_exec" in names) is admin
-    assert (prompt_defaults.AGENT_VM_PROMPT in calls[0]["messages"][0]["content"]) is admin
+    assert ("vm_exec" in names) is vm
+    assert (prompt_defaults.AGENT_VM_PROMPT in calls[0]["messages"][0]["content"]) is vm
     # The same request again is the same message, with the same effective settings.
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
 
@@ -876,6 +881,30 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, admin):
 # A server without a VM provider (no SPRITES_TOKEN): Audit runs without the
 # VM, and the agent is not told of one that answers every call with "not
 # available" (2026-10-26).
+# The settings promise the VM only with its time (agent-preferences.js
+# renderVmTime): a Pro account's audit without VM gets none.
+@pytest.mark.parametrize("tier,is_admin,access,shown", [
+    ("pro", False, "", False), ("free", True, "", True), ("pro", False, "pro", True), ("free", False, "pro", False)])
+def test_the_account_status_names_vm_time_only_where_audit_has_the_vm(monkeypatch, tier, is_admin, access, shown):
+    from unittest.mock import patch
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routers import users as users_router
+    monkeypatch.setenv("AGENT_VM_ACCESS", access)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
+    app = FastAPI()
+    app.include_router(users_router.router)
+    with (patch.object(users_router, "verify_user_token", return_value="u1"),
+          patch.object(users_router, "get_user_tier", return_value=tier),
+          patch.object(users_router, "_token_budget", return_value={}),
+          patch.object(users_router, "is_user_admin", return_value=is_admin),
+          patch.object(users_router, "_vm_time", return_value={"used_seconds": 0}),
+          patch.object(users_router.account_language, "record")):
+        status = TestClient(app).get("/user_status", headers={"Authorization": "Bearer token"}).json()
+    assert status["audit_access"] is (tier == "pro" or is_admin)
+    assert ("vm_time" in status) is shown
+
+
 def test_a_server_without_a_vm_provider_offers_no_vm(api, monkeypatch):
     from app.api.routers import agent
     client, store, calls = api

@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
-from app.api.routers.agent import audit_allowed, require_agent_access
+from app.api.routers.agent import require_agent_access, vm_allowed
 from app.api.routers.chat_history import _chat_uid
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
@@ -41,8 +41,9 @@ class Control(Strict):
 
 
 def allowed(uid):
-    """The workspace comes with audit (Pro and admins) and a provider."""
-    return audit_allowed(uid) and agent_vm.configured()
+    """The workspace comes with the VM (routers/agent.py vm_allowed) and a
+    provider."""
+    return vm_allowed(uid) and agent_vm.configured()
 
 
 def owner(request):
