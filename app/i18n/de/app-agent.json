@@ -870,7 +870,7 @@
   "What the agent received": "Was der Agent bekam",
   "The agent’s step": "Schritt des Agenten",
   "The step that has not run yet": "Der Schritt, der noch nicht gelaufen ist",
-  "No reviewer could check this step": "Kein Prüfer konnte diesen Schritt prüfen",
+  "Not every reviewer could check this step": "Nicht jeder Prüfer konnte diesen Schritt prüfen",
   "A reviewer stopped a step before it ran": "Ein Prüfer hat einen Schritt angehalten, bevor er lief",
   "It acts outside the workspace and runs only if you let it.": "Er wirkt außerhalb des Arbeitsplatzes und läuft nur, wenn du ihn lässt.",
   "Let it run": "Laufen lassen",

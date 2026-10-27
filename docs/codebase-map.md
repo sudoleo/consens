@@ -5697,7 +5697,8 @@ dafür vor dem Protokolleintrag `AnswerAudit.open_gate` (`Gate`), danach
 `ready_gate(entry)` (`WorkLog.step` gibt die Nummer zurück); jeder antwortfähige
 Prüfer macht eine Gate-Runde ohne Websuche (`ReviewerSession._gate_round`,
 `GATE_NOTE`, `parse_gate`). Die Batch-Schleife ruft vor so einem Aufruf
-`_gate_wait`: alle go → läuft; ein Halt oder keine Antwort (`GATE_UNCHECKED`) →
+`_gate_wait`: jeder Prüfer des Laufs go → läuft; ein Halt oder ein Prüfer ohne
+Antwort, ausgefallen oder pausiert (`GATE_UNCHECKED`, seit 2026-10-27 nie ein Go) →
 `request_hold` mit `gate: true` (`gate_hold`, mehrere Gründe in `reasons`),
 `continue` lässt laufen, `steer` nicht (`HOLD_STEERED`). Karte in
 `agent-chat.js` (`holdCard`: „Let it run“, „The step that has not run yet“,

@@ -1472,7 +1472,8 @@
   // the response stops after timeout_seconds (30 min).
   // A pause with `gate` (since 2026-10-27, agent_gate.py) comes before a step
   // that acts outside the workspace runs: it runs only if the user lets it.
-  // "unchecked": no reviewer could answer for it, so no reviewer and no reason.
+  // "unchecked": not every reviewer could answer for it (one that failed or
+  // paused never counts as a go), so no reviewer and no reason.
   const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
     injection: "Prompt injection", unchecked: "Not checked" };
   let holdTimer = null;
@@ -1571,7 +1572,7 @@
     title.id = "agentHoldTitle";
     title.className = "agent-hold-title";
     const unchecked = hold.kind === "unchecked";
-    title.textContent = unchecked ? "No reviewer could check this step"
+    title.textContent = unchecked ? "Not every reviewer could check this step"
       : hold.gate ? "A reviewer stopped a step before it ran" : "A reviewer paused the work";
     const meta = document.createElement("p");
     meta.className = "agent-hold-meta";

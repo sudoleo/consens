@@ -465,9 +465,12 @@ wartet in `_gate_wait` (Aktivität „The reviewers check this step before it
 runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`. **Ein
 Halt reicht** → die Karte (`request_hold` mit `gate: true`, „A reviewer
 stopped a step before it ran“, Knopf „Let it run“; halten mehrere an, steht
-jeder mit seinem Grund in `reasons`). **Kann kein Prüfer antworten** (alle
-ausgefallen oder unlesbar) → Karte der Art `unchecked` („No reviewer could
-check this step“), ohne Prüfer und Grund. Der Agent erfährt nur die
+jeder mit seinem Grund in `reasons`). **Kann nicht jeder Prüfer des Laufs
+antworten** (einer ausgefallen, unlesbar, in der Fehlerpause oder nicht mehr
+folgend) → Karte der Art `unchecked` („Not every reviewer could check this
+step“), ohne Prüfer und Grund: Ein Prüfer, der nicht antworten konnte, zählt
+nie als Zustimmung (seit dem Sicherheitsaudit 2026-10-27; vorher reichte das
+Go eines einzigen, wenn die anderen ausgefallen waren). Der Agent erfährt nur die
 Entscheidung des Nutzers: `continue` lässt die Aufrufe des Schritts laufen,
 `steer` lässt sie ungelaufen (`HOLD_STEERED`) und gibt ihm die Nachricht, Stop
 stoppt. Die Entscheidung gilt für die gelisteten Aufrufe dieses einen

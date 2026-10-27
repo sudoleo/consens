@@ -1630,7 +1630,7 @@ describe("single-model agent chat", () => {
     expect(host.querySelector(".agent-hold-evidence-label").textContent).toBe("The step that has not run yet");
     expect(host.querySelector(".agent-hold-continue").textContent).toBe("Let it run");
     handlers.hold.receive({ hold: { ...base, id: "0123456789ab", kind: "unchecked", reviewer: "", reason: "" } });
-    expect(host.querySelector(".agent-hold-title").textContent).toBe("No reviewer could check this step");
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("Not every reviewer could check this step");
     expect([...host.querySelectorAll(".agent-hold-reason")].map(p => p.textContent)).toEqual([
       "It acts outside the workspace and runs only if you let it."]);
     expect([...host.querySelectorAll(".agent-hold-meta > span")].map(span => span.textContent))

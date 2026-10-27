@@ -186,6 +186,21 @@ def test_no_reviewer_able_to_answer_asks_the_user(store):
     assert ran == [UPLOAD]
 
 
+def test_a_reviewer_that_could_not_answer_is_never_a_go(store):
+    """Security audit 2026-10-27: one reviewer's go let the call run while
+    the other had failed. A reviewer that could not answer (failed, paused)
+    never counts as consent: the user decides."""
+    script, loop, ran = gated(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go),
+                       openai=replies(script, "openai", lambda m: "I cannot tell."))
+    waiter = decide_when_held(loop, store, "steer", "Leave it.")
+    events = list(loop.run())
+    waiter.join(5)
+    holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
+    assert len(holds) == 1 and holds[0]["kind"] == agent_audit.GATE_UNCHECKED and holds[0]["gate"] is True
+    assert ran == []
+
+
 def test_a_command_that_stays_inside_runs_without_a_gate_round(store):
     script, loop, ran = gated(store, live={}, command="ls -la")
     script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", halt))

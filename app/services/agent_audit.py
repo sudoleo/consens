@@ -1387,9 +1387,11 @@ class AnswerAudit:
 
     def gate_result(self, gate):
         """None while an asked reviewer is still at it. Else ("halt",
-        [(session, halt)]) when any halted, ("go", []) when at least one let
-        the calls run and none halted, (GATE_UNCHECKED, []) when none could
-        answer: the veto of one reviewer is enough."""
+        [(session, halt)]) when any halted, ("go", []) only when every
+        reviewer of the run let the calls run, (GATE_UNCHECKED, []) when one
+        could not answer (failed, paused or no longer following): the veto
+        of one reviewer is enough, and a reviewer that could not answer is
+        never a go (security audit 2026-10-27); the user decides instead."""
         with self._gate_changed:
             if not gate.ready or (gate.asked - set(gate.verdicts) and not self.stopping):
                 return None
@@ -1399,7 +1401,7 @@ class AnswerAudit:
                  if verdicts.get(provider, (None,))[0] == "halt"]
         if halts:
             return "halt", halts
-        if any(verdict == "go" for verdict, _ in verdicts.values()):
+        if self.sessions and all(verdicts.get(provider, (None,))[0] == "go" for provider in self.sessions):
             return "go", []
         return GATE_UNCHECKED, []
 
@@ -1407,7 +1409,7 @@ class AnswerAudit:
         """What the card shows for a gate the user decides (request_hold): the
         halting reviewers, the first one's reason (all of them in
         ``reasons`` when several halted) and the entry it named; without a
-        halt (no reviewer could answer) the step itself and no reason."""
+        halt (not every reviewer could answer) the step itself and no reason."""
         entry = halts[0][1]["entry"] if halts else gate.entry
         quote = halts[0][1].get("quote", "") if halts else ""
         shown = {"step": "", "step_name": "", "step_kind": "", "step_source": ""}
