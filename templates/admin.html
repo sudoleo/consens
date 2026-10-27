@@ -179,7 +179,8 @@
                 <h3>Daily token allowance</h3>
                 <p class="section-hint">
                     One account per user and UTC day for Compare, Consensus, Reasoning runs and Agent
-                    (input + output tokens, reasoning included). A run starts only when the tokens left
+                    (input + output tokens, reasoning included; Agent counts prompt tokens read from the
+                    provider's cache at a quarter). A run starts only when the tokens left
                     cover its <strong>expected run</strong> cost below; it then books what it measured and
                     may end slightly below zero. Agent reserves before every call. Who may use Agent is
                     unchanged (Pro and Admin). Changes apply within 30 seconds.

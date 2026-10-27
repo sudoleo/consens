@@ -184,7 +184,8 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
     usage = saved["agent_usage"]
     assert usage["input_tokens"] + usage["output_tokens"] == len(script.calls) * 70
     quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
-    assert quota["used"] == len(script.calls) * 70 and quota["reserved"] == 0
+    # 30 fresh + 20 cache reads at a quarter + 20 output per call (agent_quota.CACHED_INPUT_WEIGHT).
+    assert quota["used"] == len(script.calls) * 55 and quota["reserved"] == 0
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
     tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
     assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
@@ -317,7 +318,7 @@ def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
     for _ in range(2):
         store.settle(UID, loop.chat_id, loop.turn_id, completion=value, status="cancelled", final=False)
     quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
-    assert quota["used"] == 15 and quota["reserved"] == 0
+    assert quota["used"] == 5 + 2 + 5 and quota["reserved"] == 0  # cache reads at a quarter, rounded up
 
 
 @pytest.mark.parametrize("remaining", [0, 40000])
@@ -350,11 +351,12 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
     store.protect_review(UID, loop.chat_id, loop.turn_id, loop.run_token, 600)
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 600
     old = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
-    assert old['used'] == 1100 and old['reserved'] == 0
+    # 800 fresh + 200 cache reads at a quarter + 100 output (agent_quota.CACHED_INPUT_WEIGHT).
+    assert old['used'] == 950 and old['reserved'] == 0
     assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, step='completion:1', reservation=(800, 100), **params)
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 800
     store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', step='completion:1', final=False)
-    assert agent_quota.snapshot(store.db, UID)['used'] == 1100
+    assert agent_quota.snapshot(store.db, UID)['used'] == 950
 
 
 

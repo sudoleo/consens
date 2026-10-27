@@ -5388,7 +5388,12 @@ seit 2026-10-01 gemeinsam mit Compare/Consensus/Reasoning-Läufen (§4 „Ein To
 für alle Modi"). Das Limit kommt aus der Kontostufe
 (`app_config/agent_budget.tier_limits[free|plus|pro|admin]`, `account_tier`:
 Admin-Rolle vor gespeicherter Stufe); das frühere globale
-`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Agent ist
+`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Ein
+Agent-Aufruf bucht seit 2026-10-27 `charged_tokens` ab: Input und Output
+voll, Cache-Reads (`cached_input_tokens`) zu `CACHED_INPUT_WEIGHT` = 0,25
+(Max; `measured_tokens`, `provisional_lower_bound`, Abgleich
+`agent_usage_reconciliation.generation_tokens` mit `native_tokens_cached`),
+der Beleg trägt `quota_charged`; Pipeline-Läufe zählen unverändert. Agent ist
 seit 2026-10-02 für jedes angemeldete Konto offen (`require_agent_access`);
 Pro bleiben Premium-Modelle und hohe Denkstufen.
 agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.

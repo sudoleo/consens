@@ -136,6 +136,28 @@ def test_generation_stats_prefer_native_counts_and_reject_garbage():
     assert reconciliation.generation_tokens({"data": {"native_tokens_prompt": None}}) is None
     assert reconciliation.generation_tokens({"data": {"tokens_prompt": -1, "tokens_completion": 3}}) is None
     assert reconciliation.generation_tokens([]) is None
+    # Cache reads count at a quarter, as for a streamed call; unreadable ones in full.
+    assert reconciliation.generation_tokens({"data": {"native_tokens_prompt": 100, "native_tokens_completion": 30,
+                                                      "native_tokens_cached": 80}}) == 20 + 20 + 30
+    assert reconciliation.generation_tokens({"data": {"native_tokens_prompt": 100, "native_tokens_completion": 30,
+                                                      "native_tokens_cached": 900}}) == 130
+
+
+def test_cache_reads_count_at_a_quarter_in_the_account():
+    """Max, 2026-10-27: a prompt token read from the provider's cache takes a
+    quarter of a fresh one from the daily account, in every Agent mode; cache
+    writes and output count in full, the receipt keeps the usage as measured."""
+    usage = {"input_tokens": 10_000, "output_tokens": 500, "cached_input_tokens": 8_000, "cache_write_tokens": 1_000}
+    assert agent_quota.CACHED_INPUT_WEIGHT == .25
+    assert agent_quota.measured_tokens(usage) == 2_000 + 2_000 + 500
+    # Rounded up, never below what was fresh; unknown or impossible cache counts count in full.
+    assert agent_quota.charged_tokens(10, 0, 3) == 7 + 1
+    assert agent_quota.measured_tokens({**usage, "cached_input_tokens": None}) == 10_500
+    assert agent_quota.measured_tokens({**usage, "cached_input_tokens": 20_000}) == 10_500
+    data = agent_quota.settle(agent_quota.reserve({}, 20_000, limit=100_000), 20_000, usage)
+    assert data["used"] == 4_500 and data["reserved"] == 0
+    # A lost final chunk: the bound of what was seen is weighted the same way.
+    assert agent_quota.provisional_lower_bound({**usage, "provisional": True}) == 4_500
 
 
 def test_background_scheduling_is_disabled_in_unit_test_mode(store):

@@ -24,7 +24,10 @@ def test_every_registered_chat_comparison_and_judge_model_uses_provider_totals(m
                      'completion_tokens_details': {'reasoning_tokens': 21}, 'cost': '0.000000007'})]])
     value = AgentCompletion()
     list(value.stream(model=model, messages=[{'role': 'user', 'content': 'Hi'}], api_key='test'))
-    assert agent_quota.measured_tokens(value.usage) == 130
+    # The account's charge: 61 fresh + 40 cache reads at a quarter + 29 output
+    # (agent_quota.CACHED_INPUT_WEIGHT); the usage itself stays as measured.
+    assert agent_quota.measured_tokens(value.usage) == 61 + 10 + 29
+    assert value.usage['input_tokens'] + value.usage['output_tokens'] == 130
     assert value.usage['estimated_cost_nano_usd'] == 7
     assert value.usage['complete'] and value.usage['cost_complete']
     assert value.usage['reasoning_tokens'] == 21 and value.usage['cached_input_tokens'] == 40

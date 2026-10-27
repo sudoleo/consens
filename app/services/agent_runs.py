@@ -375,6 +375,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
                 "settled_at": firestore.SERVER_TIMESTAMP,
             }
+            charged = agent_quota.measured_tokens(usage)
+            if daily_ref and charged is not None:
+                # What the account was charged: cache reads at their weight
+                # (agent_quota.CACHED_INPUT_WEIGHT), the usage itself in full.
+                receipt_patch["quota_charged"] = charged
             if estimate is not None:
                 # Bounded uncertainty: the ledger now carries this estimate.
                 # Only a provider generation id makes later measurement possible.

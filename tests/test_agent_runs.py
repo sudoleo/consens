@@ -391,9 +391,12 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert totals(store)["estimated_cost_nano_usd"] == 132000
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
     error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
-    assert error["token_budget"]["used"] == 1100
+    # 800 fresh input + 200 cache reads at a quarter + 100 output (CACHED_INPUT_WEIGHT).
+    assert error["token_budget"]["used"] == 950
     assert error["token_budget"]["reserved"] == 0
-    assert error["token_budget"]["remaining"] == 248900
+    assert error["token_budget"]["remaining"] == 249050
+    receipts = [r for r in store.db.documents.values() if isinstance(r, dict) and "quota_charged" in r]
+    assert [r["quota_charged"] for r in receipts] == [950]
     assert error['recoverable'] is True
     count = len(store.db.documents)
     for _ in range(3):
@@ -407,7 +410,7 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert totals(store)['calls'] == 1
     turn = store.list_turns(UID, chat_id)["turns"][0]
     data = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/agents", headers=AUTH).json()
-    assert data["token_budget"]["remaining"] == 248900
+    assert data["token_budget"]["remaining"] == 249050
     assert data["token_budget"]["observed_at"] >= error["token_budget"]["observed_at"]
 
 

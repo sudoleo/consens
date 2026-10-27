@@ -1,4 +1,5 @@
-"""UTC-day token account. Measured tokens are input + output, never details.
+"""UTC-day token account. Agent calls are charged input + output, prompt
+tokens read from the provider's cache at CACHED_INPUT_WEIGHT (charged_tokens).
 
 One ledger document per account and period serves Agent and the Consensus
 pipeline alike; the limit comes from the account tier (agent_budget_config).
@@ -186,17 +187,41 @@ def quota_ref(db, uid, day):
 UNKNOWN_ESTIMATE_FRACTION = 0.5
 
 
+# A prompt token the provider read from its cache counts this much (Max,
+# 2026-10-27, for every Agent mode). It costs a fraction of a fresh one (a
+# tenth at Anthropic, a quarter to a half elsewhere), and an agent, its
+# reviewers and its workers send their whole conversation again with every
+# step: counted in full, the cache hits were 60 % of what an audit turn took
+# from the account (Prod, 24.-27.10.). Cache writes count in full.
+CACHED_INPUT_WEIGHT = 0.25
+
+
+def _cached(usage):
+    """The usage's cache reads, within its input; 0 when unknown."""
+    cached = usage.get("cached_input_tokens")
+    return cached if type(cached) is int and 0 <= cached <= usage["input_tokens"] else 0
+
+
+def charged_tokens(prompt, completion, cached=0):
+    """What one call takes from the account: its fresh input and output in
+    full, its cache reads at CACHED_INPUT_WEIGHT (rounded up)."""
+    cached = cached if type(cached) is int and 0 <= cached <= prompt else 0
+    return prompt - cached + math.ceil(cached * CACHED_INPUT_WEIGHT) + completion
+
+
 def measured_tokens(usage):
-    # Cache reads/writes are subsets of input; reasoning is part of output.
+    """The charge of a measured call (charged_tokens), or None when its usage
+    is not final. Reasoning is part of output; cache reads and writes are
+    parts of input."""
     if usage and not usage.get("provisional") and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
-        return usage["input_tokens"] + usage["output_tokens"]
+        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage))
     return None
 
 
 def provisional_lower_bound(usage):
     """Cumulative counts seen before a lost final chunk: a lower bound only."""
     if usage and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
-        return usage["input_tokens"] + usage["output_tokens"]
+        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage))
     return 0
 
 

@@ -1683,6 +1683,19 @@ Vergleichsmodelle und alle Judge-/Repair-/Retry-Aufrufe.
 Gezählt wird Provider-Input plus Provider-Output. Cache-Reads/-Writes sind bereits
 im Input enthalten, Reasoning bereits im Output. Diese Kategorien werden für
 Transparenz gespeichert, aber niemals zusätzlich zum Kontingent addiert.
+**Seit 2026-10-27 (Max) zählen Cache-Reads zu einem Viertel**
+(`agent_quota.CACHED_INPUT_WEIGHT` = 0,25, `charged_tokens`): frischer Input,
+Cache-Writes und Output voll, `cached_input_tokens` zu 25 % (aufgerundet), in
+jedem Agent-Modus (Chat, Worker, Vergleichsmodelle, Judges, Prüfer). Ein
+Cache-Read kostet beim Anbieter ein Zehntel bis die Hälfte; Agent, Prüfer und
+Worker schicken ihr Gespräch mit jedem Schritt neu, und voll gezählt waren
+Cache-Treffer 60 % dessen, was ein Audit-Turn vom Konto nahm (Prod,
+24.–27.10.). Der Beleg trägt die Abbuchung als `quota_charged`, die Usage
+bleibt wie gemessen; der spätere Abgleich (`generation_tokens`) gewichtet
+`native_tokens_cached` gleich, ohne diese Angabe zählt er voll. Reservierungen
+halten weiter den vollen Input (wie viel davon im Cache liegt, weiß erst die
+Antwort), das Settlement gibt den Rest frei. Compare/Consensus/Reasoning-Läufe
+(`usage_meter`) zählen unverändert.
 Provider-Gesamtkosten haben Vorrang; ohne sie berechnet die App eine gekennzeichnete
 Katalogschätzung. Kosten werden erfasst; im Agent-Chat gilt allein die zentrale
 Tokenquote als Verbrauchsgrenze.

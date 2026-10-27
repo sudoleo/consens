@@ -89,15 +89,19 @@ def fetch_generation_tokens(generation_id: str, api_key: str):
 
 
 def generation_tokens(payload):
-    """Parse OpenRouter generation stats; native counts match stream usage."""
+    """Parse OpenRouter generation stats; native counts match stream usage.
+    The charge as for a streamed call (agent_quota.charged_tokens): cache
+    reads (``native_tokens_cached``, with the native counts) at their weight,
+    in full where the stats do not name them."""
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):
         return None
-    for prompt_key, completion_key in (("native_tokens_prompt", "native_tokens_completion"),
-                                       ("tokens_prompt", "tokens_completion")):
+    for prompt_key, completion_key, cached_key in (
+            ("native_tokens_prompt", "native_tokens_completion", "native_tokens_cached"),
+            ("tokens_prompt", "tokens_completion", None)):
         prompt, completion = data.get(prompt_key), data.get(completion_key)
         if all(type(value) is int and 0 <= value <= 10_000_000 for value in (prompt, completion)):
-            return prompt + completion
+            return agent_quota.charged_tokens(prompt, completion, data.get(cached_key) if cached_key else 0)
     return None
 
 
