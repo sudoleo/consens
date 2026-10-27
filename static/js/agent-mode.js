@@ -437,7 +437,7 @@
     status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
   }
 
-  // In audit mode the comparison models review the agent's work and get a
+  // In audit mode the comparison models review the agent’s work and get a
   // control of their own (Max, 2026-10-27): on the start screen the marks
   // in the bar say "2 AIs cross-check", in a chat (no bar) the marks stand
   // before the chip, which then names the chat model (model-picker.js).
@@ -461,14 +461,14 @@
     if (picker) {
       // The name holds the words on screen (WCAG 2.5.3).
       write(picker, "aria-label", auditing ? words : "Configure models for your next question");
-      write(picker, "title", auditing ? "Choose the models that review the agent's work" : "Configure models");
+      write(picker, "title", auditing ? "Choose the models that review the agent’s work" : "Configure models");
     }
     const reviewers = document.getElementById("composerReviewers");
     if (!reviewers) return;
     reviewers.hidden = !auditing || start;
     if (reviewers.hidden) return;
     write(reviewers, "aria-label", words);
-    write(reviewers, "title", "Choose the models that review the agent's work");
+    write(reviewers, "title", "Choose the models that review the agent’s work");
     // The bar's marks, the same nodes: they are drawn there in every mode.
     const marks = document.getElementById("composerModelIcons");
     const own = document.getElementById("composerReviewerIcons");

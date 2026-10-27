@@ -251,7 +251,7 @@ describe("agent mode panel projection", () => {
     expect(label.hidden).toBe(false);
     expect(label.textContent).toBe("1 AI cross-checks");
     expect(picker.getAttribute("aria-label")).toBe("1 AI cross-checks");
-    expect(picker.title).toBe("Choose the models that review the agent's work");
+    expect(picker.title).toBe("Choose the models that review the agent’s work");
     // The start screen has the bar: no second control in the field.
     expect(reviewers.hidden).toBe(true);
 
