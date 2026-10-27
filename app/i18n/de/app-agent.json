@@ -759,6 +759,7 @@
   "The VM could not be restored.": "Die VM konnte nicht zurückgesetzt werden.",
   "The VM could not be restored. Check your connection.": "Die VM konnte nicht zurückgesetzt werden. Prüf deine Verbindung.",
   "This message has no VM state to go back to.": "Für diese Nachricht gibt es keinen VM-Stand zum Zurückgehen.",
+  "The VM can no longer go back to before this message.": "Die VM kann nicht mehr auf den Stand vor dieser Nachricht zurück.",
   "Wait until the response is done, then restore the VM.": "Warte, bis die Antwort fertig ist, und setz die VM dann zurück.",
   "The VM could not be restored right now. Try again later.": "Die VM lässt sich gerade nicht zurücksetzen. Versuch es später noch einmal.",
   "Open the workspace": "Arbeitsplatz öffnen",

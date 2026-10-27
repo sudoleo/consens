@@ -463,37 +463,32 @@ VM_RESTORED_NOTE = ("Before this message the user restored your VM to how it was
                     "before you rely on them.")
 
 
-def restore_chat_vm(uid, chat_id, record, checkpoint, *, factory=None):
-    """Return the VM the chat recorded (chat field ``agent_vm``: the account's
-    workspace, or the chat's own VM from before) to ``checkpoint``. Raises
-    VMUnavailable when there is none or the provider fails."""
-    if not isinstance(record, dict) or record.get("name") not in {workspace_name(uid), vm_name(uid, chat_id)}:
-        raise VMUnavailable("restore: no VM of this chat")
+def restore_workspace(uid, checkpoint, *, factory=None):
+    """Return the account's workspace to ``checkpoint``, one of its own
+    (agent_workspace.restorable decides which may go back). Raises
+    VMUnavailable when there is no provider or it fails."""
     vm = (factory or backend)()
     if vm is None:
         raise VMUnavailable("restore: no provider configured")
     try:
-        vm.restore(record["name"], checkpoint)
+        vm.restore(workspace_name(uid), checkpoint)
     finally:
         vm.close()
 
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None):
     """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
-    folder in the account's workspace, or its own VM from before. Raises
-    when the provider fails or is not configured: the chat's deletion job
-    then retries (chat_store.run_chat_deletion), so none of the chat's files
-    outlives it. A workspace already deleted (with its account) is fine."""
+    folder in the account's workspace, and the chat's own VM from before
+    2026-10-27. That one's name comes from the chat (vm_name), never from
+    the record: a chat that moved to the workspace lost it there, and its VM
+    stayed (security audit 2026-10-27). Gone already is fine. Raises when
+    the provider fails or is not configured: the chat's deletion job then
+    retries (chat_store.run_chat_deletion), so none of the chat's files
+    outlives it."""
     if not isinstance(record, dict) or not record.get("name"):
         return
     name = record["name"]
-    if name == workspace_name(uid):
-        def operation(vm):
-            vm.delete_path(name, chat_dir(chat_id))
-    elif name == vm_name(uid, chat_id):
-        def operation(vm):
-            vm.delete(name)
-    else:
+    if name not in {workspace_name(uid), vm_name(uid, chat_id)}:
         # Written by this app only; anything else is not ours to delete.
         logging.warning("Agent VM record does not match its chat")
         return
@@ -501,14 +496,18 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
     if vm is None:
         raise VMUnavailable("delete: no provider configured")
     try:
-        operation(vm)
+        if name == workspace_name(uid):
+            vm.delete_path(name, chat_dir(chat_id))
+        vm.delete(vm_name(uid, chat_id))
     finally:
         vm.close()
 
 
 def delete_workspace(uid, *, factory=None):
     """Delete the account's workspace with its account (agent_workspace.py):
-    every chat's folder, the browser and its sign-ins."""
+    every chat's folder, the browser and its sign-ins. By the name that
+    follows from the account, so a record already gone never hides it;
+    gone already is fine."""
     vm = (factory or backend)()
     if vm is None:
         raise VMUnavailable("delete: no provider configured")

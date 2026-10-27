@@ -153,3 +153,5 @@ def test_signing_the_browser_out_waits_for_the_agent_and_deletes_its_profile(vie
     assert client.post("/agent/workspace/reset-browser", headers=AUTH).json() == {"status": "reset"}
     [command] = [call[2] for call in fake_vm.calls if call[0] == "exec"]
     assert f"rm -rf {agent_workspace.BROWSER_PROFILE}" in command and "pkill" in command
+    # No checkpoint from before brings the sign-ins back (restorable).
+    assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)

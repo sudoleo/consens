@@ -7,6 +7,7 @@ runs against FakeVM, SpritesBackend against httpx.MockTransport and a fake
 WebSocket.
 """
 import base64
+from datetime import datetime
 import json
 
 import httpx
@@ -258,8 +259,11 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     assert saved["command"] == "python3 stats.py" and saved["cwd"] == folder
     paths = {e["name"]: e["path"] for e in turn["agent_activity"] if e.get("name") in {"vm_read_file", "vm_write_file"}}
     assert paths == {"vm_write_file": f"{folder}/stats.py", "vm_read_file": f"{folder}/stats.py"}
-    # The message's summary: its checkpoint and the commands' run time.
-    assert turn["agent_vm"] == {"provider": "fake", "checkpoint": "v1", "calls": 3, "commands": 1, "seconds": 3.0}
+    # The message's summary: its checkpoint (in which VM, when) and the commands' run time.
+    taken = datetime.fromisoformat(turn["agent_vm"].pop("checkpoint_at"))
+    assert taken.tzinfo is not None
+    assert turn["agent_vm"] == {"provider": "fake", "name": NAME, "checkpoint": "v1", "calls": 3, "commands": 1,
+                                "seconds": 3.0}
     # Command output is outside content: memory is locked from then on.
     assert loop.memory_locked is True
     # The message's lease ended with it.
@@ -958,6 +962,22 @@ def test_deleting_the_chat_deletes_its_folder_and_keeps_the_workspace(store, fak
     assert ("delete", NAME) not in fake_vm.calls
     assert workspace_files(fake_vm) == {f"{agent_vm.chat_dir(kept.chat_id)}/notes.txt": b"b"}
     assert not store._chat_ref(UID, gone.chat_id).get().exists
+    # No checkpoint from before may bring the folder back (restorable).
+    assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
+
+
+def test_a_chats_own_vm_from_before_goes_with_it_after_the_move_to_the_workspace(store, fake_vm):
+    """Security audit 2026-10-27: a chat that had its own VM lost its name
+    when it moved to the workspace, and the VM was never deleted. Its name
+    follows from the chat (vm_name), not from the record."""
+    chat_id, _ = pending(store)
+    legacy = agent_vm.vm_name(UID, chat_id)
+    fake_vm.vms[legacy] = {"files": {}, "checkpoints": []}
+    agent_workspace.claim(store, UID, chat_id, "moved", provider="fake")
+    assert store._chat_ref(UID, chat_id).get().to_dict()["agent_vm"]["name"] == NAME
+    store._purge_chat(UID, chat_id)
+    assert legacy not in fake_vm.vms and ("delete", legacy) in fake_vm.calls
+    assert ("delete", NAME) not in fake_vm.calls
 
 
 def test_a_chat_with_its_own_vm_from_before_deletes_that_vm(store, fake_vm):
@@ -986,10 +1006,33 @@ def test_deleting_the_account_deletes_its_workspace(store, fake_vm):
     AccountDeletion(store.db)._delete_agent_workspace(UID)
     assert NAME not in fake_vm.vms and ("delete", NAME) in fake_vm.calls
     assert not agent_workspace.ref(store.db, UID).get().exists
-    # Nothing to do (and no provider call) for an account without one.
-    fake_vm.calls.clear()
+
+
+def test_the_workspace_is_deleted_by_its_name_even_once_its_record_is_gone(store, fake_vm):
+    """Security audit 2026-10-27: one failed provider call, then a later area
+    of the account's deletion removed the record, and the next try found
+    nothing to do: the VM stayed for good. Now the name follows from the
+    account, and the record goes only after the VM."""
+    from app.services.account_deletion import FirestoreAccountDeletion as AccountDeletion
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    fake_vm.fail.add("delete")
+    with pytest.raises(VMUnavailable):
+        AccountDeletion(store.db)._delete_agent_workspace(UID)
+    assert agent_workspace.ref(store.db, UID).get().exists
+    agent_workspace.ref(store.db, UID).delete()
+    fake_vm.fail.discard("delete")
     AccountDeletion(store.db)._delete_agent_workspace(UID)
-    assert fake_vm.calls == []
+    assert NAME not in fake_vm.vms
+
+
+def test_a_server_without_a_provider_skips_an_account_that_never_had_a_workspace(store, monkeypatch):
+    from app.services.account_deletion import FirestoreAccountDeletion as AccountDeletion
+    monkeypatch.delenv("SPRITES_TOKEN", raising=False)
+    AccountDeletion(store.db)._delete_agent_workspace(UID)
+    agent_workspace.ref(store.db, UID).set({"name": NAME})
+    with pytest.raises(VMUnavailable):
+        AccountDeletion(store.db)._delete_agent_workspace(UID)
 
 
 def test_a_chat_without_a_vm_is_deleted_without_asking_the_provider(store, monkeypatch):

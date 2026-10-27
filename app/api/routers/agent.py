@@ -798,13 +798,19 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
                             status_code=409)
     lock = chat.get("agent_lock_until")
     from app.services import agent_workspace
+    workspace = agent_workspace.record(db_firestore, uid)
+    # Only a checkpoint of this account's workspace, recent and taken after
+    # the last sign-out everywhere or chat deletion (security audit 2026-10-27).
+    if not agent_workspace.restorable(workspace, turn.get("agent_vm")):
+        return JSONResponse({"error": "The VM can no longer go back to before this message.", "code": "expired"},
+                            status_code=409)
     # The workspace is the account's: no chat's message may be using it.
     if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)) or \
             agent_workspace.held_by(db_firestore, uid):
         return JSONResponse({"error": "Wait until the response is done, then restore the VM.", "code": "running"},
                             status_code=409)
     try:
-        agent_vm.restore_chat_vm(uid, chat_id, chat.get("agent_vm"), checkpoint)
+        agent_vm.restore_workspace(uid, checkpoint)
     except agent_vm.VMUnavailable as exc:
         logging.warning("Agent VM restore unavailable category=%s", safe_exception(exc))
         return JSONResponse({"error": "The VM could not be restored right now. Try again later.",

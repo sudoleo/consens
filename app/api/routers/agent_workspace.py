@@ -114,6 +114,9 @@ def reset_workspace_browser(request: Request):
     if agent_workspace.held_by(db_firestore, uid):
         return JSONResponse({"error": "The agent is working in the workspace. Try again when its response is done.",
                              "code": "running"}, status_code=409)
+    # No checkpoint from before brings the sign-ins back (restorable): set
+    # first, so a failure here leaves the browser as it is.
+    agent_workspace.raise_restore_floor(_store(), uid)
     try:
         vm = _backend()
         try:

@@ -324,7 +324,9 @@ class VMSession:
         # Set once the VM was ready in this message, also if it fails later:
         # the turn is a long run from then on (DelegationLoop._long_run).
         self.started = False
-        self.checkpoint = None
+        # The checkpoint before this message's first VM call, with when it
+        # was taken: a restore checks both (agent_workspace.restorable).
+        self.checkpoint = self.checkpoint_at = None
         self.inputs, self.skipped = [], []
         self.calls = self.commands = 0
         self.seconds = 0.0
@@ -359,6 +361,7 @@ class VMSession:
                 self._still_active()
                 try:
                     self.checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
+                    self.checkpoint_at = _now()
                 except agent_vm.VMUnavailable:
                     # Works on without it: the checkpoint only marks a state to return to.
                     logging.warning("Agent VM checkpoint unavailable")
@@ -499,7 +502,8 @@ class VMSession:
         """The turn's ``agent_vm``, or None when no VM tool ran."""
         if self.state == "idle":
             return None
-        data = {"provider": self.backend.provider if self.backend else "", "checkpoint": self.checkpoint,
+        data = {"provider": self.backend.provider if self.backend else "", "name": self.name,
+                "checkpoint": self.checkpoint, "checkpoint_at": self.checkpoint_at,
                 "calls": self.calls, "commands": self.commands, "seconds": round(self.seconds, 1)}
         if self.state == "unavailable":
             data["unavailable"] = True

@@ -40,12 +40,22 @@ def test_sprites_restores_a_checkpoint_and_waits_for_completion():
         sprites(lambda request: httpx.Response(200, content=json.dumps({"type": "info"}))).restore("consens-x", "v3")
 
 
-def vm_turn(store, *, checkpoint="v3", status="completed"):
-    chat, turn = pending(store, request_id=f"r-{checkpoint}-{status}")
-    name = agent_vm.vm_name(UID, chat)
-    store._transaction(lambda tx: tx.update(store._chat_ref(UID, chat), {"agent_vm": {"provider": "fake", "name": name}}))
-    store._transaction(lambda tx: tx.update(store._turn_ref(UID, chat, turn["id"]),
-                                            {"status": status, "agent_vm": {"provider": "fake", "checkpoint": checkpoint}}))
+def vm_turn(store, *, checkpoint="v3", status="completed", name=None, taken=None):
+    """A message whose first VM call took ``checkpoint`` in the account's
+    workspace (VMSession.summary: its name and when)."""
+    from datetime import datetime, timezone
+    from app.services import agent_workspace
+    from uuid import uuid4
+    chat, turn = pending(store, request_id=f"r-{checkpoint}-{status}-{uuid4().hex[:8]}")
+    workspace = agent_vm.workspace_name(UID)
+    if not agent_workspace.ref(store.db, UID).get().exists:
+        agent_workspace.ref(store.db, UID).set({"provider": "fake", "name": workspace})
+    store._transaction(lambda tx: tx.update(store._chat_ref(UID, chat), {"agent_vm": {
+        "provider": "fake", "name": workspace, "workspace": True}}))
+    taken = taken or datetime.now(timezone.utc).isoformat()
+    store._transaction(lambda tx: tx.update(store._turn_ref(UID, chat, turn["id"]), {"status": status, "agent_vm": {
+        "provider": "fake", "name": name or workspace, "checkpoint": checkpoint, "checkpoint_at": taken}}))
+    name = workspace
     if status != "pending":
         store._transaction(lambda tx: tx.update(store._chat_ref(UID, chat), {"agent_lock_until": None}))
     return chat, turn["id"], name
@@ -121,3 +131,27 @@ def test_the_next_message_is_told_once(admin_api, fake_vm):
         contexts.append(turn["app_context"])
     assert agent_vm.VM_RESTORED_NOTE in contexts[0] and agent_vm.VM_RESTORED_NOTE not in contexts[1]
     assert store._chat_ref(UID, chat).get().to_dict()["agent_vm"]["restored"]["told"] is True
+
+
+def test_only_a_recent_checkpoint_of_the_workspace_after_the_last_sign_out_goes_back(admin_api, fake_vm):
+    """Security audit 2026-10-27: a chat's checkpoint from its own VM went to
+    the workspace, and a restore brought back sign-ins after "Log out
+    everywhere" and folders of deleted chats. Now a checkpoint must be the
+    workspace's, at most RESTORE_DAYS old and taken after the last sign-out
+    everywhere or chat deletion (agent_workspace.restorable)."""
+    from datetime import datetime, timedelta, timezone
+    from app.services import agent_workspace
+    client, store, _ = admin_api
+    old = (datetime.now(timezone.utc) - timedelta(days=agent_workspace.RESTORE_DAYS + 1)).isoformat()
+    for kwargs in ({"name": agent_vm.vm_name(UID, "legacy")}, {"taken": old}, {"taken": "not a time"}):
+        chat, turn_id, _ = vm_turn(store, **kwargs)
+        refused = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
+        assert refused.status_code == 409 and refused.json()["code"] == "expired", kwargs
+    chat, turn_id, _ = vm_turn(store, checkpoint="v7")
+    agent_workspace.raise_restore_floor(store, UID)
+    after_sign_out = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
+    assert after_sign_out.status_code == 409 and after_sign_out.json()["code"] == "expired"
+    assert not [call for call in fake_vm.calls if call[0] == "restore"]
+    chat, turn_id, _ = vm_turn(store, checkpoint="v8")
+    assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 200
+    assert ("restore", agent_vm.workspace_name(UID), "v8") in fake_vm.calls

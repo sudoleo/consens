@@ -828,11 +828,20 @@ VM:
 - *Checkpoint wiederherstellen.* Unter der Verbrauchszeile der letzten
   Antwort steht für Admins „Restore the VM to before this message“, wenn der
   Turn einen Checkpoint hat; nach Bestätigung (`App.confirm`, gefährlich)
-  setzt `POST /agent/chats/{chat}/turns/{turn}/vm-restore` die VM über
-  `agent_vm.restore_chat_vm` (Sprites `POST …/checkpoints/{id}/restore`,
+  setzt `POST /agent/chats/{chat}/turns/{turn}/vm-restore` den Arbeitsplatz
+  über `agent_vm.restore_workspace` (Sprites `POST …/checkpoints/{id}/restore`,
   NDJSON bis `complete`) auf den Stand vor dieser Nachricht zurück. Nie,
   solange im Chat eine Antwort läuft (409), nur mit Checkpoint (409), Ausfall
-  des Anbieters 503. Der Chat merkt sich `agent_vm.restored`; die nächste
+  des Anbieters 503. Seit dem Sicherheitsaudit 2026-10-27 nur ein Checkpoint,
+  den `agent_workspace.restorable` erlaubt (sonst 409 `expired`): der Turn
+  nennt den Arbeitsplatz als VM (`agent_vm.name`, vorher konnte der Checkpoint
+  einer alten Chat-VM auf den Arbeitsplatz gehen), er ist höchstens
+  `RESTORE_DAYS` (14) alt (`checkpoint_at`) und jünger als `restore_floor` am
+  Konto-Dokument. Die Untergrenze setzen „Log out everywhere“ (vor dem
+  Löschen des Profils) und das Löschen eines Chats mit Ordner im Arbeitsplatz
+  (`raise_restore_floor`): ein älterer Checkpoint brächte Anmeldungen oder den
+  Ordner zurück. Löschen kann die REST-API der Sprites Checkpoints nicht; nur
+  ihre Nutzung endet hier. Der Chat merkt sich `agent_vm.restored`; die nächste
   Nachricht mit VM bekommt einmal `VM_RESTORED_NOTE` in ihren App-Kontext
   (danach `told`), damit der Agent seinem Arbeitsstand nicht blind glaubt.
 
@@ -1030,10 +1039,16 @@ Lese-/Schreibschritten „4 earlier steps“, `foldPast`, seit 2026-10-26);
 sichtbar bleiben der Satz vor dem letzten Befehl, der Befehl und was folgt.
 Die Zeitleiste zeigt weiter jeden Schritt. Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
 
-**Löschung.** `chat_store._purge_chat` löscht die VM, die der Chat nennt
-(`agent_vm.delete_chat_vm`), vor dem Rest des Chats; scheitert der Anbieter,
-bleibt der Lösch-Job und versucht es erneut. Ein Chat ohne VM fragt den
-Anbieter nie. Die Kontolöschung läuft über denselben Weg.
+**Löschung.** `chat_store._purge_chat` löscht vor dem Rest des Chats seinen
+Ordner im Arbeitsplatz und immer auch seine alte eigene VM, deren Name aus dem
+Chat folgt (`agent_vm.delete_chat_vm`, `vm_name`; 404 ist in Ordnung): Mit
+dem Umzug in den Arbeitsplatz verlor der Datensatz diesen Namen, und die VM
+blieb stehen (Sicherheitsaudit 2026-10-27). Scheitert der Anbieter, bleibt der
+Lösch-Job und versucht es erneut. Ein Chat ohne VM fragt den Anbieter nie.
+Die Kontolöschung löscht den Arbeitsplatz über den Namen aus der UID
+(`agent_workspace.delete_for_account`), erst danach den Datensatz; vorher
+endete sie bei fehlendem Datensatz, und den räumte ein späterer Bereich nach
+einem gescheiterten Anbieter-Aufruf schon ab.
 
 Voraussetzung live: `SPRITES_TOKEN` im Backend (lokal in `.env`, auf Render
 als Umgebungsvariable). Ohne Token sagt das erste VM-Werkzeug „not

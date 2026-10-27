@@ -1390,10 +1390,15 @@ class ChatStore:
         from app.services.agent_vm import delete_chat_vm
         AgentFiles(self.db).cleanup_chat(uid, chat_id)
         # The chat's Agent VM holds its files and the agent's work: deleted
-        # first, and a provider failure keeps the deletion job retrying.
+        # first, and a provider failure keeps the deletion job retrying. No
+        # checkpoint from before may bring its folder back to the workspace.
         snapshot = self._chat_ref(uid, chat_id).get()
         if snapshot.exists:
-            delete_chat_vm(uid, chat_id, (snapshot.to_dict() or {}).get("agent_vm"))
+            record = (snapshot.to_dict() or {}).get("agent_vm")
+            delete_chat_vm(uid, chat_id, record)
+            if isinstance(record, dict) and record.get("workspace"):
+                from app.services import agent_workspace
+                agent_workspace.raise_restore_floor(self, uid)
         self._delete_chat_tree(self._chat_ref(uid, chat_id))
 
     def _deletion_job_ref(self, uid: str, chat_id: str):

@@ -339,10 +339,54 @@ def reset_browser(vm, name, cancellation):
 
 
 def delete_for_account(db, uid, *, factory=None):
-    """With the account (account_deletion.py): the workspace VM, then its
-    record. Nothing to do for an account that never had one."""
+    """With the account (account_deletion.py): the workspace VM by the name
+    that follows from the account, then its record. Before 2026-10-27 a
+    missing record ended this, and a later area of the deletion removed the
+    record after one failed provider call: the VM stayed for good. Only a
+    server without a provider skips an account without a record (it never
+    made one there)."""
     workspace = ref(db, uid)
-    if not workspace.get().exists:
-        return
-    agent_vm.delete_workspace(uid, factory=factory)
+    if agent_vm.configured() or factory is not None or workspace.get().exists:
+        agent_vm.delete_workspace(uid, factory=factory)
     workspace.delete()
+
+
+# A message's checkpoint (VMSession.ready) may bring the workspace back for
+# this long, and only after the last time something left it for good
+# (``restore_floor``): signing the browser out everywhere or deleting a
+# chat. An older checkpoint would bring the sign-ins or the chat's folder
+# back (security audit 2026-10-27). The provider keeps the checkpoints; only
+# their use ends here.
+RESTORE_DAYS = 14
+
+
+def restorable(record, turn_vm, now=None):
+    """Whether ``turn_vm`` (a turn's ``agent_vm``) names a checkpoint of this
+    account's workspace that may still bring it back: taken in the workspace
+    (its name), within RESTORE_DAYS and after the record's restore_floor."""
+    now = now or _now()
+    if not isinstance(turn_vm, dict) or not turn_vm.get("checkpoint"):
+        return False
+    if not record.get("name") or turn_vm.get("name") != record.get("name"):
+        return False
+    try:
+        taken = datetime.fromisoformat(str(turn_vm.get("checkpoint_at") or ""))
+    except ValueError:
+        return False
+    if taken.tzinfo is None or taken < now - timedelta(days=RESTORE_DAYS):
+        return False
+    floor = record.get("restore_floor")
+    return not (isinstance(floor, datetime) and taken <= floor)
+
+
+def raise_restore_floor(store, uid):
+    """Something left the workspace for good (a sign-out everywhere, a
+    chat's folder): no checkpoint from before may bring it back
+    (restorable). An account without a record (deleted meanwhile) is left
+    alone."""
+    workspace = ref(store.db, uid)
+
+    def operation(tx):
+        if workspace.get(transaction=tx).exists:
+            tx.update(workspace, {"restore_floor": _now()})
+    store._transaction(operation)
