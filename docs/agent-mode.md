@@ -763,49 +763,6 @@ Hinweis im Verlauf sagt dann, darauf aufzubauen (`FAILED_TURN_RESUME`, siehe
 „Abbrüche mitten im Schritt“). Ein erfolgreicher Turn, dessen VM nie
 startete, speichert keins.
 
-**Kein Arbeitsplatz-Ergebnis ohne Aufruf (seit 2026-10-27).** Im Prod-Smoke
-(Max' Chat `fdd69442…`, MiMo V2.6 Pro ohne Reasoning als Agent und Prüfer)
-rief der Agent ab der zweiten Nachricht kein Werkzeug mehr auf und erfand die
-Ergebnisse: „notiz.txt wurde angelegt“, eine `ls -la`-Ausgabe, auf Nachfrage
-„das echte Ergebnis von vm_exec“. Werkzeuge und `tool_choice: auto` waren in
-jedem Request (Turn 2 las 9.472 Tokens, Systemprompt samt Tools, aus dem Cache
-von Turn 1; alle fünf OpenRouter-Endpunkte des Modells können Tools). Auslöser
-war die zweite Nachricht: Ihre URL trug den Seiteninhalt als Base64, das Modell
-las ihn selbst und antwortete ohne `curl`. Ab da zeigt der Verlauf nur noch
-Antworten mit Arbeitsplatz-Ergebnissen ohne Aufruf (frühere Turns kommen als
-Frage und Antwort, Aufrufe nur im Arbeitsstand), und das Muster setzt sich
-fort. Ob Reasoning aus mitwirkt, klärt nur eine bezahlte Probe (nicht gemacht);
-Turn 1 rief ohne Reasoning Werkzeuge auf. Der Prompt verbietet es schon
-(„Never claim a result the workspace did not return“), deshalb eine App-Regel
-für jedes Modell: Lief in der Nachricht kein Arbeitsplatz-Werkzeug
-(`agent_vm_tools.WORKSPACE_TOOLS`: die Werkzeuge mit Herkunft `vm` im
-Arbeitsprotokoll; ein gescheiterter Aufruf zählt mit, der Agent darf dann
-sagen, dass der Arbeitsplatz nicht erreichbar ist), hält
-`DelegationLoop._workspace_reminder` eine Antwort einmal zurück
-(`WORKSPACE_REMINDERS` = 1), wenn `workspace_signals` etwas findet:
-
-- `asked`: Die Worte des Nutzers in dieser Nachricht (Frage und
-  Zwischennachrichten) legen etwas in den Arbeitsplatz, mit dem Namen der
-  Oberfläche („im Arbeitsplatz“, „in deinem Arbeitsplatz“, „in the
-  workspace“, „your workspace“; nicht „am Arbeitsplatz“ oder „Google
-  Workspace“), oder nennen ein VM-Werkzeug;
-- `tool`, `path`, `listing`: Die Antwort nennt ein VM-Werkzeug, zeigt
-  `/home/sprite` oder `.consens-chat` oder Zeilen von `ls -l`.
-
-Der Agent bekommt `WORKSPACE_REMINDER` („App rule: your reply above is not
-sent. No workspace tool has run in this message …“): das Werkzeug aufrufen
-oder ohne Arbeitsplatz-Ergebnis antworten. Bei `asked` streamt eine Antwort vor
-dem ersten Aufruf gar nicht (`_workspace_hold` in `_hold_answer`), die
-erfundene erscheint also nie; sonst nimmt `_retract` gestreamten Text zurück,
-und `answer_check` kommt für ihn nicht (`_answer_check_follows`). Die zweite
-Antwort steht, damit der Turn mit einer Antwort endet; dann schreibt die App
-`app`/`no_workspace_call` (`WORKSPACE_UNBACKED` und die Signale) vor
-`answer_fixed` ins Arbeitsprotokoll, für die Prüfer, und loggt „Agent reply
-about the workspace without a workspace call stands“. Grenze: Eine Behauptung
-in Prosa, ohne dass Frage oder Antwort den Arbeitsplatz erkennbar nennen
-(„führ ls aus“ → „Datei angelegt“), erkennt die Regel nicht; die bleibt bei
-den Prüfern.
-
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
 dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von
 `agent_vm.py`, Gmail und Kalender bleiben Backend-Werkzeuge mit Bestätigung.

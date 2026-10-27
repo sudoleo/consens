@@ -59,8 +59,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
-from app.services.agent_work_log import TOOL_DATA
-from app.services.agent_workspace import CHAT_MARKER
 from app.services.error_alerts import report_server_exception
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
@@ -114,40 +112,7 @@ USER_POLL_SECONDS = 2
 VM_USER_HAS_BROWSER = ("The user has taken over the workspace's browser and still has it, so nothing ran in the VM: "
                        "the workspace waits for them. Call the tool again to wait on, or answer with what you have.")
 
-# A reply about the workspace in a message in which no workspace tool ran
-# (DelegationLoop._workspace_reminder, since 2026-10-27). In prod MiMo V2.6
-# Pro (reasoning off) answered four follow-up messages of a chat without a
-# single call, with every tool in the request: "notiz.txt was created", an
-# ls -la it made up, and asked again, "the real result of vm_exec", made up
-# again. Nothing in such a reply can come from the workspace as it is now, so
-# it is held back WORKSPACE_REMINDERS times; then it stands, and the work log
-# tells the reviewers (WORKSPACE_UNBACKED). The app cannot read every claim:
-# it goes by the user's words of the message, which put something in the
-# workspace by the app's own name for it or name a VM tool, and by what only
-# the workspace returns in the reply (workspace_signals).
-WORKSPACE_REMINDERS = 1
-WORKSPACE_REMINDER = ("App rule: your reply above is not sent. No workspace tool has run in this message, so nothing "
-                      "in the reply can come from the workspace as it is now: no command output, no file, no result. "
-                      "If the user asked for something in the workspace, call the tool for it now and answer from "
-                      "what it returns. Otherwise write your reply without workspace results.")
-WORKSPACE_UNBACKED = ("No workspace tool ran in this message, yet the agent's reply concerns the workspace: nothing "
-                      "in it comes from the workspace as it is now. The app held a reply back once for this; the "
-                      "reply that followed stands.")
-# The tools whose results come from the workspace (the work log's ``vm`` data).
-WORKSPACE_TOOLS = frozenset(name for name, data in TOOL_DATA.items() if data == "vm")
-# "in the workspace", "im Arbeitsplatz" and the like: the app's name for it
-# (UI "Workspace", "Arbeitsplatz"), with a word that places something there,
-# so that Google Workspace or stress "am Arbeitsplatz" do not count.
-_ASKS_WORKSPACE = re.compile(
-    r"\b(?:in|into|inside|from|on|to)\s+(?:the|my|your|our)\s+workspace\b|\byour\s+workspace\b"
-    r"|\b(?:im|ins|(?:in|aus)\s+(?:de[mn]|meine[mn]|deine[mn]|unsere[mn]))\s+arbeitsplatz"
-    r"|\bdeine[mns]?\s+arbeitsplatz", re.IGNORECASE)
-_TOOL_NAMED = re.compile(r"\b(?:" + "|".join(sorted(WORKSPACE_TOOLS)) + r")\b")
-_WORKSPACE_PATH = re.compile(re.escape(HOME) + r"\b|" + re.escape(CHAT_MARKER) + r"\b")
-# A line of ls -l, or its "total" line.
-_LISTING = re.compile(r"^\s*(?:total \d+\s*$|[-dlbcps][rwxsStT-]{9}[.+@]?\s+\d+\s+\S+\s+\S+\s+\d+\s)", re.MULTILINE)
-
-_ANSI =re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
 
 class VmExecArgs(BaseModel):
@@ -295,23 +260,6 @@ def sees_pictures(model):
     except Exception:
         return False
     return "image" in ((metadata.get("architecture") or {}).get("input_modalities") or [])
-
-
-def asks_workspace(words):
-    """Whether the user's words put something in the workspace or name a VM tool."""
-    return bool(_ASKS_WORKSPACE.search(words or "") or _TOOL_NAMED.search(words or ""))
-
-
-def workspace_signals(words, reply):
-    """Why a reply of a message without a workspace call concerns the
-    workspace, as a tuple, or ``()``: ``asked`` (the user's words of the
-    message, asks_workspace), ``tool`` (the reply names a VM tool),
-    ``path`` (the workspace's home or a chat folder's marker), ``listing``
-    (lines of ls -l)."""
-    reply = reply or ""
-    signals = (("asked", asks_workspace(words)), ("tool", bool(_TOOL_NAMED.search(reply))),
-               ("path", bool(_WORKSPACE_PATH.search(reply))), ("listing", bool(_LISTING.search(reply))))
-    return tuple(name for name, found in signals if found)
 
 
 def _safe_name(name, used):
