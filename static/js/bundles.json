@@ -214,6 +214,10 @@
           "note": "App.agentGithub: connecting GitHub in Settings and the pull request card under an Agent answer. Uses App.httpError, App.readJson and App.userError (app-text.js); agent-chat.js renders the card."
         },
         {
+          "file": "static/js/workspace-view.js",
+          "note": "App.workspaceView: the account's workspace live (noVNC from static/vendor/novnc, imported when it first opens), takeover and Settings row. Uses App.confirm and App.t at runtime; the composer's Workspace button opens it."
+        },
+        {
           "file": "static/js/agent-settings.js",
           "note": "App.agentSettings: the settings-change card under an Agent answer. Uses App.userSettings, App.agentPreferences, App.agentChat and App.activeConsensusPresetId (model-picker.js) at runtime; agent-chat.js renders it."
         },

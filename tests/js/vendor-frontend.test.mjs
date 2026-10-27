@@ -9,11 +9,15 @@ afterEach(async () => { for (const dir of dirs.splice(0)) await fs.rm(dir, { rec
 const files = {
   marked: ['marked.min.js', 'LICENSE.md'], dompurify: ['dist/purify.min.js', 'LICENSE'],
   katex: ['dist/katex.min.js', 'dist/katex.min.css', 'dist/contrib/auto-render.min.js', 'LICENSE', 'dist/fonts/Z.woff2', 'dist/fonts/A.ttf'],
+  // ES modules with relative imports: every file below core/ and vendor/.
+  '@novnc/novnc': ['LICENSE.txt', 'core/rfb.js', 'core/util/b.js', 'vendor/pako/a.js'],
 };
+// Where a package lands under static/vendor (a scope's @ stays out of URLs).
+const folder = name => (name === '@novnc/novnc' ? 'novnc' : name);
 async function put(root, relative, content) { const full = path.join(root, relative); await fs.mkdir(path.dirname(full), { recursive: true }); await fs.writeFile(full, content); }
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'consensio-vendor-')); dirs.push(root);
-  await put(root, 'package.json', JSON.stringify({ devDependencies: { marked: '1.0.0', dompurify: '1.0.0', katex: '1.0.0' } }));
+  await put(root, 'package.json', JSON.stringify({ devDependencies: { marked: '1.0.0', dompurify: '1.0.0', katex: '1.0.0', '@novnc/novnc': '1.0.0' } }));
   for (const [name, paths] of Object.entries(files)) {
     await put(root, `node_modules/${name}/package.json`, '{"version":"1.0.0"}');
     for (const file of paths) await put(root, `node_modules/${name}/${file}`, Buffer.from(`${name}/${file}\0binary`));
@@ -26,10 +30,12 @@ describe('Vendoring pinned frontend libraries on disk', () => {
     const root = await fixture();
     await put(root, 'static/vendor/marked/0.9.0/keep.js', 'old');
     const inputs = await vendorFrontend(root, false);
-    expect(inputs).toHaveLength(10);
-    expect(inputs.slice(-2)).toEqual(['static/vendor/katex/1.0.0/dist/fonts/A.ttf', 'static/vendor/katex/1.0.0/dist/fonts/Z.woff2']);
+    expect(inputs).toHaveLength(14);
+    expect(inputs.slice(8, 10)).toEqual(['static/vendor/katex/1.0.0/dist/fonts/A.ttf', 'static/vendor/katex/1.0.0/dist/fonts/Z.woff2']);
+    expect(inputs.slice(-4)).toEqual(['static/vendor/novnc/1.0.0/LICENSE.txt', 'static/vendor/novnc/1.0.0/core/rfb.js',
+      'static/vendor/novnc/1.0.0/core/util/b.js', 'static/vendor/novnc/1.0.0/vendor/pako/a.js']);
     for (const [name, paths] of Object.entries(files)) for (const file of paths) {
-      expect(await fs.readFile(path.join(root, `static/vendor/${name}/1.0.0/${file}`))).toEqual(await fs.readFile(path.join(root, `node_modules/${name}/${file}`)));
+      expect(await fs.readFile(path.join(root, `static/vendor/${folder(name)}/1.0.0/${file}`))).toEqual(await fs.readFile(path.join(root, `node_modules/${name}/${file}`)));
     }
     expect(await fs.readFile(path.join(root, 'static/vendor/marked/0.9.0/keep.js'), 'utf8')).toBe('old');
     const old = new Date('2020-01-01Z');

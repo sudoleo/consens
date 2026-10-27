@@ -29,6 +29,7 @@
 @import url('./css/agent-chat.css');
 @import url('./css/agent-google.css');
 @import url('./css/agent-workspace.css');
+@import url('./css/workspace-view.css');
 /* The composer row's layout, for every mode (see its header). */
 @import url('./css/composer.css');
 @import url('./css/chat-scroll.css');
@@ -59,6 +60,7 @@
 body:not(.viewer-is-admin) .admin-only { display: none !important; }
 /* Audit with its own VM: Pro and admins (firebase.js, /user_status audit_access). */
 body:not(.viewer-can-audit) .audit-only { display: none !important; }
+body:not(.viewer-has-workspace) .workspace-only { display: none !important; }
 /* Only the settings of the chosen way of working (agent-preferences.js). */
 #agentSettingsSection.is-audit .agent-comparison-setting,
 #agentSettingsSection:not(.is-audit) .agent-audit-setting { display: none; }

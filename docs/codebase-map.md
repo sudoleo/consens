@@ -134,6 +134,19 @@ access, reading and disconnecting only the owner) and the pull request card's
 `#agentGithubSettings` and the card. Details in `docs/agent-mode.md`
 ("GitHub aus der VM") and `docs/github-app-setup.md`.
 
+The account's workspace live (27.10.2026): `routers/agent_workspace.py` exposes
+`GET /agent/workspace`, `POST /agent/workspace/control` (`{"holder": "user"|"agent"}`),
+`POST /agent/workspace/reset-browser` and the WebSocket `/agent/workspace/view`
+(sign-in by its first message, then carried through to the VM gateway over the
+Sprite's private address with `SPRITES_TOKEN`, which never reaches the browser);
+all need Agent access and audit (`audit_allowed`) on a server with a VM provider.
+`workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
+`open`, `close`, `init`, `isOpen`) renders the panel, imports noVNC from
+`static/vendor/novnc/1.7.0` on first open and wires `#composerWorkspaceButton`
+and `#agentWorkspaceSettings` (`.workspace-only`, body class
+`viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
+("Arbeitsplatz").
+
 Google/Calendar in Agent Mode (27.09.2026): `agent_google.py` exposes owner-bound
 connection controls at `/agent/google/{connections,connect,finish}` and the isolated
 popup callback; connect/finish/actions require Agent access, listing and disconnect
@@ -5695,7 +5708,12 @@ Chat-Ordner an, den Checkpoint der Nachricht und kopiert ihre Anhänge in den
 (`agent_vm.vm_name`), behalten sie bis zu ihrer Löschung. Der Agent bedient
 den Chrome des Arbeitsplatzes mit `browser` über `vm_exec`, als Text
 (`read`/`click e12`/`type`, nie in Passwortfelder, nie während der Nutzer
-übernommen hat); Details `docs/agent-mode.md`, „Arbeitsplatz“. Befehle
+übernommen hat). Live-Ansicht: `routers/agent_workspace.py` (WebSocket `/agent/workspace/view` bis zum
+Gateway der VM, `POST /agent/workspace/control` für Übernehmen/Zurückgeben,
+`POST /agent/workspace/reset-browser`, `GET /agent/workspace`) und
+`workspace-view.js` (`window.App.workspaceView`, noVNC aus `static/vendor/novnc`,
+Knopf `#composerWorkspaceButton`, Zeile `#agentWorkspaceSettings`, Körperklasse
+`viewer-has-workspace`); Details `docs/agent-mode.md`, „Arbeitsplatz“. Befehle
 laufen unter einem Limit (60 s, höchstens 300 s, nie über `answer_time_left`)
 mit VM-seitigem `timeout`; Ausgaben gehen gekürzt (Ende bleibt) an das Modell.
 Jeder Aufruf ist ein Tool-Event mit `command`/`path`, live `output`

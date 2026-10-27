@@ -1,0 +1,138 @@
+/* The account's workspace live (workspace-view.js): a panel at the right
+   edge on wide screens, the whole screen on phones. Monochrome and without
+   frames like the rest; the screen itself is the only picture. */
+.workspace-view {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(58vw, 1040px);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  background: var(--side);
+  color: var(--ink);
+  box-shadow: var(--lift);
+}
+
+.workspace-view-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 8px 18px;
+}
+
+.workspace-view-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.workspace-view-status {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-view-toggle {
+  flex: none;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The user has the browser: the one strong button says how to give it back. */
+.workspace-view-toggle.is-user {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.workspace-view-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-view-close:hover,
+  .workspace-view-toggle:hover {
+    background: var(--hover, var(--raise));
+  }
+
+  .workspace-view-toggle.is-user:hover {
+    background: var(--ink);
+  }
+}
+
+.workspace-view-close svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.workspace-view-hint {
+  margin: 0;
+  padding: 0 18px 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.workspace-view-screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 10px 10px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--raise);
+}
+
+/* noVNC's own screen element fills the area and scales the picture. */
+.workspace-view-screen > div:not(.workspace-view-cover) {
+  position: absolute;
+  inset: 0;
+}
+
+/* While the agent has the browser: one click anywhere takes it over. */
+.workspace-view-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.workspace-view-cover:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+@media (max-width: 760px) {
+  .workspace-view {
+    width: 100vw;
+  }
+
+  .workspace-view-hint {
+    display: none;
+  }
+}

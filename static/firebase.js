@@ -396,6 +396,8 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       document.body.classList.toggle("viewer-is-admin", data.is_admin === true);
       // Audit with its own VM (Pro and admins): its settings, work log and restore.
       document.body.classList.toggle("viewer-can-audit", data.audit_access === true);
+      // Its workspace, when the server has a VM provider (vm_time comes with it).
+      document.body.classList.toggle("viewer-has-workspace", data.audit_access === true && Boolean(data.vm_time));
       window.App.vmTime = data.vm_time || null;
       window.App.agentPreferences?.sync?.();
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
@@ -895,7 +897,7 @@ onIdTokenChanged(auth, async (user) => {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
         window.App?.accountTier?.set?.("free");
-        document.body.classList.remove("viewer-is-admin", "viewer-can-audit");
+        document.body.classList.remove("viewer-is-admin", "viewer-can-audit", "viewer-has-workspace");
         publishAuthState(null);
         // Only now is the session known to be gone. The field was drawn
         // above while the page still expected the account this browser

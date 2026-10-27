@@ -552,6 +552,39 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   nie solange der Nutzer übernommen hat (Exit 3, `control.json` mit Ablauf).
   Chrome meldet sich nicht als ferngesteuert (`navigator.webdriver` false, kein
   `--enable-automation`).
+- **Live-Ansicht** (`routers/agent_workspace.py`, `workspace-view.js`): Knopf
+  „Workspace“ im Composer (`#composerWorkspaceButton`, `.workspace-only`:
+  Körperklasse `viewer-has-workspace` aus `/user_status`, `audit_access` und
+  `vm_time`) und Einstellungen → Agent → Workspace. Ein WebSocket
+  `/agent/workspace/view`: Die erste Nachricht meldet an (`{"id_token"}`, nie in
+  der URL), dann legt der Server den Arbeitsplatz bei Bedarf an
+  (`record_for_view`, ohne Sperre: es ist der Rechner des Nutzers), bringt die
+  Werkzeuge auf Stand und verbindet sich mit dem Token über die private
+  Adresse der VM mit dem Gateway (`wss://<sprite>.sprites.app/vnc`, ohne Token
+  leitet Sprites auf die Anmeldung um). Text-Zustände `connecting`, `setup`,
+  `starting`, `ready`, `error`, `ended`, danach VNC-Bytes in beide Richtungen.
+  Nach `VIEW_SECONDS` (1 h) endet eine Ansicht, weil sie die VM wach hält; das
+  Log nennt ihre Dauer („Agent workspace view closed seconds=…“), um die
+  Kosten zu beobachten. Der Browser lädt noVNC 1.7.0 (MPL-2.0,
+  `static/vendor/novnc/1.7.0/core/rfb.js`) erst beim ersten Öffnen und übergibt
+  ihm den Socket synchron beim Zustand `ready`, damit kein VNC-Byte verloren
+  geht.
+- **Übernehmen und Zurückgeben.** Zuerst schaut der Nutzer nur zu
+  (`viewOnly`); ein Klick ins Bild übernimmt (`POST /agent/workspace/control`
+  `{"holder": "user"}` schreibt `control.json` mit Ablauf in
+  `CONTROL_SECONDS` = 90 s, die offene Ansicht erneuert alle 30 s),
+  „Zurückgeben“ oder Schließen setzt `agent`. Ein geschlossener Tab lässt die
+  Übernahme einfach ablaufen. Solange sie gilt, liest `browser` weiter, handelt
+  aber nicht (Exit 3, `browser wait`). Die Prüfer folgen dem Agenten, nicht dem
+  Nutzer.
+- **Überall abmelden** (`POST /agent/workspace/reset-browser`, nach
+  Rückfrage): beendet Chrome und löscht das Profil, nie während ein Chat den
+  Arbeitsplatz nutzt (409 `running`).
+- **Gemessen 2026-10-27** an einer eigenen Test-Sprite (Ubuntu 26.04, 8 CPU,
+  16 GB): Setup 67 s einmalig, `browser read` 0,8 s, `prepare` bei neuer
+  Version 7,5 s, Gateway bis zum VNC-Bild 0,6–1 s über die private Adresse;
+  Klicks und echte Tastendrücke aus der Ansicht kommen in Chrome an, die
+  Aktionen des Agenten erscheinen live.
 
 **Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
 erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM

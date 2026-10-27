@@ -148,6 +148,23 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       available“, die Antwort kommt trotzdem. Chat löschen: die Sprite ist im
       Sprites-Dashboard weg. Chat mit Gmail/Kalender: keine VM-Werkzeuge.
       Automatisiert: `test_agent_vm.py`, `agent-vm-activity.test.mjs`.
+- [ ] Arbeitsplatz (2026-10-27, Pro- oder Admin-Konto mit Audit, echter
+      Provider): Composer → „Workspace“ öffnet das Panel; beim allerersten Mal
+      „Der Browser wird eingerichtet …“ (~1 min), dann Chrome im Bild, „Du
+      schaust zu“. Ein Klick ins Bild übernimmt („Zurückgeben“), Tippen und
+      Klicken kommen an; bei einer Website anmelden. Agent-Frage im Audit:
+      „Öffne <die Website> in deinem Browser und sag mir, was auf der
+      Startseite steht.“ Der Agent nutzt `browser`, die Ansicht zeigt es live,
+      er ist eingeloggt. Während du übernommen hast, wartet er („browser wait“).
+      Er tippt kein Passwort (auf einer Login-Seite bittet er dich). Zweiter
+      Chat, während der erste läuft: „Übersprungen · Arbeitsplatz gerade in
+      einem anderen Chat“, die Antwort kommt. Datei im ersten Chat schreiben,
+      zweiten Chat bitten, sie aus dem Ordner des ersten zu lesen: klappt.
+      Chat löschen: nur sein Ordner unter `/home/sprite/chats` ist weg.
+      Einstellungen → Workspace → „Überall abmelden“: danach ist die Website
+      wieder ausgeloggt. Nach einer Stunde schließt die Ansicht von selbst.
+      Automatisiert: `test_agent_workspace.py`, `test_agent_workspace_view.py`,
+      `workspace-view.test.mjs`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,
