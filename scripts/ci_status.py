@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ssl
 import subprocess
 import sys
 import time
@@ -41,11 +42,27 @@ class ApiError(Exception):
     pass
 
 
+def tls_context():
+    """The system's roots plus certifi's. Windows only has the roots it has
+    already fetched, and the issuer of api.github.com was not among them
+    (2026-10-27): every --wait after a push ended unreachable."""
+    context = ssl.create_default_context()
+    try:
+        import certifi
+    except ImportError:
+        return context
+    context.load_verify_locations(certifi.where())
+    return context
+
+
+TLS = tls_context()
+
+
 def get(path):
     request = urllib.request.Request(API + path, headers={
         "Accept": "application/vnd.github+json", "User-Agent": "consens-ci-status"})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30, context=TLS) as response:
             return json.load(response)
     except urllib.error.HTTPError as exc:
         if exc.code == 403 and exc.headers.get("X-RateLimit-Remaining") == "0":
