@@ -393,6 +393,10 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-dialog.is-docked .answer-reader-body > :first-child { margin-top: 0; }
 .answer-reader-dialog.is-docked .answer-reader-body p { margin-bottom: .9em; }
 .answer-reader-dialog.is-docked .answer-reader-body li { margin-bottom: .3em; }
+/* A quote's bar ends with its text, as in the consensus (shell.css): the
+   paragraph's own space below stood in the bar. After the rules above, so it
+   holds in every reader. */
+.model-answer-reader .answer-reader-body blockquote > :last-child { margin-bottom: 0; }
 .answer-reader-dialog li.answer-reader-source-card {
   padding: 10px 40px 10px var(--reader-card-inset);
   gap: 10px;
