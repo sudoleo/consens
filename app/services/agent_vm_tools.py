@@ -385,9 +385,10 @@ class VMSession:
         reaches the VM, so nothing sees what they type there: the call waits
         until they hand it back, at most USER_WAIT_SECONDS and never into the
         time the answer needs, then says so. A reviewer's halt ends the wait
-        (the command then stops, VMTools.exec). A failed read lets the call
-        go: the VM freezes the agent's commands meanwhile by itself
-        (workspace_vm/pause.py)."""
+        (the command then stops, VMTools.exec). A failed read counts as the
+        user's: the VM freezes only what already runs (workspace_vm/pause.py),
+        and a short new command finishes before it looks (measured on a
+        Sprite 2026-10-27: 0.2 s)."""
         from app.services import agent_workspace
         deadline = self.clock() + USER_WAIT_SECONDS
         left = getattr(self.loop, "answer_time_left", lambda: None)()
@@ -399,7 +400,6 @@ class VMSession:
                     return
             except Exception as exc:
                 logging.warning("Agent workspace control unavailable category=%s", safe_exception(exc))
-                return
             if self.clock() >= deadline:
                 raise ValueError(VM_USER_HAS_BROWSER)
             cancellation.raise_if_cancelled()

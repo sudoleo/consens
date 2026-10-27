@@ -27,7 +27,9 @@ CONTROL = os.path.join(HOME, ".consens/workspace/control.json")
 LOCK = os.path.join(HOME, ".consens/workspace/pause.lock")
 PROC = "/proc"
 MARK = b"CONSENS_AGENT=1"
-SCAN_SECONDS = 0.5
+# What starts in the moment of the takeover is frozen this soon (a /proc
+# listing costs next to nothing).
+SCAN_SECONDS = 0.2
 # Linux's numbers where the platform has none (the tests run elsewhere too).
 STOP = getattr(signal, "SIGSTOP", 19)
 CONT = getattr(signal, "SIGCONT", 18)

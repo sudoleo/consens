@@ -669,6 +669,29 @@ def test_while_the_user_has_the_browser_nothing_of_the_agent_reaches_the_vm(stor
     assert stopped["stopped"] and not [call for call in fake_vm.calls if call[0] == "exec"]
 
 
+def test_an_unreadable_takeover_counts_as_the_users(store, fake_vm, monkeypatch):
+    """A short new command finishes before the VM freezes it (measured on a
+    Sprite, 0.2 s): a failed read of the record waits like a takeover."""
+    loop = vm_loop(store, Agent())
+    session = loop.vm_tools.session
+    session.clock = fake_vm.clock
+    reads, seen = iter([RuntimeError("firestore"), False]), []
+
+    def read(db, uid):
+        value = next(reads)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def sleep(seconds):
+        seen.append(list(fake_vm.calls))
+        fake_vm.clock.now += seconds
+    monkeypatch.setattr(agent_workspace, "user_has_browser", read)
+    session.sleep = sleep
+    assert loop.vm_tools.exec(VmExecArgs(command="ls"), cancellation=ProviderCancellation())["exit_code"] == 0
+    assert seen == [[]]
+
+
 def test_a_halt_while_the_vm_starts_stops_the_command_it_starts_for(store, fake_vm, monkeypatch):
     # The halt comes after the VM came up for the command, before it runs:
     # interrupt() finds no running command, and the command ran anyway with

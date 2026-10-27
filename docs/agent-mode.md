@@ -652,7 +652,9 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
      `USER_WAIT_SECONDS` = 120 s, nie in die Zeit der Antwort), dann läuft er;
      dauert die Übernahme länger, hört der Agent `VM_USER_HAS_BROWSER`, und in
      der VM lief nichts. Ein Halt der Prüfer beendet das Warten. Ein
-     Lesefehler lässt den Aufruf durch: Schicht 3 friert ihn dann ein.
+     Lesefehler zählt wie eine Übernahme (es wird weiter gefragt), denn
+     Schicht 3 friert nur ein, was schon läuft: Ein neuer kurzer Befehl ist
+     fertig, bevor sie hinsieht (an einer Sprite gemessen: 0,2 s).
   2. *Browser:* `browser` handelt nicht (Exit 3), liest aber weiter.
   3. *VM:* Jeder Befehl des Agenten läuft mit `CONSENS_AGENT=1` in der
      Umgebung (`agent_vm.AGENT_MARK`, in `wrapped_command` per `env`), und
@@ -660,7 +662,7 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
      Bei jeder Übernahme (und jeder Auffrischung) startet der Server ohne
      Marke `workspace_vm/pause.py` (`PAUSE_COMMAND`, eine Sperrdatei hält es
      einmalig): Es friert jeden markierten Prozess ein (SIGSTOP), sucht alle
-     0,5 s nach neuen und setzt sie fort (SIGCONT), sobald `control.json`
+     0,2 s nach neuen und setzt sie fort (SIGCONT), sobald `control.json`
      nicht mehr den Nutzer nennt, also nach „Zurückgeben“ oder dem Ablauf.
      Die Zeitgrenzen bleiben: `timeout` ist nicht markiert und schickt nach
      dem Signal selbst SIGCONT. Eigene Befehle des Servers (`pause.py` starten,
@@ -685,8 +687,14 @@ Nutzer und Agent teilen sich eine VM wie einen Arbeitsrechner. Code:
   (`.workspace-view-paste-target`, 16 px gegen den iOS-Zoom), dessen
   `paste`-Ereignis tippt den Text ein und gibt den Fokus ans Bild zurück.
   Geprüft 2026-10-27 in Chromium mit einem nachgebauten noVNC (echte Tasten,
-  echtes `ClipboardEvent`). Gegen eine echte Sprite (x11vnc, deutsche
-  Sonderzeichen über `-add_keysyms`) ist es noch ungeprüft.
+  echtes `ClipboardEvent`) und an einer echten Sprite: Dieselbe Tastenfolge
+  über Gateway und x11vnc, mit noch gedrückter Strg-Taste vom Kürzel, kam
+  als `Pa$$wörd-42€ Ä@\ ~|{}ß` genau so im Feld an.
+- **Pause an einer echten Sprite geprüft** (2026-10-27, eigene Test-Sprite,
+  ohne Firestore): Ein Hintergrundprozess und ein laufender Befehl stehen
+  (Zustand `T`), Chrome, Xvfb, x11vnc und Gateway laufen weiter, Chrome ohne
+  Marke. Tippen des Nutzers kommt an. Nach dem Zurückgeben und nach dem Ablauf
+  (ohne Zurückgeben) laufen sie weiter, der Befehl endet normal.
 - **Überall abmelden** (`POST /agent/workspace/reset-browser`, nach
   Rückfrage): beendet Chrome und löscht das Profil, nie während ein Chat den
   Arbeitsplatz nutzt (409 `running`).
