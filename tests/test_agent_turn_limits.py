@@ -297,9 +297,15 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     # every command may change (the tests again after an edit; test_agent_vm),
     # and sharing a file again after it changed is a new file for the user.
     # Reading a background process's output again is waiting for it.
+    # The same plan between work steps says where the agent stands; refusing
+    # it ended a long VM run at its fourth unchanged plan.
     assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
-                                                 "vm_process_output", "vm_stop_process", "vm_view_image"}
+                                                 "vm_process_output", "vm_stop_process", "vm_view_image",
+                                                 "update_plan"}
+    plan = {"id": "p", "type": "function", "function": {"name": "update_plan", "arguments": json.dumps(
+        {"items": [{"content": "Run the tests", "status": "in_progress"}], "status_update": "Still testing"})}}
+    assert all(loop._identical_call(plan) is None for _ in range(5))
 
 
 def test_each_check_runs_two_differences_passes_in_production(store, monkeypatch):

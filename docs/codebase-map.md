@@ -4230,8 +4230,8 @@ begrenzen weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, gesetzt nur in
 `for_chat`, im Snapshot sichtbar) eine Schleife gültiger Aufrufe: 4 Vergleiche
 (der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
 Wrap-up plus 5 min (`TURN_WRAP_UP_SECONDS`) bis zum harten Stopp in `_check`, und
-höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`
-ausgenommen). Wrap-up (`_merged_wrap_up`) = der Agent schreibt die Antwort in
+höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`,
+derselbe Plan per `update_plan` und die VM-Werkzeuge ausgenommen). Wrap-up (`_merged_wrap_up`) = der Agent schreibt die Antwort in
 einem letzten Schritt ohne aufrufbare Tools aus einem Vergleich mit ≥2
 Antworten, danach Judges; sonst `AnalysisBudgetExceeded` mit
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige

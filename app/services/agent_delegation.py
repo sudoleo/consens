@@ -77,10 +77,12 @@ THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
 # A VM call's result depends on the VM's state, which every command may
 # change: running the tests again after an edit is progress. The turn's step
-# and time limits bound them (agent_vm_tools.py).
+# and time limits bound them (agent_vm_tools.py). The same plan again between
+# work steps says where the agent stands; refused, it ended a long VM run at
+# its fourth unchanged plan.
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
-                              "vm_view_image"})
+                              "vm_view_image", "update_plan"})
 # Tools that bring outside content into the agent's context: model answers
 # and their source excerpts, pages, emails, calendars, files. Once one of them
 # returned in a message, its memory can no longer change (memory_locked): a
