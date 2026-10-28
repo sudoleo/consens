@@ -86,10 +86,14 @@ def test_the_chats_domains_come_with_its_next_message_and_leave_with_it(store, f
         list(first.run())
     finally:
         type(fake_vm.backend()).set_policy = original
-    # In the policy from the start of the message (ensure), back to the registries at its end.
+    # In the policy from the start of the message (ensure), kept while the new
+    # workbench's setup reaches Chrome's download server (agent_workspace.prepare),
+    # back to the registries at its end.
+    from app.services import agent_workspace
     ensured = next(index for index, call in enumerate(fake_vm.calls) if call == ("ensure", NAME))
     assert fake_vm.calls[ensured] == ("ensure", NAME)
-    assert policies == [agent_vm.WORKBENCH_RULES]
+    chat_rules = agent_domains.rules(["api.example.com"])
+    assert policies == [[*chat_rules, agent_workspace.CHROME_RULE], chat_rules, agent_vm.WORKBENCH_RULES]
     assert fake_vm.vms[NAME]["policy"] == agent_vm.WORKBENCH_RULES
     # Another chat of the account never gets them.
     other = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="other")

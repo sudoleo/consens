@@ -28,8 +28,9 @@ chown "$user:$user" "$home"
 chmod 700 "$home"
 chmod 750 "$legacy"
 
-# The browser that ran here before 2026-10-27 and its live view's gateway.
-pkill -KILL -f '/opt/google/chrome/' 2>/dev/null || true
+# The browser that ran here before 2026-10-27 (as the provider's user; the
+# agent's headless Chrome goes on) and its live view's gateway.
+pkill -KILL -u sprite -f '/opt/google/chrome/' 2>/dev/null || true
 pkill -KILL -x Xvfb 2>/dev/null || true
 pkill -KILL -x x11vnc 2>/dev/null || true
 pkill -KILL -x openbox 2>/dev/null || true
@@ -76,6 +77,50 @@ for shim in /.sprite/bin/*; do
     timeout 30 "$shim" --version </dev/null >/dev/null 2>&1 &
 done
 wait
+
+# Tools every workbench has for the agent: ripgrep from the Ubuntu mirrors,
+# which the policy allows, and headless Chrome for pages on the workbench
+# itself, such as the agent's dev server or a local file (screenshots,
+# PDFs; no sign-ins: the shared browser with those is a VM of its own).
+# `google-chrome --headless=new` runs as the agent's user with its sandbox
+# on: no_new_privs ignores the setuid helper, but the VM allows user
+# namespaces (test Sprite 2026-10-28), so no --no-sandbox and no wrapper.
+# Chrome comes from Google's server, which agent_workspace.prepare opens
+# around this script alone. Workbenches from before 2026-10-27 have Chrome
+# already, with the old browser's screen, VNC server and window manager:
+# those three go, Chrome stays. A failed install costs the workbench that
+# tool until the next version, never its user (the steps above).
+export DEBIAN_FRONTEND=noninteractive
+apt_get() { apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confold -y -qq "$@"; }
+installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
+tools() {
+  local old="" package
+  for package in xvfb x11vnc openbox; do
+    if installed "$package"; then old="$old $package"; fi
+  done
+  if [ -n "$old" ]; then
+    # shellcheck disable=SC2086
+    apt_get purge $old >/dev/null || return 1
+  fi
+  command -v rg >/dev/null 2>&1 && command -v google-chrome >/dev/null 2>&1 && return 0
+  apt_get update >/dev/null || return 1
+  if ! command -v rg >/dev/null 2>&1; then
+    apt_get install --no-install-recommends ripgrep >/dev/null || return 1
+  fi
+  if ! command -v google-chrome >/dev/null 2>&1; then
+    # In a folder only root can open: the agent's user shares /tmp and must
+    # never swap the package root installs.
+    local download status
+    download=$(mktemp -d) || return 1
+    curl -fsSL --retry 3 -o "$download/chrome.deb" \
+      https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+      && apt_get install "$download/chrome.deb" >/dev/null
+    status=$?
+    rm -rf -- "$download"
+    return "$status"
+  fi
+}
+tools || echo "setup: a tool could not be installed (ripgrep, Chrome)" >&2
 
 as_user() { setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs -- env -i HOME="$home" "$@"; }
 as_user mkdir -p "$home/chats" "$home/.local/bin" "$home/.config"

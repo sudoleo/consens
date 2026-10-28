@@ -41,6 +41,7 @@ reviewers follow what the agent does, never what the user does.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -82,6 +83,11 @@ CONTROL_REFRESH_SECONDS = 30
 WORKBENCH_FILES = ("agent-run", "pause.py", "setup.sh")
 BROWSER_FILES = ("browser.py", "display.sh", "relay.py", "setup.sh")
 SETUP_SECONDS = 180
+# setup.sh installs headless Chrome from Google's own server, which the
+# workbench's policy closes (agent_vm.WORKBENCH_RULES): prepare opens it
+# around the setup alone (_open_for_setup).
+CHROME_DOMAIN = "dl.google.com"
+CHROME_RULE = {"domain": CHROME_DOMAIN, "action": "allow"}
 # Started as root at every takeover (a second one ends at once).
 PAUSE_COMMAND = (f"sudo -n setsid nohup \"$(command -v python3)\" {WORKSPACE_DIR}/pause.py "
                  ">/dev/null 2>&1 </dev/null &")
@@ -313,12 +319,32 @@ def _current(vm, name, version):
     return raw.decode("utf-8", "replace").strip() == version
 
 
+@contextmanager
+def _open_for_setup(vm, name):
+    """CHROME_RULE for setup.sh alone: the rules read before come back
+    exactly as they were, also when the setup fails or is stopped. A
+    running chat's message may have added its domains (agent_domains.py),
+    so they never go back to the base list. A policy that lets it through
+    already, or none at all (open), stays untouched."""
+    before = vm.get_policy(name)
+    widen = bool(before) and not any(rule.get("action") == "allow" and rule.get("domain") in {CHROME_DOMAIN, "*"}
+                                     for rule in before)
+    if widen:
+        vm.set_policy(name, [*before, CHROME_RULE])
+    try:
+        yield
+    finally:
+        if widen:
+            vm.set_policy(name, before)
+
+
 def prepare(vm, name, cancellation=None):
     """The workbench at this VERSION, only when the version there differs
     (else one read): its tools written to the provider's home, the live
     view's gateway service of the layout before removed, and setup.sh run
-    as root (the agent's user; once, the move of its files out of the
-    provider's home). Returns whether it wrote them; raises VMUnavailable
+    as root (the agent's user, the tools every workbench has; once, the
+    move of its files out of the provider's home) while the policy lets it
+    reach CHROME_DOMAIN. Returns whether it wrote them; raises VMUnavailable
     when the setup failed, so no command runs with the provider's rights."""
     from app.services.llm.provider_runtime import ProviderCancellation
     if _current(vm, name, VERSION):
@@ -327,9 +353,10 @@ def prepare(vm, name, cancellation=None):
         vm.write_file(name, f"{WORKSPACE_DIR}/{file}", data, agent=False)
     vm.delete_service(name, OLD_GATEWAY_SERVICE)
     said = []
-    outcome = vm.exec(name, f"sudo -n bash {WORKSPACE_DIR}/setup.sh", cwd=agent_vm.SERVER_HOME,
-                      timeout=SETUP_SECONDS, on_output=lambda stream, chunk: said.append(chunk),
-                      cancellation=cancellation or ProviderCancellation(), agent=False)
+    with _open_for_setup(vm, name):
+        outcome = vm.exec(name, f"sudo -n bash {WORKSPACE_DIR}/setup.sh", cwd=agent_vm.SERVER_HOME,
+                          timeout=SETUP_SECONDS, on_output=lambda stream, chunk: said.append(chunk),
+                          cancellation=cancellation or ProviderCancellation(), agent=False)
     if outcome.exit_code != 0:
         logging.warning("Agent workbench setup failed exit=%s", outcome.exit_code)
         raise agent_vm.VMUnavailable("setup")

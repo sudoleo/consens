@@ -175,6 +175,11 @@ class VMBackend:
         """Replace the VM's network rules; they apply at once."""
         raise NotImplementedError
 
+    def get_policy(self, name):
+        """The VM's network rules now, as set_policy takes them (a list of
+        ``{"domain", "action"}``); empty where none were ever set (open)."""
+        raise NotImplementedError
+
     def run(self, name, argv, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation, input=None):
         """Run ``argv`` as given (no shell around it), wait at most
         ``timeout`` seconds plus the grace for its end. ``input``: bytes for
@@ -342,6 +347,18 @@ class SpritesBackend(VMBackend):
 
     def set_policy(self, name, rules):
         self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": list(rules)})
+
+    def get_policy(self, name):
+        # {"rules": [...]}, [] on a sprite whose policy was never set (measured 2026-10-28).
+        response = self._request("policy", "GET", self._sprite(name) + "/policy/network")
+        try:
+            rules = response.json().get("rules")
+        except (ValueError, AttributeError):
+            rules = None
+        if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+            logging.warning("Agent VM policy unreadable")
+            raise VMUnavailable("policy: unreadable")
+        return rules
 
     def _collect(self, name, argv, *, limit, input=None, timeout=FILE_SECONDS):
         """``(exit_code, stdout)`` of a short command, at most ``limit`` bytes kept."""
