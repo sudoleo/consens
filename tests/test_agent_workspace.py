@@ -121,6 +121,91 @@ def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
         assert moved in setup
 
 
+def test_every_workbench_gets_ripgrep_and_headless_chrome_and_loses_the_old_screen():
+    """setup.sh (Paket 4, ran on a test Sprite 2026-10-28, docs/agent-mode.md):
+    ripgrep from the Ubuntu mirrors and Chrome from Google's server, each only
+    when missing and without questions; the old layout's screen, VNC server
+    and window manager purged where installed, Chrome kept. A failed install
+    never fails the setup (the agent's user does not depend on it)."""
+    setup = agent_workspace.tool_files("workbench")["setup.sh"].decode()
+    assert "export DEBIAN_FRONTEND=noninteractive" in setup and " -y -qq " in setup
+    assert "if ! command -v rg " in setup and "apt_get install --no-install-recommends ripgrep" in setup
+    assert "if ! command -v google-chrome " in setup
+    assert f"https://{agent_workspace.CHROME_DOMAIN}/linux/direct/google-chrome-stable_current_amd64.deb" in setup
+    # Downloaded where only root can open it: the agent's user shares /tmp.
+    assert 'download=$(mktemp -d)' in setup and 'apt_get install "$download/chrome.deb"' in setup
+    assert "/tmp/" not in setup
+    assert "for package in xvfb x11vnc openbox; do" in setup and 'if installed "$package"' in setup
+    assert "apt_get purge $old" in setup
+    assert not [line for line in setup.splitlines() if "purge" in line and "chrome" in line.lower()]
+    assert 'tools || echo "setup: a tool could not be installed' in setup
+    # Only the old browser (the provider's user) is ended, never the agent's headless Chrome.
+    assert "pkill -KILL -u sprite -f '/opt/google/chrome/'" in setup
+
+
+def _recording_setup(fake_vm, name, *, stop=False):
+    """A backend whose exec notes the policy each command ran under, and is
+    stopped at the setup when ``stop``."""
+    from app.services.llm.provider_runtime import ProviderCancelled
+    backend, during = fake_vm.backend(), []
+    run = backend.exec
+
+    def recording(vm_name, command, **kwargs):
+        during.append(list(fake_vm.vms[vm_name]["policy"]))
+        if stop:
+            raise ProviderCancelled()
+        return run(vm_name, command, **kwargs)
+    backend.exec = recording
+    return backend, during
+
+
+def test_only_the_setup_reaches_chromes_download_server_and_a_chats_domains_stay(fake_vm):
+    """prepare reads the rules, adds dl.google.com for setup.sh alone, then
+    sets exactly what it read: a running chat's domains (agent_domains.py)
+    stay, never the base list. Also when the setup fails or is stopped."""
+    from app.services import agent_domains
+    from app.services.llm.provider_runtime import ProviderCancelled
+    from test_agent_vm import SETUP
+    name = agent_vm.workspace_name(UID)
+    chat_rules = agent_domains.rules(["api.example.com"])
+    fake_vm.vms[name] = {"files": {}, "checkpoints": [], "policy": list(chat_rules)}
+    backend, during = _recording_setup(fake_vm, name)
+    assert agent_workspace.prepare(backend, name) is True
+    assert during == [[*chat_rules, {"domain": "dl.google.com", "action": "allow"}]]
+    assert fake_vm.vms[name]["policy"] == chat_rules
+    assert [call[0] for call in fake_vm.calls if call[0] in {"get_policy", "policy", "exec"}] == [
+        "get_policy", "policy", "exec", "policy"]
+    # Up to date: the policy is not touched.
+    fake_vm.calls.clear()
+    assert agent_workspace.prepare(backend, name) is False
+    assert not [call for call in fake_vm.calls if call[0] in {"get_policy", "policy"}]
+    # A failed setup: the same rules come back and the version stays unwritten, so it runs again.
+    del fake_vm.vms[name]["files"][agent_workspace.VERSION_PATH]
+    fake_vm.commands[SETUP] = ([("stderr", b"useradd: failed\n")], 1, .5)
+    with pytest.raises(agent_vm.VMUnavailable):
+        agent_workspace.prepare(backend, name)
+    assert during[-1] == during[0] and fake_vm.vms[name]["policy"] == chat_rules
+    assert agent_workspace.VERSION_PATH not in fake_vm.vms[name]["files"]
+    # Stopped during the setup: the same.
+    stopped, during = _recording_setup(fake_vm, name, stop=True)
+    with pytest.raises(ProviderCancelled):
+        agent_workspace.prepare(stopped, name)
+    assert during == [[*chat_rules, agent_workspace.CHROME_RULE]] and fake_vm.vms[name]["policy"] == chat_rules
+
+
+def test_a_policy_that_lets_google_through_already_stays_untouched(fake_vm):
+    """None set (open), the domain allowed for the chat, or everything: no
+    second rule, no change."""
+    name = agent_vm.workspace_name(UID)
+    for rules in ([], [*agent_vm.WORKBENCH_RULES, agent_workspace.CHROME_RULE], [{"domain": "*", "action": "allow"}]):
+        fake_vm.vms[name] = {"files": {}, "checkpoints": [], "policy": list(rules)}
+        fake_vm.calls.clear()
+        backend, during = _recording_setup(fake_vm, name)
+        assert agent_workspace.prepare(backend, name) is True
+        assert during == [rules] and fake_vm.vms[name]["policy"] == rules
+        assert not [call for call in fake_vm.calls if call[0] == "policy"]
+
+
 def test_the_takeover_expires_unless_the_view_refreshes_it(tmp_path, monkeypatch):
     browser = load("browser")
     control = tmp_path / "control.json"
@@ -323,6 +408,24 @@ def test_the_old_gateway_service_and_the_servers_paths_go_through_the_api():
     assert seen[1][2] == {"path": "/home/sprite/chats/c1", "workingDir": "/home/sprite", "recursive": True,
                           "asRoot": False}
     assert seen[2][2] == {"rules": [{"domain": "pypi.org", "action": "allow"}]}
+
+
+def test_the_policy_is_read_as_its_rules_or_not_at_all():
+    """get_policy (agent_workspace.prepare restores what it read): the rules
+    as set_policy takes them; anything else is the provider failing."""
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, request.url.path))
+        return httpx.Response(200, json={"rules": [{"domain": "pypi.org", "action": "allow"}]})
+    assert sprites(handler).get_policy("consens-w-a") == [{"domain": "pypi.org", "action": "allow"}]
+    assert seen == [("GET", "/v1/sprites/consens-w-a/policy/network")]
+    assert sprites(lambda request: httpx.Response(200, json={"rules": []})).get_policy("consens-w-a") == []
+    for answer in (httpx.Response(200, json={}), httpx.Response(200, json={"rules": "all"}),
+                   httpx.Response(200, json={"rules": ["pypi.org"]}), httpx.Response(200, text="<html>"),
+                   httpx.Response(502)):
+        with pytest.raises(agent_vm.VMUnavailable):
+            sprites(lambda request, answer=answer: answer).get_policy("consens-w-a")
 
 
 def test_a_chat_folder_is_only_ever_a_folder_of_its_own():

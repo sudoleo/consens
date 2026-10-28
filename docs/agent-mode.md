@@ -715,6 +715,42 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   Shells des Anbieters lesen sie). Scheitert `setup.sh`, ist die VM für die
   Nachricht aus (`VM_UNAVAILABLE`), damit nie ein Befehl mit den Rechten des
   Anbieters läuft.
+- **Werkzeuge jeder Werkbank (seit 2026-10-28).** `setup.sh` installiert,
+  wo sie fehlen, **ripgrep** (apt aus den Ubuntu-Spiegeln) und **headless
+  Chrome** (`google-chrome-stable` als `.deb` von `dl.google.com`, in einen
+  Ordner, den nur root öffnet, `mktemp -d`: Der Agent teilt `/tmp` und darf
+  das Paket, das root installiert, nie austauschen), beides
+  ohne Rückfragen (`DEBIAN_FRONTEND=noninteractive`, `apt-get -y`, Lock-Wartezeit
+  60 s). Chrome dient Seiten auf der Werkbank selbst (Screenshots oder PDFs
+  vom Dev-Server des Agenten oder lokaler Dateien), ohne Anmeldungen und ohne
+  Netz über das der Werkbank hinaus; der geteilte Chrome mit den Anmeldungen
+  des Nutzers bleibt die Browser-VM (Werkzeug `browser`); so sagt es
+  `AGENT_VM_PROMPT` in einem Satz nach den Paketwegen. Der Agent ruft
+  `google-chrome --headless=new` direkt auf, mit Sandbox: `no_new_privs`
+  macht den setuid-Helfer wirkungslos, die VM erlaubt aber eigene
+  User-Namespaces, und die Renderer laufen darin mit seccomp-bpf (gemessen,
+  siehe unten). Darum kein `--no-sandbox` und kein Wrapper. Werkbänke von vor
+  dem 2026-10-27 haben Chrome schon, dazu Xvfb, x11vnc und openbox der alten
+  Bauweise: Die drei werden entfernt (`apt-get purge`, nur wenn installiert),
+  Chrome bleibt; `pkill` beendet nur noch den alten Browser des Nutzers
+  `sprite`, nie den headless Chrome des Agenten. Eine gescheiterte
+  Installation bricht das Setup nicht ab (Meldung auf stderr): Der Werkbank
+  fehlt dann das Werkzeug bis zur nächsten `VERSION`, nie ihr Nutzer.
+- **Netz für das Setup.** `dl.google.com` ist in `WORKBENCH_RULES` zu.
+  `prepare` liest deshalb vor `setup.sh` die Regeln (`get_policy`), setzt sie
+  plus `{"domain": "dl.google.com", "action": "allow"}` (`CHROME_RULE`) und
+  stellt danach im `finally` genau die gelesenen Regeln wieder her, auch wenn
+  das Setup scheitert oder gestoppt wird. Nie die Grundliste: Eine laufende
+  Nachricht eines Chats kann ihre Domains in der Policy haben (das Terminal des
+  Nutzers und das Löschen eines Chat-Ordners rufen `prepare` ohne Lease).
+  Ohne gesetzte Regeln (offen) oder wenn die Domain oder `*` schon erlaubt
+  ist, bleibt die Policy unangetastet. Nur bei neuer `VERSION`, also einmal
+  je Werkbank und Version. Restrisiko: Ändert eine laufende Nachricht die
+  Policy genau während eines Setups, das das Terminal angestoßen hat, setzt
+  das `finally` den gelesenen Stand zurück. Eine Freigabe per
+  `request_domain` gilt dann erst ab der nächsten Nachricht des Chats (sie
+  steht am Chat); endet die Nachricht in der Zeit, bleiben ihre Domains bis
+  zum nächsten `ensure` stehen, wie nach einem abgestürzten Lauf.
 - **Installationen.** `vm_install_packages` (apt als root durch den Server),
   pip/uv in `~/.local`, npm im Projekt (siehe oben).
 - **Hintergrundprozesse.** Der Aufseher (`RUNNER`) gehört dem Server: Er liegt
@@ -950,6 +986,45 @@ der Session), dazu drei kleine Sonden (Laufzeit-Shims, Ports, x11vnc):
   sechsten Lauf griff die Wiederholung), x11vnc band IPv6 (jetzt nur
   Unix-Socket), Playwright fehlte direkt nach der ersten Einrichtung im
   laufenden Python (Nutzer-Site nachgeladen).
+
+#### Live geprüft: ripgrep und headless Chrome (2026-10-28)
+
+Mit `SpritesBackend` und `agent_workspace.prepare` dieser Version gegen
+frische Test-Sprites (Ubuntu 26.04, je danach gelöscht): eine Sonde
+(`consens-test-90353019ce7f`), dann derselbe Ablauf zweimal
+(`consens-test-29caf0230a90`, und nach dem Download-Ordner über `mktemp -d`
+`consens-test-d6ae64eed9a5`; Zahlen unten aus beiden). Vor dem Setup
+Policy wie in einer laufenden Nachricht: `WORKBENCH_RULES` plus
+`example.com`.
+
+- **Policy:** `GET …/policy/network` liefert `{"rules": [...]}`, auf einer
+  nie eingestellten Sprite `{"rules": []}`. Als `sprite` vorher
+  `curl https://dl.google.com/` → DNS gesperrt. Während `prepare` stand
+  `dl.google.com` in der Policy (parallel alle 2 s gelesen), danach waren die
+  Regeln wieder genau die gelesenen, `example.com` eingeschlossen; als Agent
+  danach wieder „Could not resolve host: dl.google.com“.
+- **Frische Werkbank:** `prepare` 46,6–55,5 s (apt-get update, ripgrep,
+  Chrome-Download und -Installation; `SETUP_SECONDS` = 180 reicht).
+  Als Agent: `ripgrep 15.1.0`, `Google Chrome 156.0.8078.73`.
+- **Alte Bauweise:** `xvfb x11vnc openbox` als root nachinstalliert (20–22 s),
+  Version gelöscht, `prepare` 5,9–6,2 s: die drei entfernt,
+  `google-chrome-stable` und `ripgrep` installiert. Danach `prepare` auf
+  Stand: 0,1 s, ein Lesezugriff.
+- **Dev-Server und Screenshot:** `python3 -m http.server 8124 --bind
+  127.0.0.1` als Agent über `agent_vm.wrapped_command`, losgelöst gestartet
+  wie `vm_start_process` (`setsid nohup …` durch den Server; `ps` zeigt den
+  Nutzer `agent`). Als Agent `google-chrome --headless=new
+  --window-size=1000,500 --screenshot=$HOME/shot.png http://localhost:8124/`
+  → Exit 0 in 2 s, 26 KB PNG (gültige Signatur, über `read_file` als Agent
+  zurückgelesen, zeigt die Seite); `--print-to-pdf` Exit 0 in 0–1 s, 22 KB.
+  Chrome meldet auf stderr nur fehlendes D-Bus.
+- **Sandbox:** ohne `--no-sandbox`. In der Sonde liefen die Renderer in einem
+  eigenen User- und PID-Namespace mit `Seccomp: 2`; `unshare --user
+  --map-root-user` gelingt dem Agenten (`user.max_user_namespaces` 63951).
+- **Nebenbefund, nicht behoben:** Ein Hintergrundprozess, in der Sonde als
+  Agent mit `setsid nohup … &` in einem Exec gestartet, hielt diesen Exec
+  offen, bis sein Zeitlimit (170 s) ablief; der Server lief danach weiter.
+  Dev-Server gehören ohnehin zu `vm_start_process`, so sagt es der Prompt.
 
 **Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
 erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM
@@ -1209,7 +1284,8 @@ Branch wird nie geändert, nie direkt auf main gepusht. „Discard“
 `https://github.com/…`.
 
 **Anbieter-Schnittstelle** (`agent_vm.py`): `VMBackend` mit `exists`,
-`ensure(name, rules)`, `set_policy`, `run` (argv wie gegeben, optional stdin),
+`ensure(name, rules)`, `set_policy`, `get_policy` (die Regeln, wie
+`set_policy` sie nimmt; `[]` ohne gesetzte Policy), `run` (argv wie gegeben, optional stdin),
 `exec` (Shell-Befehl über `wrapped_command`), `exec_url`, `read_file`,
 `write_file`, `delete_path` (die drei mit `agent=True` als Agenten-Nutzer,
 `agent=False` für den Server in seinem eigenen Home), `delete_service`,

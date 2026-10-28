@@ -90,6 +90,10 @@ class _FakeBackend(VMBackend):
         self._call("policy", name)
         self.vm.vms[name]["policy"] = list(rules)
 
+    def get_policy(self, name):
+        self._call("get_policy", name)
+        return list(self.vm.vms[name].get("policy", []))
+
     def exec(self, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
         self._call("exec", name, command, cwd, timeout)
         if not agent:

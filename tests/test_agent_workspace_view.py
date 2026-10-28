@@ -142,7 +142,9 @@ def test_the_terminal_is_a_shell_with_the_agents_rights_in_the_users_size(view_a
 
 def test_the_terminal_ends_with_its_shell_and_leaves_a_running_chats_network_rules(view_api, fake_vm, monkeypatch):
     client, _, shell = terminal_api(view_api, monkeypatch, [b"bye\r\n", json.dumps({"type": "exit", "exit_code": 0})])
-    fake_vm.vms[NAME] = {"files": {}, "checkpoints": [], "policy": ["the running chat's rules"]}
+    from app.services import agent_domains
+    running = agent_domains.rules(["api.example.com"])
+    fake_vm.vms[NAME] = {"files": {}, "checkpoints": [], "policy": list(running)}
     with client.websocket_connect("/agent/workspace/terminal") as ws:
         ws.send_text(json.dumps({"id_token": "verified", "cols": "wide", "rows": 30}))
         assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "ready"]
@@ -150,10 +152,12 @@ def test_the_terminal_ends_with_its_shell_and_leaves_a_running_chats_network_rul
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_bytes()
     assert closed.value.code == 1000
-    # An unusable size falls back to 80 x 24; an existing workbench keeps its rules.
+    # An unusable size falls back to 80 x 24; an existing workbench keeps a
+    # running chat's rules (its setup's download server comes and goes,
+    # agent_workspace.prepare).
     assert [call[3] for call in fake_vm.calls if call[0] == "exec_url"] == [(80, 24)]
-    assert fake_vm.vms[NAME]["policy"] == ["the running chat's rules"]
-    assert not [call for call in fake_vm.calls if call[0] in {"ensure", "policy"} and call[1] == NAME]
+    assert fake_vm.vms[NAME]["policy"] == running
+    assert not [call for call in fake_vm.calls if call[0] == "ensure" and call[1] == NAME]
 
 
 def test_the_terminal_needs_the_vm_and_counts_against_the_rate_limit(view_api, fake_vm, monkeypatch):
