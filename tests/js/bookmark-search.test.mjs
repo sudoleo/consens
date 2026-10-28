@@ -83,4 +83,27 @@ describe("bookmark search", () => {
     expect(visibleIds(document)).toEqual(["a", "b", "c"]);
     window.close();
   });
+
+  // On a Mac, Ctrl+K deletes to the end of the line in any text field; the
+  // search took it, in the rename field with half a name saved (2026-10-23).
+  it.each([
+    ["MacIntel", { metaKey: true }, { ctrlKey: true }, "Meta+K"],
+    ["Win32", { ctrlKey: true }, { metaKey: true }, "Control+K"],
+  ])("opens the search with the platform's own shortcut only (%s)", async (platform, own, other, keys) => {
+    const { window, document } = await bootApp({ body: BODY, before(w) {
+      Object.defineProperty(w.navigator, "platform", { configurable: true, get: () => platform });
+    } });
+    const field = document.getElementById("questionInput");
+    const press = init => {
+      field.focus();
+      const event = new window.KeyboardEvent("keydown", { key: "k", bubbles: true, cancelable: true, ...init });
+      field.dispatchEvent(event);
+      return event;
+    };
+    expect(document.getElementById("bookmarkSearchTrigger").getAttribute("aria-keyshortcuts")).toBe(keys);
+    expect(press(other).defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(field);
+    expect(press(own).defaultPrevented).toBe(true);
+    window.close();
+  });
 });

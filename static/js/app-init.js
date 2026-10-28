@@ -1405,12 +1405,16 @@
 
         // Ctrl+K (Cmd+K on a Mac) finds a chat from anywhere, as in other chat
         // apps: a closed sidebar opens, a folded list unfolds, and the
-        // search field takes the keys.
-        const searchShortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "") ? "Cmd+K" : "Ctrl+K";
+        // search field takes the keys. On a Mac only Cmd: Ctrl+K deletes to
+        // the end of the line in every text field there, and was taken
+        // (in the rename field, leaving it then saved half a name).
+        const onApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+        const searchShortcut = onApple ? "Cmd+K" : "Ctrl+K";
         bookmarkSearchTrigger?.setAttribute("data-tooltip", `Search chats (${searchShortcut})`);
-        bookmarkSearchTrigger?.setAttribute("aria-keyshortcuts", "Control+K Meta+K");
+        bookmarkSearchTrigger?.setAttribute("aria-keyshortcuts", onApple ? "Meta+K" : "Control+K");
         document.addEventListener("keydown", function (event) {
-          if (String(event.key).toLowerCase() !== "k" || !(event.ctrlKey || event.metaKey)) return;
+          if (String(event.key).toLowerCase() !== "k" || !(onApple ? event.metaKey && !event.ctrlKey
+            : event.ctrlKey && !event.metaKey)) return;
           if (event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented) return;
           if (!bookmarkSearchInput || bookmarkSearchInput.disabled || document.querySelector("dialog[open]")) return;
           event.preventDefault();
