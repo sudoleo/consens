@@ -36,6 +36,10 @@ pkill -KILL -x x11vnc 2>/dev/null || true
 pkill -KILL -x openbox 2>/dev/null || true
 pkill -KILL -f "$legacy/.consens/workspace/gateway.py" 2>/dev/null || true
 rm -rf "$legacy/.consens/browser" "$legacy/.local/bin/browser"
+# Its leftovers in /tmp (Playwright's and Chrome's folders of the provider's
+# user, seen by the agent on 2026-10-28), never the agent's own.
+find /tmp -maxdepth 1 -user sprite \( -name 'playwright*' -o -name '.com.google.Chrome.*' \
+  -o -name 'com.google.Chrome.*' \) -exec rm -rf {} + 2>/dev/null || true
 for old in browser.py display.sh gateway.py ref-count setup-done-2 setup.lock pause.lock; do
   rm -f "$legacy/.consens/workspace/$old"
 done

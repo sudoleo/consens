@@ -81,6 +81,8 @@ def test_a_page_of_the_workspace_names_its_headless_chrome(url):
     # The prompt says it as a fact too, and the workbench's clock.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert "It reaches the web but not your workspace" in AGENT_VM_PROMPT and "clock runs on UTC" in AGENT_VM_PROMPT
+    # Clicks on its own dev servers: Playwright with the workbench's Chrome (test Sprite 2026-10-28).
+    assert 'launch(channel="chrome")' in AGENT_VM_PROMPT
 
 
 def test_public_addresses_open_as_given():

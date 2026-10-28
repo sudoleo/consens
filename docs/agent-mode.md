@@ -280,7 +280,9 @@ Entscheidung über `update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
 sind Seiten, die der Nutzer verlinkt, Quellen früherer Nachrichten und seit
 2026-10-27 die eigenen Suchtreffer dieser Nachricht: `DelegationLoop.search_sources`
 sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
-`LABEL_SEARCH` auf. Sie hätte keine Seite schreiben können, und mit der
+`LABEL_SEARCH` auf („a web search result of this message“, seit 2026-10-28;
+vorher „your search in this message“, was nach einer Suche klang, die der
+Agent nie selbst aufgerufen hat). Sie hätte keine Seite schreiben können, und mit der
 nächsten Nachricht wären sie als frühere Quellen ohnehin lesbar).
 Der Agent sucht in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS` (5) Runden;
 passt die Reservierung nicht, geht `smaller_search` 5 → 3 → 1 → 0. Sein Text
@@ -535,7 +537,9 @@ Pro-Konten laufen mit Prüfern, aber ohne VM, und Arbeitsplatz, Live-Ansicht,
 VM-Restore, VM-Zeit (`/user_status` `vm_time`, Body-Klasse
 `viewer-has-workspace`) und die GitHub-Zeile (`.workspace-only`) entfallen für
 sie. `AGENT_VM_ACCESS=pro` öffnet die VM wieder für jedes Konto mit Audit
-(`agent_vm.open_to_pro`); erst setzen, wenn die Fixes aus dem Audit live sind.
+(`agent_vm.open_to_pro`); erst setzen, wenn die Fixes aus dem Audit live sind. In Prod gesetzt
+seit 2026-10-28 (Max: Pro haben nur er und zwei Freunde), mit dem Deploy nach dem
+zweiten Live-Test.
 
 **Was der Agent bekommt.** Seit 2026-10-27 die Werkbank des Arbeitsplatzes
 (Fly.io Sprites, Ubuntu, bash) als eigener Unix-Nutzer `agent` ohne sudo
@@ -856,7 +860,12 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Adresse oder `file://` sagt in der Absage, dass der Browser nur das Web
   erreicht und Seiten der Werkbank deren headless Chrome zeigt
   (`agent_browser.BROWSER_PRIVATE`); der VM-Prompt sagt dasselbe als Fakt,
-  dazu, dass die Werkbank auf UTC läuft.
+  dazu, dass die Werkbank auf UTC läuft. Nach dem zweiten Live-Test am selben
+  Tag: `text` bringt ebenso zuerst den Text des Hauptbereichs, dann den Rest der
+  Seite ohne dessen Zeilen (`TEXT_JS`); `find` nennt außer Fundstellen im
+  Seitentext auch Elemente, deren Name den Text enthält (aus den Zeilen von
+  `read`, `ELEMENT_NAME`: eine Suchbox, die nur über ihr Label heißt, steht in
+  keinem Seitentext).
   Aktivität („Searched the page for“, Feld `query`) und Arbeitsprotokoll
   (`browser find "…"`) nennen den Suchtext, den Text von `type` nie. Der Kopf jeder Seitenausgabe (`Page:`/`URL:`) trägt die Zeile `Cookies saved
   for this site: yes|no` aus den Cookies des Browser-Kontexts für die
@@ -1043,6 +1052,19 @@ und entfernt `google-chrome.list` vor und nach der Installation, sonst warnte
 jeder apt-Lauf des Agenten „Failed to fetch dl.google.com“ (Chromes tägliche
 Aufgabe trug die Quelle immer wieder ein). Dazu `poppler-utils`.
 
+Geprüft an `consens-test-8464d0c68f86` (2026-10-28, danach gelöscht), mit den
+Resten einer alten Werkbank (Googles apt-Quelle, `/tmp/playwright-artifacts-x`
+und `/tmp/.com.google.Chrome.abc` des Anbieter-Nutzers, dazu eine fremde Datei):
+`prepare` 54,9 s; danach ripgrep 15.1.0, `pdftotext` 26.01.0, Chrome
+156.0.8078.73; `sources.list.d` nur noch `ubuntu.sources`, `apt-get update` ohne
+Warnung; die beiden alten Ordner weg, die fremde Datei da. **Playwright** mit
+Chrome der Werkbank: `python3 -m venv` + `pip install playwright` 8 s, ein
+Skript mit `launch(channel="chrome")` füllt ein Feld auf dem Dev-Server des
+Agenten aus, klickt und liest „Antwort: Grüße“ in 1 s. Der VM-Prompt nennt das
+als Fakt (Playwrights eigener Browser-Download erreicht die Werkbank nicht).
+`setup.sh` räumt seitdem die `/tmp`-Ordner des alten Browsers auf (nur die des
+Anbieter-Nutzers).
+
 Mit `SpritesBackend` und `agent_workspace.prepare` dieser Version gegen
 frische Test-Sprites (Ubuntu 26.04, je danach gelöscht): eine Sonde
 (`consens-test-90353019ce7f`), dann derselbe Ablauf zweimal
@@ -1210,8 +1232,10 @@ geschriebenen Dateien wieder, seit 2026-10-28: vorher stand er als `lost` in der
 Liste, ohne je gelaufen zu sein), jeder endet spätestens nach
 `max_seconds`, die Sprite bleibt nach dem Ende einer Nachricht also höchstens
 3 × 1 h wach. Ein Prozess überlebt seine Nachricht (der Arbeitsstand nennt
-seine ID). Status: `running`, `exited` mit `exit_code` oder `lost` (die VM hat
-ihn ohne Exit-Code beendet). Das Modell bekommt das Ende der Ausgabe wie bei
+seine ID). Status: `running`, `exited` mit `exit_code`, `stopped` (seit
+2026-10-28: `vm_stop_process` hat ihn beendet, Marke `stopped` im Prozessordner;
+vorher stand dort der Exit-Code von coreutils `timeout`, 124, der wie sein
+Zeitlimit las) oder `lost` (die VM hat ihn ohne Exit-Code beendet). Das Modell bekommt das Ende der Ausgabe wie bei
 `vm_exec` (12.000 Zeichen, Kürzung im Text), die Anzeige zeigt den Start wie
 einen Befehl („Started in the background“, `$ Befehl`, „Running in the
 background“) und Lesen/Stoppen mit der Prozess-ID; alte Ergebnisse werden

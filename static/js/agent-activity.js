@@ -513,7 +513,8 @@
     if (item.status === 'running') return ['vm_exec', 'vm_install_packages'].includes(item.name) ? App.t('Running…') : '';
     // A background process that still runs once its call is done.
     if (item.process_status === 'running') return App.t('Running in the background');
-    if (item.status === 'cancelled') return App.t('Stopped');
+    // Ended by vm_stop_process: no exit code (timeout's 124 read as its limit).
+    if (item.status === 'cancelled' || item.process_status === 'stopped') return App.t('Stopped');
     if (item.status === 'failed') return App.t('Failed');
     const parts = [];
     if (item.timed_out) parts.push(App.t('Timed out'));

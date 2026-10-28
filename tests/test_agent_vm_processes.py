@@ -39,7 +39,7 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     directory = process_dir(PID)
     fake_vm.commands[start_command(directory, task_name(PID))] = (status("running", "Listening on :3000\n"), 0, 2.0)
     fake_vm.commands[status_command(directory, wait=5)] = (status("running", "GET / 200\n"), 0, 5.0)
-    fake_vm.commands[stop_command(directory, task_name(PID))] = (status(143, "GET / 200\nbye\n"), 0, 1.0)
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (status("stopped", "GET / 200\nbye\n"), 0, 1.0)
     script = Agent([[("vm_start_process", {"command": "npm run dev", "cwd": "app"})],
                     [("vm_process_output", {"id": PID, "wait_seconds": 5})],
                     [("vm_stop_process", {"id": PID})]])
@@ -50,7 +50,8 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert started["id"] == PID and started["status"] == "running" and started["output"] == "Listening on :3000\n"
     assert started["max_seconds"] == 1800 and "vm_stop_process" in started["note"]
     assert read == {"id": PID, "status": "running", "output": "GET / 200\n"}
-    assert stopped == {"id": PID, "status": "exited", "output": "GET / 200\nbye\n", "exit_code": 143}
+    # Ended by the agent: "stopped", no exit code (timeout's 124 read as its limit, 2026-10-28).
+    assert stopped == {"id": PID, "status": "stopped", "output": "GET / 200\nbye\n"}
     # The supervisor in the server's own folder, the command as the agent's
     # user in its folder and login environment, the command for listing.
     files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
@@ -74,7 +75,8 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     start, stop = saved["vm_start_process"], saved["vm_stop_process"]
     assert start["command"] == "npm run dev" and start["output"] == "Listening on :3000\n"
     assert start["process"] == PID and start["process_status"] == "running"
-    assert stop["process"] == PID and stop["exit_code"] == 143 and stop["output"] == "GET / 200\nbye\n"
+    assert stop["process"] == PID and stop["process_status"] == "stopped" and "exit_code" not in stop
+    assert stop["output"] == "GET / 200\nbye\n"
     # The next message knows the process by its id.
     assert describe("vm_start_process", json.dumps({"command": "npm run dev"}), json.dumps(started)) == (
         f"vm_start_process {PID} $ npm run dev -> running: Listening on :3000")
@@ -217,9 +219,11 @@ def test_the_supervisor_stops_a_process_and_counts_the_running_ones(shell, tmp_p
     for directory in directories[:MAX_RUNNING]:
         code, text = run(stop_command(directory, "consens-x"))
         state, _, _ = parse_status(text)
-        assert code == 0 and isinstance(state, int) and state != 0
+        assert code == 0 and state == "stopped"
     code, text = run(status_command(directories[0]))
-    assert parse_status(text)[0] != "running"
+    assert parse_status(text)[0] == "stopped"
+    listed = run(list_command(root=root))[1].splitlines()
+    assert sorted(line.split("\t")[1] for line in listed) == ["lost", "stopped", "stopped", "stopped"]
 
 
 def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):

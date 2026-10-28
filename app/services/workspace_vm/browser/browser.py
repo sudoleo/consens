@@ -360,9 +360,25 @@ def read_text(page, offset=0, limit=READ_CHARS):
     return "\n".join(out)
 
 
+# text: the main content's text and the whole page's, so the main content
+# comes first as in read (2026-10-28: Wikipedia's text began with its menus).
+TEXT_JS = r"""
+() => {
+  const main = document.querySelector('main, [role=main]');
+  return {main: main ? main.innerText || '' : '', all: (document.body || document.documentElement).innerText || ''};
+}
+"""
+
+
 def page_text(page, offset):
-    text = page.evaluate("() => (document.body || document.documentElement).innerText || ''")
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    texts = page.evaluate(TEXT_JS)
+    split = lambda text: [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    main, lines = split(texts.get("main")), split(texts.get("all"))
+    if main:
+        # The rest of the page after it, without the main content's lines again.
+        inside = set(main)
+        rest = [line for line in lines if line not in inside]
+        lines = main + (["(outside the main content: header, navigation, footer)"] + rest if rest else [])
     shown, rest = paged(lines, offset, TEXT_CHARS)
     out = [header(page), "\n".join(shown) if shown else "(the page shows no text)"]
     if rest > 0:
@@ -383,23 +399,37 @@ def listed_refs(lines):
     return [match.group(1) for match in (re.match(r"\[(e\d+)\] ", line) for line in lines) if match]
 
 
+# An element's line of read: its ref and its name, '[e12] link "Name" ...'.
+ELEMENT_NAME = re.compile(r'\[(e\d+)\] [^"]*"(.*?)"(?= |$)')
+
+
 def find_text(page, query):
     """Where ``query`` stands in what the page shows (any case): the first
     FIND_MATCHES places, each with the page around it and the ref of the
     element it lies in when read lists one. The refs come from read itself,
     so they are the ones read gives."""
-    refs = listed_refs(page_lines(page))
-    found = page.evaluate(FIND_JS, {"query": query, "refs": refs, "limit": FIND_MATCHES, "around": FIND_AROUND})
+    lines = page_lines(page)
+    found = page.evaluate(FIND_JS, {"query": query, "refs": listed_refs(lines), "limit": FIND_MATCHES,
+                                    "around": FIND_AROUND})
     total, matches = int(found.get("total") or 0), found.get("matches") or []
+    # Elements whose name holds it (a search box named only by its label or
+    # placeholder is in no page text, 2026-10-28), as read lists them.
+    seen = {str(match.get("ref") or "") for match in matches}
+    named = [line for line in lines if (name := ELEMENT_NAME.match(line)) and name.group(1) not in seen
+             and query.casefold() in name.group(2).casefold()][:FIND_MATCHES]
     out = [header(page)]
-    if not total:
-        out.append(f'"{query}" is not in the text the page shows.')
+    if not total and not named:
+        out.append(f'"{query}" is neither in the text the page shows nor in the name of an element.')
         return "\n".join(out)
-    counted = "1 match" if total == 1 else f"{total} matches"
-    out.append(f'{counted} for "{query}"' + (f", the first {len(matches)}:" if total > len(matches) else ":"))
+    if total:
+        counted = "1 match" if total == 1 else f"{total} matches"
+        out.append(f'{counted} for "{query}"' + (f", the first {len(matches)}:" if total > len(matches) else ":"))
     for match in matches:
         ref = str(match.get("ref") or "")
         out.append((f"[{ref}] " if ref else "") + f'"{match.get("snippet") or ""}"')
+    if named:
+        out.append(f'Elements whose name holds "{query}":')
+        out.extend(named)
     return "\n".join(out)
 
 

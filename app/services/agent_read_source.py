@@ -125,7 +125,10 @@ LABEL_EARLIER = "an earlier message's sources"
 # the earlier messages' sources, which they become with the next message
 # anyway: no page wrote them. Not in comparison mode, where the answers'
 # sources cover them and a read before the comparison would end it.
-LABEL_SEARCH = "your search in this message"
+# The web search that runs with every audit-mode step (the provider's own):
+# the agent does not call it, so "your search" read as a search it never made
+# (2026-10-28).
+LABEL_SEARCH = "a web search result of this message"
 
 
 def user_urls(conversation):

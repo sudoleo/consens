@@ -151,6 +151,8 @@ def test_every_workbench_gets_ripgrep_and_headless_chrome_and_loses_the_old_scre
     assert 'tools || echo "setup: a tool could not be installed' in setup
     # Only the old browser (the provider's user) is ended, never the agent's headless Chrome.
     assert "pkill -KILL -u sprite -f '/opt/google/chrome/'" in setup
+    # Its leftovers in /tmp go, only those of the provider's user (2026-10-28).
+    assert "find /tmp -maxdepth 1 -user sprite \\( -name 'playwright*'" in setup
 
 
 def _recording_setup(fake_vm, name, *, stop=False):
@@ -452,7 +454,51 @@ def test_find_lists_the_places_of_a_text_with_reads_refs(tmp_path, monkeypatch):
     assert '1 match for "x":' in one
     # No place: it says so.
     none = browser.find_text(FakePage(browser, found={"total": 0, "matches": []}), "checkout")
-    assert none.endswith('"checkout" is not in the text the page shows.')
+    assert none.endswith('"checkout" is neither in the text the page shows nor in the name of an element.')
+
+
+def test_find_names_elements_whose_name_holds_the_text(tmp_path, monkeypatch):
+    """A search box named only by its label is in no page text (feedback
+    2026-10-28): find lists it from read's lines, by its name alone."""
+    browser = load("browser")
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    lines = ['[e1] searchbox "Wikipedia durchsuchen" (empty)', '[e2] button "Suchen"', '[e3] link "Spenden"',
+             '[e4] list "Sprache" selected="Wikipedia durchsuchen"']
+    none = {"total": 0, "matches": []}
+    text = browser.find_text(FakePage(browser, lines=lines, found=none), "wikipedia DURCHSUCHEN")
+    # By the name, not by an option's value or the role.
+    assert text.split("\n")[3:] == ['Elements whose name holds "wikipedia DURCHSUCHEN":',
+                                    '[e1] searchbox "Wikipedia durchsuchen" (empty)']
+    assert "searchbox" not in browser.find_text(FakePage(browser, lines=lines, found=none), "box")
+    # An element the text matches already is not named twice.
+    found = {"total": 1, "matches": [{"snippet": "Suchen", "ref": "e2"}]}
+    text = browser.find_text(FakePage(browser, lines=lines, found=found), "suchen")
+    assert text.split("\n")[3:] == ['1 match for "suchen":', '[e2] "Suchen"', 'Elements whose name holds "suchen":',
+                                    '[e1] searchbox "Wikipedia durchsuchen" (empty)']
+
+
+def test_text_brings_the_main_content_first():
+    browser = load("browser")
+
+    class Page:
+        url = "https://de.wikipedia.org/wiki/Ironman_Hawaii"
+        context = type("Context", (), {"cookies": lambda self, urls: []})()
+
+        def __init__(self, main):
+            self.main = main
+
+        def title(self):
+            return "Ironman Hawaii"
+
+        def evaluate(self, script, arg=None):
+            assert script == browser.TEXT_JS
+            return {"main": self.main, "all": "Hauptmenü\nSuchen\n" + (self.main or "Ironman Hawaii\nKona") + "\nImpressum"}
+    text = browser.page_text(Page("Ironman Hawaii\nKona"), 0)
+    assert text.split("\n")[3:] == ["Ironman Hawaii", "Kona", "(outside the main content: header, navigation, footer)",
+                                    "Hauptmenü", "Suchen", "Impressum"]
+    # Without a main region the page's own order.
+    assert browser.page_text(Page(""), 0).split("\n")[3:] == ["Hauptmenü", "Suchen", "Ironman Hawaii", "Kona",
+                                                              "Impressum"]
 
 
 def test_find_takes_one_to_200_characters_and_reads_while_the_user_has_the_browser(tmp_path, monkeypatch, capsys):

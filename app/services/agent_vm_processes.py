@@ -51,7 +51,7 @@ MAX_WAIT_SECONDS = 60
 STOP_GRACE_SECONDS = 10
 ID = r"^[a-f0-9]{8}$"
 # The first line of every status: "consens-process <state> <bytes>".
-STATUS_LINE = re.compile(r"^consens-process (running|lost|-?\d+) (\d+)$")
+STATUS_LINE = re.compile(r"^consens-process (running|lost|stopped|-?\d+) (\d+)$")
 
 # The supervisor of one process (``bash run.sh <dir> <task>``): the agent's
 # command (``launch.sh``, under its time limit), a Tasks API hold while it
@@ -121,6 +121,7 @@ def status_command(directory, chars=OUTPUT_CHARS, wait=0):
             "code=$(cat \"$dir/exit_code\" 2>/dev/null); "
             "if [ -z \"$code\" ]; then pid=$(cat \"$dir/pid\" 2>/dev/null); "
             "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; else code=lost; fi; fi; "
+            "[ -f \"$dir/stopped\" ] && [ \"$code\" != running ] && code=stopped; "
             "size=$(stat -c %s \"$dir/output.log\" 2>/dev/null || echo 0); "
             "printf 'consens-process %s %s\\n' \"$code\" \"$size\"; "
             f"tail -c {int(chars)} \"$dir/output.log\" 2>/dev/null; true")
@@ -146,7 +147,7 @@ def stop_command(directory, task):
     d = shlex.quote(directory)
     return (f"dir={d}; [ -d \"$dir\" ] || exit 5; pid=$(cat \"$dir/pid\" 2>/dev/null); "
             "sid=$(cat \"$dir/sid\" 2>/dev/null); "
-            "[ -f \"$dir/exit_code\" ] || { [ -n \"$pid\" ] && kill -TERM \"$pid\" 2>/dev/null; }; "
+            "[ -f \"$dir/exit_code\" ] || { : > \"$dir/stopped\"; [ -n \"$pid\" ] && kill -TERM \"$pid\" 2>/dev/null; }; "
             f"for _ in $(seq {STOP_GRACE_SECONDS}); do [ -f \"$dir/exit_code\" ] && break; sleep 1; done; "
             "if [ ! -f \"$dir/exit_code\" ]; then [ -n \"$pid\" ] && kill -KILL \"$pid\" 2>/dev/null; "
             "if [ -n \"$sid\" ]; then sudo -n pkill -KILL -s \"$sid\" 2>/dev/null || pkill -KILL -s \"$sid\" "
@@ -159,6 +160,7 @@ def list_command(root=PROCESSES_DIR):
     return (f"for d in {shlex.quote(root)}/*/; do [ -d \"$d\" ] || continue; id=$(basename \"$d\"); "
             "code=$(cat \"$d/exit_code\" 2>/dev/null); if [ -z \"$code\" ]; then pid=$(cat \"$d/pid\" 2>/dev/null); "
             "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; else code=lost; fi; fi; "
+            "[ -f \"$d/stopped\" ] && [ \"$code\" != running ] && code=stopped; "
             "printf '%s\\t%s\\t%s\\n' \"$id\" \"$code\" \"$(head -c 200 \"$d/command\" 2>/dev/null | tr '\\n\\t' '  ')\"; "
             "done; true")
 
@@ -169,14 +171,15 @@ def task_name(process_id):
 
 def parse_status(text):
     """``(state, bytes, output)`` of a status command's output: state is
-    "running", "lost" (the VM stopped it, e.g. while paused without a hold)
-    or the exit code."""
+    "running", "lost" (the VM stopped it, e.g. while paused without a hold),
+    "stopped" (vm_stop_process ended it: coreutils timeout then reports 124,
+    which read as its time limit, 2026-10-28) or the exit code."""
     first, _, rest = text.partition("\n")
     match = STATUS_LINE.match(first.strip())
     if not match:
         raise ValueError("The process status could not be read.")
     state = match.group(1)
-    return (state if state in {"running", "lost"} else int(state)), int(match.group(2)), rest
+    return (state if state in {"running", "lost", "stopped"} else int(state)), int(match.group(2)), rest
 
 
 class ProcessTools:
@@ -210,8 +213,8 @@ class ProcessTools:
         from app.services.agent_vm_tools import clean, model_text
         state, size, output = parse_status(text)
         raw = output.encode("utf-8")
-        result = {"id": process_id, "status": "running" if state == "running" else "lost" if state == "lost"
-                  else "exited", "output": model_text(raw, max(size, len(raw)), "output")}
+        result = {"id": process_id, "status": state if state in {"running", "lost", "stopped"} else "exited",
+                  "output": model_text(raw, max(size, len(raw)), "output")}
         if isinstance(state, int):
             result["exit_code"] = state
         if state == "lost":
@@ -269,7 +272,8 @@ class ProcessTools:
                 parts = line.split("\t", 2)
                 if len(parts) == 3 and re.fullmatch(ID, parts[0]):
                     state = parts[1]
-                    processes.append({"id": parts[0], "status": state if state in {"running", "lost"} else "exited",
+                    processes.append({"id": parts[0], "status": state if state in {"running", "lost", "stopped"}
+                                      else "exited",
                                       **({"exit_code": int(state)} if re.fullmatch(r"-?\d+", state) else {}),
                                       "command": parts[2].strip()})
             return self.vm.session.announce({"processes": processes})
@@ -306,6 +310,6 @@ class ProcessTools:
                 fields["process"] = result["id"]
             if "exit_code" in result:
                 fields["exit_code"] = result["exit_code"]
-            if result.get("status") in {"running", "lost"}:
+            if result.get("status") in {"running", "lost", "stopped"}:
                 fields["process_status"] = result["status"]
         return {**fields, **self.vm._outcome(result)}
