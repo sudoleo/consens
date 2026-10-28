@@ -149,7 +149,7 @@ def test_every_reviewers_go_lets_the_call_run(store):
     assert {family: len(rounds) for family, rounds in script.gate_searches.items()} == {"anthropic": 1, "openai": 1}
     assert all(not searches for rounds in script.gate_searches.values() for searches in rounds)
     gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
-    assert OPEN in gate_round["content"]
+    assert OPEN in gate_round["content"] and agent_audit.GATE_WEB_NOTE not in gate_round["content"]
     names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "checked" in names and "paused" not in names
     assert saved(store, loop)["status"] == "completed"
@@ -252,6 +252,9 @@ def test_a_search_hit_is_read_at_once_and_a_page_of_its_own_choice_after_every_r
     assert {family: len(rounds) for family, rounds in script.gate_searches.items()} == {"anthropic": 1, "openai": 1}
     gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
     assert chosen in gate_round["content"] and found not in gate_round["content"].split("Before it runs:")[1]
+    # The reviewers learn what such a fetch can do (2026-10-28: MiMo halted a
+    # picture whose address came from search hits the log never shows).
+    assert agent_audit.GATE_WEB_NOTE in gate_round["content"]
     assert not [e for e in events if e.get("type") == "hold"]
 
 

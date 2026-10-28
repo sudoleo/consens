@@ -3414,6 +3414,22 @@ Google-Daten).
   was es meinte.
 - Vorab-Prüfung: eine Adresse, die die Nachricht nicht hält, wartet auf die
   Prüfer (`agent_gate.WEB_READS`), ein schon gezeigtes Bild nicht mehr.
+  Gleich nach dem Deploy (2026-10-28, 21:40 UTC) hielt MiMo V2.6 Pro so ein
+  Bild als „injection“ an: Terra hatte fünfmal gesucht, kein Treffer stand im
+  Protokoll (die eingebaute Suche meldet Treffer laut OpenRouter nur als
+  Zitate im Antworttext, ein Schritt mit bloßem Werkzeugaufruf hat keine),
+  und der Prüfer begründete mit einer nicht belegten Aussage über die Person.
+  Seitdem bekommt die Gate-Runde für `read_source` und `show_image`
+  `GATE_WEB_NOTE`: was so ein Abruf kann (vom Server, ohne Anmeldungen, ändert
+  nichts; hinaus geht nur die Adresse), dass Suchtreffer im Protokoll fehlen
+  können, und dass die Frage, ob Seite oder Bild die Aussage stützt, in die
+  Marken zur Antwort gehört. Halten darf der Prüfer weiter aus jedem der vier
+  Gründe.
+- Unter 160 px Kante (wie die Watch-Bilder) ist es kein Bild, sondern ein Icon
+  oder Avatar: Ergebnis `failed` mit der Größe (am selben Abend kam ein
+  70×70-Avatar unter die Antwort). Ergebnis und Bild stehen im
+  Arbeitsprotokoll mit Herkunft `web` (vorher das Bild als `vm`, ebenso ein
+  Screenshot des Browsers).
 - Prompt: `AGENT_AUDIT_IMAGE_PROMPT` („PICTURES“), nur Fakten: was es tut, dass
   der Server lädt und Markdown-Bilder nicht erscheinen.
 

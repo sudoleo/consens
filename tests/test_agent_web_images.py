@@ -137,6 +137,10 @@ def test_the_picture_lands_under_the_answer_with_its_source(store, monkeypatch, 
                                   "caption": "Jeef at Lobby Legends"}
     assert PAGE not in saved[0]["name"] and saved[0]["name"].endswith(".webp")
     assert len([e for e in events if e.get("type") == "resources"]) == 2
+    # The reviewers read result and picture as the web's, not the VM's.
+    logged = [entry for entry, _ in loop.work_log.entries_after(0)]
+    assert {e["data"] for e in logged if e["kind"] == "tool" and e.get("name") == "show_image"} == {"web"}
+    assert {e["data"] for e in logged if e["kind"] == "context" and e["seq"] > 3 and e.get("name") == "user"} == {"web"}
     # The agent sees what it showed, as data.
     pictures = [m for m in loop.messages if m.get("role") == "user" and isinstance(m.get("content"), list)]
     assert [m["content"][0]["text"] for m in pictures][:1] == [INTRO.format(url=PAGE)]
@@ -145,6 +149,20 @@ def test_the_picture_lands_under_the_answer_with_its_source(store, monkeypatch, 
             and e.get("status") == "succeeded"]
     assert [(e.get("host"), e.get("outcome")) for e in done] == [
         ("liquipedia.net", None), ("liquipedia.net", None), ("toureiffel.paris", None), (None, "failed")]
+
+
+def test_an_avatar_is_no_picture_to_show(monkeypatch):
+    """2026-10-28: a 70x70 avatar of a player came under the answer."""
+    from app.services.agent_web_images import ShowImageArgs, WebImageTools
+    from app.services.llm.provider_runtime import ProviderCancellation
+    avatar = "https://ugc.production.linktr.ee/profile-image-70x70.png"
+
+    async def fetch(url, get=None):
+        return png((70, 70)), url, ""
+    monkeypatch.setattr(agent_web_images, "fetch_picture", fetch)
+    result = WebImageTools(None).show(ShowImageArgs(url=avatar), cancellation=ProviderCancellation())
+    assert result["status"] == "failed" and "only 70×70 pixels, an icon or avatar" in result["reason"]
+    assert agent_web_images.MIN_SIDE == watch_images.MIN_SIDE
 
 
 def test_without_audit_there_is_no_show_image(store):

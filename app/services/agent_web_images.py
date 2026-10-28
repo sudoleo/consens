@@ -49,7 +49,9 @@ PAGE_BYTES = 2_000_000
 IMAGE_BYTES = 8_000_000
 FETCH_SECONDS = 12.0
 CALL_SECONDS = 30.0
-MIN_SIDE = 48
+# An avatar or an icon is no picture to show (2026-10-28: a 70x70 avatar of
+# a player came under the answer); the same floor as the watch pictures.
+MIN_SIDE = 160
 MAX_SIDE = 1600
 MAX_PIXELS = 40_000_000
 STORED_BYTES = 1_500_000
@@ -88,6 +90,15 @@ def page_picture(html, base_url):
                 if found:
                     return found[0]
     return ""
+
+
+def size_of(raw):
+    """(width, height) of a picture of the four formats, or None."""
+    try:
+        with Image.open(io.BytesIO(raw), formats=FORMATS) as source:
+            return source.size
+    except Exception:
+        return None
 
 
 def encode(raw):
@@ -217,6 +228,11 @@ class WebImageTools:
             # A result, not a tool error: a site that blocks must not cost the answer.
             return {"status": "failed", "url": url, "reason": f"No picture: {_reason(exc)}.",
                     "note": "Do not claim the user sees it."}
+        size = size_of(raw)
+        if size and min(size) < MIN_SIDE:
+            return {"status": "failed", "url": url, "reason": (
+                f"No picture: it is only {size[0]}×{size[1]} pixels, an icon or avatar (at least {MIN_SIDE} on each "
+                "side)."), "note": "Do not claim the user sees it."}
         encoded = encode(raw)
         if encoded is None:
             return {"status": "failed", "url": url, "reason": "No picture: what came back is no usable picture.",

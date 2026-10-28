@@ -70,6 +70,8 @@ TOOL_DATA = {
     "vm_install_packages": "vm", "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
     # Pages of the open web, in the user's signed-in browser.
     "browser": "web",
+    # A picture of the web the server fetched (agent_web_images.py).
+    "show_image": "web",
 }
 
 
@@ -137,8 +139,11 @@ def context_data(actor, index, own_from, message, text):
     if role == "assistant" or actor != "agent":
         return "agent"
     if is_work_record(text) or text.startswith(PICTURE_OPEN):
-        # The app's record of VM output, a picture of the VM.
-        return "vm"
+        # The app's record of VM output, a picture of the VM; a picture of
+        # the browser or one show_image fetched is the web's.
+        from app.services.agent_browser import SCREENSHOT_INTRO
+        from app.services.agent_web_images import INTRO
+        return "web" if text.startswith((SCREENSHOT_INTRO.split("{")[0], INTRO.split("{")[0])) else "vm"
     from app.services.agent_delegation import USER_NOTE_OPEN
     if text.startswith(USER_NOTE_OPEN):
         # A message the user sent into the running response.
