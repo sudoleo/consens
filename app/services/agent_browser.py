@@ -8,8 +8,10 @@ VM of its own with no code of the agent on it (security audit 2026-10-27,
 finding 2): the agent chooses an action and its typed arguments, the backend
 checks them and calls one fixed program there, workspace_vm/browser/
 browser.py, with the request as JSON on its stdin and no shell. The program
-reads pages as text with refs (e12), never shows a password field's value,
-never types into one, and does not act while the user has the browser.
+reads pages as text with refs (e12), finds a text on the page with the refs
+it is in, says whether the browser has saved sign-in data for the page's
+site (never which), never shows a password field's value, never types into
+one, and does not act while the user has the browser.
 
 Addresses are http(s) only and never the VM itself (file://, the browser's
 debugging port, localhost): a page of the VM would show its profile. An
@@ -40,11 +42,13 @@ from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
 from app.services.llm.provider_runtime import ProviderCancelled
 
-ACTIONS = ("open", "read", "text", "click", "type", "select", "key", "scroll", "back", "forward", "tabs", "tab",
-           "screenshot", "upload", "wait")
+ACTIONS = ("open", "read", "text", "find", "click", "type", "select", "key", "scroll", "back", "forward", "tabs",
+           "tab", "screenshot", "upload", "wait")
 KEYS = ("Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab")
 TYPE_CHARS = 20_000
+# find: the text to look for (the helper's FIND_CHARS).
+FIND_CHARS = 200
 UPLOAD_BYTES = 15 * 1024 * 1024
 # The helper takes up to 100 s for a first setup and 60 s for the browser's start.
 CALL_SECONDS = 180
@@ -64,13 +68,16 @@ class BrowserArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     action: Literal[ACTIONS] = Field(description=(
         "open: go to url (new_tab for a new tab). read: the page's headings and elements, each with a ref like "
-        "e12 (offset to read on). text: the page's text (offset). click, type (text, enter to submit), select "
-        "(option), upload (file of your workspace): on the element ref. key: press a key. scroll: direction. "
+        "e12 (offset to read on). text: the page's text (offset). find: where text (up to 200 characters, any "
+        "case) appears on the page, up to 20 places, each with the ref of the element it is in. click, type "
+        "(text, enter to submit), select (option), upload (file of your workspace): on the element ref. key: "
+        "press a key. scroll: direction. "
         "back, forward. tabs: list them; tab: bring tab number to the front. screenshot: a picture of the page. "
         "wait: seconds, also until the user hands the browser back."))
     url: str = Field(default="", max_length=4000, description="open: an http or https address.")
     ref: str = Field(default="", pattern=r"^(e[0-9]{1,8})?$", description="An element's ref from read.")
-    text: str = Field(default="", max_length=TYPE_CHARS, description="type: the text (never a password).")
+    text: str = Field(default="", max_length=TYPE_CHARS, description=(
+        "type: the text (never a password). find: the text to look for (up to 200 characters)."))
     enter: bool = Field(default=False, description="type: press Enter afterwards.")
     option: str = Field(default="", max_length=500, description="select: the option's label or value.")
     key: Literal[("",) + KEYS] = ""
@@ -111,9 +118,11 @@ def check_url(url):
 def required(args):
     """What an action needs, or ValueError naming it."""
     need = {"open": "url", "click": "ref", "type": "ref", "select": "ref", "upload": "ref", "key": "key",
-            "tab": "tab"}.get(args.action)
+            "tab": "tab", "find": "text"}.get(args.action)
     if need and not getattr(args, need):
         raise ValueError(f"{args.action} needs {need}.")
+    if args.action == "find" and not 1 <= len(" ".join(args.text.split())) <= FIND_CHARS:
+        raise ValueError(f"find needs text, 1 to {FIND_CHARS} characters.")
     if args.action == "select" and not args.option:
         raise ValueError("select needs option.")
     if args.action == "upload" and not args.file.strip():
@@ -133,7 +142,8 @@ class BrowserTools:
         return [ReadOnlyTool(
             "browser", "Use the workspace's Chrome, the one the user can watch and take over live, signed in where "
                        "the user signed in. Pages come back as text with refs (e12) for click, type, select and "
-                       "upload; every action returns the page again.",
+                       "upload, and find looks up a text on the page with the refs it is in; every action returns "
+                       "the page again.",
             BrowserArgs, self.call, activity=self._activity, reports=True)]
 
     def _helper(self, request, timeout, cancellation):
@@ -268,6 +278,8 @@ class BrowserTools:
             fields["key"] = args.key
         if args.action == "upload":
             fields["file"] = args.file[:300]
+        if args.action == "find":
+            fields["query"] = args.text[:FIND_CHARS]
         if isinstance(result, dict) and isinstance(result.get("page"), str):
             first = result["page"].split("\n", 2)
             if first and first[0].startswith("Page: "):

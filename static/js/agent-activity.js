@@ -482,7 +482,8 @@
     request_domain: ['Asking for access to', 'Access to'] };
   // A browser step by its action (agent_browser.py): what it did and to what.
   const browserVerbs = { open: ['Opening', 'Opened'], read: ['Reading the page', 'Read the page'],
-    text: ['Reading the page', 'Read the page'], click: ['Clicking', 'Clicked'], type: ['Typing into', 'Typed into'],
+    text: ['Reading the page', 'Read the page'], find: ['Searching the page for', 'Searched the page for'],
+    click: ['Clicking', 'Clicked'], type: ['Typing into', 'Typed into'],
     select: ['Choosing in', 'Chose in'], key: ['Pressing', 'Pressed'], scroll: ['Scrolling', 'Scrolled'],
     back: ['Going back', 'Went back'], forward: ['Going forward', 'Went forward'],
     tabs: ['Listing the tabs', 'Listed the tabs'], tab: ['Switching the tab', 'Switched the tab'],
@@ -494,7 +495,7 @@
     if (item.name === 'request_domain') return item.domain;
     if (item.name === 'browser') {
       return item.action === 'open' ? item.url : item.action === 'upload' ? item.file
-        : item.action === 'key' ? item.key : item.ref || item.title;
+        : item.action === 'key' ? item.key : item.action === 'find' ? item.query : item.ref || item.title;
     }
     return item.path || item.process;
   }
@@ -546,7 +547,7 @@
   function updateVm(details, item) {
     const signature = JSON.stringify([item.status, item.command, item.path, item.output, item.output_truncated,
       item.exit_code, item.duration_ms, item.timed_out, item.outcome, item.action, item.url, item.ref, item.page,
-      item.title, item.packages, item.domain]);
+      item.title, item.packages, item.domain, item.query]);
     if (details.dataset.signature === signature) return;
     details.dataset.signature = signature;
     details.dataset.status = item.status;

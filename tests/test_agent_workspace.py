@@ -244,6 +244,113 @@ def test_long_pages_are_read_in_pieces():
     assert browser.paged(["y" * 5000], 0, 1000) == (["y" * 5000], 0)
 
 
+class FakePage:
+    """A page as browser.py sees it through Playwright: its title and
+    address, its context's cookies, and the answers of its two scripts
+    (read's SNAPSHOT_JS, find's FIND_JS). The scripts themselves run in
+    tests/js/workspace-browser-refs.test.mjs."""
+
+    def __init__(self, browser, url="https://shop.example/cart", cookies=(), lines=(), found=None):
+        self.browser, self.url, self.lines, self.found = browser, url, list(lines), found
+        self.scripts, self.asked = [], []
+        page = self
+
+        class Context:
+            def cookies(self, urls):
+                page.asked.append(urls)
+                if isinstance(cookies, Exception):
+                    raise cookies
+                return list(cookies)
+        self.context = Context()
+
+    def title(self):
+        return "Shop"
+
+    def evaluate(self, script, arg=None):
+        if script == self.browser.SNAPSHOT_JS:
+            self.scripts.append(("read", arg))
+            given = sum(1 for line in self.lines if line.startswith("[e"))
+            return {"lines": self.lines, "count": arg + given}
+        if script == self.browser.FIND_JS:
+            self.scripts.append(("find", arg))
+            return self.found
+        raise AssertionError(script)
+
+
+SESSION_COOKIE = {"name": "sid", "value": "s3cr3t-session-value", "domain": "shop.example", "path": "/"}
+
+
+def test_the_page_head_says_whether_the_browser_holds_sign_in_data_for_the_site(tmp_path, monkeypatch):
+    """Since 2026-10-28: yes or no from the context's cookies for the page's
+    address, never a cookie's name, value or their number."""
+    browser = load("browser")
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    signed = FakePage(browser, cookies=[SESSION_COOKIE, {**SESSION_COOKIE, "name": "csrf", "value": "t0k3n"}])
+    head = browser.header(signed)
+    assert head == ('Page: "Shop"\nURL: https://shop.example/cart\nSaved sign-in data for this site: yes')
+    assert signed.asked == [["https://shop.example/cart"]]
+    assert not any(secret in head for secret in ("sid", "s3cr3t", "csrf", "t0k3n", "2"))
+    assert browser.header(FakePage(browser)).endswith("\nSaved sign-in data for this site: no")
+    # No web address, or cookies it cannot read: no line rather than a guess.
+    blank = FakePage(browser, url="about:blank", cookies=[SESSION_COOKIE])
+    assert browser.header(blank) == 'Page: "Shop"\nURL: about:blank' and blank.asked == []
+    assert "sign-in" not in browser.header(FakePage(browser, cookies=RuntimeError("cdp")))
+    # Every page head carries it: read, text, find.
+    page = FakePage(browser, cookies=[SESSION_COOKIE], lines=['[e1] link "More"'],
+                    found={"total": 0, "matches": []})
+    assert "Saved sign-in data for this site: yes" in browser.read_text(page)
+    assert "Saved sign-in data for this site: yes" in browser.find_text(page, "price")
+
+
+def test_find_lists_the_places_of_a_text_with_reads_refs(tmp_path, monkeypatch):
+    """find (since 2026-10-28): read numbers the page first, with the same
+    counter, so a ref find names is the one read gives; up to FIND_MATCHES
+    places, each with the page around it."""
+    browser = load("browser")
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    (tmp_path / "ref-count").write_text("7")
+    lines = ['heading "Prices"', '[e8] link "Sale price list"', '[e9] button "Buy"', "frame https://ads.example"]
+    found = {"total": 2, "matches": [{"snippet": "Prices", "ref": ""}, {"snippet": "Sale price list", "ref": "e8"}]}
+    page = FakePage(browser, lines=lines, found=found)
+    text = browser.find_text(page, "price")
+    assert page.scripts == [("read", 7), ("find", {"query": "price", "refs": ["e8", "e9"],
+                                                   "limit": browser.FIND_MATCHES, "around": browser.FIND_AROUND})]
+    assert (tmp_path / "ref-count").read_text() == "9"
+    assert text.split("\n")[3:] == ['2 matches for "price":', '"Prices"', '[e8] "Sale price list"']
+    # More places than it lists: it says how many there are.
+    many = {"total": 57, "matches": [{"snippet": f"Item {n}", "ref": f"e{n}"} for n in range(1, 21)]}
+    text = browser.find_text(FakePage(browser, found=many), "item")
+    assert '57 matches for "item", the first 20:' in text and text.count("\n[e") == 20
+    one = browser.find_text(FakePage(browser, found={"total": 1, "matches": [{"snippet": "x", "ref": ""}]}), "x")
+    assert '1 match for "x":' in one
+    # No place: it says so.
+    none = browser.find_text(FakePage(browser, found={"total": 0, "matches": []}), "checkout")
+    assert none.endswith('"checkout" is not in the text the page shows.')
+
+
+def test_find_takes_one_to_200_characters_and_reads_while_the_user_has_the_browser(tmp_path, monkeypatch, capsys):
+    browser = load("browser")
+    assert browser.find_query({"text": "  total \n price "}) == "total price"
+    for text in ("", "   ", "x" * 201, None):
+        with pytest.raises(browser.Refused, match="1 to 200"):
+            browser.find_query({"text": text})
+    started = []
+
+    def ensure_browser():
+        started.append(True)
+        raise browser.SettingUp("The browser is being set up.")
+    monkeypatch.setattr(browser, "ensure_browser", ensure_browser)
+    assert run_helper(browser, monkeypatch, capsys, {"action": "find", "text": ""})["status"] == "refused"
+    assert started == []
+    # Like read and text it only reads: the user's takeover does not stop it.
+    control = tmp_path / "control.json"
+    control.write_bytes(agent_workspace.control_payload("user"))
+    monkeypatch.setattr(browser, "CONTROL", str(control))
+    assert "find" not in browser.ACTING and {"read", "text"}.isdisjoint(browser.ACTING)
+    assert run_helper(browser, monkeypatch, capsys, {"action": "find", "text": "price"})["status"] == "setup"
+    assert started == [True]
+
+
 def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, capfd):
     """The live view's way in since 2026-10-27, over the provider's exec API:
     states as JSON lines on stderr while the browser is set up and started,

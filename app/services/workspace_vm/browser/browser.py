@@ -13,8 +13,10 @@ only chooses among these actions and their typed arguments.
 The same Chrome the user sees and steers in the live view, with the sign-ins
 the user made there. Pages are read as text: ``read`` lists the page's
 headings and the elements one can act on, each with a ref (e12) that click,
-type, select and upload take; every action prints the page again, so the
-agent sees what changed in the same step.
+type, select and upload take; ``find`` looks up a text in what the page shows
+and names the ref of the element it lies in; every action prints the page
+again, so the agent sees what changed in the same step. The page's head says
+whether the browser holds cookies for its address (yes or no, never which).
 
 Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
@@ -24,6 +26,7 @@ agent's calls meanwhile).
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -41,13 +44,18 @@ CDP = "http://127.0.0.1:9222"
 READ_CHARS = 6000
 AFTER_ACTION_CHARS = 4000
 TEXT_CHARS = 12000
+# find: the text to look for, how many places it lists, and the characters
+# of the page it shows on either side of one.
+FIND_CHARS = 200
+FIND_MATCHES = 20
+FIND_AROUND = 60
 WAIT_MAX = 120
 # A first setup in one call, within the server's limit (agent_browser.CALL_SECONDS).
 SETUP_SECONDS = 100
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
-ACTIONS = {"open", "read", "text", "click", "type", "select", "key", "scroll", "back", "forward", "tabs", "tab",
-           "screenshot", "upload", "wait"}
+ACTIONS = {"open", "read", "text", "find", "click", "type", "select", "key", "scroll", "back", "forward", "tabs",
+           "tab", "screenshot", "upload", "wait"}
 # What changes the page or sends something: never while the user has the browser.
 ACTING = {"open", "click", "type", "select", "upload", "key", "scroll", "back", "forward", "tab"}
 
@@ -92,7 +100,7 @@ start => {
   for (let el = walker.currentNode; el; el = walker.nextNode()) {
     if (listed && listed !== el && listed.contains(el)) continue;
     if (/^H[1-6]$/.test(el.tagName) || el.getAttribute('role') === 'heading') {
-      if (shown(el) && clean(el.innerText)) lines.push('heading "' + clip(clean(el.innerText), 120) + '"');
+      if (shown(el) && clean(el.innerText)) lines.push('heading "' + clip(clean(el.innerText), 200) + '"');
       continue;
     }
     if (el.tagName === 'IFRAME' && shown(el)) {
@@ -112,7 +120,7 @@ start => {
     let label = name(el) || clean(el.value && el.type !== 'password' ? el.value : '');
     if (!label && el.tagName === 'A') label = clip(clean(el.getAttribute('href')), 60);
     if (!label) label = clean(el.getAttribute('name') || el.id || '');
-    let line = '[' + ref + '] ' + kind + ' "' + clip(label, 80) + '"';
+    let line = '[' + ref + '] ' + kind + ' "' + clip(label, 200) + '"';
     if (el.tagName === 'SELECT') {
       const option = el.options[el.selectedIndex];
       line += ' selected="' + clip(clean(option ? option.text : ''), 60) + '"';
@@ -128,6 +136,90 @@ start => {
     lines.push(line);
   }
   return {lines, count};
+}
+"""
+
+# find: what the page shows as one string, its whitespace folded. A text
+# counts where its element is shown; a new block or a line break starts with
+# a space, where innerText starts a new line. A place's ref is the one of the
+# listed element it lies in (``refs``: what read listed just before).
+FIND_JS = r"""
+({query, refs, limit, around}) => {
+  const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'TEXTAREA', 'SELECT']);
+  const seen = new Map();
+  const shown = el => {
+    if (!seen.has(el)) {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      seen.set(el, style.visibility !== 'hidden' && style.display !== 'none' && box.width > 0 && box.height > 0);
+    }
+    return seen.get(el);
+  };
+  const blocks = new Map();
+  const blockOf = el => {
+    if (!blocks.has(el)) {
+      let node = el;
+      while (node.parentElement && /^(inline|contents)/.test(getComputedStyle(node).display)) node = node.parentElement;
+      blocks.set(el, node);
+    }
+    return blocks.get(el);
+  };
+  const root = document.body || document.documentElement;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode: node => node.nodeType === 1 && SKIP.has(node.tagName) ? NodeFilter.FILTER_REJECT
+      : NodeFilter.FILTER_ACCEPT
+  });
+  let full = '';
+  const parts = [];
+  let block = null, gap = false;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.nodeType === 1) {
+      if (node.tagName === 'BR') gap = true;
+      continue;
+    }
+    const el = node.parentElement;
+    if (!el || !shown(el)) continue;
+    let text = node.data.replace(/\s+/g, ' ');
+    const here = blockOf(el);
+    if (block !== null && here !== block) gap = true;
+    block = here;
+    if (gap && full && !full.endsWith(' ') && !text.startsWith(' ')) full += ' ';
+    gap = false;
+    if (text.startsWith(' ') && (!full || full.endsWith(' '))) text = text.slice(1);
+    if (!text) continue;
+    parts.push([full.length, el]);
+    full += text;
+  }
+  const wanted = new Set(refs);
+  const refOf = el => {
+    for (let node = el; node; node = node.parentElement) {
+      const ref = node.getAttribute('data-consens-ref');
+      if (ref && wanted.has(ref)) return ref;
+    }
+    return '';
+  };
+  const needle = query.replace(/\s+/g, ' ').trim();
+  const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const matches = [];
+  let total = 0, part = 0, found;
+  while ((found = pattern.exec(full))) {
+    total += 1;
+    if (matches.length >= limit) continue;
+    const at = found.index, end = at + found[0].length;
+    while (part + 1 < parts.length && parts[part + 1][0] <= at) part += 1;
+    let from = Math.max(0, at - around), to = Math.min(full.length, end + around);
+    if (from > 0) {
+      const space = full.indexOf(' ', from);
+      if (space !== -1 && space < at) from = space + 1;
+    }
+    if (to < full.length) {
+      const space = full.lastIndexOf(' ', to);
+      if (space >= end) to = space;
+    }
+    const snippet = (from > 0 ? '…' : '') + full.slice(from, to).trim() + (to < full.length ? '…' : '');
+    matches.push({snippet, ref: refOf(parts[part][1])});
+  }
+  return {total, matches};
 }
 """
 
@@ -201,12 +293,29 @@ def settle(page):
         pass
 
 
+def saved_sign_in(page):
+    """Whether the browser holds cookies for the page's address, "yes" or
+    "no"; None for a page with no web address or when it cannot tell. Only
+    that: never a cookie's name, value or their number."""
+    url = str(page.url or "")
+    if not url.startswith(("http://", "https://")):
+        return None
+    try:
+        return "yes" if page.context.cookies([url]) else "no"
+    except Exception:
+        return None
+
+
 def header(page):
     try:
         title = page.title()
     except Exception:
         title = ""
-    return f'Page: "{title}"\nURL: {page.url}'
+    lines = [f'Page: "{title}"', f"URL: {page.url}"]
+    saved = saved_sign_in(page)
+    if saved:
+        lines.append(f"Saved sign-in data for this site: {saved}")
+    return "\n".join(lines)
 
 
 def page_lines(page):
@@ -255,6 +364,39 @@ def page_text(page, offset):
     return "\n".join(out)
 
 
+def find_query(request):
+    """find's text with its whitespace folded, or Refused."""
+    query = " ".join(str(request.get("text") or "").split())
+    if not 1 <= len(query) <= FIND_CHARS:
+        raise Refused(f"find needs text, 1 to {FIND_CHARS} characters.")
+    return query
+
+
+def listed_refs(lines):
+    """The refs of read's lines (an element's line starts with its ref)."""
+    return [match.group(1) for match in (re.match(r"\[(e\d+)\] ", line) for line in lines) if match]
+
+
+def find_text(page, query):
+    """Where ``query`` stands in what the page shows (any case): the first
+    FIND_MATCHES places, each with the page around it and the ref of the
+    element it lies in when read lists one. The refs come from read itself,
+    so they are the ones read gives."""
+    refs = listed_refs(page_lines(page))
+    found = page.evaluate(FIND_JS, {"query": query, "refs": refs, "limit": FIND_MATCHES, "around": FIND_AROUND})
+    total, matches = int(found.get("total") or 0), found.get("matches") or []
+    out = [header(page)]
+    if not total:
+        out.append(f'"{query}" is not in the text the page shows.')
+        return "\n".join(out)
+    counted = "1 match" if total == 1 else f"{total} matches"
+    out.append(f'{counted} for "{query}"' + (f", the first {len(matches)}:" if total > len(matches) else ":"))
+    for match in matches:
+        ref = str(match.get("ref") or "")
+        out.append((f"[{ref}] " if ref else "") + f'"{match.get("snippet") or ""}"')
+    return "\n".join(out)
+
+
 def element(page, ref):
     if not isinstance(ref, str) or not ref.startswith("e") or not ref[1:].isdigit():
         raise Refused(f"{ref} is no ref: take one from read (like e12).")
@@ -271,6 +413,7 @@ def run(request):
     if action in ACTING and user_control():
         raise UserHasControl("The user has taken over the browser in the workspace view. Do not act in it now: "
                              "your next call waits until they hand it back, or answer with what you have.")
+    query = find_query(request) if action == "find" else ""
     ensure_browser()
     # A first setup installed Playwright into the user's site folder, which
     # Python only looks at when it exists at its start.
@@ -288,6 +431,8 @@ def run(request):
             return {"text": read_text(page, offset)}
         if action == "text":
             return {"text": page_text(page, offset)}
+        if action == "find":
+            return {"text": find_text(page, query)}
         if action == "tabs":
             lines = []
             for number, tab in enumerate(context.pages, 1):
