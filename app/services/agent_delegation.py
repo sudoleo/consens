@@ -512,6 +512,12 @@ class DelegationLoop(AgentLoop):
                                                      agent_settings.ORCHESTRATOR_PROMPT)
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
+        # The user's earlier chats, found and read on demand (agent_chat_search.py):
+        # on their own account-mode turns; chats with Google data stay out.
+        if self.comparison is not None and self.policy.account_budget_only:
+            from app.services.agent_chat_search import ChatSearch
+            self.registry = ToolRegistry([*self.registry.tools.values(), *ChatSearch(self).tools()],
+                                         argument_limit=self.registry.argument_limit)
         # The agent's own Linux VM (Agent VM, admins; agent_vm_tools.py): on
         # account-mode turns, never with Google data (it would leave the
         # allowed providers). A setting, so the prompt stays cacheable.

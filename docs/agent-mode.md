@@ -2198,6 +2198,28 @@ Nutzers nicht.
 laufen wie bei jeder Watch auf dem Server-Key (global
 `watch_max_runs_per_day`), nicht auf dem Agent-Tokenkonto.
 
+## Frühere Chats durchsuchen (seit 2026-10-28)
+
+`search_chats` (`agent_chat_search.py`, `ChatSearch`) gibt der Agent in
+eigenen Account-Turns (`account_budget_only`), in jedem Modus. Mit `query`
+sucht es in den bis zu 200 Chats des Kontos (`SEARCH_CHATS`, nach
+`updated_at`) in Titel, Startdatum (`YYYY-MM-DD`) und letzter Frage (jedes Wort
+muss vorkommen, Groß-/Kleinschreibung egal) und nennt höchstens 10
+(`RESULTS`) mit Titel, Start, Zahl der Nachrichten, erster und letzter Frage
+(je 300 Zeichen); leer listet es die neuesten. Mit `chat_id` aus einem
+Treffer liefert es die Fragen und Antworten dieses Chats (die ersten 40
+Nachrichten, je Antwort 4.000, zusammen 24.000 Zeichen, sonst `more`). Der
+aktuelle Chat fehlt (er steht schon im Kontext), ebenso gelöschte Chats und
+**Chats mit Google-Daten**: Deren Inhalt ist nur für ihren Chat freigegeben
+und geroutet (`google_data` am Chat), er wandert nicht in einen anderen. Das
+Ergebnis ist Fremdinhalt wie jedes Werkzeugergebnis (nicht in
+`MEMORY_KEEPING_TOOLS`): Memory sperrt danach oder geht durch die
+Vorab-Prüfung. Kosten: Firestore-Lesungen (bis zu 200 Chat-Dokumente und
+höchstens 10 erste Fragen je Suche, ein Chat mit seinen Nachrichten je
+Öffnen), kein Modellaufruf. Aktivität: „Searched your chats“ mit dem
+Suchtext, „Read an earlier chat“ mit dem Titel (`agent-activity.js`).
+Tests: `tests/test_agent_chat_search.py`.
+
 ## Einstellungen umstellen (seit 2026-10-17)
 
 Sagt der Nutzer „nimm ab jetzt Opus“, „denk gründlicher“ oder „keine

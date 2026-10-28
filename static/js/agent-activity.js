@@ -33,6 +33,8 @@
     import_gmail_attachment: ['Email attachment', 'Importing an email attachment…', 'Imported an email attachment'],
     prepare_gmail_draft: ['Email draft', 'Drafting an email for your review…', 'Email draft ready for review'],
     update_memory: ['Memory', 'Updating memory…', 'Updated memory'],
+    // The user's earlier chats (agent_chat_search.py); one opened says so (stepLabel).
+    search_chats: ['Your chats', 'Searching your chats…', 'Searched your chats'],
     // The agent's own VM (agent_vm_tools.py); each call also shows as a
     // compact block of its own (vmView).
     vm_exec: ['Command', 'Running a command…', 'Ran a command'],
@@ -104,6 +106,9 @@
       return settingsOutcomes[item.outcome];
     }
     if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
+    if (item.name === 'search_chats' && item.opened && ['running', 'succeeded'].includes(item.status)) {
+      return item.status === 'running' ? 'Opening an earlier chat…' : 'Read an earlier chat';
+    }
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
     if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);
     if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
