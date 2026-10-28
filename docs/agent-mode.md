@@ -286,11 +286,16 @@ Der Agent sucht in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS` (5) Runden;
 passt die Reservierung nicht, geht `smaller_search` 5 → 3 → 1 → 0. Sein Text
 streamt wie jede Antwort (`research=False`), auch nach eigenen Suchtreffern.
 Watch, Einstellungen, Dateien, Dokumente, Google und Memory bleiben. Sobald
-ein Schritt eigene Suchtreffer hat (`_searched`), ist Memory für die
-Nachricht gesperrt (`memory_locked`, auch für die Aufrufe desselben
-Schritts), wie nach `read_source`: Seiten könnten sonst `update_memory`
-steuern. Seit 2026-10-27 gilt das auch im Vergleichsmodus. Der Memory-Prompt sagt deshalb „call update_memory first, before you
-search“.
+ein Schritt eigene Suchtreffer hat (`_searched`), ist Fremdinhalt im Blick
+(`outside_in_view`, auch für die Aufrufe desselben Schritts), wie nach
+`read_source`: Seiten könnten sonst `update_memory` steuern. Seit 2026-10-28
+sperrt das Memory im Audit-Modus nicht mehr, solange Prüfer mitlaufen: eine
+Änderung wartet dann wie ein Aufruf mit Außenwirkung auf die Vorab-Prüfung
+(`agent_gate.outward` „memory“, Prüferhinweis `GATE_MEMORY_NOTE`; alle sagen
+go, sonst entscheidet der Nutzer auf der Karte), das Belegzitat bleibt
+Pflicht. Ohne Prüfer (Antwortprüfung aus) und im Vergleichsmodus bleibt die
+Sperre (`memory_locked`). Der Audit-Prompt sagt das als Fakt, nicht mehr
+„call it first … before you search“ (Max: Spielraum statt Mikromanagement).
 
 **Die Vergleichsmodelle prüfen, während der Agent arbeitet.** Ab dem Start
 des Laufs folgt jedes gewählte Vergleichsmodell dem Arbeitsprotokoll
@@ -1834,6 +1839,14 @@ ist. Vorher zählte eine Liste die sperrenden Werkzeuge auf und übersah
 `vm_write_file`, `vm_share_file`, `github_import` und `prepare_pull_request`,
 deren erstes Ergebnis die Notizen des Arbeitsplatzes trägt (Sicherheitsaudit
 2026-10-27). Die eigene Websuche sperrt in jedem Modus (`_searched`).
+Seit 2026-10-28 merkt sich die Schleife nur noch, dass Fremdinhalt im Blick
+ist (`outside_in_view`); `memory_locked` ist daraus abgeleitet und im
+Audit-Modus mit Prüfern falsch: dort geht `update_memory` durch die
+Vorab-Prüfung (`_open_gate`, `_memory_reviewed`), und ein Aufruf, der an ihr
+vorbeikäme, bekommt `MEMORY_LOCKED`. Ein `memory`-Feld an einem anderen
+Werkzeug läuft durch kein Gate und wird nach Fremdinhalt nie angewandt. Die
+Belegpflicht für Einstellungen (`agent_settings.prepare`) hängt an
+`outside_in_view`, ändert sich also nicht.
 `update_memory` antwortet mit `MEMORY_LOCKED`, ein `memory`-Feld an einem
 späteren Vergleich wird nicht angewandt (Aktivität „blocked“,
 `untrusted_context`). Grund: Die Prüfung, dass die Evidenz ein wörtliches
@@ -2872,8 +2885,8 @@ Antwort des Helfers („OK“) wird verworfen.
   `Location`-Header (`resolve_redirect`, ohne Weiterleitung zu folgen, Ziel nach
   denselben Regeln wie zitierte URLs geprüft), dann liest Exa die Zielseite;
   gespeichert werden Ziel (`url`) und Zitat (`cited_url`).
-- Höchstens `READS_PER_MESSAGE` (5) Abrufe je Nachricht (auch gescheiterte
-  zählen), `READS_PER_STEP` (3) je Steuerschritt, `READ_CONTENT_TOKENS` (4.000)
+- Höchstens `READS_PER_MESSAGE` (15, bis 2026-10-28: 5) Abrufe je Nachricht
+  (auch gescheiterte zählen), `READS_PER_STEP` (5, vorher 3) je Steuerschritt, `READ_CONTENT_TOKENS` (4.000)
   je Seite (`max_uses: 1`, `max_content_tokens`); gespeichert bis
   `READ_TEXT_CHARS` (24.000 Zeichen). Eine schon gelesene URL (auch über ihre
   Weiterleitung) liefert `already_read` ohne neuen Abruf, eine gescheiterte wird

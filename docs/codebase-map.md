@@ -4449,8 +4449,11 @@ nur `SIDE_TOOLS` (`update_memory`, `prepare_watch`), bleibt der Text die Antwort
 (`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach einem Batch mit
 einem Ergebnis eines Werkzeugs außerhalb von `MEMORY_KEEPING_TOOLS` (seit 2026-10-27
 jedes, Fehler eingeschlossen; nur vor dem Lauf abgelehnte Aufrufe nicht) und nach
-eigener Websuche in jedem Modus sperrt `memory_locked` jede weitere
-Memory-Änderung der Nachricht (`agent_memory.MEMORY_LOCKED`). Eigene Recherche ohne Vergleich:
+eigener Websuche in jedem Modus gilt Fremdinhalt als im Blick
+(`outside_in_view`): `memory_locked` sperrt dann jede weitere
+Memory-Änderung der Nachricht (`agent_memory.MEMORY_LOCKED`), außer im
+Audit-Modus mit Prüfern, wo `update_memory` seit 2026-10-28 durch die
+Vorab-Prüfung geht (`agent_gate.outward(call, memory_exposed=…)` → „memory“). Eigene Recherche ohne Vergleich:
 `_consensus_search_handoff` (oben), danach hält `_tool_reminder` eine Antwort
 über `DIRECT_REPLY_CHARS` (800) Zeichen einmal zurück (`TOOL_REMINDERS`);
 kürzere Rückfragen stehen sofort, nach der Erinnerung steht auch eine lange
@@ -5693,8 +5696,9 @@ nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
 `agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
-`failed`. Eigene Suchtreffer sperren Memory für die Nachricht
-(`memory_locked`). Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
+`failed`. Eigene Suchtreffer bringen Fremdinhalt in den Blick
+(`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
+Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne sie sperrt `memory_locked`. Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
 `window.renderStoredAuditMarks`; seit 2026-10-27 nennt Notes den Schritt
 eines Befunds zur Arbeit über `App.agentActivity.toolName` („Command“,
@@ -8426,7 +8430,7 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate)
-  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten Aufrufe, die den Arbeitsplatz verlassen (browser open/click/upload/key Enter oder Space/type mit enter, request_domain); solche Aufrufe laufen erst nach dem Go aller Prüfer, eine Domain entscheidet danach immer der Nutzer
+  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten Aufrufe, die den Arbeitsplatz verlassen (browser open/click/upload/key Enter oder Space/type mit enter, request_domain); solche Aufrufe laufen erst nach dem Go aller Prüfer, eine Domain entscheidet danach immer der Nutzer; seit 2026-10-28 auch update_memory, sobald Fremdinhalt im Blick ist (memory_exposed)
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
   agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/click/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/wait) auf der Browser-VM über workspace_vm/browser/browser.py mit JSON auf stdin; Adressen nur http(s) und öffentlich, Upload einer Werkbank-Datei für einen Aufruf, Screenshot als Bild, Ausfall kostet nur dieses Werkzeug
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (exists/ensure(rules)/set_policy/run mit stdin/exec/exec_url/read_file/write_file/delete_path, die Dateien mit agent=True als Agenten-Nutzer, delete_service/checkpoint/restore/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets, Handshake einmal wiederholt); WORKBENCH_RULES (Paketquellen) und BROWSER_RULES (offenes Web ohne Fly-intern), agent_argv/wrapped_command (Agenten-Befehle über agent-run), workspace_name und browser_name je Konto, chat_dir je Chat (vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner als Agent und am alten Ort, alte VM über vm_name), delete_workspace (beide VMs) und restore_workspace; ein Anbieterwechsel betrifft nur diese Datei

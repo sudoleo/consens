@@ -285,3 +285,62 @@ def test_a_request_the_tool_refuses_needs_no_card(store):
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     events = list(loop.run())
     assert not [e for e in events if e.get("type") == "hold"]
+
+
+# --- A memory change with outside content in view (since 2026-10-28) ------------------
+
+def test_a_memory_change_waits_only_once_outside_content_is_in_view():
+    change = call("update_memory", changes=[{"op": "add", "text": "Likes towers.", "evidence": "I like towers"}])
+    assert outward(change) is None
+    assert outward(change, memory_exposed=True) == "memory"
+    assert outward(call("read_settings"), memory_exposed=True) is None
+
+
+MEMORY_TEXT = "Is planning a trip to the Eiffel Tower."
+MEMORY_CHANGE = {"op": "add", "text": MEMORY_TEXT, "evidence": "Tell me about the Eiffel Tower"}
+
+
+def remembering(store, *, live, judges="on"):
+    """An audit turn whose first step searched (every scripted step does) and
+    saves a memory with it, so outside content is in view for the change."""
+    from test_agent_memory import repo, set_profile
+    set_profile(store.db, auto_memory=True)
+    script = Audit(tool_steps=1, step_tools={0: "update_memory"}, step_args={0: {"changes": [MEMORY_CHANGE]}},
+                   live=live)
+    loop = audit_loop(store, script, judges=judges, memory=repo(store).snapshot(UID))
+    return script, loop, lambda: [item["text"] for item in repo(store).get(UID)[0]]
+
+
+def test_a_memory_change_after_the_agents_search_runs_on_every_reviewers_go(store):
+    """Max, 2026-10-28: no lock after outside content in audit mode; the
+    reviewers check the change like an outward call. The evidence rule stays."""
+    script, loop, memories = remembering(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
+    events = list(loop.run())
+    assert memories() == [MEMORY_TEXT]
+    assert not [e for e in events if e.get("type") == "hold"]
+    gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
+    assert agent_audit.GATE_MEMORY_NOTE in gate_round["content"]
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_halted_memory_change_never_runs_when_the_user_writes_instead(store):
+    script, loop, memories = remembering(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", halt))
+    waiter = decide_when_held(loop, store, "steer", "Do not remember that.")
+    events = list(loop.run())
+    waiter.join(5)
+    holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
+    assert len(holds) == 1 and holds[0]["gate"] is True
+    assert memories() == []
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert results == [{"error": agent_delegation.HOLD_STEERED}]
+
+
+def test_without_reviewers_memory_still_locks_after_outside_content(store):
+    from app.services.agent_memory import MEMORY_LOCKED
+    script, loop, memories = remembering(store, live={}, judges="off")
+    list(loop.run())
+    assert loop.memory_locked is True and memories() == []
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert MEMORY_LOCKED in json.dumps(results)

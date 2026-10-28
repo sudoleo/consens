@@ -537,7 +537,7 @@ def test_a_named_model_counts_as_in_place_only_when_new_chats_use_it_too(store, 
 def test_after_outside_content_only_the_users_own_words_carry_a_change(store):
     loop = settings_loop(store, question="Nimm die offenen Modelle. Und wie hoch ist der Eiffelturm?",
                          preferences=AgentPreferences())
-    loop.memory_locked = True  # a comparison or page came back in this message
+    loop.outside_in_view = True  # a comparison or page came back in this message
     with pytest.raises(ValueError, match="needs evidence: an exact quote of the user's own words"):
         prepare(loop, comparison_lineup="balanced")
     with pytest.raises(ValueError, match="needs evidence"):

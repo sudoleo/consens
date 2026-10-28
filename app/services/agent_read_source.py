@@ -50,10 +50,12 @@ from app.services.source_catalog import canonical_source_url
 
 ENABLED_ENV = "AGENT_READ_SOURCES"
 # Pages per message and per routing step. Every later routing step re-sends
-# what was read, so reading stays rare: the prompt asks for the one or two
-# pages that decide a point.
-READS_PER_MESSAGE = 5
-READS_PER_STEP = 3
+# what was read (from the prompt cache). Since 2026-10-28 fifteen instead of
+# five: the agent decides itself how much it reads (Max), five cut thorough
+# research short; five at once instead of three, so reading them takes fewer
+# steps that each re-send the conversation.
+READS_PER_MESSAGE = 15
+READS_PER_STEP = 5
 # Exa cuts a page at about this many tokens (max_content_tokens); a 15-page
 # PDF arrived as 15,900 characters at 4,000 tokens.
 READ_CONTENT_TOKENS = 4000

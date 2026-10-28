@@ -345,8 +345,11 @@ class DelegationLoop(AgentLoop):
         self.closed = threading.Event()
         self.watch_error = None
         self.search_handoff = False
-        # Set after a batch in which a MEMORY_LOCKING_TOOLS call returned.
-        self.memory_locked = False
+        # Set once outside content is in view (_lock_memory): after the step's
+        # own web search or a batch with a result of a tool not in
+        # MEMORY_KEEPING_TOOLS. Memory then locks (memory_locked), unless
+        # reviewers check each change first (_memory_reviewed).
+        self.outside_in_view = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
         # Per-turn guards of account mode (see TURN_WRAP_UP_SECONDS); the
@@ -1074,8 +1077,9 @@ class DelegationLoop(AgentLoop):
             # leaves the declared passage out).
             memory_result = None
             if (registry is self.registry and getattr(args, "memory", None) and tool.name != "update_memory"
-                    and self.memory_locked):
-                # Decided with outside content in view: never applied.
+                    and self.outside_in_view):
+                # Decided with outside content in view: never applied (riding
+                # along, it passes no reviewer's gate).
                 from app.services.agent_memory import MEMORY_LOCKED
                 memory_result = {"error": MEMORY_LOCKED}
                 self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}:memory", "update_memory",
@@ -1800,7 +1804,9 @@ class DelegationLoop(AgentLoop):
         if auditor is None or not auditor.sessions or not getattr(value, "tool_calls", None):
             return None
         from app.services.agent_gate import outward
-        calls = [call for call in value.tool_calls if outward(call)]
+        # The step's own search counts already: it came back with the step.
+        exposed = self.outside_in_view or _searched(value)
+        calls = [call for call in value.tool_calls if outward(call, memory_exposed=exposed)]
         return auditor.open_gate(calls) if calls else None
 
     def _gate_wait(self, gate):
@@ -2259,10 +2265,24 @@ class DelegationLoop(AgentLoop):
         return False
 
     def _lock_memory(self, reason, step):
-        """Outside content is in view: memory can no longer change this message."""
-        if not self.memory_locked and self.work_log is not None:
+        """Outside content is in view: memory can no longer change this
+        message, or in audit mode only through the reviewers' gate."""
+        if not self.outside_in_view and self.work_log is not None:
             self.work_log.app("memory_locked", reason, step=step)
-        self.memory_locked = True
+        self.outside_in_view = True
+
+    def _memory_reviewed(self):
+        """Reviewers follow the work (audit mode, answer check on): a memory
+        change with outside content in view waits for them like an outward
+        call (_open_gate), instead of being refused (Max, 2026-10-28)."""
+        auditor = self.comparison.auditor if self.comparison is not None else None
+        return bool(auditor is not None and auditor.sessions)
+
+    @property
+    def memory_locked(self):
+        """Memory refuses every change in this message: outside content is in
+        view and no reviewer checks a change before it runs."""
+        return self.outside_in_view and not self._memory_reviewed()
 
     def _research_unchecked(self):
         """The agent searched the web for this message and has neither
@@ -2607,6 +2627,19 @@ class DelegationLoop(AgentLoop):
                                 steered = True
                                 results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
                                                        "content": json.dumps({"error": HOLD_STEERED})}
+                                continue
+                            elif name == "update_memory" and self.outside_in_view and self._memory_reviewed() \
+                                    and (gate is None or call["id"] not in gate.call_ids):
+                                # With outside content in view a change runs
+                                # only past the reviewers' gate (_open_gate);
+                                # without reviewers MemoryTools refuses it.
+                                from app.services.agent_memory import MEMORY_LOCKED
+                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
+                                                       "content": json.dumps({"error": MEMORY_LOCKED})}
+                                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", "update_memory",
+                                                                         "blocked", text=MEMORY_LOCKED,
+                                                                         reason="untrusted_context"))
+                                last_accepted = False
                                 continue
                             result = yield from self._execute_stream(value, call)
                             results[call["id"]] = result

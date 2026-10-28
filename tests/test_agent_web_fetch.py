@@ -612,11 +612,14 @@ def test_cited_spelling_variants_and_a_second_read_fetch_once(store, monkeypatch
     assert len(calls) == 1 and len(saved["agent_review"]["read_sources"]) == 1
 
 
-def test_at_most_five_reads_per_message_and_three_per_step(store, monkeypatch, enabled):
+def test_reads_stop_at_the_message_and_step_limits(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
     urls = [f"https://example.org/page-{i}" for i in range(READS_PER_MESSAGE + 2)]
+    # One read too many in the first step, then full steps up to the limit.
+    rest = urls[READS_PER_STEP + 1:READS_PER_MESSAGE + 1]
     steps = [[compare()], [read_call(u) for u in urls[:READS_PER_STEP + 1]],
-             [read_call(u) for u in urls[READS_PER_STEP + 1:READS_PER_MESSAGE + 1]], [read_call(urls[-1])]]
+             *[[read_call(u) for u in rest[i:i + READS_PER_STEP]] for i in range(0, len(rest), READS_PER_STEP)],
+             [read_call(urls[-1])]]
     loop, _, saved = run(store, Plan(steps=steps, cited=urls))
     outcome = [r["reason"] if r["status"] == "refused" else r["status"] for r in results(loop)]
     assert outcome[:READS_PER_STEP] == ["completed"] * READS_PER_STEP

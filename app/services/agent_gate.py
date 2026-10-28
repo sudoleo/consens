@@ -13,6 +13,10 @@ are not on it since the workbench's network is closed (security audit
 2026-10-27, agent_domains.py): until the user allowed a domain, a command
 reaches nothing but the package registries, whatever it says. Before, a
 list of patterns guessed which commands talked to the network.
+
+A memory change (update_memory) joins them once outside content is in view
+(since 2026-10-28): it acts on later chats, and a page could have suggested
+it. Before, memory simply locked for the rest of the message.
 """
 from __future__ import annotations
 
@@ -33,12 +37,17 @@ def _arguments(call):
     return args if isinstance(args, dict) else {}
 
 
-def outward(call):
-    """Why ``call`` acts outside the workspace ("browser", "domain"), or None
-    for a call that stays inside it."""
+def outward(call, *, memory_exposed=False):
+    """Why ``call`` waits for the reviewers ("browser", "domain", "memory"),
+    or None for a call that stays inside the workspace. ``memory_exposed``:
+    outside content is in view (DelegationLoop.outside_in_view), so a memory
+    change may come from a page rather than the user (since 2026-10-28 it
+    waits for the reviewers instead of being refused)."""
     name = ((call or {}).get("function") or {}).get("name")
     if name == "request_domain":
         return "domain"
+    if name == "update_memory":
+        return "memory" if memory_exposed else None
     if name != "browser":
         return None
     args = _arguments(call)

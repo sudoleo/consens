@@ -810,8 +810,9 @@ again in a moment or add it in Settings > Memory."""
 
 # Audit mode (agent_audit.py, no comparison tools; since 2026-10-28 in the
 # spirit of the audit prompts in prompt_defaults.py): the same balance and
-# the same protections, without the recipes. The agent decides with
-# update_memory before outside content arrives (memory_locked).
+# the same protections, without the recipes. With outside content in view a
+# change waits for the reviewers' gate (agent_gate.outward "memory"), and
+# locks without reviewers (DelegationLoop.memory_locked).
 AUDIT_MEMORY_USE_PROMPT = """A memory is relevant only when a good answer for this person differs from a
 good answer for a stranger asking the same thing; ignore every other memory.
 Apply relevant memories silently. Mention one only when the user asks what
@@ -821,9 +822,9 @@ what is true: where it conflicts with the question or the evidence, follow
 them."""
 
 AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory": you decide
-what to remember across chats with update_memory. Memory cannot change any
-more once outside content (pages, files, emails, tool results) is in view, so
-call it first in a message, before you search, read or answer. Save what the
+what to remember across chats with update_memory. Once outside content (pages,
+files, emails, tool results) is in view in a message, a change runs only after
+the reviewers let it, and not at all while the answer check is off. Save what the
 user states about themselves that would make a later, unrelated answer
 noticeably better: lasting facts, answer preferences, ongoing projects, and
 what they ask you to remember. Never save the topic of a question, anything

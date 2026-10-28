@@ -259,8 +259,9 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
     assert review["audit"]["process"] == []
     # An answer written in one step: only the final round, no live round.
     assert script.rounds == {"anthropic": ["final"], "openai": ["final"]}
-    # The agent's own search put pages in view: memory is locked for the turn.
-    assert loop.memory_locked is True
+    # The agent's own search put pages in view; with reviewers a memory change
+    # waits for their gate instead of being refused (test_agent_gate).
+    assert loop.outside_in_view is True and loop.memory_locked is False
     # A reviewer's session saves what it reads, not a copy of it.
     sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
     assert len(sessions) == 2
@@ -755,9 +756,12 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
     from app.services.agent_read_source import READS_PER_MESSAGE
     assert prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE) in system
     # Since 2026-10-28 the audit blocks name no comparison at all (no limit,
-    # no memory field, no free-mode text), and memory is decided first.
+    # no memory field, no free-mode text), and memory changes pass the
+    # reviewers once outside content is in view instead of coming first.
     assert "comparison" not in system.lower() and "compare_models" not in system
-    assert agent_memory.AUDIT_MEMORY_WRITE_PROMPT in system and "call it first" in system and "FREE" not in system
+    assert agent_memory.AUDIT_MEMORY_WRITE_PROMPT in system and "FREE" not in system
+    assert "only after the reviewers let it" in " ".join(system.split()) and "call it first" not in system
+    assert "agent mode with audit" in system and "quotation marks" not in system
     names = set(loop.registry.tools)
     assert {"read_source", "update_memory"} <= names and not {"compare_models", "check_text"} & names
     assert "Call it first" in loop.registry.tools["update_memory"].description
