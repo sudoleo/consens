@@ -378,6 +378,23 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('offers only another model when the chat model declined the request', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_u, _p, _s, handlers) => {
+      handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'c'.repeat(32) });
+      return { ok: false, status: 200, streamed: true, data: { error: 'This chat model declined to answer this request. Another chat model may answer it.',
+        code: 'model_declined', recoverable: false } };
+    });
+    d.getElementById('questionInput').value = 'Check your sandbox';
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    // The same message meets the same filter again: no Retry.
+    expect([...d.querySelectorAll('#agentAnswerErrorActions button')].map(b => b.textContent)).toEqual(['Choose another model']);
+    dom.window.close();
+  });
+
   // Review B2: a follow-up replaces the live surface by a fresh copy
   // (liveTurn.take). Its buttons acted only on the first copy.
   it('runs Retry and "Choose another model" from a fresh copy of the live surface', async () => {

@@ -17,13 +17,14 @@ import pytest
 from app.services import agent_delegation
 from app.services.agent_comparison import AgentPreferences, review_is_bound
 from app.services.agent_delegation import TURN_TIME_LIMIT, TURN_WRAP_UP_SECONDS
+from app.core.observability import provider_diagnostic
 from app.services.agent_provider_limits import (
-    TURN_OUTPUT_LIMIT, ModelEmptyAnswer, ModelOutputLimit, ProviderCooldowns, agent_failure,
+    TURN_OUTPUT_LIMIT, ModelDeclined, ModelEmptyAnswer, ModelOutputLimit, ProviderCooldowns, agent_failure,
 )
 from app.services.llm.agent_client import (
     ANSWER_OUTPUT_CEILING, ANSWER_REASONING_HEADROOM, REASONING_STORAGE_CHARS, ROUTING_REASONING_HEADROOM,
-    AgentCompletion, AgentModel, answer_output_limit, lighter_reasoning, measured_usage, reasoning_active,
-    routing_output_limit,
+    AgentCompletion, AgentModel, AgentStreamIncomplete, answer_output_limit, lighter_reasoning, measured_usage,
+    reasoning_active, routing_output_limit,
 )
 from app.services.llm.engines import _ProviderHTTPStatusError
 from test_agent_chat_integrity import chat_loop
@@ -116,9 +117,41 @@ def test_a_model_that_thought_and_stopped_without_writing_is_an_output_limit(mon
 
 
 def test_an_empty_stop_without_any_reasoning_stays_a_provider_error(monkeypatch):
-    value, _, error = _stream(monkeypatch, [packet({}, finish="stop", usage={"prompt_tokens": 50, "completion_tokens": 0})])
-    assert type(error) is RuntimeError and not value.output_limited
+    stop = packet({}, finish="stop", usage={"prompt_tokens": 50, "completion_tokens": 0})
+    stop["choices"][0]["native_finish_reason"] = "end_turn"
+    value, _, error = _stream(monkeypatch, [stop])
+    assert isinstance(error, AgentStreamIncomplete) and not value.output_limited
     assert agent_failure(error)["code"] == "provider_error"
+    # The log says how the stream ended, in words a log may carry.
+    assert error.safe_diagnostic == "finish=stop native=end-turn text=0 tool_parts=0 output_tokens=0"
+    assert provider_diagnostic(error) == error.safe_diagnostic
+
+
+def _declined(native=None, finish="stop", delta=None):
+    stop = packet(delta or {}, finish=finish, usage={"prompt_tokens": 0, "completion_tokens": 0})
+    if native:
+        stop["choices"][0]["native_finish_reason"] = native
+    return [stop]
+
+
+@pytest.mark.parametrize("packets", [_declined("refusal"), _declined("SAFETY"), _declined(finish="content_filter"),
+                                     _declined(delta={"refusal": "I can't help with that."})])
+def test_a_safety_stop_without_a_word_is_declined_and_not_retried(monkeypatch, packets):
+    # 2026-10-28: Claude on Vertex stopped every attempt of one chat at once
+    # with 0 tokens; "try again" met the same filter each time.
+    _, _, error = _stream(monkeypatch, packets)
+    assert isinstance(error, ModelDeclined)
+    failure = agent_failure(error)
+    assert failure["code"] == "model_declined" and "Another chat model" in failure["error"]
+    assert not agent_delegation._passing_failure(error)
+
+
+def test_a_refusal_reason_after_a_written_answer_keeps_the_answer(monkeypatch):
+    stop = packet({"content": "Here is what I can say."}, finish="stop",
+                  usage={"prompt_tokens": 50, "completion_tokens": 9})
+    stop["choices"][0]["native_finish_reason"] = "refusal"
+    value, _, error = _stream(monkeypatch, [stop])
+    assert error is None and value.text == "Here is what I can say."
 
 
 def test_reasoning_past_the_stored_bound_still_streams_but_is_not_stored(monkeypatch):

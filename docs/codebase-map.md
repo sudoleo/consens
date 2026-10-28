@@ -5095,6 +5095,16 @@ würden, eigene Codes statt `provider_error` („Trying again … usually works�
 (`agent_runs.ConversationTooLong`), `file_unavailable` und `google_error`
 (die eigenen, nutzerlesbaren Texte von `FileUnavailable`/`GoogleError`).
 `agent-chat.js::failureNotice` bietet bei diesen drei ersten kein „Retry“ an.
+Seit 2026-10-28 kommt `model_declined` dazu (`ModelDeclined`): Endet ein Stream
+ohne Wort und Werkzeugaufruf mit einem Sicherheitsfilter des Anbieters
+(`finish_reason` `content_filter`, `native_finish_reason` aus
+`agent_client.DECLINED_NATIVE_REASONS` wie Anthropics `refusal`, oder ein
+`refusal`-Text), wird der Schritt nicht wiederholt, und die UI bietet nur
+„Choose another model“. Anlass: Claude auf Vertex hat jeden Versuch eines Chats
+sofort mit 0 Tokens beendet. Jedes andere Ende ohne Antwort ist
+`AgentStreamIncomplete` (weiter `provider_error`, ein Versuch mehr). Dessen
+`safe_diagnostic` (`finish=… native=… text=… tool_parts=… output_tokens=…`)
+steht in den Logzeilen „Agent step broke off“ und „Agent completion failed“.
 Scheitert beim Speichern des Endes einer Vergleichsantwort oder eines
 Seitenlesens (`DelegationLoop._terminal`) Firestore nur kurz
 (`_transient_store_error`, wie bei `_settle_step`), folgt ein Versuch nach

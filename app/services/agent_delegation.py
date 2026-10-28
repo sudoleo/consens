@@ -17,7 +17,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core import config as cfg
-from app.core.observability import safe_exception
+from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
 from app.services.agent_costs import aggregate_usage, fetch_bounds
 from app.services.agent_quota import AgentTokenBudgetExceeded
@@ -2062,8 +2062,8 @@ class DelegationLoop(AgentLoop):
                 raise cause
             step = f"completion:{index}"
         if passing:
-            logging.warning("Agent step broke off, retrying model=%s category=%s retry_in=%s", model.model,
-                            safe_exception(cause), delay)
+            logging.warning("Agent step broke off, retrying model=%s category=%s detail=%s retry_in=%s", model.model,
+                            safe_exception(cause), provider_diagnostic(cause), delay)
             yield self.activity({"step_id": step, "id": "passing_retry", "kind": "progress", "text": PASSING_RETRY_TEXT})
         else:
             logging.warning("Agent step rate limited model=%s retry_in=%s", model.model, delay)

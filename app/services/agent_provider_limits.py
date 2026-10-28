@@ -74,6 +74,16 @@ class ModelEmptyAnswer(ModelOutputLimit):
         super().__init__(message or "The model ended without writing an answer.")
 
 
+class ModelDeclined(RuntimeError):
+    """The provider's own safety filter stopped the answer before a word.
+
+    Sending the same message again meets the same filter (2026-10-28: Claude
+    on Vertex stopped every attempt of one chat at once, 0 tokens), so no
+    retry; another chat model may well answer it."""
+    def __init__(self, message=None):
+        super().__init__(message or "This chat model declined to answer this request. Another chat model may answer it.")
+
+
 # The chat model reasoned through its allowance, also on its lighter retry:
 # the user can change the reasoning level, the app cannot do more by itself.
 TURN_OUTPUT_LIMIT = ("The chat model used its whole output allowance on reasoning before it could finish. "
@@ -109,6 +119,8 @@ def agent_failure(error):
         return {"code": "run_interrupted", "error": str(error)}
     if isinstance(error, (AgentCapacityExceeded, TurnStatusConflict)):
         return {"code": "run_state_conflict", "error": str(error)}
+    if isinstance(error, ModelDeclined):
+        return {"code": "model_declined", "error": str(error)}
     if isinstance(error, ModelEmptyAnswer):
         return {"code": "empty_answer", "error": str(error)}
     if isinstance(error, ModelOutputLimit):

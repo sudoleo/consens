@@ -13,7 +13,7 @@ import uuid
 from app.core import config as cfg
 from app.core.observability import record_metric
 from app.core.openrouter_contract import provider_routing
-from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
+from app.services.agent_provider_limits import ModelDeclined, ModelEmptyAnswer, ModelOutputLimit
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 from app.services.llm import agent_model_metadata
 
@@ -164,6 +164,18 @@ TOOL_INDEX_BOUND = 64
 # name (AgentCompletion._note_shapes).
 _KNOWN_CHUNK_FIELDS = frozenset({"id", "object", "created", "model", "provider", "choices", "usage",
                                  "system_fingerprint", "service_tier", "error"})
+# Provider end reasons of a safety filter (Anthropic "refusal", Gemini "SAFETY").
+DECLINED_NATIVE_REASONS = frozenset({"refusal", "content_filter", "safety", "prohibited_content"})
+
+
+class AgentStreamIncomplete(RuntimeError):
+    """The stream ended without an answer or a completed tool call. Its log
+    detail (safe_diagnostic) says how it ended, never what it said."""
+    def __init__(self, diagnostic):
+        super().__init__("Agent stream ended without a completed answer")
+        self.safe_diagnostic = diagnostic
+
+
 _KNOWN_CHOICE_FIELDS = frozenset({"index", "delta", "finish_reason", "native_finish_reason", "logprobs", "message"})
 _KNOWN_DELTA_FIELDS = frozenset({"role", "content", "reasoning", "reasoning_content", "reasoning_details",
                                  "tool_calls", "annotations", "refusal"})
@@ -683,6 +695,9 @@ class AgentCompletion:
         self._reasoning_text = ""
         # Set when the step ended as ModelOutputLimit (see _output_limited).
         self.output_limited = False
+        # The provider's own end reason and whether it sent a refusal (_declined).
+        self.native_finish_reason = ""
+        self.refusal = False
         # A helper call's own OpenRouter session, and whether no later request
         # re-sends its prompt (DelegationLoop.worker_completion, see stream).
         self.session_id = None
@@ -706,6 +721,20 @@ class AgentCompletion:
                         or ((self.usage or {}).get("reasoning_tokens") or 0) > 0)
         return (self.finish_reason in {"stop", ""} and reasoned
                 and not self._tool_parts and not self.text.strip())
+
+    def _declined(self):
+        """The provider's safety filter ended the step: OpenRouter's
+        content_filter, the provider's own refusal reason or a refusal text."""
+        return (self.refusal or self.finish_reason == "content_filter"
+                or self.native_finish_reason.lower() in DECLINED_NATIVE_REASONS)
+
+    def _end_diagnostic(self):
+        """How a stream without an answer ended, as log detail (never what it said)."""
+        def word(value):
+            return re.sub(r"[^A-Za-z0-9.-]", "-", value)[:40] or "none"
+        return (f"finish={word(self.finish_reason)} native={word(self.native_finish_reason)} "
+                f"text={len(self.text.strip())} tool_parts={len(self._tool_parts)} "
+                f"output_tokens={(self.usage or {}).get('output_tokens')}")
 
     def record_rejection(self, error, model):
         # An HTTP admission rejection never opened an SSE generation, and a
@@ -1182,6 +1211,10 @@ class AgentCompletion:
                         self._annotations((choice.get("message") or {}).get("annotations"), before)
                         if native_searches:
                             self._note_shapes(data, choice, delta)
+                        if delta.get("refusal") or (choice.get("message") or {}).get("refusal"):
+                            self.refusal = True
+                        if isinstance(choice.get("native_finish_reason"), str) and choice["native_finish_reason"]:
+                            self.native_finish_reason = choice["native_finish_reason"][:40]
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
                 # A mark still held at the end ends with the stream: its URLs
@@ -1205,6 +1238,8 @@ class AgentCompletion:
                 if self.skipped_tool_parts:
                     logging.warning("Agent tool call fragments skipped model=%s step=%s count=%s kept=%s",
                                     model.model, self.step_id, self.skipped_tool_parts, len(self.tool_calls or []))
+                if not self.tool_calls and not self.text.strip() and self._declined():
+                    raise ModelDeclined()
                 if not self.tool_calls and self._output_limited():
                     # The whole allowance went into reasoning, or into reasoning
                     # and a tool call cut in half. Not a provider fault: the
@@ -1216,7 +1251,7 @@ class AgentCompletion:
                            else ModelEmptyAnswer())
                 if not self.tool_calls and (self._tool_parts or self.finish_reason not in {"stop", "length"}
                                             or not self.text.strip()):
-                    raise RuntimeError("Agent stream ended without a completed answer")
+                    raise AgentStreamIncomplete(self._end_diagnostic())
             finally:
                 lines.close()
                 # Also the partial text of a stream that broke off.

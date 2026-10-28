@@ -20,7 +20,7 @@
   // provider's own error text never reaches the page (see provider_failure).
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
     provider_unavailable: 'the model was unavailable at its provider', provider_access: 'the provider declined the request',
-    provider_rejected: 'the provider rejected the request',
+    provider_rejected: 'the provider rejected the request', model_declined: 'the model declined the request',
     output_limit: 'it used its whole output allowance before finishing',
     empty_answer: 'it stopped twice without writing an answer',
     late_cutoff: 'it was still writing when the answer was finished', stopped: 'the run was stopped' };

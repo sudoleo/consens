@@ -268,6 +268,7 @@ COMPARISON_FAILURES = {
     "provider_unavailable": "The model is unavailable at its provider right now.",
     "provider_access": "The provider declined the request.",
     "provider_rejected": "The provider rejected the request.",
+    "model_declined": "The model declined the request.",
     "provider_error": "The provider did not finish this answer.",
     # Cut when the answer is fixed (finish_comparisons), before any check.
     "late_cutoff": "It was still writing when the answer was finished.",

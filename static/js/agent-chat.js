@@ -708,10 +708,10 @@
     // Any other stop (provider busy, timeout, lost connection) can be sent
     // again as it was; a busy model can also be swapped first. A refusal of
     // the request itself (agent_provider_limits) would fail again unchanged.
-    const repeats = ['conversation_too_long', 'file_unavailable', 'provider_rejected'].includes(code);
+    const repeats = ['conversation_too_long', 'file_unavailable', 'provider_rejected', 'model_declined'].includes(code);
     const actions = retry && !repeats ? [['retry', 'Retry']] : [];
     // A refused request names the way out itself: another chat model.
-    if (['provider_rate_limited', 'provider_unavailable', 'provider_rejected'].includes(code)) actions.push(['choose-model', 'Choose another model']);
+    if (['provider_rate_limited', 'provider_unavailable', 'provider_rejected', 'model_declined'].includes(code)) actions.push(['choose-model', 'Choose another model']);
     return { text: note ?? (failure?.error || failure?.message || ''), actions };
   }
   // A brand-new chat has no files or actions until the run reports resources
