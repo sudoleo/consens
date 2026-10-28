@@ -5858,7 +5858,10 @@ leben oder `browser.py` `--restart` verlangt (`--keep` startet nur, beendet nie)
 `browser.py` verbindet nach einem Neustart erneut, beendet jede Aktion nach
 `CALL_LIMIT` über einen Wächter (Antwort `failed`, Neustart), `open` liefert eine
 noch ladende Seite; `relay.py` hält Chrome bei offener Live-Ansicht am Leben
-(`keep_chrome`). Details `docs/agent-mode.md`, „Browser-VM“.
+(`keep_chrome`). Seit 2026-10-29 hält jeder Aufruf die Browser-VM 10 min wach
+(`browser.stay_awake`, ablaufender Hold der Sprites-Tasks-API): eingeschlafen
+verlor Chrome zwischen zwei Schritten jede Live-Verbindung. Details
+`docs/agent-mode.md`, „Browser-VM“.
 Während der Übernahme pausiert der Agent ganz: `control` im Konto-Dokument
 lässt jeden Aufruf warten (`VMSession.wait_for_user`, höchstens 120 s, dann
 `VM_USER_HAS_BROWSER`), `browser.py` handelt nicht, und

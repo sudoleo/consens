@@ -235,11 +235,36 @@ def test_the_takeover_expires_unless_the_view_refreshes_it(tmp_path, monkeypatch
     assert browser.user_control() is False
 
 
-def run_helper(browser, monkeypatch, capsys, request):
+def run_helper(browser, monkeypatch, capsys, request, awake=None):
     import io
     monkeypatch.setattr(browser.sys, "stdin", type("In", (), {"buffer": io.BytesIO(json.dumps(request).encode())})())
+    monkeypatch.setattr(browser, "stay_awake", lambda: (awake if awake is not None else []).append(True))
     assert browser.main() == 0
     return json.loads(capsys.readouterr().out)
+
+
+def test_every_call_holds_the_browser_vm_awake_for_ten_minutes(monkeypatch, capsys):
+    """Measured 2026-10-29: without a command the VM froze 46 of 60 seconds,
+    and a game on foony.com went offline between two of the agent's moves.
+    Each call, also a refused one, renews an expiring Tasks API hold (like
+    agent_vm_processes); with it the test VM stayed awake through 60 idle
+    seconds."""
+    browser = load("browser")
+    awake = []
+    assert run_helper(browser, monkeypatch, capsys, {"action": "rm -rf /"}, awake)["status"] == "refused"
+    assert awake == [True]
+    fresh, ran = load("browser"), []
+    monkeypatch.setattr(fresh.subprocess, "run", lambda argv, **kwargs: ran.append(argv))
+    fresh.stay_awake()
+    [argv] = ran
+    assert argv[:5] == ["curl", "-s", "--max-time", "5", "--unix-socket"] and argv[5] == "/.sprite/api.sock"
+    assert f"http://sprite/v1/tasks/{fresh.AWAKE_TASK}" in argv and json.loads(argv[-1]) == {"expire": "10m"}
+
+    def unreachable(argv, **kwargs):
+        raise OSError("no curl")
+    # No hold API reachable (a test machine): the call answers all the same.
+    monkeypatch.setattr(fresh.subprocess, "run", unreachable)
+    fresh.stay_awake()
 
 
 def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_has_it(tmp_path, monkeypatch, capsys):

@@ -30,6 +30,15 @@ that does not finish within CALL_LIMIT ends with "failed" and restarts
 Chrome (display.sh --restart, tabs and sign-ins stay), a connection that
 does not come about restarts it once and tries again, and open returns a
 page that answered but is still loading instead of failing.
+
+Awake between the agent's steps (since 2026-10-29): the VM pauses after a
+few idle seconds (measured: 46 of 60 seconds frozen without a command), and a
+paused Chrome loses every live connection of its pages; a game on foony.com
+went "offline" between two moves, and so do consens.io's live updates. Each
+call therefore holds the VM awake for AWAKE_FOR after it, through the Sprites
+Tasks API like the workbench's background processes (agent_vm_processes): an
+expiring hold, renewed by the next call, gone by itself after the last one.
+The live view keeps it awake anyway (its exec session).
 """
 import base64
 import json
@@ -70,6 +79,10 @@ CONNECT_SECONDS = 15
 RESTART_SECONDS = 30
 OPEN_SECONDS = 30
 LOADED_SECONDS = 10
+# The Tasks API hold that keeps the VM awake after a call (stay_awake).
+AWAKE_TASK = "consens-browser-awake"
+AWAKE_FOR = "10m"
+API_SOCKET = "/.sprite/api.sock"
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
 ACTIONS = {"open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
@@ -304,6 +317,18 @@ def ensure_browser():
         raise RuntimeError("The browser did not start: " + (started.stderr.strip() or "no reason given"))
 
 
+def stay_awake():
+    """The VM awake for AWAKE_FOR from now (an expiring Tasks API hold; the
+    next call renews it). A failure only costs the hold."""
+    try:
+        subprocess.run(["curl", "-s", "--max-time", "5", "--unix-socket", API_SOCKET,
+                        "-H", "Content-Type: application/json", "-X", "PUT",
+                        f"http://sprite/v1/tasks/{AWAKE_TASK}", "-d", json.dumps({"expire": AWAKE_FOR})],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+    except Exception:
+        pass
+
+
 def restart_browser():
     """Chrome anew, its profile and tabs kept (display.sh --restart)."""
     started = subprocess.run(["bash", os.path.join(HERE, "display.sh"), "--restart"], capture_output=True, text=True,
@@ -356,6 +381,7 @@ def watchdog(seconds):
             said = "it was restarted with its tabs and sign-ins"
         except Exception:
             said = "the next call starts it again"
+        stay_awake()
         sys.stdout.write(json.dumps({"status": "failed", "text": (
             f"The browser did not answer within {seconds} s; {said}. Read the page again, or open it anew.")}))
         sys.stdout.flush()
@@ -853,6 +879,7 @@ def main():
         answer = {"status": "failed", "text": message[:400]}
     if _timer is not None:
         _timer.cancel()
+    stay_awake()
     if not answer_once(answer):
         # The watchdog answered: it ends the process once Chrome restarted.
         _watchdog_done.wait(RESTART_SECONDS + 10)
