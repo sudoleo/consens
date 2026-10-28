@@ -7317,8 +7317,16 @@ Solange ein sendbarer Anhang vorliegt, schließt der Client DeepSeek sowohl im
 sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out aus.
 Base64 wird anhand der kodierten Länge **vor** dem Dekodieren begrenzt. DOCX
 akzeptiert nur sichere Word-Pfade und höchstens 256 ZIP-Einträge; Einzeldatei,
-Gesamtexpansion und Kompressionsverhältnis besitzen feste Budgets. `document.xml`
-wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen.
+Gesamtexpansion und Kompressionsverhältnis besitzen feste Budgets. Der
+DOCX-Text (`extract_docx_text`) läuft wie PDF im Wegwerf-Subprozess (Modus
+`docx-text`): `document.xml` wird nur bis zum Budget expandiert und von
+`agent_file_extract.parse_xml` gelesen, einem stdlib-expat, dessen Handler
+jede DTD, Entity-Deklaration und externe Entity ablehnen, in jeder Kodierung.
+Das Ergebnis gilt pro Dateiinhalt (sha256, 32 Einträge, Fehlschläge nicht):
+die Familien-Requests eines Compare-Laufs extrahieren einmal, die übrigen
+warten darauf. Bis 2026-10-28 lief er im Webprozess pro Familien-Request,
+hinter einer Bytesuche nach `<!doctype`/`<!entity`, die UTF-16 übersah
+(Sicherheitsaudit; ein OOM beendete alle laufenden Agent-Turns).
 
 ### Ein Tokenkonto für alle Modi (seit 2026-10-01)
 
@@ -10752,7 +10760,8 @@ Adressraum; höchstens 80 PDF-Seiten, 120 Auszüge / 120.000 Zeichen. DOCX-Tabel
 behalten Zellreihenfolge, Textdateien Zeilenbereiche und PDFs Seitennummern.
 Scans ohne Text bleiben ausdrücklich als unvollständig erkennbar. Kein OCR.
 `run_isolated` ist der gemeinsame Einstieg; klassische Consensus-Anhänge nutzen
-ihn im Modus `pdf-text` (siehe Attachments).
+ihn in den Modi `pdf-text` und `docx-text` (siehe Attachments). Word-XML liest
+überall `parse_xml` (expat ohne DTD und Entities).
 `FileContext` ergänzt `read_file`, gezielte Auszüge und native Bilder bei
 expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
 Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur

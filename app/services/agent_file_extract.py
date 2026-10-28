@@ -15,6 +15,9 @@ MAX_PDF_PAGES = 80
 # Mode for regular (non-agent) consensus attachments: plain page text up to
 # a character budget, read page by page and stopped as soon as it is reached.
 PDF_TEXT_MODE = "pdf-text"
+# The same for Word attachments: paragraph text up to a character budget.
+DOCX_TEXT_MODE = "docx-text"
+WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 PROCESS_TIMEOUT_SECONDS = 15
 MAX_RESPONSE_BYTES = 800_000
 SAFETY_LIMIT_WARNING = "Processing exceeded its safety limits. Provide a smaller file or extracted text."
@@ -86,6 +89,65 @@ def extract_pdf_text(raw, max_chars):
     return {"status": "ready" if combined else "empty", "text": combined, "warnings": warnings}
 
 
+def _refuse_declaration(*_args):
+    raise ValueError("XML declarations are not allowed.")
+
+
+def _element_name(name):
+    # expat reports "uri}local" with this separator; ElementTree writes "{uri}local".
+    return "{" + name if "}" in name else name
+
+
+def parse_xml(data):
+    """An ElementTree root from stdlib expat that refuses every DTD.
+
+    The parser itself rejects a document type declaration, entity
+    declarations and external entity references, in whatever encoding the
+    document declares. Until 2026-10-28 a byte search for "<!doctype" and
+    "<!entity" ran first: a UTF-16 document passed it, and expat expanded its
+    entities (audit)."""
+    from xml.parsers import expat
+    builder = ET.TreeBuilder()
+    parser = expat.ParserCreate(namespace_separator="}")
+    parser.buffer_text = True
+    parser.StartDoctypeDeclHandler = _refuse_declaration
+    parser.EntityDeclHandler = _refuse_declaration
+    parser.UnparsedEntityDeclHandler = _refuse_declaration
+    parser.ExternalEntityRefHandler = _refuse_declaration
+    parser.StartElementHandler = lambda name, attrs: builder.start(
+        _element_name(name), {_element_name(key): value for key, value in attrs.items()})
+    parser.EndElementHandler = lambda name: builder.end(_element_name(name))
+    parser.CharacterDataHandler = builder.data
+    parser.Parse(data, True)
+    return builder.close()
+
+
+def _document_xml(raw):
+    """word/document.xml of a validated archive, read no further than its budget."""
+    from app.services.llm.attachments import MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES, _validate_docx_archive
+    info = _validate_docx_archive(raw)
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive, archive.open(info) as source:
+        xml = source.read(MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES + 1)
+    if len(xml) > MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES:
+        raise ValueError("document.xml expansion exceeds budget")
+    return xml
+
+
+def extract_docx_text(raw, max_chars):
+    """Paragraph text of a Word document, stopping once ``max_chars`` is reached."""
+    paragraphs, total = [], 0
+    for paragraph in parse_xml(_document_xml(raw)).iter(f"{WORD_NS}p"):
+        text = "".join(node.text for node in paragraph.iter(f"{WORD_NS}t") if node.text)
+        if not text:
+            continue
+        paragraphs.append(text)
+        total += len(text)
+        if total >= max_chars:
+            break
+    combined = "\n".join(paragraphs).strip()[:max_chars]
+    return {"status": "ready" if combined else "empty", "text": combined, "warnings": []}
+
+
 def extract(raw, mime):
     parts, warnings = [], []
     remaining = MAX_CHARS
@@ -130,14 +192,8 @@ def extract(raw, mime):
         if empty:
             warnings.append(scanned_pages_warning(empty))
     elif mime.endswith("wordprocessingml.document"):
-        from app.services.llm.attachments import _validate_docx_archive
-        _validate_docx_archive(raw)
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            xml = archive.read("word/document.xml")
-        if b"<!doctype" in xml.lower() or b"<!entity" in xml.lower():
-            raise ValueError("XML entities are not allowed.")
-        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-        body = ET.fromstring(xml).find(f"{ns}body")
+        ns = WORD_NS
+        body = parse_xml(_document_xml(raw)).find(f"{ns}body")
         if body is None:
             raise ValueError("Word document has no body.")
         for number, node in enumerate(body, 1):
@@ -176,9 +232,10 @@ def main():
         raise ValueError("File exceeds the extraction limit.")
     mode = sys.argv[1]
     try:
-        if mode == PDF_TEXT_MODE:
+        if mode in (PDF_TEXT_MODE, DOCX_TEXT_MODE):
             limit = int(sys.argv[2]) if len(sys.argv) > 2 else 24_000
-            result = extract_pdf_text(raw, max(1, min(limit, MAX_CHARS)))
+            text = extract_pdf_text if mode == PDF_TEXT_MODE else extract_docx_text
+            result = text(raw, max(1, min(limit, MAX_CHARS)))
         else:
             result = extract(raw, mode)
     except Exception:

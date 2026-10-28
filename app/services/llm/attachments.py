@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import logging
 import re
-import xml.etree.ElementTree as ET
+import threading
 import zipfile
+from collections import OrderedDict
 from fastapi import HTTPException
 
 from app.core.observability import safe_exception
@@ -35,7 +37,6 @@ MAX_DOCX_ENTRIES = 256
 MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
 MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES = 8 * 1024 * 1024
 MAX_DOCX_COMPRESSION_RATIO = 100
-DOCX_READ_CHUNK_BYTES = 64 * 1024
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 TEXT_MIME = "text/plain"
@@ -500,48 +501,43 @@ def extract_pdf_text(raw: bytes) -> str | None:
     return text[:MAX_PDF_EXTRACT_CHARS] or None
 
 
+# Word text by file content. A Compare run sends the same attachment with
+# every family's request, each extraction is a subprocess: the first request
+# extracts, the others wait for it (striped locks) and read the result.
+DOCX_TEXT_CACHE_SIZE = 32
+_docx_texts: OrderedDict[str, str | None] = OrderedDict()
+_docx_texts_guard = threading.Lock()
+_DOCX_EXTRACTIONS = tuple(threading.Lock() for _ in range(16))
+
+
 def extract_docx_text(raw: bytes) -> str | None:
-    """Extrahiert den Absatztext aus word/document.xml (kein python-docx nötig)."""
-    W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-    try:
-        document_info = _validate_docx_archive(raw)
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            with archive.open(document_info, "r") as source:
-                chunks = []
-                expanded = 0
-                while True:
-                    chunk = source.read(DOCX_READ_CHUNK_BYTES)
-                    if not chunk:
-                        break
-                    expanded += len(chunk)
-                    if expanded > MAX_DOCX_ENTRY_UNCOMPRESSED_BYTES:
-                        raise InvalidDocx("document.xml expansion exceeds budget")
-                    chunks.append(chunk)
-            document_xml = b"".join(chunks)
-        lowered = document_xml.lower()
-        if b"<!doctype" in lowered or b"<!entity" in lowered:
-            raise InvalidDocx("DTD/entity declarations are not allowed")
-        root = ET.fromstring(document_xml)
-        paragraphs = []
-        total = 0
-        for paragraph in root.iter(f"{W_NS}p"):
-            runs = [node.text for node in paragraph.iter(f"{W_NS}t") if node.text]
-            if not runs:
-                continue
-            text = "".join(runs)
-            paragraphs.append(text)
-            total += len(text)
-            if total >= MAX_TEXT_EXTRACT_CHARS:
-                break
-        combined = "\n".join(paragraphs).strip()
-        if not combined:
-            return None
-        return combined[:MAX_TEXT_EXTRACT_CHARS]
-    except Exception as exc:
-        logger.warning(
-            "DOCX text extraction failed category=%s", safe_exception(exc)
-        )
+    """Absatztext aus word/document.xml, im selben begrenzten Wegwerf-Prozess
+    wie PDF (``agent_file_extract``, der Parser lehnt jede DTD ab). Bis
+    2026-10-28 lief er im Webprozess: ein DOCX voller Entities konnte ihn
+    und damit alle laufenden Agent-Turns per OOM beenden (Audit)."""
+    if not raw:
         return None
+    from app.services import agent_file_extract
+
+    digest = hashlib.sha256(raw).hexdigest()
+    with _DOCX_EXTRACTIONS[int(digest[:8], 16) % len(_DOCX_EXTRACTIONS)]:
+        with _docx_texts_guard:
+            if digest in _docx_texts:
+                _docx_texts.move_to_end(digest)
+                return _docx_texts[digest]
+        result = agent_file_extract.run_isolated(
+            raw, agent_file_extract.DOCX_TEXT_MODE, MAX_TEXT_EXTRACT_CHARS,
+        )
+        if result.get("status") == "failed":
+            # Not cached: a timeout under load may pass on the next request.
+            logger.warning("DOCX text extraction failed or exceeded its safety limits")
+            return None
+        text = str(result.get("text") or "").strip()[:MAX_TEXT_EXTRACT_CHARS] or None
+        with _docx_texts_guard:
+            _docx_texts[digest] = text
+            while len(_docx_texts) > DOCX_TEXT_CACHE_SIZE:
+                _docx_texts.popitem(last=False)
+        return text
 
 
 def attachment_fallback_text(attachment: dict, *, include_images_note: bool = True) -> str:
