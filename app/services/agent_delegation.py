@@ -391,6 +391,8 @@ class DelegationLoop(AgentLoop):
         ], argument_limit=24_000)
         self.comparison = None
         self.app_registry = None
+        # Pictures from the web under the answer (show_image, audit mode).
+        self.image_tools = None
         if comparison_models is not None:
             from app.services.agent_comparison import BOUNDED_COMPARISONS, ComparisonTools, preference_prompt
             from app.services import agent_read_source
@@ -430,6 +432,15 @@ class DelegationLoop(AgentLoop):
                     limit=agent_read_source.READS_PER_MESSAGE)
                 self.registry = ToolRegistry([*self.registry.tools.values(), self.comparison.reader.tool],
                                              argument_limit=24_000)
+                if audit:
+                    # The same bounds as reading: the server fetches the page
+                    # (agent_web_images.py, docs/agent-mode.md "Bilder").
+                    from app.services.agent_web_images import WebImageTools
+                    from app.services.prompt_defaults import AGENT_AUDIT_IMAGE_PROMPT
+                    self.image_tools = WebImageTools(self)
+                    self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_IMAGE_PROMPT
+                    self.registry = ToolRegistry([*self.registry.tools.values(), *self.image_tools.tools()],
+                                                 argument_limit=24_000)
 
         if self.file_context:
             from app.services.agent_files import AUDIT_UNTRUSTED, UNTRUSTED
@@ -711,12 +722,12 @@ class DelegationLoop(AgentLoop):
         return None
 
     def _show_pictures(self):
-        """The pictures vm_view_image read and the browser's screenshots of
-        this batch follow its results as user messages with the image; older ones leave the view
+        """The pictures vm_view_image read, the browser's screenshots and
+        the pictures show_image put under the answer of this batch follow its
+        results as user messages with the image; older ones leave the view
         (agent_compaction.older_pictures)."""
-        if self.vm_tools is None:
-            return
-        pictures = self.vm_tools.take_pictures()
+        pictures = [*(self.vm_tools.take_pictures() if self.vm_tools is not None else ()),
+                    *(self.image_tools.take_pictures() if self.image_tools is not None else ())]
         if not pictures:
             return
         from app.services import agent_compaction
@@ -1816,8 +1827,25 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_gate import outward
         # The step's own search counts already: it came back with the step.
         exposed = self.outside_in_view or _searched(value)
-        calls = [call for call in value.tool_calls if outward(call, memory_exposed=exposed)]
+        # The step's own search hits count as held: they join search_sources
+        # only after the gate opened, and read_source reads them as such.
+        from app.services.agent_read_source import url_key
+        hits = {url_key(source.get("url")) for source in getattr(value, "sources", None) or ()
+                if isinstance(source, dict) and isinstance(source.get("url"), str)}
+        hits.discard("")
+
+        def known(url):
+            return url_key(url) in hits or self._known_url(url)
+        calls = [call for call in value.tool_calls if outward(call, memory_exposed=exposed, known=known)]
         return auditor.open_gate(calls) if calls else None
+
+    def _known_url(self, url):
+        """Whether the message already holds ``url``: such an address is
+        fetched without a gate round (read_source and show_image,
+        agent_gate.WEB_READS); a picture shown once is fetched again freely."""
+        reader = getattr(self.comparison, "reader", None)
+        return bool((reader is not None and reader.knows(url))
+                    or (self.image_tools is not None and self.image_tools.knows(url)))
 
     def _gate_wait(self, gate):
         """An outward call waits for the reviewers' verdicts on its step. All

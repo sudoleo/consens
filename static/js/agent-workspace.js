@@ -436,12 +436,28 @@
   // A picture the agent shared from its VM, under the answer at its width;
   // a click opens it in the file viewer (attachments.js) with download and
   // removal. Its name, download and removal sit in the caption.
+  // A picture from the web (show_image, agent_web_images.py): what it shows,
+  // as the agent said, and the page it came from, only an http(s) address.
+  function webSource(file) {
+    if (file.kind !== 'web_image') return null;
+    const origin = file.origin || {};
+    let page = '', host = '';
+    try {
+      const url = new URL(origin.page || origin.url);
+      if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+        page = url.href; host = url.hostname.replace(/^www\./, '');
+      }
+    } catch (_) { /* No source to link. */ }
+    return { page, host, caption: typeof origin.caption === 'string' ? origin.caption.trim() : '' };
+  }
   function pictureCard(chatId, file, scope) {
     const key = `${scope}:file:${file.id}`;
+    const web = webSource(file);
+    const name = web ? web.caption || web.host || file.name : file.name;
     const figure = node('figure', 'agent-vm-picture'); figure.dataset.filesKey = key;
     const open = node('button', 'agent-vm-picture-open'); open.type = 'button';
-    open.setAttribute('aria-label', `Open ${file.name}`);
-    const img = node('img'); img.alt = file.name; img.decoding = 'async';
+    open.setAttribute('aria-label', `Open ${name}`);
+    const img = node('img'); img.alt = name; img.decoding = 'async';
     open.append(img);
     const entry = picture(chatId, file);
     if (entry.url) img.src = entry.url;
@@ -452,8 +468,22 @@
     }
     open.addEventListener('click', () => App.attachments?.openStored?.({ fileId: file.id, name: file.name, mime: file.mime, size: file.size }));
     const caption = node('figcaption', 'agent-vm-picture-caption');
-    caption.append(node('span', 'agent-file-name', file.name), downloadChip(chatId, file, '', false),
-      overflow(key, `More actions for ${file.name}`, [{ label: 'Remove…', danger: true, run: () => askToRemove(key) }]));
+    if (web) {
+      // The agent's words and a site's name are content, not app text.
+      if (web.caption) {
+        const text = node('span', 'agent-file-name', web.caption);
+        text.setAttribute('data-i18n-skip', '');
+        caption.append(text);
+      }
+      if (web.page) {
+        const source = node('a', 'agent-vm-picture-source', web.host);
+        source.href = web.page; source.target = '_blank'; source.rel = 'noopener noreferrer nofollow';
+        source.setAttribute('data-i18n-skip', '');
+        caption.append(source);
+      }
+    } else caption.append(node('span', 'agent-file-name', file.name));
+    caption.append(downloadChip(chatId, file, '', false),
+      overflow(key, `More actions for ${name}`, [{ label: 'Remove…', danger: true, run: () => askToRemove(key) }]));
     figure.append(open, caption);
     if (confirmKey === key) {
       figure.append(confirmation(key, `Remove ${file.name}? The agent can no longer use it in this chat.`, 'Remove file', [file]));
@@ -503,7 +533,8 @@
     rendered = '';
   }
   // What one turn produced: its documents (versions up to this turn), the
-  // files the agent shared from its VM and the mail attachments it fetched.
+  // files the agent shared from its VM, the pictures it showed from the web
+  // and the mail attachments it fetched.
   // Uploads are on the message.
   function turnResources(box, chatId, files, turnId, scope, live, body) {
     if (!turnId) { fillPictures(body, chatId, [], scope); return; }
@@ -513,7 +544,7 @@
       const card = documentCard(chatId, group, { upTo: mine[0].number, turnId: live ? turnId : '', compact: !live, scope });
       if (card) box.append(card);
     }
-    const shared = files.filter(file => file.kind === 'vm_file' && file.turn_id === turnId);
+    const shared = files.filter(file => ['vm_file', 'web_image'].includes(file.kind) && file.turn_id === turnId);
     const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
     // Under the answer text when there is one, else with the other files.
     if (body) fillPictures(body, chatId, shown, scope);

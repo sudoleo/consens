@@ -588,15 +588,113 @@ def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():
     Laura's test (2026-10-28). A Chrome running without it restarts once."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     assert "--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader" in display
-    restart = display[display.index("# WebGL without a graphics card"):display.index('if ! runs "^/opt/google/chrome/chrome')]
+    restart = display[display.index("# WebGL without a graphics card"):display.index('if [ -z "$(browser_pid)" ]')]
     # By the marker written at Chrome's start, never by its command line:
     # Chrome rewrites it, and a search for the flag restarted Chrome on every
     # call (test Sprite 2026-10-28).
     assert '[ "$(cat "$dir/chrome-flags" 2>/dev/null)" != "$flags" ]' in restart
     assert "swiftshader" not in restart.split("then", 1)[0].split("flags=", 1)[1].split("\n", 1)[1]
-    assert 'pkill -TERM -f "^/opt/google/chrome/chrome .*user-data-dir=$profile"' in restart
-    start = display[display.index('if ! runs "^/opt/google/chrome/chrome'):display.index('if ! runs "^x11vnc')]
+    assert '[ -n "$why" ] && stop_chrome' in restart
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index('if ! runs "^x11vnc')]
     assert 'echo "$flags" >"$dir/chrome-flags"' in start
+
+
+def test_a_chrome_that_no_longer_answers_starts_anew():
+    """Max's browser VM, 2026-10-28: a page load and the next connection ran
+    into their limits, Chrome died two minutes later, and the open view stayed
+    black. display.sh now tells Chrome's browser process from its children,
+    restarts one whose debugging port does not answer (or that is gone while
+    children remain), and only after every process of the profile ended."""
+    import re
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    # The browser process runs under its starter's name, its children as
+    # /opt/google/chrome/chrome (test Sprite 2026-10-29: the old pattern found
+    # only the children). Both belong to the profile, nothing else does.
+    profile = "/home/sprite/.consens/browser/profile"
+    pattern = re.search(r'^chrome="(.*)"$', display, re.M).group(1).replace("$profile", profile)
+    for line in (f"/usr/bin/google-chrome --user-data-dir={profile} --remote-debugging-port=9222",
+                 f"/opt/google/chrome/chrome --type=renderer --user-data-dir={profile} --lang=en-US"):
+        assert re.search(pattern, line), line
+    for line in (f"/opt/google/chrome/chrome_crashpad_handler --database={profile}/Crash Reports",
+                 f"/usr/bin/google-chrome --user-data-dir={profile}2", f"bash display.sh --keep"):
+        assert not re.search(pattern, line), line
+    # The children carry the profile's --user-data-dir too: they are not Chrome.
+    assert 'grep -q -- " --type="' in display.split("browser_pid() {", 1)[1].split("}", 1)[0]
+    # Alive means its main thread answers: the target list, not the version.
+    assert 'curl -s -m 5 -o /dev/null "http://127.0.0.1:9222/json/list"' in display
+    decide = display[display.index('pid="$(browser_pid)"'):display.index('[ -n "$why" ] && stop_chrome')]
+    assert '[ "$mode" != "--keep" ]' in decide and '[ "$mode" = "--restart" ]' in decide
+    assert "! listens 9222 || { ! answers && ! answers; }" in decide
+    assert 'elif [ -z "$pid" ] && runs "$chrome"; then' in decide
+    # Never two Chromes on one profile: KILL after TERM, then wait until all are gone.
+    stop = display.split("stop_chrome() {", 1)[1].split("\n}", 1)[0]
+    assert stop.index("pkill -TERM") < stop.index("pkill -KILL") < stop.rindex('runs "$chrome" || return 0')
+    # Earlier starts stay in the log, each with its reason, up to about 1 MB.
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index('if ! runs "^x11vnc')]
+    assert 'Chrome starts${why:+, restarted: $why}" >>"$log"' in start and '>>"$log" 2>&1' in start
+    assert '-gt 1000000 ] && mv -f "$log" "$log.1"' in start
+
+
+def test_the_browser_helper_restarts_chrome_once_when_it_takes_no_connection(monkeypatch):
+    browser = load("browser")
+    restarts, tries = [], []
+    monkeypatch.setattr(browser, "restart_browser", lambda: restarts.append(True))
+
+    class Chromium:
+        def connect_over_cdp(self, url, timeout):
+            tries.append(timeout)
+            if len(tries) == 1:
+                raise TimeoutError("BrowserType.connect_over_cdp: Timeout 15000ms exceeded.")
+            return "browser"
+    playwright = type("Playwright", (), {"chromium": Chromium()})()
+    assert browser.connect(playwright) == "browser"
+    assert restarts == [True] and tries == [browser.CONNECT_SECONDS * 1000] * 2
+
+
+def test_open_returns_a_page_that_answered_but_is_still_loading():
+    browser = load("browser")
+
+    class Page:
+        url = "https://linktr.ee/XQN_TheSad"
+
+        def __init__(self, answers=True):
+            self.answers, self.waits = answers, []
+
+        def bring_to_front(self):
+            pass
+
+        def goto(self, url, wait_until, timeout):
+            assert wait_until == "commit" and timeout == browser.OPEN_SECONDS * 1000
+            if not self.answers:
+                raise TimeoutError("Page.goto: Timeout 30000ms exceeded.")
+
+        def wait_for_load_state(self, state, timeout):
+            self.waits.append((state, timeout))
+            raise TimeoutError("Timeout 10000ms exceeded.")
+    page = Page()
+    assert browser.act(None, page, "open", {"url": Page.url}) == \
+        f"Opened {Page.url} (still loading: this is what it shows so far)"
+    assert page.waits == [("domcontentloaded", browser.LOADED_SECONDS * 1000)]
+    with pytest.raises(RuntimeError, match="did not answer within 30 s"):
+        browser.act(None, Page(answers=False), "open", {"url": Page.url})
+
+
+def test_a_call_the_browser_does_not_finish_ends_with_one_answer_and_a_restart(monkeypatch, capsys):
+    """The watchdog: the call answers "failed" after its limit, restarts
+    Chrome for the next call and ends the process; main then writes nothing."""
+    import threading
+    browser = load("browser")
+    restarted, ended = [], threading.Event()
+    monkeypatch.setattr(browser, "restart_browser", lambda: restarted.append(True))
+    monkeypatch.setattr(browser.os, "_exit", lambda code: ended.set())
+    with browser._ANSWER_LOCK:
+        browser._answered = False
+    browser.watchdog(0.01)
+    assert ended.wait(5) and restarted == [True]
+    answer = json.loads(capsys.readouterr().out)
+    assert answer["status"] == "failed" and "restarted with its tabs and sign-ins" in answer["text"]
+    assert browser.answer_once({"status": "ok", "text": "late"}) is False
+    assert capsys.readouterr().out == ""
 
 
 def test_text_brings_the_main_content_first():
@@ -655,7 +753,7 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
     import threading
     relay = load("relay")
     scripts = []
-    monkeypatch.setattr(relay, "run", lambda script: scripts.append(script) or True)
+    monkeypatch.setattr(relay, "run", lambda script, *args: scripts.append(script) or True)
     monkeypatch.setattr(relay.os.path, "exists", lambda path: False)
     server = socket.socket()
     server.bind(("127.0.0.1", 0))
@@ -693,9 +791,31 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
     assert sum(len(chunk) for chunk in received) == 70_000
 
 
+def test_the_open_view_starts_a_chrome_that_ended_again(monkeypatch):
+    """2026-10-28: Chrome died while Max watched, and the screen stayed black
+    until the agent's next call. While the view is open the relay asks
+    display.sh every KEEP_SECONDS to start a Chrome that is gone, never to
+    end one (--keep)."""
+    import threading
+    relay = load("relay")
+    calls, done = [], threading.Event()
+
+    def run(script, *args):
+        calls.append((script, *args))
+        if len(calls) == 2:
+            done.set()
+        return True
+    monkeypatch.setattr(relay, "run", run)
+    monkeypatch.setattr(relay, "KEEP_SECONDS", 0.01)
+    relay.keep_chrome(done)
+    assert calls == [("display.sh", "--keep")] * 2
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    assert '[ -n "$pid" ] && [ "$mode" != "--keep" ]' in display
+
+
 def test_a_relay_without_its_browser_says_so(monkeypatch, capfd):
     relay = load("relay")
-    monkeypatch.setattr(relay, "run", lambda script: script == "setup.sh")
+    monkeypatch.setattr(relay, "run", lambda script, *args: script == "setup.sh")
     monkeypatch.setattr(relay.os.path, "exists", lambda path: True)
     assert relay.main() == 1
     assert [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()] == ["starting", "error"]

@@ -262,6 +262,32 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // show_image (2026-10-29): a picture from the web, with what it shows and
+  // the site it came from as a link; never a link that is not http(s).
+  it('shows a picture from the web with its caption and its source', async () => {
+    const WEB = { id: 'a'.repeat(32), name: 'picture-1a2b3c4d.webp', mime: 'image/webp', size: 15000, status: 'ready',
+      kind: 'web_image', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',
+      origin: { source: 'web', url: 'https://liquipedia.net/commons/images/jeef.jpg',
+                page: 'https://www.liquipedia.net/hearthstone/Jeef', host: 'liquipedia.net', caption: 'Jeef at Lobby Legends' } };
+    const BARE = { ...WEB, id: 'b'.repeat(32), origin: { source: 'web', page: 'javascript:alert(1)', caption: '' } };
+    const files = [WEB, BARE];
+    const { window, document, dom } = boot({ files });
+    window.fetch = vi.fn(async url => url.includes('/files/') && !url.endsWith('/files')
+      ? { ok: true, blob: async () => new window.Blob([new Uint8Array([82, 73, 70, 70])], { type: 'image/webp' }) } : reply(files));
+    await window.App.agentWorkspace.refresh(CHAT);
+    const [web, bare] = document.getElementById('agentAnswerBody').nextElementSibling.querySelectorAll('.agent-vm-picture');
+    expect(web.querySelector('img').alt).toBe('Jeef at Lobby Legends');
+    expect(web.querySelector('.agent-file-name').textContent).toBe('Jeef at Lobby Legends');
+    const source = web.querySelector('a.agent-vm-picture-source');
+    expect([source.textContent, source.href, source.target, source.rel]).toEqual(
+      ['liquipedia.net', 'https://www.liquipedia.net/hearthstone/Jeef', '_blank', 'noopener noreferrer nofollow']);
+    expect(source.hasAttribute('data-i18n-skip')).toBe(true);
+    // No caption, no usable source: the file's name, and no link at all.
+    expect(bare.querySelector('a')).toBeNull();
+    expect(bare.querySelector('img').alt).toBe('picture-1a2b3c4d.webp');
+    dom.window.close();
+  });
+
   it('puts an archived turn\'s pictures under its own answer text, above its evidence row', async () => {
     const PICTURE = { id: 'e'.repeat(32), name: 'bunny.png', mime: 'image/png', size: 900, status: 'ready', kind: 'vm_file',
       turn_id: TURN_ONE, expires_at: '2099-10-29T10:00:00Z' };

@@ -17,6 +17,14 @@ list of patterns guessed which commands talked to the network.
 A memory change (update_memory) joins them once outside content is in view
 (since 2026-10-28): it acts on later chats, and a page could have suggested
 it. Before, memory simply locked for the rest of the message.
+
+Pages the server fetches for the agent join them too (since 2026-10-29):
+read_source and show_image take any public address in audit mode, and one
+the message did not already hold (its search hits, the user's links, the
+chat's earlier sources: ``known``) reaches out like a browser's open. Before,
+read_source refused such an address, and GPT-6.1 Terra, whose search hits
+never reach the app, could read nothing it found (15 searches, 1 source kept
+in four days) and went to the slower browser.
 """
 from __future__ import annotations
 
@@ -27,6 +35,8 @@ import json
 BROWSER_OUTWARD = frozenset({"open", "click", "drag", "upload", "download"})
 # Keys that send: Enter submits, Space presses the focused button like a click.
 BROWSER_OUTWARD_KEYS = frozenset({"Enter", "Space"})
+# Tools whose ``url`` the server fetches (agent_read_source, agent_web_images).
+WEB_READS = frozenset({"read_source", "show_image"})
 
 
 def _arguments(call):
@@ -38,17 +48,22 @@ def _arguments(call):
     return args if isinstance(args, dict) else {}
 
 
-def outward(call, *, memory_exposed=False):
-    """Why ``call`` waits for the reviewers ("browser", "domain", "memory"),
-    or None for a call that stays inside the workspace. ``memory_exposed``:
-    outside content is in view (DelegationLoop.outside_in_view), so a memory
-    change may come from a page rather than the user (since 2026-10-28 it
-    waits for the reviewers instead of being refused)."""
+def outward(call, *, memory_exposed=False, known=None):
+    """Why ``call`` waits for the reviewers ("browser", "domain", "memory",
+    "web"), or None for a call that stays inside the workspace.
+    ``memory_exposed``: outside content is in view
+    (DelegationLoop.outside_in_view), so a memory change may come from a page
+    rather than the user (since 2026-10-28 it waits for the reviewers instead
+    of being refused). ``known(url)``: whether the message already holds that
+    address (SourceReader.knows); without it every fetched address waits."""
     name = ((call or {}).get("function") or {}).get("name")
     if name == "request_domain":
         return "domain"
     if name == "update_memory":
         return "memory" if memory_exposed else None
+    if name in WEB_READS:
+        url = _arguments(call).get("url")
+        return None if known is not None and isinstance(url, str) and known(url) else "web"
     if name != "browser":
         return None
     args = _arguments(call)

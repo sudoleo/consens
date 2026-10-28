@@ -817,13 +817,15 @@ def candidate_urls(sources, limit: int = MAX_PAGES) -> list[str]:
     return picked[:limit]
 
 
-async def _fetch(client, url: str, kinds, max_bytes: int, accept: str):
-    """(endgültige URL, Bytes, Typ, abgeschnitten) über die gepinnte Adresse."""
+async def _fetch(client, url: str, kinds, max_bytes: int, accept: str, headers=None):
+    """(endgültige URL, Bytes, Typ, abgeschnitten) über die gepinnte Adresse.
+    ``headers`` ergänzt die eigenen (agent_web_images: Referer)."""
     for _ in range(4):
         target, host, hostname = await pinned_target(url)
         async with client.stream(
             "GET", target,
             headers={
+                **(headers or {}),
                 "Host": host, "Accept": accept, "Accept-Encoding": "gzip, deflate",
                 "User-Agent": USER_AGENT,
             },

@@ -504,7 +504,13 @@ Textmuster): beim Werkzeug `browser` die Aktionen `open`, `click`, `upload`,
 `key` mit `Enter` oder `Space` (drückt den fokussierten Knopf wie ein Klick, seit
 2026-10-28) und `type` mit `enter` (Lesen, Tippen allein, Scrollen und
 Tabs senden nichts), und jede Domain-Anfrage (`request_domain`, die danach
-immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Bis zum Umbau nach
+immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Seit 2026-10-29
+außerdem `read_source` und `show_image` mit einer Adresse, die die Nachricht
+noch nicht hält (`agent_gate.WEB_READS`, „web“): Der Server holt sie, also
+geht eine Anfrage hinaus wie beim `open` des Browsers. Was sie hält
+(`DelegationLoop._known_url`: Suchtreffer dieser Nachricht samt denen des
+Schritts selbst, Links des Nutzers, Quellen früherer Nachrichten, schon
+gelesene Seiten, schon gezeigte Bilder), läuft ohne Runde. Bis zum Umbau nach
 dem Sicherheitsaudit (2026-10-27) suchte eine Liste von Mustern in
 Shell-Befehlen nach `curl`, `git push` u. Ä.; seit die Werkbank nur noch
 Paketquellen erreicht, kann ein Befehl nichts hinausschicken, was auch
@@ -842,6 +848,15 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   stehen; Hintergrundprozesse verlieren den Zugang mit dem Ende ihrer
   Nachricht.
 - Lesen im Web läuft weiter über `web_search` und `read_source` im Backend.
+- **Vier Wege ins Web, als Fakten im Prompt (seit 2026-10-29).** Max: Der
+  Agent wusste oft nicht, wann er Browser, Websuche oder VM nehmen soll. Nach
+  „Verfassung statt Regeln“ bekommt er keine Wann-Liste, sondern einen Absatz
+  in `AGENT_VM_PROMPT`, was jeder Weg erreicht und was er kostet: die
+  eingebaute Suche (in jedem Schritt, Treffer in Sekunden), `read_source`
+  (Seitentext über einen Lesedienst, ohne Anmeldung), `browser` (echter Chrome
+  mit den Anmeldungen des Nutzers, Skripte, Klicks, Formulare; jedes `open`,
+  jeder Klick und jedes Enter wartet vorher auf die Prüfer) und die Werkbank
+  selbst (nur Paketquellen, sonst `request_domain`).
 
 #### Browser-VM (Fund 2)
 
@@ -967,6 +982,44 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
   Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit zählt als
   VM-Zeit.
+- **Ein Chrome, der nicht mehr antwortet, heilt sich (seit 2026-10-29).**
+  Anlass, Max' Browser-VM am 2026-10-28 (Chat „Bester HSG-Spieler“, Live-Ansicht
+  offen): `open` auf linktr.ee lief in `Page.goto: Timeout 30000ms`, der
+  nächste Aufruf in `connect_over_cdp: Timeout 20000ms`, Chrome starb um 17:16
+  UTC, und die Ansicht blieb schwarz, bis zum nächsten Aufruf. Das Netz war
+  nicht schuld: von der VM aus antworteten consens.io in 0,1 s, linktr.ee in
+  0,02 s, bgbuddy.net in 0,6 s (curl). An einer frischen Test-Browser-VM luden
+  dieselben Seiten in 3–5 s, auch nach 4 und 10 Minuten Leerlauf (die Sprite
+  schlief dazwischen). Was Chrome dort hängen ließ, war nicht nachzustellen;
+  deshalb fängt die App jeden solchen Zustand ab, statt eine Ursache zu raten:
+  - `display.sh` unterscheidet den Browser-Prozess von seinen Kindern (die
+    tragen dasselbe `--user-data-dir`, nur ohne `--type=`; vorher galt ein
+    Chrome als laufend, solange irgendein Renderer lebte). Er startet Chrome
+    neu, wenn dessen Debug-Port nicht antwortet (`/json/list`, braucht Chromes
+    Hauptthread, zweimal je 5 s), wenn nur noch Kinder leben, mit
+    `--restart` (nach einem Aufruf, den `browser.py` nicht beenden konnte) und
+    bei neuen Flags. Vor dem Start enden alle Prozesse des Profils (TERM, nach
+    5 s KILL, dann warten): Beim Flag-Wechsel am 28.10. liefen kurz zwei
+    Chromes auf einem Profil. `chrome.log` behält frühere Starts mit Grund
+    („--- … Chrome starts, restarted: no answer on its debugging port“) bis
+    etwa 1 MB, danach `chrome.log.1`.
+  - `browser.py`: Kommt die Verbindung nicht zustande (15 s), startet es Chrome
+    einmal neu und verbindet erneut. Jede Aktion hat eine Grenze (`CALL_LIMIT`
+    70 s, `wait` und `download` mit ihrer eigenen Zeit dazu); danach antwortet
+    ein Wächter-Thread „failed“ („did not answer within 70 s; it was restarted
+    with its tabs and sign-ins“), startet Chrome neu und beendet den Prozess,
+    statt dass der Aufruf die 180 s des Servers aufbraucht und der nächste
+    wieder hängt. `open` wartet nur, bis die Adresse antwortet (`commit`,
+    30 s), dann bis 10 s auf das Dokument; lädt es noch, kommt die Seite so, wie
+    sie gerade ist („still loading: this is what it shows so far“), statt eines
+    Fehlers. Eine Adresse, die gar nicht antwortet, sagt das in Worten.
+  - `relay.py` hält Chrome am Leben, solange die Live-Ansicht offen ist: alle
+    10 s `display.sh --keep`, das nur einen Chrome startet, der nicht läuft,
+    nie einen laufenden beendet (der Nutzer könnte ihn gerade bedienen). Auch
+    ein Chrome, dessen Fenster der Nutzer schließt, kommt so mit seinen Tabs
+    zurück.
+  Geprüft an einer eigenen Test-Browser-VM (2026-10-29, danach gelöscht):
+  siehe „Live geprüft: Selbstheilung des Browsers“ unten.
 - **Live-Ansicht ohne Sprite-URL und Gateway** (Fund 1,
   `routers/agent_workspace.py`, `workspace-view.js`): Der Server öffnet das
   Exec-WebSocket von `api.sprites.dev` für `relay.py` auf der Browser-VM
@@ -1125,6 +1178,38 @@ der Session), dazu drei kleine Sonden (Laufzeit-Shims, Ports, x11vnc):
   sechsten Lauf griff die Wiederholung), x11vnc band IPv6 (jetzt nur
   Unix-Socket), Playwright fehlte direkt nach der ersten Einrichtung im
   laufenden Python (Nutzer-Site nachgeladen).
+
+#### Live geprüft: Selbstheilung des Browsers (2026-10-29)
+
+Erst lesend an Max' Browser-VM (keine Änderung): Chrome lief nicht mehr, Xvfb,
+openbox und x11vnc schon; `chrome.log` endete um 17:16:47 UTC, der vorige
+Chrome war beim Flag-Wechsel (16:41:56) mit „Failed to send GetTerminationStatus
+message to zygote … GPU process isn't usable. Goodbye.“ gestorben. Das Netz der
+VM war gesund (curl siehe oben). Dann an eigenen Test-Browser-VMs
+(`consens-test-…`, je danach gelöscht), mit `display.sh`, `browser.py` und
+`relay.py` dieser Version:
+
+- **Gefunden dabei:** Chromes Browser-Prozess heißt `/usr/bin/google-chrome`
+  (das Startskript ruft Chrome unter seinem eigenen Namen auf), nur die Kinder
+  `/opt/google/chrome/chrome --type=…`. Die alte Prüfung
+  `^/opt/google/chrome/chrome .*user-data-dir=` sah also nur die Kinder: Der
+  Flag-Neustart beendete nur sie (daher der Absturz um 16:41), und ohne Kinder
+  hätte `display.sh` einen zweiten Chrome auf dasselbe Profil gestartet. Das
+  Muster nimmt jetzt beide Namen (`chrome=` in `display.sh`, Test in
+  `tests/test_agent_workspace.py`). Die erste Fassung der Heilung startete
+  deshalb bei jedem Aufruf neu, bis das Muster stimmte.
+- Browser-Prozess eingefroren (SIGSTOP): `json/list` schweigt, der nächste
+  Aufruf startet Chrome neu („restarted: no answer on its debugging port“) und
+  öffnet linktr.ee (21,9 s samt der zwei Proben und dem Neustart).
+- Browser-Prozess getötet: die Kinder enden mit ihm, der nächste Aufruf startet
+  Chrome, die Sitzung bringt den Tab zurück (`read` 2,9 s).
+- Renderer eingefroren: `connect_over_cdp` hängt (wie am 28.10. bei Max),
+  `browser.py` startet Chrome neu, verbindet erneut, `read` kommt nach 17,2 s
+  mit der Seite.
+- `display.sh --keep` lässt einen laufenden Chrome stehen (dieselbe PID) und
+  startet einen, der fehlt.
+- Ohne Eingriff, 4 und 10 Minuten Leerlauf dazwischen (die Sprite schlief):
+  consens.io/app, linktr.ee und bgbuddy.net öffneten in 3–5 s.
 
 #### Live geprüft: ripgrep und headless Chrome (2026-10-28)
 
@@ -3114,6 +3199,26 @@ Gespeicherte Quellen sind Provider-Zitate oder bereits gelesene Seiten. Schalter
 `AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
 Code: `agent_read_source.py`.
 
+**Im Audit-Modus jede öffentliche Seite (seit 2026-10-29).** Gemessen über alle
+Audit-Läufe vom 25. bis 28.10.: GPT-6.1 Terra suchte 15-mal und behielt eine
+Quelle, GPT-6 Luna 7-mal und keine (DeepSeek 25 → 45, MiMo 3 → 10, Sonnet 1 → 5).
+Die eingebaute Suche von OpenAI schickt ihre Treffer nicht an die App, nur in
+den Kontext des Modells. `read_source` lehnte deshalb ab, was Terra (seit dem
+28.10. das Standard-Chatmodell) gefunden hatte, die Prüfer sahen nur „hat
+gesucht“, und der Agent wich auf den Browser aus, wo jedes `open` auf die
+Prüfer wartet und ein Prüfer die unerklärte Adresse prompt als Injection anhielt
+(Chat „Bester HSG-Spieler“: linktr.ee). Jetzt liest `read_source` im
+Audit-Modus jede öffentliche http(s)-Adresse; eine, die die Nachricht nicht
+hält, geht vorher durch die Vorab-Prüfung (`agent_gate.WEB_READS`), wie ein
+`open` im Browser. `SourceReader.chosen` nimmt sie nur, wenn Prüfer dem Lauf
+folgen (`auditor.sessions`), sonst gilt die alte Absage; gelesen steht sie
+mit dem Label `LABEL_CHOSEN` („a page you chose“). Die Sicherheit bleibt die
+des Browsers: Eine Adresse mit Chat-Inhalt erreicht ihren Server erst nach
+dem Go aller Prüfer, und der Abruf läuft über Exa ohne Anmeldungen. Der
+Prompt `AGENT_AUDIT_READ_SOURCE_PROMPT` sagt das als Fakt, dazu, dass bei
+manchen Anbietern die Treffer nur das Modell erreichen; die Prüfer lesen in
+`REVIEW_PROMPT_BODY`, dass Adressen nach so einer Suche aus ihr stammen können.
+
 **Warum ein eigenes Tool.** Der naheliegende Weg, OpenRouters Server-Tool
 `openrouter:web_fetch` direkt in den Steuerschritt zu hängen, scheitert an der
 Prüfbarkeit: Über Chat Completions (unser Transport) kommt der gelesene Text nie
@@ -3273,6 +3378,47 @@ bei nicht lesbarer Seite dem Grund) in der Seitenleiste und zählt dort in
 Quellenansicht markiert gelesene Quellen mit „Read by the agent“, verglichen
 wie `url_key` und auch über die zitierte Weiterleitung. `MOCK_LLM` liefert eine
 feste Seite ohne Abruf (`mock_llm.mock_fetched_page`).
+
+### Bilder aus dem Web (show_image, seit 2026-10-29)
+
+Anlass: „zeig mir ein Bild vom besten HS-BG-Spieler“ (Max, 2026-10-28).
+Claude zeigt Bildtreffer direkt, der Agent schrieb „Direkt einblenden kann ich
+es hier leider nicht“. Ein Markdown-Bild in der Antwort lädt der Browser
+absichtlich nie (`markdown-stream.js`: eine injizierte Bildadresse könnte
+Chat-Inhalt beim Rendern ohne Klick hinaustragen). Deshalb holt der Server
+das Bild: Werkzeug `show_image(url, caption)` (`agent_web_images.py`, nur im
+Audit-Modus und dort, wo `read_source` läuft, also nie in Chats mit
+Google-Daten).
+
+- `url` ist ein Bild oder eine Seite. Bei einer Seite nimmt der Server ihr
+  eigenes Vorschaubild (`og:image`, `twitter:image`, sonst das erste `image`
+  im JSON-LD, `page_picture`). Abgerufen über `watch_images._fetch` mit
+  `source_documents.pinned_target` (nur öffentliche Adressen, gepinnte IP,
+  ehrlicher User-Agent `consens.io-preview`), das Bild mit der Seite als
+  `Referer`. Seiten, die automatische Abrufe sperren (Liquipedia antwortet
+  403), geben ein ruhiges Ergebnis `failed` mit Grund, nie einen Toolfehler.
+- Nur Bytes, die ein Bild sind (JPEG, PNG, WebP, GIF; Pillow, `encode`), neu
+  als WebP kodiert (keine Metadaten, höchstens 1600 px Kante, bis 1,5 MB),
+  mindestens 48 px. Gespeichert in der privaten Dateiablage des Chats
+  (`AgentFiles`, `kind: "web_image"`, `turn_id`, `origin {source: web, url,
+  page, host, caption}`, Name `picture-<hash>.webp`), 30 Tage wie jede Datei.
+- Anzeige wie ein geteiltes VM-Bild unter dem Antworttext
+  (`agent-workspace.js` `turnResources`, `pictureCard`): Bildunterschrift aus
+  `caption`, daneben die Website als Link (`rel="noopener noreferrer
+  nofollow"`), beide `data-i18n-skip`. Der Browser lädt das Bild nur von
+  consens.io; die Bildseite sieht den Nutzer nie. Aktivität „Showed a picture ·
+  liquipedia.net“ bzw. „Couldn’t get the picture“ (`agent-activity.js`).
+- Höchstens 6 je Nachricht; dieselbe Adresse noch einmal ist dasselbe Bild.
+  Ein Chatmodell, das Bilder nimmt, sieht das Bild nach dem Ergebnis (wie
+  `vm_view_image`, `DelegationLoop._show_pictures`), um zu prüfen, ob es zeigt,
+  was es meinte.
+- Vorab-Prüfung: eine Adresse, die die Nachricht nicht hält, wartet auf die
+  Prüfer (`agent_gate.WEB_READS`), ein schon gezeigtes Bild nicht mehr.
+- Prompt: `AGENT_AUDIT_IMAGE_PROMPT` („PICTURES“), nur Fakten: was es tut, dass
+  der Server lädt und Markdown-Bilder nicht erscheinen.
+
+Tests: `tests/test_agent_web_images.py`, die Gate-Fälle in
+`tests/test_agent_gate.py`.
 
 ## Persistenz, Stop und Recovery
 

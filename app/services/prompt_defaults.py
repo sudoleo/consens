@@ -117,9 +117,18 @@ This chat runs in agent mode with audit. A message without tool calls is your an
 AGENT_AUDIT_SYSTEM_PROMPT = _AGENT_AUDIT_STEERING + "\n\n" + AGENT_AUDIT_ANSWER_SECTION
 
 # AGENT_READ_SOURCE_PROMPT for audit mode: no comparison answers cite sources.
+# Since 2026-10-29 any public page; one the message did not hold waits for
+# the reviewers (agent_gate.WEB_READS). The provider's search of GPT-6 Luna
+# and GPT-6.1 Terra sends no hits to the app, so the reviewers of such a step
+# see only that it searched (agent_audit.REVIEW_PROMPT_BODY).
 AGENT_AUDIT_READ_SOURCE_PROMPT = """READING SOURCES
 
-read_source opens a page, at most {limit} per message: a result of this message's web search, a page the user linked or a source of an earlier answer in this chat."""
+read_source reads one public page as text, at most {limit} per message: a reader service fetches it within seconds, without sign-ins, scripts or clicks. A page that is not a result of this message's web search, a page the user linked or a source of an earlier answer in this chat waits for the reviewers first. With some providers the hits of your web search reach you but not the app: the reviewers then see that you searched, not what you found."""
+
+# show_image (agent_web_images.py, audit mode since 2026-10-29).
+AGENT_AUDIT_IMAGE_PROMPT = """PICTURES
+
+show_image puts a picture from the web under your answer, with its source as a link: give a picture's address, or a page's, and its own preview picture is taken. The server fetches it, so the user's browser loads nothing from that site; pictures in the answer's Markdown are not shown."""
 
 # Agent VM (since 2026-10-25, agent_vm_tools.py; since 2026-10-27 the
 # account's workspace, agent_workspace.py): appended to either system prompt
@@ -130,7 +139,7 @@ You and the user share a Linux computer, the workspace (Ubuntu, bash), the same 
 
 This chat has its own folder (the first VM result names it): commands start there, relative paths lead there, and the files the user attached to the current message are in its input folder. Other chats' folders are next to it under /home/agent/chats, each named after its chat's title, which it follows when the chat is renamed (its .consens-chat file holds title, start and id). Files stay across messages and chats.
 
-The workspace reaches the package registries (apt, pip, npm) and nothing else on the internet. For another domain your code needs, ask with request_domain and say why: the user decides on a card, and what they allow holds for this chat. Web pages are read with web_search and read_source; GitHub repositories come in with github_import.
+Four ways reach the web, each with its own reach. Your web search runs inside your own steps, and its hits come back with the step within seconds. read_source reads a page's text through a reader service, without sign-ins. The browser tool is a real Chrome, signed in as the user: it runs a page's scripts, clicks and fills in forms, and each open, click or Enter waits for the reviewers before it runs. The workspace itself reaches the package registries (apt, pip, npm) and nothing else on the internet: for another domain your code needs, ask with request_domain and say why; the user decides on a card, and what they allow holds for this chat. GitHub repositories come in with github_import.
 
 /home/agent/NOTES.md is your notebook of the workspace across chats (what is where, work in progress, a project's conventions); its beginning comes with your first VM result in every message. It holds your own words from earlier chats, maybe outdated. Facts about the user themselves belong in memory; secrets and what you saw behind a sign-in belong in neither.
 

@@ -5756,8 +5756,10 @@ davor), `tab-status.js` („Paused“).
 **Vorab-Prüfung** (seit 2026-10-27, Details `docs/agent-mode.md` „Vorab-Prüfung
 vor Außenwirkung“): `agent_gate.outward` erkennt nach Werkzeug und typisierten
 Argumenten Aufrufe, die den Arbeitsplatz verlassen (`browser` mit `open`,
-`click`, `upload`, `key` Enter oder Space, `type` mit `enter`; `request_domain`), seit
-dem Netz-Umbau ohne Befehlsmuster. `DelegationLoop._step` öffnet
+`click`, `upload`, `key` Enter oder Space, `type` mit `enter`; `request_domain`;
+seit 2026-10-29 `read_source` und `show_image` mit einer Adresse, die die
+Nachricht nicht hält: `WEB_READS`, `known` aus `DelegationLoop._known_url` und den
+Treffern des Schritts), seit dem Netz-Umbau ohne Befehlsmuster. `DelegationLoop._step` öffnet
 dafür vor dem Protokolleintrag `AnswerAudit.open_gate` (`Gate`), danach
 `ready_gate(entry)` (`WorkLog.step` gibt die Nummer zurück); jeder antwortfähige
 Prüfer macht eine Gate-Runde ohne Websuche (`ReviewerSession._gate_round`,
@@ -5846,6 +5848,13 @@ der Browser-VM bedient der Agent mit dem Werkzeug `browser`
 (`agent_browser.py`: typisierte Aktionen, das Backend ruft
 `workspace_vm/browser/browser.py` mit JSON auf stdin; nie in Passwortfelder,
 nie während der Nutzer übernommen hat, nur http(s) zu öffentlichen Adressen).
+Seit 2026-10-29 heilt sich ein Chrome, der nicht mehr antwortet: `display.sh`
+startet ihn neu, wenn der Debug-Port (`/json/list`) schweigt, nur noch Kinder
+leben oder `browser.py` `--restart` verlangt (`--keep` startet nur, beendet nie);
+`browser.py` verbindet nach einem Neustart erneut, beendet jede Aktion nach
+`CALL_LIMIT` über einen Wächter (Antwort `failed`, Neustart), `open` liefert eine
+noch ladende Seite; `relay.py` hält Chrome bei offener Live-Ansicht am Leben
+(`keep_chrome`). Details `docs/agent-mode.md`, „Browser-VM“.
 Während der Übernahme pausiert der Agent ganz: `control` im Konto-Dokument
 lässt jeden Aufruf warten (`VMSession.wait_for_user`, höchstens 120 s, dann
 `VM_USER_HAS_BROWSER`), `browser.py` handelt nicht, und
@@ -5880,7 +5889,9 @@ und je Änderung eingeklappt in der Zeitleiste. `vm_share_file` (seit 2026-10-26
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
-`agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn als Bild direkt unter dem
+`agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn (`vm_file`, seit
+2026-10-29 auch `web_image` von `show_image` mit Bildunterschrift und der
+Website als Link, `webSource`) als Bild direkt unter dem
 Antworttext, über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
 dem Antwort-Body; `App.answerTail(body)` sagt agent-review.js, watch.js,
 share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffnet
@@ -8458,7 +8469,7 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate)
-  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten Aufrufe, die den Arbeitsplatz verlassen (browser open/click/upload/key Enter oder Space/type mit enter, request_domain); solche Aufrufe laufen erst nach dem Go aller Prüfer, eine Domain entscheidet danach immer der Nutzer; seit 2026-10-28 auch update_memory, sobald Fremdinhalt im Blick ist (memory_exposed)
+  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten Aufrufe, die den Arbeitsplatz verlassen (browser open/click/upload/key Enter oder Space/type mit enter, request_domain); solche Aufrufe laufen erst nach dem Go aller Prüfer, eine Domain entscheidet danach immer der Nutzer; seit 2026-10-28 auch update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); seit 2026-10-29 read_source und show_image mit einer Adresse, die die Nachricht nicht hält (WEB_READS, „web“; known = DelegationLoop._known_url plus die Treffer des Schritts)
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
   agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) auf der Browser-VM über workspace_vm/browser/browser.py mit JSON auf stdin; Adressen nur http(s) und öffentlich, Upload einer Werkbank-Datei für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach auf der Browser-VM gelöscht), Screenshot als Bild, Ausfall kostet nur dieses Werkzeug
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (exists/ensure(rules)/set_policy/get_policy/run mit stdin/exec/exec_url/read_file/write_file/delete_path/move_path, die Dateien mit agent=True als Agenten-Nutzer, delete_service/checkpoint/restore/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets, Handshake einmal wiederholt); WORKBENCH_RULES (Paketquellen) und BROWSER_RULES (offenes Web ohne Fly-intern), agent_argv/wrapped_command (Agenten-Befehle über agent-run), workspace_name und browser_name je Konto, chat_dir/chat_folder je Chat (Ordnername aus Titel + ID-Anfang, seit 2026-10-28; vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner unter gemerktem Namen und ID als Agent und am alten Ort, alte VM über vm_name), delete_workspace (beide VMs) und restore_workspace; ein Anbieterwechsel betrifft nur diese Datei
@@ -8471,7 +8482,8 @@ app/services/
   agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
-  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge
+  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge; im Audit-Modus seit 2026-10-29 jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN, nur mit Prüfern, vorher durch die Vorab-Prüfung), SourceReader.knows für das Gate
+  agent_web_images.py        Tool show_image (seit 2026-10-29, Audit-Modus, wo read_source läuft): Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px), Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; Bildmodelle sehen das Bild danach (take_pictures → DelegationLoop._show_pictures); höchstens 6 je Nachricht
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
   agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)

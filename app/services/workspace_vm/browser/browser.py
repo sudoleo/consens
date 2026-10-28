@@ -22,6 +22,14 @@ Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
 browser (CONTROL, written by consens.io's server, which also holds the
 agent's calls meanwhile).
+
+A Chrome that stops answering costs one call, not the rest of the message
+(since 2026-10-29; on Max's browser VM a page load ran into its 30 s, the
+next connection into its 20 s, and each later call would have too): a call
+that does not finish within CALL_LIMIT ends with "failed" and restarts
+Chrome (display.sh --restart, tabs and sign-ins stay), a connection that
+does not come about restarts it once and tries again, and open returns a
+page that answered but is still loading instead of failing.
 """
 import base64
 import json
@@ -29,6 +37,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +61,15 @@ FIND_AROUND = 60
 WAIT_MAX = 120
 # A first setup in one call, within the server's limit (agent_browser.CALL_SECONDS).
 SETUP_SECONDS = 100
+# One action once the browser runs (a wait adds its seconds), the connection
+# to Chrome's debugging port, and how long open waits for an address to
+# answer and then for its document. Together with a restart they stay within
+# the server's limit (agent_browser.CALL_SECONDS).
+CALL_LIMIT = 70
+CONNECT_SECONDS = 15
+RESTART_SECONDS = 30
+OPEN_SECONDS = 30
+LOADED_SECONDS = 10
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
 ACTIONS = {"open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
@@ -284,6 +302,70 @@ def ensure_browser():
     started = subprocess.run(["bash", os.path.join(HERE, "display.sh")], capture_output=True, text=True, timeout=60)
     if started.returncode != 0:
         raise RuntimeError("The browser did not start: " + (started.stderr.strip() or "no reason given"))
+
+
+def restart_browser():
+    """Chrome anew, its profile and tabs kept (display.sh --restart)."""
+    started = subprocess.run(["bash", os.path.join(HERE, "display.sh"), "--restart"], capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL, timeout=RESTART_SECONDS)
+    if started.returncode != 0:
+        raise RuntimeError("The browser did not start again: " + (started.stderr.strip() or "no reason given"))
+
+
+def connect(playwright):
+    """The running Chrome; one fresh start when it does not take the
+    connection (2026-10-28: connect_over_cdp ran into its limit, and every
+    later call would have too)."""
+    try:
+        return playwright.chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
+    except Exception:
+        restart_browser()
+        return playwright.chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
+
+
+# The call's one answer on stdout: from main, or from the watchdog when the
+# browser stopped answering (then main writes nothing).
+_ANSWER_LOCK = threading.Lock()
+_answered = False
+_watchdog_done = threading.Event()
+_timer = None
+
+
+def answer_once(answer):
+    global _answered
+    with _ANSWER_LOCK:
+        if _answered:
+            return False
+        _answered = True
+    sys.stdout.write(json.dumps(answer))
+    sys.stdout.flush()
+    return True
+
+
+def watchdog(seconds):
+    """Ends the call after ``seconds`` when the browser did not answer, and
+    restarts Chrome so that the next call finds one that does."""
+    def expire():
+        global _answered
+        with _ANSWER_LOCK:
+            if _answered:
+                return
+            _answered = True
+        try:
+            restart_browser()
+            said = "it was restarted with its tabs and sign-ins"
+        except Exception:
+            said = "the next call starts it again"
+        sys.stdout.write(json.dumps({"status": "failed", "text": (
+            f"The browser did not answer within {seconds} s; {said}. Read the page again, or open it anew.")}))
+        sys.stdout.flush()
+        _watchdog_done.set()
+        os._exit(0)
+    global _timer
+    _timer = threading.Timer(seconds, expire)
+    _timer.daemon = True
+    _timer.start()
+    return _timer
 
 
 def current_page(context):
@@ -596,7 +678,9 @@ def run(request):
     importlib.invalidate_caches()
     from playwright.sync_api import sync_playwright
     with sync_playwright() as playwright:
-        browser = playwright.chromium.connect_over_cdp(CDP, timeout=20_000)
+        browser = connect(playwright)
+        watchdog(CALL_LIMIT + (min(WAIT_MAX, max(1, int(request.get("seconds") or 30))) if action == "wait" else 0)
+                 + (DOWNLOAD_SECONDS if action == "download" else 0))
         context = browser.contexts[0] if browser.contexts else browser.new_context()
         page = current_page(context)
         offset = int(request.get("offset") or 0)
@@ -667,12 +751,19 @@ def act(context, page, action, request):
             page = context.new_page()
         page.bring_to_front()
         try:
-            page.goto(target, wait_until="domcontentloaded", timeout=30_000)
+            # Until the address answers; its document may still be coming.
+            page.goto(target, wait_until="commit", timeout=OPEN_SECONDS * 1000)
         except Exception as exc:
             # An address that downloads a file instead of showing a page.
-            if "Download is starting" not in str(exc):
-                raise
-            return f"Opened {target}: it downloads a file."
+            if "Download is starting" in str(exc):
+                return f"Opened {target}: it downloads a file."
+            if "Timeout" in str(exc):
+                raise RuntimeError(f"{target} did not answer within {OPEN_SECONDS} s.") from None
+            raise
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=LOADED_SECONDS * 1000)
+        except Exception:
+            return f"Opened {page.url} (still loading: this is what it shows so far)"
         return f"Opened {page.url}"
     if action == "download":
         return fetch(context, page, str(request.get("url") or ""))
@@ -744,6 +835,11 @@ def act(context, page, action, request):
 
 
 def main():
+    global _answered
+    # One call per process on the VM; tests call main again in one process.
+    with _ANSWER_LOCK:
+        _answered = False
+    _watchdog_done.clear()
     try:
         request = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
         if not isinstance(request, dict):
@@ -755,8 +851,11 @@ def main():
     except Exception as exc:
         message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
         answer = {"status": "failed", "text": message[:400]}
-    sys.stdout.write(json.dumps(answer))
-    sys.stdout.flush()
+    if _timer is not None:
+        _timer.cancel()
+    if not answer_once(answer):
+        # The watchdog answered: it ends the process once Chrome restarted.
+        _watchdog_done.wait(RESTART_SECONDS + 10)
     return 0
 
 

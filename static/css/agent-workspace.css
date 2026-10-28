@@ -187,6 +187,17 @@
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--ink-3); font-size: var(--font-size-xs); font-weight: 400;
 }
+/* A picture from the web (show_image): the site it came from, as a link. */
+.agent-vm-picture-source {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-left: 8px; color: var(--ink-3); font-size: var(--font-size-xs); text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px;
+}
+.agent-vm-picture-source:first-child { margin: 0 auto 0 0; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-vm-picture-source:hover { color: var(--ink-2); }
+}
+.agent-vm-picture-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
 .agent-vm-picture-caption .agent-files-icon-btn, .agent-vm-picture-caption .agent-files-more { width: 32px; height: 32px; color: var(--ink-3); }
 .agent-vm-picture-caption .agent-files-menu-wrap { margin: 0; }
 .agent-vm-picture .agent-files-confirm { margin-top: 8px; }

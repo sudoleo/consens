@@ -9,6 +9,8 @@
   const tools = {
     web_search: ['Web search', 'Searching the web…', 'Searched the web'],
     read_source: ['Read source', 'Reading a source…', 'Read source'],
+    // A picture from the web under the answer (agent_web_images.py; pictureSummary).
+    show_image: ['Picture', 'Getting a picture…', 'Showed a picture'],
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
     check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
     prepare_watch: ['Watch', 'Preparing a Watch…', 'Prepared a Watch for you to start'],
@@ -90,6 +92,13 @@
     if (item.status === 'succeeded' && item.read === 'refused') return 'Read source · Skipped';
     return null;
   }
+  // "Showed a picture · liquipedia.net"; a site that gave none says so.
+  function pictureSummary(item) {
+    if (item.status !== 'succeeded') return null;
+    const host = typeof item.host === 'string' && /^[\w.-]{1,253}$/.test(item.host) ? item.host : '';
+    if (item.outcome === 'failed') return 'Couldn’t get the picture';
+    return host ? `Showed a picture · ${host}` : tools.show_image[2];
+  }
   // A turn whose only check was that of a pasted text (saved on 2026-10-09
   // before the answer of such a turn was judged too): the answer judges did
   // not run.
@@ -106,6 +115,7 @@
       return settingsOutcomes[item.outcome];
     }
     if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
+    if (item.name === 'show_image' && pictureSummary(item)) return pictureSummary(item);
     if (item.name === 'search_chats' && item.opened && ['running', 'succeeded'].includes(item.status)) {
       return item.status === 'running' ? 'Opening an earlier chat…' : 'Read an earlier chat';
     }

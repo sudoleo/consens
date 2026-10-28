@@ -280,9 +280,11 @@ Agent-Panel.
 5. **Vor dem Aufruf** (umgesetzt 2026-10-27, Max: Veto eines Prüfers reicht,
    der Agent erfährt nur die Entscheidung des Nutzers): Aufrufe, die den
    Arbeitsplatz verlassen (`agent_gate.py`, nach Werkzeug und typisierten
-   Argumenten: `browser` mit `open`, `click`, `upload`, Enter, Leertaste; seit dem
-   Netz-Umbau desselben Tages keine Befehlsmuster mehr, die Werkbank erreicht
-   nur Paketquellen), laufen erst, wenn jeder Prüfer des Laufs in einer
+   Argumenten: `browser` mit `open`, `click`, `upload`, Enter, Leertaste; seit
+   2026-10-29 `read_source` und `show_image` mit einer Adresse, die die
+   Nachricht nicht hält; seit dem Netz-Umbau desselben Tages keine
+   Befehlsmuster mehr, die Werkbank erreicht nur Paketquellen), laufen erst,
+   wenn jeder Prüfer des Laufs in einer
    Gate-Runde ohne Websuche „go“ sagt. Ein Halt oder ein Prüfer ohne
    verwertbare Antwort (ausgefallen, pausiert) fragt den Nutzer; Ausfall zählt
    nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Domain für die

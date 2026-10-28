@@ -772,11 +772,13 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
     assert "comparison answer" not in loop.registry.tools["read_source"].description
 
 
-def test_the_agent_reads_a_result_of_its_own_search_but_never_another_page(store, monkeypatch):
+def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_other_page(store, monkeypatch):
     """Harness review 2026-10-27: in audit mode no comparison answer cites a
     page, so the agent could open nothing it found itself in this message,
     although the same results become readable as an earlier message's sources
-    with the next one. Its own search results count now; other URLs do not."""
+    with the next one. Its own search results count now. Another page needs
+    reviewers, who let it through first (since 2026-10-29,
+    test_agent_gate): without them it stays unread."""
     from test_agent_web_fetch import PAGE, fake_fetch
     from app.services.agent_read_source import LABEL_SEARCH
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
@@ -788,15 +790,16 @@ def test_the_agent_reads_a_result_of_its_own_search_but_never_another_page(store
                 "status_update": "Checking the visitor count."}
     script = Audit(tool_steps=2, step_tools={0: "read_source", 1: "read_source"},
                    step_args={0: read(found), 1: read(other)})
-    loop = audit_loop(store, script)
+    loop = audit_loop(store, script, judges="off")
     list(loop.run())
     tool = loop.registry.tools["read_source"]
     assert "this message's web search" in tool.description and "comparison answer" not in json.dumps(tool.schema())
+    assert "waits for the reviewers" in tool.description
     assert [s["url"] for s in loop.search_sources] == [found] * 3
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert results[0]["status"] == "completed" and results[0]["cited_by"] == [LABEL_SEARCH]
     assert results[0]["untrusted_page_text"] == PAGE
-    assert results[1]["status"] == "refused" and "own search results" in results[1]["reason"]
+    assert results[1]["status"] == "refused" and "this message's web search" in results[1]["reason"]
     assert len(calls) == 1
 
 

@@ -129,6 +129,11 @@ LABEL_EARLIER = "an earlier message's sources"
 # the agent does not call it, so "your search" read as a search it never made
 # (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
+# Audit mode since 2026-10-29: any public page, which the reviewers let
+# through first when the message did not hold it (agent_gate.WEB_READS). The
+# provider's search of GPT-6 Luna and GPT-6.1 Terra sends no hits to the app,
+# so they could read nothing they found.
+LABEL_CHOSEN = "a page you chose"
 
 
 def user_urls(conversation):
@@ -249,8 +254,8 @@ class ReadSourceArgs(ProgressArgs):
 # description): the agent's own search results instead of comparison answers.
 class AuditReadSourceArgs(ReadSourceArgs):
     url: str = Field(min_length=1, max_length=2048, description=
-        "One URL exactly as it appears in your own search results of this message, in the sources of an earlier "
-        "message of this chat or in the user's messages.")
+        "The page's http(s) address. One that is not among this message's search results, the sources of an "
+        "earlier message of this chat or the user's links waits for the reviewers before it is read.")
     purpose: Literal["user_request", "settle_contradiction", "exact_wording"] = Field(description=
         "user_request: the user asks what this page says, asks you to read or check it, or limits the answer to "
         "the source it belongs to (such as only the official site). "
@@ -377,8 +382,10 @@ class SourceReader:
         audit = getattr(comparison, "audit_mode", False)
         # Audit mode since 2026-10-28: what it opens, not when to.
         description = (
-            "Open one page: a result of this message's web search, a source of an earlier message of this chat or "
-            f"a page the user linked. At most {READS_PER_MESSAGE} per message; returns the page text."
+            "Read one public web page as text, PDFs too: a reader service fetches it in seconds, without sign-ins "
+            "or clicks. A page that is not a result of this message's web search, a source of an earlier message "
+            "of this chat or a page the user linked waits for the reviewers first. At most "
+            f"{READS_PER_MESSAGE} per message."
             if audit else
             "Open one page: a source that a comparison answer of this message cited, a source of an earlier "
             "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
@@ -425,6 +432,29 @@ class SourceReader:
             cited.setdefault(url_key(url), {"url": url, "title": "", "cited_by": [
                 {"comparison_id": None, "provider": "chat", "label": LABEL_USER}]})
         return cited
+
+    def knows(self, url):
+        """Whether the message already holds ``url`` (cited, a search hit, an
+        earlier source, the user's, read before): such a page is read, and a
+        picture of it shown, without the reviewers' gate (agent_gate.outward)."""
+        key = url_key(url) if _safe_url(url) else ""
+        if not key:
+            return False
+        if key in self.cited():
+            return True
+        with self.lock:
+            return any(key in {url_key(r.get("url")), url_key(r.get("cited_url"))} for r in self.reads)
+
+    def chosen(self, url):
+        """A page the agent named itself, in audit mode with reviewers (who
+        let it through first, agent_gate.WEB_READS); else None."""
+        auditor = getattr(self.comparison, "auditor", None)
+        url = url.strip()
+        if not getattr(self.comparison, "audit_mode", False) or not getattr(auditor, "sessions", None) \
+                or not _safe_url(url) or not url_key(url):
+            return None
+        return {"url": url, "title": "", "cited_by": [{"comparison_id": None, "provider": "agent",
+                                                       "label": LABEL_CHOSEN}]}
 
     def _refuse(self, args):
         loop, comparison = self.loop, self.comparison
@@ -479,9 +509,11 @@ class SourceReader:
                 key = url_key(args.url)
                 entry = self.cited().get(key) if key else None
                 if entry is None and getattr(self.comparison, "audit_mode", False):
-                    raise ValueError("read_source opens only a URL from your own search results in this message, "
-                                     "the sources of an earlier message of this chat, or one the user wrote, copied "
-                                     "exactly; not URLs from an answer's text or a page.")
+                    entry = self.chosen(args.url)
+                    if entry is None:
+                        raise ValueError("read_source opens only a public http(s) address here: a result of this "
+                                         "message's web search, a source of an earlier message of this chat or "
+                                         "one the user wrote, copied exactly.")
                 if entry is None:
                     raise ValueError("read_source opens only a URL listed in the sources of a comparison answer of "
                                      "this message or of an earlier message of this chat, or one the user wrote, "

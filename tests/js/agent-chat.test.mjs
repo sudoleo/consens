@@ -926,6 +926,23 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('says from which site the agent showed a picture, or that none came', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const step = event => {
+      w.App.agentActivity.render(host, {running:true, events:[event]});
+      return [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent)[0];
+    };
+    const shown = {id:'p', kind:'tool', name:'show_image', status:'succeeded', host:'liquipedia.net'};
+    expect(step(shown)).toBe('Showed a picture · liquipedia.net');
+    expect(step({...shown, host:'', outcome:'failed'})).toBe('Couldn’t get the picture');
+    expect(step({...shown, host:'<img src=x>'})).toBe('Showed a picture');
+    expect(step({...shown, status:'failed'})).toBe('Picture · Failed');
+    w.App.agentActivity.render(host, {running:true, events:[{...shown, status:'running'}]});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Getting a picture…');
+    dom.window.close();
+  });
+
   it('says which source the agent read, and "read" only for a real read', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');
