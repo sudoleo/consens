@@ -181,10 +181,11 @@ class BrowserTools:
 
     def tools(self):
         return [ReadOnlyTool(
-            "browser", "Use the workspace's Chrome, the one the user can watch and take over live, signed in where "
-                       "the user signed in. Pages come back as text with refs (e12) for click, type, select and "
-                       "upload, and find looks up a text on the page with the refs it is in; every action returns "
-                       "the page again. A file the page downloads comes into your chat folder's downloads folder.",
+            "browser", "Use the browser, a Chrome on a computer of its own that the user can watch and take over "
+                       "live, signed in where the user signed in. Pages come back as text with refs (e12) for click, "
+                       "type, select and upload, and find looks up a text on the page with the refs it is in; every "
+                       "action returns the page again. A file the page downloads, also one the user downloads there, "
+                       "comes into your chat folder's downloads folder.",
             BrowserArgs, self.call, activity=self._activity, reports=True)]
 
     def _helper(self, request, timeout, cancellation):

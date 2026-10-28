@@ -225,8 +225,7 @@ def test_reading_a_page_runs_without_a_gate_round(store):
 
 
 def read_args(url):
-    return {"url": url, "purpose": "exact_wording", "point": "The visitor count",
-            "status_update": "Checking the visitor count."}
+    return {"url": url}
 
 
 def test_a_search_hit_is_read_at_once_and_a_page_of_its_own_choice_after_every_reviewers_go(store, monkeypatch):

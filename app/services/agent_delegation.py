@@ -420,25 +420,23 @@ class DelegationLoop(AgentLoop):
                 # Reading cited sources after a comparison (docs/agent-mode.md,
                 # "Quellen nachlesen"). Registered for the whole turn: a tool
                 # list that changes between steps would rewrite the prompt cache.
-                from app.services.prompt_defaults import (AGENT_AUDIT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_PROMPT,
-                                                          AGENT_READ_SOURCE_REPLACEMENTS)
+                from app.services.prompt_defaults import AGENT_READ_SOURCE_PROMPT, AGENT_READ_SOURCE_REPLACEMENTS
                 self.comparison.reader = agent_read_source.SourceReader(self, self.comparison)
-                content = self.messages[0]["content"]
                 if not audit:
+                    # In audit mode the tool's description says it all
+                    # (prompt_defaults, since 2026-10-28).
+                    content = self.messages[0]["content"]
                     for old, new in AGENT_READ_SOURCE_REPLACEMENTS:
                         content = content.replace(old, new)
-                self.messages[0]["content"] = content + "\n\n" + (
-                    AGENT_AUDIT_READ_SOURCE_PROMPT if audit else AGENT_READ_SOURCE_PROMPT).format(
-                    limit=agent_read_source.READS_PER_MESSAGE)
+                    self.messages[0]["content"] = content + "\n\n" + AGENT_READ_SOURCE_PROMPT.format(
+                        limit=agent_read_source.READS_PER_MESSAGE)
                 self.registry = ToolRegistry([*self.registry.tools.values(), self.comparison.reader.tool],
                                              argument_limit=24_000)
                 if audit:
                     # The same bounds as reading: the server fetches the page
                     # (agent_web_images.py, docs/agent-mode.md "Bilder").
                     from app.services.agent_web_images import WebImageTools
-                    from app.services.prompt_defaults import AGENT_AUDIT_IMAGE_PROMPT
                     self.image_tools = WebImageTools(self)
-                    self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_IMAGE_PROMPT
                     self.registry = ToolRegistry([*self.registry.tools.values(), *self.image_tools.tools()],
                                                  argument_limit=24_000)
 

@@ -248,9 +248,12 @@ def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):
     assert describe("browser", json.dumps({"action": "click", "x": 640, "y": 300}), "{}") == "browser click at 640,300"
     assert describe("browser", json.dumps({"action": "drag", "strokes": [[[1, 1], [2, 2]]] * 3}), "{}") == (
         "browser drag 3 strokes")
-    # The prompt says it as a fact, and that a check for a human is never the agent's.
+    # The action's description says it (since 2026-10-28 only there, not also
+    # in the prompt), and the prompt that a check for a human is never the agent's.
+    from app.services.agent_browser import BrowserArgs
     from app.services.prompt_defaults import AGENT_VM_PROMPT
-    assert "at x,y of your last screenshot" in AGENT_VM_PROMPT
+    assert "at x,y of your last screenshot" in BrowserArgs.model_json_schema()["properties"]["action"]["description"]
+    assert "at x,y" not in AGENT_VM_PROMPT
     from app.services.prompt_defaults import AGENT_AUDIT_SYSTEM_PROMPT
     assert "checks meant for humans, such as passwords and CAPTCHAs, stay theirs" in AGENT_AUDIT_SYSTEM_PROMPT
 

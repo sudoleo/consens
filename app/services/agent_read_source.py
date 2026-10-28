@@ -34,7 +34,7 @@ from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
-from pydantic import Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.openrouter_contract import OPENROUTER_BASE_URL, openrouter_headers
 from app.services.agent_comparison import ProgressArgs
@@ -251,16 +251,13 @@ class ReadSourceArgs(ProgressArgs):
 
 
 # ReadSourceArgs in audit mode (no docstring: it would become the schema's
-# description): the agent's own search results instead of comparison answers.
-class AuditReadSourceArgs(ReadSourceArgs):
-    url: str = Field(min_length=1, max_length=2048, description=
-        "The page's http(s) address. One that is not among this message's search results, the sources of an "
-        "earlier message of this chat or the user's links waits for the reviewers before it is read.")
-    purpose: Literal["user_request", "settle_contradiction", "exact_wording"] = Field(description=
-        "user_request: the user asks what this page says, asks you to read or check it, or limits the answer to "
-        "the source it belongs to (such as only the official site). "
-        "settle_contradiction: sources disagree on a fact that matters and this page decides it. "
-        "exact_wording: the answer will quote a key figure, date, definition or official statement from it.")
+# description). Since 2026-10-28 only the address: no purpose and point to
+# justify a read with (a list of when to read, which Max took out of the
+# prompt on 2026-10-28), and no status_update, since text beside a tool call
+# shows the user as a note in audit mode. The description says the rest once.
+class AuditReadSourceArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    url: str = Field(min_length=1, max_length=2048, description="The page's http(s) address.")
 
 
 class PageFetch(AgentCompletion):
@@ -382,10 +379,10 @@ class SourceReader:
         audit = getattr(comparison, "audit_mode", False)
         # Audit mode since 2026-10-28: what it opens, not when to.
         description = (
-            "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins or "
-            "clicks. A page that is not a result of this message's web search, a source of an earlier message "
-            "of this chat or a page the user linked waits for the reviewers first. At most "
-            f"{READS_PER_MESSAGE} per message."
+            "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
+            "or clicks; a read takes about 10 to 30 seconds. A page that is not a result of this message's web "
+            "search, a source of an earlier message of this chat or a page the user linked waits for the "
+            f"reviewers first. At most {READS_PER_MESSAGE} per message."
             if audit else
             "Open one page: a source that a comparison answer of this message cited, a source of an earlier "
             "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
@@ -529,8 +526,8 @@ class SourceReader:
                 return {"status": "already_read", "url": tried["url"],
                         "note": "You already read this source in this message; its text is in that earlier result."}
             record = {"id": len(self.reads) + 1, "url": entry["url"], "host": host_of(entry["url"]),
-                      "title": entry["title"], "status": "running", "purpose": args.purpose,
-                      "point": " ".join(args.point.split()), "cited_by": entry["cited_by"]}
+                      "title": entry["title"], "status": "running", "purpose": getattr(args, "purpose", ""),
+                      "point": " ".join(getattr(args, "point", "").split()), "cited_by": entry["cited_by"]}
             self.reads.append(record)
             self._steps[loop.routing_steps] = self._steps.get(loop.routing_steps, 0) + 1
         self._checkpoint()

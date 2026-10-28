@@ -32,10 +32,7 @@ def _reviewer():
 
 def _audit_blocks():
     from app.services import agent_files, agent_memory, agent_settings, agent_watch
-    from app.services.agent_read_source import READS_PER_MESSAGE
-    from app.services.prompt_defaults import AGENT_AUDIT_IMAGE_PROMPT, AGENT_AUDIT_READ_SOURCE_PROMPT
-    return "\n\n".join((AGENT_AUDIT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE), AGENT_AUDIT_IMAGE_PROMPT,
-                        agent_watch.AUDIT_PROMPT,
+    return "\n\n".join((agent_watch.AUDIT_PROMPT,
                         agent_settings.AUDIT_PROMPT, agent_memory.AUDIT_MEMORY_USE_PROMPT,
                         agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED))
 
@@ -86,11 +83,10 @@ _ENTRIES = (
      "tool blocks\").",
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent_audit")),
     ("agent_audit_blocks", "Agent audit: tool blocks",
-     "Appended to \"Agent: audit mode instructions\" with their tools, instead of the agent's versions: source "
-     "reading, pictures (show_image), Watch, settings, memory (relevance and, when the user lets the agent update "
-     "memory, the update rules) and files. Without comparisons and without recipes for when to read, ask or "
-     "remember.",
-     "prompt_defaults.py:AGENT_AUDIT_READ_SOURCE_PROMPT, AGENT_AUDIT_IMAGE_PROMPT, "
+     "Appended to \"Agent: audit mode instructions\" with their tools, instead of the agent's versions: Watch, "
+     "settings, memory (relevance and, when the user lets the agent update memory, the update rules) and files. "
+     "Without comparisons and without recipes for when to read, ask or remember. Since 2026-10-28 source reading "
+     "and pictures (read_source, show_image) have no block: their descriptions say what they do.",
      "agent_watch.py/agent_settings.py:AUDIT_PROMPT, "
      "agent_memory.py:AUDIT_MEMORY_*, agent_files.py:AUDIT_UNTRUSTED", _audit_blocks),
     ("audit_reviewer", "Agent audit: reviewers",

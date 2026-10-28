@@ -283,10 +283,29 @@ Schreibratschläge und keine Beispiele; Grenzen, die zählen, setzen die
 Werkzeuge durch (Leseadressen und -anzahl, Belegzitate, Memory-Sperre). Der
 Audit-Modus hat dafür eigene, kurze Fassungen der Blöcke zu Quellen, Watches,
 Einstellungen, Memory, Dateien, Dokumenten und Google
-(`AGENT_AUDIT_READ_SOURCE_PROMPT`, `agent_watch.AUDIT_PROMPT`,
-`agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
-`agent_files.AUDIT_UNTRUSTED`; im Admin als „Agent audit: tool blocks“); keiner
-nennt einen Vergleich. Die Prüfer werden nur noch genannt (unabhängig, der
+(`agent_watch.AUDIT_PROMPT`, `agent_settings.AUDIT_PROMPT`,
+`agent_memory.AUDIT_MEMORY_*`, `agent_files.AUDIT_UNTRUSTED`; im Admin als
+„Agent audit: tool blocks“); keiner nennt einen Vergleich. Seit 2026-10-28
+(abends, Max: „go for it“ nach dem Harness-Check) steht jeder Fakt an genau
+einer Stelle: `read_source` und `show_image` haben keinen eigenen Block mehr
+(vorher `AGENT_AUDIT_READ_SOURCE_PROMPT` und `AGENT_AUDIT_IMAGE_PROMPT`, die ihre
+Beschreibungen wiederholten), die zwei App-Fakten darum stehen in
+`AGENT_AUDIT_ANSWER_SECTION` (Bilder im Markdown erscheinen nicht; bei manchen
+Anbietern erreichen Suchtreffer weder App noch Prüfer). `AGENT_VM_PROMPT` nennt
+nur noch, was mehrere Werkzeuge betrifft (gemeinsamer Rechner, Chat-Ordner,
+Notizen, vier Wege ins Web, Browser auf eigenem Rechner, Terminal); die Liste
+der VM-Werkzeuge und die Aktionen des Browsers standen dort ein zweites Mal.
+Der Rechner heißt überall „workspace“ (die Werkzeuge sagten „your VM“, ein
+Absatz „workbench“), und `vm_exec` sagte fälschlich, es starte im Home statt im
+Ordner des Chats. `read_source` nimmt im Audit-Modus nur noch `url`
+(`AuditReadSourceArgs`: ohne `purpose`/`point`, die einen Lesegrund aus einer
+Liste verlangten, und ohne `status_update`, weil Text neben dem Aufruf als
+Notiz erscheint), `show_image` nur `url` und `caption`. Gemessen (Audit mit VM,
+ohne Memory): Systemprompt 8.488 → 6.579 Zeichen, Werkzeuge 21.868 → 20.459.
+Max' Anlass: Terra schätzte die eigene „kognitive Auslastung“ auf 40 %; das ist
+kein Messwert, die Messung zeigte einen schlanken Harness mit Dopplungen.
+Eine Tabelle „Ziel → Werkzeug“ kam bewusst nicht dazu: eine Wann-Regel, die
+klügere Modelle aus den Beschreibungen selbst ableiten. Die Prüfer werden nur noch genannt (unabhängig, der
 Nutzer sieht ihre Marken, der Agent nicht), damit der Agent consens.io erklären
 und nicht fälschlich von einer Prüfung sprechen kann. Gemessen: rund 9.500
 statt zuvor 20.100 Zeichen für Kern, Quellen, Arbeitsplatz, GitHub, Plan,
@@ -303,7 +322,7 @@ Tiefe, Answer start, `_consensus_search_handoff` und `_tool_reminder`
 (eigene Recherche führt nicht mehr in einen Vergleich), das Memory-Feld an
 den Vergleichen (eigene Memory-Regeln `agent_memory.AUDIT_MEMORY_*`:
 Entscheidung über `update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
-(`AGENT_AUDIT_READ_SOURCE_PROMPT` statt `AGENT_READ_SOURCE_PROMPT`; lesbar
+(ohne eigenen Lese-Block, die Beschreibung von `read_source` sagt es; lesbar
 sind Seiten, die der Nutzer verlinkt, Quellen früherer Nachrichten und seit
 2026-10-27 die eigenen Suchtreffer dieser Nachricht: `DelegationLoop.search_sources`
 sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
@@ -3214,8 +3233,8 @@ hält, geht vorher durch die Vorab-Prüfung (`agent_gate.WEB_READS`), wie ein
 folgen (`auditor.sessions`), sonst gilt die alte Absage; gelesen steht sie
 mit dem Label `LABEL_CHOSEN` („a page you chose“). Die Sicherheit bleibt die
 des Browsers: Eine Adresse mit Chat-Inhalt erreicht ihren Server erst nach
-dem Go aller Prüfer, und der Abruf läuft über Exa ohne Anmeldungen. Der
-Prompt `AGENT_AUDIT_READ_SOURCE_PROMPT` sagt das als Fakt, dazu, dass bei
+dem Go aller Prüfer, und der Abruf läuft über Exa ohne Anmeldungen. Die
+Werkzeugbeschreibung sagt das als Fakt, `AGENT_AUDIT_ANSWER_SECTION`, dass bei
 manchen Anbietern die Treffer nur das Modell erreichen; die Prüfer lesen in
 `REVIEW_PROMPT_BODY`, dass Adressen nach so einer Suche aus ihr stammen können.
 
@@ -3432,8 +3451,9 @@ Google-Daten).
   entscheidet der Agent. Nur die Dekodiergrenze (Pixelzahl) bleibt. Ergebnis
   und Bild stehen im Arbeitsprotokoll mit Herkunft `web` (vorher das Bild als
   `vm`, ebenso ein Screenshot des Browsers).
-- Prompt: `AGENT_AUDIT_IMAGE_PROMPT` („PICTURES“), nur Fakten: was es tut, dass
-  der Server lädt und Markdown-Bilder nicht erscheinen.
+- Prompt: kein eigener Block (bis zum Aufräumen am selben Abend
+  `AGENT_AUDIT_IMAGE_PROMPT`); die Beschreibung sagt, was es tut, und
+  `AGENT_AUDIT_ANSWER_SECTION`, dass Bilder im Markdown nicht erscheinen.
 
 Tests: `tests/test_agent_web_images.py`, die Gate-Fälle in
 `tests/test_agent_gate.py`.

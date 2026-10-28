@@ -659,7 +659,9 @@ def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm)
     files[f"{D}/calc.py"] = source.encode()
     events = list(loop.run())
     assert "vm_edit_file" in script.offered[0]
-    assert "vm_edit_file read, write and change text files" in prompt_defaults.AGENT_VM_PROMPT
+    # What it does stands in its description, once (since 2026-10-28 not also in the prompt).
+    assert "replacing exact text" in loop.registry.tools["vm_edit_file"].description
+    assert "vm_edit_file" not in prompt_defaults.AGENT_VM_PROMPT
     assert files[f"{D}/calc.py"].decode() == source.replace("total = a - b\n", "total = a + b\nprint(total)\n")
     [result] = results(loop)
     assert result["path"] == f"{D}/calc.py" and result["replacements"] == 1

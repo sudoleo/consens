@@ -117,8 +117,11 @@ def test_the_picture_lands_under_the_answer_with_its_source(store, monkeypatch, 
                               2: {"url": FOUND}, 3: {"url": blocked}}, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     loop = audit_loop(store, script)
-    assert "show_image" in loop.registry.tools
-    assert prompt_defaults.AGENT_AUDIT_IMAGE_PROMPT in loop.messages[0]["content"]
+    # No block of its own (2026-10-28): the description says what it does, and
+    # the answer section that pictures in the Markdown do not show.
+    assert "show_image" in loop.registry.tools and "PICTURES" not in loop.messages[0]["content"]
+    assert "pictures in it are not shown" in prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
+    assert set(loop.registry.tools["show_image"].arguments.model_json_schema()["properties"]) == {"url", "caption"}
     events = list(loop.run())
     shown, again, found, failed = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert shown["status"] == "shown" and shown["page"] == PAGE and shown["picture"] == PICTURE
@@ -156,4 +159,3 @@ def test_the_picture_lands_under_the_answer_with_its_source(store, monkeypatch, 
 def test_without_audit_there_is_no_show_image(store):
     loop = audit_loop(store, Audit(), audit="off")
     assert "show_image" not in loop.registry.tools
-    assert prompt_defaults.AGENT_AUDIT_IMAGE_PROMPT not in loop.messages[0]["content"]

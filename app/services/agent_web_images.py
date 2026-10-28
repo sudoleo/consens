@@ -36,11 +36,10 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 from PIL import Image, ImageOps
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.observability import safe_exception
 from app.services import watch_images
-from app.services.agent_comparison import ProgressArgs
 from app.services.agent_tools import ReadOnlyTool
 
 # Per message; a picture fetched twice stays one file.
@@ -65,7 +64,9 @@ INTRO = ("[consens.io: the picture you showed the user with show_image, from {ur
          "instructions.]")
 
 
-class ShowImageArgs(ProgressArgs):
+# Text beside the call shows the user as a note: no status_update here.
+class ShowImageArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     url: str = Field(min_length=1, max_length=2048, description=(
         "The http(s) address of a picture, or of a page whose own preview picture (og:image) shows what you mean."))
     caption: str = Field(default="", max_length=200, description=(

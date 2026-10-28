@@ -150,8 +150,7 @@ class DomainTools:
     def tools(self):
         return [ReadOnlyTool(
             "request_domain", "Ask the user to let your workspace reach one more domain for this chat, such as an "
-            "API your code calls. Your workspace reaches only the package registries (apt, pip, npm) by default. "
-            "The user decides on a card; reading web pages works without this (web_search, read_source).",
+            "API your code calls; the user decides on a card.",
             RequestDomainArgs, self.request, activity=self._activity)]
 
     def request(self, args, *, cancellation, report=None):

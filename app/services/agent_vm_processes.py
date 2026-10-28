@@ -83,7 +83,7 @@ class VmStartProcessArgs(BaseModel):
     command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash in the background.")
     cwd: str = Field(default="", max_length=1024, description="Working directory; default this chat's folder.")
     max_seconds: int = Field(default=DEFAULT_SECONDS, ge=10, le=MAX_SECONDS,
-                             description="The process is ended after this long.")
+                             description=f"The process is ended after this long (default {DEFAULT_SECONDS // 60} minutes).")
 
 
 class VmProcessOutputArgs(BaseModel):
@@ -190,7 +190,7 @@ class ProcessTools:
 
     def tools(self):
         return [
-            ReadOnlyTool("vm_start_process", "Start a command in the background in your VM, such as a dev server or "
+            ReadOnlyTool("vm_start_process", "Start a command in the background in your workspace, such as a dev server or "
                          "a long test run (at most three at once). Returns its id and first output.",
                          VmStartProcessArgs, self.start, activity=self._activity, reports=True),
             ReadOnlyTool("vm_process_output", "Read the end of a background process's output and whether it still "

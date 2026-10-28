@@ -5649,7 +5649,11 @@ wieder für jedes Konto mit Audit; ohne Audit keine VM). Die Seite zeigt dann nu
 Agent-Prompts (seit 2026-10-28 schlank: nur App-Fakten, App-Verträge, Sicherheit
 und Wahrheit; eigene Audit-Blöcke `agent_watch.AUDIT_PROMPT`,
 `agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
-`agent_files.AUDIT_UNTRUSTED`, Admin-Katalog `agent_audit_blocks`),
+`agent_files.AUDIT_UNTRUSTED`, Admin-Katalog `agent_audit_blocks`; seit dem
+Aufräumen am 2026-10-28 abends jeder Fakt einmal: `read_source`/`show_image`
+ohne eigenen Block, ihre zwei App-Fakten in `AGENT_AUDIT_ANSWER_SECTION`,
+`AGENT_VM_PROMPT` nur Werkzeug-übergreifendes, ein Name „workspace“,
+`AuditReadSourceArgs` nur `url`),
 `ComparisonTools.audit_mode` bietet keine Vergleichstools an,
 und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
 streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).

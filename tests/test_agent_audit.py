@@ -753,9 +753,13 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
         {"role": "system", "content": prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT}, {"role": "user", "content": "Hi"}])
     system = loop.messages[0]["content"]
     assert system.startswith(prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT)
-    assert system.count("HOW CONSENS.IO WORKS") == 1 and "READING SOURCES" in system
+    # Since 2026-10-28 read_source has no block of its own: its description
+    # says what it does, once (Max: each fact in one place).
+    assert system.count("HOW CONSENS.IO WORKS") == 1 and "READING SOURCES" not in system
     from app.services.agent_read_source import READS_PER_MESSAGE
-    assert prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE) in system
+    reader = loop.registry.tools["read_source"]
+    assert f"At most {READS_PER_MESSAGE} per message" in reader.description
+    assert set(reader.arguments.model_json_schema()["properties"]) == {"url"}
     # Since 2026-10-28 the audit blocks name no comparison at all (no limit,
     # no memory field, no free-mode text), and memory changes pass the
     # reviewers once outside content is in view instead of coming first.
@@ -785,11 +789,9 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     calls = fake_fetch(monkeypatch)
     found, other = "https://www.toureiffel.paris/en", "https://evil.example/collect?d=1"
 
-    def read(url):
-        return {"url": url, "purpose": "exact_wording", "point": "The visitor count",
-                "status_update": "Checking the visitor count."}
+    # Only the address since 2026-10-28: no purpose or point to justify a read.
     script = Audit(tool_steps=2, step_tools={0: "read_source", 1: "read_source"},
-                   step_args={0: read(found), 1: read(other)})
+                   step_args={0: {"url": found}, 1: {"url": other}})
     loop = audit_loop(store, script, judges="off")
     list(loop.run())
     tool = loop.registry.tools["read_source"]
@@ -810,8 +812,7 @@ def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     texts = (agent_memory.AUDIT_MEMORY_USE_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT,
              agent_memory.AUDIT_MEMORY_READ_ONLY_PROMPT, agent_memory.AUDIT_MEMORY_PAUSED_PROMPT,
              agent_memory.AUDIT_MEMORY_UNAVAILABLE_PROMPT, agent_watch.AUDIT_PROMPT, agent_settings.AUDIT_PROMPT,
-             agent_files.AUDIT_UNTRUSTED, prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT,
-             prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT, prompt_defaults.AGENT_VM_PROMPT)
+             agent_files.AUDIT_UNTRUSTED, prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT, prompt_defaults.AGENT_VM_PROMPT)
     for text in texts:
         assert "comparison" not in text.lower() and "compare_models" not in text, text[:80]
     # Since 2026-10-28 a constitution and facts (Max: the model decides with
@@ -827,7 +828,7 @@ def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     assert "evidence" in agent_settings.AUDIT_PROMPT and "only the user starts" in agent_watch.AUDIT_PROMPT
     # Facts, no rules: the blocks name no "never" and no "do not" any more.
     for text in (agent_watch.AUDIT_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED,
-                 prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT, prompt_defaults.AGENT_VM_PROMPT):
+                 prompt_defaults.AGENT_VM_PROMPT):
         assert not re.search(r"(never|do not)", text, re.I), text[:80]
 
 

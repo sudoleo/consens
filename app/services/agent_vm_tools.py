@@ -603,28 +603,28 @@ class VMTools:
         # without the app's configuration the tools say "not set up".
         github = agent_github.GitHubTools(self).tools()
         return [
-            ReadOnlyTool("vm_exec", "Run a shell command in your Linux VM (bash, your home folder by default). "
+            ReadOnlyTool("vm_exec", "Run a shell command in your workspace (bash, in this chat's folder by default). "
                          "Returns stdout, stderr (their ends when long), exit code and duration.",
                          VmExecArgs, self.exec, activity=self._exec_activity, reports=True),
-            ReadOnlyTool("vm_install_packages", "Install Ubuntu packages with apt in your VM (you have no sudo). "
+            ReadOnlyTool("vm_install_packages", "Install Ubuntu packages with apt in your workspace (you have no sudo). "
                          "For Python packages use pip or uv yourself, for Node npm in your project.",
                          VmInstallPackagesArgs, self.install, activity=self._install_activity, reports=True),
-            ReadOnlyTool("vm_read_file", "Read a text file in your VM by lines.", VmReadFileArgs, self.read,
+            ReadOnlyTool("vm_read_file", "Read a text file in your workspace by lines.", VmReadFileArgs, self.read,
                          activity=self._path_activity, reports=True),
-            ReadOnlyTool("vm_write_file", "Write a text file in your VM (creates folders, replaces the file).",
+            ReadOnlyTool("vm_write_file", "Write a text file in your workspace (creates folders, replaces the file).",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
-            ReadOnlyTool("vm_edit_file", "Change a text file in your VM by replacing exact text: old_string must "
+            ReadOnlyTool("vm_edit_file", "Change a text file in your workspace by replacing exact text: old_string must "
                          "occur exactly once (or set replace_all). Returns the changed lines.",
                          VmEditFileArgs, self.edit, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
-            ReadOnlyTool("vm_share_file", "Give the user a file from your VM (up to 5 MB): it appears under your "
+            ReadOnlyTool("vm_share_file", "Give the user a file from your workspace (up to 5 MB): it appears under your "
                          "answer, a picture as a picture, any other file as a download.",
                          VmShareFileArgs, self.share, activity=self._path_activity, reports=True),
             # Dev servers and long test runs (agent_vm_processes.py).
             *ProcessTools(self).tools(),
             # Only for a chat model that takes images.
-            *([ReadOnlyTool("vm_view_image", "Look at a picture in your VM (PNG, JPEG, WebP or GIF up to 5 MB), "
+            *([ReadOnlyTool("vm_view_image", "Look at a picture in your workspace (PNG, JPEG, WebP or GIF up to 5 MB), "
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",
                             VmViewImageArgs, self.view, activity=self._path_activity, reports=True)]
               if sees_pictures(self.loop.model) else []),
