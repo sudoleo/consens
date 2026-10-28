@@ -286,7 +286,10 @@ def describe(name, arguments, result):
         if title.startswith("Page: "):
             line += f" -> {_short(title[6:], 120)}"
     elif name == "vm_install_packages":
-        line = f"vm_install_packages {' '.join(str(n) for n in (args.get('packages') or [])[:30])}"
+        # The arguments as the model wrote them, also when the registry
+        # refused them (packages as a number or an object).
+        packages = args.get("packages") if isinstance(args.get("packages"), list) else []
+        line = f"vm_install_packages {' '.join(str(n) for n in packages[:30])}"
         if "exit_code" in data:
             line += f" -> exit {data['exit_code']}"
     elif name == "request_domain":

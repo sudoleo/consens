@@ -428,6 +428,19 @@ def test_a_stopped_vm_turn_still_tells_the_next_message(store, fake_vm):
     assert turn["agent_work_record"].splitlines()[1] == "1. vm_exec $ make -> exit 0, 0.5 s: ok"
 
 
+def test_a_call_with_malformed_arguments_does_not_cost_the_answer(store, fake_vm):
+    """The record is written in run's finally, before finish_run: a call the
+    registry refused for its arguments (packages as an object) broke it with
+    a TypeError until 2026-10-28, and the finished answer was never saved."""
+    script = LongAgent([[("vm_exec", {"command": "make"})],
+                        [("vm_install_packages", {"packages": {"pip": ["numpy"]}})]])
+    loop = vm_loop(store, script, audit="off")
+    list(loop.run())
+    turn = stored(store, loop)
+    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
+    assert turn["agent_work_record"].splitlines()[2].startswith("2. vm_install_packages")
+
+
 def test_a_turn_without_vm_work_saves_no_record(store, fake_vm):
     loop = vm_loop(store, LongAgent([]), audit="off")
     list(loop.run())
