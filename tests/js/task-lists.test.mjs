@@ -126,6 +126,31 @@ describe("ticks of a saved turn", () => {
     expect(JSON.parse(init.body)).toEqual({ checked: [0, 1] });
   });
 
+  // An outage used up the retries; every later tick of the turn then failed
+  // once and was dropped unsaved, its box still ticked (2026-10-24).
+  it("gives a tick after an outage its own retries", async () => {
+    const { window, document, fetch, timers } = boot();
+    const el = document.createElement("div");
+    document.body.append(el);
+    window.App.taskChecks.scope(el, { chatId: "c".repeat(32), turnId: "t".repeat(32) });
+    window.injectMarkdown(el, LIST, []);
+    const boxes = el.querySelectorAll(".md-task-box");
+    fetch.mockImplementation(async () => ({ ok: false, status: 503, json: async () => ({}) }));
+    boxes[0].click();
+    for (let round = 0; round < 3; round++) { timers.run(); await flush(); }
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(timers.delays()).toEqual([]);
+    // Later, still down for one try, then back.
+    fetch.mockImplementationOnce(async () => ({ ok: false, status: 503, json: async () => ({}) }));
+    fetch.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({}) }));
+    boxes[1].click();
+    timers.run(); await flush();
+    expect(timers.delays()).toEqual([2000]);
+    timers.run(); await flush();
+    expect(fetch).toHaveBeenCalledTimes(5);
+    expect(JSON.parse(fetch.mock.calls[4][1].body)).toEqual({ checked: [0] });
+  });
+
   it("keeps a tick through a new render of the same answer and wins over older turn data", () => {
     const { window, document } = boot();
     const el = document.createElement("div");
