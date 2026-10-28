@@ -51,6 +51,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -561,12 +562,69 @@ def parse(source: str) -> _Element:
         if tag in VOID_TAGS or token.endswith("/>"):
             element.end = ""
             continue
+        closing = _marked_end(source, tag, token, element, position)
+        if closing is not None:
+            # Words the page marks as the reader's (a shared answer): never
+            # translated, so not parsed either; they pass byte for byte.
+            # Until 2026-10-28 a long answer was parsed into a tree first,
+            # 0.5-2 s per page (audit).
+            if closing.start() > position:
+                element.children.append(_Raw(source[position:closing.start()]))
+            element.end = closing.group(0)
+            position = closing.end()
+            continue
         stack.append(element)
     if position < length:
         stack[-1].children.append(_Text(source[position:]))
     for open_element in stack[1:]:
         open_element.end = ""
     return root
+
+
+@lru_cache(maxsize=64)
+def _nesting_tokens(tag: str) -> re.Pattern:
+    """Where a token that changes the nesting of ``tag`` may start."""
+    return re.compile(rf"<(?:/?(?:{re.escape(tag)}|script|style|textarea)(?=[\s/>])|!--)", re.I)
+
+
+def _marked_end(source: str, tag: str, token: str, element: _Element, position: int):
+    """The closing token of a marked element (``_Element.marked``), or None:
+    unmarked, a tag the next one may end implicitly, or no matching end.
+    Only the tokens that open or close ``tag`` (and the raw-text elements and
+    comments around them) are read, about twenty times faster than parsing."""
+    if tag in _IMPLIED_END or not any(word in token for word in ("data-i18n-skip", "translate", "contenteditable")):
+        return None
+    if not element.marked:
+        return None
+    candidates = _nesting_tokens(tag)
+    depth = 1
+    while True:
+        hit = candidates.search(source, position)
+        if hit is None:
+            return None
+        match = _TOKEN.match(source, hit.start())
+        if match is None or source.rfind(">", 0, hit.start()) < source.rfind("<", 0, hit.start()):
+            # No token here, or inside another tag (an attribute value).
+            position = hit.start() + 1
+            continue
+        found = match.group(0)
+        position = match.end()
+        if found.startswith("</"):
+            if found[2:-1].strip().lower() == tag:
+                depth -= 1
+                if depth == 0:
+                    return match
+            continue
+        if found.startswith(("<!", "<?")):
+            continue
+        name = _TAG_NAME.match(found, 1).group(0).lower()
+        if name in RAW_TEXT_TAGS:
+            raw_end = re.compile(rf"</{name}\s*>", re.I).search(source, position)
+            if raw_end is None:
+                return None
+            position = raw_end.end()
+        elif name == tag and name not in VOID_TAGS and not found.endswith("/>"):
+            depth += 1
 
 
 def render(node) -> str:

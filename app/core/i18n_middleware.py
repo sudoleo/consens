@@ -28,6 +28,7 @@ through untouched.
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 from urllib.parse import parse_qsl, quote, urlencode
 
@@ -41,6 +42,10 @@ from app.core.site import SITE_URL
 PASS_THROUGH = ("/static/", "/__/", "/api/", "/admin", "/health", "/agent/google/callback")
 COOKIE_MAX_AGE = 365 * 24 * 3600
 BUNDLE_PREFIX = "/i18n/"
+# A longer page goes out in English with the browser dictionary, which
+# translates it as it arrives (static/js/i18n.js). The reader's words are not
+# parsed at all (i18n.parse); this bounds what stays.
+MAX_TRANSLATED_PAGE_CHARS = 2_000_000
 
 
 def _vary(headers: MutableHeaders, *names: str) -> None:
@@ -194,7 +199,9 @@ class I18nMiddleware:
                 return
             start = state["start"]
             body = b"".join(state["chunks"])
-            body = self._page(body, language, page_path, prefixed, localized)
+            # Off the event loop: until 2026-10-28 a long page held every
+            # other request, SSE streams included, while it was translated.
+            body = await asyncio.to_thread(self._page, body, language, page_path, prefixed, localized)
             headers = MutableHeaders(raw=list(start.get("headers", [])))
             headers["content-length"] = str(len(body))
             if language in i18n.TRANSLATED_LANGUAGES:
@@ -213,8 +220,9 @@ class I18nMiddleware:
             return body
         if language in i18n.TRANSLATED_LANGUAGES:
             canonical = f"{SITE_URL}{i18n.localized_path(page_path, language)}" if prefixed else ""
-            source = i18n.translate_html(source, language, link_prefix=i18n.LOCALE_PREFIX.get(language, ""),
-                                         canonical=canonical)
+            if len(source) <= MAX_TRANSLATED_PAGE_CHARS:
+                source = i18n.translate_html(source, language, link_prefix=i18n.LOCALE_PREFIX.get(language, ""),
+                                             canonical=canonical)
             bundle = i18n.client_bundle(language)
             if bundle is not None:
                 source = _after_charset(source, f'<script src="{bundle.url}"></script>')

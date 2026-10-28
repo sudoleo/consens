@@ -28,6 +28,7 @@ import httpx
 from fastapi import APIRouter, Request, Response
 
 from app.core.observability import safe_exception
+from app.core.rate_limit import limiter
 
 
 router = APIRouter()
@@ -104,7 +105,13 @@ def _is_helper_path(helper: str) -> bool:
     return all(_HELPER_SEGMENT.fullmatch(segment) and segment not in (".", "..") for segment in segments)
 
 
+# Every request goes on to Firebase, unauthenticated. One sign-in loads about
+# half a dozen helpers (handler, iframe and their scripts, init.json).
+AUTH_HELPER_RATE = "60/minute"
+
+
 @router.api_route("/__/auth/{helper:path}", methods=["GET", "HEAD", "POST"])
+@limiter.limit(AUTH_HELPER_RATE)
 async def firebase_auth_helper(helper: str, request: Request) -> Response:
     if not _is_helper_path(helper):
         return Response(status_code=404)
@@ -112,5 +119,6 @@ async def firebase_auth_helper(helper: str, request: Request) -> Response:
 
 
 @router.get("/__/firebase/init.json")
+@limiter.limit(AUTH_HELPER_RATE)
 async def firebase_init_json(request: Request) -> Response:
     return await _forward(request, "/__/firebase/init.json")

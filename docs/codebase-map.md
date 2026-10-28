@@ -10172,6 +10172,17 @@ ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
   sonst stückweise; Platzhalter `{name}` fangen nur ganze Elemente; Attribute, Meta, JSON-LD, `lang`,
   Links auf lokalisierte Seiten, Canonical/hreflang). Ergebnis-Cache per
   Inhalts-Hash. `Content-Language: de`, `Vary: Accept-Language, Cookie`.
+  Übersetzt wird in einem Thread (`asyncio.to_thread`), nie im Event Loop;
+  Inhalt unter `data-i18n-skip` (und anderen markierten Elementen) parst
+  `i18n.parse` gar nicht erst, er geht als ein roher Block durch
+  (`_marked_end` liest nur die Tokens, die das Element verschachteln; ohne
+  passendes Ende, und bei implizit endenden Tags wie `<li>`, wie zuvor).
+  Seiten über `MAX_TRANSLATED_PAGE_CHARS` (2 Mio. Zeichen) gehen englisch mit
+  Wörterbuch raus, der Browser übersetzt sie. `/topics`, `/topics/{slug}`
+  und der Auth-Proxy `/__/auth/*` haben 60/min je Adresse. Bis 2026-10-28
+  lief die Übersetzung synchron im Loop und parste jede Antwort mit: lange
+  Share-Seiten kosteten 0,5–2 s und hielten alles an, auch SSE
+  (Sicherheitsaudit).
 - **Browser:** `/i18n/de.<hash>.js` = Wörterbuch + `static/js/i18n.js`, als
   erstes Skript im `<head>` jeder deutschen Seite (nicht in `bundles.json`).
   Ein `MutationObserver` übersetzt alles, was Skripte schreiben; `App.t`,

@@ -267,7 +267,13 @@ def _topic_name(topic_id: str) -> tuple[str, str]:
     return " ".join(str(topic.get("title") or "").split()), f"/topics/{topic['slug']}"
 
 
+# Public pages a German reader gets translated on the server, a cost per
+# request (i18n_middleware); generous for crawlers, which slow down on a 429.
+TOPIC_PAGE_RATE = "60/minute"
+
+
 @router.get("/topics", response_class=HTMLResponse)
+@limiter.limit(TOPIC_PAGE_RATE)
 async def topics_hub(request: Request):
     cached = _cached_topic_page(("hub",))
     if cached is not None:
@@ -361,6 +367,7 @@ def _topic_not_found(request: Request, detail: str = "Topic not found"):
 
 
 @router.get("/topics/{slug}", response_class=HTMLResponse)
+@limiter.limit(TOPIC_PAGE_RATE)
 async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
 ):
