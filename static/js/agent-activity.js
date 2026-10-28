@@ -811,8 +811,10 @@
       && item.status === "unknown" && (item.server_tool || item.provider_native)
       && !(Number.isInteger(item.count) && item.count > 0) && !item.sources?.length));
     const activeTool = tools.findLast(item => item.status === "running");
-    // A request for a domain has no reviewer's reason of its own, yet stays in the history.
-    const holds = events.filter(item => item.kind === 'hold' && (item.reason || item.domain));
+    // A request for a domain and a step not every reviewer could check have no
+    // reviewer's reason of their own, yet stay in the history: every opened
+    // pause names its kind (halt).
+    const holds = events.filter(item => item.kind === 'hold' && (item.reason || item.domain || item.halt));
     const textOnly = textOnlyReview(review);
     const latest = events.filter(item => item.kind === "status").at(-1);
     // Text the model writes before a tool call is a preamble, not the answer.

@@ -362,4 +362,24 @@ describe("installing and asking for a domain", () => {
     expect(step.querySelector("strong").textContent).toBe("The agent asked to reach api.example.com");
     expect(step.querySelector(".agent-hold-step-state").textContent).toBe("Network access · You did not allow it");
   });
+
+  // A step that acts outside the workspace that not every reviewer could
+  // check (agent_audit.gate_hold, GATE_UNCHECKED): no reviewer, no reason,
+  // yet the run waits for the user like on any pause (2026-10-28: it was
+  // filtered out, the heading said "Thinking…" and the history lost it).
+  it("shows a pause before an unchecked step and keeps the decision", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-0123456789ab", step_id: "hold", halt: "unchecked",
+      reviewer: "", provider: "", reason: "", entry: 7, gate: true, state: "waiting" });
+    activity.render(host, { running: true, status: "running", events });
+    const live = host.querySelector(".agent-progress .agent-hold-step");
+    expect(live.querySelector("strong").textContent).toBe("Paused before a step ran");
+    expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Not checked · Waiting for your decision");
+    expect(host.querySelector(".agent-current-status").textContent).toBe("Paused for your decision");
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-0123456789ab", step_id: "hold", state: "continue" });
+    activity.render(host, { running: false, status: "completed", events });
+    const saved = host.querySelector(".agent-activity-content .agent-hold-step");
+    expect(saved.querySelector(".agent-hold-step-state").textContent).toBe("Not checked · You let the work go on");
+  });
 });
