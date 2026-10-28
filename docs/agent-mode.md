@@ -2369,10 +2369,16 @@ zurück. Deshalb bleiben große `vm_write_file`-Inhalte in den Argumenten
 stehen. Das Arbeitsprotokoll behält die vollen Ergebnisse und vermerkt den
 Schnitt (`app`-Eintrag `compacted`).
 
-Die gespeicherte Aktivität eines Turns bleibt unter `ACTIVITY_MAX_CHARS` =
-600.000 Zeichen JSON (`agent_runs.bounded_activity`, 1 MiB je Turn-Dokument):
-Zuerst verlieren die ältesten Events ihre VM-Ausgabe (`output_truncated`),
-danach werden lange Texte gekürzt; Events und Reihenfolge bleiben.
+Die gespeicherte Aktivität eines Turns bekommt den Platz, den der Rest des
+Turn-Dokuments (1 MiB) übrig lässt, abzüglich 64 kB Reserve, höchstens
+`ACTIVITY_MAX_BYTES` = 600.000 Byte UTF-8-JSON (`agent_runs.activity_budget`,
+`bounded_activity`, gesetzt als letztes Feld in `finish_run`): Zuerst verlieren
+die ältesten Events ihre VM-Ausgabe (`output_truncated`), danach werden lange
+Texte und Plan-Schritte gekürzt; reicht das nicht, fallen die ältesten Events
+weg, die Antwort nie. Bis 2026-10-28 zählte die Grenze 600.000 Zeichen fest,
+unabhängig von Prüfung und Antwort: Ein langer VM-Lauf mit Audit (Prüfung bis
+600 kB, `━`/`✓` je 3 Byte) sprengte das Dokument, `finish_run` scheiterte und
+die Antwort war verloren.
 
 Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 

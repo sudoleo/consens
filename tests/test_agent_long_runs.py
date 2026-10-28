@@ -20,7 +20,7 @@ from app.services.agent_delegation import (DelegationLoop, TURN_ALLOWANCE_LIMIT,
                                            TURN_WRAP_UP_SECONDS)
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
-from app.services.agent_runs import ACTIVITY_MAX_CHARS, bounded_activity
+from app.services.agent_runs import ACTIVITY_MAX_BYTES, activity_budget, bounded_activity, json_bytes
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
@@ -259,15 +259,49 @@ def test_the_saved_activity_stays_within_its_size_dropping_old_output_first():
     small = events[:10]
     assert bounded_activity(small) is small
     bounded = bounded_activity(events)
-    assert len(json.dumps(bounded)) <= ACTIVITY_MAX_CHARS and len(bounded) == 400
+    assert json_bytes(bounded) <= ACTIVITY_MAX_BYTES and len(bounded) == 400
     assert bounded[0]["output"] == "" and bounded[0]["output_truncated"] is True
     assert bounded[-1]["output"] == "z" * 2_000 and bounded[-1]["command"] == "make 399"
     # The caller's events are not changed.
     assert events[0]["output"] == "z" * 2_000
 
 
+# Counted in characters, "━" and "✓" (3 bytes each) took three times the
+# room they were given; plan steps were never shortened.
+def test_the_saved_activity_is_measured_in_bytes_and_shortens_plans_too():
+    output = [{"id": f"completion:{n}:call/tool", "kind": "tool", "name": "vm_exec", "status": "succeeded",
+               "command": f"make {n}", "output": "━" * 1_000, "output_truncated": False} for n in range(300)]
+    assert len(json.dumps(output, ensure_ascii=False)) < ACTIVITY_MAX_BYTES < json_bytes(output)
+    bounded = bounded_activity(output)
+    assert json_bytes(bounded) <= ACTIVITY_MAX_BYTES and len(bounded) == 300
+    assert bounded[0]["output_truncated"] is True and bounded[-1]["output"] == "━" * 1_000
+    plans = [{"id": f"completion:{n}:plan/tool", "kind": "tool", "name": "update_plan", "status": "succeeded",
+              "items": [{"content": f"Step {k} " + "✓" * 190, "status": "pending"} for k in range(20)]}
+             for n in range(60)]
+    bounded = bounded_activity(plans, 300_000)
+    assert json_bytes(bounded) <= 300_000 and len(bounded) == 60
+    assert len(bounded[0]["items"]) == 20 and bounded[0]["items"][0]["content"].startswith("Step 0 ✓")
+    assert len(bounded[0]["items"][0]["content"]) == 60 and bounded[-1]["items"] == plans[-1]["items"]
+
+
+# Next to a large review the activity gets only what the turn has left, and
+# when shortening is not enough its oldest events go, never the answer.
+def test_the_activity_takes_only_the_room_the_turn_leaves():
+    turn = {"question": "Build it", "agent_review": {"comparisons": [{"answers": [{"text": "r" * 800_000}]}]}}
+    patch = {"assistant_response": "a" * 100_000}
+    budget = activity_budget(turn, patch)
+    assert 0 < budget < ACTIVITY_MAX_BYTES - 400_000
+    events = [{"id": f"completion:{n}:call/tool", "kind": "tool", "name": "vm_exec", "status": "succeeded",
+               "command": "x" * 1_000, "output": "z" * 2_000} for n in range(400)]
+    bounded = bounded_activity(events, budget)
+    assert json_bytes(bounded) <= budget and bounded[-1]["id"] == "completion:399:call/tool"
+    assert len(bounded) < 400 and bounded[0]["command"].endswith("…")
+    assert activity_budget({"agent_review": {"text": "r" * 1_100_000}}, {}) == 0
+    assert bounded_activity(events, 0) == []
+
+
 def test_a_long_activity_is_saved_with_the_turn(store, fake_vm, monkeypatch):
-    monkeypatch.setattr("app.services.agent_runs.ACTIVITY_MAX_CHARS", 14_000)
+    monkeypatch.setattr("app.services.agent_runs.ACTIVITY_MAX_BYTES", 14_000)
     for n in range(10):
         fake_vm.commands[f"make step{n}"] = ([("stdout", ("w" * 1_500).encode())], 0, 1.0)
     loop = vm_loop(store, LongAgent([[("vm_exec", {"command": f"make step{n}"})] for n in range(10)]),

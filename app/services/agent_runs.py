@@ -41,11 +41,18 @@ FAILED_TURN_RESUME = ("[This previous turn did not finish successfully. No assis
                       "again only what you need fresh.]")
 OWNER_CONCURRENT_RUNS = 2
 RUN_LEASE_SECONDS = 300
-# The saved activity of one turn, as JSON, within the turn document's 1 MiB
-# next to the answer and its review. Only a long VM run comes near it (one
-# event per command, each with its output's end).
-ACTIVITY_MAX_CHARS = 600_000
+# The saved activity of one turn, as UTF-8 JSON, within the turn document's
+# 1 MiB next to the answer and its review (agent_comparison: up to 600 kB).
+# Only a long VM run comes near it (one event per command, each with its
+# output's end). It takes what the rest of the turn leaves, less a margin for
+# Firestore's own per-field overhead; until 2026-10-28 it counted characters
+# against a fixed 600,000, and a long audited VM run's turn outgrew the
+# document: finish_run failed and the answer was lost.
+TURN_DOCUMENT_BYTES = 1_048_576
+TURN_DOCUMENT_MARGIN = 64_000
+ACTIVITY_MAX_BYTES = 600_000
 ACTIVITY_SHORT_CHARS = 200
+PLAN_ITEM_SHORT_CHARS = 60
 
 
 class ConversationTooLong(ValueError):
@@ -67,12 +74,25 @@ def history_start(sizes, budget):
     return stepped if stepped < len(sizes) else cut
 
 
-def bounded_activity(activity):
-    """``activity`` as saved: within ACTIVITY_MAX_CHARS characters of JSON.
-    The oldest events lose their VM output first (``output_truncated``), then
-    their long texts are shortened; the events themselves and their order stay."""
-    limit = ACTIVITY_MAX_CHARS
-    size = len(json.dumps(activity, ensure_ascii=False, default=str))
+def json_bytes(value):
+    """Size of ``value`` as UTF-8 JSON, what a Firestore document holds."""
+    return len(json.dumps(value, ensure_ascii=False, default=str).encode("utf-8"))
+
+
+def activity_budget(turn, patch):
+    """Bytes the activity may take next to everything else the turn keeps."""
+    rest = {key: value for key, value in {**turn, **patch}.items() if key != "agent_activity"}
+    return max(0, min(ACTIVITY_MAX_BYTES, TURN_DOCUMENT_BYTES - TURN_DOCUMENT_MARGIN - json_bytes(rest)))
+
+
+def bounded_activity(activity, limit=None):
+    """``activity`` as saved: within ``limit`` bytes of UTF-8 JSON (default
+    ACTIVITY_MAX_BYTES). The oldest events lose their VM output first
+    (``output_truncated``), then their long texts and plan steps are
+    shortened; the events and their order stay. Only when that is not enough
+    do the oldest events go: the answer never does."""
+    limit = ACTIVITY_MAX_BYTES if limit is None else limit
+    size = json_bytes(activity)
     if size <= limit:
         return activity
     events = [dict(event) for event in activity]
@@ -80,7 +100,7 @@ def bounded_activity(activity):
         for event in events:
             if size <= limit:
                 return events
-            before = len(json.dumps(event, ensure_ascii=False, default=str))
+            before = json_bytes(event)
             if not shorten and event.get("output"):
                 event["output"], event["output_truncated"] = "", True
             elif shorten:
@@ -88,7 +108,14 @@ def bounded_activity(activity):
                     value = event.get(key)
                     if isinstance(value, str) and len(value) > ACTIVITY_SHORT_CHARS:
                         event[key] = value[:ACTIVITY_SHORT_CHARS - 1] + "…"
-            size -= before - len(json.dumps(event, ensure_ascii=False, default=str))
+                if isinstance(event.get("items"), list):
+                    event["items"] = [{**item, "content": item["content"][:PLAN_ITEM_SHORT_CHARS - 1] + "…"}
+                                      if isinstance(item, dict) and isinstance(item.get("content"), str)
+                                      and len(item["content"]) > PLAN_ITEM_SHORT_CHARS else item
+                                      for item in event["items"]]
+            size -= before - json_bytes(event)
+    while events and size > limit:
+        size -= json_bytes(events.pop(0)) + 1
     return events
 
 
@@ -408,7 +435,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if (turn.to_dict() or {}).get("status") == "pending":
                     patch = {"status": "completed" if status == "succeeded" else "failed",
                              "updated_at": firestore.SERVER_TIMESTAMP}
-                    patch.update(agent_activity=bounded_activity(completion.activity), agent_usage=usage,
+                    patch.update(agent_usage=usage,
                                  agent_finish_reason=completion.finish_reason,
                                  agent_reasoning_truncated=completion.reasoning_truncated,
                                  sources=agent_sources(completion))
@@ -420,6 +447,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     else:
                         patch["error_code"] = "cancelled" if status == "cancelled" else "agent_failed"
                         patch["failed_at"] = firestore.SERVER_TIMESTAMP
+                    patch["agent_activity"] = bounded_activity(
+                        completion.activity, activity_budget(turn.to_dict() or {}, patch))
                     tx.update(turn_ref, patch)
                 if chat_data.get("agent_turn_id") == turn_id:
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc),
@@ -476,7 +505,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             chat_data, turn_data = chat.to_dict() or {}, turn.to_dict() or {}
             if chat.exists and turn.exists and chat_data.get("status") == "active" and turn_data.get("status") == "pending":
                 patch = {"status": "completed" if status == "succeeded" else "failed", "updated_at": firestore.SERVER_TIMESTAMP,
-                         "agent_activity": bounded_activity(completion.activity), "agent_usage": completion.usage,
+                         "agent_usage": completion.usage,
                          "agent_finish_reason": completion.finish_reason,
                          "agent_reasoning_truncated": completion.reasoning_truncated,
                          "sources": agent_sources(completion, review)}
@@ -527,6 +556,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         if not review["read_sources"]:
                             review.pop("read_sources")
                         patch["agent_review"] = review
+                # Last: the activity takes the room the rest of the turn leaves.
+                patch["agent_activity"] = bounded_activity(completion.activity, activity_budget(turn_data, patch))
                 tx.update(turn_ref, patch)
                 if pick:
                     persistence_guard.write_agent_vote(tx, self.db, vote_ref, uid=uid, chat_id=chat_id,
