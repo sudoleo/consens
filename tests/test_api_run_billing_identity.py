@@ -270,13 +270,22 @@ def test_execution_validity_stays_bounded(env):
             UID, "late", "ask:openai", canonical_request_fingerprint({"a": 1}),
             now=BEFORE_MIDNIGHT + MIN_EXECUTION_WINDOW + timedelta(seconds=1),
         )
-    # Midday reservations keep the whole remaining billing day.
+    # Midday reservations keep the whole remaining billing day, but their
+    # admission lapses with its hold (audit 2026-10-28): a later operation is
+    # admitted against the account again, which the bare claim cannot do.
     noon = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
-    env.usage.reserve(UID, "noon", RunKind.REGULAR, LIMITS, now=noon)
+    late = datetime(2026, 9, 26, 23, 59, tzinfo=timezone.utc)
+    run_fp = canonical_request_fingerprint({"question": "noon"})
+    env.usage.reserve(UID, "noon", RunKind.REGULAR, LIMITS, request_fingerprint=run_fp, now=noon)
     env.usage.consume(UID, "noon")
     env.usage.claim_operation(UID, "noon", "ask:openai",
-                              canonical_request_fingerprint({"a": 1}),
-                              now=datetime(2026, 9, 26, 23, 59, tzinfo=timezone.utc))
+                              canonical_request_fingerprint({"a": 1}), now=noon + timedelta(minutes=5))
+    with pytest.raises(UsageRunExpired):
+        env.usage.claim_operation(UID, "noon", "ask:gemini", canonical_request_fingerprint({"a": 1}), now=late)
+    result, _ = env.usage.authorize_operation(UID, "noon", RunKind.REGULAR, LIMITS, "ask:gemini",
+                                              canonical_request_fingerprint({"a": 1}),
+                                              request_fingerprint=run_fp, now=late)
+    assert result.token_budget is not None
     with pytest.raises(UsageRunExpired):
         env.usage.claim_operation(UID, "noon", "ask:mistral",
                                   canonical_request_fingerprint({"a": 1}),
