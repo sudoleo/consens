@@ -167,14 +167,18 @@ def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, 
     script.factory = factory
     loop = make_loop(store, script)
     events = list(loop.run())
-    progress = [e for e in events if e.get("kind") == "progress"]
+    # The agent's own words beside each call stand as notes (since 2026-10-28).
+    notes = [e["text"] for e in events if e.get("kind") == "progress" and e["id"].endswith("/note")]
+    assert notes == ["I will compare perspective 1.", "I will compare perspective 2."]
+    progress = [e for e in events if e.get("kind") == "progress" and not e["id"].endswith("/note")]
     assert [e["text"] for e in progress] == updates
     assert len({e["id"] for e in progress}) == 2
     for update in progress:
         following = events[events.index(update) + 1]
         assert following["kind"] == "tool" and following["status"] == "running"
     saved = store.get_turn(loop.uid, loop.chat_id, loop.turn_id)
-    assert [e["text"] for e in saved["agent_activity"] if e["kind"] == "progress"] == updates
+    assert [e["text"] for e in saved["agent_activity"]
+            if e["kind"] == "progress" and not e["id"].endswith("/note")] == updates
     assert saved["consensus"] == "The first option costs 100."
     # Three orchestrator steps, two answers per comparison, two judges per check.
     assert len(script.calls) == 11
