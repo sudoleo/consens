@@ -71,6 +71,18 @@ def test_the_browser_never_opens_its_own_computer(url):
         check_url(url)
 
 
+@pytest.mark.parametrize("url", ["http://localhost:8765/", "file:///tmp/t.html", "http://127.0.0.1:3000"])
+def test_a_page_of_the_workspace_names_its_headless_chrome(url):
+    """DeepSeek, 2026-10-28: it opened its dev server in the browser first.
+    The refusal says where such a page is seen: the browser reaches the web,
+    the workbench's own Chrome its dev servers and files."""
+    with pytest.raises(ValueError, match="headless Chrome"):
+        check_url(url)
+    # The prompt says it as a fact too, and the workbench's clock.
+    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    assert "It reaches the web but not your workspace" in AGENT_VM_PROMPT and "clock runs on UTC" in AGENT_VM_PROMPT
+
+
 def test_public_addresses_open_as_given():
     assert check_url("https://example.com/a?b=1") == "https://example.com/a?b=1"
     assert check_url("example.com") == "https://example.com"

@@ -78,7 +78,8 @@ for shim in /.sprite/bin/*; do
 done
 wait
 
-# Tools every workbench has for the agent: ripgrep from the Ubuntu mirrors,
+# Tools every workbench has for the agent: ripgrep and poppler-utils
+# (pdftotext and the like, for the PDFs it reads) from the Ubuntu mirrors,
 # which the policy allows, and headless Chrome for pages on the workbench
 # itself, such as the agent's dev server or a local file (screenshots,
 # PDFs; no sign-ins: the shared browser with those is a VM of its own).
@@ -93,8 +94,17 @@ wait
 export DEBIAN_FRONTEND=noninteractive
 apt_get() { apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confold -y -qq "$@"; }
 installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
+# Chrome's package adds Google's apt source, and a daily job of it adds the
+# source again: the workbench reaches no Google server, so every apt run of
+# the agent warned "Failed to fetch dl.google.com" (2026-10-28). The
+# package reads /etc/default/google-chrome before it adds anything.
+no_chrome_source() {
+  printf 'repo_add_once="false"\nrepo_reenable_on_distupgrade="false"\n' > /etc/default/google-chrome
+  rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+}
 tools() {
   local old="" package
+  no_chrome_source
   for package in xvfb x11vnc openbox; do
     if installed "$package"; then old="$old $package"; fi
   done
@@ -102,10 +112,11 @@ tools() {
     # shellcheck disable=SC2086
     apt_get purge $old >/dev/null || return 1
   fi
-  command -v rg >/dev/null 2>&1 && command -v google-chrome >/dev/null 2>&1 && return 0
+  command -v rg >/dev/null 2>&1 && command -v pdftotext >/dev/null 2>&1 \
+    && command -v google-chrome >/dev/null 2>&1 && return 0
   apt_get update >/dev/null || return 1
-  if ! command -v rg >/dev/null 2>&1; then
-    apt_get install --no-install-recommends ripgrep >/dev/null || return 1
+  if ! command -v rg >/dev/null 2>&1 || ! command -v pdftotext >/dev/null 2>&1; then
+    apt_get install --no-install-recommends ripgrep poppler-utils >/dev/null || return 1
   fi
   if ! command -v google-chrome >/dev/null 2>&1; then
     # In a folder only root can open: the agent's user shares /tmp and must
@@ -117,10 +128,11 @@ tools() {
       && apt_get install "$download/chrome.deb" >/dev/null
     status=$?
     rm -rf -- "$download"
+    no_chrome_source
     return "$status"
   fi
 }
-tools || echo "setup: a tool could not be installed (ripgrep, Chrome)" >&2
+tools || echo "setup: a tool could not be installed (ripgrep, poppler-utils, Chrome)" >&2
 
 as_user() { setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs -- env -i HOME="$home" "$@"; }
 as_user mkdir -p "$home/chats" "$home/.local/bin" "$home/.config"

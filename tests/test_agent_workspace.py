@@ -131,8 +131,16 @@ def test_every_workbench_gets_ripgrep_and_headless_chrome_and_loses_the_old_scre
     never fails the setup (the agent's user does not depend on it)."""
     setup = agent_workspace.tool_files("workbench")["setup.sh"].decode()
     assert "export DEBIAN_FRONTEND=noninteractive" in setup and " -y -qq " in setup
-    assert "if ! command -v rg " in setup and "apt_get install --no-install-recommends ripgrep" in setup
+    assert "if ! command -v rg " in setup and "apt_get install --no-install-recommends ripgrep poppler-utils" in setup
+    # pdftotext for the PDFs the agent reads (DeepSeek's feedback 2026-10-28).
+    assert "! command -v pdftotext" in setup
     assert "if ! command -v google-chrome " in setup
+    # Google's apt source never stays (the workbench cannot reach it, every
+    # apt run warned), and Chrome's daily job does not add it again.
+    assert 'repo_add_once="false"' in setup and "> /etc/default/google-chrome" in setup
+    assert "rm -f /etc/apt/sources.list.d/google-chrome.list" in setup
+    tools = setup[setup.index("tools() {"):setup.index("\ntools ||")]
+    assert tools.count("no_chrome_source") == 2 and tools.index("no_chrome_source") < tools.index("apt_get update")
     assert f"https://{agent_workspace.CHROME_DOMAIN}/linux/direct/google-chrome-stable_current_amd64.deb" in setup
     # Downloaded where only root can open it: the agent's user shares /tmp.
     assert 'download=$(mktemp -d)' in setup and 'apt_get install "$download/chrome.deb"' in setup
@@ -362,6 +370,38 @@ class FakePage:
             self.scripts.append(("find", arg))
             return self.found
         raise AssertionError(script)
+
+
+def test_typing_with_enter_presses_it_on_the_keyboard_not_on_the_field():
+    """2026-10-28: pressed on the field, Enter waited 30 s while Wikipedia's
+    suggestion list covered it; the keyboard presses it at once, the field
+    has the focus after fill."""
+    browser = load("browser")
+    done = []
+
+    class Field:
+        first = None
+
+        def count(self):
+            return 1
+
+        def evaluate(self, script):
+            return False
+
+        def fill(self, text, timeout):
+            done.append(("fill", text))
+
+        def press(self, key, **kwargs):
+            raise AssertionError("pressed on the field")
+    Field.first = Field()
+
+    class Page:
+        keyboard = type("Keyboard", (), {"press": staticmethod(lambda key: done.append(("key", key)))})()
+
+        def locator(self, selector):
+            return Field()
+    said = browser.act(None, Page(), "type", {"ref": "e7", "text": "Paris", "enter": True})
+    assert done == [("fill", "Paris"), ("key", "Enter")] and said == "Typed into e7 and pressed Enter."
 
 
 SESSION_COOKIE = {"name": "sid", "value": "s3cr3t-session-value", "domain": "shop.example", "path": "/"}

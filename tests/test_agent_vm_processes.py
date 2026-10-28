@@ -21,7 +21,7 @@ from app.services.agent_compaction import describe
 from app.services.agent_vm_processes import (MAX_RUNNING, RUNNER, launch_script, list_command, parse_status,
                                              process_dir, start_command, status_command, stop_command, task_name)
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import chat_path, NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import NAME, NO_NOTES, Agent, chat_path, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
 
 PID = "abcd1234"
 
@@ -119,6 +119,9 @@ def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed
     list(loop.run())
     capped, missing, too_long = results(loop)
     assert f"{MAX_RUNNING} background processes are already running" in capped["error"]
+    # Its files go again: the list never shows it as "lost" (2026-10-28).
+    assert ("delete_path", NAME, directory) in fake_vm.calls
+    assert not [path for path in fake_vm.vms[NAME]["files"] if path.startswith(directory + "/")]
     assert "No background process ffffffff" in missing["error"]
     assert "max_seconds" in too_long["error"] or "3600" in too_long["error"]
 

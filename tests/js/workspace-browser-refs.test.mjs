@@ -169,4 +169,24 @@ describe("workspace browser find", () => {
     expect(match.snippet).toContain("alpha needle omega");
     expect(match.snippet.length).toBeLessThan(140);
   });
+
+  // DeepSeek, 2026-10-28: a Wikipedia read was mostly navigation. The main
+  // content comes first now, the rest after a line, all of it still there.
+  it("lists the main content first and the header and navigation after it", () => {
+    const { read, find } = page(
+      '<header><a href="/">Home</a></header><nav><a href="/a">Menu A</a></nav>' +
+        '<main><h1>Paris 2024</h1><a href="/t">Triathlon</a></main><footer><a href="/i">Imprint</a></footer>'
+    );
+    const { lines } = read(0);
+    expect(lines).toEqual(['heading "Paris 2024"', '[e3] link "Triathlon"',
+      "(outside the main content: header, navigation, footer)",
+      '[e1] link "Home"', '[e2] link "Menu A"', '[e4] link "Imprint"']);
+    // Refs stay in page order and find names them as before.
+    expect(find("Menu").matches[0].ref).toBe("e2");
+  });
+
+  it("leaves a page without a main region in page order", () => {
+    const { read } = page('<nav><a href="/a">Menu</a></nav><a href="/b">Body</a>');
+    expect(read(0).lines).toEqual(['[e1] link "Menu"', '[e2] link "Body"']);
+  });
 });

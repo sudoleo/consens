@@ -102,6 +102,8 @@ def check_url(url):
     if "://" not in text:
         text = "https://" + text
     parts = urlsplit(text)
+    if parts.scheme == "file":
+        raise ValueError(BROWSER_PRIVATE)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         raise ValueError("open takes an http or https address.")
     host = parts.hostname.lower().rstrip(".")
@@ -111,8 +113,16 @@ def check_url(url):
         address = None
     if (host == "localhost" or host.endswith((".localhost", ".internal", ".flycast"))
             or (address is not None and not address.is_global)):
-        raise ValueError("That address is the browser's own computer or a private network: open a public page.")
+        raise ValueError(BROWSER_PRIVATE)
     return text
+
+
+# The browser runs on a computer of its own and reaches the web, never the
+# workbench: the way to a page there (a dev server, a file) is said with the
+# refusal (DeepSeek's feedback 2026-10-28: it tried its dev server here first).
+BROWSER_PRIVATE = ("That address is the browser's own computer or a private network: the browser reaches public "
+                   "pages only. A dev server or a file of your workspace is seen there with its headless Chrome "
+                   "(google-chrome --headless=new --screenshot or --print-to-pdf).")
 
 
 def required(args):

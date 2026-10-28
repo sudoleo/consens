@@ -28,6 +28,7 @@ code. The VM holds no secret, so neither does any of it.
 """
 from __future__ import annotations
 
+import logging
 import posixpath
 import re
 import secrets
@@ -240,6 +241,13 @@ class ProcessTools:
             self.vm._provider("write", lambda name=name, content=content: session.backend.write_file(
                 session.name, posixpath.join(directory, name), content.encode("utf-8"), agent=False))
         code, text = self._run(start_command(directory, task_name(process_id)), cancellation, 30)
+        if code != 0:
+            # Its files go again: left behind, the list showed a process that
+            # never ran as "lost" (2026-10-28).
+            try:
+                session.backend.delete_path(session.name, directory, agent=False)
+            except agent_vm.VMUnavailable:
+                logging.warning("Agent VM process folder not removed")
         if code == 4:
             raise ValueError(f"{MAX_RUNNING} background processes are already running. Stop one with "
                              "vm_stop_process first.")

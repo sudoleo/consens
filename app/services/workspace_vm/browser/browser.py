@@ -90,7 +90,10 @@ start => {
   const role = el => el.getAttribute('role') ||
     ({A: 'link', BUTTON: 'button', SELECT: 'list', TEXTAREA: 'textbox', SUMMARY: 'button'})[el.tagName] ||
     (el.tagName === 'INPUT' ? (TYPES[el.type] || 'textbox') : el.isContentEditable ? 'textbox' : 'element');
-  const lines = [];
+  // The page's main content first, the rest (header, navigation, footer)
+  // after it, so the first page of a read is what the page is about.
+  const main = document.querySelector('main, [role=main]');
+  const lines = [], outside = [];
   let count = start;
   // The element listed last: what lies inside it is part of it. Listed
   // elements never nest, and the walk is in document order.
@@ -99,12 +102,13 @@ start => {
   const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_ELEMENT);
   for (let el = walker.currentNode; el; el = walker.nextNode()) {
     if (listed && listed !== el && listed.contains(el)) continue;
+    const into = main && !main.contains(el) ? outside : lines;
     if (/^H[1-6]$/.test(el.tagName) || el.getAttribute('role') === 'heading') {
-      if (shown(el) && clean(el.innerText)) lines.push('heading "' + clip(clean(el.innerText), 200) + '"');
+      if (shown(el) && clean(el.innerText)) into.push('heading "' + clip(clean(el.innerText), 200) + '"');
       continue;
     }
     if (el.tagName === 'IFRAME' && shown(el)) {
-      lines.push('frame ' + clip(el.src || '(inline)', 100) + ' (its content: open its address with the action open)');
+      into.push('frame ' + clip(el.src || '(inline)', 100) + ' (its content: open its address with the action open)');
       continue;
     }
     if (!el.matches(ACT) || !shown(el)) continue;
@@ -133,9 +137,10 @@ start => {
     }
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') line += ' disabled';
     if (el.getAttribute('aria-expanded')) line += el.getAttribute('aria-expanded') === 'true' ? ' expanded' : ' collapsed';
-    lines.push(line);
+    into.push(line);
   }
-  return {lines, count};
+  if (outside.length && lines.length) lines.push('(outside the main content: header, navigation, footer)');
+  return {lines: lines.concat(outside), count};
 }
 """
 
@@ -491,7 +496,10 @@ def act(context, page, action, request):
         else:
             target.fill(text, timeout=10_000)
         if request.get("enter"):
-            target.press("Enter")
+            # The field has the focus: Enter through the keyboard, like the
+            # action key. Pressed on the element it waited up to 30 s while a
+            # suggestion list covered it (2026-10-28, Wikipedia's search).
+            page.keyboard.press("Enter")
         return f"Typed into {ref}" + (" and pressed Enter." if request.get("enter") else ".")
     if action == "select":
         ref, choice = request.get("ref"), str(request.get("option") or "")

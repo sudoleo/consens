@@ -734,7 +734,8 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   Nachricht aus (`VM_UNAVAILABLE`), damit nie ein Befehl mit den Rechten des
   Anbieters läuft.
 - **Werkzeuge jeder Werkbank (seit 2026-10-28).** `setup.sh` installiert,
-  wo sie fehlen, **ripgrep** (apt aus den Ubuntu-Spiegeln) und **headless
+  wo sie fehlen, **ripgrep** und **poppler-utils** (`pdftotext` & Co., seit
+  dem DeepSeek-Feedback vom 2026-10-28; apt aus den Ubuntu-Spiegeln) und **headless
   Chrome** (`google-chrome-stable` als `.deb` von `dl.google.com`, in einen
   Ordner, den nur root öffnet, `mktemp -d`: Der Agent teilt `/tmp` und darf
   das Paket, das root installiert, nie austauschen), beides
@@ -844,6 +845,18 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `find` die Seite zuerst wie `read` (gleiches `SNAPSHOT_JS`, gleicher
   `ref-count`), die Refs sind also dieselben. `find` liest nur: wie `read` und
   `text` läuft es auch während einer Übernahme und wartet nie auf die Prüfer.
+  Seit 2026-10-28 (DeepSeek-Feedback: eine Wikipedia-Seite war in `read`
+  vor allem Navigation) listet `read` den Hauptinhalt zuerst (`main` oder
+  `role=main`), danach nach der Zeile „(outside the main content: header,
+  navigation, footer)“ den Rest; ohne Hauptbereich bleibt die Seitenfolge.
+  Die Refs zählen weiter in Seitenfolge, `find` und Blättern mit `offset`
+  bleiben gleich. `type` mit `enter` drückt Enter über die Tastatur
+  (`page.keyboard`), nicht auf dem Feld: dort wartete es bis 30 s, wenn eine
+  Vorschlagsliste das Feld verdeckte. Ein `open` auf localhost, eine private
+  Adresse oder `file://` sagt in der Absage, dass der Browser nur das Web
+  erreicht und Seiten der Werkbank deren headless Chrome zeigt
+  (`agent_browser.BROWSER_PRIVATE`); der VM-Prompt sagt dasselbe als Fakt,
+  dazu, dass die Werkbank auf UTC läuft.
   Aktivität („Searched the page for“, Feld `query`) und Arbeitsprotokoll
   (`browser find "…"`) nennen den Suchtext, den Text von `type` nie. Der Kopf jeder Seitenausgabe (`Page:`/`URL:`) trägt die Zeile `Cookies saved
   for this site: yes|no` aus den Cookies des Browser-Kontexts für die
@@ -1024,6 +1037,12 @@ der Session), dazu drei kleine Sonden (Laufzeit-Shims, Ports, x11vnc):
 
 #### Live geprüft: ripgrep und headless Chrome (2026-10-28)
 
+Nachtrag (DeepSeek-Feedback, gleicher Tag, nicht an einer Sprite geprüft):
+`setup.sh` schreibt `/etc/default/google-chrome` mit `repo_add_once="false"`
+und entfernt `google-chrome.list` vor und nach der Installation, sonst warnte
+jeder apt-Lauf des Agenten „Failed to fetch dl.google.com“ (Chromes tägliche
+Aufgabe trug die Quelle immer wieder ein). Dazu `poppler-utils`.
+
 Mit `SpritesBackend` und `agent_workspace.prepare` dieser Version gegen
 frische Test-Sprites (Ubuntu 26.04, je danach gelöscht): eine Sonde
 (`consens-test-90353019ce7f`), dann derselbe Ablauf zweimal
@@ -1186,7 +1205,9 @@ Tasks-API (`/.sprite/api.sock`, `PUT /v1/tasks/consens-<id>` mit 5 min Ablauf,
 jede Minute erneuert) wach, solange der Befehl läuft, schreibt danach
 `exit_code` und gibt die Sperre frei (`DELETE`); stirbt der Aufseher, läuft die
 Sperre von selbst aus. Deckel gegen Kosten: höchstens `MAX_RUNNING` = 3
-gleichzeitig (der vierte Start sagt es dem Agenten), jeder endet spätestens nach
+gleichzeitig (der vierte Start sagt es dem Agenten und löscht seine schon
+geschriebenen Dateien wieder, seit 2026-10-28: vorher stand er als `lost` in der
+Liste, ohne je gelaufen zu sein), jeder endet spätestens nach
 `max_seconds`, die Sprite bleibt nach dem Ende einer Nachricht also höchstens
 3 × 1 h wach. Ein Prozess überlebt seine Nachricht (der Arbeitsstand nennt
 seine ID). Status: `running`, `exited` mit `exit_code` oder `lost` (die VM hat
