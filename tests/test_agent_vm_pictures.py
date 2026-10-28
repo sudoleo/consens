@@ -14,7 +14,7 @@ from app.services.agent_vm_tools import PICTURE_INTRO, picture_message
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_long_runs import LongAgent
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import NO_NOTES, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import chat_path, NO_NOTES, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"chart" * 20
 
@@ -32,12 +32,12 @@ def put(fake_vm, loop, path, data):
 def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
     script = LongAgent([[("vm_view_image", {"path": "chart.png"}), ("vm_exec", {"command": "ls"})]])
     loop = vm_loop(store, script)
-    put(fake_vm, loop, f"{agent_vm.chat_dir(loop.chat_id)}/chart.png", PNG)
+    put(fake_vm, loop, f"{chat_path(loop.chat_id)}/chart.png", PNG)
     list(loop.run())
     assert "vm_view_image" in script.offered[0]
     viewed = results(loop)[0]
-    chart = f"{agent_vm.chat_dir(loop.chat_id)}/chart.png"
-    assert viewed == {"path": chart, "mime": "image/png", "bytes": len(PNG), "chat_folder": agent_vm.chat_dir(loop.chat_id), "workspace_notes": NO_NOTES,
+    chart = f"{chat_path(loop.chat_id)}/chart.png"
+    assert viewed == {"path": chart, "mime": "image/png", "bytes": len(PNG), "chat_folder": chat_path(loop.chat_id), "workspace_notes": NO_NOTES,
                       "note": "The picture follows as an image after these results."}
     # The next step: both results first (every call answered), then the picture.
     after = script.seen[1]
@@ -54,8 +54,8 @@ def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
 def test_only_pictures_and_only_for_a_model_that_takes_them(store, fake_vm, sees, monkeypatch):
     loop = vm_loop(store, LongAgent([[("vm_view_image", {"path": "notes.txt"})],
                                      [("vm_view_image", {"path": "big.png"})]]))
-    put(fake_vm, loop, f"{agent_vm.chat_dir(loop.chat_id)}/notes.txt", b"just text")
-    put(fake_vm, loop, f"{agent_vm.chat_dir(loop.chat_id)}/big.png", b"\x89PNG\r\n\x1a\n" + b"0" * agent_vm_tools.PICTURE_BYTES)
+    put(fake_vm, loop, f"{chat_path(loop.chat_id)}/notes.txt", b"just text")
+    put(fake_vm, loop, f"{chat_path(loop.chat_id)}/big.png", b"\x89PNG\r\n\x1a\n" + b"0" * agent_vm_tools.PICTURE_BYTES)
     list(loop.run())
     text, big = results(loop)
     assert "no PNG, JPEG, WebP or GIF" in text["error"] and "larger than 5 MB" in big["error"]

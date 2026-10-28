@@ -10,6 +10,8 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -515,6 +517,38 @@ def test_the_old_gateway_service_and_the_servers_paths_go_through_the_api():
     assert seen[1][2] == {"path": "/home/sprite/chats/c1", "workingDir": "/home/sprite", "recursive": True,
                           "asRoot": False}
     assert seen[2][2] == {"rules": [{"domain": "pypi.org", "action": "allow"}]}
+
+
+def test_a_chat_folder_moves_as_the_agent_and_never_over_another(monkeypatch, tmp_path):
+    """move_path (since 2026-10-28, a chat's folder after a new title): as
+    the agent's user through agent-run, "missing" and "taken" by exit code;
+    the script itself, in a real bash, never moves over what exists."""
+    backend = sprites(lambda request: httpx.Response(200, json={}))
+    ran = []
+
+    def collect(name, argv, *, limit, input=None):
+        ran.append(argv)
+        return {"a": 0, "b": 44, "c": 47}[argv[-2][-1]], b""
+    monkeypatch.setattr(backend, "_collect", collect)
+    assert [backend.move_path("consens-w-a", f"/home/agent/chats/{x}", "/home/agent/chats/new") for x in "abc"] == [
+        "moved", "missing", "taken"]
+    assert ran[0][:3] == ["sudo", "-n", "/bin/bash"] and "move" in ran[0]
+    monkeypatch.setattr(backend, "_collect", lambda name, argv, *, limit, input=None: (1, b""))
+    with pytest.raises(agent_vm.VMUnavailable):
+        backend.move_path("consens-w-a", "/home/agent/chats/a", "/home/agent/chats/new")
+    found = shutil.which("bash")
+    if not found:
+        return
+    (tmp_path / "old").mkdir()
+    (tmp_path / "old" / "f.txt").write_text("f")
+    (tmp_path / "other").mkdir()
+
+    def move(source, target):
+        return subprocess.run([found, "-c", agent_vm.MOVE_SCRIPT, "move", source, target], cwd=tmp_path).returncode
+    assert move("other", "old") == 47 and (tmp_path / "other").is_dir()
+    assert move("nothing", "new") == 44
+    assert move("old", "new") == 0 and (tmp_path / "new" / "f.txt").read_text() == "f"
+    assert not (tmp_path / "old").exists()
 
 
 def test_the_policy_is_read_as_its_rules_or_not_at_all():

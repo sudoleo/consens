@@ -48,6 +48,7 @@ import os
 import re
 import time
 from typing import Callable, Optional
+import unicodedata
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -144,11 +145,37 @@ CHATS_DIR = HOME + "/chats"
 LEGACY_CHATS_DIR = SERVER_HOME + "/chats"
 
 
-def chat_dir(chat_id):
+FOLDER_TITLE_CHARS = 40
+FOLDER_ID_CHARS = 6
+_GERMAN_LETTERS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
+
+def chat_folder(title, chat_id):
+    """The name of a chat's folder since 2026-10-28: its title as words and
+    the start of its id, ``promotion-neben-dem-beruf-3f9a1c`` (``chat-…``
+    while it has no title yet). The id part keeps two chats of one title
+    apart; the folder follows a new title (agent_workspace.make_chat_dir)."""
+    chat_dir(chat_id)
+    text = unicodedata.normalize("NFKD", str(title or "").lower().translate(_GERMAN_LETTERS))
+    words = re.sub(r"[^a-z0-9]+", "-", text.encode("ascii", "ignore").decode()).strip("-")
+    if len(words) > FOLDER_TITLE_CHARS:
+        # At a word's end where there is one in reach.
+        cut = words[:FOLDER_TITLE_CHARS + 1]
+        words = cut.rsplit("-", 1)[0] if "-" in cut else words[:FOLDER_TITLE_CHARS]
+    return f"{words or 'chat'}-{str(chat_id)[:FOLDER_ID_CHARS].lower()}"
+
+
+def chat_dir(chat_id, folder=None):
     """A chat's own folder in the workspace: where its commands start and its
-    attachments land, deleted with the chat."""
+    attachments land, deleted with the chat. ``folder``: its name as the
+    chat records it (chat_folder); without one the folder of a chat from
+    before 2026-10-28, named by its id."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(chat_id or "")):
         raise ValueError("chat id")
+    if folder is not None:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", str(folder)):
+            raise ValueError("chat folder")
+        return f"{CHATS_DIR}/{folder}"
     return f"{CHATS_DIR}/{chat_id}"
 
 
@@ -226,6 +253,12 @@ class VMBackend:
         """Delete a file or folder with everything in it; gone is fine."""
         raise NotImplementedError
 
+    def move_path(self, name, source, target):
+        """Rename a file or folder as the agent's user (a chat's folder after
+        a new title): "moved", "missing" (no ``source``, nothing to do) or
+        "taken" (``target`` exists and stays untouched)."""
+        raise NotImplementedError
+
     def delete_service(self, name, service):
         """Remove a service of the VM (the live view's gateway before
         2026-10-27); gone is fine."""
@@ -282,6 +315,9 @@ READ_SCRIPT = ('[ -e "$1" ] || exit 44; [ -d "$1" ] && exit 45; [ -r "$1" ] || e
 WRITE_SCRIPT = ('[ -d "$1" ] && exit 45; mkdir -p -- "$(dirname -- "$1")" 2>/dev/null || exit 46; '
                 'cat > "$1" 2>/dev/null || exit 46; stat -c %s -- "$1"')
 DELETE_SCRIPT = 'rm -rf -- "$1"'
+# Never over something that exists (mv -T -n would still merge into an empty folder).
+MOVE_SCRIPT = ('[ -e "$1" ] || [ -L "$1" ] || exit 44; { [ -e "$2" ] || [ -L "$2" ]; } && exit 47; '
+               'mkdir -p -- "$(dirname -- "$2")" && mv -T -- "$1" "$2"')
 FILE_SECONDS = 120
 
 
@@ -488,6 +524,14 @@ class SpritesBackend(VMBackend):
         self._request("delete path", "DELETE", self._sprite(name) + "/fs/delete", missing_ok=True,
                       json={"path": path, "workingDir": SERVER_HOME, "recursive": True, "asRoot": False})
 
+    def move_path(self, name, source, target):
+        code, _ = self._collect(name, agent_argv(["bash", "-c", MOVE_SCRIPT, "move", source, target], FILE_SECONDS),
+                                limit=0)
+        outcome = {0: "moved", 44: "missing", 47: "taken"}.get(code)
+        if outcome is None:
+            raise VMUnavailable(f"move path: exit {code}")
+        return outcome
+
     def delete_service(self, name, service):
         self._request("service", "DELETE", f"{self._sprite(name)}/services/{quote(service, safe='')}", missing_ok=True)
 
@@ -680,6 +724,11 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
         if name == workspace_name(uid) and vm.exists(name):
             from app.services import agent_workspace
             agent_workspace.prepare(vm, name)
+            # The folder by the name the chat recorded (since 2026-10-28), and
+            # by its id, as before and while a rename has not happened yet.
+            folder = record.get("folder")
+            if isinstance(folder, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", folder):
+                vm.delete_path(name, chat_dir(chat_id, folder))
             vm.delete_path(name, chat_dir(chat_id))
             vm.delete_path(name, f"{LEGACY_CHATS_DIR}/{chat_dir(chat_id).rsplit('/', 1)[1]}", agent=False)
         vm.delete(vm_name(uid, chat_id))

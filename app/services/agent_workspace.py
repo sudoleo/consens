@@ -114,6 +114,9 @@ class Claim:
     started: str = ""
     # The domains the user allowed for this chat (agent_domains.py).
     domains: tuple = ()
+    # The name of the chat's folder as the chat records it (make_chat_dir),
+    # empty before its first message since 2026-10-28.
+    folder: str = ""
 
 
 def tool_files(kind="workbench"):
@@ -182,6 +185,8 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         started = chat_data.get("created_at")
         outcome["title"] = str(chat_data.get("title") or "")
         outcome["started"] = started.date().isoformat() if isinstance(started, datetime) else ""
+        folder = used.get("folder")
+        outcome["folder"] = folder if isinstance(folder, str) else ""
         from app.services import agent_domains
         outcome["domains"] = agent_domains.granted(chat_data)
         tx.set(workspace, {**{key: value for key, value in record.items() if key != "lease"},
@@ -190,13 +195,14 @@ def claim(store, uid, chat_id, turn_id, *, provider):
                            "lease": {"chat_id": chat_id, "turn_id": turn_id, "until": now + timedelta(
                                seconds=LEASE_SECONDS)}})
         tx.update(chat, {"agent_vm": {**{key: value for key, value in used.items()
-                                         if key in {"restored", "created_at"}},
+                                         if key in {"restored", "created_at", "folder"}},
                                       "provider": provider, "name": name, "workspace": True,
                                       "created_at": used.get("created_at") or now.isoformat(), "used_at": now,
                                       "restores_seen": restores}})
     store._transaction(operation)
     return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
-                 started=outcome.get("started", ""), domains=tuple(outcome.get("domains") or ()))
+                 started=outcome.get("started", ""), domains=tuple(outcome.get("domains") or ()),
+                 folder=outcome.get("folder", ""))
 
 
 def renew(store, uid, turn_id):
@@ -385,9 +391,10 @@ def open_browser(vm, uid):
 
 
 # Makes the chat's folder (as the agent's user, with the folders the file
-# needs), where commands start, and names its chat there: the folders
-# themselves are ids, so `cat ~/chats/*/.consens-chat` tells the agent which
-# is which.
+# needs), where commands start, and names its chat there. Since 2026-10-28
+# the folder is named after the chat's title (agent_vm.chat_folder), so
+# `ls ~/chats` already says which is which; .consens-chat adds title, start
+# and id.
 CHAT_MARKER = ".consens-chat"
 TITLE_CHARS = 200
 
@@ -398,9 +405,38 @@ def chat_marker(chat_id, title="", started=""):
             "This folder holds the files of that chat; it is deleted with the chat.\n").encode("utf-8")
 
 
-def make_chat_dir(vm, name, chat_id, title="", started=""):
-    """Written at every message's first VM call: the title follows a rename."""
-    vm.write_file(name, f"{agent_vm.chat_dir(chat_id)}/{CHAT_MARKER}", chat_marker(chat_id, title, started))
+def make_chat_dir(vm, name, chat_id, title="", started="", folder=""):
+    """At every message's first VM call: the chat's folder follows its title
+    (``folder``: the name the chat recorded, empty for a folder named by its
+    id from before 2026-10-28, which moves too). Returns the folder's name
+    now; the old one when the new name is taken. Its marker is rewritten."""
+    wanted = agent_vm.chat_folder(title, chat_id)
+    if wanted != folder:
+        outcome = vm.move_path(name, agent_vm.chat_dir(chat_id, folder or None), agent_vm.chat_dir(chat_id, wanted))
+        if outcome == "taken":
+            wanted = folder
+    vm.write_file(name, f"{agent_vm.chat_dir(chat_id, wanted or None)}/{CHAT_MARKER}",
+                  chat_marker(chat_id, title, started))
+    return wanted
+
+
+def record_folder(store, uid, chat_id, folder):
+    """The chat names its folder (chat field ``agent_vm.folder``): its
+    deletion finds it there (agent_vm.delete_chat_vm), the next message
+    renames from there. Written after the move, so a failed move never
+    leaves the chat pointing at a folder that does not exist; a failed
+    write only means the next message moves nothing and writes it again."""
+    chat = store._chat_ref(uid, chat_id)
+
+    def operation(tx):
+        data = chat.get(transaction=tx).to_dict() or {}
+        used = data.get("agent_vm") if isinstance(data.get("agent_vm"), dict) else None
+        if data.get("status") == "active" and used is not None:
+            tx.update(chat, {"agent_vm": {**used, "folder": folder}})
+    try:
+        store._transaction(operation)
+    except Exception as exc:
+        logging.warning("Agent chat folder not recorded category=%s", safe_exception(exc))
 
 
 def read_notes(vm, name):

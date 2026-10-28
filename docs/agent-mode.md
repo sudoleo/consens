@@ -658,6 +658,19 @@ auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
   mit Titel, Startdatum und ID des Chats (`agent_workspace.make_chat_dir`, bei
   jeder Nachricht neu, folgt also einer Umbenennung); `cat ~/chats/*/.consens-chat`
   sagt dem Agenten, welcher Ordner zu welchem Chat gehört.
+- **Ordner heißen wie ihr Chat** (2026-10-28): `agent_vm.chat_folder` bildet
+  aus dem Titel Wörter (Umlaute ausgeschrieben, höchstens 40 Zeichen, an einer
+  Wortgrenze gekürzt) und hängt die ersten 6 Zeichen der Chat-ID an:
+  `promotion-neben-dem-beruf-3f9a1c`, ohne Titel `chat-3f9a1c`. Der Chat merkt
+  sich den Namen (`agent_vm.folder` am Chat, `agent_workspace.record_folder`,
+  erst nach dem Umbenennen geschrieben). Beim ersten VM-Aufruf jeder Nachricht
+  benennt `make_chat_dir` den Ordner um, wenn der Titel einen anderen Namen
+  ergibt (`VMBackend.move_path` als Agent: `moved`, `missing`, `taken`; nie über
+  etwas Bestehendes, ist der Name belegt, bleibt der alte). So ziehen auch die
+  Ordner von vorher, die nach der ID heißen, beim nächsten Gebrauch um. Erst
+  danach steht der Ordner fest (`VMSession.dir`), deshalb lösen die Werkzeuge
+  ihre Pfade nach dem Start auf. Löschen nimmt den gemerkten Namen und den
+  ID-Namen (`delete_chat_vm`).
 - **Arbeitsplatz-Notizen** (2026-10-27, wie Claude Codes Memory):
   `/home/agent/NOTES.md` ist das Notizbuch des Agenten über Chats hinweg (was
   wo liegt, Arbeit in Arbeit, Regeln eines Projekts). Der Anfang

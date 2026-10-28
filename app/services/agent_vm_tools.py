@@ -333,6 +333,7 @@ class VMSession:
         self.sleep = sleep
         self.name = agent_vm.workspace_name(loop.uid)
         # The chat's own folder: where commands start and relative paths lead.
+        # Named after the chat's title once the VM is ready (ready, make_chat_dir).
         self.dir = agent_vm.chat_dir(loop.chat_id)
         self._lock = threading.Lock()
         # The workspace's lease (agent_workspace.claim): held from the first
@@ -384,8 +385,11 @@ class VMSession:
                 self.domains = list(self.claim.domains)
                 self.backend.ensure(self.name, agent_domains.rules(self.domains))
                 agent_workspace.prepare(self.backend, self.name, cancellation)
-                agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id,
-                                              self.claim.title, self.claim.started)
+                folder = agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id,
+                                                       self.claim.title, self.claim.started, self.claim.folder)
+                self.dir = agent_vm.chat_dir(self.loop.chat_id, folder or None)
+                if folder != self.claim.folder:
+                    agent_workspace.record_folder(self.loop.store, self.loop.uid, self.loop.chat_id, folder)
                 self._still_active()
                 try:
                     self.checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
@@ -806,8 +810,8 @@ class VMTools:
 
     def read(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
+        path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("read", lambda: self.session.backend.read_file(
                 self.session.name, path, limit=READ_BYTES))
@@ -850,8 +854,8 @@ class VMTools:
 
     def write(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
+        path = vm_path(args.path, self.session.dir)
         size = self._provider("write", lambda: self.session.backend.write_file(
             self.session.name, path, args.content.encode("utf-8")))
         report({"bytes": size})
@@ -861,10 +865,10 @@ class VMTools:
         """Exact replacement on the file's bytes: everything else, line
         endings and encoding included, stays as it was."""
         report = report or (lambda fields: None)
-        path = vm_path(args.path, self.session.dir)
         if args.old_string == args.new_string:
             raise ValueError("old_string and new_string are the same: there is nothing to change.")
         self._start(cancellation)
+        path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("edit", lambda: self.session.backend.read_file(
                 self.session.name, path, limit=READ_BYTES))
@@ -893,8 +897,8 @@ class VMTools:
 
     def view(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
+        path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("view", lambda: self.session.backend.read_file(
                 self.session.name, path, limit=PICTURE_BYTES + 1))
@@ -921,8 +925,8 @@ class VMTools:
 
     def share(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        path = vm_path(args.path, self.session.dir)
         self._start(cancellation)
+        path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("share", lambda: self.session.backend.read_file(
                 self.session.name, path, limit=SHARE_BYTES + 1))

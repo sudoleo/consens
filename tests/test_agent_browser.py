@@ -13,7 +13,7 @@ from app.services import agent_browser, agent_vm, agent_vm_tools, agent_workspac
 from app.services.agent_browser import BROWSER_UNAVAILABLE, BrowserArgs, BrowserTools, check_url
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import NAME, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401
+from test_agent_vm import chat_path, NAME, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401
 
 BROWSER = agent_vm.browser_name(UID)
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -134,7 +134,7 @@ def test_find_looks_up_a_text_and_only_reads(store, fake_vm):
 
 def test_an_upload_copies_one_file_of_the_workbench_for_that_call(store, fake_vm):
     loop, browser = tools(store)
-    folder = agent_vm.chat_dir(loop.chat_id)
+    folder = chat_path(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
     fake_vm.vms[NAME]["files"][f"{folder}/report.pdf"] = b"%PDF-1.7 report"
     result = call(browser, action="upload", ref="e3", file="report.pdf")

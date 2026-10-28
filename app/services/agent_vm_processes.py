@@ -221,8 +221,8 @@ class ProcessTools:
         from app.services.agent_vm_tools import vm_path
         report = report or (lambda fields: None)
         from app.services.agent_vm_tools import VM_DAY_LIMIT
-        cwd = vm_path(args.cwd, self.vm.session.dir) if args.cwd.strip() else self.vm.session.dir
         self.vm._start(cancellation)
+        cwd = vm_path(args.cwd, self.vm.session.dir) if args.cwd.strip() else self.vm.session.dir
         session = self.vm.session
         # It holds the VM awake for up to its time limit, after the message
         # too: that whole limit counts against today's VM time, and it never

@@ -24,7 +24,7 @@ from app.services.agent_runs import ACTIVITY_MAX_BYTES, activity_budget, bounded
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
-from test_agent_vm import ANSWER, Agent, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import chat_path, ANSWER, Agent, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
 
 
 class LongAgent(Agent):
@@ -390,7 +390,7 @@ def test_the_next_message_is_told_what_the_vm_turn_did(store, fake_vm):
     record = stored(store, first)["agent_work_record"]
     # The browser never gets it (chat_store's turn fields).
     assert "agent_work_record" not in saved(store, first)
-    assert record.splitlines() == [WORK_RECORD_OPEN, f"1. vm_write_file {agent_vm.chat_dir(first.chat_id)}/app.py (8 bytes)",
+    assert record.splitlines() == [WORK_RECORD_OPEN, f"1. vm_write_file {chat_path(first.chat_id)}/app.py (8 bytes)",
                                    "2. vm_exec $ pytest -q -> exit 1, 2.0 s: 1 failed, 2 passed", WORK_RECORD_CLOSE]
     script = LongAgent()
     second = loop_after(store, script, first.chat_id, "two", "Fix the failing test.")

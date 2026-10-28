@@ -156,6 +156,18 @@ class _FakeBackend(VMBackend):
         for file in [file for file in files if file == path or file.startswith(path + "/")]:
             del files[file]
 
+    def move_path(self, name, source, target):
+        self._call("move_path", name, source, target)
+        files = self.vm.vms.get(name, {}).get("files", {})
+        inside = [file for file in files if file == source or file.startswith(source + "/")]
+        if not inside:
+            return "missing"
+        if any(file == target or file.startswith(target + "/") for file in files):
+            return "taken"
+        for file in inside:
+            files[target + file[len(source):]] = files.pop(file)
+        return "moved"
+
     def delete_service(self, name, service):
         self._call("delete_service", name, service)
 
@@ -242,6 +254,12 @@ def results(loop):
     return [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
 
 
+def chat_path(chat_id, title="Question one"):
+    """A chat's folder as the workspace names it (agent_vm.chat_folder): a
+    test chat is titled after its first question (pending)."""
+    return agent_vm.chat_dir(chat_id, agent_vm.chat_folder(title, chat_id))
+
+
 # --- The turn -------------------------------------------------------------------
 
 def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(store, fake_vm):
@@ -258,8 +276,8 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     # The agent is told about its workspace and offered its three tools.
     assert prompt_defaults.AGENT_VM_PROMPT in script.systems[0]
     assert {"vm_exec", "vm_read_file", "vm_write_file"} <= set(script.offered[0])
-    folder = agent_vm.chat_dir(loop.chat_id)
-    assert folder == f"/home/agent/chats/{loop.chat_id}"
+    folder = chat_path(loop.chat_id)
+    assert folder == f"/home/agent/chats/question-one-{loop.chat_id[:6]}"
     # The account and the chat name the workspace before the provider creates it; it reaches the registries only.
     chat = store._chat_ref(UID, loop.chat_id).get().to_dict()
     assert chat["agent_vm"]["name"] == NAME and chat["agent_vm"]["provider"] == "fake"
@@ -383,12 +401,12 @@ def test_the_accounts_chats_share_one_workspace_each_in_its_own_folder(store, fa
     first = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "first"})]]))
     list(first.run())
     second = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "second"})],
-                                   [("vm_read_file", {"path": f"{agent_vm.chat_dir(first.chat_id)}/notes.txt"})]]),
+                                   [("vm_read_file", {"path": f"{chat_path(first.chat_id)}/notes.txt"})]]),
                      request_id="other-chat")
     list(second.run())
     assert first.chat_id != second.chat_id and list(fake_vm.vms) == [NAME]
-    assert workspace_files(fake_vm) == {f"{agent_vm.chat_dir(first.chat_id)}/notes.txt": b"first",
-                                        f"{agent_vm.chat_dir(second.chat_id)}/notes.txt": b"second"}
+    assert workspace_files(fake_vm) == {f"{chat_path(first.chat_id)}/notes.txt": b"first",
+                                        f"{chat_path(second.chat_id)}/notes.txt": b"second"}
     # The same computer: a chat can read another chat's folder when it is asked to.
     assert results(second)[1]["content"] == "first\n"
 
@@ -468,7 +486,7 @@ def test_the_messages_attachments_are_in_the_input_folder_at_first_use(store, fa
     script = Agent([[("vm_exec", {"command": "ls input"})], [("vm_exec", {"command": "wc -l input/data.csv"})]])
     loop = vm_loop(store, script, chat_id=chat_id, file_context=context)
     list(loop.run())
-    inputs = agent_vm.chat_dir(chat_id) + "/input"
+    inputs = chat_path(chat_id) + "/input"
     assert workspace_files(fake_vm) == {f"{inputs}/data.csv": b"a,b\n1,2\n", f"{inputs}/data (2).csv": b"a,b\n1,2\n"}
     first, second = results(loop)
     assert first["inputs"] == [f"{inputs}/data.csv", f"{inputs}/data (2).csv"]
@@ -618,7 +636,7 @@ def test_reading_a_missing_or_long_file(store, fake_vm):
     script = Agent([[("vm_read_file", {"path": "/nope"})], [("vm_read_file", {"path": "big.txt", "offset": 3,
                                                                                 "limit": 2})]])
     loop = vm_loop(store, script)
-    D = agent_vm.chat_dir(loop.chat_id)
+    D = chat_path(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
     fake_vm.vms[NAME]["files"][f"{D}/big.txt"] = lines
     list(loop.run())
@@ -635,7 +653,7 @@ def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm)
     script = Agent([[("vm_edit_file", {"path": "calc.py", "old_string": "total = a - b",
                                        "new_string": "total = a + b\nprint(total)"})]])
     loop = vm_loop(store, script)
-    D = agent_vm.chat_dir(loop.chat_id)
+    D = chat_path(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
     files = fake_vm.vms[NAME]["files"]
     files[f"{D}/calc.py"] = source.encode()
@@ -716,7 +734,7 @@ def test_while_the_user_has_the_browser_nothing_of_the_agent_reaches_the_vm(stor
     session.sleep = sleep
     result = tools.exec(VmExecArgs(command="ls"), cancellation=ProviderCancellation())
     assert result["exit_code"] == 0 and seen == [[], [], []]
-    assert ("exec", NAME, "ls", agent_vm.chat_dir(loop.chat_id), 60) in fake_vm.calls
+    assert ("exec", NAME, "ls", chat_path(loop.chat_id), 60) in fake_vm.calls
     # A takeover that lasts: after USER_WAIT_SECONDS the agent hears so, the VM nothing.
     agent_workspace.ref(store.db, UID).update({"control": {"holder": "user", "until": time.time() + 600}})
     fake_vm.calls.clear()
@@ -783,7 +801,7 @@ def test_a_halt_while_the_vm_starts_stops_the_command_it_starts_for(store, fake_
 
 def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
     loop = vm_loop(store, Agent())
-    D = agent_vm.chat_dir(loop.chat_id)
+    D = chat_path(loop.chat_id)
     tools, cancellation = loop.vm_tools, ProviderCancellation()
 
     def edit(**kwargs):
@@ -818,7 +836,7 @@ def test_a_line_longer_than_a_page_is_read_cut_and_reading_goes_on(store, fake_v
     script = Agent([[("vm_read_file", {"path": "data.json"})],
                     [("vm_read_file", {"path": "data.json", "offset": 2})]])
     loop = vm_loop(store, script)
-    D = agent_vm.chat_dir(loop.chat_id)
+    D = chat_path(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
     fake_vm.vms[NAME]["files"][f"{D}/data.json"] = (
         f"short\n{long_line}\nend\n".encode())
@@ -844,7 +862,7 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
                     [("vm_share_file", {"path": "/tmp/chart.png"}), ("vm_share_file", {"path": "/tmp/fake.png"}),
                      ("vm_share_file", {"path": "big.bin"}), ("vm_share_file", {"path": "/nope"})]])
     loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
-    D = agent_vm.chat_dir(chat_id)
+    D = chat_path(chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
     fake_vm.vms[NAME]["files"].update({
         "/tmp/chart.png": png, f"{D}/notes.txt": b"mean 42\n", "/tmp/fake.png": b"<svg onload=alert(1)>",
@@ -1018,9 +1036,9 @@ def test_deleting_the_chat_deletes_its_folder_and_keeps_the_workspace(store, fak
     kept = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "b"})]]), request_id="kept")
     list(kept.run())
     store._purge_chat(UID, gone.chat_id)
-    assert ("delete_path", NAME, agent_vm.chat_dir(gone.chat_id)) in fake_vm.calls
+    assert ("delete_path", NAME, chat_path(gone.chat_id)) in fake_vm.calls
     assert ("delete", NAME) not in fake_vm.calls
-    assert workspace_files(fake_vm) == {f"{agent_vm.chat_dir(kept.chat_id)}/notes.txt": b"b"}
+    assert workspace_files(fake_vm) == {f"{chat_path(kept.chat_id)}/notes.txt": b"b"}
     assert not store._chat_ref(UID, gone.chat_id).get().exists
     # No checkpoint from before may bring the folder back (restorable).
     assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
@@ -1117,7 +1135,7 @@ def test_a_chat_deleted_while_its_folder_was_made_deletes_the_folder(store, fake
             loop.vm_tools.session.ready(ProviderCancellation())
     finally:
         _FakeBackend.ensure = original
-    assert ("delete_path", NAME, agent_vm.chat_dir(loop.chat_id)) in fake_vm.calls
+    assert ("delete_path", NAME, chat_path(loop.chat_id)) in fake_vm.calls
     assert workspace_files(fake_vm) == {}
 
 
@@ -1362,11 +1380,56 @@ def test_each_chat_folder_names_its_chat(store, fake_vm):
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     store._chat_ref(UID, loop.chat_id).update({"title": "CSV-Auswertung\nder Umsätze"})
     list(loop.run())
-    marker = fake_vm.vms[NAME]["files"][f"{agent_vm.chat_dir(loop.chat_id)}/{agent_workspace.CHAT_MARKER}"].decode()
+    # Since 2026-10-28 named after the title (umlauts spelled out) and the id's start.
+    folder = f"/home/agent/chats/csv-auswertung-der-umsaetze-{loop.chat_id[:6]}"
+    assert chat_path(loop.chat_id, "CSV-Auswertung\nder Umsätze") == folder
+    marker = fake_vm.vms[NAME]["files"][f"{folder}/{agent_workspace.CHAT_MARKER}"].decode()
     assert marker.startswith("chat: CSV-Auswertung der Umsätze\nstarted: ")
     assert f"id: {loop.chat_id}\n" in marker and "deleted with the chat" in marker
+    assert ("exec", NAME, "ls", folder, 60) in fake_vm.calls
+    # The chat records the name: its deletion and the next rename start there.
+    assert store._chat_ref(UID, loop.chat_id).get().to_dict()["agent_vm"]["folder"] == folder.rsplit("/", 1)[1]
     # The agent is told how to find another chat's folder.
     assert ".consens-chat" in prompt_defaults.AGENT_VM_PROMPT
+
+
+def test_a_chat_folder_follows_a_new_title_and_an_old_id_folder_moves_once(store, fake_vm):
+    first = vm_loop(store, Agent([[("vm_write_file", {"path": "a.txt", "content": "a"})]]))
+    chat_id = first.chat_id
+    # A folder from before 2026-10-28, named by the chat's id.
+    fake_vm.vms[NAME] = {"files": {f"/home/agent/chats/{chat_id}/old.txt": b"o"}, "checkpoints": []}
+    list(first.run())
+    renamed = chat_path(chat_id)
+    assert workspace_files(fake_vm) == {f"{renamed}/old.txt": b"o", f"{renamed}/a.txt": b"a"}
+    store._chat_ref(UID, chat_id).update({"title": "Promotion neben dem Beruf"})
+    second = vm_loop(store, Agent([[("vm_read_file", {"path": "a.txt"})]]), chat_id=chat_id, request_id="two")
+    list(second.run())
+    now = f"/home/agent/chats/promotion-neben-dem-beruf-{chat_id[:6]}"
+    assert results(second)[0]["content"].strip() == "a"
+    assert workspace_files(fake_vm) == {f"{now}/old.txt": b"o", f"{now}/a.txt": b"a"}
+    assert ("move_path", NAME, renamed, now) in fake_vm.calls
+    # Deleting the chat deletes the folder by its recorded name.
+    store._purge_chat(UID, chat_id)
+    assert workspace_files(fake_vm) == {}
+
+
+def test_a_taken_name_keeps_the_chats_folder_where_it_is(store, fake_vm):
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    fake_vm.vms[NAME] = {"files": {f"{chat_path(loop.chat_id)}/x.txt": b"someone else's",
+                                   f"/home/agent/chats/{loop.chat_id}/mine.txt": b"mine"}, "checkpoints": []}
+    list(loop.run())
+    assert ("exec", NAME, "ls", f"/home/agent/chats/{loop.chat_id}", 60) in fake_vm.calls
+    assert fake_vm.vms[NAME]["files"][f"{chat_path(loop.chat_id)}/x.txt"] == b"someone else's"
+
+
+@pytest.mark.parametrize("title,folder", [
+    ("Promotion neben dem Beruf", "promotion-neben-dem-beruf"), ("", "chat"), ("  ???  ", "chat"),
+    ("Größe & Maße: Café", "groesse-masse-cafe"),
+    ("Ein sehr langer Titel, der weit über vierzig Zeichen hinausgeht", "ein-sehr-langer-titel-der-weit-ueber"),
+])
+def test_a_folder_name_is_the_titles_words_and_the_ids_start(title, folder):
+    assert agent_vm.chat_folder(title, "3F9A1C2B") == f"{folder}-3f9a1c"
+    assert len(agent_vm.chat_folder("x" * 300, "3f9a1c")) <= 47
 
 
 def test_the_workspaces_notes_come_with_the_first_vm_result_as_data(store, fake_vm):

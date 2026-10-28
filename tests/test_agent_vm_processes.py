@@ -21,7 +21,7 @@ from app.services.agent_compaction import describe
 from app.services.agent_vm_processes import (MAX_RUNNING, RUNNER, launch_script, list_command, parse_status,
                                              process_dir, start_command, status_command, stop_command, task_name)
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
-from test_agent_vm import NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
+from test_agent_vm import chat_path, NO_NOTES, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401  (fixtures)
 
 PID = "abcd1234"
 
@@ -57,9 +57,9 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert directory.startswith("/home/sprite/.consens/processes/")
     assert files[f"{directory}/run.sh"].decode() == RUNNER
     launch = files[f"{directory}/launch.sh"].decode()
-    assert launch == launch_script("npm run dev", agent_vm.chat_dir(loop.chat_id) + "/app", 1800)
+    assert launch == launch_script("npm run dev", chat_path(loop.chat_id) + "/app", 1800)
     assert shlex.split(launch)[1:7] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "1800",
-                                        agent_vm.chat_dir(loop.chat_id) + "/app"]
+                                        chat_path(loop.chat_id) + "/app"]
     assert files[f"{directory}/command"] == b"npm run dev"
     assert {path for _, path in fake_vm.server_files if path.startswith(directory)} == {
         f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command"}
@@ -131,7 +131,7 @@ def test_without_an_id_the_processes_are_listed(store, fake_vm):
     assert results(loop)[0] == {"processes": [
         {"id": "abcd1234", "status": "running", "command": "npm run dev"},
         {"id": "0000ffff", "status": "exited", "exit_code": 1, "command": "pytest -q"}],
-        "chat_folder": agent_vm.chat_dir(loop.chat_id), "workspace_notes": NO_NOTES}
+        "chat_folder": chat_path(loop.chat_id), "workspace_notes": NO_NOTES}
 
 
 def test_a_process_the_vm_stopped_is_said_to_be_lost():
