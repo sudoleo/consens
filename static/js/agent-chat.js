@@ -1369,7 +1369,11 @@
       const response = await fetch(url, { method: "POST", body: JSON.stringify({ text: item.text }),
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
       const data = await response.json().catch(() => ({}));
-      if (response.ok && data.id) Object.assign(item, { state: "waiting", noteId: data.id });
+      if (response.ok && data.id && context.metadata.readNotes?.includes(data.id)) {
+        // Read before this answer arrived (delivered): done, never sent again.
+        const queue = queueOf(context);
+        if (queue.includes(item)) queue.splice(queue.indexOf(item), 1);
+      } else if (response.ok && data.id) Object.assign(item, { state: "waiting", noteId: data.id });
       else item.state = "queued";
     } catch (_) {
       // Unreachable now: it goes out with the next message instead.
@@ -1380,13 +1384,16 @@
   // The activity showed the message under "You": the run has read it. Its
   // id comes with the step that read it ("completion:3/note-<id>",
   // agent_loop.activity); matched as "note-<id>" alone, a read message
-  // stayed queued and went out again after the response.
+  // stayed queued and went out again after the response. The run can read
+  // it before this page has the POST's answer with the id: kept as read, so
+  // deliver drops it then (before, it went out again as a new, paid message).
   function delivered(context, event) {
     const match = typeof event?.id === "string" ? /(?:^|\/)note-([^/]+)$/.exec(event.id) : null;
     if (!event?.from_user || !match) return;
     const queue = queueOf(context);
     const index = queue.findIndex(item => item.noteId === match[1]);
     if (index >= 0) { queue.splice(index, 1); renderQueue(); }
+    else (context.metadata.readNotes ||= []).push(match[1]);
   }
   // The response is over: what it did not read goes out now, or back into
   // the field when it stopped or failed.
@@ -1417,7 +1424,11 @@
       }, 0);
       return;
     }
-    input.value = input.value.trim() ? `${text}\n\n${input.value}` : text;
+    // Older text first: a new draft follows the waiting message, the run's
+    // own question (restoreUnsentDraft, refused before it started) leads it.
+    const ownQuestion = context.metadata.draftRestored
+      && input.value.trim() === String(context.metadata.draftQuestion || "").trim();
+    input.value = !input.value.trim() ? text : ownQuestion ? `${input.value}\n\n${text}` : `${text}\n\n${input.value}`;
     input.dispatchEvent(new Event("input", { bubbles: true }));
     App.showPopup?.(context.status === "succeeded" ? "Your waiting message is back in the field, before your new text."
       : "Your waiting message is back in the field: the response ended before it could take it.");
@@ -1886,7 +1897,9 @@
   // or one that ended moments ago, takes the screen. A turn long over or one
   // the server no longer knows took it on every reload, the field slid down
   // and back up, and its record stayed (2026-10-26). Without an answer (no
-  // network) it is followed as before.
+  // network) it is followed as before. "Moments ago" counts from the turn's
+  // end, not from sending: a VM run of more than 10 minutes that ended just
+  // before the reload counted as long over, and its answer stayed away.
   const RESUME_FRESH_MS = 10 * 60 * 1000;
   async function resumeState(record) {
     let result = null;
@@ -1896,7 +1909,11 @@
         signal, {}, { headers }), { timeoutMs: 15000 });
     } catch (_) { return "unknown"; }
     if (result?.data?.recovery_state === "running") return "running";
-    if (result?.data?.turn) return Date.now() - Number(record.at) < RESUME_FRESH_MS ? "ended" : "over";
+    const turn = result?.data?.turn;
+    if (turn) {
+      const ended = Date.parse(turn.completed_at || turn.failed_at || "");
+      return Date.now() - (Number.isFinite(ended) ? ended : Number(record.at)) < RESUME_FRESH_MS ? "ended" : "over";
+    }
     if (!result || result.status >= 500 || result.status === 429) return "unknown";
     return "over";
   }

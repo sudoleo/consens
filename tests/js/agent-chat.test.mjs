@@ -1469,6 +1469,43 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // The run read the message before the POST's answer with its id arrived:
+  // it stayed queued and went out again after the response, paid twice.
+  it("never sends a message again that the run read before its id came back", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => false };
+    } });
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    window.sendQuestion = vi.fn();
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const catalogFetch = window.fetch;
+    let answer;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
+      ? { ok: true, json: () => new Promise(resolve => { answer = resolve; }) } : catalogFetch(url, options));
+    input.value = "Use the newer data";
+    const steering = window.App.agentChat.steer();
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    handlers.activity.receive({ version: 1, step_id: "completion:3", id: "completion:3/note-n1", kind: "progress",
+      text: "Use the newer data", from_user: true });
+    answer({ status: "added", id: "n1" });
+    await steering;
+    expect(queue.hidden).toBe(true);
+    window.App.runRegistry.cancel(run.runId, "user");
+    expect(input.value).toBe("");
+    expect(window.sendQuestion).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
   it("keeps a message for the next turn once the answer is fixed and under review", async () => {
     const { window, document, dom } = boot({ setup(w) {
       w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
@@ -2420,6 +2457,27 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // The waiting message came back before the restored question: sent
+  // again as it stood, the two went out swapped.
+  it('puts a waiting message after the restored question when the server refuses before starting', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    let refuse;
+    w.streamSSERequest = vi.fn(() => new Promise(resolve => { refuse = resolve; }));
+    d.body.insertAdjacentHTML('beforeend', '<div id="bookmarksContainer"></div>');
+    const input = d.getElementById('questionInput');
+    input.value = 'First question';
+    const sending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(refuse).toBeTypeOf('function'));
+    input.value = 'Second thought';
+    await w.App.agentChat.steer();
+    refuse({ ok: false, status: 422, streamed: false,
+      data: { detail: 'This chat contains Google information. Allow sharing it for this message.' } });
+    await sending;
+    expect(input.value).toBe('First question\n\nSecond thought');
+    dom.window.close();
+  });
+
   // Apple-Audit H1: the engine's words ("Load failed", "Failed to fetch",
   // "The string did not match the expected pattern.") never reach the reader.
   it.each([
@@ -3035,6 +3093,26 @@ describe("agent turns that outlive their connection", () => {
       expect(liveCalls(w)).toHaveLength(0);
       dom.window.close();
     }
+  });
+
+  // "Moments ago" counts from the turn's end: a long VM run sent 40 minutes
+  // ago that ended just before the reload still takes the screen.
+  it("shows the answer of a long turn that ended just before the reload", async () => {
+    const record = { at: Date.now() - 40 * 60 * 1000, title: "Long run", followup: false,
+      body: { chat_id: CHAT, question: "Long run", client_request_id: "req-long", bookmark_id: "b_long", recover_only: false,
+        model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {}, file_ids: [] } };
+    const { window: w, dom } = bootFollow({
+      before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+      pages: [{ known: true, done: true, last_seq: 2, events: [{ seq: 2, type: "final", data: finalData("Long answer") }] }] });
+    const turn = { id: TURN, question: "Long run", consensus: "Long answer", status: "completed",
+      completed_at: new Date(Date.now() - 60 * 1000).toISOString() };
+    w.streamSSERequest.mockImplementation(async () => ({ ok: true, status: 200, data: { turn: structuredClone(turn) } }));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-long")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-long");
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    expect(run.consensus.text).toBe("Long answer");
+    dom.window.close();
   });
 
   it("ignores stale or foreign records after a reload", async () => {

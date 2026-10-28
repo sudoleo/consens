@@ -5052,7 +5052,9 @@ attachmentMeta, stop?}` in `sessionStorage["agent_pending_runs_<uid>"]` (≤ 4,
 (Erfolg/gespeicherter Fehler; ein Transportproblem behält ihn); nach einem
 Reload fragt `resumePending` (sobald Katalog bereit, Agent-Modus) erst still
 nach (`resumeState`, `recover_only`): nur ein laufender Turn oder einer, der
-vor höchstens 10 min endete (`RESUME_FRESH_MS`), bekommt wieder einen
+vor höchstens 10 min endete (`RESUME_FRESH_MS`, gezählt ab `completed_at`/
+`failed_at` des Turns; bis 2026-10-28 ab dem Absenden, sodass ein über 10 min
+langer VM-Lauf, der kurz vor dem Reload endete, verworfen wurde), bekommt wieder einen
 Run-Context und wird ohne neuen Aufruf verfolgt; einen längst beendeten oder
 dem Server unbekannten Turn verwirft es (`dropPending`). Bis 2026-10-26 nahm
 jeder Reload einen solchen Eintrag wieder auf und schob den Startbildschirm
