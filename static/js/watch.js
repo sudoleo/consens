@@ -2133,7 +2133,10 @@
     loadState: () => loadWatchLimits(false),
     watchedFor: watchedFor,
     answerButton: syncAnswerWatchButton,
-    resetAfterLogout: resetAfterLogout
+    resetAfterLogout: resetAfterLogout,
+    // A chat that opens leaves Watches (openBookmark): by keyboard or from
+    // Share in its "…" menu it opened unseen behind the page (2026-10-23).
+    leave: () => { if (watchViewIsOpen()) closeWatchDashboard({ animate: false, restoreScroll: false }); }
   });
   // Shared with watch-dashboard.js, which renders /app/watches, and with
   // agent-watch.js, the Watch card under an Agent answer.

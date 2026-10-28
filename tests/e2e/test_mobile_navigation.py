@@ -280,6 +280,31 @@ def test_watches_take_the_place_of_an_open_chat(browser, phase4_server, width):
         context.close()
 
 
+def test_a_chat_opened_without_a_click_leaves_watches(browser, phase4_server):
+    # Enter or Space on a chat row and Share in its "…" menu open the chat
+    # through openBookmark only; it loaded unseen behind Watches (2026-10-23).
+    context, page = _real_firebase_page(browser, phase4_server)
+    saved_id = 'saved_from_watches'
+    turn = {'id': 'c' * 32, 'status': 'completed', 'position': 1, 'question': 'Saved question',
+            'mode': 'Standard', 'execution_mode': 'consensus', 'consensus': 'Saved answer', 'sources': [],
+            'model_answers': {'OpenAI': {'provider': 'OpenAI', 'model_label': 'Saved OpenAI', 'answer': 'OpenAI answer'}}}
+    bookmark = {'id': saved_id, 'query': 'Saved question', 'title': 'Saved', 'mode': 'Standard',
+                'chat_id': 'd' * 32, 'responses': {'consensus': 'Saved answer'}}
+    try:
+        page.route(f'**/bookmarks/{saved_id}/conversation*',
+                   lambda route: _json(route, {'chat_id': 'd' * 32, 'turns': [turn], 'has_more': False}))
+        page.route(f'**/bookmarks/{saved_id}', lambda route: _json(route, {'bookmark': bookmark}))
+        page.evaluate('window.openWatchDashboard()')
+        expect(page.locator('#watchDashboard')).to_be_visible()
+        page.evaluate('id => window.openBookmark(id)', saved_id)
+        expect(page.locator('#watchDashboard')).to_be_hidden()
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bis-watch-view\b'))
+        expect(page.locator('#threadAskText')).to_have_text('Saved question')
+        expect(page.locator('.container')).to_be_visible()
+    finally:
+        context.close()
+
+
 def test_open_mobile_sidebar_survives_the_keyboard_resize(browser, phase4_server):
     # Chrome on Android resizes the layout viewport when the keyboard opens
     # (interactive-widget=resizes-content); typing in the chat search must not

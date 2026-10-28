@@ -1485,8 +1485,11 @@ async function handleEmailLogin() {
     continueSignedIn();
   } catch (error) {
     setButtonPending(loginBtn, false);
-    loginErr.textContent = mapFirebaseLoginError(error);
-    if (loginErr.textContent === window.App.t(WRONG_CREDENTIALS_MESSAGE)) passEl.setAttribute("aria-invalid", "true");
+    // Compared before it is shown: the German page translates the text a
+    // moment later, so the text on screen never matched (2026-10-23).
+    const message = mapFirebaseLoginError(error);
+    loginErr.textContent = message;
+    if (message === WRONG_CREDENTIALS_MESSAGE) passEl.setAttribute("aria-invalid", "true");
     trackAppEvent("auth_email_login_result", { status: "error" });
   }
 }
@@ -3140,6 +3143,7 @@ window.openBookmark = async function (bookmarkId) {
   // The tap is answered at once: the phone menu closes and the row is
   // marked before anything loads (Apple audit D2).
   window.App.chatScroll?.closeMenu?.();
+  window.App.watch?.leave?.();
   syncActiveBookmark(bookmarkId);
   const requestEpoch = ++bookmarkViewEpoch;
   const liveContext = window.App.runRegistry?.findByBookmarkId?.(bookmarkId);

@@ -313,6 +313,19 @@ describe("New watch dialog", () => {
     expect(page.hidden).toBe(true);
   });
 
+  // openBookmark calls it: Enter on a row and Share in its menu open the
+  // chat without a click, and it loaded unseen behind Watches (2026-10-23).
+  it("leaves Watches for a chat opened without a click", () => {
+    const { window, document } = boot({ watches: [] });
+    const page = document.getElementById("watchDashboard");
+    expect(page.hidden).toBe(false);
+    window.App.watch.leave();
+    expect(page.hidden).toBe(true);
+    expect(document.body.classList.contains("is-watch-view")).toBe(false);
+    window.App.watch.leave();
+    expect(page.hidden).toBe(true);
+  });
+
   it("shows a guest the page with an example instead of a toast", async () => {
     const { window, document } = boot({ user: false, path: "/app" });
     document.getElementById("viewSwitchWatches").click();

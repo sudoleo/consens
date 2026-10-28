@@ -93,9 +93,28 @@ def test_enter_submits_the_login_and_wrong_credentials_read_as_such(browser, pha
         # SDK 9.22 reports enumeration-protected wrong passwords as
         # auth/internal-error; the user must still read "wrong password".
         expect(page.locator("#loginError")).to_contain_text("Email or password is not correct")
+        expect(page.locator("#loginPassword")).to_have_attribute("aria-invalid", "true")
         expect(page.locator("#loginButton")).to_be_enabled()
         expect(page.locator("#loginButton")).to_have_text("Log in")
         assert _calls(page) == [["password", "someone@example.test"]]
+    finally:
+        context.close()
+
+
+# The field was marked only when the text on screen equalled the German
+# message, which the page translates a moment after it is set (2026-10-23).
+def test_a_wrong_password_marks_the_field_on_the_german_page_too(browser, phase4_server):
+    context, page = _guest_page(browser, phase4_server)
+    try:
+        context.add_cookies([{"name": "consens_lang", "value": "de", "url": phase4_server}])
+        page.goto(phase4_server + "/app", wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__consensioAuthState?.known === true && !!window.App.openAuthModal")
+        page.click("#authTopLoginBtn")
+        page.fill("#loginEmail", "someone@example.test")
+        page.fill("#loginPassword", "not-the-password")
+        page.press("#loginPassword", "Enter")
+        expect(page.locator("#loginError")).to_contain_text("E-Mail oder Passwort ist falsch")
+        expect(page.locator("#loginPassword")).to_have_attribute("aria-invalid", "true")
     finally:
         context.close()
 
