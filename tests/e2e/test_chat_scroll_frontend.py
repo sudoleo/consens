@@ -172,6 +172,10 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         page.wait_for_timeout(600)
         assert abs(page.evaluate("scrollY") - before) < 3
         expect(latest).to_be_visible()
+        # The jump keeps the end it was pressed for; on a slow runner the text
+        # was still landing then and ran past the near-end band (nightly
+        # 2026-10-28). Press once all of it is there.
+        page.wait_for_function("() => document.getElementById('agentAnswerBody').textContent.split('Additional material.').length > 20")
         latest.focus()
         latest.press("Enter")
         page.wait_for_function(await_bottom)

@@ -8,7 +8,7 @@ from native_support import native_db, tree
 from test_file_storage_transactions import cloud_files, save
 
 
-AREAS = {"api_access", "user_subcollections", "chats", "waitlist_feedback", "tier_audit", "owned_shares", "pending_results",
+AREAS = {"api_access", "agent_workspace", "user_subcollections", "chats", "waitlist_feedback", "tier_audit", "owned_shares", "pending_results",
     "answer_receipts", "orphan_watches", "watch_indexes", "watch_brief", "notification_outbox",
     "persistence_guards", "email_follows", "profile", "firebase_auth"}
 

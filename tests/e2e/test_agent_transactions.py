@@ -228,11 +228,13 @@ def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatc
             assert sum(pool.map(lambda _: AgentRunStore(db).settle(*args, completion=value,
                 status="cancelled", final=False), range(2))) == 1
         quota = agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()
-        assert quota["used"] == 15 and quota["reserved"] == 0
+        # 5 fresh input + 5 cache reads at a quarter, rounded up (2) + 5 output
+        # (agent_quota.CACHED_INPUT_WEIGHT since 2974d716).
+        assert quota["used"] == 12 and quota["reserved"] == 0
         assert quota['revision'] == 2  # one admitted call, one settlement despite retries
         store.finish_run(*args, completion=value, status="cancelled", run_token=args[1])
         store.delete_chat(uid, args[1])
-        assert agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()["used"] == 15
+        assert agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()["used"] == 12
     finally:
         FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
         db.collection("users").document(uid).delete()

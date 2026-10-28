@@ -89,12 +89,15 @@ def seed_reader(page, direct=False, *, insights=False, question=None, difference
     page.wait_for_function("""() => App.followup?.lastExchange?.turn?.turn_id === 'reader-current'
       && document.getElementById('runProvenance')?.hidden === false""")
     # An opened chat lands at its newest question (chat-scroll.js); wait
-    # until the page stands, so a menu opened next is not closed by it.
+    # until the page stands, so a menu opened next is not closed by it. The
+    # landing may still correct the place until its settle ends (the body
+    # leaves chat-scroll-following); a slow runner opened the menu before.
     page.evaluate("""() => new Promise(resolve => {
       let last = scrollY, still = 0;
       const tick = () => {
         if (Math.abs(scrollY - last) < 1) still += 1; else { still = 0; last = scrollY; }
-        if (still >= 12) resolve(); else requestAnimationFrame(tick);
+        if (still >= 12 && !document.body.classList.contains('chat-scroll-following')) resolve();
+        else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     })""")
