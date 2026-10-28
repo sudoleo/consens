@@ -59,8 +59,11 @@ def is_configured() -> bool:
 
 
 def verify_webhook_secret(candidate: str) -> bool:
+    # As bytes: compare_digest raises TypeError for a str with non-ASCII
+    # characters, and a header can carry any Latin-1 character (until
+    # 2026-10-28 such a request ended in a 500 and an alert).
     expected = webhook_secret()
-    return bool(expected and hmac.compare_digest(expected, str(candidate or "")))
+    return bool(expected and hmac.compare_digest(expected.encode("utf-8"), str(candidate or "").encode("utf-8")))
 
 
 def ensure_webhook_configured() -> dict:

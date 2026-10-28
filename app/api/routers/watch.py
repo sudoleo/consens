@@ -231,11 +231,22 @@ def disconnect_telegram(request: Request, data: dict = Body(default={})):
 
 
 @router.post("/api/telegram/webhook")
-async def telegram_webhook(request: Request, data: dict = Body(default={})):
+async def telegram_webhook(request: Request):
+    # The secret first, the body after: until 2026-10-28 FastAPI parsed the
+    # JSON of anyone's request before this check (audit). The body itself is
+    # capped before (request_limits.PATH_MAX_REQUEST_BODY_BYTES).
     if not telegram_watch.verify_webhook_secret(
         request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
     ):
         raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
+    try:
+        data = await request.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        # Acknowledged like a failed update: Telegram would only resend it.
+        logging.warning("telegram_webhook update was not a JSON object")
+        return {"ok": True}
     try:
         await asyncio.to_thread(telegram_watch.handle_update, data)
     except Exception as exc:

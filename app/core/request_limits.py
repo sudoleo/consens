@@ -4,13 +4,44 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 
+# Ceiling for every route (MAX_REQUEST_BODY_BYTES), reached only by uploads.
 DEFAULT_MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024
-# Routes whose largest valid body is small. A hostile body there could still
-# make validation expensive (one error per key), so it is refused early. The
-# settings PATCH is at most ~64 KB (a 32 KB system prompt, fully escaped).
-PATH_MAX_REQUEST_BODY_BYTES = {"/api/my/settings": 256 * 1024}
+# Every other route. The body is buffered and parsed before authentication
+# and rate limits: a hostile 16 MB JSON body cost about a second of CPU and
+# 380 MB of memory on any route (audit 2026-10-28).
+SMALL_REQUEST_BODY_BYTES = 1024 * 1024
+# The routes that need more: the real uploads, files as base64 inside JSON
+# (/ask_* two files of at most 5 MB, 14 MB as base64, before the server
+# shrinks an image the browser could not; an Agent upload one file of at most
+# 7,000,000 base64 characters), and a saved chat (its sources are bounded
+# only by the Firestore document, at most 1 MiB).
+LARGE_ROUTE_MAX_REQUEST_BODY_BYTES = (
+    (re.compile(r"/ask_[a-z0-9_]+"), 15 * 1024 * 1024),
+    (re.compile(r"/agent/chats/[^/]+/files"), 8 * 1024 * 1024),
+    (re.compile(r"/bookmark"), 2 * 1024 * 1024),
+)
+# Routes whose largest valid body is far smaller still. A hostile body there
+# could make validation expensive (one error per key), so it is refused early.
+# The settings PATCH is at most ~64 KB (a 32 KB system prompt, fully escaped);
+# a Telegram update is a few KB and arrives before its secret is checked.
+PATH_MAX_REQUEST_BODY_BYTES = {
+    "/api/my/settings": 256 * 1024,
+    "/api/telegram/webhook": 64 * 1024,
+    "/api/client-errors": 64 * 1024,
+}
+
+
+def route_max_request_body_bytes(path: str) -> int:
+    """The body limit of one route, before the configured ceiling."""
+    if path in PATH_MAX_REQUEST_BODY_BYTES:
+        return PATH_MAX_REQUEST_BODY_BYTES[path]
+    for pattern, limit in LARGE_ROUTE_MAX_REQUEST_BODY_BYTES:
+        if pattern.fullmatch(path):
+            return limit
+    return SMALL_REQUEST_BODY_BYTES
 
 
 def configured_max_request_body_bytes() -> int:
@@ -51,8 +82,7 @@ class RequestBodyLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        limit = min(self.max_body_bytes,
-                    PATH_MAX_REQUEST_BODY_BYTES.get(str(scope.get("path") or ""), self.max_body_bytes))
+        limit = min(self.max_body_bytes, route_max_request_body_bytes(str(scope.get("path") or "")))
         headers = {
             key.lower(): value
             for key, value in scope.get("headers", [])

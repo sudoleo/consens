@@ -212,3 +212,47 @@ def test_a_small_json_route_has_its_own_tighter_cap():
         asyncio.run(RequestBodyLimitMiddleware(inner, 16 * 1024 * 1024)(scope, receive, send))
         assert bool(sent and sent[0]["status"] == 413) == rejected
         assert (received_by_app == []) == rejected
+
+
+def _declared(path, size):
+    """The status the middleware answers a body of ``size`` bytes on ``path``
+    with (204 = handed to the app), by its Content-Length alone."""
+    sent = []
+
+    async def inner(scope, receive, send):
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "POST", "path": path,
+             "headers": [(b"content-length", str(size).encode())]}
+    asyncio.run(RequestBodyLimitMiddleware(inner, DEFAULT_MAX_REQUEST_BODY_BYTES)(scope, receive, send))
+    return sent[0]["status"]
+
+
+@pytest.mark.parametrize("path", ["/chats", "/agent", "/api/watch", "/register", "/api/v1/consensus",
+                                  "/__/auth/handler", "/bookmarks/b1/title", "/unknown-route"])
+def test_only_upload_routes_accept_large_bodies(path):
+    # Audit 2026-10-28: 16 MB were allowed everywhere, parsed before auth and
+    # rate limits (about a second of CPU and 380 MB per request).
+    from app.core.request_limits import SMALL_REQUEST_BODY_BYTES
+    assert _declared(path, SMALL_REQUEST_BODY_BYTES) == 204
+    assert _declared(path, SMALL_REQUEST_BODY_BYTES + 1) == 413
+
+
+@pytest.mark.parametrize("path,size", [("/ask_openai", 14 * 1024 * 1024), ("/ask_deepseek", 14 * 1024 * 1024),
+                                       ("/agent/chats/" + "a" * 32 + "/files", 7_100_000),
+                                       ("/bookmark", 1_500_000)])
+def test_upload_routes_keep_room_for_their_largest_valid_body(path, size):
+    assert _declared(path, size) == 204
+    assert _declared(path, DEFAULT_MAX_REQUEST_BODY_BYTES + 1) == 413
+
+
+def test_the_telegram_webhook_takes_only_a_small_body():
+    assert _declared("/api/telegram/webhook", 64 * 1024) == 204
+    assert _declared("/api/telegram/webhook", 64 * 1024 + 1) == 413
