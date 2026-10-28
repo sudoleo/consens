@@ -4373,9 +4373,15 @@ erhalten keine Delegations-/Vergleichstools, aber Websuche
 ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
 `comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
 Orchestrator sucht vor dem ersten Vergleich nur für sich selbst. Sobald ein Vergleich
-bezahlte Antworten hat (bis 2026-10-14: schon ab seinem Start), dürfen die Schritte
-des Agenten und die Judges das Tageslimit überziehen
-(`_admit_chat_step` → `claim(overdraft=True)`). Jeder Schritt des Agenten im
+bezahlte Antworten hat (bis 2026-10-14: schon ab seinem Start), dürfen der
+Schlussschritt, der die Antwort ohne Tools schreibt (`_merged_wrap_up`,
+`closing`), und die Judges das Tageslimit überziehen
+(`_admit_chat_step` → `claim(overdraft=True)`). Ein Steuer-Schritt läuft auch
+danach nur im Kontingent; weist es ihn vor seinem Claim ab, schreibt der Agent
+die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
+`TURN_ALLOWANCE_LIMIT`), ohne bezahlte Vergleiche nicht. Bis 2026-10-28 überzog
+nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
+(Sicherheitsaudit). Jeder Schritt des Agenten im
 Kontomodus kann die Antwort schreiben und wird mit dem Steuer-Budget zugelassen
 (`_routing_model`); sein Antwortbudget darüber (`_answer_output`) reserviert er
 einmal statt pro Suchrunde (`RunCosts.estimate(answer_output=…)`), und nur dieser

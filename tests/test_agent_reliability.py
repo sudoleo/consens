@@ -246,12 +246,15 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
     assert value.text == "Long answer with progress." and agent_quota.measured_tokens(value.usage) == 14
 
 
-@pytest.mark.parametrize("comparison", ["answered", "unanswered", None])
-def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(store, monkeypatch, comparison):
-    """Once a comparison holds paid answers, the step that may write the
-    answer starts at once with its whole allowance (overdraft: the next
-    message is refused instead). Before that, also after a comparison whose
-    answers found no allowance, a step waits for sibling reservations."""
+@pytest.mark.parametrize("comparison,closing", [("answered", True), ("answered", False), ("unanswered", False),
+                                                (None, False)])
+def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(store, monkeypatch, comparison, closing):
+    """Once a comparison holds paid answers, the closing step that writes the
+    answer without tools starts at once with its whole allowance (overdraft:
+    the next message is refused instead). A routing step does not overdraw
+    (audit 2026-10-28): like a step after a comparison whose answers found no
+    allowance, it starts with what still fits. Without a comparison a step
+    waits for sibling reservations."""
     from dataclasses import replace
     from test_agent_chat_integrity import chat_loop as comparison_chat_loop
     limits = []
@@ -274,13 +277,13 @@ def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(s
     monkeypatch.setattr(loop.condition, "wait", wait)
     model = replace(loop.model, max_output_tokens=60000)
     step = loop._step(model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation,
-                      searches_enabled=False, answer_candidate=True)
-    if compared:
+                      searches_enabled=False, answer_candidate=True, allow_tools=not closing)
+    if compared and closing:
         exhaust(step)
         assert not waited and limits == [60000]
     elif comparison:
-        # No overdraft without paid answers: it starts with what still fits
-        # (clamp_floor) instead of its whole allowance.
+        # No overdraft without paid answers, nor for a routing step: it starts
+        # with what still fits (clamp_floor) instead of its whole allowance.
         exhaust(step)
         assert not waited and limits and limits[0] < 60000
     else:

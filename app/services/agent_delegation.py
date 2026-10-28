@@ -970,6 +970,20 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             return all(w.reviewed and not w.inbox for w in self.workers.values())
 
+    def _paid_comparison(self):
+        """Whether a comparison of this message holds paid answers."""
+        return bool(self.comparison and any(c.get("answers") for c in self.comparison.comparisons))
+
+    def _closing_index(self, exc):
+        """The free step index of a routing step the allowance refused, when
+        the turn closes with its answer instead (_merged_wrap_up, which may
+        overdraw after paid comparisons), else None: the refusal ends it."""
+        step = getattr(exc, "unclaimed_step", None)
+        if not (step and self.merged and self.policy.account_budget_only and self._paid_comparison()
+                and self._can_wrap_up()):
+            return None
+        return int(step.split(":")[1])
+
     def _report(self, worker, args, *, cancellation):
         self._check(cancellation)
         if len(args.text) > self.policy.message_chars:
@@ -1092,7 +1106,7 @@ class DelegationLoop(AgentLoop):
         return message
 
     def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
-                         clamp_floor=None, server_tools=(), answer_output=0):
+                         clamp_floor=None, server_tools=(), answer_output=0, closing=False):
         """Retry admission, never generation. All successful claims stay atomic.
 
         Contention is backpressure, not exhaustion. Wait for active receipts,
@@ -1105,10 +1119,12 @@ class DelegationLoop(AgentLoop):
         answer of a comparison keeps its full rounds, whatever order the
         siblings are admitted in; settlement books the measured search tokens.
         Only a context window too small for the search shrinks it.
-        Once a comparison of this message holds paid answers, the orchestrator
-        and the judges may overdraw the daily allowance: paid
-        comparisons always reach an answer and its check, and the next message
-        is refused instead (see agent_quota.reserve).
+        Once a comparison of this message holds paid answers, the ``closing``
+        step (the answer written without tools, _merged_wrap_up) and the
+        judges may overdraw the daily allowance: paid comparisons always reach
+        an answer and its check, and the next message is refused instead (see
+        agent_quota.reserve). A routing step is admitted only within the
+        allowance; refused, it leaves its step to the closing one (run).
         A step that may write the answer (``answer_output``) is admitted like
         a routing step, with ``model``'s routing allowance per segment. The
         answer it may write on top (one segment up to ``answer_output``) is
@@ -1121,8 +1137,10 @@ class DelegationLoop(AgentLoop):
         # comparison whose answers found no allowance has nothing to finish
         # (review 2026-10-14: near the daily limit a long first step left the
         # comparison without answers, and the overdraft then paid an unchecked turn).
-        overdraft = bool(self.comparison and any(c.get("answers") for c in self.comparison.comparisons)
-                         and (worker is None or getattr(worker, "kind", None) == "judge"))
+        # And only for what finishes them: until 2026-10-28 every further
+        # routing step overdrew too, never refused before turn_steps (audit).
+        overdraft = self._paid_comparison() and (
+            closing if worker is None else getattr(worker, "kind", None) == "judge")
         search_limited, waiting = False, False
         delay, recovered_at = .1, time.monotonic()
         while True:
@@ -1325,12 +1343,15 @@ class DelegationLoop(AgentLoop):
                                    else None)
                     model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
                         model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor,
-                        server_tools=server_tools, answer_output=answer_output)
+                        server_tools=server_tools, answer_output=answer_output, closing=not allow_tools)
                 else:
                     claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                         run_token=self.run_token, policy=claim_policy, reservation=reservation)
-            except AgentTokenBudgetExceeded:
+            except AgentTokenBudgetExceeded as exc:
                 if self.policy.account_budget_only or not searches:
+                    # Refused before its claim: the step stays free for the
+                    # closing step (_closing_index).
+                    exc.unclaimed_step = step
                     raise
                 # Admission failed before any paid request. Keep all hard
                 # bounds, but allow a response from the evidence already held.
@@ -2344,16 +2365,22 @@ class DelegationLoop(AgentLoop):
                 self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
                     {"error": "Not run: this message reached its limit."})})
 
+    def _can_wrap_up(self):
+        """Whether a merged turn holds what its closing answer is written
+        from. In audit mode the agent's own research carries the answer, in a
+        long VM run its own work."""
+        comparison = self.comparison
+        compared = any(len(c["answers"]) >= 2 for c in comparison.comparisons)
+        usable = comparison.text or comparison.audit_mode or compared or self._long_run()
+        return bool(usable) and self._workers_ready()
+
     def _merged_wrap_up(self, reason, steps, value):
         """A per-turn limit in a merged turn: one last step of the agent, its
         tools listed but not callable (tool_choice none, prompt cache kept),
         writes the answer from the comparisons it has."""
         comparison = self.comparison
         compared = any(len(c["answers"]) >= 2 for c in comparison.comparisons)
-        # In audit mode the agent's own research carries the answer, in a
-        # long VM run its own work.
-        usable = comparison.text or comparison.audit_mode or compared or self._long_run()
-        if not usable or not self._workers_ready():
+        if not self._can_wrap_up():
             raise AnalysisBudgetExceeded(reason)
         logging.info("Agent turn limit reached; the agent writes the answer from what it has")
         if not comparison.text:
@@ -2456,29 +2483,41 @@ class DelegationLoop(AgentLoop):
                         search = {"searches_enabled": not (self.search_handoff and research),
                                   "search_rounds": ORCHESTRATOR_SEARCH_ROUNDS if research else 1}
                     routing = self._routing_model()
-                    value = yield from self._orchestrate(routing, index, steps, search, research)
-                    if _thought_only(value):
-                        # Reasoned through the routing allowance without a
-                        # complete tool call (prod: Sonnet "max"). One retry with
-                        # lighter reasoning, kept for this turn's later steps.
-                        lighter = lighter_reasoning(self.routing_lighter or self.model)
-                        index = next(steps, None) if lighter else None
-                        if index is None:
-                            raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
-                        if self.merged:
-                            # Text it streamed before a tool call cut in half
-                            # does not stay under the retry's text.
-                            yield from self._retract(value)
-                        logging.warning("Agent routing step reasoned through its allowance model=%s effort=%s retry_effort=%s",
-                                        routing.model, routing.reasoning_effort, lighter.reasoning_effort)
-                        yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
-                                             "text": "The model used its whole output allowance on reasoning before choosing "
-                                                     "its next step. Trying again with lighter reasoning."})
-                        self.routing_lighter = lighter
-                        self.routing_steps += 1
-                        value = yield from self._orchestrate(self._routing_model(), index, steps, search, research)
+                    try:
+                        value = yield from self._orchestrate(routing, index, steps, search, research)
                         if _thought_only(value):
-                            raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
+                            # Reasoned through the routing allowance without a
+                            # complete tool call (prod: Sonnet "max"). One retry with
+                            # lighter reasoning, kept for this turn's later steps.
+                            lighter = lighter_reasoning(self.routing_lighter or self.model)
+                            index = next(steps, None) if lighter else None
+                            if index is None:
+                                raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
+                            if self.merged:
+                                # Text it streamed before a tool call cut in half
+                                # does not stay under the retry's text.
+                                yield from self._retract(value)
+                            logging.warning("Agent routing step reasoned through its allowance model=%s effort=%s retry_effort=%s",
+                                            routing.model, routing.reasoning_effort, lighter.reasoning_effort)
+                            yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
+                                                 "text": "The model used its whole output allowance on reasoning before choosing "
+                                                         "its next step. Trying again with lighter reasoning."})
+                            self.routing_lighter = lighter
+                            self.routing_steps += 1
+                            value = yield from self._orchestrate(self._routing_model(), index, steps, search, research)
+                            if _thought_only(value):
+                                raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
+                    except AgentTokenBudgetExceeded as exc:
+                        # After paid comparisons a routing step runs only
+                        # within the allowance. Refused, the agent writes its
+                        # answer from them in the step it left free.
+                        closing = self._closing_index(exc)
+                        if closing is None:
+                            raise
+                        logging.info("Agent routing step refused by the allowance; the agent writes the answer")
+                        yield from self._wrap_up(TURN_ALLOWANCE_LIMIT, chain([closing], steps), value)
+                        status = "succeeded"
+                        break
                     self.messages.append(value.assistant_message())
                     if _searched(value):
                         # The step's own web search (every step in audit mode,

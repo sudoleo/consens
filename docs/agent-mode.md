@@ -1701,7 +1701,9 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
   reserviert er einmal, nicht pro Suchrunde, und dieser Teil darf das
   Tageslimit überziehen, auch ohne Vergleich
   (`agent_quota.reserve(..., overdraft=<Tokens>)`); sobald ein Vergleich bezahlte
-  Antworten hat, darf es der ganze Schritt. Vor dem Fix vom 2026-10-14 (noch hinter
+  Antworten hat, darf es der ganze Schlussschritt ohne Tools (seit 2026-10-28
+  nicht mehr jeder Steuer-Schritt: Weist das Kontingent einen ab, schreibt der
+  Agent die Antwort, `_closing_index`). Vor dem Fix vom 2026-10-14 (noch hinter
   dem Schalter) reservierte der erste Schritt mit drei Recherche-Runden rund 470k
   Tokens statt 270k wie im getrennten Weg: Ein Free-Konto (660k) bekam schon ab
   ≈ 190k Tagesverbrauch nur noch eine statt drei Recherche-Runden, und kurz vor
@@ -1868,7 +1870,8 @@ Chatmodells selbst (bis 180 s ohne Fortschritt, danach bricht der Watchdog ab un
 der Turn scheitert), eine Wiederholung nach einem ausgedachten Schritt (ein
 weiterer Schritt, Warnung im Log) und `read_source` (bis 60 s je Abruf,
 nacheinander, höchstens fünf). 429 kostet höchstens 10 s, sonst scheitert der
-Schritt; zugelassen wird nach einem Vergleich immer (Überziehen erlaubt).
+Schritt; zugelassen wird nach einem Vergleich der Schlussschritt immer
+(Überziehen erlaubt), ein Steuer-Schritt nur im Kontingent.
 Quorum-Nachfrist und Nachzügler liegen vor dem Vergleichsende, Judge-Plätze und
 Judge-Ausfälle danach. Die zusammengelegten Ausreißer (Wärmepumpe 299 s,
 Eiffelturm 290 s) hatten genau zwei Chat-Schritte, keine Warnung und für beide
@@ -2188,8 +2191,8 @@ damaligen Wege (getrennter Antwortschritt und Antwort des Agenten), genau wie
 Pro. Die größte Einzelreservierung ist der erste Schritt mit drei
 Recherche-Runden (≈ 329k, zugelassen ab 276k; im getrennten Weg bis
 2026-10-14 ≈ 276k); die sechs Vergleichsantworten reservieren je ≈ 13k (Suche
-gebucht, nicht reserviert), die Schritte des Agenten und die Judges dürfen nach
-dem Vergleich überziehen.
+gebucht, nicht reserviert), der Schlussschritt des Agenten und die Judges dürfen
+nach dem Vergleich überziehen.
 Bei bereits verbrauchtem Konto wird zuerst die Recherche des ersten Schritts
 abgestuft (drei Runden brauchen ≈ 276k Rest, eine ≈ 70k). Erst wenn der Rest
 die sechs parallelen Vergleichsantworten nicht mehr deckt (unter ≈ 55k, bei
@@ -2491,10 +2494,14 @@ Worst-Case-Schranke für drei Runden und sechs parallele Antworten (≈ 1,5 M
 Tokens) läge sonst über einem ganzen Free-Tag, und die Zulassung hätte die
 zuletzt gestarteten Modelle abgestuft. Damit ein Vergleich, der das Tageslimit
 dabei überzieht, nicht bezahlte Antworten verwirft, dürfen, sobald ein Vergleich
-bezahlte Antworten hat, Orchestrator (also auch der Schritt, der die Antwort schreibt)
-und Judges das Limit überziehen
+bezahlte Antworten hat, der Schlussschritt, der die Antwort ohne Tools schreibt
+(`_merged_wrap_up`), und die Judges das Limit überziehen
 (`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die nächste
 Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Ein
+Steuer-Schritt danach läuft nur im Kontingent: Weist es ihn vor seinem Claim ab,
+nimmt der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
+Bis 2026-10-28 überzog jeder Steuer-Schritt nach dem ersten bezahlten Vergleich,
+ohne Absage bis `turn_steps` (Sicherheitsaudit). Ein
 Schritt des Agenten reserviert je Such-Segment das Steuer-Budget und das
 Antwortbudget darüber nur einmal (`answer_output`, siehe „Die Antwort schreibt
 der Agent selbst“). Grundlage, gemessen 2026-10-01 pro Runde: eigene

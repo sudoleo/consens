@@ -421,6 +421,44 @@ def test_a_turn_limit_lets_the_agent_write_without_tools(store, monkeypatch):
     assert review_is_bound(saved["agent_review"], ANSWER) and deltas(events) == ANSWER
 
 
+def test_after_paid_comparisons_a_refused_routing_step_closes_the_turn(store, monkeypatch):
+    """Audit 2026-10-28: after the first paid comparison every further
+    routing step overdrew the daily allowance and was never refused before
+    turn_steps. Now only the closing answer (no tools) and the judges may: a
+    routing step the allowance refuses leaves its step to that answer."""
+    ref = free_account(store, monkeypatch, 400_000)
+    script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
+    loop = merged_loop(store, script)
+    execute = loop._execute_stream
+
+    def spend(value, call, *args):
+        result = yield from execute(value, call, *args)
+        if call["function"]["name"] == "compare_models":
+            # Another tab used up the rest of the day meanwhile.
+            ref.set({**ref.get().to_dict(), "used": agent_budget_config.DEFAULT_TIER_LIMITS["free"]})
+        return result
+
+    monkeypatch.setattr(loop, "_execute_stream", spend)
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == ANSWER
+    # Step 1 was refused before its claim and written as the closing answer:
+    # tools listed, none callable.
+    assert orchestrator_steps(script) == ["completion:0", "completion:1"]
+    assert script.kwargs[1]["allow_tool_calls"] is False
+    assert script.requests[1][-1]["content"].startswith("App rule: this message has reached its limit.")
+    assert review_is_bound(saved["agent_review"], ANSWER) and deltas(events) == ANSWER
+
+
+def test_without_paid_comparisons_a_refused_routing_step_ends_the_turn(store, monkeypatch):
+    free_account(store, monkeypatch, 0)
+    script = Merged([{"text": ANSWER}])
+    loop = merged_loop(store, script)
+    with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
+        list(loop.run())
+    assert orchestrator_steps(script) == []
+
+
 def test_the_memory_decision_rides_on_the_comparison(store):
     set_profile(store.db, auto_memory=True)
     snapshot = repo(store).snapshot(UID)
