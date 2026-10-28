@@ -38,10 +38,14 @@ _LINK_REL = "nofollow noopener noreferrer"
 SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
 # The whole group of markers before the sentence end moves behind the point,
 # not only the last one: "Claim [S1][S2]." became "Claim [1].[2]" with the
-# point between the two (2026-10-20).
+# point between the two (2026-10-20). A group always matches whole, its
+# point is optional (group 2 is None without one): with the point required,
+# a long group without one was tried again from each of its markers and
+# from each blank before it, quadratic (4,000 markers took 5.7 s on a
+# share page, 2026-10-22). Same matches as before otherwise.
 _TERMINAL_SOURCE_ORDER_RE = re.compile(
-    r"[ \t]*((?:\[(?:S?\d+)(?:\s*,\s*S?\d+)*\][ \t]*)*\[(?:S?\d+)(?:\s*,\s*S?\d+)*\])"
-    r"([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$)",
+    r"(?<![ \t])[ \t]*((?:\[(?:S?\d+)(?:\s*,\s*S?\d+)*\][ \t]*)*\[(?:S?\d+)(?:\s*,\s*S?\d+)*\])"
+    r"(?:([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$))?",
     re.IGNORECASE,
 )
 # Fenced-Code-Blöcke und Inline-Code: dort keine Quellen-Tags ersetzen.
@@ -141,7 +145,7 @@ def _link_source_tags(md_text, labels, dropped=frozenset()):
         # Fussnoten am Satzende folgen dem Satzzeichen: `Aussage.[S1]`.
         # A "!" right before a link would turn it into Markdown image syntax.
         segment = _TERMINAL_SOURCE_ORDER_RE.sub(
-            lambda match: re.sub(r"!$", r"\\!", match[2]) + match[1], segment
+            lambda match: re.sub(r"!$", r"\\!", match[2]) + match[1] if match[2] else match[0], segment
         )
         return SOURCE_RUN_RE.sub(
             lambda match: match[0] if segment[match.end():match.end() + 1] == "("

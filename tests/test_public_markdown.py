@@ -133,3 +133,39 @@ def test_a_shared_agent_answer_cites_its_sources_as_pills_like_the_app():
 
     # Without the flag (Consensus and Watch pages) nothing changes.
     assert "src-ref" not in render_public_markdown(md, sources)
+
+
+# A long group of markers without a point was tried again from each marker
+# and each blank before it: 4,000 markers took 5.7 s on a share page, which
+# renders without a cache (2026-10-22). The point is optional now, the
+# matches are those of the old pattern.
+_OLD_TERMINAL_SOURCE_ORDER = (
+    r"[ \t]*((?:\[(?:S?\d+)(?:\s*,\s*S?\d+)*\][ \t]*)*\[(?:S?\d+)(?:\s*,\s*S?\d+)*\])"
+    r"([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$)"
+)
+
+
+def test_markers_before_the_sentence_end_move_as_before_in_linear_time():
+    import random
+    import re
+    import time
+    from app.services.public_markdown import _TERMINAL_SOURCE_ORDER_RE, render_public_markdown
+
+    old = re.compile(_OLD_TERMINAL_SOURCE_ORDER, re.IGNORECASE)
+
+    def move(pattern, text):
+        return pattern.sub(lambda m: m[2] + m[1] if m[2] else m[0], text)
+
+    rng = random.Random(20261028)
+    pieces = ["[1]", "[S2]", "[3, S4]", "[x]", "[Text]", " ", "\t", "  ", ".", "!", "?", "”", ")", "]",
+              "[", "a", "Claim", "\n", ",", "(", "[1](u)"]
+    for _ in range(20_000):
+        text = "".join(rng.choice(pieces) for _ in range(rng.randint(1, 14)))
+        assert move(_TERMINAL_SOURCE_ORDER_RE, text) == move(old, text), text
+    assert move(_TERMINAL_SOURCE_ORDER_RE, "See [Text][1]. Claim [S1] [S2].") == "See [Text].[1] Claim.[S1] [S2]"
+
+    sources = [{"id": "S1", "url": "https://agency.example/report", "title": "Agency"}]
+    started = time.perf_counter()
+    html = render_public_markdown("Claim " + "[S1]" * 8_000 + " " * 8_000 + "end", sources)
+    assert time.perf_counter() - started < 2
+    assert "#src-1" in html
