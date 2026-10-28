@@ -7,7 +7,7 @@ and runs it at once while a round takes seconds.
 
 The app decides by the tool and its typed arguments, never by reading text:
 the browser's actions that send something or go somewhere (open, click,
-Enter, upload) and a request for a domain (request_domain, which the user
+Enter, Space, upload) and a request for a domain (request_domain, which the user
 decides after the reviewers, DelegationLoop._domain_wait). Shell commands
 are not on it since the workbench's network is closed (security audit
 2026-10-27, agent_domains.py): until the user allowed a domain, a command
@@ -20,6 +20,8 @@ import json
 
 # browser actions that act outside: always, or with one argument set.
 BROWSER_OUTWARD = frozenset({"open", "click", "upload"})
+# Keys that send: Enter submits, Space presses the focused button like a click.
+BROWSER_OUTWARD_KEYS = frozenset({"Enter", "Space"})
 
 
 def _arguments(call):
@@ -41,7 +43,7 @@ def outward(call):
         return None
     args = _arguments(call)
     action = args.get("action")
-    if action in BROWSER_OUTWARD or (action == "key" and args.get("key") == "Enter") \
+    if action in BROWSER_OUTWARD or (action == "key" and args.get("key") in BROWSER_OUTWARD_KEYS) \
             or (action == "type" and args.get("enter") is True):
         return "browser"
     return None

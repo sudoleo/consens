@@ -466,7 +466,8 @@ eines Prüfers dauert Sekunden. Jetzt warten Aufrufe, die den Arbeitsplatz
 verlassen, auf die Prüfer. Welche, entscheidet die App nach dem Werkzeug und
 seinen typisierten Argumenten (`agent_gate.outward`, nie ein Modell, nie ein
 Textmuster): beim Werkzeug `browser` die Aktionen `open`, `click`, `upload`,
-`key` mit `Enter` und `type` mit `enter` (Lesen, Tippen allein, Scrollen und
+`key` mit `Enter` oder `Space` (drückt den fokussierten Knopf wie ein Klick, seit
+2026-10-28) und `type` mit `enter` (Lesen, Tippen allein, Scrollen und
 Tabs senden nichts), und jede Domain-Anfrage (`request_domain`, die danach
 immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Bis zum Umbau nach
 dem Sicherheitsaudit (2026-10-27) suchte eine Liste von Mustern in
@@ -786,7 +787,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `~/.consens/browser/uploads` der Browser-VM und löscht sie danach; der Helfer
   nimmt nur Dateien aus diesem Ordner. `screenshot` kommt als Bild zum Agenten
   (wie `vm_view_image`, nur für Bildmodelle). `open`, `click`, `upload`,
-  `key Enter` und `type` mit `enter` warten auf die Prüfer (Vorab-Prüfung).
+  `key Enter`, `key Space` und `type` mit `enter` warten auf die Prüfer (Vorab-Prüfung).
   Die Einrichtung läuft synchron im ersten Aufruf (bis 100 s): Im Hintergrund
   fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
   Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit zählt als

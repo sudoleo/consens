@@ -28,6 +28,8 @@ def call(name, **arguments):
     {"action": "click", "ref": "e12"},
     {"action": "upload", "ref": "e3", "file": "report.pdf"},
     {"action": "key", "key": "Enter"},
+    # Space presses the focused button like a click (Tab, then Space).
+    {"action": "key", "key": "Space"},
     {"action": "type", "ref": "e7", "text": "Hallo", "enter": True},
 ])
 def test_browser_actions_that_send_or_go_somewhere_wait_for_the_reviewers(arguments):
