@@ -965,14 +965,22 @@
     }
   });
 
+  // The direct comparison on screen in numbers: the composer's narrow form
+  // ("5/6 · 1!") is built from them, never parsed out of the translated words.
+  function directCounts() {
+    if (!direct || !selected || selected.preview) return null;
+    return { ready: selected.answers.filter(answer => answer.status === 'complete').length, total: selected.answers.length,
+      unavailable: selected.answers.filter(answer => ['error', 'skipped', 'canceled'].includes(answer.status)).length };
+  }
+
   App.answerReader = Object.freeze({
     syncPreview,
+    directCounts,
     directSummary() {
-      if (!direct || !selected || selected.preview) return null;
-      const ready = selected.answers.filter(answer => answer.status === 'complete').length;
-      const unavailable = selected.answers.filter(answer => ['error', 'skipped', 'canceled'].includes(answer.status)).length;
-      return [window.App.t("{count} of {total} ready", { count: ready, total: selected.answers.length }),
-        unavailable ? window.App.t("{failures} unavailable", { failures: unavailable }) : ""].filter(Boolean).join(" · ");
+      const counts = directCounts();
+      if (!counts) return null;
+      return [window.App.t("{count} of {total} ready", { count: counts.ready, total: counts.total }),
+        counts.unavailable ? window.App.t("{failures} unavailable", { failures: counts.unavailable }) : ""].filter(Boolean).join(" · ");
     },
     close,
     openPanel,

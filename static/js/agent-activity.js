@@ -414,14 +414,27 @@
   }
 
   // The model the turn ran on, with its reasoning only when it was not the
-  // model's default (the same words as the answer's label).
+  // model's default (the same words as the answer's label). The name stays
+  // as it is, the reasoning is translated on its own: on the German page
+  // "{0} reasoning" took the whole line ("Nachdenken: Claude Sonnet 5.5 ·
+  // High"), and the line was written anew on every render because the page
+  // translates data-label, which it was compared with (2026-10-23).
   function renderRunDetails(view, settings) {
     const text = settings?.label ? label(settings) : '';
     view.runDetails.hidden = !text;
-    if (view.runDetails.dataset.label !== text) {
-      view.runDetails.dataset.label = text;
-      view.runDetails.textContent = text;
-    }
+    if (view.runDetailsText === text) return;
+    view.runDetailsText = text;
+    view.runDetails.replaceChildren();
+    if (!text) return;
+    const name = document.createElement('span');
+    name.setAttribute('data-i18n-skip', '');
+    name.textContent = settings.label;
+    view.runDetails.append(name);
+    const effort = settings.reasoning_effort;
+    if (!effort || effort === 'default') return;
+    const reasoning = document.createElement('span');
+    reasoning.textContent = effort === 'none' ? 'Reasoning off' : `${effortName(effort)} reasoning`;
+    view.runDetails.append(' · ', reasoning);
   }
   // A step in the timeline says what happened in the words of the live run
   // ("Searched the web"); its sources follow as the answer's pills.

@@ -64,3 +64,35 @@ describe("activity clock", () => {
     app.dom.window.close();
   });
 });
+
+// On the German page "{0} reasoning" took the whole line, model name
+// included, and the line was written anew on every render (2026-10-23).
+describe("run details on a German page", () => {
+  it("translates the reasoning on its own, keeps the model's name and the line", async () => {
+    const app = loadScripts(["static/js/i18n.js", "static/js/app-text.js", "static/js/agent-activity.js"], {
+      body: '<div id="host"></div>', base: false,
+      before(window) {
+        window.__consensI18n = { lang: "de", entries: {
+          "{0} reasoning": "Nachdenken: {0}", "High": "Hoch", "Reasoning off": "Nachdenken aus" } };
+      },
+    });
+    const host = app.document.getElementById("host");
+    const activity = app.window.App.agentActivity;
+    const settled = async () => { await Promise.resolve(); app.window.App.i18n.flush(); };
+    const settings = { label: "Claude Sonnet 5.5", reasoning_effort: "high" };
+    activity.render(host, { running: false, elapsedMs: 9000, status: "succeeded", events: [], settings });
+    await settled();
+    const details = host.querySelector(".agent-activity-run-details");
+    expect(details.textContent).toBe("Claude Sonnet 5.5 · Nachdenken: Hoch");
+    const name = details.firstElementChild;
+    activity.render(host, { running: false, elapsedMs: 9000, status: "succeeded", events: [], settings });
+    await settled();
+    expect(details.firstElementChild).toBe(name);
+    expect(details.textContent).toBe("Claude Sonnet 5.5 · Nachdenken: Hoch");
+    activity.render(host, { running: false, elapsedMs: 9000, status: "succeeded", events: [],
+      settings: { label: "Claude Sonnet 5.5", reasoning_effort: "none" } });
+    await settled();
+    expect(details.textContent).toBe("Claude Sonnet 5.5 · Nachdenken aus");
+    app.dom.window.close();
+  });
+});

@@ -215,6 +215,23 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById('composerComparisonStatus').hidden).toBe(true);
     dom.window.close();
   });
+
+  // The narrow form came out of the words with an English pattern: on the
+  // German page it stayed the whole sentence, cut off (2026-10-23).
+  it("builds the narrow comparison status from numbers, in any language", () => {
+    const {window, document, dom} = boot();
+    window.App.answerReader = {directSummary: () => '5 von 6 bereit · 1 nicht verfügbar',
+      directCounts: () => ({ready: 5, total: 6, unavailable: 1})};
+    window.updateAgentModeUI();
+    const status = document.getElementById('composerComparisonStatus');
+    expect(status.textContent).toBe('5 von 6 bereit · 1 nicht verfügbar.');
+    expect(status.dataset.compact).toBe('5/6 · 1!');
+    window.App.answerReader.directCounts = () => ({ready: 2, total: 2, unavailable: 0});
+    window.App.answerReader.directSummary = () => '2 von 2 bereit';
+    window.updateAgentModeUI();
+    expect(status.dataset.compact).toBe('2/2');
+    dom.window.close();
+  });
   // Audit (Max, 2026-10-27): the reviewers say what they do next to their
   // marks under the field; in a chat, where the bar steps aside, their marks
   // stand before the chip, which names the chat model (model-picker.js).

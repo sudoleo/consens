@@ -135,6 +135,10 @@
     box.setAttribute("aria-checked", state.checked.has(index) ? "true" : "false");
     state.touched = true;
     state.dirty = true;
+    // A new tick gets its own retries: after a longer outage had used them
+    // up, every later tick of the turn failed once and was dropped unsaved,
+    // its box still ticked (2026-10-24).
+    state.attempt = 0;
     state.chatId = state.chatId || el.dataset.taskChat || visibleChatId();
     schedule(turnId, SAVE_DELAY_MS);
   });

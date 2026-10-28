@@ -329,6 +329,7 @@
     // on screen, never tools.
     const start = window.App.composer?.isStartScreen?.() ?? document.body.classList.contains("is-hero");
     const summary = beta ? null : window.App.answerReader?.directSummary?.();
+    const counts = summary ? window.App.answerReader?.directCounts?.() : null;
     const wasHidden = bar.hidden;
     // A bar fading out of the start screen stays until app-core.js lets it go.
     const leaving = bar.classList.contains("is-leaving");
@@ -431,10 +432,13 @@
     // The comparison on screen says how far it got. (Its "Shown: Compare
     // result" prefix for a differing next mode left with Consensus on
     // 2026-10-25: Agent, the only other mode, has its own composer, where
-    // this bar steps aside.) The summary comes translated (directSummary).
+    // this bar steps aside.) The summary comes translated (directSummary),
+    // so the narrow form comes from the numbers: parsed out of the words, it
+    // stayed the whole German sentence, cut off (2026-10-23).
     status.textContent = summary ? `${summary}.` : "";
     status.title = status.textContent;
-    status.dataset.compact = summary ? summary.replace(/^(\d+) of (\d+) ready/, "$1/$2").replace(/ unavailable$/, "!") : "";
+    status.dataset.compact = counts
+      ? `${counts.ready}/${counts.total}${counts.unavailable ? ` · ${counts.unavailable}!` : ""}` : "";
   }
 
   // In audit mode the comparison models review the agent’s work and get a
