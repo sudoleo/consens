@@ -27,6 +27,20 @@ fi
 if ! runs "^openbox"; then
   setsid nohup openbox >"$dir/openbox.log" 2>&1 </dev/null 8>&- &
 fi
+# WebGL without a graphics card: Chrome no longer falls back to software
+# by itself, so maps, design tools and canvas apps did not start (2026-10-28).
+# A Chrome started with older flags is restarted once; the profile keeps
+# sign-ins and the session its tabs. Which flags it has says the marker this
+# script writes when it starts Chrome: Chrome rewrites its command line, so
+# a search for a flag in it never matched, and Chrome restarted on every call
+# (test Sprite 2026-10-28).
+flags="webgl-1"
+if runs "^/opt/google/chrome/chrome .*user-data-dir=$profile" \
+    && [ "$(cat "$dir/chrome-flags" 2>/dev/null)" != "$flags" ]; then
+  pkill -TERM -f "^/opt/google/chrome/chrome .*user-data-dir=$profile"
+  for _ in $(seq 50); do runs "^/opt/google/chrome/chrome .*user-data-dir=$profile" || break; sleep 0.1; done
+  pkill -KILL -f "^/opt/google/chrome/chrome .*user-data-dir=$profile" 2>/dev/null || true
+fi
 if ! runs "^/opt/google/chrome/chrome .*user-data-dir=$profile"; then
   # A Chrome the VM stopped leaves its lock behind; nothing else uses the profile.
   rm -f "$profile"/Singleton*
@@ -35,7 +49,9 @@ if ! runs "^/opt/google/chrome/chrome .*user-data-dir=$profile"; then
   setsid nohup google-chrome --user-data-dir="$profile" --remote-debugging-address=127.0.0.1 \
     --remote-debugging-port=9222 --no-first-run --no-default-browser-check --start-maximized \
     --disable-dev-shm-usage --hide-crash-restore-bubble --password-store=basic \
+    --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader \
     >"$dir/chrome.log" 2>&1 </dev/null 8>&- &
+  echo "$flags" >"$dir/chrome-flags"
 fi
 if ! runs "^x11vnc -display :1 "; then
   rm -f "$dir/vnc.sock"

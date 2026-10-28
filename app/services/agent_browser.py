@@ -32,7 +32,7 @@ import json
 import logging
 import posixpath
 import re
-from typing import Literal
+from typing import Literal, Optional
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,8 +42,8 @@ from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
 from app.services.llm.provider_runtime import ProviderCancelled
 
-ACTIONS = ("open", "read", "text", "find", "click", "type", "select", "key", "scroll", "back", "forward", "tabs",
-           "tab", "screenshot", "upload", "download", "wait")
+ACTIONS = ("open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
+           "tabs", "tab", "screenshot", "upload", "download", "wait")
 KEYS = ("Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab")
 TYPE_CHARS = 20_000
@@ -55,6 +55,12 @@ UPLOAD_BYTES = 15 * 1024 * 1024
 # are deleted on the browser VM and named as skipped.
 DOWNLOAD_BYTES = 25 * 1024 * 1024
 DOWNLOADS_PER_CALL = 10
+# click at x,y and drag's strokes (since 2026-10-28), pixels of the
+# screenshot; the helper checks the same (workspace_vm/browser/browser.py).
+MAX_COORDINATE = 10_000
+MAX_STROKES = 50
+MAX_STROKE_POINTS = 500
+MAX_POINTS = 2_000
 # The helper takes up to 100 s for a first setup and 60 s for the browser's start.
 CALL_SECONDS = 180
 WAIT_MAX = 120
@@ -75,7 +81,9 @@ class BrowserArgs(BaseModel):
         "open: go to url (new_tab for a new tab). read: the page's headings and elements, each with a ref like "
         "e12 (offset to read on). text: the page's text (offset). find: where text (up to 200 characters, any "
         "case) appears on the page, up to 20 places, each with the ref of the element it is in. click, type "
-        "(text, enter to submit), select (option), upload (file of your workspace): on the element ref. key: "
+        "(text, enter to submit), select (option), upload (file of your workspace): on the element ref; click "
+        "also at x,y of your last screenshot (a canvas, a map, an app read lists nothing of). drag: strokes, each "
+        "a list of x,y points of the screenshot, pressed along each (drawing, a slider, drag and drop). key: "
         "press a key. scroll: direction. download: the file at url (default: the current page's address) with "
         "the user's sign-ins. "
         "back, forward. tabs: list them; tab: bring tab number to the front. screenshot: a picture of the page. "
@@ -94,6 +102,10 @@ class BrowserArgs(BaseModel):
     offset: int = Field(default=0, ge=0, le=100_000)
     seconds: int = Field(default=0, ge=0, le=WAIT_MAX)
     file: str = Field(default="", max_length=1024, description="upload: a file in your workspace.")
+    x: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description="click: x of the screenshot, without ref.")
+    y: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description="click: y of the screenshot, without ref.")
+    strokes: list[list[list[int]]] = Field(default_factory=list, max_length=MAX_STROKES, description=(
+        "drag: strokes, each a list of [x, y] points of the screenshot (2 to 500 per stroke, 2000 in all)."))
 
 
 def check_url(url):
@@ -134,7 +146,7 @@ BROWSER_PRIVATE = ("That address is the browser's own computer or a private netw
 
 def required(args):
     """What an action needs, or ValueError naming it."""
-    need = {"open": "url", "click": "ref", "type": "ref", "select": "ref", "upload": "ref", "key": "key",
+    need = {"open": "url", "type": "ref", "select": "ref", "upload": "ref", "key": "key",
             "tab": "tab", "find": "text"}.get(args.action)
     if need and not getattr(args, need):
         raise ValueError(f"{args.action} needs {need}.")
@@ -142,6 +154,18 @@ def required(args):
         raise ValueError(f"find needs text, 1 to {FIND_CHARS} characters.")
     if args.action == "select" and not args.option:
         raise ValueError("select needs option.")
+    if args.action == "click" and not args.ref and (args.x is None or args.y is None):
+        raise ValueError("click needs ref, or x and y of your last screenshot.")
+    if args.action == "drag":
+        if not args.strokes:
+            raise ValueError("drag needs strokes: lists of [x, y] points of your last screenshot.")
+        if any(not 2 <= len(stroke) <= MAX_STROKE_POINTS for stroke in args.strokes):
+            raise ValueError(f"Each stroke needs 2 to {MAX_STROKE_POINTS} points.")
+        if any(len(point) != 2 or not all(0 <= value <= MAX_COORDINATE for value in point)
+               for stroke in args.strokes for point in stroke):
+            raise ValueError(f"Each point is [x, y], whole pixels from 0 to {MAX_COORDINATE}.")
+        if sum(len(stroke) for stroke in args.strokes) > MAX_POINTS:
+            raise ValueError(f"At most {MAX_POINTS} points in one drag.")
     if args.action == "upload" and not args.file.strip():
         raise ValueError("upload needs file, a file in your workspace.")
 
@@ -234,6 +258,10 @@ class BrowserTools:
             value = getattr(args, field)
             if value not in ("", 0, False):
                 request[field] = value
+        if args.action == "click" and not args.ref:
+            request.update(x=args.x, y=args.y)
+        if args.action == "drag":
+            request["strokes"] = args.strokes
         self.vm._start(cancellation)
         session = self.vm.session
         upload = None
@@ -343,6 +371,10 @@ class BrowserTools:
             fields["url"] = args.url[:500]
         elif args.ref:
             fields["ref"] = args.ref
+        elif args.action == "click" and args.x is not None and args.y is not None:
+            fields["at"] = f"{args.x},{args.y}"
+        if args.action == "drag":
+            fields["strokes"] = len(args.strokes)
         if args.action == "key" and args.key:
             fields["key"] = args.key
         if args.action == "upload":

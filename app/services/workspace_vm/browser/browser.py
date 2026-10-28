@@ -54,10 +54,16 @@ WAIT_MAX = 120
 SETUP_SECONDS = 100
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
-ACTIONS = {"open", "read", "text", "find", "click", "type", "select", "key", "scroll", "back", "forward", "tabs",
-           "tab", "screenshot", "upload", "download", "wait"}
+ACTIONS = {"open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
+           "tabs", "tab", "screenshot", "upload", "download", "wait"}
 # What changes the page or sends something: never while the user has the browser.
-ACTING = {"open", "click", "type", "select", "upload", "download", "key", "scroll", "back", "forward", "tab"}
+ACTING = {"open", "click", "drag", "type", "select", "upload", "download", "key", "scroll", "back", "forward", "tab"}
+# A place on the page and drag's strokes (agent_browser.py checks the same).
+MAX_COORDINATE = 10_000
+MAX_STROKES = 50
+MAX_STROKE_POINTS = 500
+MAX_POINTS = 2_000
+DRAG_STEP_PIXELS = 8
 # Files a page downloaded (a click, Enter, an address that downloads, the
 # action download) until the server copies them to the workbench and deletes
 # them here (agent_browser.py, since 2026-10-28). What the user downloads in
@@ -449,6 +455,43 @@ def element(page, ref):
     return locator.first
 
 
+def point(x, y):
+    """x, y as whole pixels of the viewport, or Refused."""
+    if not all(type(value) is int and 0 <= value <= MAX_COORDINATE for value in (x, y)):
+        raise Refused(f"A place needs x and y, whole pixels of the screenshot (0 to {MAX_COORDINATE}).")
+    return x, y
+
+
+def drag(page, strokes):
+    """Each stroke: press the mouse at its first point, move through the
+    others, release at the last (drawing, a slider, drag and drop). Between
+    two points the mouse moves in small steps, as a hand would, so a canvas
+    gets a line and not two dots."""
+    if not isinstance(strokes, list) or not 1 <= len(strokes) <= MAX_STROKES:
+        raise Refused(f"drag needs strokes: 1 to {MAX_STROKES}, each a list of x,y points of the screenshot.")
+    total = 0
+    paths = []
+    for stroke in strokes:
+        if not isinstance(stroke, list) or not 2 <= len(stroke) <= MAX_STROKE_POINTS:
+            raise Refused(f"Each stroke needs 2 to {MAX_STROKE_POINTS} points.")
+        paths.append([point(*pair) if isinstance(pair, list) and len(pair) == 2 else point(None, None)
+                      for pair in stroke])
+        total += len(stroke)
+    if total > MAX_POINTS:
+        raise Refused(f"At most {MAX_POINTS} points in one drag.")
+    for path in paths:
+        page.mouse.move(*path[0])
+        page.mouse.down()
+        last = path[0]
+        for x, y in path[1:]:
+            steps = max(1, int(max(abs(x - last[0]), abs(y - last[1])) / DRAG_STEP_PIXELS))
+            page.mouse.move(x, y, steps=steps)
+            last = (x, y)
+        page.mouse.up()
+    count = "1 stroke" if len(paths) == 1 else f"{len(paths)} strokes"
+    return f"Dragged {count} ({total} points)."
+
+
 def safe_name(name):
     """A download's file name without folders or odd characters."""
     name = re.sub(r"[^\w.\- ]", "_", os.path.basename(str(name or "").replace("\\", "/"))).strip(". ")
@@ -588,7 +631,11 @@ def run(request):
             return {"text": "\n".join(lines)}
         if action == "screenshot":
             png = page.screenshot(type="png")
-            return {"text": header(page), "png": base64.b64encode(png).decode()}
+            # The picture is the viewport, one pixel per CSS pixel: its x,y are
+            # what click and drag take.
+            width, height = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+            return {"text": header(page) + f"\nPicture: {width}x{height} pixels, the x,y that click and drag take.",
+                    "png": base64.b64encode(png).decode()}
         if action == "wait":
             seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
             deadline, held = time.time() + seconds, user_control()
@@ -630,8 +677,17 @@ def act(context, page, action, request):
     if action == "download":
         return fetch(context, page, str(request.get("url") or ""))
     if action == "click":
-        element(page, request.get("ref")).click(timeout=10_000)
-        return f"Clicked {request.get('ref')}."
+        if request.get("ref"):
+            element(page, request.get("ref")).click(timeout=10_000)
+            return f"Clicked {request.get('ref')}."
+        # A place on the page as the screenshot shows it (CSS pixels of the
+        # viewport): for what read lists no element of, such as a canvas,
+        # a map or an app drawn in one (since 2026-10-28).
+        x, y = point(request.get("x"), request.get("y"))
+        page.mouse.click(x, y)
+        return f"Clicked at {x},{y}."
+    if action == "drag":
+        return drag(page, request.get("strokes"))
     if action == "type":
         ref, text = request.get("ref"), str(request.get("text") or "")
         target = element(page, ref)

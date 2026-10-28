@@ -548,6 +548,57 @@ def test_download_fetches_with_the_browsers_sign_ins_but_never_its_own_computer(
         browser.fetch(Context(Response("https://shop.example/x", status=403)), page, "https://shop.example/x")
 
 
+def test_drag_presses_the_mouse_along_each_stroke_and_click_takes_a_place():
+    """A canvas gets lines (small steps between points), each stroke its own
+    press; bad points never reach the mouse (2026-10-28)."""
+    browser = load("browser")
+    moves = []
+
+    class Mouse:
+        def move(self, x, y, steps=1):
+            moves.append(("move", x, y, steps))
+
+        def down(self):
+            moves.append(("down",))
+
+        def up(self):
+            moves.append(("up",))
+
+        def click(self, x, y):
+            moves.append(("click", x, y))
+    page = type("Page", (), {"mouse": Mouse()})()
+    said = browser.drag(page, [[[0, 0], [80, 0], [80, 40]], [[5, 5], [6, 6]]])
+    assert said == "Dragged 2 strokes (5 points)."
+    assert moves == [("move", 0, 0, 1), ("down",), ("move", 80, 0, 10), ("move", 80, 40, 5), ("up",),
+                     ("move", 5, 5, 1), ("down",), ("move", 6, 6, 1), ("up",)]
+    moves.clear()
+    for strokes in ([], [[[1, 1]]], [[[1, 1], [2]]], [[[1, 1], [2, -1]]], [[[1, 1], [2, "x"]]], "nope"):
+        with pytest.raises(browser.Refused):
+            browser.drag(page, strokes)
+    assert moves == []
+    assert browser.act(None, page, "click", {"x": 640, "y": 300}) == "Clicked at 640,300."
+    assert moves == [("click", 640, 300)]
+    with pytest.raises(browser.Refused, match="x and y"):
+        browser.act(None, page, "click", {"x": 640})
+
+
+def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():
+    """No graphics card on the browser VM, and Chrome no longer falls back to
+    software WebGL by itself: maps, design tools and canvas apps failed in
+    Laura's test (2026-10-28). A Chrome running without it restarts once."""
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    assert "--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader" in display
+    restart = display[display.index("# WebGL without a graphics card"):display.index('if ! runs "^/opt/google/chrome/chrome')]
+    # By the marker written at Chrome's start, never by its command line:
+    # Chrome rewrites it, and a search for the flag restarted Chrome on every
+    # call (test Sprite 2026-10-28).
+    assert '[ "$(cat "$dir/chrome-flags" 2>/dev/null)" != "$flags" ]' in restart
+    assert "swiftshader" not in restart.split("then", 1)[0].split("flags=", 1)[1].split("\n", 1)[1]
+    assert 'pkill -TERM -f "^/opt/google/chrome/chrome .*user-data-dir=$profile"' in restart
+    start = display[display.index('if ! runs "^/opt/google/chrome/chrome'):display.index('if ! runs "^x11vnc')]
+    assert 'echo "$flags" >"$dir/chrome-flags"' in start
+
+
 def test_text_brings_the_main_content_first():
     browser = load("browser")
 

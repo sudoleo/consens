@@ -490,7 +490,7 @@
   // A browser step by its action (agent_browser.py): what it did and to what.
   const browserVerbs = { open: ['Opening', 'Opened'], read: ['Reading the page', 'Read the page'],
     text: ['Reading the page', 'Read the page'], find: ['Searching the page for', 'Searched the page for'],
-    click: ['Clicking', 'Clicked'], type: ['Typing into', 'Typed into'],
+    click: ['Clicking', 'Clicked'], drag: ['Dragging', 'Dragged'], type: ['Typing into', 'Typed into'],
     select: ['Choosing in', 'Chose in'], key: ['Pressing', 'Pressed'], scroll: ['Scrolling', 'Scrolled'],
     back: ['Going back', 'Went back'], forward: ['Going forward', 'Went forward'],
     tabs: ['Listing the tabs', 'Listed the tabs'], tab: ['Switching the tab', 'Switched the tab'],
@@ -503,7 +503,11 @@
     if (item.name === 'browser') {
       return item.action === 'open' || item.action === 'download' ? item.url || item.downloads?.[0] || item.title
         : item.action === 'upload' ? item.file
-        : item.action === 'key' ? item.key : item.action === 'find' ? item.query : item.ref || item.title;
+        : item.action === 'key' ? item.key : item.action === 'find' ? item.query
+        // A place of the screenshot, or how many strokes (agent_browser._activity).
+        : item.action === 'drag' && Number.isInteger(item.strokes)
+          ? App.t(item.strokes === 1 ? '1 stroke' : '{count} strokes', { count: item.strokes })
+        : item.ref || item.at || item.title;
     }
     return item.path || item.process;
   }

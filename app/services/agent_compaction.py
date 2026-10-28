@@ -284,6 +284,12 @@ def describe(name, arguments, result):
         # find's text says what it looked for (type's text stays out: it may be a message).
         if args.get("action") == "find" and isinstance(args.get("text"), str):
             target = f'"{" ".join(args["text"].split())}"'
+        # A place clicked or the strokes dragged (since 2026-10-28), not the points.
+        if args.get("action") == "click" and not target and args.get("x") is not None:
+            target = f"at {args.get('x')},{args.get('y')}"
+        if args.get("action") == "drag" and isinstance(args.get("strokes"), list):
+            count = len(args["strokes"])
+            target = "1 stroke" if count == 1 else f"{count} strokes"
         line = f"browser {args.get('action') or ''} {_short(target, 200)}".rstrip()
         title = str(data.get("page") or "").split("\n", 1)[0]
         if title.startswith("Page: "):

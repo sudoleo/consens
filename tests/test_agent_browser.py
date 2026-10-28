@@ -228,6 +228,31 @@ def test_download_takes_a_public_address_or_the_current_page_and_waits_for_the_r
     assert outward({"function": {"name": "browser", "arguments": json.dumps({"action": "download"})}}) == "browser"
 
 
+def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):
+    """Since 2026-10-28 (a paint site in Laura's test): click also at x,y of
+    the screenshot, drag along strokes of points; checked before anything
+    runs, the work record names the place or the strokes, not the points."""
+    loop, browser = tools(store)
+    call(browser, action="click", x=640, y=300)
+    call(browser, action="drag", strokes=[[[10, 10], [50, 60], [90, 20]], [[5, 5], [6, 6]]])
+    assert fake_vm.requests[-2:] == [{"action": "click", "x": 640, "y": 300},
+                                     {"action": "drag", "strokes": [[[10, 10], [50, 60], [90, 20]], [[5, 5], [6, 6]]]}]
+    for arguments, message in (({"action": "click"}, "ref, or x and y"), ({"action": "click", "x": 3}, "ref, or x and y"),
+                               ({"action": "drag"}, "drag needs strokes"),
+                               ({"action": "drag", "strokes": [[[1, 1]]]}, "2 to 500 points"),
+                               ({"action": "drag", "strokes": [[[1, 1, 1], [2, 2]]]}, "Each point is"),
+                               ({"action": "drag", "strokes": [[[1, 1], [2, 20_000]]]}, "Each point is")):
+        with pytest.raises(ValueError, match=message):
+            call(browser, **arguments)
+    from app.services.agent_compaction import describe
+    assert describe("browser", json.dumps({"action": "click", "x": 640, "y": 300}), "{}") == "browser click at 640,300"
+    assert describe("browser", json.dumps({"action": "drag", "strokes": [[[1, 1], [2, 2]]] * 3}), "{}") == (
+        "browser drag 3 strokes")
+    # The prompt says it as a fact, and that a check for a human is never the agent's.
+    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    assert "at x,y of your last screenshot" in AGENT_VM_PROMPT and "never solve a CAPTCHA" in AGENT_VM_PROMPT
+
+
 def test_a_screenshot_comes_as_a_picture_only_for_a_model_that_takes_them(store, fake_vm, monkeypatch):
     loop, browser = tools(store)
     fake_vm.browser = lambda request: {"status": "ok", "text": 'Page: "Shop"\nURL: https://shop.example/cart',

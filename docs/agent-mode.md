@@ -866,6 +866,30 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Seitentext auch Elemente, deren Name den Text enthält (aus den Zeilen von
   `read`, `ELEMENT_NAME`: eine Suchbox, die nur über ihr Label heißt, steht in
   keinem Seitentext).
+- **Maus und WebGL (seit 2026-10-28, nach Lauras Test auf einer Mal-Seite).**
+  `click` geht auch ohne Ref an `x`,`y` des letzten Screenshots (der Screenshot
+  ist der Viewport, ein Pixel je CSS-Pixel; `screenshot` nennt seine Größe):
+  für Leinwände, Karten und Apps, von denen `read` nichts listet. Die neue
+  Aktion `drag` drückt die Maus entlang von `strokes` (Listen von `[x, y]`,
+  höchstens 50 Striche, je 2–500 Punkte, 2.000 zusammen; zwischen zwei Punkten
+  in Schritten von 8 px, damit eine Leinwand Linien bekommt): Zeichnen,
+  Schieberegler, Drag-and-drop, viele Striche in einem Aufruf und damit einer
+  Prüfrunde. Beide warten wie ein Klick auf die Prüfer (`BROWSER_OUTWARD`).
+  Der VM-Prompt sagt dazu als Sicherheitsregel, dass der Agent nie ein CAPTCHA
+  oder eine andere Prüfung auf einen Menschen löst. Chrome startet mit
+  Software-WebGL (`--use-gl=angle --use-angle=swiftshader
+  --enable-unsafe-swiftshader`): Ohne Grafikkarte fällt Chrome nicht mehr von
+  selbst darauf zurück, Karten, Design-Tools und Mal-Seiten starteten nicht
+  (jspaint meldete ein WebGL-Problem). Ein Chrome mit älteren Flags startet
+  `display.sh` einmal neu (Profil und Sitzung bleiben); welche Flags er hat,
+  sagt die Markierung `chrome-flags` (`webgl-1`), die `display.sh` beim Start
+  schreibt. Eine Suche nach dem Flag in der Befehlszeile traf nie (Chrome
+  schreibt sie um), und Chrome startete an der ersten Test-Sprite bei jedem
+  Aufruf neu. Geprüft an eigenen Test-Browser-VMs (2026-10-28, danach
+  gelöscht): `webgl:true WebGL 1.0 (OpenGL ES 2.0 Chromium)`, derselbe
+  Chrome-Prozess über mehrere Aufrufe, ein alter Chrome ohne Markierung genau
+  einmal neu gestartet, `click` an x,y und zwei Striche auf einer Leinwand
+  angekommen, auf jspaint mit `drag` eine Baumkrone samt Ästen gezeichnet.
 - **Downloads vom Browser auf die Werkbank (seit 2026-10-28).** Was der
   Browser herunterlädt, landet im Chat-Ordner unter `downloads/`: Downloads,
   die eine Aktion startet (ein Klick, Enter, eine Adresse, die eine Datei

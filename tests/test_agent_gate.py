@@ -31,6 +31,9 @@ def call(name, **arguments):
     # Space presses the focused button like a click (Tab, then Space).
     {"action": "key", "key": "Space"},
     {"action": "type", "ref": "e7", "text": "Hallo", "enter": True},
+    # A place of the screenshot and a drag press the mouse like a click (2026-10-28).
+    {"action": "click", "x": 640, "y": 300},
+    {"action": "drag", "strokes": [[[10, 10], [200, 200]]]},
 ])
 def test_browser_actions_that_send_or_go_somewhere_wait_for_the_reviewers(arguments):
     assert outward(call("browser", **arguments)) == "browser"
