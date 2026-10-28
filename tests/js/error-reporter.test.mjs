@@ -177,6 +177,30 @@ describe("critical resource reporting", () => {
     dom.window.close();
   });
 
+  // A browser extension's own error, with an Error object or as a rejection,
+  // raised an alert without a place (2026-10-22).
+  it("drops errors thrown by browser extensions, not those passing through the app", () => {
+    const { window, dom, reports } = boot();
+    window.dispatchEvent(new window.ErrorEvent("error", {
+      message: "Uncaught TypeError", error: new window.TypeError("x"),
+      filename: "chrome-extension://abcdefghijklmnop/content.js", lineno: 3, colno: 9,
+    }));
+    const rejection = new window.Event("unhandledrejection");
+    rejection.reason = { name: "Error", message: "Extension context invalidated.",
+      stack: "Error: Extension context invalidated.\n    at n (moz-extension://1234-5678/inject.js:1:200)" };
+    window.dispatchEvent(rejection);
+    expect(reports).toEqual([]);
+    const mixed = new window.Event("unhandledrejection");
+    mixed.reason = { name: "TypeError", message: "private", stack: [
+      "TypeError: private",
+      "    at wrap (chrome-extension://abcdefghijklmnop/hook.js:1:5)",
+      `    at send (${window.location.origin}/static/dist/app.012345abcdef.js:4:10)`].join("\n") };
+    window.dispatchEvent(mixed);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ script: "app.012345abcdef.js", line: 4, column: 10 });
+    dom.window.close();
+  });
+
   it("preserves distinct stream failure categories during deduplication", () => {
     const { window, dom, reports } = boot();
     for (const kind of ["stream_read_failed", "stream_handler_failed", "stream_read_failed"]) {

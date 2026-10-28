@@ -220,6 +220,7 @@
   // They only produced empty alerts.
   function isUnattributableError(event) {
     if (/^ResizeObserver loop/.test(String(event.message || ""))) return true;
+    if (fromExtension(event.filename, event.error?.stack)) return true;
     if (event.error && typeof event.error === "object") return false;
     try {
       const url = new URL(event.filename || "", window.location.href);
@@ -227,6 +228,18 @@
     } catch (_) {
       return true;
     }
+  }
+
+  // Browser extensions run their own scripts in the page. An error thrown
+  // there (chrome-extension://…, also with an Error object, or a rejection
+  // whose stack holds only extension frames) is no fault of the app and
+  // raised alerts without a place (2026-10-22). A stack that also passes
+  // through our own files is still reported.
+  const EXTENSION_URL = /\b(?:chrome|moz|safari|safari-web|ms-browser)-extension:\/\//;
+  function fromExtension(filename, stack) {
+    if (EXTENSION_URL.test(String(filename || ""))) return true;
+    const text = String(stack || "");
+    return EXTENSION_URL.test(text) && !text.includes(window.location.origin);
   }
 
   // A browser that refuses a resource type itself fires the same error as an
@@ -282,7 +295,7 @@
   }, true);
 
   window.addEventListener("unhandledrejection", function (event) {
-    if (isExpectedAbort(event.reason)) return;
+    if (isExpectedAbort(event.reason) || fromExtension("", event.reason?.stack)) return;
     reportCriticalError({
       type: "unhandled_rejection",
       phase: "browser_promise",
