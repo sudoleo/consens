@@ -175,6 +175,17 @@
   }
   function rememberChatPanel(view) {
     try { sessionStorage.setItem(chatKey(view.chatId), view.closed ? "closed" : "open"); } catch (_) { /* Storage may be unavailable. */ }
+    // And across chats: the reader's last explicit choice (panelDefault).
+    try { localStorage.setItem(`agent-panel:${uid()}`, view.closed ? "closed" : "open"); } catch (_) { /* Storage may be unavailable. */ }
+  }
+  // Without a choice for the chat, the panel stands beside the answer where
+  // there is room for it (2026-10-28, Max: a central element, best always
+  // there) and stays closed on narrower screens, where it would be a sheet;
+  // a reader who closed it once keeps it closed in the next chats.
+  function panelDefaultClosed() {
+    let choice = null;
+    try { choice = localStorage.getItem(`agent-panel:${uid()}`); } catch (_) { /* Storage may be unavailable. */ }
+    return choice ? choice === "closed" : !wide();
   }
   function resetOwner() {
     if (owner === uid() && ownerUser === window.auth?.currentUser && ownerGeneration === App.authState?.generation) return;
@@ -199,7 +210,7 @@
       if (typeof saved.closed !== 'boolean' && chatChoice) saved.closed = chatChoice === "closed";
       views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
         controller: new AbortController(), expanded: new Set(saved.expanded || []),
-        closed: typeof saved.closed === 'boolean' ? saved.closed : true, manual: typeof saved.closed === 'boolean',
+        closed: typeof saved.closed === 'boolean' ? saved.closed : panelDefaultClosed(), manual: typeof saved.closed === 'boolean',
         scroll: saved.scroll || 0, loaded: false, loading: false, running: false, ended: false, settling: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
@@ -744,30 +755,43 @@
         inline._viewKey = view.key;
         inline._buttons = new Map();
         inline._stack = node("span", "agent-model-stack");
-        // A quiet panel glyph beside the model icons instead of a text chip.
+        // The reviewers' icons say who works; the controls stand apart, after
+        // them: the workspace, then the panel at the edge, as its own toggle
+        // sits at the edge of the app (2026-10-28, Max: the panel sat between
+        // the icons, a central element lost among them).
+        const svg = (paths, className) => {
+          const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+          glyph.setAttribute("viewBox", "0 0 16 16"); glyph.setAttribute("aria-hidden", "true");
+          if (className) glyph.setAttribute("class", className);
+          for (const [tag, attributes] of paths) {
+            const shape = document.createElementNS(glyph.namespaceURI, tag);
+            for (const [name, value] of Object.entries(attributes)) shape.setAttribute(name, value);
+            glyph.append(shape);
+          }
+          return glyph;
+        };
+        const controls = node("span", "agent-inline-controls");
         const toggle = node("button", "agent-sidebar-toggle"); toggle.type = "button";
         toggle.setAttribute("aria-controls", "agentSidebar");
-        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        glyph.setAttribute("viewBox", "0 0 16 16"); glyph.setAttribute("aria-hidden", "true");
-        const frame = document.createElementNS(glyph.namespaceURI, "path");
-        frame.setAttribute("d", "M2.5 3.5h11v9h-11zM10 3.5v9");
-        glyph.append(frame); toggle.append(glyph);
+        // A window with its right column, rounded like the app's other glyphs.
+        toggle.append(svg([["rect", { x: "1.75", y: "2.75", width: "12.5", height: "10.5", rx: "2.25" }],
+          ["path", { d: "M9.75 2.75v10.5" }], ["rect", { class: "agent-glyph-fill", x: "9.75", y: "2.75", width: "4.5",
+            height: "10.5" }]]));
         toggle.addEventListener("click", () => view.closed ? show(null, toggle) : hide(true));
         inline._toggle = toggle;
-        // The workspace beside it once the run worked there (workspace-view.js):
-        // agent-chat.css shows it when the activity holds a VM step.
+        // The workspace once the run worked there (workspace-view.js):
+        // agent-chat.css shows it when the activity holds a VM step, and lets
+        // it breathe like a working reviewer while a step runs there.
         const workspace = node("button", "agent-workspace-toggle workspace-only");
         workspace.type = "button";
         workspace.setAttribute("aria-label", "Open the workspace");
         workspace.title = "Workspace";
-        const screen = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        screen.setAttribute("viewBox", "0 0 16 16"); screen.setAttribute("aria-hidden", "true");
-        const outline = document.createElementNS(screen.namespaceURI, "path");
-        outline.setAttribute("d", "M2.5 3h11v7.5h-11zM6 13.5h4M8 10.5v3");
-        screen.append(outline); workspace.append(screen);
+        workspace.append(svg([["rect", { x: "1.75", y: "2.25", width: "12.5", height: "8.75", rx: "1.75" }],
+          ["path", { d: "M5.75 13.75h4.5M8 11v2.75" }]]));
         workspace.addEventListener("click", () => App.workspaceView?.open());
         inline._workspace = workspace;
-        inline.replaceChildren(inline._stack, toggle, workspace);
+        controls.append(workspace, toggle);
+        inline.replaceChildren(inline._stack, controls);
       }
       const models = new Map();
       for (const agent of view.agents.values()) {
@@ -935,11 +959,17 @@
       if (agent) openInReader(view, agent);
     }, true);
   }
+  // Whether the chat's next turn starts with the panel open: the reader's
+  // choice for the chat, else the default (panelDefaultClosed).
+  function chatPanelStaysOpen(chatId) {
+    const choice = chatPanelOpen(chatId);
+    return choice ? choice === "open" : !panelDefaultClosed();
+  }
   function project(spec) {
     resetOwner();
     // A new message of a chat whose panel is open: the panel waits for the
     // new turn's calls instead of closing and opening again (Apple audit A9).
-    if (spec?.chatId && !spec.turnId && spec.running && owner && chatPanelOpen(spec.chatId) === "open"
+    if (spec?.chatId && !spec.turnId && spec.running && owner && chatPanelStaysOpen(spec.chatId)
         && sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving")) {
       if (current) prefs(current);
       current = null; inline?.remove(); inline = null;

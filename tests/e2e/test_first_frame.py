@@ -113,7 +113,7 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         _routes(page)
         page.goto(phase4_server + "/app")
         _settled(page)
-        expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("6 AIs cross-check")
+        expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("3 AIs cross-check")
         expect(page.locator("#agentModelControls .model-picker-display")).to_have_attribute("title", re.compile(r"^DeepSeek V4\.1 Flash writes the answer"))
         page.reload()
         _settled(page)
@@ -123,9 +123,9 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         # Consensus chip, a quiet Send (B1); "Chat" and "New chat" (B10).
         assert len(frames) == 1, frames
         first = frames[0]
-        assert first["agent"] == "chip:6 AIs cross-check", first
+        assert first["agent"] == "chip:3 AIs cross-check", first
         assert first["consensus"] == "hidden" and first["demo"] == "-" and first["send"] == "disabled", first
-        assert first["reasoning"] == "Auto" and first["marks"] == 6, first
+        assert first["reasoning"] == "Auto" and first["marks"] == 3, first
         assert first["tab"] == "Chat" and first["newChat"] == "New chat", first
         # On a phone the switch lives in the menu, never cut off in the bar (B2);
         # on a desktop the bar is only a wrapper (display: contents) around it.
@@ -217,9 +217,9 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
         frames = _frames(page)
         # The chip says what the comparison models do, for the remembered
         # account and the guest alike; the guest's buttons in the end.
-        assert frames[0]["agent"] == "chip:6 AIs cross-check", frames
+        assert frames[0]["agent"] == "chip:3 AIs cross-check", frames
         last = frames[-1]
-        assert last["guestButtons"] and last["agent"] == "chip:6 AIs cross-check", last
+        assert last["guestButtons"] and last["agent"] == "chip:3 AIs cross-check", last
         assert last["reasoning"] == "Auto" and last["consensus"] == "hidden", last
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         field.type("Still here")
@@ -250,9 +250,9 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         assert len(frames) == 1, frames
         first = frames[0]
         assert first["demo"] == "demo" and first["send"] == "hidden" and first["guestButtons"], first
-        assert first["agent"] == "chip:6 AIs cross-check", first
+        assert first["agent"] == "chip:3 AIs cross-check", first
         assert first["consensus"] == "hidden", first
-        assert first["reasoning"] == "Auto" and first["marks"] == 6, first
+        assert first["reasoning"] == "Auto" and first["marks"] == 3, first
         assert first["greeting"] == "What do you want to be sure about?", first
         assert first["tab"] == "Chat" and first["switchInHeader"] is not mobile
         # Nothing a guest cannot have is asked for (the model list needs an account).

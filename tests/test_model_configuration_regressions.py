@@ -232,15 +232,20 @@ class ExistingModelFlowTests(unittest.TestCase):
         presets = {preset["id"]: preset for preset in cfg.get_consensus_presets()}
         self.assertEqual(set(presets), {"fast", "balanced", "thorough"})
         for preset in presets.values():
-            self.assertEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
+            self.assertGreaterEqual(len(preset["models"]), cfg.MIN_PRESET_FAMILIES)
+            self.assertLessEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
             self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
             self.assertTrue(preset["consensus_model"])
+        # Daily: three quick reviewers from three labs (2026-10-28).
+        self.assertEqual(presets["fast"]["models"], {
+            "openai": cfg.OPENAI_LUNA_MODEL, "anthropic": cfg.DEFAULT_ANTHROPIC_MODEL,
+            "deepseek": cfg.DEEPSEEK_FLASH_MODEL,
+        })
         # Open Models (ID balanced): only open-weight models, same writer as Daily.
         self.assertEqual(presets["balanced"]["label"], "Open Models")
         self.assertEqual(presets["balanced"]["models"], {
-            "qwen": cfg.QWEN_BASE_MODEL, "gemini": cfg.GEMMA_MODEL,
-            "deepseek": cfg.DEEPSEEK_FLASH_MODEL, "kimi": cfg.KIMI_BASE_MODEL,
-            "glm": cfg.GLM_BASE_MODEL, "meta": cfg.MUSE_BASE_MODEL,
+            "qwen": cfg.QWEN_BASE_MODEL, "deepseek": cfg.DEEPSEEK_FLASH_MODEL,
+            "glm": cfg.GLM_BASE_MODEL,
         })
         self.assertFalse(set(presets["balanced"]["models"].values()) & cfg.PREMIUM_MODELS)
         self.assertEqual(presets["balanced"]["consensus_model"], cfg.OPENAI_LUNA_MODEL)
@@ -248,10 +253,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(presets["thorough"]["models"]["openai"], cfg.OPENAI_SOL_MODEL)
         self.assertEqual(presets["thorough"]["label"], "High Quality")
         self.assertIn(cfg.OPENAI_SOL_MODEL, cfg.PREMIUM_MODELS)
-        self.assertEqual(
-            presets["fast"]["models"]["grok"],
-            cfg.GROK_FAST_MODEL,
-        )
+        self.assertEqual(len(presets["thorough"]["models"]), cfg.MAX_RUN_FAMILIES)
         self.assertTrue(presets["thorough"]["pro_only"])
 
     def test_saved_open_models_trade_gpt_oss_for_qwen(self):

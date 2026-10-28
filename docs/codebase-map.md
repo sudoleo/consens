@@ -2740,6 +2740,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Leseinteraktion beendet das. Die 420-ms-Fahrt gibt es nur noch für Senden
   (`sent()`, Frage nach oben) und „Latest message“. `closeMenu()` schließt das
   Handy-Menü; `openBookmark` ruft es schon beim Antippen.
+  Der Knopf erscheint erst, wenn das Ende 500 ms lang mehr als 160 px
+  außer Reichweite bleibt (`SHOW_AFTER_MS`, `SHOW_FAR`, `showWhenFar`, seit
+  2026-10-28), und geht sofort; so blinkt er nicht, wenn Reasoning-Zeilen die
+  Höhe kurz springen lassen.
   „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
   beim Drücken bestand (gemessen an der Reserve-Unterkante); Text, der während
   des Sprungs ankommt, verlängert ihn nicht, ein wachsender Composer schon.
@@ -4202,7 +4206,10 @@ und im Menü. Vorher „<Chatmodell> +6“, das Neulingen nichts sagte. Im
 Audit-Modus nennt der Chip seit 2026-10-27 das Chatmodell, und die Prüfer
 haben ein eigenes Element (siehe „Audit statt Vergleich“). Der erste
 Frame (`app-bootstrap.js`) zeichnet dasselbe Label; `App.firstFrame` merkt
-sich den Namen des Chatmodells aus dessen Select. `renderControls` verknüpft
+sich den Namen des Chatmodells aus dessen Select. Er zählt die angehakten
+Familien in `#modelSelectionArea`; das Template hakt seit 2026-10-28 die des
+Standard-Presets an (`default_families` aus `pages.py`, vorher die ersten
+`MAX_RUN_FAMILIES`), sonst sprang der Chip mit drei Prüfern von 6 auf 3. `renderControls` verknüpft
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
 Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
 unverknüpft zurück. Das Menü öffnet mit „Agent“ (Chatmodell, Reasoning) und
@@ -5649,7 +5656,9 @@ Bedienelement: Der Agent-Chip nennt im Audit-Modus das Chatmodell
 `App.firstFrame.agentModel()`), im Startbildschirm steht „2 AIs cross-check“
 (`#composerModelLabel`) neben den Marken der Leiste (`#composerModelPicker`),
 im Chat (ohne Leiste) stehen dieselben Marken vor dem Chip
-(`#composerReviewers`, `agent-mode.js` `renderReviewers`). Beide öffnen die
+(`#composerReviewers`, `agent-mode.js` `renderReviewers`), seit 2026-10-28
+mit den Worten daneben („3 AIs cross-check“, `#composerReviewersLabel`, unter
+561 px ausgeblendet) und einem Titel, der sagt, was Prüfer tun. Beide öffnen die
 Prüfer-Ebene des Agent-Menüs, das aus dem geklickten Knopf kommt
 (`openModelPicker(…, { anchor })`, `fitComposerPicker`, `aria-expanded` am
 Anker, der Chip bleibt in Ruhe). Der erste Frame zeichnet das nach
@@ -5856,7 +5865,10 @@ sperren Memory. Ein Ausfall (`VMUnavailable`) schaltet die VM für die
 Nachricht ab, die Antwort läuft weiter. Anzeige: `agent-activity.js` `vmView`
 (kompakter Block, offen während der Befehl läuft, danach eingeklappt;
 Befehl/Ausgabe in `<code>`/`<pre>`); live faltet `foldPast` frühere Schritte in
-eine Zeile („Ran 3 commands“). Der Plan (`update_plan`, seit 2026-10-26) steht
+eine Zeile („Ran 3 commands“), seit 2026-10-28 alle Schrittarten, nicht nur
+VM-Befehle, und lange Notizen des Agenten kürzt die Live-Ansicht auf drei
+Zeilen (`.agent-progress-note`): Die Live-Zeilen wachsen in langen Läufen
+nicht mehr endlos. Der Plan (`update_plan`, seit 2026-10-26) steht
 als `planView` angeheftet über den Live-Zeilen (neuester gültiger Plan, offen)
 und je Änderung eingeklappt in der Zeitleiste. `vm_share_file` (seit 2026-10-26) kopiert eine
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
@@ -9304,15 +9316,18 @@ Providerlisten, Reihenfolge, Free-Defaults und Premium-Zuordnung aus
 Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und Basiswerte ausschließlich
 für ein fehlendes/noch nicht migriertes Dokument.
 Firestore `preset_models` speichert pro Daily/Open Models (ID: `balanced`)/High
-Quality (ID: `thorough`) unter `answers` genau sechs unterschiedliche
-Familienmodelle plus `consensus`; das alte Top-Level-Provider-Schema wird beim
+Quality (ID: `thorough`) unter `answers` zwei bis sechs unterschiedliche
+Familienmodelle (`MIN_PRESET_FAMILIES` bis `MAX_RUN_FAMILIES`, die Admin-Seite
+prüft dasselbe) plus `consensus`; das alte Top-Level-Provider-Schema wird beim
 Laden migriert. Daily/Open Models bleiben Free-faehig und
 High Quality bleibt unabhaengig von der Konfiguration Pro-only. Open Models
 (seit 2026-10-15, vorher das mit Daily deckungsgleiche „Balanced“) ist eine
-zweite Meinung aus sechs Modellen mit offenen Gewichten (Qwen3.8 27B,
-Gemma 4 31B, DeepSeek V4.1 Flash, Kimi K2.6, GLM 5.3 Flash, Muse Glimmer 30B;
-Beleg je Modell: `hugging_face_id` im OpenRouter-Katalog) mit demselben
-Schreiber wie Daily. Free-Presets haben je Familie praktisch nur ein aktuelles
+zweite Meinung aus Modellen mit offenen Gewichten (Beleg je Modell:
+`hugging_face_id` im OpenRouter-Katalog) mit demselben Schreiber wie Daily.
+Seit 2026-10-28 prüfen Daily (GPT Luna, Claude Haiku, DeepSeek Flash) und
+Open Models (Qwen3.8 27B, DeepSeek V4.1 Flash, GLM 5.3 Flash) mit drei
+Modellen statt sechs: Im Audit-Modus wartet jeder Schritt nach außen auf alle
+Prüfer, sechs machten Aktionen zäh. High Quality bleibt bei sechs. Free-Presets haben je Familie praktisch nur ein aktuelles
 Modell, ein zweites Free-Preset unterscheidet sich deshalb nur in der
 Aufstellung. Bis 2026-10-22 stand dort gpt-oss-120b (OpenAI, also das Labor
 des Schreibers; las nur Text und nannte in der Live-Probe trotz Suche
@@ -11066,10 +11081,13 @@ Spalte, keine Karte, kein Schatten; Zeilen ohne Trennlinien mit Ton beim
 Hover, Segmente nur in Tinte, laufender Aufruf als wandernder Abschnitt ohne
 Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.auth-top-actions` rückt
 für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet.
-`agent-delegation.js` öffnet die Leiste seit 2026-10-17 auf keiner Breite
-selbst, auch nicht für einen laufenden Turn (vorher ab 1200 px automatisch
-bei Platz neben der Spalte). Das Panel-Symbol neben den Modell-Icons
-(`.agent-sidebar-toggle`, `aria-label` „Activity · n“,
+`agent-delegation.js` stellt die Leiste ab 1200 px seit 2026-10-28 ohne
+eigene Wahl neben die Spalte (`panelDefaultClosed`; vom 17. bis 28.10. nur auf
+Klick); ein Schließen merkt `localStorage` `agent-panel:{uid}` für die nächsten
+Chats. Rechts neben den Modell-Icons steht, durch eine Haarlinie abgesetzt,
+`.agent-inline-controls`: das Arbeitsplatz-Symbol (`.agent-workspace-toggle`,
+atmet wie ein arbeitender Prüfer, solange ein VM-Schritt läuft) und zuletzt
+das Panel-Symbol (`.agent-sidebar-toggle`, `aria-label` „Activity · n“,
 `aria-controls="agentSidebar"`) oder ein Modell-Icon öffnet sie: unter 1200 px
 als Sheet mit Scrim, Fokusfalle und Escape, ab 1200 px daneben; offen rückt
 die Spalte nach links (`body.agent-sidebar-open`), statt unter der Leiste zu
@@ -11078,7 +11096,7 @@ liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt, **und seit
 Apple-Audit A9): ein neuer Turn übernimmt die Wahl des Chats, und solange eine
 Folgefrage ihren Turn noch nicht kennt (`project({chatId, running})` ohne
 `turnId`), bleibt eine offene Leiste mit „Starting…“ stehen, statt zu- und
-wieder aufzugehen. Sie geht auf demselben Weg, wie sie kam
+wieder aufzugehen (`chatPanelStaysOpen`: Wahl des Chats, sonst der Standard). Sie geht auf demselben Weg, wie sie kam
 (`setPanelVisible`, `.is-leaving` gleitet/blendet samt Scrim aus, erst danach
 `hidden`; C5). Logo-Einflug (`.agent-inline-model.is-arriving`) nur für Modelle,
 die während eines laufenden Turns dazukommen; ein gespeicherter Turn zeigt seine

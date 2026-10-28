@@ -64,7 +64,7 @@ describe("Agent sidebar", () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}));
     receive(w, agent(1, 'completed'));
     w.App.agentDelegation.project({chatId,turnId,running:false});
-    d.querySelector('.agent-sidebar-toggle').click();
+    // On a wide screen it stands beside the answer by itself (2026-10-28).
     const sidebar = d.getElementById('agentSidebar');
     expect(sidebar.hidden).toBe(false);
     // The follow-up starts: the server has not named its turn yet.
@@ -346,14 +346,12 @@ describe("Agent sidebar", () => {
     await vi.waitFor(() => expect(w.App.agentChat.receiveBudget).toHaveBeenCalledWith(budget, 'owner'));
     dom.window.close();
   });
-  it("stays closed on first start on a wide screen, shares state with inline icons and respects manual close and duplicate events", async () => {
+  it("stands open on a wide screen without a choice, shares state with inline icons and respects manual close and duplicate events", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); w.App.agentDelegation.project({ chatId, turnId, running: true });
-    // A running turn no longer opens the panel by itself, on any width.
-    expect(d.getElementById("agentSidebar").hidden).toBe(true);
-    expect(d.body.classList.contains("agent-sidebar-open")).toBe(false);
-    d.querySelector(".agent-sidebar-toggle").click();
+    // Where there is room the panel stands beside the answer (2026-10-28, Max).
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
+    expect(d.body.classList.contains("agent-sidebar-open")).toBe(true);
     expect(d.getElementById("agentSidebar").getAttribute("role")).toBe("complementary");
     expect(d.querySelectorAll(".agent-session")).toHaveLength(1);
     await settle();
@@ -373,6 +371,10 @@ describe("Agent sidebar", () => {
     w.App.agentDelegation.project(null);
     w.App.agentDelegation.project({ chatId, turnId });
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    // The close carries over to the reader's next chats.
+    w.App.agentDelegation.project({ chatId: "e".repeat(32), turnId: "f".repeat(32) });
+    expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    w.App.agentDelegation.project({ chatId, turnId });
     d.querySelector(".agent-sidebar-toggle").click();
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
     d.getElementById("agentSidebar").dispatchEvent(new w.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -382,8 +384,9 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it("keeps the panel closed when a saved turn is opened, even with room beside the column", async () => {
+  it("keeps the panel closed on a saved turn for a reader who closed it before, even with room beside the column", async () => {
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [agent(1, "completed")], status: "succeeded" }) }));
+    w.localStorage.setItem("agent-panel:owner", "closed");
     w.App.agentDelegation.project({ chatId, turnId, running: false });
     await vi.waitFor(() => expect(d.querySelectorAll(".agent-session")).toHaveLength(1));
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
@@ -775,7 +778,7 @@ describe("Agent sidebar", () => {
 });
 
 describe('the workspace shortcut in the run header (workspace-view.js)', () => {
-  it('stands beside the activity toggle for accounts with a workspace and opens it', async () => {
+  it('stands before the activity toggle for accounts with a workspace and opens it', async () => {
     const {window:w,document:d,dom} = bootNarrow();
     const opened = [];
     w.App.workspaceView = { open: () => opened.push(true) };
@@ -785,7 +788,9 @@ describe('the workspace shortcut in the run header (workspace-view.js)', () => {
     const shortcut = row.querySelector('.agent-workspace-toggle');
     // agent-chat.css shows it once a VM step stands in the run; style.css hides it without a workspace.
     expect(shortcut.classList.contains('workspace-only')).toBe(true);
-    expect(shortcut.previousElementSibling).toBe(row.querySelector('.agent-sidebar-toggle'));
+    // Both controls sit apart from the model stack, the panel last (2026-10-28).
+    expect(shortcut.parentElement.classList.contains('agent-inline-controls')).toBe(true);
+    expect(shortcut.nextElementSibling).toBe(row.querySelector('.agent-sidebar-toggle'));
     expect(shortcut.getAttribute('aria-label')).toBe('Open the workspace');
     shortcut.click();
     expect(opened).toEqual([true]);

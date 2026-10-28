@@ -1357,18 +1357,19 @@ def update_models(request: Request, data: dict = Body(...)):
             if not isinstance(supplied, dict):
                 raise HTTPException(status_code=400, detail=f"preset_models.{preset_id} must be a model mapping")
             supplied_answers = supplied.get("answers")
-            expected_count = min(cfg.MAX_RUN_FAMILIES, len(PROVIDER_KEYS))
+            # 2 to 6 families since 2026-10-28 (three for Daily and Open Models).
+            most = min(cfg.MAX_RUN_FAMILIES, len(PROVIDER_KEYS))
             if not isinstance(supplied_answers, dict):
                 raise HTTPException(
                     status_code=400,
                     detail=f"preset_models.{preset_id}.answers must be a provider mapping",
                 )
-            if len(supplied_answers) != expected_count:
+            if not cfg.MIN_PRESET_FAMILIES <= len(supplied_answers) <= most:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"preset_models.{preset_id}.answers must select exactly "
-                        f"{expected_count} model families"
+                        f"preset_models.{preset_id}.answers must select "
+                        f"{cfg.MIN_PRESET_FAMILIES} to {most} model families"
                     ),
                 )
             normalized_answers = normalized["preset_models"][preset_id]["answers"]

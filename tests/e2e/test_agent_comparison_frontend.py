@@ -327,8 +327,11 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert any('meta.svg' in src for src in icons)
         # A model's row in the agent panel opens its answer in the reader;
         # the answer check opens the differences.
-        expect(page.locator('#agentSidebar')).not_to_be_visible()
-        page.locator('#agentAnswer .agent-sidebar-toggle').click()
+        # A wide screen shows it beside the column by itself (2026-10-28).
+        if width < 1200:
+            expect(page.locator('#agentSidebar')).not_to_be_visible()
+            page.locator('#agentAnswer .agent-sidebar-toggle').click()
+        expect(page.locator('#agentSidebar')).to_be_visible()
         page.locator('.agent-session', has_text='Kimi K2.6').locator('summary').click()
         expect(page.locator('#modelAnswerReader')).to_be_visible()
         expect(page.locator('#agentSidebar')).not_to_be_visible()

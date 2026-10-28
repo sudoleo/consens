@@ -24,7 +24,8 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         mode = page.locator('#runModeSelect')
         expect(bar).to_be_visible()
         expect(mode).to_have_value('compare')
-        expect(page.locator('#composerModelIcons img')).to_have_count(6)
+        # Daily compares three since 2026-10-28.
+        expect(page.locator('#composerModelIcons img')).to_have_count(3)
         expect(page.locator('#composerModelCount')).to_have_count(0)
         expect(page.locator('#composerReasoningToggle')).to_be_visible()
         expect(page.locator('#composerAttachButton')).to_be_visible()

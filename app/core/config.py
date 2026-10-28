@@ -521,10 +521,14 @@ ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
 # Die IDs sind Vertrag (Firestore-Overrides, gespeicherte Nutzerauswahl) und
 # bleiben deshalb unveraendert, auch wenn sich das Label aendert.
 # Open Models (seit 2026-10-15, vorher "Balanced" und deckungsgleich mit
-# Daily): sechs Modelle mit offenen Gewichten als zweite Meinung. Free-Presets
+# Daily): Modelle mit offenen Gewichten als zweite Meinung. Free-Presets
 # haben je Familie praktisch nur ein aktuelles Modell, ein zweites Free-Preset
 # kann sich also nur in der Aufstellung unterscheiden. Der Schreiber bleibt
 # derselbe wie in Daily, damit nur das Panel wechselt.
+# Seit 2026-10-28 haben Daily und Open Models drei Modelle statt sechs (Max):
+# im Audit-Modus pruefen sie die Arbeit des Agenten, und jede Aktion mit
+# Aussenwirkung wartet, bis alle "go" sagen; sechs Pruefer machten das zaeh.
+# Ein Preset hat so viele Modelle wie seine Basis (_normalize_preset_answers).
 CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "fast",
@@ -535,7 +539,7 @@ CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "balanced",
         "label": "Open Models",
-        "hint": "Six open models, for a second opinion",
+        "hint": "Three open models, for a second opinion",
         "pro_only": False,
     },
     {
@@ -547,28 +551,26 @@ CONSENSUS_PRESET_DEFINITIONS = [
 ]
 
 _BASE_CONSENSUS_PRESET_MODELS = {
+    # Luna, Haiku und DeepSeek Flash: drei Labore, alle schnell und guenstig.
     "fast": {
         "answers": {
             "openai": OPENAI_LUNA_MODEL,
-            "mistral": DEFAULT_MISTRAL_MODEL,
             "anthropic": DEFAULT_ANTHROPIC_MODEL,
-            "gemini": DEFAULT_GEMINI_MODEL,
             "deepseek": DEEPSEEK_FLASH_MODEL,
-            "grok": GROK_FAST_MODEL,
         },
         "consensus": "Gemini",
     },
     # Qwen statt gpt-oss-120b seit 2026-10-22: gpt-oss kam vom selben Labor wie
     # der Schreiber (Luna), las nur Text und nannte in der Live-Probe trotz
     # Suche den EZB-Einlagezins von 2024 und die Foerderung von 2024.
+    # Qwen, DeepSeek Flash und GLM Flash: offene Gewichte aus drei Laboren,
+    # alle guenstig (Kimi, Gemma und Muse seit 2026-10-28 draussen: drei
+    # Pruefer reichen, Kimi kostet ein Vielfaches).
     "balanced": {
         "answers": {
             "qwen": QWEN_BASE_MODEL,
-            "gemini": GEMMA_MODEL,
             "deepseek": DEEPSEEK_FLASH_MODEL,
-            "kimi": KIMI_BASE_MODEL,
             "glm": GLM_BASE_MODEL,
-            "meta": MUSE_BASE_MODEL,
         },
         "consensus": OPENAI_LUNA_MODEL,
     },
@@ -1287,7 +1289,11 @@ def _normalize_preset_answers(
         *base_answers,
         *PROVIDERS,
     ]))
-    target_count = min(MAX_RUN_FAMILIES, len(PROVIDERS))
+    # As many models as the stored set has (2 to 6, the admin's choice), else
+    # as its base: three for Daily and Open Models since 2026-10-28.
+    size = len(supplied_answers) if MIN_PRESET_FAMILIES <= len(supplied_answers) <= MAX_RUN_FAMILIES \
+        else len(base_answers)
+    target_count = min(MAX_RUN_FAMILIES, len(PROVIDERS), size)
     clean: dict[str, str] = {}
     for provider in provider_order:
         if provider not in PROVIDERS or len(clean) >= target_count:
@@ -1495,6 +1501,8 @@ def get_judge_families() -> dict:
 # als das duerfen konfiguriert sein -- ein Lauf bleibt trotzdem ein
 # Sechs-Modell-Vergleich (Prompt-Laenge, Kosten, Lesbarkeit).
 MAX_RUN_FAMILIES = 6
+# A preset needs at least two models: one alone cross-checks nothing.
+MIN_PRESET_FAMILIES = 2
 
 
 def get_model_families() -> list[dict]:

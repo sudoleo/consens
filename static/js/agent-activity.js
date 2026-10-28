@@ -692,15 +692,22 @@
   // that command and what follows stay in view. Until 2026-10-26 every
   // command and every note between them stood one under the other, a screen
   // long. A step that waits on the reader never folds away.
+  // The live lines stay a few: the step at work (with the note leading into
+  // it), and whatever waits on the user; every earlier step folds into one
+  // line, in every run (2026-10-28, Max: a long run grew the live lines down
+  // the screen, and their growing and folding made the page jump). Until
+  // then only a VM run folded, up to its latest command.
   function foldPast(paragraphs) {
-    const lastVm = paragraphs.findLastIndex(item => item.kind === 'vm');
-    let start = lastVm;
+    // The step at work, not the "Thinking…" row that stands after it.
+    const lastStep = paragraphs.findLastIndex(item => (item.kind === 'vm' || item.kind === 'step')
+      && item.id !== 'current-status');
+    let start = lastStep;
     while (start > 0 && paragraphs[start - 1].kind === 'progress' && !paragraphs[start - 1].quiet) start--;
     const waits = paragraphs.findIndex(item => item.kind === 'review'
       || (item.kind === 'hold' && (item.item.state || 'waiting') === 'waiting'));
     const past = paragraphs.slice(0, waits >= 0 ? Math.min(start, waits) : start);
     const steps = past.filter(item => !['progress', 'user', 'hold'].includes(item.kind));
-    if (steps.length < 2 || !steps.some(item => item.kind === 'vm')) return null;
+    if (steps.length < 2) return null;
     const commands = steps.filter(item => item.kind === 'vm' && item.item.name === 'vm_exec').length;
     const label = commands === steps.length ? (commands === 1 ? 'Ran 1 command' : `Ran ${commands} commands`)
       : steps.length === 1 ? '1 earlier step' : `${steps.length} earlier steps`;
@@ -963,6 +970,8 @@
         continue;
       }
       if (item.quiet) p.setAttribute('aria-hidden', 'true');
+      // The agent's note beside a call: a few lines here, whole in the timeline.
+      p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
       p.classList.toggle('agent-progress-step', item.kind === 'step');
       p.classList.toggle('agent-current-status', Boolean(item.current));
       // Paused for the user: nothing works, so nothing shines.

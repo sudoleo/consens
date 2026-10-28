@@ -406,3 +406,25 @@ describe("The agent's note beside a tool call", () => {
     expect(note.textContent.length).toBeGreaterThan(400);
   });
 });
+
+// 2026-10-28 (Max): a long run without a VM step grew its live lines down
+// the screen. Every run folds its earlier steps; the step at work and the
+// note leading into it stay, a long note three lines tall.
+describe("Live lines of a long run", () => {
+  it("fold every earlier step, not only commands", () => {
+    const { host, activity } = setup();
+    const events = [];
+    const search = (n, status = "succeeded") => activity.receive(events, { version: 1, kind: "tool",
+      id: `s${n}/tool`, name: "web_search", status, count: 1 });
+    search(1); search(2);
+    activity.receive(events, { version: 1, kind: "progress", id: "completion:3/note", text: "Checking the docs. ".repeat(40) });
+    search(3, "running");
+    activity.render(host, { running: true, status: "running", events });
+    const preview = host.querySelector(".agent-progress");
+    const fold = preview.querySelector(".agent-vm-fold");
+    expect(fold.querySelector("summary").textContent).toBe("2 earlier steps");
+    const note = preview.querySelector(".agent-progress-note");
+    expect(note.closest(".agent-vm-fold")).toBeNull();
+    expect(note.textContent.length).toBeGreaterThan(400);
+  });
+});

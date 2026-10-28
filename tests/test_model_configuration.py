@@ -755,8 +755,13 @@ class ModelConfigurationTests(unittest.TestCase):
         presets = {preset["id"]: preset for preset in cfg.get_consensus_presets()}
         self.assertEqual(set(presets), {"fast", "balanced", "thorough"})
         for preset in presets.values():
-            self.assertEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
+            self.assertGreaterEqual(len(preset["models"]), cfg.MIN_PRESET_FAMILIES)
+            self.assertLessEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
             self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
+        # Daily and Open Models review with three; outward steps wait for all (2026-10-28).
+        self.assertEqual(len(presets["fast"]["models"]), 3)
+        self.assertEqual(len(presets["balanced"]["models"]), 3)
+        self.assertEqual(len(presets["thorough"]["models"]), cfg.MAX_RUN_FAMILIES)
         self.assertFalse(presets["fast"]["pro_only"])
         self.assertTrue(presets["thorough"]["pro_only"])
 

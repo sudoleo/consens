@@ -1342,8 +1342,10 @@ async function saveModels() {
     for (const definition of (meta().preset_definitions || [])) {
         const configured = data.preset_models[definition.id] || {};
         const answers = configured.answers || {};
-        if (Object.keys(answers).length !== 6 || !configured.consensus) {
-            setStatus(`${definition.label} must select six different model families and one consensus engine.`, true);
+        // 2 to 6 families since 2026-10-28 (Daily and Open Models have three).
+        const families = Object.keys(answers).length;
+        if (families < 2 || families > 6 || !configured.consensus) {
+            setStatus(`${definition.label} must select two to six different model families and one consensus engine.`, true);
             return;
         }
     }

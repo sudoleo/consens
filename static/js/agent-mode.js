@@ -472,7 +472,11 @@
     reviewers.hidden = !auditing || start;
     if (reviewers.hidden) return;
     write(reviewers, "aria-label", words);
-    write(reviewers, "title", "Choose the models that review the agent’s work");
+    // What the icons are, said beside them and in the tooltip (2026-10-28,
+    // Max: new users did not know why a logo stood there).
+    write(reviewers, "title", "Independent AIs follow the agent’s work and stop it when in doubt. Choose them here.");
+    const caption = document.getElementById("composerReviewersLabel");
+    if (caption) write(caption, "text", words);
     // The bar's marks, the same nodes: they are drawn there in every mode.
     const marks = document.getElementById("composerModelIcons");
     const own = document.getElementById("composerReviewerIcons");

@@ -193,16 +193,30 @@
   .agent-sidebar .agent-sidebar-close::after { content: ""; position: absolute; inset: var(--hit-slop); }
 }
 .agent-model-stack { display: inline-flex; align-items: center; padding-left: 2px; }
-.agent-answer-activity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); }
-.agent-sidebar-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
-.agent-sidebar-toggle[aria-expanded="true"] { color: var(--ink); }
+/* The controls after the reviewers' icons, set apart by a hairline
+   (agent-delegation.js): the workspace, then the panel at the edge. */
+.agent-inline-controls { display: inline-flex; align-items: center; gap: 2px; padding-left: 8px; margin-left: 2px; border-left: 1px solid var(--line-soft); }
+.agent-inline-controls:empty, .agent-inline-models > .agent-model-stack:empty + .agent-inline-controls { border-left: 0; padding-left: 0; margin-left: 0; }
+.agent-answer-activity .agent-inline-models .agent-sidebar-toggle { width: 28px; min-height: 28px; padding: 0; color: var(--ink-3); border-radius: 7px; }
+.agent-sidebar-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; }
+.agent-sidebar-toggle .agent-glyph-fill { fill: currentColor; stroke: none; opacity: .18; transition: opacity var(--dur-state) var(--ease-standard); }
+.agent-sidebar-toggle[aria-expanded="true"] { color: var(--ink); background: var(--hover); }
+.agent-sidebar-toggle[aria-expanded="true"] .agent-glyph-fill { opacity: .55; }
 /* The workspace's shortcut beside it, once a VM step stands in the run (agent-delegation.js). */
 .agent-answer-activity .agent-inline-models .agent-workspace-toggle {
   display: none; width: 28px; min-height: 28px; padding: 0; border: 0; background: none; color: var(--ink-3); cursor: pointer;
 }
-.agent-answer-activity:has(.agent-vm) .agent-inline-models .agent-workspace-toggle { display: inline-grid; place-items: center; }
-.agent-workspace-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
-body.workspace-view-open .agent-workspace-toggle { color: var(--ink); }
+.agent-answer-activity:has(.agent-vm) .agent-inline-models .agent-workspace-toggle { display: inline-grid; place-items: center; border-radius: 7px; }
+.agent-workspace-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; }
+body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background: var(--hover); }
+/* While a step runs in the workspace, its icon breathes like a reviewer at
+   work (agent-model-wait, below); still otherwise (2026-10-28). */
+@media (prefers-reduced-motion: no-preference) {
+  .agent-answer-activity:has(.agent-vm[data-status="running"]) .agent-inline-models .agent-workspace-toggle svg {
+    animation: agent-model-wait var(--dur-beat) var(--ease-standard) infinite;
+  }
+}
+.agent-answer-activity:has(.agent-vm[data-status="running"]) .agent-inline-models .agent-workspace-toggle { color: var(--ink); }
 @media (hover: hover) and (pointer: fine) {
   .agent-answer-activity .agent-inline-models .agent-workspace-toggle:hover { color: var(--ink); }
 }
@@ -714,6 +728,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; }
 /* pre-line: the agent's note beside a tool call keeps its lines. */
 .agent-progress p { margin: 0 0 14px; overflow-wrap: anywhere; white-space: pre-line; }
+/* In the live lines a note stays three lines tall (the timeline has it
+   whole): a long one pushed the page down and back (2026-10-28). */
+.agent-progress .agent-progress-note {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
 .agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; overflow-wrap: anywhere; white-space: pre-line; }
 .agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
 .agent-current-status { font-weight: 500; }

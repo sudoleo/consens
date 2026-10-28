@@ -1496,8 +1496,10 @@ rutschte er in dessen Mitte). Befehl und Ausgabe stehen in
 Fortschrittszeilen, danach in der Zeitleiste; die Admin-Verbrauchszeile nennt
 „VM 12s“. Wie bei Claude Code falten die Fortschrittszeilen ab zwei früheren
 Schritten diese samt Zwischensätzen in eine Zeile („Ran 3 commands“, mit
-Lese-/Schreibschritten „4 earlier steps“, `foldPast`, seit 2026-10-26);
-sichtbar bleiben der Satz vor dem letzten Befehl, der Befehl und was folgt.
+Lese-/Schreibschritten „4 earlier steps“, `foldPast`, seit 2026-10-26;
+seit 2026-10-28 jede Schrittart, auch ohne VM); sichtbar bleiben der Satz vor
+dem letzten Schritt, der Schritt und was folgt. Notizen des Agenten kürzt die
+Live-Ansicht auf drei Zeilen.
 Die Zeitleiste zeigt weiter jeden Schritt. Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
 
 **Löschung.** `chat_store._purge_chat` löscht vor dem Rest des Chats seinen

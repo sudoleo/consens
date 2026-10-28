@@ -240,7 +240,7 @@ describe("agent mode panel projection", () => {
       "static/js/run-mode.js", "static/js/agent-mode.js"], {
       body: BODY + `<button id="composerModelPicker" aria-label="Configure models for your next question" title="Configure models">
         <span id="composerModelLabel" hidden></span></button>
-        <button id="composerReviewers" hidden><span id="composerReviewerIcons"></span></button>`,
+        <button id="composerReviewers" hidden><span id="composerReviewerIcons"></span><span id="composerReviewersLabel"></span></button>`,
       before(window) {
         window.App = { modelPrefs: [{ key: "OpenAI", label: "OpenAI", provider: "openai", checkId: "openaiCheck",
           selectId: "openaiModelSelect", textId: "openaiModelText", responseId: "openaiResponse" }],
@@ -277,6 +277,9 @@ describe("agent mode panel projection", () => {
     expect(document.getElementById("composerModeBar").hidden).toBe(true);
     expect(reviewers.hidden).toBe(false);
     expect(reviewers.getAttribute("aria-label")).toBe("1 AI cross-checks");
+    // In words beside the marks, and what they do in the tooltip (2026-10-28).
+    expect(document.getElementById("composerReviewersLabel").textContent).toBe("1 AI cross-checks");
+    expect(reviewers.title).toBe("Independent AIs follow the agent’s work and stop it when in doubt. Choose them here.");
     const [mark] = reviewers.querySelectorAll(".composer-model-icon");
     expect(mark.dataset.provider).toBe("openai");
     // Named once, by the button.

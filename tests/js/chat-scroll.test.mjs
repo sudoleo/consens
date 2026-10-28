@@ -179,6 +179,10 @@ describe("conversation scroll", () => {
     const app = boot();
     app.window.App.revealSentMessage(); app.tick();
     const button = app.document.querySelector(".chat-scroll-latest");
+    // It comes once the end stays out of reach for half a second (2026-10-28:
+    // live lines that grew and folded made it flash), not in the jump's frames.
+    expect(button.hidden).toBe(true);
+    app.tick();
     expect(button.hidden).toBe(false); // 2000 of 2400: more than the near-end band.
     app.grow(1000);
     expect(button.hidden).toBe(false);
@@ -188,6 +192,23 @@ describe("conversation scroll", () => {
     expect(button.hidden).toBe(true);
     app.grow(500); app.tick();
     expect(app.window.scrollY).toBe(3400);
+    expect(button.hidden).toBe(false);
+    app.dom.window.close();
+  });
+
+  it("does not flash Latest message while live lines grow and fold back", () => {
+    const app = boot();
+    app.window.App.revealSentMessage(); app.tick(80);
+    const button = app.document.querySelector(".chat-scroll-latest");
+    button.click(); app.tick(80);
+    expect(button.hidden).toBe(true);
+    // A few live lines push the end out of reach and fold again within a moment.
+    app.grow(300); app.tick(10);
+    expect(button.hidden).toBe(true);
+    app.grow(-300); app.tick(80);
+    expect(button.hidden).toBe(true);
+    // Out of reach for good: then it comes.
+    app.grow(300); app.tick(40);
     expect(button.hidden).toBe(false);
     app.dom.window.close();
   });

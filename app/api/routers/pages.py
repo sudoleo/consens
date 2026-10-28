@@ -567,6 +567,12 @@ def read_root(request: Request):
     except Exception:
         google_for_everyone = {"gmail": False, "drive": False}
 
+    consensus_presets = cfg.get_consensus_presets()
+    # The template checks the default preset's families, so the first frame
+    # counts the reviewers the app settles on (three since 2026-10-28).
+    default_families = next((list(preset["models"]) for preset in consensus_presets
+                             if preset["id"] == cfg.APP_DEFAULT_CONSENSUS_PRESET), [])
+
     response = templates.TemplateResponse(request=request, name="index.html", context={
         "agent_default_label": agent_default_label,
         "google_for_everyone": google_for_everyone,
@@ -574,11 +580,12 @@ def read_root(request: Request):
         "models": models,
         "model_families": model_families,
         "max_run_families": cfg.MAX_RUN_FAMILIES,
+        "default_families": default_families,
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
         "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_models": consensus_models,
-        "consensus_presets": cfg.get_consensus_presets(),
+        "consensus_presets": consensus_presets,
         "default_consensus_preset": cfg.APP_DEFAULT_CONSENSUS_PRESET,
         "model_labels": model_labels,
         "model_badges": model_badges,

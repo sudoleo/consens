@@ -103,6 +103,11 @@
   cursor: pointer; transition: background var(--dur-press) var(--ease-standard);
 }
 .composer-reviewers[hidden] { display: none; }
+/* What the marks are, in words ("1 AI cross-checks"); on a narrow field only
+   the marks, the tooltip and the label of the button say it. */
+.composer-reviewers-label { margin-left: 6px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
+.composer-reviewers-label:empty { display: none; }
+@media (max-width: 560px) { .composer-reviewers-label { display: none; } }
 .composer-reviewers[aria-expanded="true"] { background: var(--hover); }
 @media (hover: hover) and (pointer: fine) {
   .composer-reviewers:hover { background: var(--hover); }

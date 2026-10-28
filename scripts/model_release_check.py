@@ -235,9 +235,11 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
         answers = preset["answers"]
         if not preset["consensus"]:
             findings.append((f"{preset_id}:engine:missing", f"{label}: keine Consensus-Engine gespeichert"))
-        if len(answers) < conf.cfg.MAX_RUN_FAMILIES:
+        # Daily and Open Models review with three since 2026-10-28; fewer
+        # than two is no comparison.
+        if len(answers) < conf.cfg.MIN_PRESET_FAMILIES:
             findings.append((f"{preset_id}:families:{len(answers)}",
-                             f"{label}: nur {len(answers)} von {conf.cfg.MAX_RUN_FAMILIES} Familien belegt"))
+                             f"{label}: nur {len(answers)} Familie(n) belegt, mindestens {conf.cfg.MIN_PRESET_FAMILIES}"))
         # What the document stores and the app silently replaces.
         for family, model in preset["stored"].items():
             if model not in (conf.prod.get(family) or []):

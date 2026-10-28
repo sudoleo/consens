@@ -21,6 +21,7 @@ import time
 
 import pytest
 
+from app.core import config as cfg
 from app.services import agent_delegation
 from app.services.agent_comparison import comparison_selection
 from app.services.agent_delegation import DelegationLoop
@@ -156,8 +157,8 @@ def run_turn(store):
                   {"role": "user", "content": "What should I pack for a marathon training camp?"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=timeline.factory,
-        # The Daily preset: six families answer in parallel.
-        comparison_models=comparison_selection())
+        # The most a run asks (High Quality): six families answer in parallel.
+        comparison_models=comparison_selection(cfg.CONSENSUS_PRESET_MODELS["thorough"]["answers"]))
     started = time.monotonic()
     events = list(loop.run())
     return loop, timeline, events, time.monotonic() - started

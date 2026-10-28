@@ -28,6 +28,12 @@ function boot(status = "succeeded") {
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const logCalls = w => w.fetch.mock.calls.filter(([url]) => url.includes("/work-log"));
+// Without a matchMedia the window counts as wide, where the panel stands open
+// by itself (2026-10-28); the toggle opens it only where it is not.
+function openPanel(d) {
+  const toggle = d.querySelector(".agent-sidebar-toggle");
+  if (toggle.getAttribute("aria-expanded") !== "true") toggle.click();
+}
 function open(details) {
   details.open = true;
   details.dispatchEvent(new details.ownerDocument.defaultView.Event("toggle"));
@@ -38,7 +44,7 @@ describe("Agent work log", () => {
     const { window: w, document: d } = boot();
     w.App.agentDelegation.project({ chatId, turnId, running: false, workLog: true });
     await settle();
-    d.querySelector(".agent-sidebar-toggle").click();
+    openPanel(d);
     const host = d.querySelector(".agent-work-log-host");
     expect(host.hidden).toBe(false);
     // Audit with its VM is Pro and admins (style.css .audit-only).
@@ -76,7 +82,7 @@ describe("Agent work log", () => {
     const { window: w, document: d } = boot();
     w.App.agentDelegation.project({ chatId, turnId, running: false });
     await settle();
-    d.querySelector(".agent-sidebar-toggle").click();
+    openPanel(d);
     expect(d.querySelector(".agent-work-log-host").hidden).toBe(true);
     expect(logCalls(w)).toHaveLength(0);
   });
@@ -86,7 +92,7 @@ describe("Agent work log", () => {
     try {
       const { window: w, document: d } = boot("running");
       w.App.agentDelegation.project({ chatId, turnId, running: true, workLog: true });
-      d.querySelector(".agent-sidebar-toggle").click();
+      openPanel(d);
       open(d.querySelector(".agent-work-log"));
       await vi.waitFor(() => expect(logCalls(w)).toHaveLength(1));
       // Another turn, without a log: the first one is no longer polled.
@@ -121,7 +127,7 @@ describe("Agent work log", () => {
           ? { entries: [], has_more: false, incomplete: false } : { agents: [{ ...reviewer, status: "working" }], status: "running" } }));
       } });
     w.App.agentDelegation.project({ chatId, turnId, running: true, workLog: true });
-    d.querySelector(".agent-sidebar-toggle").click();
+    openPanel(d);
     open(d.querySelector(".agent-work-log"));
     await vi.waitFor(() => expect(d.querySelector(".agent-work-log-status").textContent).toBe("Waiting for the first entries…"));
   });
@@ -131,7 +137,7 @@ describe("Agent work log", () => {
     try {
       const { window: w, document: d } = boot("running");
       w.App.agentDelegation.project({ chatId, turnId, running: true, workLog: true });
-      d.querySelector(".agent-sidebar-toggle").click();
+      openPanel(d);
       open(d.querySelector(".agent-work-log"));
       await vi.waitFor(() => expect(logCalls(w)).toHaveLength(1));
       await vi.advanceTimersByTimeAsync(3100);

@@ -207,10 +207,12 @@
         <!-- DOM state only. The accessible visual controls live in the
              composer picker; these checkbox IDs remain the app contract. -->
         <div id="modelSelectionArea" hidden aria-hidden="true">
-          {#- Vorausgewaehlt sind die ersten max_run_families Familien: ein Lauf
-              bleibt ein Sechs-Modell-Vergleich, auch wenn mehr konfiguriert sind. -#}
+          {#- Vorausgewaehlt sind die Familien des Standard-Presets (seit
+              2026-10-28 drei), damit der erste Frame schon so viele Pruefer
+              zaehlt wie die App danach; ohne Preset die ersten
+              max_run_families. -#}
           {% for family in model_families %}
-          <label for="{{ family.checkboxId }}"><input type="checkbox" id="{{ family.checkboxId }}" {% if loop.index0 < max_run_families %}checked{% endif %}>{{ family.title }}</label>
+          <label for="{{ family.checkboxId }}"><input type="checkbox" id="{{ family.checkboxId }}" {% if (default_families and family.provider in default_families) or (not default_families and loop.index0 < max_run_families) %}checked{% endif %}>{{ family.title }}</label>
           {% endfor %}
         </div>
       </div>
@@ -543,6 +545,7 @@
         <div class="composer-models">
           <button type="button" id="composerReviewers" class="composer-reviewers" aria-haspopup="listbox" aria-expanded="false" hidden>
             <span id="composerReviewerIcons" class="composer-model-icons"></span>
+            <span id="composerReviewersLabel" class="composer-reviewers-label"></span>
           </button>
           <div id="agentModelControls" class="agent-model-controls" hidden>
             <div class="select-wrapper agent-model-picker">

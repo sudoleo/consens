@@ -102,9 +102,26 @@
     if (frame) window.cancelAnimationFrame(frame);
     frame = 0; started = null;
   }
+  // "Latest message" comes once the end stays out of reach a moment and by
+  // more than the near-end band; it goes at once. Live lines that grow and
+  // fold during a run made it flash on and off (2026-10-28).
+  const SHOW_FAR = 160, SHOW_AFTER_MS = 500;
+  let farSince = null, showFrame = 0;
+  function away() { return !valid() || !!jump || occupied() || maxTop() - window.scrollY <= NEAR_END; }
   function syncButton() {
-    if (button) button.hidden = !valid() || !!jump || occupied() || maxTop() - window.scrollY <= NEAR_END;
+    if (button) {
+      if (away()) { button.hidden = true; farSince = null; }
+      else if (button.hidden && !showFrame) showFrame = window.requestAnimationFrame(showWhenFar);
+    }
     document.body.classList.toggle("chat-scroll-following", !!valid() && !!jump);
+  }
+  function showWhenFar(now) {
+    showFrame = 0;
+    if (!button || !button.hidden) return;
+    if (away()) { farSince = null; return; }
+    if (farSince === null) farSince = now;
+    if (now - farSince >= SHOW_AFTER_MS && maxTop() - window.scrollY > SHOW_FAR) { button.hidden = false; farSince = null; return; }
+    showFrame = window.requestAnimationFrame(showWhenFar);
   }
   function pause() {
     jump = null;

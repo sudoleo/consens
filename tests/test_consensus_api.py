@@ -262,7 +262,7 @@ def test_server_model_plan_uses_exactly_the_configured_preset_models():
 
     default = cfg.get_consensus_preset_models()[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]
     assert plan["providers"] == default
-    assert len(plan["providers"]) == cfg.MAX_RUN_FAMILIES
+    assert cfg.MIN_PRESET_FAMILIES <= len(plan["providers"]) <= cfg.MAX_RUN_FAMILIES
     assert "deepseek" in plan["providers"]
 
 
