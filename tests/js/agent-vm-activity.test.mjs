@@ -317,6 +317,14 @@ describe("a step in the workspace's browser", () => {
     expect(read.querySelector(".agent-vm-watch").hidden).toBe(false);
     expect(click.querySelector(".agent-vm-verb").textContent).toBe("Clicked");
     expect(click.querySelector(".agent-vm-target").textContent).toBe("e1");
+    // A search on the page by what it looked for, its places as the output.
+    activity.receive(events, step({ id: "completion:1:call_6/tool", status: "succeeded", action: "find",
+      query: "price", title: "Shop", page: 'Page: "Shop"\n1 match for "price":\n[e4] "Sort by price"' }));
+    activity.render(host, { running: true, status: "running", events });
+    const find = host.querySelectorAll(".agent-activity-content .agent-vm")[4];
+    expect(find.querySelector(".agent-vm-verb").textContent).toBe("Searched the page for");
+    expect(find.querySelector(".agent-vm-target").textContent).toBe("price");
+    expect(find.querySelector(".agent-vm-output").textContent).toContain('[e4] "Sort by price"');
   });
 
   it("offers nothing without a workspace on the account, and never for a shell command", () => {

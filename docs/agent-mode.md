@@ -775,9 +775,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   0.9.17 nicht (gemessen an Test-Sprites 2026-10-27). Chrome speichert keine
   Passwörter, Karten und Adressen (Richtlinie).
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
-  `browser`): `action` aus `open`, `read`, `text`, `click`, `type`, `select`,
-  `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`, `upload`,
-  `wait` mit typisierten Feldern (`url`, `ref` als `e<Zahl>`, `text`, `enter`,
+  `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
+  `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,
+  `upload`, `wait` mit typisierten Feldern (`url`, `ref` als `e<Zahl>`, `text`, `enter`,
   `option`, `key` aus einer festen Liste, `direction`, `tab`, `new_tab`,
   `offset`, `seconds`, `file`). Das Backend prüft sie (jede Aktion sagt, was
   ihr fehlt) und ruft `workspace_vm/browser/browser.py` mit dem JSON auf stdin
@@ -785,7 +785,24 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `refused`, `user`, `setup`, `failed`). Die Logik von früher bleibt: Refs
   bleiben bei ihrem Element (`ref-count`), Passwort- und Code-Felder zeigen nie
   ihren Wert und nehmen nie Text, keine Aktion, solange der Nutzer übernommen
-  hat. `open` nimmt nur http(s) zu öffentlichen Adressen (nie `file://`,
+  hat. `read` gibt Beschriftungen und Überschriften bis 200 Zeichen ganz
+  wieder (bis 2026-10-28 80 bzw. 120). `find` (seit 2026-10-28, `text` mit 1–200
+  Zeichen) sucht im sichtbaren Text der Seite ohne Groß-/Kleinschreibung
+  (`FIND_JS`: Textknoten sichtbarer Elemente, über Inline-Elemente hinweg, ein
+  Leerzeichen an Block- und Zeilengrenzen) und nennt bis zu 20 Fundstellen mit
+  je ±60 Zeichen Umgebung und gesamter Trefferzahl; liegt eine Fundstelle in
+  einem Element, das `read` listet, steht dessen Ref davor. Dafür nummeriert
+  `find` die Seite zuerst wie `read` (gleiches `SNAPSHOT_JS`, gleicher
+  `ref-count`), die Refs sind also dieselben. `find` liest nur: wie `read` und
+  `text` läuft es auch während einer Übernahme und wartet nie auf die Prüfer.
+  Aktivität („Searched the page for“, Feld `query`) und Arbeitsprotokoll
+  (`browser find "…"`) nennen den Suchtext, den Text von `type` nie. Der Kopf jeder Seitenausgabe (`Page:`/`URL:`) trägt die Zeile `Cookies saved
+  for this site: yes|no` aus den Cookies des Browser-Kontexts für die
+  aktuelle Adresse (nicht leer = yes); nie Namen, Werte oder Anzahl. Ohne
+  http(s)-Adresse (`about:blank`) oder wenn die Cookies nicht lesbar sind, fehlt
+  die Zeile. Sie sagt Cookies, nicht Anmeldung: Auch Einwilligungs- oder
+  Bot-Schutz-Cookies ergeben „yes“ (bis zum Merge hieß sie „Saved sign-in data“). `open` nimmt nur http(s) zu
+  öffentlichen Adressen (nie `file://`,
   `chrome://`, `javascript:`, `data:`, localhost, private Netze): Eine Seite
   der VM selbst zeigte ihr Profil. `upload` liest eine Datei der Werkbank als
   Agent (bis 15 MB), legt sie für diesen einen Aufruf in
@@ -1291,9 +1308,11 @@ Checkpoints, Anhänge, Ausfälle, Grenzen, Kürzung, Route, Löschung;
 `SpritesBackend` gegen `httpx.MockTransport` und einen Fake-Socket, Dateien
 des Agenten nie über die Datei-API), `tests/test_agent_browser.py`
 (Werkzeug `browser`: typisierte Aktionen, Adressen, Upload, Screenshot,
-Ausfall), `tests/test_agent_domains.py` (Domains pro Chat, Policy live),
-`tests/test_agent_workspace.py` (Sperre, Skripte der VMs, Pause per Nutzer und
-cgroup, Relay, Löschung), `tests/test_agent_workspace_view.py` (Live-Ansicht
+`find`, Ausfall), `tests/test_agent_domains.py` (Domains pro Chat, Policy live),
+`tests/test_agent_workspace.py` (Sperre, Skripte der VMs, `find` und
+Anmeldezeile des Helfers, Pause per Nutzer und cgroup, Relay, Löschung),
+`tests/js/workspace-browser-refs.test.mjs` (`SNAPSHOT_JS`/`FIND_JS` in jsdom:
+Refs, Länge der Beschriftungen, Fundstellen), `tests/test_agent_workspace_view.py` (Live-Ansicht
 über die Exec-API), `tests/test_agent_gate.py` (Vorab-Prüfung, Domain-Karte),
 `tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
 Fensterende, Kompaktierung, Aktivitätsgröße),

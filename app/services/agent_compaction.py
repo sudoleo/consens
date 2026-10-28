@@ -281,6 +281,9 @@ def describe(name, arguments, result):
     elif name == "browser":
         target = next((args[key] for key in ("url", "ref", "key", "file") if isinstance(args.get(key), str)
                        and args[key].strip()), "")
+        # find's text says what it looked for (type's text stays out: it may be a message).
+        if args.get("action") == "find" and isinstance(args.get("text"), str):
+            target = f'"{" ".join(args["text"].split())}"'
         line = f"browser {args.get('action') or ''} {_short(target, 200)}".rstrip()
         title = str(data.get("page") or "").split("\n", 1)[0]
         if title.startswith("Page: "):

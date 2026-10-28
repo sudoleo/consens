@@ -105,6 +105,33 @@ def test_acting_goes_out_as_typed_fields(store, fake_vm):
                                 {"action": "key", "key": "Enter"}]
 
 
+def test_find_looks_up_a_text_and_only_reads(store, fake_vm):
+    """find (since 2026-10-28): the text goes out as a typed field, 1 to 200
+    characters; it never waits for the reviewers, and the activity and the
+    work record say what it looked for."""
+    from app.services import agent_gate
+    from app.services.agent_compaction import describe
+    loop, browser = tools(store)
+    for text in ("", "   ", "x" * 201):
+        with pytest.raises(ValueError, match="find needs text"):
+            call(browser, action="find", text=text)
+    assert fake_vm.requests == [] and fake_vm.calls == []
+    page = 'Page: "Shop"\nURL: https://shop.example/\n1 match for "total price":\n[e4] "Sort by total price"'
+    fake_vm.browser = lambda request: {"status": "ok", "text": page}
+    result = call(browser, action="find", text="total price")
+    assert fake_vm.requests == [{"action": "find", "text": "total price"}]
+    assert result["action"] == "find" and result["page"] == page
+    arguments = {"action": "find", "text": "total price"}
+    assert agent_gate.outward({"function": {"name": "browser", "arguments": json.dumps(arguments)}}) is None
+    activity = browser._activity(BrowserArgs(**arguments), result)
+    assert activity["query"] == "total price" and activity["title"] == "Shop"
+    assert describe("browser", json.dumps(arguments), json.dumps(result)) == \
+        'browser find "total price" -> "Shop"'
+    # type's text stays out of the record: it may be a message.
+    assert "Hallo" not in describe("browser", json.dumps({"action": "type", "ref": "e7", "text": "Hallo"}),
+                                   json.dumps(result))
+
+
 def test_an_upload_copies_one_file_of_the_workbench_for_that_call(store, fake_vm):
     loop, browser = tools(store)
     folder = agent_vm.chat_dir(loop.chat_id)
