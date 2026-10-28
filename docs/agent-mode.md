@@ -1869,8 +1869,15 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
 (`ANSWER_HOLD_CHARS`), damit eine kurze Einleitung vor einem Toolcall nie
 aufblitzt; kurze Antworten wie Grüße kommen am Schrittende auf einmal. Beginnt
 ein Toolcall, stoppt das Streaming. Wurde schon Text gezeigt, nimmt die App ihn
-zurück (Status `retract` mit `clear_response`) und zeigt ihn als eine
-Fortschrittszeile (`note`, höchstens 400 Zeichen). Folgen nur `update_memory`
+zurück (Status `retract` mit `clear_response`), seit 2026-10-28 sofort, wenn der
+Client den Beginn des Aufrufs meldet (Status `tool_call`, `_move_preamble`;
+nicht bei reinen `SIDE_TOOLS` oder solange ein Aufruf noch keinen Namen hat),
+sonst am Schrittende. Der ganze Text des Schritts steht dann in der Zeitleiste
+als Notiz (`note`, bis `NOTE_CHARS` = 8000 Zeichen, Zeilen bleiben,
+`white-space: pre-line`), auch eine kurze Einleitung, die nie gestreamt wurde;
+vorher eine Zeile von höchstens 400 Zeichen und kurze Einleitungen gar nicht
+(Max: in die Spur, nicht abgeschnitten). Der Audit-Prompt verbietet Text neben
+Werkzeugaufrufen nicht mehr, er sagt nur, dass er als Notiz erscheint. Folgen nur `update_memory`
 oder `prepare_watch`, bleibt der Text die Antwort, wenn diese Werkzeuge geklappt
 haben (`_side_results_accepted`: kein Fehler, Watch-Status `prepared`): Claude
 schreibt manchmal erst die Antwort und speichert dann eine Erinnerung. Hat eines

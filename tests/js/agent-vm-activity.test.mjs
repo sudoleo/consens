@@ -391,3 +391,18 @@ describe("installing and asking for a domain", () => {
     expect(saved.querySelector(".agent-hold-step-state").textContent).toBe("Not checked · You let the work go on");
   });
 });
+
+// Since 2026-10-28 the agent's text beside a tool call stands whole in the
+// timeline (agent_answer_mode.NOTE_CHARS), its lines kept.
+describe("The agent's note beside a tool call", () => {
+  it("keeps the whole text and its lines in the live progress", () => {
+    const { host, activity } = setup();
+    const events = [];
+    const text = "I'll first look at the folder. ".repeat(20) + "\n- Then the notes.";
+    activity.receive(events, { version: 1, kind: "progress", id: "completion:0/note", text });
+    activity.render(host, { running: true, status: "running", events, elapsedMs: 3000 });
+    const note = [...host.querySelectorAll(".agent-progress p")].find(p => p.textContent.startsWith("I'll first"));
+    expect(note.textContent).toBe(text);
+    expect(note.textContent.length).toBeGreaterThan(400);
+  });
+});

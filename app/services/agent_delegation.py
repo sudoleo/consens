@@ -1451,6 +1451,11 @@ class DelegationLoop(AgentLoop):
                                     event = {"step_id": step, "id": "thinking", "kind": "progress",
                                              "text": compact["text"].rsplit("\n", 1)[-1]}
                                 event = self.activity(event)
+                            if event and event["type"] == "activity" and event.get("id") == f"{step}/tool_call":
+                                yield event
+                                if stream_answer and self.merged:
+                                    yield from self._move_preamble(value)
+                                continue
                             if event and event["type"] == "delta" and stream_answer:
                                 event = self._candidate_delta(value, research)
                                 if event is None:
@@ -2197,24 +2202,37 @@ class DelegationLoop(AgentLoop):
 
     def _retract(self, value, *, note=False):
         """Take back what a merged step streamed when it is no answer after
-        all. ``note``: a tool call followed, so the text was the agent's own
-        preamble; it stays visible as one progress line."""
+        all. ``note``: a tool call followed, so the text is the agent's own
+        words on its work; the whole step text (also one too short to have
+        streamed) stands in the timeline as a progress note, lines kept."""
         published = getattr(value, "published", "")
-        if not published:
-            return
-        if self.work_log is not None:
-            self.work_log.app("retract", published, step=value.step_id)
-        self.completion.text = ""
-        value.published = ""
-        if self.comparison:
-            self.comparison.discard_answer_progress()
-        yield self.status(value.step_id, "retract", status="working", clear_response=True)
+        if published:
+            if self.work_log is not None:
+                self.work_log.app("retract", published, step=value.step_id)
+            self.completion.text = ""
+            value.published = ""
+            if self.comparison:
+                self.comparison.discard_answer_progress()
+            yield self.status(value.step_id, "retract", status="working", clear_response=True)
         if note:
             from app.services.agent_answer_mode import NOTE_CHARS
-            text = " ".join(published.split())
+            lines = (" ".join(line.split()) for line in value.text.strip().splitlines())
+            text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
             if len(text) > NOTE_CHARS:
                 text = text[:NOTE_CHARS - 1].rstrip() + "\u2026"
-            yield self.activity({"step_id": value.step_id, "id": "note", "kind": "progress", "text": text})
+            if text:
+                # The same id on every call: a later, longer text replaces it.
+                yield self.activity({"step_id": value.step_id, "id": "note", "kind": "progress", "text": text})
+
+    def _move_preamble(self, value):
+        """A tool call began after text that already shows as the answer: the
+        text moves into the timeline now, not once the call's arguments have
+        streamed. Not for calls that leave a written answer standing
+        (SIDE_TOOLS, _answered_with_tools), nor while a call has no name yet."""
+        from app.services.agent_answer_mode import SIDE_TOOLS
+        names = [part["function"]["name"] for part in value._tool_parts.values()]
+        if getattr(value, "published", "") and names and all(names) and not set(names) <= SIDE_TOOLS:
+            yield from self._retract(value, note=True)
 
     def _answered_with_tools(self, value):
         """A merged step that shows its answer (or a short one that was held

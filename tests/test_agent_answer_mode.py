@@ -13,6 +13,7 @@ from dataclasses import replace
 import json
 import re
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -106,6 +107,11 @@ class Merged(Script):
                     calls.append(tool_call(index, n, name, args))
                 if calls:
                     self._tool_parts = dict(enumerate(calls))
+                    # As AgentCompletion.stream says it when a call begins;
+                    # what the user sees once the loop has taken it in.
+                    yield self.event("status", "tool_call", status="working")
+                    loop = getattr(script, "loop", None)
+                    script.shown_at_call = loop.completion.text if loop is not None else None
                     self.tool_calls, self.finish_reason = calls, "tool_calls"
                 else:
                     self.finish_reason = step.get("finish", "stop")
@@ -264,26 +270,48 @@ def test_a_greeting_shows_at_once_when_the_step_ends(store):
     assert loop.completion.text == "Hello! How can I help?"
 
 
-def test_a_short_preamble_before_a_tool_call_never_shows(store):
+def notes(events):
+    return [e["text"] for e in events if e.get("kind") == "progress" and e.get("id", "").endswith("/note")]
+
+
+def test_a_short_preamble_never_shows_as_the_answer_but_stands_as_a_note(store):
     script = Merged([{"text": "I'll compare the options.", "tools": [COMPARE]}, {"text": ANSWER}])
     loop = merged_loop(store, script)
     events = list(loop.run())
     assert deltas(events) == ANSWER and not retractions(events)
+    # Since 2026-10-28 also a text too short to have streamed (Max: in the trace).
+    assert notes(events) == ["I'll compare the options."]
 
 
-def test_a_long_text_before_a_tool_call_is_taken_back_and_kept_as_a_note(store):
+def test_a_long_text_before_a_tool_call_moves_whole_into_the_timeline_once_the_call_begins(store):
     preamble = "Let me first think about what matters here. " * 12
-    script = Merged([{"text": preamble, "tools": [COMPARE]}, {"text": ANSWER}])
+    second = "\n\n\n- First the fees.\n- Then   the terms."
+    script = Merged([{"text": preamble + second, "tools": [COMPARE]}, {"text": ANSWER}])
     loop = merged_loop(store, script)
     events = list(loop.run())
     assert len(retractions(events)) == 1
     clear = events.index(retractions(events)[0])
     # What streamed before the clear was the preamble; after it only the answer.
-    assert deltas(events[:clear]) == preamble and deltas(events[clear:]) == ANSWER
-    note = next(e for e in events if e.get("kind") == "progress" and e.get("id", "").endswith("/note"))
-    assert note["text"].startswith("Let me first think") and len(note["text"]) <= agent_answer_mode.NOTE_CHARS
+    assert deltas(events[:clear]) == preamble + second and deltas(events[clear:]) == ANSWER
+    # Moved when the call began, not when its arguments had streamed.
+    assert script.shown_at_call == ""
+    # Whole, not cut to 400 characters; its lines kept, spaces tidied.
+    assert notes(events)[-1] == preamble.strip() + "\n\n- First the fees.\n- Then the terms."
+    assert len(notes(events)[-1]) > 400
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["consensus"] == ANSWER
+
+
+@pytest.mark.parametrize("names,moves", [(["update_memory"], False), (["prepare_watch", "update_plan"], False),
+                                         (["update_memory", "vm_exec"], True), (["vm_exec"], True), ([""], False)])
+def test_only_a_call_that_needs_results_moves_the_shown_text_when_it_begins(store, names, moves):
+    """A side tool leaves a written answer standing (_answered_with_tools),
+    and a call without a name yet may still turn out to be one."""
+    loop = merged_loop(store, Merged([{"text": ANSWER}]))
+    value = SimpleNamespace(step_id="completion:0", text="The answer so far.", published="The answer so far.",
+                            _tool_parts={n: {"function": {"name": name}} for n, name in enumerate(names)})
+    moved = list(loop._move_preamble(value))
+    assert bool(moved) is moves and (value.published == "") is moves
 
 
 def test_research_is_held_back_and_goes_through_a_comparison(store):
@@ -536,9 +564,10 @@ def test_a_reply_next_to_a_refused_memory_save_is_written_again(store, reply):
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["assistant_response"] == retry
     assert shown(events) == retry
-    # Only a reply that was on screen leaves a note.
+    # Since 2026-10-28 also a reply too short to have been on screen leaves
+    # its note: the agent's words stay in the timeline.
     notes = [e for e in events if e.get("kind") == "progress" and e.get("id", "").endswith("/note")]
-    assert len(notes) == (reply == ANSWER)
+    assert len(notes) == 1 and notes[0]["text"] == reply.strip()
 
 
 @pytest.mark.parametrize("accepted", [False, True], ids=["refused", "accepted"])

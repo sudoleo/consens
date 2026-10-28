@@ -399,7 +399,9 @@
         const auxiliary = events.filter(item => !['progress', 'tool'].includes(item.kind));
         for (const item of auxiliary.slice(0, Math.max(0, auxiliary.length - 63))) events.splice(events.indexOf(item), 1);
       }
-      events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "progress" ? 400 : event.kind === "tool" ? 8000 : 32000) });
+      // A progress note keeps the agent's whole text beside a tool call
+      // (agent_answer_mode.NOTE_CHARS); status lines are short anyway.
+      events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "progress" || event.kind === "tool" ? 8000 : 32000) });
     }
   }
 

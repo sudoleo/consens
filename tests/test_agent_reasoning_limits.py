@@ -146,6 +146,20 @@ def test_a_safety_stop_without_a_word_is_declined_and_not_retried(monkeypatch, p
     assert not agent_delegation._passing_failure(error)
 
 
+def test_the_client_says_once_when_a_tool_call_begins(monkeypatch):
+    # The loop moves text shown so far into the timeline then (_move_preamble).
+    value, events, error = _stream(monkeypatch, [
+        packet({"content": "Let me look that up first."}),
+        packet({"tool_calls": [{"index": 0, "id": "call_1", "type": "function",
+                                "function": {"name": "compare_models", "arguments": '{"question": '}}]}),
+        packet({"tool_calls": [{"index": 0, "function": {"arguments": '"Which?"}'}}]}),
+        packet({}, finish="tool_calls", usage={"prompt_tokens": 50, "completion_tokens": 30})], tools=TOOL)
+    assert error is None and value.tool_calls
+    starts = [i for i, e in enumerate(events) if e.get("kind") == "status" and e.get("id") == "tool_call"]
+    deltas = [i for i, e in enumerate(events) if e.get("type") == "delta"]
+    assert len(starts) == 1 and starts[0] > deltas[-1] and events[starts[0]]["status"] == "working"
+
+
 def test_a_refusal_reason_after_a_written_answer_keeps_the_answer(monkeypatch):
     stop = packet({"content": "Here is what I can say."}, finish="stop",
                   usage={"prompt_tokens": 50, "completion_tokens": 9})

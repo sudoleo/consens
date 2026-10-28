@@ -4443,7 +4443,10 @@ nach eigenen Suchtreffern; kürzerer Text (Gruß, Rückfrage) erscheint, wenn de
 Schritt endet. `hold` (`_hold_answer`: ungeprüfte Worker, Mailbox oder eigene
 Recherche ohne Vergleich) blendet ihn ganz aus. Folgt doch ein Toolcall, nimmt
 `_retract` den Text per Status `retract` mit `clear_response` zurück und zeigt
-ihn als Fortschrittszeile `note` (höchstens `NOTE_CHARS` = 400 Zeichen); folgen
+seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der Zeitleiste
+(`NOTE_CHARS` = 8000, Zeilen bleiben; auch nie gestreamter kurzer Text). Schon
+gezeigter Text wandert, sobald der Client den Aufruf meldet (Status
+`tool_call` aus `AgentCompletion.stream`, `_move_preamble`); folgen
 nur `SIDE_TOOLS` (`update_memory`, `prepare_watch`), bleibt der Text die Antwort
 (`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
 (`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach einem Batch mit

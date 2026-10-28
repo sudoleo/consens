@@ -1185,7 +1185,12 @@ class AgentCompletion:
                             self._preserve_reasoning(delta)
                         if delta.get("tool_calls"):
                             if allow_tool_calls:
+                                calling = bool(self._tool_parts)
                                 self._tool_delta(delta["tool_calls"])
+                                if self._tool_parts and not calling:
+                                    # Text before it is no answer: the loop
+                                    # moves it into the timeline (_move_preamble).
+                                    yield self.event("status", "tool_call", status="working")
                             else:
                                 # A step that may only write (tool_choice none) and
                                 # calls anyway: the call is not run; its text stands.

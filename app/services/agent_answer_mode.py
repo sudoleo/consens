@@ -20,9 +20,11 @@ from __future__ import annotations
 # shows. Greetings and other short answers appear at once when the step ends.
 ANSWER_HOLD_CHARS = 300
 
-# Text a step streamed and then took back (a tool call followed) stays visible
-# as one progress line of at most this many characters.
-NOTE_CHARS = 400
+# Text a step wrote alongside a tool call stays visible in the timeline as a
+# progress note of at most this many characters, its lines kept. Since
+# 2026-10-28 the whole text, also one too short to have streamed, moved there
+# once the call starts (Max: in the trace, not cut to one line of 400).
+NOTE_CHARS = 8000
 
 # Text replies a turn holds back because a rule requires a tool first (own
 # research without a comparison). After that many the reply stands: the turn
