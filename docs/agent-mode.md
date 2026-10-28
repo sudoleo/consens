@@ -1039,6 +1039,25 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
     zurück.
   Geprüft an einer eigenen Test-Browser-VM (2026-10-28, danach gelöscht):
   siehe „Live geprüft: Selbstheilung des Browsers“ unten.
+- **Wach zwischen den Schritten des Agenten (seit 2026-10-29).** Max spielte mit
+  dem Agenten Tic Tac Toe auf foony.com: zwischen zwei Zügen (Nachdenken,
+  Prüfer-Runde, seine Entscheidung auf der Karte) meldete das Spiel „You're
+  offline … Couldn't reach the server“. Gemessen an einer Test-VM: Ohne
+  laufenden Befehl fror sie 46 von 60 Sekunden ein (Herzschlag alle 0,5 s),
+  mit einer offenen Exec-Sitzung, wie sie die Live-Ansicht hält, nie. Ein
+  eingefrorener Chrome verliert jede Live-Verbindung seiner Seiten (Spiele,
+  Chats, auch die Live-Updates von consens.io). Deshalb hält `browser.py` nach
+  jedem Aufruf, auch einem abgelehnten, die VM `AWAKE_FOR` (10 min) wach:
+  `stay_awake`, ein ablaufender Hold der Sprites-Tasks-API
+  (`PUT http://sprite/v1/tasks/consens-browser-awake` über `/.sprite/api.sock`,
+  wie die Hintergrundprozesse der Werkbank), den der nächste Aufruf erneuert und
+  der nach dem letzten von selbst endet. Kosten höchstens 10 Minuten Wachzeit
+  nach dem letzten Browser-Schritt; sie zählen nicht zur VM-Zeit des Tages.
+  Geprüft (2026-10-29, Test-VM danach gelöscht): nach einem Aufruf 60 s ohne
+  Befehl 121 Herzschläge ohne Lücke, der Hold in `GET /v1/tasks` mit Ablauf
+  +10 min, Foony nach 90 s Pause noch verbunden. Dabei gesehen: Foonys
+  `006b7264336be749.d.foony.com` löst nirgends auf (NXDOMAIN auch bei
+  1.1.1.1), das ist kein Fehler der Netzregeln.
 - **Live-Ansicht ohne Sprite-URL und Gateway** (Fund 1,
   `routers/agent_workspace.py`, `workspace-view.js`): Der Server öffnet das
   Exec-WebSocket von `api.sprites.dev` für `relay.py` auf der Browser-VM
