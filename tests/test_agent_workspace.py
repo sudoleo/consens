@@ -608,7 +608,7 @@ def test_a_chrome_that_no_longer_answers_starts_anew():
     import re
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     # The browser process runs under its starter's name, its children as
-    # /opt/google/chrome/chrome (test Sprite 2026-10-29: the old pattern found
+    # /opt/google/chrome/chrome (test Sprite 2026-10-28: the old pattern found
     # only the children). Both belong to the profile, nothing else does.
     profile = "/home/sprite/.consens/browser/profile"
     pattern = re.search(r'^chrome="(.*)"$', display, re.M).group(1).replace("$profile", profile)

@@ -10,7 +10,7 @@ setup.sh installs the browser (once), {"state": "starting"} while display.sh
 starts it, {"state": "ready"} once the VNC server answers, or
 {"state": "error"}. It ends with stdin (the view closed) or the VNC server.
 
-While the view is open it keeps Chrome running (since 2026-10-29): a Chrome
+While the view is open it keeps Chrome running (since 2026-10-28): a Chrome
 that ended, by a crash or because the user closed its window, starts again
 within KEEP_SECONDS with its tabs (display.sh --keep). On 2026-10-28 Chrome
 died in Max's open view and the screen stayed black until the agent's next

@@ -262,7 +262,7 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // show_image (2026-10-29): a picture from the web, with what it shows and
+  // show_image (2026-10-28): a picture from the web, with what it shows and
   // the site it came from as a link; never a link that is not http(s).
   it('shows a picture from the web with its caption and its source', async () => {
     const WEB = { id: 'a'.repeat(32), name: 'picture-1a2b3c4d.webp', mime: 'image/webp', size: 15000, status: 'ready',

@@ -24,7 +24,7 @@ browser (CONTROL, written by consens.io's server, which also holds the
 agent's calls meanwhile).
 
 A Chrome that stops answering costs one call, not the rest of the message
-(since 2026-10-29; on Max's browser VM a page load ran into its 30 s, the
+(since 2026-10-28; on Max's browser VM a page load ran into its 30 s, the
 next connection into its 20 s, and each later call would have too): a call
 that does not finish within CALL_LIMIT ends with "failed" and restarts
 Chrome (display.sh --restart, tabs and sign-ins stay), a connection that

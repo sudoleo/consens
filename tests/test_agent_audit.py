@@ -777,7 +777,7 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     page, so the agent could open nothing it found itself in this message,
     although the same results become readable as an earlier message's sources
     with the next one. Its own search results count now. Another page needs
-    reviewers, who let it through first (since 2026-10-29,
+    reviewers, who let it through first (since 2026-10-28,
     test_agent_gate): without them it stays unread."""
     from test_agent_web_fetch import PAGE, fake_fetch
     from app.services.agent_read_source import LABEL_SEARCH

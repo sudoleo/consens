@@ -18,7 +18,7 @@ A memory change (update_memory) joins them once outside content is in view
 (since 2026-10-28): it acts on later chats, and a page could have suggested
 it. Before, memory simply locked for the rest of the message.
 
-Pages the server fetches for the agent join them too (since 2026-10-29):
+Pages the server fetches for the agent join them too (since 2026-10-28):
 read_source and show_image take any public address in audit mode, and one
 the message did not already hold (its search hits, the user's links, the
 chat's earlier sources: ``known``) reaches out like a browser's open. Before,

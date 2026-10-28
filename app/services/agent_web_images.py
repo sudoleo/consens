@@ -1,4 +1,4 @@
-"""show_image: a picture from the web under the agent's answer (since 2026-10-29).
+"""show_image: a picture from the web under the agent's answer (since 2026-10-28).
 
 Claude shows pictures from the web with its answer; consens.io's agent could
 only say where one was (2026-10-28, "zeig mir ein Bild vom besten HS-BG-

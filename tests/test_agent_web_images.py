@@ -1,4 +1,4 @@
-"""show_image (agent_web_images.py, since 2026-10-29): a picture from the web
+"""show_image (agent_web_images.py, since 2026-10-28): a picture from the web
 under the agent's answer. The server fetches it (a picture, or the preview
 picture a page names for itself), only bytes that are a picture, encoded
 anew, kept in the chat's private store as the turn's ``web_image`` with its

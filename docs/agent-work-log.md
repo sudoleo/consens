@@ -281,7 +281,7 @@ Agent-Panel.
    der Agent erfährt nur die Entscheidung des Nutzers): Aufrufe, die den
    Arbeitsplatz verlassen (`agent_gate.py`, nach Werkzeug und typisierten
    Argumenten: `browser` mit `open`, `click`, `upload`, Enter, Leertaste; seit
-   2026-10-29 `read_source` und `show_image` mit einer Adresse, die die
+   2026-10-28 `read_source` und `show_image` mit einer Adresse, die die
    Nachricht nicht hält; seit dem Netz-Umbau desselben Tages keine
    Befehlsmuster mehr, die Werkbank erreicht nur Paketquellen), laufen erst,
    wenn jeder Prüfer des Laufs in einer

@@ -129,7 +129,7 @@ LABEL_EARLIER = "an earlier message's sources"
 # the agent does not call it, so "your search" read as a search it never made
 # (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
-# Audit mode since 2026-10-29: any public page, which the reviewers let
+# Audit mode since 2026-10-28: any public page, which the reviewers let
 # through first when the message did not hold it (agent_gate.WEB_READS). The
 # provider's search of GPT-6 Luna and GPT-6.1 Terra sends no hits to the app,
 # so they could read nothing they found.

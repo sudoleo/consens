@@ -60,7 +60,7 @@ def test_a_domain_is_on_it_and_shell_commands_are_not():
 
 @pytest.mark.parametrize("name", ["read_source", "show_image"])
 def test_a_page_the_message_does_not_hold_waits_for_the_reviewers(name):
-    """Since 2026-10-29 the server fetches any public address for read_source
+    """Since 2026-10-28 the server fetches any public address for read_source
     and show_image in audit mode (GPT-6.1 Terra's search hits never reach the
     app): an address the message already holds is fetched at once, any other
     reaches out like a browser's open."""

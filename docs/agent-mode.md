@@ -504,7 +504,7 @@ Textmuster): beim Werkzeug `browser` die Aktionen `open`, `click`, `upload`,
 `key` mit `Enter` oder `Space` (drückt den fokussierten Knopf wie ein Klick, seit
 2026-10-28) und `type` mit `enter` (Lesen, Tippen allein, Scrollen und
 Tabs senden nichts), und jede Domain-Anfrage (`request_domain`, die danach
-immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Seit 2026-10-29
+immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Seit 2026-10-28
 außerdem `read_source` und `show_image` mit einer Adresse, die die Nachricht
 noch nicht hält (`agent_gate.WEB_READS`, „web“): Der Server holt sie, also
 geht eine Anfrage hinaus wie beim `open` des Browsers. Was sie hält
@@ -848,7 +848,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   stehen; Hintergrundprozesse verlieren den Zugang mit dem Ende ihrer
   Nachricht.
 - Lesen im Web läuft weiter über `web_search` und `read_source` im Backend.
-- **Vier Wege ins Web, als Fakten im Prompt (seit 2026-10-29).** Max: Der
+- **Vier Wege ins Web, als Fakten im Prompt (seit 2026-10-28).** Max: Der
   Agent wusste oft nicht, wann er Browser, Websuche oder VM nehmen soll. Nach
   „Verfassung statt Regeln“ bekommt er keine Wann-Liste, sondern einen Absatz
   in `AGENT_VM_PROMPT`, was jeder Weg erreicht und was er kostet: die
@@ -982,7 +982,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
   Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit zählt als
   VM-Zeit.
-- **Ein Chrome, der nicht mehr antwortet, heilt sich (seit 2026-10-29).**
+- **Ein Chrome, der nicht mehr antwortet, heilt sich (seit 2026-10-28).**
   Anlass, Max' Browser-VM am 2026-10-28 (Chat „Bester HSG-Spieler“, Live-Ansicht
   offen): `open` auf linktr.ee lief in `Page.goto: Timeout 30000ms`, der
   nächste Aufruf in `connect_over_cdp: Timeout 20000ms`, Chrome starb um 17:16
@@ -1018,7 +1018,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
     nie einen laufenden beendet (der Nutzer könnte ihn gerade bedienen). Auch
     ein Chrome, dessen Fenster der Nutzer schließt, kommt so mit seinen Tabs
     zurück.
-  Geprüft an einer eigenen Test-Browser-VM (2026-10-29, danach gelöscht):
+  Geprüft an einer eigenen Test-Browser-VM (2026-10-28, danach gelöscht):
   siehe „Live geprüft: Selbstheilung des Browsers“ unten.
 - **Live-Ansicht ohne Sprite-URL und Gateway** (Fund 1,
   `routers/agent_workspace.py`, `workspace-view.js`): Der Server öffnet das
@@ -1179,7 +1179,7 @@ der Session), dazu drei kleine Sonden (Laufzeit-Shims, Ports, x11vnc):
   Unix-Socket), Playwright fehlte direkt nach der ersten Einrichtung im
   laufenden Python (Nutzer-Site nachgeladen).
 
-#### Live geprüft: Selbstheilung des Browsers (2026-10-29)
+#### Live geprüft: Selbstheilung des Browsers (2026-10-28)
 
 Erst lesend an Max' Browser-VM (keine Änderung): Chrome lief nicht mehr, Xvfb,
 openbox und x11vnc schon; `chrome.log` endete um 17:16:47 UTC, der vorige
@@ -3199,7 +3199,7 @@ Gespeicherte Quellen sind Provider-Zitate oder bereits gelesene Seiten. Schalter
 `AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
 Code: `agent_read_source.py`.
 
-**Im Audit-Modus jede öffentliche Seite (seit 2026-10-29).** Gemessen über alle
+**Im Audit-Modus jede öffentliche Seite (seit 2026-10-28).** Gemessen über alle
 Audit-Läufe vom 25. bis 28.10.: GPT-6.1 Terra suchte 15-mal und behielt eine
 Quelle, GPT-6 Luna 7-mal und keine (DeepSeek 25 → 45, MiMo 3 → 10, Sonnet 1 → 5).
 Die eingebaute Suche von OpenAI schickt ihre Treffer nicht an die App, nur in
@@ -3379,7 +3379,7 @@ Quellenansicht markiert gelesene Quellen mit „Read by the agent“, verglichen
 wie `url_key` und auch über die zitierte Weiterleitung. `MOCK_LLM` liefert eine
 feste Seite ohne Abruf (`mock_llm.mock_fetched_page`).
 
-### Bilder aus dem Web (show_image, seit 2026-10-29)
+### Bilder aus dem Web (show_image, seit 2026-10-28)
 
 Anlass: „zeig mir ein Bild vom besten HS-BG-Spieler“ (Max, 2026-10-28).
 Claude zeigt Bildtreffer direkt, der Agent schrieb „Direkt einblenden kann ich

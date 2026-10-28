@@ -12,7 +12,7 @@
 # -localhost took the VM's fdf::1, which /etc/hosts also names localhost
 # (measured on Sprites 2026-10-27).
 #
-# Since 2026-10-29 it also mends a Chrome that is no longer usable (Max's
+# Since 2026-10-28 it also mends a Chrome that is no longer usable (Max's
 # browser VM, 2026-10-28: a page load and the next connection ran into their
 # time limits, Chrome died two minutes later, and the live view stayed black
 # until the next call): a Chrome whose debugging port does not answer, or
@@ -35,7 +35,7 @@ listens() { ss -ltn 2>/dev/null | grep -q "127.0.0.1:$1 "; }
 # was started, /usr/bin/google-chrome (the starter script execs Chrome under
 # its own name); only its children (renderers, the zygote, the GPU process)
 # are /opt/google/chrome/chrome, and they carry its --user-data-dir too.
-# Until 2026-10-29 the check matched the children alone: a Chrome counted
+# Until 2026-10-28 the check matched the children alone: a Chrome counted
 # as running while any child lived, the flags' restart ended only the
 # children (Chrome died with "GPU process isn't usable"), and a Chrome whose
 # children were gone got a second one started on the same profile.
