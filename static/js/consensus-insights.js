@@ -757,9 +757,12 @@
               });
             }
             window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: kind, previewed: previewed });
+            // Escape belongs to the card from its first moment; only the click
+            // waits a task, so the click that opened it does not close it
+            // (nightly 2026-10-28: an Escape right after the click was lost).
+            document.addEventListener("keydown", onKeyDown, true);
             setTimeout(function () {
               document.addEventListener("click", onDocClick, true);
-              document.addEventListener("keydown", onKeyDown, true);
             }, 0);
           }
 
