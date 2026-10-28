@@ -271,7 +271,8 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
         except OSError:
             pass  # the relay closed it: its stdin ended
         connection.close()
-    threading.Thread(target=vnc, daemon=True).start()
+    server_thread = threading.Thread(target=vnc, daemon=True)
+    server_thread.start()
     stdin, stdout = io.BytesIO(b"\x01" * 70_000), io.BytesIO()
 
     class Stream:
@@ -280,6 +281,9 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
     monkeypatch.setattr(relay.sys, "stdin", Stream(stdin))
     monkeypatch.setattr(relay.sys, "stdout", Stream(stdout))
     assert relay.main() == 0
+    # The relay returns once it has sent everything; the VNC side may still be
+    # reading it (CI read 65536 of 70000 bytes before this join).
+    server_thread.join(10)
     server.close()
     states = [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()]
     assert states == ["setup", "starting", "ready"] and scripts == ["setup.sh", "display.sh"]
