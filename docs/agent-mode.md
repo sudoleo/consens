@@ -866,6 +866,36 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Seitentext auch Elemente, deren Name den Text enthält (aus den Zeilen von
   `read`, `ELEMENT_NAME`: eine Suchbox, die nur über ihr Label heißt, steht in
   keinem Seitentext).
+- **Downloads vom Browser auf die Werkbank (seit 2026-10-28).** Was der
+  Browser herunterlädt, landet im Chat-Ordner unter `downloads/`: Downloads,
+  die eine Aktion startet (ein Klick, Enter, eine Adresse, die eine Datei
+  liefert; Playwright-Ereignis `download`, gespeichert mit `save_as`), die neue
+  Aktion `download` (die Datei an `url`, sonst an der Adresse der aktuellen
+  Seite, über `context.request` mit den Cookies des Browsers: so kommt auch ein
+  PDF, das Chrome im Viewer zeigt, als Datei) und was der Nutzer in der
+  Live-Ansicht herunterlädt (Chromes Ordner `~/Downloads`, nur fertige Dateien,
+  keine `.crdownload`). Der Helfer sammelt sie in
+  `agent_workspace.BROWSER_DOWNLOADS` und nennt sie nach jeder Aktion
+  (`finished_downloads`); `BrowserTools._keep_downloads` liest jede (nur aus
+  diesem Ordner, ohne `..`) als Anbieter-Nutzer, schreibt sie als Agent in
+  `<Chat-Ordner>/downloads/` (nie über eine bestehende Datei: `name (2).pdf`)
+  und löscht sie auf der Browser-VM, auch wenn sie mit über `DOWNLOAD_BYTES`
+  (25 MB) übersprungen wird (`downloads_skipped`); höchstens
+  `DOWNLOADS_PER_CALL` (10) je Aufruf. `download` wartet wie `open` auf die
+  Prüfer (`agent_gate.BROWSER_OUTWARD`: es schickt eine Anfrage mit den
+  Anmeldungen des Nutzers) und nimmt nur öffentliche Adressen, auch nach
+  Weiterleitungen (`browser.public_address`: nie der Debug-Port des
+  Browsers). Das Ergebnis nennt die Pfade (`downloads`, Hinweis), die
+  Aktivität sie als `downloads`, der Arbeitsbericht („-> downloaded …“).
+  Inhalt aus einem eingeloggten Konto ist Fremdinhalt wie jedes
+  Werkzeugergebnis. Geprüft an eigenen Test-Browser-VMs (2026-10-28, danach
+  gelöscht): ein Klick auf einen Download-Link (`hallo.txt`), eine Adresse, die
+  mit `Content-Disposition: attachment` antwortet (`open` meldet „it downloads a
+  file“, `test.txt`), `download` auf ein PDF, das Chrome im Viewer zeigt
+  (13 KB, zweites Mal als `dummy (2).pdf`), `download` auf localhost abgelehnt.
+  Dabei aufgefallen: Playwright nimmt `list.append` nicht als Ereignis-Handler
+  (es markiert jeden Handler), jede Aktion scheiterte, deshalb eine eigene
+  Funktion.
   Aktivität („Searched the page for“, Feld `query`) und Arbeitsprotokoll
   (`browser find "…"`) nennen den Suchtext, den Text von `type` nie. Der Kopf jeder Seitenausgabe (`Page:`/`URL:`) trägt die Zeile `Cookies saved
   for this site: yes|no` aus den Cookies des Browser-Kontexts für die

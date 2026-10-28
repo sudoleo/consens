@@ -68,6 +68,9 @@ BROWSER_STATE = agent_vm.SERVER_HOME + "/.consens/browser"
 BROWSER_CONTROL = BROWSER_STATE + "/control.json"
 BROWSER_PROFILE = BROWSER_STATE + "/profile"
 BROWSER_UPLOADS = BROWSER_STATE + "/uploads"
+# What the browser downloaded, until agent_browser copies it to the workbench
+# (workspace_vm/browser/browser.py DOWNLOADS).
+BROWSER_DOWNLOADS = BROWSER_STATE + "/downloads"
 BROWSER_HELPER = WORKSPACE_DIR + "/browser.py"
 BROWSER_RELAY = WORKSPACE_DIR + "/relay.py"
 NOTES_PATH = HOME + "/NOTES.md"

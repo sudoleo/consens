@@ -55,9 +55,16 @@ SETUP_SECONDS = 100
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
 ACTIONS = {"open", "read", "text", "find", "click", "type", "select", "key", "scroll", "back", "forward", "tabs",
-           "tab", "screenshot", "upload", "wait"}
+           "tab", "screenshot", "upload", "download", "wait"}
 # What changes the page or sends something: never while the user has the browser.
-ACTING = {"open", "click", "type", "select", "upload", "key", "scroll", "back", "forward", "tab"}
+ACTING = {"open", "click", "type", "select", "upload", "download", "key", "scroll", "back", "forward", "tab"}
+# Files a page downloaded (a click, Enter, an address that downloads, the
+# action download) until the server copies them to the workbench and deletes
+# them here (agent_browser.py, since 2026-10-28). What the user downloads in
+# the live view lands in Chrome's own folder and is taken along as well.
+DOWNLOADS = os.path.join(STATE, "downloads")
+CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
+DOWNLOAD_SECONDS = 60
 
 # A ref stays with its element, and a new element takes the next number of
 # the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
@@ -442,6 +449,93 @@ def element(page, ref):
     return locator.first
 
 
+def safe_name(name):
+    """A download's file name without folders or odd characters."""
+    name = re.sub(r"[^\w.\- ]", "_", os.path.basename(str(name or "").replace("\\", "/"))).strip(". ")
+    return name[:120] or "download"
+
+
+def free_path(folder, name):
+    os.makedirs(folder, exist_ok=True)
+    stem, dot, ext = name.rpartition(".") if "." in name else (name, "", "")
+    path, number = os.path.join(folder, name), 2
+    while os.path.exists(path):
+        path = os.path.join(folder, f"{stem} ({number}){dot}{ext}")
+        number += 1
+    return path
+
+
+def keep_downloads(caught):
+    """The downloads this action started, saved in DOWNLOADS once complete;
+    their names."""
+    names = []
+    for download in caught:
+        path = free_path(DOWNLOADS, safe_name(download.suggested_filename))
+        try:
+            download.save_as(path)
+        except Exception:
+            continue
+        names.append(os.path.basename(path))
+    return names
+
+
+def public_address(url):
+    """Only an http(s) address of the open web: never the browser's own
+    computer (its debugging port) nor a private network."""
+    import ipaddress
+    from urllib.parse import urlsplit
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower().rstrip(".")
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    return (parts.scheme in {"http", "https"} and bool(host) and host != "localhost"
+            and not host.endswith((".localhost", ".internal", ".flycast"))
+            and (address is None or address.is_global))
+
+
+def fetch(context, page, url):
+    """download: the file at ``url`` (else the current page's address) with
+    the browser's sign-ins, as Chrome would send its cookies; a PDF Chrome
+    shows in its viewer comes as the file this way."""
+    target = url or page.url
+    if not public_address(target):
+        raise Refused("download takes the address of a file on the web (or the current page's).")
+    response = context.request.get(target, timeout=DOWNLOAD_SECONDS * 1000, max_redirects=10)
+    if not public_address(response.url):
+        raise Refused("That download leads to the browser's own computer or a private network.")
+    if not response.ok:
+        raise Refused(f"The download failed: HTTP {response.status}.")
+    body = response.body()
+    disposition = response.headers.get("content-disposition", "")
+    named = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", disposition, re.I)
+    from urllib.parse import unquote, urlsplit
+    name = safe_name(unquote(named.group(1)) if named else unquote(urlsplit(response.url).path.rsplit("/", 1)[-1]))
+    path = free_path(DOWNLOADS, name)
+    with open(path, "wb") as handle:
+        handle.write(body)
+    return f"Downloaded {os.path.basename(path)} ({len(body)} bytes)."
+
+
+def finished_downloads():
+    """The files waiting for the server: what this helper saved and what
+    Chrome finished in its own folder (the user's downloads in the view)."""
+    if os.path.isdir(CHROME_DOWNLOADS):
+        for name in sorted(os.listdir(CHROME_DOWNLOADS)):
+            source = os.path.join(CHROME_DOWNLOADS, name)
+            if os.path.isfile(source) and not name.endswith((".crdownload", ".tmp")):
+                try:
+                    os.replace(source, free_path(DOWNLOADS, safe_name(name)))
+                except OSError:
+                    pass
+    if not os.path.isdir(DOWNLOADS):
+        return []
+    return [{"file": os.path.join(DOWNLOADS, name), "name": name,
+             "bytes": os.path.getsize(os.path.join(DOWNLOADS, name))}
+            for name in sorted(os.listdir(DOWNLOADS)) if os.path.isfile(os.path.join(DOWNLOADS, name))]
+
+
 def run(request):
     action = request.get("action")
     if action not in ACTIONS:
@@ -463,6 +557,19 @@ def run(request):
         context = browser.contexts[0] if browser.contexts else browser.new_context()
         page = current_page(context)
         offset = int(request.get("offset") or 0)
+        # A download this action starts, in any tab, also one it opens.
+        # A function of its own: Playwright marks each handler, which a
+        # builtin like list.append does not allow (every action failed).
+        caught = []
+
+        def catch(download):
+            caught.append(download)
+
+        def watch(tab):
+            tab.on("download", catch)
+        for tab in context.pages:
+            watch(tab)
+        context.on("page", watch)
         if action == "read":
             return {"text": read_text(page, offset)}
         if action == "text":
@@ -497,6 +604,9 @@ def run(request):
         done = act(context, page, action, request)
         page = current_page(context)
         settle(page)
+        saved = keep_downloads(caught)
+        if saved:
+            done += "\nDownloaded: " + ", ".join(saved) + "."
         return {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)}
 
 
@@ -509,8 +619,16 @@ def act(context, page, action, request):
         if request.get("new_tab"):
             page = context.new_page()
         page.bring_to_front()
-        page.goto(target, wait_until="domcontentloaded", timeout=30_000)
+        try:
+            page.goto(target, wait_until="domcontentloaded", timeout=30_000)
+        except Exception as exc:
+            # An address that downloads a file instead of showing a page.
+            if "Download is starting" not in str(exc):
+                raise
+            return f"Opened {target}: it downloads a file."
         return f"Opened {page.url}"
+    if action == "download":
+        return fetch(context, page, str(request.get("url") or ""))
     if action == "click":
         element(page, request.get("ref")).click(timeout=10_000)
         return f"Clicked {request.get('ref')}."
@@ -575,6 +693,7 @@ def main():
         if not isinstance(request, dict):
             raise Refused("The request is no JSON object.")
         answer = {"status": "ok", **run(request)}
+        answer["downloads"] = finished_downloads()
     except (Refused, UserHasControl, SettingUp) as exc:
         answer = {"status": exc.status, "text": str(exc)}
     except Exception as exc:

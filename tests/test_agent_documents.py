@@ -293,3 +293,17 @@ def test_file_list_is_chronological_and_carries_document_titles(setup):
         data.pop("title")
         record.set(data)
     assert all(f["title"] == "Decision brief" for f in files.list("owner", chat) if f.get("kind") == "document")
+
+
+def test_audit_mode_names_no_model_comparisons_for_a_document():
+    """Opus in audit mode, 2026-10-28: create_document asked for model
+    comparisons it had no tool for. Only comparison mode names them."""
+    from types import SimpleNamespace
+    from app.services.agent_documents import DocumentTools
+
+    def description(audit):
+        tools = object.__new__(DocumentTools)
+        tools.loop = SimpleNamespace(comparison=SimpleNamespace(audit_mode=audit))
+        return next(tool.description for tool in tools.tools() if tool.name == "create_document")
+    assert "comparison" not in description(True).lower() and "Preserve uncertainties" in description(True)
+    assert "Complete model comparisons first" in description(False)

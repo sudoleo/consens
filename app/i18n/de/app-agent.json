@@ -579,6 +579,8 @@
   "Waiting…": "Wartet…",
   "Uploaded · partly read": "Hochgeladen · teilweise gelesen",
   "Uploaded": "Hochgeladen",
+  "Downloaded": "Heruntergeladen",
+  "Downloading": "Lädt herunter",
   "Parts of {0} couldn’t be read": "Teile von {0} konnten nicht gelesen werden",
   "Parts of {length} files couldn’t be read": "Teile von {length} Dateien konnten nicht gelesen werden",
   "Couldn’t load this chat’s files. {error}": "Die Dateien dieses Chats konnten nicht geladen werden. {error}",

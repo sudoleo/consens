@@ -288,6 +288,10 @@ def describe(name, arguments, result):
         title = str(data.get("page") or "").split("\n", 1)[0]
         if title.startswith("Page: "):
             line += f" -> {_short(title[6:], 120)}"
+        # Where its downloads went: the next message finds the files there.
+        kept = [item.get("path") for item in data.get("downloads") or [] if isinstance(item, dict)]
+        if kept:
+            line += " -> downloaded " + ", ".join(_short(str(path), 160) for path in kept[:5])
     elif name == "vm_install_packages":
         # The arguments as the model wrote them, also when the registry
         # refused them (packages as a number or an object).

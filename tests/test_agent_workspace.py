@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -475,6 +476,76 @@ def test_find_names_elements_whose_name_holds_the_text(tmp_path, monkeypatch):
     text = browser.find_text(FakePage(browser, lines=lines, found=found), "suchen")
     assert text.split("\n")[3:] == ['1 match for "suchen":', '[e2] "Suchen"', 'Elements whose name holds "suchen":',
                                     '[e1] searchbox "Wikipedia durchsuchen" (empty)']
+
+
+def test_downloads_are_saved_by_their_name_and_handed_over_once_finished(tmp_path, monkeypatch):
+    """The helper's side of downloads (since 2026-10-28): what an action
+    started is saved in DOWNLOADS under a safe, free name; Chrome's own
+    finished files (the user's in the view) move there too, unfinished ones
+    stay; main names them all for the server."""
+    browser = load("browser")
+    monkeypatch.setattr(browser, "DOWNLOADS", str(tmp_path / "downloads"))
+    # Not "Downloads": on Windows that is the same folder as "downloads".
+    monkeypatch.setattr(browser, "CHROME_DOWNLOADS", str(tmp_path / "chrome"))
+    assert browser.safe_name("../../etc/pass wd") == "pass wd" and browser.safe_name("") == "download"
+    assert browser.safe_name("Rechnung März?.pdf") == "Rechnung März_.pdf"
+
+    class Download:
+        def __init__(self, name, data=b"%PDF", fails=False):
+            self.suggested_filename, self.data, self.fails = name, data, fails
+
+        def save_as(self, path):
+            if self.fails:
+                raise RuntimeError("canceled")
+            with open(path, "wb") as handle:
+                handle.write(self.data)
+    assert browser.keep_downloads([Download("invoice.pdf"), Download("invoice.pdf"), Download("x", fails=True)]) == [
+        "invoice.pdf", "invoice (2).pdf"]
+    chrome = tmp_path / "chrome"
+    chrome.mkdir()
+    (chrome / "export.csv").write_text("a,b")
+    (chrome / "half.zip.crdownload").write_text("…")
+    files = browser.finished_downloads()
+    assert [item["name"] for item in files] == ["export.csv", "invoice (2).pdf", "invoice.pdf"]
+    assert files[0]["bytes"] == 3 and files[0]["file"] == str(tmp_path / "downloads" / "export.csv")
+    assert sorted(os.listdir(chrome)) == ["half.zip.crdownload"]
+
+
+def test_download_fetches_with_the_browsers_sign_ins_but_never_its_own_computer(tmp_path, monkeypatch):
+    browser = load("browser")
+    monkeypatch.setattr(browser, "DOWNLOADS", str(tmp_path / "downloads"))
+    asked = []
+
+    class Response:
+        def __init__(self, url, status=200, disposition=""):
+            self.url, self.status, self.ok = url, status, status < 400
+            self.headers = {"content-disposition": disposition} if disposition else {}
+
+        def body(self):
+            return b"%PDF-1.7 invoice"
+
+    class Context:
+        def __init__(self, response):
+            self.request = self
+            self.response = response
+
+        def get(self, url, **kwargs):
+            asked.append(url)
+            return self.response
+    page = type("Page", (), {"url": "https://shop.example/viewer/invoice-7.pdf"})()
+    said = browser.fetch(Context(Response("https://shop.example/viewer/invoice-7.pdf")), page, "")
+    assert said == "Downloaded invoice-7.pdf (16 bytes)." and asked == ["https://shop.example/viewer/invoice-7.pdf"]
+    named = Response("https://shop.example/get?id=7", disposition="attachment; filename=\"Rechnung 7.pdf\"")
+    assert browser.fetch(Context(named), page, "https://shop.example/get?id=7") == "Downloaded Rechnung 7.pdf (16 bytes)."
+    assert sorted(os.listdir(tmp_path / "downloads")) == ["Rechnung 7.pdf", "invoice-7.pdf"]
+    for url in ("http://localhost:9222/json", "http://127.0.0.1/", "file:///etc/passwd", "http://10.0.0.1/x"):
+        with pytest.raises(browser.Refused):
+            browser.fetch(Context(Response(url)), page, url)
+    # A redirect to the browser's own computer is refused as well, and an error says its status.
+    with pytest.raises(browser.Refused, match="private network"):
+        browser.fetch(Context(Response("http://127.0.0.1:9222/json")), page, "https://shop.example/r")
+    with pytest.raises(browser.Refused, match="HTTP 403"):
+        browser.fetch(Context(Response("https://shop.example/x", status=403)), page, "https://shop.example/x")
 
 
 def test_text_brings_the_main_content_first():

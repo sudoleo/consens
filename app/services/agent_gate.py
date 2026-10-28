@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 
 # browser actions that act outside: always, or with one argument set.
-BROWSER_OUTWARD = frozenset({"open", "click", "upload"})
+BROWSER_OUTWARD = frozenset({"open", "click", "upload", "download"})
 # Keys that send: Enter submits, Space presses the focused button like a click.
 BROWSER_OUTWARD_KEYS = frozenset({"Enter", "Space"})
 

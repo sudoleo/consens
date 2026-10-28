@@ -164,6 +164,70 @@ def test_an_upload_copies_one_file_of_the_workbench_for_that_call(store, fake_vm
         call(browser, action="upload", ref="e3", file="missing.pdf")
 
 
+def downloaded(fake_vm, *files):
+    """The browser VM holds ``files`` ({name: bytes}) as finished downloads,
+    and the helper names them in its answer like browser.py's main."""
+    folder = agent_workspace.BROWSER_DOWNLOADS
+    fake_vm.vms.setdefault(BROWSER, {"files": {}, "checkpoints": []})
+    for name, data in files:
+        fake_vm.vms[BROWSER]["files"][f"{folder}/{name}"] = data
+    page = 'Page: "Invoices"\nURL: https://shop.example/invoices'
+    fake_vm.browser = lambda request: {"status": "ok", "text": page, "downloads": [
+        {"file": f"{folder}/{name}", "name": name, "bytes": len(data)} for name, data in files]}
+
+
+def test_a_download_comes_into_the_chat_folder_and_leaves_the_browser(store, fake_vm, monkeypatch):
+    """Since 2026-10-28: what the browser downloaded (a click, the action
+    download, the user in the view) lands in the chat's downloads folder as
+    the agent's user, never over an existing file, and is deleted on the
+    browser VM; larger than DOWNLOAD_BYTES is skipped and deleted too."""
+    loop, browser = tools(store)
+    folder = chat_path(loop.chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"][f"{folder}/downloads/invoice.pdf"] = b"older"
+    monkeypatch.setattr(agent_browser, "DOWNLOAD_BYTES", 1024 * 1024)
+    downloaded(fake_vm, ("invoice.pdf", b"%PDF-1.7"), ("big.zip", b"x" * (1024 * 1024 + 1)))
+    result = call(browser, action="click", ref="e4")
+    assert result["downloads"] == [{"path": f"{folder}/downloads/invoice (2).pdf", "bytes": 8}]
+    assert result["downloads_skipped"] == [{"name": "big.zip", "reason": "larger than 1 MB"}]
+    assert f"{folder}/downloads/invoice (2).pdf" in result["note"]
+    files = fake_vm.vms[NAME]["files"]
+    assert files[f"{folder}/downloads/invoice (2).pdf"] == b"%PDF-1.7" and files[f"{folder}/downloads/invoice.pdf"] == b"older"
+    # Written as the agent's user, read and deleted by the server on the browser VM.
+    assert ("write", f"{folder}/downloads/invoice (2).pdf") not in fake_vm.server_files
+    assert not [path for path in fake_vm.vms[BROWSER]["files"] if "/downloads/" in path]
+    # The next message's work record names where it went.
+    from app.services.agent_compaction import describe
+    line = describe("browser", json.dumps({"action": "click", "ref": "e4"}), json.dumps(result))
+    assert line.endswith(f"-> downloaded {folder}/downloads/invoice (2).pdf")
+
+
+def test_only_the_browsers_download_folder_is_copied(store, fake_vm):
+    loop, browser = tools(store)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms.setdefault(BROWSER, {"files": {}, "checkpoints": []})
+    fake_vm.vms[BROWSER]["files"]["/home/sprite/.consens/browser/profile/Default/Cookies"] = b"secret"
+    fake_vm.browser = lambda request: {"status": "ok", "text": "Page: \"x\"", "downloads": [
+        {"file": "/home/sprite/.consens/browser/profile/Default/Cookies", "name": "Cookies", "bytes": 6},
+        {"file": f"{agent_workspace.BROWSER_DOWNLOADS}/../profile/Default/Cookies", "name": "Cookies", "bytes": 6}]}
+    result = call(browser, action="read")
+    assert "downloads" not in result
+    assert not [path for path in fake_vm.vms[NAME]["files"] if "Cookies" in path]
+
+
+def test_download_takes_a_public_address_or_the_current_page_and_waits_for_the_reviewers(store, fake_vm):
+    from app.services.agent_gate import outward
+    loop, browser = tools(store)
+    call(browser, action="download")
+    call(browser, action="download", url="shop.example/invoice.pdf")
+    assert fake_vm.requests[-2:] == [{"action": "download"},
+                                     {"action": "download", "url": "https://shop.example/invoice.pdf"}]
+    with pytest.raises(ValueError, match="headless Chrome"):
+        call(browser, action="download", url="http://localhost:9222/json")
+    # It sends a request with the user's sign-ins: outward, like open.
+    assert outward({"function": {"name": "browser", "arguments": json.dumps({"action": "download"})}}) == "browser"
+
+
 def test_a_screenshot_comes_as_a_picture_only_for_a_model_that_takes_them(store, fake_vm, monkeypatch):
     loop, browser = tools(store)
     fake_vm.browser = lambda request: {"status": "ok", "text": 'Page: "Shop"\nURL: https://shop.example/cart',

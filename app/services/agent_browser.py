@@ -43,13 +43,18 @@ from app.services.agent_tools import ReadOnlyTool
 from app.services.llm.provider_runtime import ProviderCancelled
 
 ACTIONS = ("open", "read", "text", "find", "click", "type", "select", "key", "scroll", "back", "forward", "tabs",
-           "tab", "screenshot", "upload", "wait")
+           "tab", "screenshot", "upload", "download", "wait")
 KEYS = ("Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab")
 TYPE_CHARS = 20_000
 # find: the text to look for (the helper's FIND_CHARS).
 FIND_CHARS = 200
 UPLOAD_BYTES = 15 * 1024 * 1024
+# A file the browser downloaded comes into the chat's folder (downloads/) up
+# to this size, at most this many per call (since 2026-10-28); larger ones
+# are deleted on the browser VM and named as skipped.
+DOWNLOAD_BYTES = 25 * 1024 * 1024
+DOWNLOADS_PER_CALL = 10
 # The helper takes up to 100 s for a first setup and 60 s for the browser's start.
 CALL_SECONDS = 180
 WAIT_MAX = 120
@@ -71,10 +76,12 @@ class BrowserArgs(BaseModel):
         "e12 (offset to read on). text: the page's text (offset). find: where text (up to 200 characters, any "
         "case) appears on the page, up to 20 places, each with the ref of the element it is in. click, type "
         "(text, enter to submit), select (option), upload (file of your workspace): on the element ref. key: "
-        "press a key. scroll: direction. "
+        "press a key. scroll: direction. download: the file at url (default: the current page's address) with "
+        "the user's sign-ins. "
         "back, forward. tabs: list them; tab: bring tab number to the front. screenshot: a picture of the page. "
         "wait: seconds, also until the user hands the browser back."))
-    url: str = Field(default="", max_length=4000, description="open: an http or https address.")
+    url: str = Field(default="", max_length=4000, description=(
+        "open: an http or https address. download: the file's address (empty: the current page's)."))
     ref: str = Field(default="", pattern=r"^(e[0-9]{1,8})?$", description="An element's ref from read.")
     text: str = Field(default="", max_length=TYPE_CHARS, description=(
         "type: the text (never a password). find: the text to look for (up to 200 characters)."))
@@ -153,7 +160,7 @@ class BrowserTools:
             "browser", "Use the workspace's Chrome, the one the user can watch and take over live, signed in where "
                        "the user signed in. Pages come back as text with refs (e12) for click, type, select and "
                        "upload, and find looks up a text on the page with the refs it is in; every action returns "
-                       "the page again.",
+                       "the page again. A file the page downloads comes into your chat folder's downloads folder.",
             BrowserArgs, self.call, activity=self._activity, reports=True)]
 
     def _helper(self, request, timeout, cancellation):
@@ -217,6 +224,8 @@ class BrowserTools:
         request = {"action": args.action}
         if args.action == "open":
             request.update(url=check_url(args.url), new_tab=args.new_tab)
+        if args.action == "download" and args.url.strip():
+            request["url"] = check_url(args.url)
         if args.action == "screenshot":
             from app.services.agent_vm_tools import sees_pictures
             if not sees_pictures(self.vm.loop.model):
@@ -264,6 +273,14 @@ class BrowserTools:
             from app.services.agent_vm_tools import VM_USER_HAS_BROWSER
             raise ValueError(VM_USER_HAS_BROWSER)
         result = {"action": args.action, "page": text}
+        files = answer.get("downloads")
+        if isinstance(files, list) and files:
+            kept, skipped = self._keep_downloads(files)
+            if kept:
+                result["downloads"] = kept
+                result["note"] = "Downloaded into your workspace: " + ", ".join(item["path"] for item in kept) + "."
+            if skipped:
+                result["downloads_skipped"] = skipped
         if args.action == "screenshot":
             try:
                 raw = base64.b64decode(answer.get("png") or "", validate=True)
@@ -275,8 +292,50 @@ class BrowserTools:
             with self.vm._pictures_lock:
                 self.vm._pictures.append((url or "the browser", "image/png", raw,
                                           SCREENSHOT_INTRO.format(url=url or "the current page")))
-            result["note"] = "The screenshot follows as an image after these results."
+            result["note"] = " ".join(filter(None, (result.get("note"),
+                                                    "The screenshot follows as an image after these results.")))
         return session.announce(result)
+
+    def _keep_downloads(self, files):
+        """The browser's finished downloads into the chat's folder
+        (downloads/, as the agent's user, never over an existing file), then
+        gone from the browser VM: ``(kept, skipped)``."""
+        from app.services import agent_workspace
+        session = self.vm.session
+        kept, skipped = [], []
+        for item in files[:DOWNLOADS_PER_CALL]:
+            path = str((item or {}).get("file") or "")
+            if not path.startswith(agent_workspace.BROWSER_DOWNLOADS + "/") or "/.." in path:
+                continue
+            name = re.sub(r"[^\w.\- ]", "_", posixpath.basename(path)).strip(". ")[:120] or "download"
+            try:
+                raw, complete = session.backend.read_file(self.name, path, limit=DOWNLOAD_BYTES + 1, agent=False)
+                if not complete or len(raw) > DOWNLOAD_BYTES:
+                    skipped.append({"name": name, "reason": f"larger than {DOWNLOAD_BYTES // (1024 * 1024)} MB"})
+                    continue
+                target = self._free_path(f"{session.dir}/downloads", name)
+                session.backend.write_file(session.name, target, raw)
+                kept.append({"path": target, "bytes": len(raw)})
+            except agent_vm.VMFileMissing:
+                continue
+            finally:
+                try:
+                    session.backend.delete_path(self.name, path, agent=False)
+                except Exception as exc:
+                    logging.info("Agent browser download not removed category=%s", safe_exception(exc))
+        return kept, skipped
+
+    def _free_path(self, folder, name):
+        """``folder/name``, or ``name (2)`` and on while a file has that name."""
+        session = self.vm.session
+        stem, dot, ext = name.rpartition(".") if "." in name else (name, "", "")
+        for number in range(1, 100):
+            candidate = f"{folder}/{name}" if number == 1 else f"{folder}/{stem} ({number}){dot}{ext}"
+            try:
+                session.backend.read_file(session.name, candidate, limit=1)
+            except agent_vm.VMFileMissing:
+                return candidate
+        raise ValueError(f"Too many files named {name} in {folder}.")
 
     def _activity(self, args, result):
         fields = {"action": args.action}
@@ -290,6 +349,10 @@ class BrowserTools:
             fields["file"] = args.file[:300]
         if args.action == "find":
             fields["query"] = args.text[:FIND_CHARS]
+        if args.action == "download" and args.url:
+            fields["url"] = args.url[:500]
+        if isinstance(result, dict) and result.get("downloads"):
+            fields["downloads"] = [item["path"] for item in result["downloads"]][:DOWNLOADS_PER_CALL]
         if isinstance(result, dict) and isinstance(result.get("page"), str):
             first = result["page"].split("\n", 2)
             if first and first[0].startswith("Page: "):

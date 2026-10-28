@@ -495,13 +495,14 @@
     back: ['Going back', 'Went back'], forward: ['Going forward', 'Went forward'],
     tabs: ['Listing the tabs', 'Listed the tabs'], tab: ['Switching the tab', 'Switched the tab'],
     screenshot: ['Taking a screenshot', 'Took a screenshot'], upload: ['Uploading', 'Uploaded'],
-    wait: ['Waiting for the page', 'Waited for the page'] };
+    download: ['Downloading', 'Downloaded'], wait: ['Waiting for the page', 'Waited for the page'] };
   function vmTarget(item) {
     if (['vm_exec', 'vm_start_process'].includes(item.name)) return item.command;
     if (item.name === 'vm_install_packages') return Array.isArray(item.packages) ? item.packages.join(' ') : '';
     if (item.name === 'request_domain') return item.domain;
     if (item.name === 'browser') {
-      return item.action === 'open' ? item.url : item.action === 'upload' ? item.file
+      return item.action === 'open' || item.action === 'download' ? item.url || item.downloads?.[0] || item.title
+        : item.action === 'upload' ? item.file
         : item.action === 'key' ? item.key : item.action === 'find' ? item.query : item.ref || item.title;
     }
     return item.path || item.process;
