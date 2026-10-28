@@ -200,7 +200,7 @@ def test_the_runs_end_waits_for_the_log_at_most_its_limit():
 def test_an_audit_turn_logs_what_the_agent_sees_and_does_but_not_its_reviewers(store, monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
     # Small limits: the system prompt goes to the (local) object store.
-    monkeypatch.setattr(agent_work_log, "INLINE_CHARS", 4000)
+    monkeypatch.setattr(agent_work_log, "INLINE_CHARS", 2000)
     monkeypatch.setattr(agent_work_log, "PREVIEW_CHARS", 100)
     script = Audit()
     loop = audit_loop(store, script)
@@ -214,7 +214,7 @@ def test_an_audit_turn_logs_what_the_agent_sees_and_does_but_not_its_reviewers(s
     assert [(e["name"], e["data"]) for e in context] == [("system", "app"), ("user", "user")]
     # The system prompt is long: in the object store, whole.
     system = store.work_log_entry(UID, loop.chat_id, loop.turn_id, context[0]["seq"])
-    assert len(loop.messages[0]["content"]) > 4000
+    assert len(loop.messages[0]["content"]) > 2000
     assert context[0]["ref"] and len(context[0]["content"]) == 100 and system["content"] == loop.messages[0]["content"]
     [step] = [e for e in entries if e["kind"] == "step"]
     body = json.loads(step["content"])

@@ -30,6 +30,15 @@ def _reviewer():
     return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, review_system_prompt(DEFAULT_TIMEZONE), count=1)
 
 
+def _audit_blocks():
+    from app.services import agent_files, agent_memory, agent_settings, agent_watch
+    from app.services.agent_read_source import READS_PER_MESSAGE
+    from app.services.prompt_defaults import AGENT_AUDIT_READ_SOURCE_PROMPT
+    return "\n\n".join((AGENT_AUDIT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE), agent_watch.AUDIT_PROMPT,
+                        agent_settings.AUDIT_PROMPT, agent_memory.AUDIT_MEMORY_USE_PROMPT,
+                        agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED))
+
+
 def _vm():
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     return AGENT_VM_PROMPT
@@ -70,10 +79,17 @@ _ENTRIES = (
     ("agent_audit", "Agent: audit mode instructions",
      "System prompt of the Agent model instead of \"Agent: instructions\" when an admin switched on Audit instead "
      "of comparison (agent_audit.py): no comparison tools, the agent researches with its own web search in every "
-     "step and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION). At runtime the source reading "
-     "(AGENT_AUDIT_READ_SOURCE_PROMPT), file, document, Google, Watch, settings and memory instructions are "
-     "appended as for the agent; the memory rules without comparisons (agent_memory.without_comparisons).",
+     "step and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION). Since 2026-10-28 it says only what the model "
+     "cannot know, the app's contracts and the rules of safety and truth. At runtime the audit versions of the "
+     "source reading, Watch, settings, memory, file, document and Google instructions are appended (\"Agent audit: "
+     "tool blocks\").",
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent_audit")),
+    ("agent_audit_blocks", "Agent audit: tool blocks",
+     "Appended to \"Agent: audit mode instructions\" with their tools, instead of the agent's versions: source "
+     "reading, Watch, settings, memory (relevance and, when the user lets the agent update memory, the update "
+     "rules) and files. Without comparisons and without recipes for when to read, ask or remember.",
+     "prompt_defaults.py:AGENT_AUDIT_READ_SOURCE_PROMPT, agent_watch.py/agent_settings.py:AUDIT_PROMPT, "
+     "agent_memory.py:AUDIT_MEMORY_*, agent_files.py:AUDIT_UNTRUSTED", _audit_blocks),
     ("audit_reviewer", "Agent audit: reviewers",
      "System prompt of each comparison model in audit mode: it follows the agent's work log in rounds (each user "
      "message holds the new entries as JSON, up to two search rounds each) and reviews the fixed answer in a final "

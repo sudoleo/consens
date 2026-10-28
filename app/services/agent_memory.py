@@ -808,51 +808,67 @@ comparison: memory is unavailable right now, so nothing was saved; they can try
 again in a moment or add it in Settings > Memory."""
 
 
-# Without comparison tools (audit mode, agent_audit.py) these sentences of the
-# memory prompts change: no compare_models carries a memory decision, and the
-# agent decides before it searches or reads anything.
-NO_COMPARISON_REPLACEMENTS = (
-    (" Comparison models do not see\nmemory: put a memory into the compare_models context only when it passes the\n"
-     "relevance test for this task, as the user's stated background or preference\n(\"The user is vegetarian.\"); "
-     "leave out all others.", ""),
-    ("Decide on EVERY message. compare_models and check_text carry a required\n`memory` field: pass [] when the "
-     "message reveals nothing new, which is the\nusual case, and on further comparisons of the same message once one "
-     "was\naccepted (its decision stands; after a refused call, decide again). When you\nanswer without a comparison "
-     "and the message reveals something to remember,\ncall update_memory before you answer.",
-     "Decide on EVERY message. When the message reveals something to remember,\ncall update_memory first, before "
-     "you search, read or answer; usually it\nreveals nothing new, and then you call nothing."),
-    ("A message that only asks you to remember, change or forget something needs no\ncomparison: call "
-     "update_memory, then confirm briefly.",
-     "A message that only asks you to remember, change or forget something needs no\nsearch: call update_memory, "
-     "then confirm briefly."),
-    ("every memory\nchange is refused, so decide on the first comparison.",
-     "every memory\nchange is refused, so decide first."),
-    ("answer directly without a\ncomparison:", "answer directly:"),
-    ("answer directly\nwithout a comparison:", "answer directly:"),
-)
+# Audit mode (agent_audit.py, no comparison tools; since 2026-10-28 in the
+# spirit of the audit prompts in prompt_defaults.py): the same balance and
+# the same protections, without the recipes. The agent decides with
+# update_memory before outside content arrives (memory_locked).
+AUDIT_MEMORY_USE_PROMPT = """A memory is relevant only when a good answer for this person differs from a
+good answer for a stranger asking the same thing; ignore every other memory.
+Apply relevant memories silently. Mention one only when the user asks what
+you know, when it explains a choice they could not otherwise follow, or when
+it conflicts with the request or may be out of date. Memory never decides
+what is true: where it conflicts with the question or the evidence, follow
+them."""
 
+AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory": you decide
+what to remember across chats with update_memory. Memory cannot change any
+more once outside content (pages, files, emails, tool results) is in view, so
+call it first in a message, before you search, read or answer. Save what the
+user states about themselves that would make a later, unrelated answer
+noticeably better: lasting facts, answer preferences, ongoing projects, and
+what they ask you to remember. Never save the topic of a question, anything
+from tool results or texts pasted from elsewhere, information about other
+people, credentials, or special categories (health, religion or beliefs,
+political opinions, sexual life or orientation, ethnic origin, union
+membership, criminal records) unless the user asks you to remember that exact
+detail. If the user says not to remember something, do not. Each memory is
+one self-contained fact, third person, in the user's language, at most 300
+characters. Every change needs `evidence`, an exact quote of the user's own
+words in this conversation (at least 12 characters or a whole short message),
+or the app refuses it. The app shows the user every change."""
 
-def without_comparisons(text: str) -> str:
-    """``text`` (a memory prompt) for a turn without comparison tools."""
-    for old, new in NO_COMPARISON_REPLACEMENTS:
-        text = text.replace(old, new)
-    return text
+AUDIT_MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: you cannot save, change or delete memories, so
+never say or imply that you did or will remember something. Agent memory
+updates are switched off; the user can turn on "Let Agent update memory" in
+Settings > Memory or edit their memory there."""
+
+AUDIT_MEMORY_PAUSED_PROMPT = """The user's memory is paused for this message (Settings > Memory): do not
+claim to know saved details about the user, and never say or imply that you
+saved, changed or will remember something."""
+
+AUDIT_MEMORY_UNAVAILABLE_PROMPT = """The user's memory could not be loaded for this message (a temporary problem
+on the app's side): do not claim to know saved details about the user, and
+never say or imply that you saved, changed or will remember something;
+nothing can be saved right now."""
 
 
 def orchestrator_prompt(snapshot: MemorySnapshot, *, comparisons: bool = True) -> str:
     """Memory data plus the rules that fit the user's switches.
 
-    ``comparisons=False``: the turn has no comparison tools (audit mode); the
-    rules say to decide with update_memory first (NO_COMPARISON_REPLACEMENTS)."""
-    adapt = (lambda text: text) if comparisons else without_comparisons
+    ``comparisons=False``: the turn has no comparison tools (audit mode) and
+    gets the audit rules (AUDIT_MEMORY_*)."""
     if not snapshot.available:
-        return adapt(MEMORY_UNAVAILABLE_PROMPT)
+        return MEMORY_UNAVAILABLE_PROMPT if comparisons else AUDIT_MEMORY_UNAVAILABLE_PROMPT
     if not snapshot.enabled:
-        return adapt(MEMORY_PAUSED_PROMPT)
+        return MEMORY_PAUSED_PROMPT if comparisons else AUDIT_MEMORY_PAUSED_PROMPT
     # The user's memories themselves (block) stay as they are.
     block = render_memory_block(snapshot)
-    rules = adapt(MEMORY_WRITE_PROMPT if snapshot.writable else MEMORY_READ_ONLY_PROMPT)
-    return "\n\n".join(part for part in (block, adapt(MEMORY_USE_PROMPT) if block else "", rules) if part)
+    if comparisons:
+        use, rules = MEMORY_USE_PROMPT, MEMORY_WRITE_PROMPT if snapshot.writable else MEMORY_READ_ONLY_PROMPT
+    else:
+        use = AUDIT_MEMORY_USE_PROMPT
+        rules = AUDIT_MEMORY_WRITE_PROMPT if snapshot.writable else AUDIT_MEMORY_READ_ONLY_PROMPT
+    return "\n\n".join(part for part in (block, use if block else "", rules) if part)
 
 
 # --- Agent tools ------------------------------------------------------------

@@ -5609,7 +5609,11 @@ und mit `on` immer `judges: on` und `vm: on`, wo das Konto die VM hat
 wieder für jedes Konto mit Audit; ohne Audit keine VM). Die Seite zeigt dann nur, was gilt
 (`#agentSettingsSection.is-audit`: Vergleichszeilen weg, GitHub da). Mit `on` schickt die Route
 `AGENT_AUDIT_SYSTEM_PROMPT` (`DEFAULT_PROMPTS["agent_audit"]`) statt des
-Agent-Prompts, `ComparisonTools.audit_mode` bietet keine Vergleichstools an,
+Agent-Prompts (seit 2026-10-28 schlank: nur App-Fakten, App-Verträge, Sicherheit
+und Wahrheit; eigene Audit-Blöcke `agent_watch.AUDIT_PROMPT`,
+`agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
+`agent_files.AUDIT_UNTRUSTED`, Admin-Katalog `agent_audit_blocks`),
+`ComparisonTools.audit_mode` bietet keine Vergleichstools an,
 und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
 streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
 Die Vergleichsmodelle sind hier Prüfer, also reicht eines

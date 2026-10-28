@@ -170,7 +170,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "comparison", "agent_audit", "audit_reviewer", "agent_vm", "agent_plan", "agent_github", "answers", "consensus",
+        "agent", "comparison", "agent_audit", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_plan",
+        "agent_github", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
@@ -193,7 +194,12 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # Audit instead of comparison: its own agent prompt and the reviewers'.
     from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT
     assert texts["agent_audit"] == AGENT_AUDIT_SYSTEM_PROMPT and texts["agent_audit"].endswith(AGENT_AUDIT_ANSWER_SECTION)
-    assert "compare_models and check_text do not exist here" in texts["agent_audit"]
+    # Since 2026-10-28 the audit texts and their tool blocks name no comparison.
+    from app.services import agent_memory, agent_watch
+    assert "comparison" not in texts["agent_audit"].lower()
+    blocks = texts["agent_audit_blocks"]
+    assert agent_watch.AUDIT_PROMPT in blocks and agent_memory.AUDIT_MEMORY_WRITE_PROMPT in blocks
+    assert "{limit}" not in blocks and "comparison" not in blocks.lower()
     reviewer = texts["audit_reviewer"]
     assert reviewer.startswith("You are an independent reviewer")
     assert prompt_catalog.DATE_PLACEHOLDER in reviewer and "Current date:" not in reviewer

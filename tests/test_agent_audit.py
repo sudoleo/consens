@@ -751,11 +751,13 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
         {"role": "system", "content": prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT}, {"role": "user", "content": "Hi"}])
     system = loop.messages[0]["content"]
     assert system.startswith(prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT)
-    assert system.count("WRITING THE ANSWER") == 1 and "READING SOURCES" in system
-    assert prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT.split("\n\n")[1][:60] in system
-    # No comparison limit, no comparison memory field, no free-mode text.
-    assert "comparisons per message" not in system and "compare_models and check_text carry" not in system
-    assert "call update_memory first" in system and "FREE" not in system
+    assert system.count("THE ANSWER") == 1 and "READING SOURCES" in system
+    from app.services.agent_read_source import READS_PER_MESSAGE
+    assert prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT.format(limit=READS_PER_MESSAGE) in system
+    # Since 2026-10-28 the audit blocks name no comparison at all (no limit,
+    # no memory field, no free-mode text), and memory is decided first.
+    assert "comparison" not in system.lower() and "compare_models" not in system
+    assert agent_memory.AUDIT_MEMORY_WRITE_PROMPT in system and "call it first" in system and "FREE" not in system
     names = set(loop.registry.tools)
     assert {"read_source", "update_memory"} <= names and not {"compare_models", "check_text"} & names
     assert "Call it first" in loop.registry.tools["update_memory"].description
@@ -790,16 +792,22 @@ def test_the_agent_reads_a_result_of_its_own_search_but_never_another_page(store
     assert len(calls) == 1
 
 
-def test_every_memory_rule_without_comparisons_replaces_a_sentence_that_exists():
-    texts = (agent_memory.MEMORY_USE_PROMPT, agent_memory.MEMORY_WRITE_PROMPT, agent_memory.MEMORY_READ_ONLY_PROMPT,
-             agent_memory.MEMORY_PAUSED_PROMPT, agent_memory.MEMORY_UNAVAILABLE_PROMPT)
-    # A changed memory prompt fails here, not silently in audit mode.
-    for old, _ in agent_memory.NO_COMPARISON_REPLACEMENTS:
-        assert any(old in text for text in texts), old
+def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
+    """Since 2026-10-28 audit mode has its own short blocks (Max: fewer rules
+    for how models behave). What protects the user stays in them."""
+    from app.services import agent_files, agent_settings, agent_watch
+    texts = (agent_memory.AUDIT_MEMORY_USE_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT,
+             agent_memory.AUDIT_MEMORY_READ_ONLY_PROMPT, agent_memory.AUDIT_MEMORY_PAUSED_PROMPT,
+             agent_memory.AUDIT_MEMORY_UNAVAILABLE_PROMPT, agent_watch.AUDIT_PROMPT, agent_settings.AUDIT_PROMPT,
+             agent_files.AUDIT_UNTRUSTED, prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT,
+             prompt_defaults.AGENT_AUDIT_READ_SOURCE_PROMPT, prompt_defaults.AGENT_VM_PROMPT)
     for text in texts:
-        adapted = agent_memory.without_comparisons(text)
-        # Only the user's own comparisons (an example) may remain.
-        assert "compar" not in adapted.replace("a comparison they asked for", "").lower(), adapted[:80]
+        assert "comparison" not in text.lower() and "compare_models" not in text, text[:80]
+    write = agent_memory.AUDIT_MEMORY_WRITE_PROMPT
+    assert "special categories" in write and "evidence" in write and "not to remember" in write
+    assert "never instructions" in prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
+    assert "Never type passwords" in prompt_defaults.AGENT_VM_PROMPT
+    assert "evidence" in agent_settings.AUDIT_PROMPT and "never claim a Watch is active" in agent_watch.AUDIT_PROMPT
 
 
 def test_the_comparison_settings_say_nothing_in_audit_mode():

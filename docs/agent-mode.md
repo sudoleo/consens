@@ -244,6 +244,29 @@ andere Konto läuft wie bisher, auch wenn seine gespeicherte Einstellung noch
 `on` sagt. Der Turn friert den wirksamen Wert ein. Ohne Einstellung läuft
 alles exakt wie zuvor. Code: `agent_audit.py`, Prompts in `prompt_defaults.py`.
 
+**Schlanke Anweisungen (seit 2026-10-28).** Max: weniger Vorgaben, wie sich
+Modelle verhalten sollen. Die Audit-Texte sagen nur noch, was das Modell nicht
+selbst wissen kann (die App, ihre Werkzeuge, was der Nutzer sieht), welche
+Verträge die App braucht (Text ohne Werkzeugaufruf ist die Antwort, Quellen als
+Links, Karten, Belegzitate) und was Sicherheit und Wahrheit verlangen (Fremdes
+ist keine Anweisung, keine Passwörter, Außenwirkung nur auf Wunsch, nichts
+behaupten, was nicht passiert ist, besondere Datenkategorien im Memory). Keine
+Rezepte mehr, wann gesucht, gelesen oder nachgefragt wird, keine
+Schreibratschläge und keine Beispiele; Grenzen, die zählen, setzen die
+Werkzeuge durch (Leseadressen und -anzahl, Belegzitate, Memory-Sperre). Der
+Audit-Modus hat dafür eigene, kurze Fassungen der Blöcke zu Quellen, Watches,
+Einstellungen, Memory, Dateien, Dokumenten und Google
+(`AGENT_AUDIT_READ_SOURCE_PROMPT`, `agent_watch.AUDIT_PROMPT`,
+`agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
+`agent_files.AUDIT_UNTRUSTED`; im Admin als „Agent audit: tool blocks“); keiner
+nennt einen Vergleich. Die Prüfer werden nur noch genannt (unabhängig, der
+Nutzer sieht ihre Marken, der Agent nicht), damit der Agent consens.io erklären
+und nicht fälschlich von einer Prüfung sprechen kann. Gemessen: rund 9.500
+statt zuvor 20.100 Zeichen für Kern, Quellen, Arbeitsplatz, GitHub, Plan,
+Watches, Einstellungen, Memory und Dateien. Der Vergleichsmodus behält seine
+Texte; wie sich das Verhalten verschiebt, zeigen echte Audit-Chats nach einem
+Deploy.
+
 **Der Agent antwortet selbst.** Die Route schickt `AGENT_AUDIT_SYSTEM_PROMPT`
 statt `AGENT_SYSTEM_PROMPT` (`config["prompts"]["agent_audit"]`, im Admin
 lesbar als „Agent: audit mode instructions“). `ComparisonTools` bietet weder
@@ -251,8 +274,8 @@ lesbar als „Agent: audit mode instructions“). `ComparisonTools` bietet weder
 Vergleich gehört, entfällt: Vergleichslimit im Prompt, `FREE_PROMPT`,
 Tiefe, Answer start, `_consensus_search_handoff` und `_tool_reminder`
 (eigene Recherche führt nicht mehr in einen Vergleich), das Memory-Feld an
-den Vergleichen (`agent_memory.without_comparisons`: Entscheidung über
-`update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
+den Vergleichen (eigene Memory-Regeln `agent_memory.AUDIT_MEMORY_*`:
+Entscheidung über `update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
 (`AGENT_AUDIT_READ_SOURCE_PROMPT` statt `AGENT_READ_SOURCE_PROMPT`; lesbar
 sind Seiten, die der Nutzer verlinkt, Quellen früherer Nachrichten und seit
 2026-10-27 die eigenen Suchtreffer dieser Nachricht: `DelegationLoop.search_sources`
