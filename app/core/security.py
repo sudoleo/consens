@@ -154,7 +154,12 @@ class CustomSecurityMiddleware:
                     + script_src
                     +
                     "style-src 'self' 'unsafe-inline'; "
-                    "img-src 'self' data: https://lh3.googleusercontent.com https:; "
+                    # No other site's images (no "https:" since 2026-10-28):
+                    # Watch and Topic pictures and every favicon come through
+                    # this server (/api/watch|topics/.../image, /api/topics/
+                    # favicon); an answer's own images are notes
+                    # (public_markdown, markdown-stream.js).
+                    "img-src 'self' data: https://lh3.googleusercontent.com; "
                     "connect-src 'self' "
                     "https://cloud.umami.is "
                     "https://gateway.umami.is "

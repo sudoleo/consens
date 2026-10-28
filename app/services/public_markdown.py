@@ -210,10 +210,46 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
         _pill_source_links(tokens, sources)
     _normalize_citation_links(tokens, sources)
     _mark_task_items(tokens)
+    _neutralize_remote_images(tokens)
     if site_links is not None:
         _link_site_mentions(tokens, site_links)
     html = _MD.renderer.render(tokens, _MD.options, {})
-    return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL, attributes=_ALLOWED_ATTRIBUTES)
+    return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL, attributes=_ALLOWED_ATTRIBUTES,
+                     attribute_filter=_same_origin_images_only)
+
+
+def _same_origin_image(src) -> bool:
+    """A path on this site, like isInlineImageSource in markdown-stream.js;
+    "//host" and "/\\host" name another host."""
+    value = str(src or "").strip()
+    return value.startswith("/") and not value.startswith(("//", "/\\"))
+
+
+def _neutralize_remote_images(tokens):
+    """An image of the answer that would load from elsewhere is the note the
+    app shows instead (markdown-stream.js neutralizeRemoteMedia). Until
+    2026-10-28 a public page loaded it: a model's or an injected picture told
+    its host who read the page, and when (audit)."""
+    for token in tokens:
+        if token.type != "inline" or not token.children:
+            continue
+        for index, child in enumerate(token.children):
+            if child.type != "image" or _same_origin_image(child.attrGet("src")):
+                continue
+            src = str(child.attrGet("src") or "").strip()
+            alt = " ".join(str(child.content or "").split())
+            local = "" if re.match(r"^(?:https?:)?//", src, re.IGNORECASE) else " is-local-ref"
+            note = Token("html_inline", "", 0)
+            note.content = (f'<span class="blocked-remote-image{local}">'
+                            f'{escape(f"[Image not loaded: {alt}]" if alt else "[External image not loaded]")}</span>')
+            token.children[index] = note
+
+
+def _same_origin_images_only(element, attribute, value):
+    """nh3's last word: an image source off this site never reaches the page."""
+    if element == "img" and attribute == "src" and not _same_origin_image(value):
+        return None
+    return value
 
 
 _INLINE_TAGS = {"strong", "em", "code", "del", "s", "sub", "sup"}

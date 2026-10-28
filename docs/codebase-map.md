@@ -300,7 +300,12 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   Kompatibilitätsvertrag (siehe §8).
 - **Markdown/Mathematik**: `marked` + `DOMPurify` clientseitig und
   `markdown-it-py` + `nh3` für Share-Seiten; KaTeX setzt in beiden Ansichten
-  LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern.
+  LaTeX-Ausdrücke nach dem sanitisierten Markdown-Rendern. Bilder einer
+  Antwort von einer anderen Site werden auf beiden Seiten zum Hinweis
+  „[Image not loaded: …]“ (`neutralizeRemoteMedia`, serverseitig
+  `_neutralize_remote_images` plus nh3-`attribute_filter`, der jede
+  fremde `img src` entfernt; vor 2026-10-28 luden Share-, Topic-, Watch- und
+  Check-Seiten sie).
 - **CI**: `.github/workflows/tests.yml` (Backend/Frontend bei jedem Push,
   `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules;
   fehlgeschlagene Tests als Annotationen über `scripts/ci_annotate_failures.py`,
@@ -10444,7 +10449,12 @@ zählen nicht):
   `connect-src`-Ziele, Frames) müssen explizit in die Policy. Sonst blockt der
   Browser still. jsDelivr steht seit 2026-10-15 nicht mehr darin (Marked,
   DOMPurify und KaTeX kommen überall aus `static/vendor`); dazu
-  `object-src 'none'` und `base-uri 'self'`. `/app`, `/app/watches`, `/admin`, `/admin/*` und `/topics/*` erzwingen bei `script-src`
+  `object-src 'none'` und `base-uri 'self'`. `img-src` ist `'self' data:` plus
+  `lh3.googleusercontent.com`, ohne Wildcard `https:` (seit 2026-10-28,
+  Sicherheitsaudit): Watch- und Topic-Bilder (`/api/watch|topics/…/image/…`)
+  und alle Favicons (`/api/topics/favicon`) laufen über den Server, Bilder in
+  Antworten sind Hinweise (`public_markdown._neutralize_remote_images`, im
+  Browser `neutralizeRemoteMedia`). `/app`, `/app/watches`, `/admin`, `/admin/*` und `/topics/*` erzwingen bei `script-src`
   die strict-variante ohne `'unsafe-inline'`; neue Inline-Skripte/-Handler würden
   dort deshalb nicht ausgeführt. `style-src` bleibt vorerst kompatibel.
   Die Middleware arbeitet auf der Header-Liste (`_ResponseHeaders`, seit
