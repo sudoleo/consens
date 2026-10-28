@@ -382,8 +382,8 @@ class SourceReader:
         audit = getattr(comparison, "audit_mode", False)
         # Audit mode since 2026-10-28: what it opens, not when to.
         description = (
-            "Read one public web page as text, PDFs too: a reader service fetches it in seconds, without sign-ins "
-            "or clicks. A page that is not a result of this message's web search, a source of an earlier message "
+            "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins or "
+            "clicks. A page that is not a result of this message's web search, a source of an earlier message "
             "of this chat or a page the user linked waits for the reviewers first. At most "
             f"{READS_PER_MESSAGE} per message."
             if audit else

@@ -123,7 +123,7 @@ AGENT_AUDIT_SYSTEM_PROMPT = _AGENT_AUDIT_STEERING + "\n\n" + AGENT_AUDIT_ANSWER_
 # see only that it searched (agent_audit.REVIEW_PROMPT_BODY).
 AGENT_AUDIT_READ_SOURCE_PROMPT = """READING SOURCES
 
-read_source reads one public page as text, at most {limit} per message: a reader service fetches it within seconds, without sign-ins, scripts or clicks. A page that is not a result of this message's web search, a page the user linked or a source of an earlier answer in this chat waits for the reviewers first. With some providers the hits of your web search reach you but not the app: the reviewers then see that you searched, not what you found."""
+read_source reads one public page as text, at most {limit} per message: a reader service fetches it, without sign-ins, scripts or clicks; a read takes about 10 to 30 seconds. A page that is not a result of this message's web search, a page the user linked or a source of an earlier answer in this chat waits for the reviewers first. With some providers the hits of your web search reach you but not the app: the reviewers then see that you searched, not what you found."""
 
 # show_image (agent_web_images.py, audit mode since 2026-10-29).
 AGENT_AUDIT_IMAGE_PROMPT = """PICTURES
