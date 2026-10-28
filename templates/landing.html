@@ -4,26 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "partials/font_preload.html" %}
-  <meta name="description" content="consens.io is an AI agent that checks its answer against six leading models, marks where they disagree, and watches for changes.">
+  <meta name="description" content="consens.io is an AI agent that checks its answer against other leading models, marks where they disagree, and watches for changes.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="The AI Agent That Checks Six Models | consens.io">
-  <meta property="og:description" content="Ask once. consens.io checks the answer against six leading AI models and marks where they disagree.">
+  <meta property="og:title" content="The AI Agent That Cross-Checks With Other Models | consens.io">
+  <meta property="og:description" content="Ask once. consens.io checks the answer against several leading AI models and marks where they disagree.">
   <meta property="og:url" content="https://www.consens.io/">
   <meta property="og:image" content="https://www.consens.io{{ asset_url('/static/og-home-v2.png') }}">
   <meta property="og:image:secure_url" content="https://www.consens.io{{ asset_url('/static/og-home-v2.png') }}">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Six models answer. See where they disagree. | consens.io">
+  <meta property="og:image:alt" content="Several models answer. See where they disagree. | consens.io">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="The AI Agent That Checks Six Models | consens.io">
-  <meta name="twitter:description" content="Ask once. consens.io checks the answer against six leading AI models and marks where they disagree.">
+  <meta name="twitter:title" content="The AI Agent That Cross-Checks With Other Models | consens.io">
+  <meta name="twitter:description" content="Ask once. consens.io checks the answer against several leading AI models and marks where they disagree.">
   <meta name="twitter:image" content="https://www.consens.io{{ asset_url('/static/og-home-v2.png') }}">
-  <meta name="twitter:image:alt" content="Six models answer. See where they disagree. | consens.io">
-  <title>The AI Agent That Checks Six Models | consens.io</title>
+  <meta name="twitter:image:alt" content="Several models answer. See where they disagree. | consens.io">
+  <title>The AI Agent That Cross-Checks With Other Models | consens.io</title>
   <link rel="stylesheet" href="{{ asset_url('/static/css/landing.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/benchmark.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
@@ -45,7 +45,7 @@
         "url": "https://www.consens.io/",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web browser",
-        "description": "consens.io is an AI agent that checks its answer against six leading models, marks where they disagree, and watches for changes.",
+        "description": "consens.io is an AI agent that checks its answer against other leading models, marks where they disagree, and watches for changes.",
         "creator": { "@id": "{{ organization_id }}" },
         "isPartOf": { "@id": "{{ website_id }}" },
         "offers": {
@@ -82,12 +82,14 @@
         <!-- The page's h1 is its loudest line (Feinschliff 2026-10-02): a
              statement, then the field. The field stays the thing you reach
              for through its surface and its light, not through a quiet h1. -->
-        <!-- Since 2026-10-02 the mechanism in its true order: six models
+        <!-- Since 2026-10-02 the mechanism in its true order: the models
              answer independently, and the one answer written from them shows
              where they disagree. ("One agent does the work. Six models check
-             it." had it the wrong way round: the six answer, a separate
-             judge pass does the checking.) Two lines at every width. -->
-        <h1 class="lp-hero-claim"><span>Six models answer.</span> <span>See where they disagree.</span></h1>
+             it." had it the wrong way round: the models answer, a separate
+             judge pass does the checking.) "Several", not a number, since
+             2026-10-28: Daily and Open Models ask three, High Quality six.
+             Two lines at every width. -->
+        <h1 class="lp-hero-claim"><span>Several models answer.</span> <span>See where they disagree.</span></h1>
 
         <div class="lp-hero-composer lp-composer-preview">
         <div id="heroField" class="lp-prompt lp-hero-prompt">
@@ -108,7 +110,7 @@
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
-            <span class="lp-run-chip">6 AIs cross-check<i aria-hidden="true"></i></span>
+            <span class="lp-run-chip">3 AIs cross-check<i aria-hidden="true"></i></span>
             <a id="heroDemoButton" class="lp-demo-btn demo-action send-glow" href="/app?demo=1"
                data-umami-event="landing_hero_demo_start"
                aria-label="Try the demo: watch one question checked across six AI models">
@@ -137,7 +139,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">Agent is where every question starts: it researches, asks six models and writes one answer.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to files and reasoning.</span></p>
+              <p class="lp-lead">Agent is where every question starts: it researches, asks several models and writes one answer.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to files and reasoning.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- The field and nothing else: no window, no title bar, no
@@ -166,7 +168,7 @@
                       </span>
                     </div>
                   </div>
-                  {% include "partials/composer_toolbar_mockup.html" %}
+                  {% with mockup_full_run = true %}{% include "partials/composer_toolbar_mockup.html" %}{% endwith %}
                   </div>
                   <p class="lp-composer-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
               </div>
@@ -185,7 +187,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">02 · Run</p>
               <h2 class="lp-h2">The agent shows its work.</h2>
-              <p class="lp-lead">It asks six models in parallel, writes one answer from what they said, and has that answer checked against all six.<span class="lp-wide-only"> Where they contradict each other on a fact, a separate judge reads the sources they cited. Scroll to move the run.</span></p>
+              <p class="lp-lead">It asks several models in parallel, writes one answer from what they said, and has that answer checked against all of them.<span class="lp-wide-only"> Where they contradict each other on a fact, a separate judge reads the sources they cited. Scroll to move the run.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- An Agent turn in /app, the way agent-activity.js and
@@ -295,7 +297,7 @@
             <div class="lp-step-copy">
               <p class="lp-step-num">01</p>
               <h3>How far apart they were</h3>
-              <p>Every checked answer carries one number: how much the six answers actually agreed.<span class="lp-wide-only"> A separate judge pass checks every sentence against all six, and the number is counted from those verdicts, not given as a grade.</span></p>
+              <p>Every checked answer carries one number: how much the answers actually agreed.<span class="lp-wide-only"> A separate judge pass checks every sentence against all of them, and the number is counted from those verdicts, not given as a grade.</span></p>
             </div>
             <div class="lp-step-visual">
               <div class="lp-excerpt">
@@ -629,7 +631,7 @@
           <article class="lp-card">
             <p class="lp-eyebrow">Control</p>
             <h3>You choose the checks</h3>
-            <p>Pick the agent's model, the six it checks with, and whether it reasons first. Model agreement is a comparison, not a fact-check of the whole answer.</p>
+            <p>Pick the agent's model, the models it checks with, and whether it reasons first. Model agreement is a comparison, not a fact-check of the whole answer.</p>
           </article>
         </div>
       </div>
@@ -676,7 +678,7 @@
               <span class="lp-attach" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </span>
-              <span class="lp-run-chip">6 AIs cross-check<i aria-hidden="true"></i></span>
+              <span class="lp-run-chip">3 AIs cross-check<i aria-hidden="true"></i></span>
               <span class="lp-demo-btn demo-action send-glow">
                 <span>Ask the agent</span>
                 <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>

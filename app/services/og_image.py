@@ -60,9 +60,9 @@ FACTS_SEPARATOR = "  ·  "
 
 # Die Markenkarte der Landing: Vorschaubild jeder Seite ohne eigene Karte.
 # Ihre Zeile ist der Hero-Satz der Landing (templates/landing.html, h1), die
-# sechs Marken sind die Familien eines vollen Laufs.
+# sechs Marken sind die Familien eines vollen Laufs (High Quality).
 BRAND_CARD = "/static/og-home-v2.png"
-BRAND_HEADLINE = ("Six models answer.", "See where they disagree.")
+BRAND_HEADLINE = ("Several models answer.", "See where they disagree.")
 BRAND_LOGOS = ("chatgpt.png", "claude.png", "gemini-icon.png", "grok.png", "deepseek.png", "mistral.png")
 
 _cache = TTLCache(maxsize=256, ttl=1800)

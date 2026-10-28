@@ -105,7 +105,9 @@
 .composer-reviewers[hidden] { display: none; }
 /* What the marks are, in words ("1 AI cross-checks"); on a narrow field only
    the marks, the tooltip and the label of the button say it. */
-.composer-reviewers-label { margin-left: 6px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
+/* In the ink of the chip beside it and of the start screen's bar, so the
+   two read as one kind of control. */
+.composer-reviewers-label { margin-left: 6px; color: var(--ink); font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
 .composer-reviewers-label:empty { display: none; }
 @media (max-width: 560px) { .composer-reviewers-label { display: none; } }
 .composer-reviewers[aria-expanded="true"] { background: var(--hover); }
@@ -251,6 +253,20 @@
     padding-bottom: 6px;
   }
   body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) .composer-models { margin-left: 0; }
+  /* One line means one line for the hint too, as on a collapsed phone:
+     beside the reviewers and a model name the long hint ends in an
+     ellipsis instead of making the empty field two lines tall. nowrap on
+     the empty field lets the autosizer's twin measure that one line;
+     Chromium draws the ellipsis only with text-overflow on the field too. */
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) > .input-field:placeholder-shown {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) > .input-field::placeholder {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   body:not(.is-hero, .direct-comparison-preview) .chat-input-container {
     align-items: center;
     padding: 6px;

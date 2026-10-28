@@ -126,8 +126,8 @@ def test_the_stored_brand_card_is_the_whatsapp_safe_one():
 
 def test_the_landing_preview_text_matches_its_card():
     head = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8").split("</head>", 1)[0]
-    alt = "Six models answer. See where they disagree. | consens.io"
+    alt = "Several models answer. See where they disagree. | consens.io"
     assert meta(head, "og:image:alt") == meta(head, "twitter:image:alt") == alt
-    assert meta(head, "og:title") == "The AI Agent That Checks Six Models | consens.io"
+    assert meta(head, "og:title") == "The AI Agent That Cross-Checks With Other Models | consens.io"
     partial = pages_router.templates.env.get_template("partials/og_card.html")
     assert meta(partial.render(og_card_image=""), "og:image:alt") == alt

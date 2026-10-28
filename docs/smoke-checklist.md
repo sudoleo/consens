@@ -1447,8 +1447,9 @@ Server.
 - [ ] Sidebar-Fuß in EINER Zeile: Imprint · Privacy · Terms links, Feedback-
       und GitHub-Zeichen rechts; das Kontingent-Glyph ist ein Kuchen im Ring
       (kein offener Bogen, der wie ein Ladekreisel aussieht).
-- [ ] Landing: H1 „Six models answer. See where they disagree.“ auf Desktop
-      zweizeilig; Composer-Mockups ohne Moduschip und ohne graue (+)-Fläche;
+- [ ] Landing: H1 „Several models answer. See where they disagree.“ auf
+      Desktop zweizeilig (deutsch „Mehrere KIs antworten.“, dreizeilig);
+      Composer-Mockups ohne Moduschip und ohne graue (+)-Fläche;
       der Modell-Chip nennt das echte Default-Modell des Agents.
 - [ ] Demo und Landing erzählen die Wärmepumpen-Frage (1978, alte Heizkörper),
       43/100, „55 °C“ bricht nie zwischen Zahl und Einheit um.

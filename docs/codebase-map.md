@@ -522,14 +522,20 @@ Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
 und die App-CTA; Model guide und About liegen im Footer. Seit 2026-10-02
 erzählt die Landingpage Agent als Standard: Hero seit der Todo-Runde 3
-(2026-10-02) „Six models answer. See where they disagree.“ (die alte Zeile
-„One agent does the work. Six models check it.“ hatte den Mechanismus
-verdreht: die sechs antworten, ein unbeteiligter Judge prüft). Composer-Mockups
-wie in /app: (+) ohne Fläche, KEIN Moduschip mehr (der Modus steckt im (+)),
-rechts der Modell-Chip „6 AIs cross-check ⌄“ wie in /app (seit 2026-10-23
-nennt er, was die Vergleichsmodelle tun, keinen Modellnamen); Lippe
-`partials/composer_toolbar_mockup.html` mit Reasoning Auto · Attach ·
-Modell-Icons, ohne eigenes Fenster um Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
+(2026-10-02) „Six models answer. See where they disagree.“, seit 2026-10-28
+„Several models answer.“ / „Mehrere KIs antworten.“ (Daily und Open Models
+fragen drei, High Quality sechs; Meta-Titel, Beschreibungen und die
+Markenkarte `og-home-v2.png` aus `og_image.BRAND_HEADLINE` ebenso ohne feste
+Zahl). Die alte Zeile „One agent does the work. Six models check it.“ hatte
+den Mechanismus verdreht: die Modelle antworten, ein unbeteiligter Judge
+prüft. Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip mehr
+(der Modus steckt im (+)), rechts der Modell-Chip „3 AIs cross-check ⌄“ wie in
+/app (seit 2026-10-23 nennt er, was die Vergleichsmodelle tun, keinen
+Modellnamen); Lippe `partials/composer_toolbar_mockup.html` mit Reasoning
+Auto · Attach · den drei Marken von Daily. Das Wärmepumpen-Beispiel (Szene 01
+bis zu den Marken 6/6, 4/6) ist ein Lauf mit sechs Modellen und behält sechs
+Marken und „6 AIs cross-check“ (`mockup_full_run`), ohne eigenes Fenster um
+Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
 2026-10-02 einen Agent-Turn so nach, wie `agent-activity.js`/`agent-review.js`
 ihn zeichnen: Uhr „Working for …s“ → „Thought for 24s“, Agent-Notizen,
 „Comparing perspectives…“ mit sechs nacheinander fertig werdenden Modell-Icons,
