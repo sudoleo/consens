@@ -235,6 +235,10 @@ def unknown_estimate(reserved, usage):
 
 # A pipeline run holds its expected cost against concurrent admissions for at
 # most this long; measured bookings shrink the hold, expiry drops the rest.
+# The admission lapses with it: a run's first operation after the window is
+# admitted against the account again (usage_repository), so a run cannot bank
+# its admission for the hours of its execution window. At most
+# MAX_PIPELINE_HOLDS runs per account are therefore admitted and unchecked.
 PIPELINE_HOLD_SECONDS = 10 * 60
 MAX_PIPELINE_HOLDS = 32
 
@@ -268,8 +272,11 @@ def _remaining(data, limit, now=None):
     return max(0, limit - spent_tokens(data) - data.get("reserved", 0) - held_tokens(data, now))
 
 
-def admit_run(data, run_id, estimate, *, limit, now=None):
-    """Admit one pipeline run if the remaining budget covers its expected cost."""
+def admit_run(data, run_id, estimate, *, limit, now=None, readmission=False):
+    """Admit one pipeline run if the remaining budget covers its expected cost.
+
+    ``readmission`` admits an existing run whose admission lapsed; it is
+    counted apart from new runs."""
     data = normalize(data)
     now = _now(now)
     holds = active_holds(data, now)
@@ -282,7 +289,8 @@ def admit_run(data, run_id, estimate, *, limit, now=None):
         raise PipelineCapacityExceeded("Too many runs are starting at once")
     holds[run_id] = {"tokens": int(estimate), "expires_at": now + PIPELINE_HOLD_SECONDS}
     data["pipeline_holds"] = holds
-    data["pipeline_runs"] = data.get("pipeline_runs", 0) + 1
+    counter = "pipeline_readmissions" if readmission else "pipeline_runs"
+    data[counter] = data.get(counter, 0) + 1
     data["revision"] = data.get("revision", 0) + 1
     return data
 

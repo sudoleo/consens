@@ -11,7 +11,7 @@ from google.api_core.exceptions import Aborted
 import app.core.config as cfg
 from app.api.routers import chat as chat_router
 from app.api.routers import users as users_router
-from app.core.rate_limit import limiter
+from app.core.rate_limit import api_uid_limiter, limiter
 from app.services import agent_budget_config, agent_quota
 from app.services.usage_repository import RunKind
 from usage_test_support import make_usage_repository
@@ -29,6 +29,7 @@ ANSWER_USAGE = {"prompt_tokens": 1_000, "completion_tokens": 500}
 @pytest.fixture
 def run_api(monkeypatch):
     limiter.reset()
+    api_uid_limiter.reset()
     repository, db = make_usage_repository()
     monkeypatch.setattr(chat_router, "run_usage_repository", repository)
     monkeypatch.setattr(users_router, "run_usage_repository", repository)
@@ -351,3 +352,23 @@ def test_admitted_run_finishes_and_may_overdraw_the_account(run_api):
     assert response.json()["token_budget"]["used"] == FREE_LIMIT + 1_500
     assert response.json()["token_budget"]["remaining"] == 0
     assert _prepare(client, "next").status_code == 403
+
+
+def test_prepare_is_throttled_per_account_across_addresses(run_api):
+    # Audit 2026-10-28: /prepare admits a run and had no limit at all.
+    client, _repository, _db = run_api
+    for index in range(chat_router.PREPARES_PER_MINUTE):
+        response = client.post("/prepare", headers={**AUTH, "CF-Connecting-IP": f"203.0.113.{index}"},
+                               json={"question": "What changed?", "usage_run_key": f"run-{index}", "run_mode": "compare"})
+        assert response.status_code in (200, 403)
+    refused = client.post("/prepare", headers={**AUTH, "CF-Connecting-IP": "198.51.100.7"},
+                          json={"question": "What changed?", "usage_run_key": "one-more"})
+    assert refused.status_code == 429
+    assert refused.headers["Retry-After"].isdigit()
+
+
+def test_prepare_is_throttled_per_address():
+    # The address limit counts before the account is known.
+    limits = [str(item.limit) for item in limiter._route_limits.get(
+        f"{chat_router.prepare.__module__}.{chat_router.prepare.__name__}", [])]
+    assert limits == ["10 per 1 minute"]

@@ -6126,7 +6126,9 @@ Consensus-Lauf danach (`/consensus`) kommt aus dem Browser nicht mehr.
    in jedem Modell-Call (`engines.py`), daher kein Intent-Router mehr.
    Bei `usage_storage_busy` wiederholt der Client `/prepare` kurz mit demselben
    Key. Bleibt Firestore beschäftigt, bleibt die Frage erhalten und der Lauf
-   endet vor dem Fan-out mit einer Retry-Karte.
+   endet vor dem Fan-out mit einer Retry-Karte. `/prepare` ist gedrosselt
+   (`PREPARE_RATE` 10/min je Adresse, `PREPARES_PER_MINUTE` 10 je Konto;
+   429 `rate_limited`).
 2. Fan-out an die ausgewählten **`/ask_<provider>`**-Endpoints (parallel), je mit
    `stream:true`. Backend prüft Auth, Pro-Status (nur für Premium-Modelle),
    Wortlimit (`validate_question_word_limit`) und Modell (`validate_model`),
@@ -7348,6 +7350,15 @@ Agent.
     Resolve gegen die Compare-Schätzung). Der Lauf legt diese Schätzung als
     Hold (`pipeline_holds`, zehn Minuten) ins Konto, damit parallele Tabs das
     Puffer nicht doppelt nutzen; es gibt **keine** Reservierung pro Call.
+    Die Admission gilt so lange wie der Hold (`admitted_at` am Run-Beleg):
+    die erste neue Operation danach lässt `authorize_operation` erneut gegen
+    das Konto zu (neuer Hold in der heutigen Periode, `quota_day` zieht mit,
+    Zähler `pipeline_readmissions`), der nackte `claim_operation` lehnt dann
+    ab. Vorher (bis 2026-10-28) blieb ein vorbereiteter Lauf ohne Prüfung
+    bis `execution_expiry` (Stunden) autorisiert, und ein Konto konnte mit
+    `/prepare` Hunderte Läufe auf Vorrat sammeln. Damit sind höchstens
+    `MAX_PIPELINE_HOLDS` (32) Läufe pro Konto zugelassen und ungeprüft;
+    `/prepare` ist zusätzlich gedrosselt (10/min je Adresse und je Konto).
     Absage: 403 `token_budget_exhausted` mit `token_budget` und
     `required_tokens`; zu viele junge Läufe: 429 `usage_run_capacity`.
   - *Messen* (`app/services/llm/usage_meter.py`, Transportschicht): jeder
@@ -8628,9 +8639,11 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
     Operations-Claim statt. Beim Account-Löschen werden beide Subcollections entfernt.
     `/ask_*` bündeln Run-Bindung, gegebenenfalls
     Admission/Consume und Operations-Claim in `authorize_operation`: zwei
-    Dokument-Reads (Account-Tombstone, Run) für vorbereitete Läufe; nur ein
-    Legacy-Direktaufruf ohne `/prepare` liest zusätzlich das Kontodokument und
-    wird dort admittiert. `/prepare` und die externe Consensus-API behalten
+    Dokument-Reads (Account-Tombstone, Run) für junge vorbereitete Läufe; ein
+    Legacy-Direktaufruf ohne `/prepare` und ein Lauf, dessen Admission mit
+    seinem Hold abgelaufen ist (`admitted_at` + zehn Minuten, ältere Belege ab
+    `created_at`), lesen zusätzlich das Kontodokument und werden dort
+    (erneut) admittiert. `/prepare` und die externe Consensus-API behalten
     ihren Reserve-/Consume-Vertrag.
   - `chat_state/agent_tokens_{YYYY-MM-DD}[_{reset_epoch}]` — das gemeinsame
     Tokenkonto (Agent + Pipeline): `used` (gemessen, beide Modi), `reserved`
@@ -8638,7 +8651,8 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
     reconciled), `pipeline_used` (Anteil der Pipeline an `used`),
     `pipeline_estimated` (Schätzungen für Pipeline-Calls ohne finale Usage),
     `pipeline_holds` (`{run_hash: {tokens, expires_at}}`, max. 32 aktive,
-    zehn Minuten), `pipeline_runs`, `unknown`/`unknown_released`, `revision`.
+    zehn Minuten), `pipeline_runs`, `pipeline_readmissions`,
+    `unknown`/`unknown_released`, `revision`.
   - `api_consensus_idempotency/{sha256(idempotency_key)}` — Mapping von UID +
     gehashtem HTTP-Idempotency-Key auf `run_id` und kanonischen `request_hash`;
     verhindert auch bei parallelen POSTs doppelte Runs. Kein Klartext-Key.

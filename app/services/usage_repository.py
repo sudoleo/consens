@@ -9,7 +9,10 @@ werden aber keine Runs mehr, sondern Tokens auf demselben Tageskonto wie Agent
   erwarteten Kosten eines typischen Laufs dieses Modus deckt (Compare,
   Consensus, Reasoning). Der Lauf haelt diese Schaetzung kurz gegen parallele
   Admissions (``pipeline_holds`` im Kontodokument), reserviert aber nichts pro
-  Call.
+  Call. Die Admission gilt so lange wie der Hold: die erste Operation danach
+  wird erneut gegen das Konto zugelassen (``admitted_at``), sonst sammelte
+  ein Konto vorab zugelassene Laeufe fuer das stundenlange
+  Ausfuehrungsfenster.
 * **Buchung:** jede abgeschlossene Operation (``ask:<familie>``, ``consensus``,
   ``resolve``, API ``pipeline``) bucht ihre gemessenen Tokens genau einmal
   (``booked_operations``). Fehlt die Messung, bucht sie dieselbe begrenzte
@@ -245,14 +248,14 @@ class FirestoreUsageRepository:
         """The account as Agent reports it (with Agent's allowance repairs)."""
         return agent_quota.snapshot(self._db, _validate_uid(uid), tier=tier)
 
-    def _admit(self, tx, uid, key_hash, kind, admission, now):
+    def _admit(self, tx, uid, key_hash, kind, admission, now, *, readmission=False):
         """Read the account and admit one new run (no writes yet)."""
         ledger_ref = agent_quota.quota_ref(self._db, uid, admission.period)
         ledger = ledger_ref.get(transaction=tx).to_dict() or {}
         epoch = now.timestamp()
         try:
             admitted = agent_quota.admit_run(ledger, key_hash, admission.estimate,
-                                             limit=admission.limit, now=epoch)
+                                             limit=admission.limit, now=epoch, readmission=readmission)
         except agent_quota.AgentTokenBudgetExceeded:
             raise UsageLimitExceeded(
                 uid=uid, kind=kind, utc_date=now.date().isoformat(), required=admission.estimate,
@@ -275,6 +278,7 @@ class FirestoreUsageRepository:
             "token_limit_at_admission": admission.limit,
             "request_fingerprint": request_fingerprint,
             "expires_at": execution_expiry(now),
+            "admitted_at": now,
             "operation_claims": {},
             "booked_operations": {},
             "created_at": now,
@@ -288,10 +292,14 @@ class FirestoreUsageRepository:
         admission: TokenAdmission, operation: str, operation_fingerprint: str,
         *, request_fingerprint: str, now: datetime | None = None,
     ) -> tuple[UsageRunResult, UsageOperationClaim]:
-        """Admit (if new)/consume/claim atomically, reading each document once.
+        """Admit (if new or lapsed)/consume/claim atomically, reading each
+        document once.
 
-        Prepared runs only need the deletion fence and the run (two reads); the
-        account is read only to admit a legacy run that skipped /prepare.
+        Young prepared runs only need the deletion fence and the run (two
+        reads). The account is read to admit a legacy run that skipped
+        /prepare, and to admit again a run whose admission lapsed with its
+        hold (``_admission_lapsed``): an execution window of hours must not
+        let a run admitted once start its operations without the account.
         No cached state may authorize external work.
         """
         uid = _validate_uid(uid)
@@ -352,6 +360,9 @@ class FirestoreUsageRepository:
                 claimed_at = _stored_datetime(existing.get("claimed_at"), "claim time")
             else:
                 claimed_at = now
+            readmitted = run_snap.exists and existing is None and _admission_lapsed(run_data, now)
+            if readmitted:
+                ledger_ref, admitted = self._admit(tx, uid, key_hash, kind, admission, now, readmission=True)
 
             # All reads and validations precede every write, as Firestore requires.
             if admitted is not None:
@@ -366,6 +377,10 @@ class FirestoreUsageRepository:
                     "status": RunStatus.CONSUMED.value,
                     "operation_claims": updated_claims, "updated_at": now,
                 }
+                if readmitted:
+                    # The new hold lives in today's period; the run books there.
+                    updates.update({"admitted_at": now, "quota_day": admission.period,
+                                    "token_tier": admission.tier})
                 if status is not RunStatus.CONSUMED:
                     updates["consumed_at"] = now
                 if run_snap.exists:
@@ -590,6 +605,9 @@ class FirestoreUsageRepository:
             if not isinstance(claims, dict):
                 raise UsageDataError("Invalid operation claims in Firestore")
             existing = claims.get(operation)
+            if existing is None and _admission_lapsed(run_data, now):
+                # Admitting again needs the account; authorize_operation does.
+                raise UsageRunExpired("Usage run admission has lapsed")
             if existing is not None:
                 if not isinstance(existing, dict):
                     raise UsageDataError("Invalid operation claim in Firestore")
@@ -850,3 +868,13 @@ def _stored_datetime(value, label: str) -> datetime:
 
 def _stored_expires_at(data: dict) -> datetime:
     return _stored_datetime(data.get("expires_at"), "expiry")
+
+
+def _admission_lapsed(data: dict, now: datetime) -> bool:
+    """Whether a run's admission ran out with its hold
+    (``agent_quota.PIPELINE_HOLD_SECONDS``). Runs stored before
+    ``admitted_at`` count from their creation; without either, it lapsed."""
+    admitted = data.get("admitted_at", data.get("created_at"))
+    if not isinstance(admitted, datetime) or admitted.tzinfo is None:
+        return True
+    return now >= admitted + timedelta(seconds=agent_quota.PIPELINE_HOLD_SECONDS)

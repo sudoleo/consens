@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Request, Body, HTTPException
 from google.api_core.exceptions import Aborted as FirestoreAborted
 
-from app.core.rate_limit import limiter
+from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter, rate_limit_message
 from app.core.observability import record_metric, safe_exception
 from app.core.entitlements import TIER_FREE, entitlements_for
 from app.core.security import (
@@ -694,7 +694,16 @@ def _planned_answers(value) -> Optional[int]:
     return value if 1 <= value <= cfg.MAX_RUN_FAMILIES else None
 
 
+# A Compare run starts with one /prepare (retried at most twice when the
+# account storage is busy); its answers are throttled per family
+# (_make_ask_endpoint). Every /prepare admits a run, so it is throttled per
+# address and per account.
+PREPARE_RATE = "10/minute"
+PREPARES_PER_MINUTE = 10
+
+
 @router.post("/prepare")
+@limiter.limit(PREPARE_RATE)
 def prepare(request: Request, data: dict = Body(...)):
     question = validate_text_size(
         data.get("question"),
@@ -726,6 +735,11 @@ def prepare(request: Request, data: dict = Body(...)):
     except Exception as exc:
         logging.error("Auth failed in /prepare category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed.")
+    try:
+        api_uid_limiter.check(uid, "prepare", PREPARES_PER_MINUTE)
+    except ApiUidRateLimitExceeded as exc:
+        raise HTTPException(status_code=429, detail=rate_limit_message(exc.retry_after),
+                            headers=exc.headers) from None
 
     validate_question_word_limit(question, tier)
     raw_system_prompt = validate_client_system_prompt(data.get("system_prompt"))

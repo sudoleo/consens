@@ -266,6 +266,54 @@ def test_expired_holds_stop_blocking_admissions(usage_repo):
     assert repo.reserve("expiry", "run-3", RunKind.REGULAR, ADMISSION, now=later).status is RunStatus.RESERVED
 
 
+def test_a_run_cannot_bank_its_admission_beyond_its_hold(usage_repo):
+    # Audit 2026-10-28: holds lapsed after ten minutes, but a prepared run
+    # stayed authorized for its whole execution window (hours). An account
+    # prepared run after run while its holds expired, then started all of
+    # them on an empty account.
+    repo, db = usage_repo
+    run_fp = canonical_request_fingerprint({"question": "banked"})
+    op_fp = canonical_request_fingerprint({"provider": "openai"})
+    for key in ("banked", "funded"):
+        repo.reserve("banker", key, RunKind.REGULAR, ADMISSION, request_fingerprint=run_fp, now=UTC_NOON)
+        repo.consume("banker", key)
+    later = UTC_NOON + timedelta(seconds=agent_quota.PIPELINE_HOLD_SECONDS + 1)
+    assert agent_quota.held_tokens(ledger(db, "banker"), later.timestamp()) == 0
+    repo.reserve("banker", "young", RunKind.REGULAR, ADMISSION, request_fingerprint=run_fp, now=later)
+    repo.consume("banker", "young")
+    key = ("users", "banker", "chat_state", "agent_tokens_" + PERIOD)
+    db.documents[key] = {**db.documents[key], "used": ADMISSION.limit - ADMISSION.estimate}
+
+    # The young run's hold covers it; a lapsed one needs the account again.
+    result, _ = repo.authorize_operation("banker", "young", RunKind.REGULAR, ADMISSION, "ask:openai", op_fp,
+                                         request_fingerprint=run_fp, now=later)
+    assert result.token_budget is None
+    with pytest.raises(UsageLimitExceeded):
+        repo.authorize_operation("banker", "banked", RunKind.REGULAR, ADMISSION, "ask:openai", op_fp,
+                                 request_fingerprint=run_fp, now=later)
+
+    # With room on the account the lapsed run is admitted again: a new hold,
+    # booked into today's period, counted apart from new runs.
+    db.documents[key] = {**db.documents[key], "used": 0}
+    result, claim = repo.authorize_operation("banker", "funded", RunKind.REGULAR, ADMISSION, "ask:openai", op_fp,
+                                             request_fingerprint=run_fp, now=later)
+    assert claim.idempotent is False and result.token_budget is not None
+    stored = ledger(db, "banker")
+    assert agent_quota.held_tokens(stored, later.timestamp()) == 2 * ADMISSION.estimate
+    assert stored["pipeline_readmissions"] == 1 and stored["pipeline_runs"] == 3
+    run = db.documents[("users", "banker", "usage_runs", result.idempotency_hash)]
+    assert run["admitted_at"] == later and run["quota_day"] == PERIOD
+    # Within the new window its other answers need no further admission.
+    db.reads.clear()
+    repo.authorize_operation("banker", "funded", RunKind.REGULAR, ADMISSION, "ask:mistral",
+                             canonical_request_fingerprint({"provider": "mistral"}),
+                             request_fingerprint=run_fp, now=later)
+    assert key not in db.reads
+    # The bare claim path has no account to ask, so it refuses a lapsed run.
+    with pytest.raises(UsageRunExpired):
+        repo.claim_operation("banker", "banked", "ask:openai", op_fp, now=later)
+
+
 def test_booking_requires_a_consumed_run(usage_repo):
     repo, _ = usage_repo
     with pytest.raises(UsageRunNotFound):
