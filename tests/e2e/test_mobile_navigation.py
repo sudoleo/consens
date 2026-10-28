@@ -261,6 +261,9 @@ def test_watches_take_the_place_of_an_open_chat(browser, phase4_server, width):
         page.evaluate('window.scrollTo(0, 600)')
         if width < 1100:
             # Reading down hides the menu island; a little way back shows it.
+            # Wait for the hide first: two scrolls in one frame arrive as a
+            # single event 520 px down, which hides it (CI watcher 2026-10-28).
+            expect(page.locator('.app-mobile-header')).to_be_hidden()
             page.evaluate('window.scrollBy(0, -80)')
             expect(page.locator('.app-mobile-header')).to_be_visible()
             page.locator('#toggleSidebarButton').click()
