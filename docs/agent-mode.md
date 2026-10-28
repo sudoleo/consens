@@ -3398,8 +3398,8 @@ Google-Daten).
   `Referer`. Seiten, die automatische Abrufe sperren (Liquipedia antwortet
   403), geben ein ruhiges Ergebnis `failed` mit Grund, nie einen Toolfehler.
 - Nur Bytes, die ein Bild sind (JPEG, PNG, WebP, GIF; Pillow, `encode`), neu
-  als WebP kodiert (keine Metadaten, höchstens 1600 px Kante, bis 1,5 MB),
-  mindestens 48 px. Gespeichert in der privaten Dateiablage des Chats
+  als WebP kodiert (keine Metadaten, höchstens 1600 px Kante, bis 1,5 MB).
+  Gespeichert in der privaten Dateiablage des Chats
   (`AgentFiles`, `kind: "web_image"`, `turn_id`, `origin {source: web, url,
   page, host, caption}`, Name `picture-<hash>.webp`), 30 Tage wie jede Datei.
 - Anzeige wie ein geteiltes VM-Bild unter dem Antworttext
@@ -3425,11 +3425,13 @@ Google-Daten).
   können, und dass die Frage, ob Seite oder Bild die Aussage stützt, in die
   Marken zur Antwort gehört. Halten darf der Prüfer weiter aus jedem der vier
   Gründe.
-- Unter 160 px Kante (wie die Watch-Bilder) ist es kein Bild, sondern ein Icon
-  oder Avatar: Ergebnis `failed` mit der Größe (am selben Abend kam ein
-  70×70-Avatar unter die Antwort). Ergebnis und Bild stehen im
-  Arbeitsprotokoll mit Herkunft `web` (vorher das Bild als `vm`, ebenso ein
-  Screenshot des Browsers).
+- Keine Mindestgröße: Am selben Abend kam ein 70×70-Avatar unter die Antwort.
+  Eine Grenze von 160 px nahm Max zurück („pauschale Regel, kann zu Problemen
+  führen“: ein kleines Logo, ein Diagramm, das einzige Foto). Das Ergebnis
+  nennt `width`/`height`, ein Bildmodell sieht das Bild; ob es passt,
+  entscheidet der Agent. Nur die Dekodiergrenze (Pixelzahl) bleibt. Ergebnis
+  und Bild stehen im Arbeitsprotokoll mit Herkunft `web` (vorher das Bild als
+  `vm`, ebenso ein Screenshot des Browsers).
 - Prompt: `AGENT_AUDIT_IMAGE_PROMPT` („PICTURES“), nur Fakten: was es tut, dass
   der Server lädt und Markdown-Bilder nicht erscheinen.
 

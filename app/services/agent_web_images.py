@@ -49,9 +49,9 @@ PAGE_BYTES = 2_000_000
 IMAGE_BYTES = 8_000_000
 FETCH_SECONDS = 12.0
 CALL_SECONDS = 30.0
-# An avatar or an icon is no picture to show (2026-10-28: a 70x70 avatar of
-# a player came under the answer); the same floor as the watch pictures.
-MIN_SIDE = 160
+# No smallest size: whether a small picture (a logo, a chart, the only photo
+# there is) fits is the agent's call, which learns its size from the result
+# (Max, 2026-10-28, against a 160 px floor: a blanket rule causes problems).
 MAX_SIDE = 1600
 MAX_PIXELS = 40_000_000
 STORED_BYTES = 1_500_000
@@ -92,25 +92,16 @@ def page_picture(html, base_url):
     return ""
 
 
-def size_of(raw):
-    """(width, height) of a picture of the four formats, or None."""
-    try:
-        with Image.open(io.BytesIO(raw), formats=FORMATS) as source:
-            return source.size
-    except Exception:
-        return None
-
-
 def encode(raw):
     """(bytes, mime, width, height) of the picture anew as WebP, or None
-    when the bytes are no picture of the four formats or too small."""
+    when the bytes are no picture of the four formats or too large to decode."""
     try:
         with Image.open(io.BytesIO(raw), formats=FORMATS) as source:
             width, height = source.size
             # JPEG decodes already shrunk (draft); the others whole, so fewer
             # pixels: a huge PNG must not swell the one server process.
             limit = MAX_PIXELS if source.format == "JPEG" else watch_images.MAX_PIXELS_DECODED
-            if min(width, height) < MIN_SIDE or width * height > limit:
+            if width * height > limit:
                 return None
             if source.format == "JPEG":
                 source.draft("RGB", (MAX_SIDE, MAX_SIDE))
@@ -228,11 +219,6 @@ class WebImageTools:
             # A result, not a tool error: a site that blocks must not cost the answer.
             return {"status": "failed", "url": url, "reason": f"No picture: {_reason(exc)}.",
                     "note": "Do not claim the user sees it."}
-        size = size_of(raw)
-        if size and min(size) < MIN_SIDE:
-            return {"status": "failed", "url": url, "reason": (
-                f"No picture: it is only {size[0]}×{size[1]} pixels, an icon or avatar (at least {MIN_SIDE} on each "
-                "side)."), "note": "Do not claim the user sees it."}
         encoded = encode(raw)
         if encoded is None:
             return {"status": "failed", "url": url, "reason": "No picture: what came back is no usable picture.",
