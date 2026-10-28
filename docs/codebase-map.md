@@ -2343,8 +2343,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   übernahm die weiße Seite die helle Schrift des Dunkelmodus), PDFs und
   größere Texte im Frame mit `color-scheme: light`. Bilder bis 15 MB werden vor der Base64-Kodierung auf
   höchstens 1568 px Kantenlänge als JPEG verkleinert; kleine Screenshots
-  bleiben unverändert. Der Server wiederholt die Aufbereitung innerhalb
-  seines 5-MB-Eingangslimits, prüft vor dem Dekodieren zusätzlich ein festes
+  bleiben unverändert. `shrinkImage` dekodiert seit 2026-10-28 mit
+  `createImageBitmap` (vorher `<img>` über eine `blob:`-URL, die `img-src`
+  blockt: jede Verkleinerung scheiterte still, Fotos über 5 MB lehnte danach
+  der Server ab); ohne `createImageBitmap` geht das Original. Der Server
+  wiederholt die Aufbereitung innerhalb seines 5-MB-Eingangslimits, prüft vor dem Dekodieren zusätzlich ein festes
   Pixelbudget und korrigiert bei einer JPEG-Konvertierung MIME und Dateiendung.
   Solange ein echter
   Anhang für die nächste Frage bereitliegt, wird DeepSeek temporär mit einem

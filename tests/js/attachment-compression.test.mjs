@@ -7,6 +7,11 @@
  *
  * Getestet wird der echte Weg (Dateifeld -> addFiles -> pendingAttachments)
  * gegen gestellte Browser-Bausteine: jsdom hat weder Bilddekoder noch Canvas.
+ *
+ * Dekodiert wird mit createImageBitmap. Bis 2026-10-28 lud ein <img> die Datei
+ * ueber eine blob:-URL, die die CSP (img-src) blockt: jede Verkleinerung
+ * scheiterte still. jsdom kennt keine CSP, deshalb darf der Test hier gar
+ * keine Objekt-URL sehen.
  */
 
 import { describe, expect, it } from "vitest";
@@ -28,9 +33,11 @@ const BODY = `
 // Bild ist immer ein Bruchteil des Originals.
 const ENCODED_BYTES = 140 * 1024;
 
-function boot({ withCanvas = true } = {}) {
+function boot({ withCanvas = true, withBitmap = true, decodes = true } = {}) {
   const alerts = [];
   const drawn = [];
+  const objectUrls = [];
+  const closed = [];
 
   const harness = loadScripts(
     ["static/js/app-state.js", "static/js/app-core.js", "static/js/attachments.js"],
@@ -46,18 +53,27 @@ function boot({ withCanvas = true } = {}) {
         // in a browser window: alert() would fail this test.
         window.alert = () => { throw new Error("alert() is not used for attachments"); };
         window.App = { composerNotice: { show: (message) => alerts.push(String(message)), clear() {} } };
-        window.URL.createObjectURL = () => "blob:image";
+        window.URL.createObjectURL = (blob) => {
+          objectUrls.push(blob);
+          return "blob:image";
+        };
         window.URL.revokeObjectURL = () => {};
 
-        // Ein Bild, dessen Masse der Test vorgibt. jsdom laedt nichts, also
-        // meldet der Stub den Ladeerfolg selbst.
-        window.Image = class {
-          set src(value) {
-            this.naturalWidth = window.__imageSize[0];
-            this.naturalHeight = window.__imageSize[1];
-            setTimeout(() => this.onload && this.onload(), 0);
-          }
-        };
+        // Ein Bild, dessen Masse der Test vorgibt. jsdom dekodiert nichts,
+        // also liefert der Stub die Bitmap selbst.
+        if (withBitmap) {
+          window.createImageBitmap = (source) => {
+            if (!decodes) return Promise.reject(new window.DOMException("The source image could not be decoded.", "InvalidStateError"));
+            return Promise.resolve({
+              width: window.__imageSize[0],
+              height: window.__imageSize[1],
+              source,
+              close() { closed.push(source.name); }
+            });
+          };
+        } else {
+          delete window.createImageBitmap;
+        }
         window.__imageSize = [0, 0];
 
         const createElement = window.document.createElement.bind(window.document);
@@ -67,7 +83,7 @@ function boot({ withCanvas = true } = {}) {
           canvas.getContext = () => ({
             fillStyle: "",
             fillRect() {},
-            drawImage() { drawn.push([canvas.width, canvas.height]); }
+            drawImage(image) { drawn.push([canvas.width, canvas.height, image.source && image.source.name]); }
           });
           if (withCanvas) {
             canvas.toBlob = (callback, type) => {
@@ -84,6 +100,8 @@ function boot({ withCanvas = true } = {}) {
   harness.window.auth = { currentUser: { uid: "u1" } };
   harness.alerts = alerts;
   harness.drawn = drawn;
+  harness.objectUrls = objectUrls;
+  harness.closed = closed;
   return harness;
 }
 
@@ -120,8 +138,47 @@ describe("client-side image compression", () => {
     // Der Name darf keinen Typ mehr behaupten, den die Datei nicht mehr hat.
     expect(attachments[0].name).toBe("photo.jpg");
     expect(attachments[0].size).toBe(ENCODED_BYTES);
-    // Laengste Kante auf 1568, Seitenverhaeltnis erhalten.
-    expect(harness.drawn).toEqual([[1568, 1045]]);
+    // Laengste Kante auf 1568, Seitenverhaeltnis erhalten; gemalt wird die
+    // Bitmap der gewaehlten Datei.
+    expect(harness.drawn).toEqual([[1568, 1045, "photo.png"]]);
+  });
+
+  it("decodes without a blob: URL, which the app's CSP blocks for images", async () => {
+    const harness = boot();
+    await pick(harness, fakeFile(harness.window, "photo.jpg", "image/jpeg", 4 * 1024 * 1024), [4000, 3000]);
+
+    expect(harness.drawn).toHaveLength(1);
+    expect(harness.objectUrls).toEqual([]);
+    // Die dekodierte Bitmap wird freigegeben, sobald sie gemalt ist.
+    expect(harness.closed).toEqual(["photo.jpg"]);
+  });
+
+  it("attaches the original when the browser cannot decode the image", async () => {
+    const harness = boot({ decodes: false });
+    const attachments = await pick(
+      harness,
+      fakeFile(harness.window, "photo.webp", "image/webp", 4 * 1024 * 1024),
+      [3000, 2000]
+    );
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].mime).toBe("image/webp");
+    expect(attachments[0].name).toBe("photo.webp");
+    expect(harness.alerts).toEqual([]);
+  });
+
+  it("attaches the original in a browser without createImageBitmap", async () => {
+    const harness = boot({ withBitmap: false });
+    const attachments = await pick(
+      harness,
+      fakeFile(harness.window, "photo.png", "image/png", 4 * 1024 * 1024),
+      [3000, 2000]
+    );
+
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].mime).toBe("image/png");
+    expect(harness.drawn).toEqual([]);
+    expect(harness.alerts).toEqual([]);
   });
 
   it("leaves a small screenshot untouched", async () => {
@@ -136,6 +193,7 @@ describe("client-side image compression", () => {
     expect(attachments[0].mime).toBe("image/png");
     expect(attachments[0].name).toBe("screenshot.png");
     expect(harness.drawn).toEqual([]);
+    expect(harness.closed).toEqual(["screenshot.png"]);
   });
 
   it("still attaches the file when the browser has no canvas", async () => {

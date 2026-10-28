@@ -940,28 +940,32 @@
     // bei 1568 px laengster Kante sieht keine davon weniger als vorher, der
     // Upload ist aber ein Bruchteil. Kleine Bilder bleiben unangetastet (ein
     // Screenshot behaelt seine PNG-Schaerfe).
+    // Dekodiert wird mit createImageBitmap, nicht mit <img>: das braeuchte
+    // eine blob:-URL, und die laesst die CSP (img-src) nicht zu. Bis
+    // 2026-10-28 scheiterte daran jede Verkleinerung still, und ein Foto
+    // ueber 5 MB lehnte danach der Server ab.
     // Loest immer auf: `null` heisst "unveraendert weiterverwenden".
     function shrinkImage(file, mime) {
-      return new Promise(function (resolve) {
-        if (mime.indexOf("image/") !== 0 || typeof document.createElement("canvas").toBlob !== "function") {
-          resolve(null);
-          return;
-        }
-        const url = URL.createObjectURL(file);
-        const image = new Image();
-        image.onload = function () {
-          URL.revokeObjectURL(url);
-          const longest = Math.max(image.naturalWidth, image.naturalHeight);
+      if (mime.indexOf("image/") !== 0
+        || typeof window.createImageBitmap !== "function"
+        || typeof document.createElement("canvas").toBlob !== "function") {
+        return Promise.resolve(null);
+      }
+      return window.createImageBitmap(file).then(function (bitmap) {
+        return new Promise(function (resolve) {
+          const longest = Math.max(bitmap.width, bitmap.height);
           if (!longest || (longest <= IMAGE_MAX_EDGE && file.size <= IMAGE_TARGET_BYTES)) {
+            bitmap.close();
             resolve(null);
             return;
           }
           const ratio = Math.min(1, IMAGE_MAX_EDGE / longest);
           const canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
-          canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+          canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
+          canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
           const ctx = canvas.getContext("2d");
           if (!ctx) {
+            bitmap.close();
             resolve(null);
             return;
           }
@@ -969,16 +973,15 @@
           // Schwarz, sonst wird aus einem PNG-Logo eine dunkle Flaeche.
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          // Ein dekodiertes 24-MP-Foto belegt ~100 MB: gleich freigeben.
+          bitmap.close();
           canvas.toBlob(function (blob) {
             resolve(blob && blob.size < file.size ? { blob: blob, mime: "image/jpeg" } : null);
           }, "image/jpeg", IMAGE_JPEG_QUALITY);
-        };
-        image.onerror = function () {
-          URL.revokeObjectURL(url);
-          resolve(null);
-        };
-        image.src = url;
+        });
+      }).catch(function () {
+        return null;
       });
     }
 

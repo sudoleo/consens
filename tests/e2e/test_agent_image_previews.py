@@ -5,6 +5,7 @@ All APIs mocked, no external writes. Pasted screenshots all arrive as
 """
 import base64
 import json
+import random
 import struct
 import zlib
 
@@ -16,13 +17,36 @@ CHAT = 'a' * 32
 IDS = ['c' * 32, 'd' * 32]
 
 
-def _png(rgb, size=4):
-    """A tiny valid PNG of one colour (stays below the shrink threshold)."""
-    raw = b''.join(b'\x00' + bytes(rgb) * size for _ in range(size))
+def _encode_png(width, height, row):
+    raw = b''.join(b'\x00' + row(y) for y in range(height))
     def chunk(kind, data):
         return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
-    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
             + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+
+
+def _png(rgb, size=4):
+    """A tiny valid PNG of one colour (stays below the shrink threshold)."""
+    return _encode_png(size, size, lambda y: bytes(rgb) * size)
+
+
+def _photo_png(width, height):
+    """Noise does not compress: a PNG as big as a photo of that size."""
+    noise = random.Random(7)
+    return _encode_png(width, height, lambda y: noise.randbytes(width * 3))
+
+
+def test_a_large_photo_is_shrunk_in_the_browser_under_the_apps_csp(app_page, get_console_errors):
+    """2026-10-28: the shrink decoded the file in an <img> from a blob: URL,
+    which the CSP (img-src) blocks. Every photo went out unshrunk, and one
+    over 5 MB the server refused. jsdom has no CSP; only a real browser shows it."""
+    photo = _photo_png(1800, 600)
+    app_page.locator('#attachFileInput').set_input_files({'name': 'photo.png', 'mimeType': 'image/png', 'buffer': photo})
+    expect(app_page.locator('#attachmentBar .attachment-chip')).to_have_count(1)
+    attached = app_page.evaluate("() => window.pendingAttachments.map(a => ({ name: a.name, mime: a.mime, size: a.size }))")
+    assert [(a['name'], a['mime']) for a in attached] == [('photo.jpg', 'image/jpeg')]
+    assert attached[0]['size'] < len(photo) // 2
+    assert not [e for e in get_console_errors() if 'content security policy' in e.lower()]
 
 
 IMAGES = [_png((200, 30, 30)), _png((30, 160, 40), 5)]
