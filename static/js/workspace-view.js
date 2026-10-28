@@ -21,6 +21,14 @@
 // moves with the arrow keys) and remembers its width per browser; the chat
 // never gets narrower than MIN_CHAT. Narrower screens show it full width.
 //
+// Two tabs (since 2026-10-28): Browser, the live view above, and Terminal, the
+// user's own shell on the workbench (routers/agent_workspace.py, xterm.js from
+// static/vendor/xterm, loaded on the tab's first use) with the agent's rights:
+// no administrator rights, only package sources online. Its keys go to the
+// shell as they are, its size follows the panel ({"type": "resize"}). While a
+// tab loads it shows a skeleton of what comes (no spinner), and after
+// SLOW_MS a calm word that the first start takes a minute.
+//
 // window.App.workspaceView: open(), close(), isOpen(), init() (the start
 // screen's Workspace button, the (+) menu's row, the row in Settings → Agent);
 // agent-activity.js opens it from a browser step ("Watch live").
@@ -28,9 +36,16 @@
   'use strict';
   const App = window.App = window.App || {};
   const NOVNC = '/static/vendor/novnc/1.7.0/core/rfb.js';
+  const XTERM = '/static/vendor/xterm/6.0.0/xterm.js';
+  const XTERM_FIT = '/static/vendor/xterm/6.0.0/addon-fit.js';
+  const XTERM_CSS = '/static/vendor/xterm/6.0.0/xterm.css';
   const REFRESH_MS = 30_000;
+  // A start that takes longer than this (the workspace's first start, outside
+  // a chat) says so calmly.
+  const SLOW_MS = 6_000;
   const STATES = {
     connecting: 'Connecting to the workspace…',
+    slow: 'Starting your workspace. The first start can take a minute.',
     setup: 'Setting up the browser (once, about a minute)…',
     starting: 'Starting the browser…',
     error: 'The workspace is not reachable right now. Try again in a moment.',
@@ -43,6 +58,19 @@
   // Why the server closed the view, by close code: noVNC owns the socket's
   // messages once it is ready, so these come as codes, not states.
   const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many' };
+  const TERMINAL = {
+    connecting: 'Opening a terminal on the workbench…',
+    ready: 'Your terminal on the workbench, with the agent’s rights.',
+    ended: 'The terminal ended. Start a new one to go on.',
+    lost: 'The connection to the terminal ended. Start a new one to go on.',
+    error: 'The terminal is not reachable right now. Try again in a moment.',
+    replaced: 'The terminal opened in another window, so this one closed.',
+    unavailable: 'The terminal could not load. Reload the page and try again.',
+  };
+  const HINTS = {
+    browser: 'Log in to sites here yourself, typing or pasting your password: the agent pauses meanwhile, then works there as you, and never types a password.',
+    terminal: 'The computer the agent works on, with the same files and rights: no administrator rights, and only package sources online.',
+  };
   // Docked beside the chat from the width where the app's sidebar pushes the column (layout.css).
   const DOCK_QUERY = '(min-width: 1100px)';
   const WIDE_QUERY = '(min-width: 1200px)';
@@ -62,6 +90,8 @@
   const MODIFIERS = [0xffe1, 0xffe2, 0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffe9, 0xffea, 0xffeb, 0xffec];
   let view = null;
   let loadRFB = () => import(NOVNC).then(module => module.default);
+  let loadTerminal = () => Promise.all([import(XTERM), import(XTERM_FIT)])
+    .then(([xterm, fit]) => ({ Terminal: xterm.Terminal, FitAddon: fit.FitAddon }));
 
   const matches = query => Boolean(window.matchMedia?.(query)?.matches);
   // The window without its scrollbar: where a fixed panel's right edge is.
@@ -160,12 +190,42 @@
     return data;
   }
 
+  // What comes, drawn calmly while it loads: a browser window (its address
+  // bar and a page) or a terminal's lines. Decoration only (aria-hidden).
+  function skeleton(kind) {
+    const box = node('div', `workspace-view-skeleton is-${kind}`);
+    box.setAttribute('aria-hidden', 'true');
+    if (kind === 'browser') box.append(node('span', 'workspace-view-skeleton-bar'));
+    const lines = node('div', 'workspace-view-skeleton-lines');
+    const widths = kind === 'browser' ? [46, 92, 84, 88, 62, 0, 78, 70] : [38, 64, 52, 24];
+    for (const width of widths) {
+      const line = node('span', width ? 'workspace-view-skeleton-line' : 'workspace-view-skeleton-gap');
+      if (width) line.style.width = `${width}%`;
+      lines.append(line);
+    }
+    box.append(lines);
+    return box;
+  }
+
   function build() {
     const panel = node('aside', 'workspace-view');
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'Workspace');
     const head = node('header', 'workspace-view-head');
     const title = node('strong', 'workspace-view-title', 'Workspace');
+    const tabs = node('div', 'workspace-view-tabs');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Workspace');
+    const tabButtons = {};
+    for (const [key, label] of [['browser', 'Browser'], ['terminal', 'Terminal']]) {
+      const tab = button('workspace-view-tab', label, () => showTab(key));
+      tab.setAttribute('role', 'tab');
+      tab.id = `workspaceTab-${key}`;
+      tab.setAttribute('aria-controls', `workspacePane-${key}`);
+      tab.addEventListener('keydown', onTabKey);
+      tabButtons[key] = tab;
+      tabs.append(tab);
+    }
     const status = node('span', 'workspace-view-status', STATES.connecting);
     status.setAttribute('role', 'status');
     const toggle = button('workspace-view-toggle', 'Take over', () => (view?.holder === 'user' ? handBack() : takeOver()));
@@ -177,10 +237,12 @@
     const paster = button('workspace-view-paste', 'Paste', pasteClipboard);
     paster.title = 'Type your clipboard into the page';
     paster.hidden = true;
-    head.append(title, status, paster, toggle, closer);
-    const hint = node('p', 'workspace-view-hint',
-      'Log in to sites here yourself, typing or pasting your password: the agent pauses meanwhile, then works there as you, and never types a password.');
-    const screen = node('div', 'workspace-view-screen');
+    head.append(title, tabs, status, paster, toggle, closer);
+    const hint = node('p', 'workspace-view-hint', HINTS.browser);
+    const screen = node('div', 'workspace-view-screen is-loading');
+    screen.id = 'workspacePane-browser';
+    screen.setAttribute('role', 'tabpanel');
+    screen.setAttribute('aria-labelledby', 'workspaceTab-browser');
     const cover = button('workspace-view-cover', '', takeOver);
     cover.setAttribute('aria-label', 'Take over the browser');
     cover.title = 'Click to take over';
@@ -189,8 +251,20 @@
     const pasteTarget = node('textarea', 'workspace-view-paste-target');
     pasteTarget.tabIndex = -1;
     pasteTarget.setAttribute('aria-hidden', 'true');
-    screen.append(cover, pasteTarget);
+    screen.append(skeleton('browser'), cover, pasteTarget);
     screen.addEventListener('keydown', onPasteKey, true);
+    // The terminal's pane: its output is the shell's, never translated.
+    const terminal = node('div', 'workspace-view-screen workspace-view-terminal is-loading');
+    terminal.id = 'workspacePane-terminal';
+    terminal.setAttribute('role', 'tabpanel');
+    terminal.setAttribute('aria-labelledby', 'workspaceTab-terminal');
+    terminal.hidden = true;
+    const terminalHost = node('div', 'workspace-view-terminal-host');
+    terminalHost.dataset.i18nSkip = '';
+    terminalHost.setAttribute('translate', 'no');
+    const restart = button('workspace-view-restart', 'Start a new terminal', () => startTerminal());
+    restart.hidden = true;
+    terminal.append(skeleton('terminal'), terminalHost, restart);
     panel.addEventListener('paste', onPaste);
     // The edge to the chat: drag it, or move it with the arrow keys; a double click goes back to half and half.
     const resizer = node('div', 'workspace-view-resizer');
@@ -205,9 +279,56 @@
       try { localStorage.removeItem(STORAGE_KEY); } catch (error) { /* per browser only */ }
       resizeTo(preferredWidth(), { save: false });
     });
-    panel.append(resizer, head, hint, screen);
-    return { panel, status, toggle, paster, cover, pasteTarget, screen, resizer, socket: null, rfb: null,
-      holder: 'agent', refresh: null, width: 0 };
+    panel.append(resizer, head, hint, screen, terminal);
+    return { panel, status, hint, tabButtons, toggle, paster, cover, pasteTarget, screen, terminal, terminalHost,
+      restart, resizer, socket: null, rfb: null, holder: 'agent', refresh: null, width: 0, tab: 'browser',
+      said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, slow: null,
+      term: null, fit: null, termSocket: null, termReady: false, termResize: null };
+  }
+
+  // ---- Tabs ---------------------------------------------------------------
+  function showTab(key) {
+    if (!view || !view.tabButtons[key]) return;
+    view.tab = key;
+    for (const [name, tab] of Object.entries(view.tabButtons)) {
+      const active = name === key;
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      tab.classList.toggle('is-active', active);
+    }
+    view.screen.hidden = key !== 'browser';
+    view.terminal.hidden = key !== 'terminal';
+    view.hint.textContent = HINTS[key];
+    view.panel.dataset.tab = key;
+    say(view.said[key], key);
+    showHolder();
+    if (key === 'terminal') {
+      if (!view.term && !view.termSocket) startTerminal();
+      else (window.requestAnimationFrame || setTimeout)(() => { fitTerminal(); view?.term?.focus(); });
+    }
+  }
+  function onTabKey(event) {
+    if (!view || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const keys = Object.keys(view.tabButtons);
+    const at = keys.indexOf(view.tab);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? keys.length - 1
+      : (at + (event.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length;
+    showTab(keys[next]);
+    view.tabButtons[keys[next]].focus();
+  }
+  // A tab's skeleton shows until what it draws is there.
+  function loading(key, on) {
+    if (!view) return;
+    (key === 'terminal' ? view.terminal : view.screen).classList.toggle('is-loading', on);
+  }
+  // A start that takes long says so once, while it still connects.
+  function watchSlow() {
+    if (!view) return;
+    clearTimeout(view.slow);
+    view.slow = setTimeout(() => {
+      if (view && view.said.browser === STATES.connecting) say(STATES.slow);
+    }, SLOW_MS);
   }
 
   // ---- Pasting as key presses ---------------------------------------------
@@ -267,8 +388,11 @@
     typeIn(text);
   }
 
-  function say(text) {
+  // Each tab has its own line; the head shows the open tab's.
+  function say(text, key = 'browser') {
     if (!view) return;
+    view.said[key] = text;
+    if (view.tab !== key) return;
     view.status.textContent = text;
     // A narrow panel cuts the line: the whole of it on hover.
     view.status.title = text;
@@ -277,10 +401,11 @@
   function showHolder() {
     if (!view) return;
     const user = view.holder === 'user';
-    view.toggle.hidden = !view.rfb;
+    const browser = view.tab === 'browser';
+    view.toggle.hidden = !view.rfb || !browser;
     view.toggle.textContent = user ? 'Hand back' : 'Take over';
     view.toggle.classList.toggle('is-user', user);
-    view.paster.hidden = !view.rfb || !user || !navigator.clipboard?.readText;
+    view.paster.hidden = !view.rfb || !user || !browser || !navigator.clipboard?.readText;
     view.cover.hidden = !view.rfb || user;
     view.panel.classList.toggle('is-user', user);
     if (view.rfb) {
@@ -338,8 +463,12 @@
       try { state = JSON.parse(event.data).state; } catch (error) { return; }
       if (state !== 'ready') {
         if (STATES[state]) say(STATES[state]);
+        if (state === 'connecting') watchSlow();
+        if (state === 'error') loading('browser', false);
         return;
       }
+      clearTimeout(view.slow);
+      loading('browser', false);
       // Synchronously, inside this event: noVNC takes over the socket's
       // handlers, so the VNC bytes that follow "ready" all reach it.
       const rfb = new RFB(view.screen, socket, { shared: true });
@@ -359,6 +488,8 @@
     };
     socket.onclose = (event) => {
       if (!view || view.socket !== socket || view.rfb) return;
+      clearTimeout(view.slow);
+      loading('browser', false);
       say(event.code === 4403 ? 'The workspace is not available on your account.'
         : 'The connection to the workspace ended. Close and open it again.');
     };
@@ -369,6 +500,121 @@
     });
   }
 
+  // ---- Terminal --------------------------------------------------------------
+  function terminalStyles() {
+    if (document.querySelector('link[data-xterm-css]')) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = XTERM_CSS;
+    link.dataset.xtermCss = '';
+    document.head.append(link);
+  }
+  // The app's own tones and type, read from the page (light or dark).
+  function terminalTheme() {
+    const style = getComputedStyle(view.panel);
+    const tone = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+    return {
+      fontFamily: tone('--font-mono', 'ui-monospace, Menlo, Consolas, monospace'), // i18n-ignore
+      theme: { background: tone('--raise', '#151515'), foreground: tone('--ink', '#f2f2f2'),
+        cursor: tone('--ink', '#f2f2f2'), selectionBackground: tone('--line', '#444444') },
+    };
+  }
+  // The panel's size in characters; a change goes to the shell.
+  function fitTerminal() {
+    if (!view?.term || !view.fit || view.terminal.hidden) return;
+    const { cols, rows } = view.term;
+    try { view.fit.fit(); } catch (error) { return; }
+    const socket = view.termSocket;
+    if (view.termReady && socket?.readyState === 1 && (view.term.cols !== cols || view.term.rows !== rows)) {
+      socket.send(JSON.stringify({ type: 'resize', cols: view.term.cols, rows: view.term.rows }));
+    }
+  }
+  function endTerminal(text) {
+    if (!view) return;
+    view.termReady = false;
+    view.termSocket = null;
+    loading('terminal', false);
+    view.restart.hidden = false;
+    say(text, 'terminal');
+  }
+  async function startTerminal() {
+    if (!view) return;
+    try { view.termSocket?.close(); } catch (error) { /* already gone */ }
+    view.restart.hidden = true;
+    loading('terminal', true);
+    say(TERMINAL.connecting, 'terminal');
+    let lib;
+    try {
+      lib = await loadTerminal();
+    } catch (error) {
+      endTerminal(TERMINAL.unavailable);
+      return;
+    }
+    if (!view) return;
+    if (!view.term) {
+      terminalStyles();
+      const { fontFamily, theme } = terminalTheme();
+      const term = new lib.Terminal({ cursorBlink: true, fontFamily, fontSize: 13, lineHeight: 1.2, theme,
+        scrollback: 5000, allowProposedApi: false });
+      const fit = new lib.FitAddon();
+      term.loadAddon(fit);
+      term.open(view.terminalHost);
+      view.term = term;
+      view.fit = fit;
+      const encoder = new TextEncoder();
+      term.onData(data => {
+        const socket = view?.termSocket;
+        if (view?.termReady && socket?.readyState === 1) socket.send(encoder.encode(data));
+      });
+      view.termResize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => fitTerminal()) : null;
+      view.termResize?.observe(view.terminalHost);
+    } else {
+      view.term.reset();
+    }
+    try { view.fit.fit(); } catch (error) { /* drawn once it is shown */ }
+    connectTerminal(view.term);
+  }
+  function connectTerminal(term) {
+    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(`${scheme}//${location.host}/agent/workspace/terminal`);
+    view.termSocket = socket;
+    view.termReady = false;
+    socket.binaryType = 'arraybuffer';
+    socket.onopen = async () => {
+      try {
+        socket.send(JSON.stringify({ id_token: await idToken(), cols: term.cols, rows: term.rows }));
+      } catch (error) {
+        endTerminal(error.message || 'Log in first.');
+        socket.close();
+      }
+    };
+    socket.onmessage = (event) => {
+      if (!view || view.termSocket !== socket) return;
+      if (typeof event.data !== 'string') {
+        term.write(new Uint8Array(event.data));
+        return;
+      }
+      let state = '';
+      try { state = JSON.parse(event.data).state; } catch (error) { return; }
+      if (state === 'ready') {
+        view.termReady = true;
+        loading('terminal', false);
+        say(TERMINAL.ready, 'terminal');
+        fitTerminal();
+        if (view.tab === 'terminal') term.focus();
+      } else if (state === 'error') {
+        endTerminal(TERMINAL.error);
+      }
+    };
+    socket.onclose = (event) => {
+      if (!view || view.termSocket !== socket) return;
+      const reason = CLOSED[event.code];
+      endTerminal(event.code === 4403 ? 'The workspace is not available on your account.'
+        : reason === 'replaced' ? TERMINAL.replaced : reason ? STATES[reason]
+          : event.code === 1000 ? TERMINAL.ended : view.termReady ? TERMINAL.lost : TERMINAL.error);
+    };
+  }
+
   async function open() {
     if (view) {
       view.panel.hidden = false;
@@ -377,6 +623,8 @@
     view = build();
     document.body.append(view.panel);
     document.body.classList.add('workspace-view-open');
+    showTab('browser');
+    watchSlow();
     layout();
     window.addEventListener('resize', onWindowResize);
     // The Agent activity panel opening or closing beside it moves its right edge.
@@ -391,6 +639,8 @@
     try {
       RFB = await loadRFB();
     } catch (error) {
+      clearTimeout(view?.slow);
+      loading('browser', false);
       say('The view could not load. Reload the page and try again.');
       return;
     }
@@ -402,10 +652,15 @@
     const closing = view;
     view = null;
     clearInterval(closing.refresh);
+    clearTimeout(closing.slow);
     // The agent may go on at once; an unsent hand-back expires by itself.
     if (closing.holder === 'user') post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
     try { closing.rfb?.disconnect(); } catch (error) { /* already gone */ }
     try { closing.socket?.close(); } catch (error) { /* already gone */ }
+    // The shell ends shortly after its socket (TERMINAL_AFTER_DISCONNECT).
+    try { closing.termSocket?.close(); } catch (error) { /* already gone */ }
+    closing.termResize?.disconnect();
+    try { closing.term?.dispose(); } catch (error) { /* already gone */ }
     closing.panel.remove();
     window.removeEventListener('resize', onWindowResize);
     closing.observer?.disconnect();
@@ -453,8 +708,10 @@
     open, close, init,
     isOpen: () => Boolean(view),
     width: () => view?.width || 0,
-    // Tests replace the noVNC import.
+    showTab,
+    // Tests replace the noVNC and xterm.js imports.
     _setLoader(loader) { loadRFB = loader; },
+    _setTerminalLoader(loader) { loadTerminal = loader; },
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

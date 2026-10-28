@@ -190,6 +190,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Chat löschen: nur sein Ordner unter `/home/agent/chats` ist weg.
       Einstellungen → Workspace → „Überall abmelden“: danach ist die Website
       wieder ausgeloggt. Nach einer Stunde schließt die Ansicht von selbst.
+      Seit 2026-10-28: Beim ersten Öffnen außerhalb eines Chats zeigt der
+      Reiter „Browser“ ein pulsierendes Skeleton und nach einigen Sekunden
+      „Dein Arbeitsplatz startet …“. Reiter „Terminal“: Skeleton, dann eine
+      Shell als `agent` (`whoami`, `sudo -n true` scheitert, `ls ~/chats`
+      zeigt die Chat-Ordner, `curl https://example.com` scheitert); das Fenster
+      schmaler ziehen → `tput cols` folgt; `exit` → „Das Terminal wurde
+      beendet“ und „Neues Terminal starten“. Während das Terminal läuft, den
+      Browser übernehmen: das Terminal tippt weiter.
       Automatisiert: `test_agent_workspace.py`, `test_agent_workspace_view.py`,
       `workspace-view.test.mjs`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›

@@ -269,22 +269,36 @@ def record_for_view(store, uid, *, provider):
 VIEW_CHECK_SECONDS = 30
 
 
-def claim_view(store, uid, seconds):
+def claim_view(store, uid, seconds, kind="view"):
     """This view is the account's one from now on (record_for_view made the
-    record): its id, which the view checks (holds_view)."""
+    record): its id, which the view checks (holds_view). ``kind``: "view"
+    for the browser's live view, "terminal" for the user's terminal on the
+    workbench; each kind has one at a time."""
     view_id = secrets.token_hex(8)
     workspace = ref(store.db, uid)
 
     def operation(tx):
         if workspace.get(transaction=tx).exists:
-            tx.update(workspace, {"view": {"id": view_id, "until": _now() + timedelta(seconds=seconds)}})
+            tx.update(workspace, {kind: {"id": view_id, "until": _now() + timedelta(seconds=seconds)}})
     store._transaction(operation)
     return view_id
 
 
-def holds_view(db, uid, view_id):
-    """Whether ``view_id`` is still the account's view (no newer one took over)."""
-    return (record(db, uid).get("view") or {}).get("id") == view_id
+def holds_view(db, uid, view_id, kind="view"):
+    """Whether ``view_id`` is still the account's view of that kind (no newer one took over)."""
+    return (record(db, uid).get(kind) or {}).get("id") == view_id
+
+
+def open_workbench(vm, uid, cancellation=None):
+    """The account's workbench for the user's terminal: created with the
+    base network rules where nothing made it yet (on an existing one a
+    running chat's message keeps the rules it set), its tools and the
+    agent's user up to date (prepare); its name."""
+    name = agent_vm.workspace_name(uid)
+    if not vm.exists(name):
+        vm.ensure(name, agent_vm.WORKBENCH_RULES)
+    prepare(vm, name, cancellation)
+    return name
 
 
 def _quiet(stream, chunk):

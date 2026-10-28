@@ -859,6 +859,36 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   „Paste“ den Text als Tastendrücke ein (`rfb.sendKey`), höchstens
   `PASTE_MAX` = 2.000 Zeichen, nie über die Zwischenablage der VM. So kommt ein
   Passwort aus dem eigenen Passwortmanager in die Seite und nirgends sonst hin.
+- **Terminal für den Nutzer** (seit 2026-10-28, Max: der Nutzer soll auf die
+  VM selbst zugreifen, nicht nur auf den Browser): Das Panel hat die Reiter
+  „Browser“ und „Terminal“ (`workspace-view.js`, xterm.js 6.0.0 (MIT,
+  `static/vendor/xterm/6.0.0`, erst beim ersten Öffnen des Reiters geladen)).
+  `WebSocket /agent/workspace/terminal` meldet sich wie die Ansicht an,
+  diesmal mit Größe (`{"id_token", "cols", "rows"}`); der Server öffnet die
+  Werkbank (`agent_workspace.open_workbench`: legt sie mit den Grundregeln an,
+  wo es sie noch nicht gibt, lässt die Netzregeln einer laufenden Nachricht
+  unberührt, `prepare`) und ein Exec mit TTY auf `api.sprites.dev`
+  (`exec_url(tty=(cols, rows))`, `max_run_after_disconnect` 5 s). Darin läuft
+  `bash -l` über `agent-run --terminal` (`agent_vm.terminal_argv`): dieselben
+  Rechte wie der Agent (Nutzer `agent`, ohne sudo, ohne `/.sprite`-Socket,
+  Netz nur Paketquellen und die Freigaben einer laufenden Nachricht), aber in
+  der eigenen cgroup `consens-user`, die eine Browser-Übernahme nicht
+  einfriert, und mit `TERM=xterm-256color`. Tasten gehen als rohe Bytes zur
+  TTY, `{"type": "resize"}` nur aus zwei geprüften Zahlen (2–500 × 2–200), die
+  Ausgabe kommt roh zurück; `{"type": "exit"}` beendet es (Close 1000, Knopf
+  „Neues Terminal starten“). Eine Sitzung pro Konto (`claim_view(kind=
+  "terminal")`, neben der Ansicht), Zeitabrechnung, Ratenbegrenzung und
+  Close-Codes wie bei der Ansicht (`_admit`, `_carry`). Die Prüfer sehen das
+  Terminal nicht: Es ist die Arbeit des Nutzers. Der Agent erfährt aus
+  `AGENT_VM_PROMPT`, dass es das Terminal gibt. Die Ausgabe trägt
+  `data-i18n-skip`. Die Datenschutzerklärung nennt Werkbank, Browser-VM und
+  Terminal (EN und DE).
+- **Ladeansicht** (seit 2026-10-28): Solange ein Reiter lädt, zeigt er ein
+  ruhig pulsierendes Skeleton dessen, was kommt (Browserfenster mit
+  Adressleiste und Seite, beim Terminal Zeilen; `prefers-reduced-motion`
+  ohne Puls), kein Spinner. Dauert die Verbindung länger als `SLOW_MS`
+  (6 s), etwa beim ersten Start außerhalb eines Chats, sagt die Statuszeile
+  „Starting your workspace. The first start can take a minute.“
 - **Überall abmelden** (`POST /agent/workspace/reset-browser`, nach
   Rückfrage): beendet Chrome auf der Browser-VM und löscht dort Profil und
   Upload-Ordner, nie während ein Chat den Arbeitsplatz nutzt (409 `running`).

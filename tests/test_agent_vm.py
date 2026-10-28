@@ -110,8 +110,10 @@ class _FakeBackend(VMBackend):
         on_output("stdout", json.dumps(answer).encode())
         return ExecOutcome(exit_code=0, timed_out=False, seconds=.5)
 
-    def exec_url(self, name, argv, *, cwd, stdin):
-        return f"wss://api.sprites.dev/v1/sprites/{name}/exec?cmd=relay"
+    def exec_url(self, name, argv, *, cwd, stdin, tty=None):
+        self._call("exec_url", name, tuple(argv), tty)
+        kind = "terminal" if tty else "relay"
+        return f"wss://api.sprites.dev/v1/sprites/{name}/exec?cmd={kind}"
 
     def read_file(self, name, path, *, limit, agent=True):
         self._call("read", name, path)

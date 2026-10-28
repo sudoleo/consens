@@ -144,13 +144,21 @@ the browser VM's `control.json` stops `browser.py`, and
 WebSocket `/agent/workspace/view` (sign-in by its first message, then carried
 through to `workspace_vm/browser/relay.py` over the provider's exec API on
 `api.sprites.dev`, stdin and stdout carrying VNC; `SPRITES_TOKEN` goes there
-only, never to a VM's address, and never reaches the browser);
-one view per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
+only, never to a VM's address, and never reaches the browser), and since
+2026-10-28 the WebSocket `/agent/workspace/terminal` (the user's own shell on
+the workbench: first message `{"id_token", "cols", "rows"}`, an exec with a TTY
+on `api.sprites.dev` running `bash -l` through `agent-run --terminal` with the
+agent's rights in the cgroup `consens-user`, raw bytes both ways, checked
+`{"type": "resize"}`; `agent_workspace.open_workbench`, `agent_vm.terminal_argv`);
+one view and one terminal per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
 since 2026-10-27, `AGENT_VM_ACCESS=pro` for every account with audit) on a
 server with a VM provider.
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
-`open`, `close`, `init`, `isOpen`) renders the panel, imports noVNC from
-`static/vendor/novnc/1.7.0` on first open and wires `#composerWorkspaceButton`
+`open`, `close`, `init`, `isOpen`, `showTab`) renders the panel with the tabs
+Browser and Terminal and a pulsing skeleton while a tab loads (a calm
+"first start" line after 6 s), imports noVNC from `static/vendor/novnc/1.7.0`
+on first open and xterm.js from `static/vendor/xterm/6.0.0` on the Terminal
+tab's first use, and wires `#composerWorkspaceButton`
 (start screen), the (+) menu's `#attachWorkspaceOption` (in a chat) and
 `#agentWorkspaceSettings`; `agent-activity.js` adds "Watch live"
 (`.agent-vm-watch`) to each step of the `browser` tool and `agent-delegation.js` the run

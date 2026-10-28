@@ -11,6 +11,8 @@ class FakeSocket {
     this.sent = [];
     this.closed = false;
     this.closeListeners = [];
+    // Open (WebSocket.OPEN) from the start: the tests call onopen themselves.
+    this.readyState = 1;
     FakeSocket.last = this;
   }
   send(data) { this.sent.push(data); }
@@ -45,14 +47,36 @@ class FakeRFB {
   disconnect() { this.disconnected = true; }
 }
 
+// xterm.js as the panel uses it: a terminal of cols x rows, its keys through onData.
+class FakeTerminal {
+  static made = [];
+  constructor(options) {
+    Object.assign(this, { options, cols: 80, rows: 24, written: [], resets: 0, focused: 0 });
+    FakeTerminal.made.push(this);
+  }
+  loadAddon(addon) { addon.term = this; this.addon = addon; }
+  open(host) { this.host = host; }
+  onData(handler) { this.type = handler; }
+  write(bytes) { this.written.push(new TextDecoder().decode(bytes)); }
+  focus() { this.focused += 1; }
+  reset() { this.resets += 1; }
+  dispose() { this.disposed = true; }
+}
+class FakeFit {
+  fit() { if (this.size) Object.assign(this.term, this.size); }
+}
+
 function setup({ clipboard } = {}) {
   FakeSocket.last = null;
   FakeRFB.made = [];
+  FakeTerminal.made = [];
   const app = loadScripts(["static/js/workspace-view.js"], {
     body: '<button id="composerWorkspaceButton"></button><button id="attachWorkspaceOption"></button>'
       + '<div id="agentWorkspaceSettings"></div>',
     before(window) {
       window.WebSocket = FakeSocket;
+      // As every browser has them (jsdom does not): the terminal's keys go as bytes.
+      window.TextEncoder = TextEncoder;
       window.auth = { currentUser: { uid: "u1", getIdToken: async () => "token" } };
       window.App = { t: (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => values?.[key] ?? "") };
       window.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
@@ -61,6 +85,7 @@ function setup({ clipboard } = {}) {
   });
   const { window } = app;
   window.App.workspaceView._setLoader(async () => FakeRFB);
+  window.App.workspaceView._setTerminalLoader(async () => ({ Terminal: FakeTerminal, FitAddon: FakeFit }));
   // As at DOMContentLoaded (jsdom may still be loading here); a second call changes nothing.
   window.App.workspaceView.init();
   window.App.workspaceView.init();
@@ -79,6 +104,82 @@ function controls(window) {
   return window.fetch.mock.calls.filter(([path]) => path === "/agent/workspace/control")
     .map(([, options]) => JSON.parse(options.body).holder);
 }
+
+describe("the workspace's loading and terminal (2026-10-28)", () => {
+  it("draws a skeleton of the browser while it loads and says so calmly when the first start takes long", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await opened(env);
+      const screen = env.document.querySelector("#workspacePane-browser");
+      expect(screen.classList.contains("is-loading")).toBe(true);
+      expect(screen.querySelector(".workspace-view-skeleton.is-browser").getAttribute("aria-hidden")).toBe("true");
+      socket.deliver(JSON.stringify({ state: "connecting" }));
+      await vi.advanceTimersByTimeAsync(6_500);
+      const status = env.document.querySelector(".workspace-view-status");
+      expect(status.textContent).toBe("Starting your workspace. The first start can take a minute.");
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      expect(screen.classList.contains("is-loading")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens the user's own terminal on its tab: size in the first message, keys and output as bytes", async () => {
+    const env = setup();
+    const view = await opened(env);
+    view.deliver(JSON.stringify({ state: "ready" }));
+    env.document.querySelector("#workspaceTab-terminal").click();
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBe(view));
+    const socket = FakeSocket.last;
+    expect(socket.url).toBe("wss://consens.io/agent/workspace/terminal");
+    await socket.onopen();
+    expect(JSON.parse(socket.sent[0])).toEqual({ id_token: "token", cols: 80, rows: 24 });
+    const pane = env.document.querySelector("#workspacePane-terminal");
+    const [term] = FakeTerminal.made;
+    // The shell's output is never translated, and the browser's controls are not this tab's.
+    expect(term.host.hasAttribute("data-i18n-skip")).toBe(true);
+    expect(pane.hidden).toBe(false);
+    expect(env.document.querySelector("#workspacePane-browser").hidden).toBe(true);
+    expect(env.document.querySelector(".workspace-view-toggle").hidden).toBe(true);
+    expect(pane.classList.contains("is-loading")).toBe(true);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    expect(pane.classList.contains("is-loading")).toBe(false);
+    expect(env.document.querySelector(".workspace-view-status").textContent)
+      .toBe("Your terminal on the workbench, with the agent’s rights.");
+    socket.deliver(new TextEncoder().encode("agent@workbench:~$ ").buffer);
+    expect(term.written).toEqual(["agent@workbench:~$ "]);
+    term.type("ls\r");
+    expect(new TextDecoder().decode(socket.sent[1])).toBe("ls\r");
+    // Back on the browser tab, its own line and controls return.
+    env.document.querySelector("#workspaceTab-browser").click();
+    expect(env.document.querySelector(".workspace-view-status").textContent).toBe("Watching. Click the screen to take over.");
+    expect(env.document.querySelector(".workspace-view-toggle").hidden).toBe(false);
+  });
+
+  it("starts a new terminal after the shell ended, and closes it with the panel", async () => {
+    const env = setup();
+    await opened(env);
+    env.workspace.showTab("terminal");
+    await vi.waitFor(() => expect(FakeTerminal.made.length).toBe(1));
+    const first = FakeSocket.last;
+    await first.onopen();
+    first.deliver(JSON.stringify({ state: "ready" }));
+    first.closedBy(1000);
+    const restart = env.document.querySelector(".workspace-view-restart");
+    expect(restart.hidden).toBe(false);
+    expect(env.document.querySelector(".workspace-view-status").textContent)
+      .toBe("The terminal ended. Start a new one to go on.");
+    restart.click();
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBe(first));
+    const [term] = FakeTerminal.made;
+    expect(FakeTerminal.made.length).toBe(1);
+    expect(term.resets).toBe(1);
+    env.workspace.close();
+    expect(FakeSocket.last.closed).toBe(true);
+    expect(term.disposed).toBe(true);
+  });
+});
 
 describe("the workspace view", () => {
   it("signs in with its first message, never in the URL, and shows the setup while it lasts", async () => {

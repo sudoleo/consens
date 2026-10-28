@@ -145,6 +145,44 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   font-weight: 600;
 }
 
+/* Browser | Terminal: a quiet segmented switch, the open tab raised. */
+.workspace-view-tabs {
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--raise);
+}
+
+.workspace-view-tab {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.workspace-view-tab.is-active {
+  background: var(--side);
+  color: var(--ink);
+}
+
+.workspace-view-tab:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .workspace-view-tab:not(.is-active):hover {
+    color: var(--ink);
+  }
+}
+
 .workspace-view-status {
   flex: 1;
   min-width: 0;
@@ -226,10 +264,113 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   background: var(--raise);
 }
 
+.workspace-view-screen[hidden] {
+  display: none;
+}
+
 /* noVNC's own screen element fills the area and scales the picture. */
-.workspace-view-screen > div:not(.workspace-view-cover) {
+.workspace-view-screen:not(.workspace-view-terminal) > div:not(.workspace-view-cover):not(.workspace-view-skeleton) {
   position: absolute;
   inset: 0;
+}
+
+/* While a tab loads: what comes, drawn in the app's tones (a browser
+   window, a terminal's lines), pulsing calmly like the activity's skeleton
+   (agent-chat.css .agent-detail-skeleton). Gone once the picture is there. */
+.workspace-view-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px;
+  background: var(--raise);
+  pointer-events: none;
+}
+
+.workspace-view-screen.is-loading > .workspace-view-skeleton {
+  display: flex;
+}
+
+.workspace-view-skeleton-bar {
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--line-soft, var(--line));
+}
+
+.workspace-view-skeleton-lines {
+  display: grid;
+  gap: 11px;
+  padding: 6px 8% 0;
+}
+
+.workspace-view-skeleton.is-terminal .workspace-view-skeleton-lines {
+  padding: 2px 0 0;
+  gap: 9px;
+}
+
+.workspace-view-skeleton-line {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-2xs, 3px);
+  background: var(--line);
+}
+
+.workspace-view-skeleton.is-browser .workspace-view-skeleton-line:first-child {
+  height: 18px;
+  margin-bottom: 6px;
+}
+
+.workspace-view-skeleton-gap {
+  display: block;
+  height: 10px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-view-skeleton-bar,
+  .workspace-view-skeleton-line {
+    animation: workspace-view-pulse var(--dur-beat) var(--ease-standard) infinite;
+  }
+
+  @keyframes workspace-view-pulse {
+    50% { opacity: .45; }
+  }
+}
+
+/* The terminal: xterm.js fills the pane with a little room at its edges. */
+.workspace-view-terminal-host {
+  position: absolute;
+  inset: 8px 4px 8px 10px;
+}
+
+.workspace-view-terminal-host .xterm {
+  height: 100%;
+}
+
+.workspace-view-terminal-host .xterm-viewport {
+  background: transparent !important;
+}
+
+.workspace-view-restart {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 3;
+  transform: translateX(-50%);
+  padding: 7px 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--ground);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.workspace-view-restart[hidden] {
+  display: none;
 }
 
 /* While the agent has the browser: one click anywhere takes it over. */
@@ -266,5 +407,16 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 @media (max-width: 760px) {
   .workspace-view-hint {
     display: none;
+  }
+
+  /* Narrow: the switch keeps its room, the status line gives way. */
+  .workspace-view-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .workspace-view-status {
+    order: 5;
+    flex-basis: 100%;
   }
 }

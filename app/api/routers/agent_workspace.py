@@ -15,6 +15,15 @@ ends after VIEW_SECONDS: an open view keeps the VM awake. An account has one
 view at a time (the newest wins, agent_workspace.claim_view), its time
 counts against the day's VM time (agent_vm_time.py) and never runs past it,
 and opening is rate limited.
+
+The terminal (since 2026-10-28) is the user's own shell on the workbench,
+the same way: a WebSocket carried to an exec with a TTY on the provider's
+API (agent_vm.terminal_argv), with the agent's rights and nothing more, one
+per account, its time VM time. The first message also names the terminal's
+size ({"id_token", "cols", "rows"}); then the browser's binary frames are
+keystrokes and {"type": "resize", "cols", "rows"} resizes it; the server's
+binary frames are the terminal's output. The reviewers never see it: it is
+the user's work, not the agent's.
 """
 from __future__ import annotations
 
@@ -46,6 +55,9 @@ UPSTREAM_OPEN_SECONDS = 30
 RELAY_GRACE_SECONDS = 60
 # The relay's first bytes on stderr: its states, one JSON line each.
 STATE_LINE_BYTES = 4096
+# The terminal's size, as xterm.js reports it (workspace-view.js), within reason.
+TERMINAL_COLS, TERMINAL_ROWS = (2, 500), (2, 200)
+RESIZE_BYTES = 200
 NO_STORE = {"Cache-Control": "private, no-store"}
 
 
@@ -169,6 +181,29 @@ def _open(uid, seconds):
         vm.close()
 
 
+def _open_terminal(uid, seconds, size):
+    """The workbench for the terminal (created if nothing used it yet, its
+    tools up to date): the exec address of a login shell with a TTY of
+    ``size`` (cols, rows) as the agent's user, for at most ``seconds``."""
+    agent_workspace.record_for_view(_store(), uid, provider="sprites")
+    vm = _backend()
+    try:
+        name = agent_workspace.open_workbench(vm, uid)
+        return vm.exec_url(name, agent_vm.terminal_argv(seconds + RELAY_GRACE_SECONDS), cwd=agent_vm.SERVER_HOME,
+                           stdin=True, tty=size)
+    finally:
+        vm.close()
+
+
+def _size(cols, rows):
+    """The terminal's (cols, rows) from the browser, or None when either is no whole number in range."""
+    if type(cols) is not int or type(rows) is not int:
+        return None
+    if not (TERMINAL_COLS[0] <= cols <= TERMINAL_COLS[1] and TERMINAL_ROWS[0] <= rows <= TERMINAL_ROWS[1]):
+        return None
+    return cols, rows
+
+
 async def connect_upstream(url):
     """The relay's exec WebSocket with the provider's token, which goes
     to the provider's API only (tests replace it)."""
@@ -213,27 +248,78 @@ async def _end(websocket, code):
         pass
 
 
-@router.websocket("/agent/workspace/view")
-async def workspace_view(websocket: WebSocket):
+async def _admit(websocket, kind):
+    """A view's or terminal's start: the account behind its first message
+    (signed in, allowed the VM), the rate limit and what is left of today's
+    VM time. ``(uid, seconds, first message)``, or None once it is closed."""
     await websocket.accept()
     try:
         first = await asyncio.wait_for(websocket.receive_text(), SIGN_IN_SECONDS)
-        token = (json.loads(first) or {}).get("id_token") if first.startswith("{") else None
+        hello = json.loads(first) if first.startswith("{") else {}
     except Exception:
-        token = None
-    uid = await asyncio.to_thread(_sign_in, token)
+        hello = {}
+    hello = hello if isinstance(hello, dict) else {}
+    uid = await asyncio.to_thread(_sign_in, hello.get("id_token"))
     if uid is None:
         await websocket.close(code=4403)
-        return
+        return None
     try:
-        api_uid_limiter.check(uid, "agent:workspace_view", VIEWS_PER_MINUTE)
+        api_uid_limiter.check(uid, f"agent:workspace_{kind}", VIEWS_PER_MINUTE)
     except ApiUidRateLimitExceeded:
         await _end(websocket, CLOSE_TOO_MANY)
-        return
+        return None
     seconds = await asyncio.to_thread(_view_seconds, uid)
     if seconds < 1:
         await _end(websocket, CLOSE_NO_TIME)
+        return None
+    return uid, seconds, hello
+
+
+async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_vm, to_browser):
+    """Carries both ways until one side ends, the time is up or a newer
+    one of this kind took over; then counts the open time as VM time and
+    closes with the reason (CLOSE_*)."""
+    async def replaced():
+        # A newer view (or terminal) of the account took over: this one ends.
+        while True:
+            await asyncio.sleep(agent_workspace.VIEW_CHECK_SECONDS)
+            try:
+                if not await asyncio.to_thread(agent_workspace.holds_view, db_firestore, uid, view_id, kind):
+                    return
+            except Exception as exc:
+                logging.info("Agent workspace %s check failed category=%s", kind, safe_exception(exc))
+
+    watcher = asyncio.ensure_future(replaced())
+    tasks = [asyncio.ensure_future(to_vm()), asyncio.ensure_future(to_browser()), watcher]
+    done, _ = await asyncio.wait(tasks, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
+    for task in tasks:
+        task.cancel()
+    try:
+        # Stdin ends (0x04, the relay's; a terminal ends with its socket).
+        if kind == "view":
+            await upstream.send(b"\x04")
+    except Exception:
+        pass
+    try:
+        await upstream.close()
+    except Exception:
+        pass
+    # Open views keep the VM awake: their time counts as VM time.
+    elapsed = time.monotonic() - started
+    await asyncio.to_thread(_charge, uid, elapsed)
+    logging.info("Agent workspace %s closed seconds=%d", kind, int(elapsed))
+    # Its hour, or today's VM time, is over; or a newer one took over.
+    code = (CLOSE_ENDED if seconds >= VIEW_SECONDS else CLOSE_NO_TIME) if not done \
+        else CLOSE_REPLACED if watcher in done else 1000
+    await _end(websocket, code)
+
+
+@router.websocket("/agent/workspace/view")
+async def workspace_view(websocket: WebSocket):
+    admitted = await _admit(websocket, "view")
+    if admitted is None:
         return
+    uid, seconds, _ = admitted
     await _state(websocket, "connecting")
     started = time.monotonic()
     try:
@@ -278,35 +364,61 @@ async def workspace_view(websocket: WebSocket):
             elif stream == 3:
                 return
 
-    async def replaced():
-        # A newer view of the account took over: this one ends.
-        while True:
-            await asyncio.sleep(agent_workspace.VIEW_CHECK_SECONDS)
-            try:
-                if not await asyncio.to_thread(agent_workspace.holds_view, db_firestore, uid, view_id):
-                    return
-            except Exception as exc:
-                logging.info("Agent workspace view check failed category=%s", safe_exception(exc))
+    await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser)
 
-    watcher = asyncio.ensure_future(replaced())
-    tasks = [asyncio.ensure_future(to_vm()), asyncio.ensure_future(to_browser()), watcher]
-    done, _ = await asyncio.wait(tasks, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
-    for task in tasks:
-        task.cancel()
+
+@router.websocket("/agent/workspace/terminal")
+async def workspace_terminal(websocket: WebSocket):
+    admitted = await _admit(websocket, "terminal")
+    if admitted is None:
+        return
+    uid, seconds, hello = admitted
+    size = _size(hello.get("cols"), hello.get("rows")) or (80, 24)
+    await _state(websocket, "connecting")
+    started = time.monotonic()
     try:
-        # The relay's stdin ends (0x04), so it ends too, then the socket.
-        await upstream.send(b"\x04")
-    except Exception:
-        pass
-    try:
-        await upstream.close()
-    except Exception:
-        pass
-    # Open views keep the VM awake: their time counts as VM time.
-    elapsed = time.monotonic() - started
-    await asyncio.to_thread(_charge, uid, elapsed)
-    logging.info("Agent workspace view closed seconds=%d", int(elapsed))
-    # Its hour, or today's VM time, is over; or a newer view took over.
-    code = (CLOSE_ENDED if seconds >= VIEW_SECONDS else CLOSE_NO_TIME) if not done \
-        else CLOSE_REPLACED if watcher in done else 1000
-    await _end(websocket, code)
+        url = await asyncio.to_thread(_open_terminal, uid, seconds, size)
+        terminal_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds, "terminal")
+        upstream = await connect_upstream(url)
+    except Exception as exc:
+        logging.warning("Agent workspace terminal unavailable category=%s", safe_exception(exc))
+        await _state(websocket, "error")
+        await websocket.close(code=1011)
+        return
+    await _state(websocket, "ready")
+
+    async def to_vm():
+        # Keystrokes go to the TTY as they are; a resize as the provider's
+        # own message, rebuilt from two checked numbers.
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            if message.get("bytes") is not None:
+                await upstream.send(message["bytes"])
+            elif message.get("text") and len(message["text"]) <= RESIZE_BYTES:
+                try:
+                    data = json.loads(message["text"])
+                except ValueError:
+                    continue
+                if isinstance(data, dict) and data.get("type") == "resize":
+                    resized = _size(data.get("cols"), data.get("rows"))
+                    if resized:
+                        await upstream.send(json.dumps({"type": "resize", "cols": resized[0], "rows": resized[1]}))
+
+    async def to_browser():
+        # A TTY's output comes as raw binary frames; the shell's end as
+        # {"type": "exit"} (or the socket's close) ends the terminal.
+        async for message in upstream:
+            if isinstance(message, bytes):
+                if message:
+                    await websocket.send_bytes(message)
+                continue
+            try:
+                data = json.loads(message)
+            except ValueError:
+                continue
+            if isinstance(data, dict) and data.get("type") == "exit":
+                return
+
+    await _carry(websocket, upstream, uid, "terminal", terminal_id, seconds, started, to_vm, to_browser)

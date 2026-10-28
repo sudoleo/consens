@@ -91,6 +91,9 @@ WS_MAX_FRAME = 10 * 1024 * 1024
 HANDSHAKE_RETRY_SECONDS = 1.0
 # Bytes per stdin frame (0x00 + data); the stdin's end is 0x04.
 STDIN_CHUNK = 256 * 1024
+# How long the user's terminal goes on once its socket is gone (the
+# provider's max_run_after_disconnect): a reload finds a new shell.
+TERMINAL_AFTER_DISCONNECT = "5s"
 # Exit codes of ``timeout``: the limit passed (TERM), or KILL after the grace.
 TIMEOUT_EXIT_CODES = frozenset({124, 137})
 
@@ -187,8 +190,9 @@ class VMBackend:
         return self.run(name, wrapped_command(command, timeout, agent, cwd=cwd), cwd="/" if agent else cwd,
                         timeout=timeout, on_output=on_output, cancellation=cancellation)
 
-    def exec_url(self, name, argv, *, cwd, stdin):
-        """The exec WebSocket's address for ``argv`` (the live view's relay)."""
+    def exec_url(self, name, argv, *, cwd, stdin, tty=None):
+        """The exec WebSocket's address for ``argv`` (the live view's relay,
+        the user's terminal with ``tty`` = (cols, rows))."""
         raise NotImplementedError
 
     def read_file(self, name, path, *, limit, agent=True):
@@ -244,6 +248,14 @@ def agent_argv(argv, timeout, cwd=HOME):
     connection is gone, and nothing of it, nor anything it starts, has more
     rights than that user."""
     return ["sudo", "-n", "/bin/bash", AGENT_RUN, str(int(timeout)), cwd, *argv]
+
+
+def terminal_argv(timeout):
+    """The user's own terminal on the workbench (routers/agent_workspace.py,
+    since 2026-10-28): a login shell through AGENT_RUN --terminal, with the
+    agent's rights and nothing more, in the agent's home, under ``timeout``.
+    Its cgroup is its own, so a takeover of the browser leaves it running."""
+    return ["sudo", "-n", "/bin/bash", AGENT_RUN, "--terminal", str(int(timeout)), HOME, "bash", "-l"]
 
 
 def wrapped_command(command, timeout, agent=True, *, cwd=HOME):
@@ -478,12 +490,19 @@ class SpritesBackend(VMBackend):
                        open_timeout=WS_OPEN_SECONDS, ping_interval=15, ping_timeout=45, close_timeout=0,
                        max_size=WS_MAX_FRAME, logger=_SOCKET_LOG)
 
-    def exec_url(self, name, argv, *, cwd, stdin):
+    def exec_url(self, name, argv, *, cwd, stdin, tty=None):
         """The exec WebSocket's address on SPRITES_API, the only place the
-        token goes (the live view uses it too, routers/agent_workspace.py)."""
-        query = urlencode([*(("cmd", arg) for arg in argv), ("path", argv[0]), ("dir", cwd),
-                           ("stdin", "true" if stdin else "false")])
-        return "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + query
+        token goes (the live view and the terminal use it too,
+        routers/agent_workspace.py). ``tty``: (cols, rows) for a terminal,
+        whose frames are raw bytes both ways and which ends
+        TERMINAL_AFTER_DISCONNECT after its socket is gone."""
+        params = [*(("cmd", arg) for arg in argv), ("path", argv[0]), ("dir", cwd),
+                  ("stdin", "true" if stdin else "false")]
+        if tty is not None:
+            cols, rows = tty
+            params += [("tty", "true"), ("cols", str(int(cols))), ("rows", str(int(rows))),
+                       ("max_run_after_disconnect", TERMINAL_AFTER_DISCONNECT)]
+        return "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + urlencode(params)
 
     def _connect_exec(self, url):
         """The exec socket; a handshake that broke off (a sprite waking from

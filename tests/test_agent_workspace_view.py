@@ -99,6 +99,74 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
     assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
 
 
+# --- The user's terminal on the workbench (since 2026-10-28) --------------------------
+
+def terminal_api(view_api, monkeypatch, frames):
+    """The view API with the terminal's exec socket: a fake TTY that sends
+    ``frames`` (raw output, or the provider's JSON messages)."""
+    client, store, _, allowed = view_api
+    shell = Relay(frames)
+
+    async def connect(url):
+        shell.url = url
+        return shell
+    monkeypatch.setattr(workspace_router, "connect_upstream", connect)
+    return client, store, shell
+
+
+def test_the_terminal_is_a_shell_with_the_agents_rights_in_the_users_size(view_api, fake_vm, monkeypatch):
+    client, store, shell = terminal_api(view_api, monkeypatch, [b"agent@workbench:~$ "])
+    with client.websocket_connect("/agent/workspace/terminal") as ws:
+        ws.send_text(json.dumps({"id_token": "verified", "cols": 120, "rows": 30}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "ready"]
+        assert ws.receive_bytes() == b"agent@workbench:~$ "
+        ws.send_bytes(b"ls\r")
+        ws.send_text(json.dumps({"type": "resize", "cols": 100, "rows": 40}))
+        # Only two checked numbers make a resize; nothing else goes on.
+        for ignored in (json.dumps({"type": "resize", "cols": "100; rm", "rows": 40}),
+                        json.dumps({"type": "resize", "cols": 9999, "rows": 40}), json.dumps({"type": "other"}),
+                        "not json"):
+            ws.send_text(ignored)
+    assert shell.received == [b"ls\r", json.dumps({"type": "resize", "cols": 100, "rows": 40})]
+    assert shell.url.endswith("cmd=terminal") and shell.closed
+    # A login shell as the agent's user (agent-run --terminal), in its home, with a TTY of the user's size.
+    [(_, name, argv, tty)] = [call for call in fake_vm.calls if call[0] == "exec_url"]
+    assert name == NAME and tty == (120, 30)
+    assert argv[:5] == ("sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "--terminal")
+    assert argv[-3:] == (agent_vm.HOME, "bash", "-l")
+    # One terminal per account, apart from the browser's view (its time counts
+    # like the view's: _carry, test_an_account_has_one_view_and_...).
+    record = agent_workspace.record(store.db, UID)
+    assert record["terminal"]["id"] and "view" not in record
+
+
+def test_the_terminal_ends_with_its_shell_and_leaves_a_running_chats_network_rules(view_api, fake_vm, monkeypatch):
+    client, _, shell = terminal_api(view_api, monkeypatch, [b"bye\r\n", json.dumps({"type": "exit", "exit_code": 0})])
+    fake_vm.vms[NAME] = {"files": {}, "checkpoints": [], "policy": ["the running chat's rules"]}
+    with client.websocket_connect("/agent/workspace/terminal") as ws:
+        ws.send_text(json.dumps({"id_token": "verified", "cols": "wide", "rows": 30}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "ready"]
+        assert ws.receive_bytes() == b"bye\r\n"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_bytes()
+    assert closed.value.code == 1000
+    # An unusable size falls back to 80 x 24; an existing workbench keeps its rules.
+    assert [call[3] for call in fake_vm.calls if call[0] == "exec_url"] == [(80, 24)]
+    assert fake_vm.vms[NAME]["policy"] == ["the running chat's rules"]
+    assert not [call for call in fake_vm.calls if call[0] in {"ensure", "policy"} and call[1] == NAME]
+
+
+def test_the_terminal_needs_the_vm_and_counts_against_the_rate_limit(view_api, fake_vm, monkeypatch):
+    client, _, shell = terminal_api(view_api, monkeypatch, [])
+    allowed = view_api[3]
+    allowed.clear()
+    with client.websocket_connect("/agent/workspace/terminal") as ws:
+        ws.send_text(json.dumps({"id_token": "verified", "cols": 80, "rows": 24}))
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+    assert closed.value.code == 4403 and shell.url is None and fake_vm.calls == []
+
+
 def test_the_view_connects_to_the_providers_api_only(monkeypatch):
     import asyncio
     with pytest.raises(ValueError):
