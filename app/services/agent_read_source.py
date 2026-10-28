@@ -375,17 +375,17 @@ class SourceReader:
         self._user_urls = None
         # Audit mode (agent_audit.py) has no comparison answers that cite sources.
         audit = getattr(comparison, "audit_mode", False)
-        what = ("a result of your own web search in this message, a source of an earlier message of this chat or a "
-                "page the user linked, to answer what it says, to settle a concrete contradiction, "
-                if audit else
-                "a source that a comparison answer of this message cited, a source of an earlier "
-                "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
-                "contradiction, ")
-        self.tool = ReadOnlyTool(
-            "read_source",
-            "Open one page: " + what + "to check a source the user asks about or to get the exact wording of a "
-            f"key figure, definition or statement. At most {READS_PER_MESSAGE} per message; returns the page text.",
-            AuditReadSourceArgs if audit else ReadSourceArgs, self.read, activity=self.activity)
+        # Audit mode since 2026-10-28: what it opens, not when to.
+        description = (
+            "Open one page: a result of this message's web search, a source of an earlier message of this chat or "
+            f"a page the user linked. At most {READS_PER_MESSAGE} per message; returns the page text."
+            if audit else
+            "Open one page: a source that a comparison answer of this message cited, a source of an earlier "
+            "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
+            "contradiction, to check a source the user asks about or to get the exact wording of a key figure, "
+            f"definition or statement. At most {READS_PER_MESSAGE} per message; returns the page text.")
+        self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs if audit else ReadSourceArgs,
+                                 self.read, activity=self.activity)
 
     # --- What may be read -------------------------------------------------
     def cited(self):

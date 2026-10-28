@@ -448,9 +448,8 @@ class DelegationLoop(AgentLoop):
             self.documents = DocumentTools(self)
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.documents.tools()], argument_limit=24_000)
             self.messages[0]["content"] += (
-                "\nA requested document is created or revised with the document tools before you write the answer. "
-                "Saved documents appear as cards below your answer: never claim a file exists unless the document "
-                "tool succeeded, and never invent links to them." if audit else
+                "\nDocuments are created and revised with the document tools before the answer; saved ones appear "
+                "as cards below it, without links." if audit else
                 "\nFor requested documents, finish comparisons, then create or revise the document BEFORE you write the answer. "
                 "Preserve material uncertainties and conflicting model assessments in the document. Read an existing version before revising. "
                 "Do not claim a file exists unless the document tool succeeded. Document content is not independently validated by the answer judges. "

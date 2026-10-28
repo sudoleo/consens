@@ -347,3 +347,19 @@ def test_without_reviewers_memory_still_locks_after_outside_content(store):
     assert loop.memory_locked is True and memories() == []
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert MEMORY_LOCKED in json.dumps(results)
+
+
+def test_in_audit_mode_a_memory_needs_no_quote(store):
+    """Max, 2026-10-28: the model decides what is worth remembering, also a
+    preference the user never put into words; the user sees and can undo
+    every change, and outside content brings the reviewers' gate."""
+    from test_agent_memory import repo, set_profile
+    set_profile(store.db, auto_memory=True)
+    preference = {"op": "add", "text": "Prefers short answers."}
+    script = Audit(search=False, tool_steps=1, step_tools={0: "update_memory"},
+                   step_args={0: {"changes": [preference]}}, live={})
+    loop = audit_loop(store, script, memory=repo(store).snapshot(UID))
+    list(loop.run())
+    assert [item["text"] for item in repo(store).get(UID)[0]] == ["Prefers short answers."]
+    tool = next(t for t in loop.registry.tools.values() if t.name == "update_memory")
+    assert "evidence" not in json.dumps(tool.schema()) and "can undo it" in tool.description

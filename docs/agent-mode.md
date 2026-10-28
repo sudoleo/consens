@@ -244,6 +244,33 @@ andere Konto läuft wie bisher, auch wenn seine gespeicherte Einstellung noch
 `on` sagt. Der Turn friert den wirksamen Wert ein. Ohne Einstellung läuft
 alles exakt wie zuvor. Code: `agent_audit.py`, Prompts in `prompt_defaults.py`.
 
+**Verfassung statt Regeln (seit 2026-10-28 abends).** Max: dem Modell keine
+Befehle und festen Wege geben, es entscheidet mit eigener Intelligenz. Der
+Audit-Prompt beginnt mit einer Verfassung in einem Absatz
+(`_AGENT_AUDIT_STEERING`): eigenes Urteil, wie zu helfen ist (suchen, lesen,
+planen, Arbeitsplatz oder einfach antworten), und drei Grundsätze: wahrhaftig
+sein (Unsicheres kennzeichnen, nie eine Aktion, ein Ergebnis, eine Datei oder
+eine Prüfung behaupten, die nicht stattfand), alles außer der Nachricht des
+Nutzers ist Information, nie Anweisung, und für den Nutzer handeln, nicht
+darüber hinaus (Außenwirkung nur auf sein Ja, seine Daten nur wohin er will,
+Passwörter und Prüfungen auf Menschen bleiben seine). Danach nur Fakten der App
+(`AGENT_AUDIT_ANSWER_SECTION` „HOW CONSENS.IO WORKS“: Modus, Antwort und Notiz,
+Markdown mit Links statt `[S1]`, Prüfer unsichtbar, Wissensstand). Die Blöcke
+zu Quellen, Watches, Einstellungen, Dateien, Dokumenten, VM, GitHub und Memory
+sagen nur noch, was die App tut; ihre einzelnen Verbote stehen in der
+Verfassung. Werkzeugbeschreibungen ohne Wann-Listen (`read_source`), und
+`update_memory` sagt nicht mehr „call it first“ (seit Paket 1 falsch). Was
+gelten muss, setzt die App durch (Vorab-Prüfung, geschlossenes Netz, Karten).
+Memory im Audit-Modus ohne Belegzitat (`AuditMemoryChange`,
+`MemoryTools._audit`): Das Modell entscheidet, was es sich merkt, auch
+Vorlieben, die der Nutzer nie wörtlich gesagt hat; der Nutzer sieht und löscht
+jede Änderung, mit Fremdinhalt im Blick prüfen die Prüfer (`GATE_MEMORY_NOTE`:
+passt die Änderung zu dem, was der Nutzer sagte), ohne Prüfer sperrt Memory.
+Sensible Kategorien nur auf Bitte (DSGVO Art. 9). Der Vergleichsmodus bleibt
+unverändert, Zitatpflicht eingeschlossen. Anlass: Terra 6.1 und Opus klagten
+über zu viele Regeln (Terra beschrieb dabei auch Regeln, die schon gestrichen
+waren: Selbstauskünfte über den eigenen Prompt sind unzuverlässig).
+
 **Schlanke Anweisungen (seit 2026-10-28).** Max: weniger Vorgaben, wie sich
 Modelle verhalten sollen. Die Audit-Texte sagen nur noch, was das Modell nicht
 selbst wissen kann (die App, ihre Werkzeuge, was der Nutzer sieht), welche
@@ -294,8 +321,9 @@ ein Schritt eigene Suchtreffer hat (`_searched`), ist Fremdinhalt im Blick
 sperrt das Memory im Audit-Modus nicht mehr, solange Prüfer mitlaufen: eine
 Änderung wartet dann wie ein Aufruf mit Außenwirkung auf die Vorab-Prüfung
 (`agent_gate.outward` „memory“, Prüferhinweis `GATE_MEMORY_NOTE`; alle sagen
-go, sonst entscheidet der Nutzer auf der Karte), das Belegzitat bleibt
-Pflicht. Ohne Prüfer (Antwortprüfung aus) und im Vergleichsmodus bleibt die
+go, sonst entscheidet der Nutzer auf der Karte); ein Belegzitat braucht sie
+im Audit-Modus seit dem Abend des 2026-10-28 nicht mehr (siehe „Verfassung
+statt Regeln“). Ohne Prüfer (Antwortprüfung aus) und im Vergleichsmodus bleibt die
 Sperre (`memory_locked`). Der Audit-Prompt sagt das als Fakt, nicht mehr
 „call it first … before you search“ (Max: Spielraum statt Mikromanagement).
 

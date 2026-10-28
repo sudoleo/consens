@@ -250,7 +250,9 @@ def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):
         "browser drag 3 strokes")
     # The prompt says it as a fact, and that a check for a human is never the agent's.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
-    assert "at x,y of your last screenshot" in AGENT_VM_PROMPT and "never solve a CAPTCHA" in AGENT_VM_PROMPT
+    assert "at x,y of your last screenshot" in AGENT_VM_PROMPT
+    from app.services.prompt_defaults import AGENT_AUDIT_SYSTEM_PROMPT
+    assert "checks meant for humans, such as passwords and CAPTCHAs, stay theirs" in AGENT_AUDIT_SYSTEM_PROMPT
 
 
 def test_a_screenshot_comes_as_a_picture_only_for_a_model_that_takes_them(store, fake_vm, monkeypatch):

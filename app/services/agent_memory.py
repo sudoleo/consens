@@ -244,6 +244,22 @@ class UpdateMemoryArgs(BaseModel):
     changes: list[MemoryChange] = Field(min_length=1, max_length=MAX_CHANGES_PER_CALL)
 
 
+# Audit mode (since 2026-10-28): a change without an evidence quote; one the
+# model sends anyway is ignored (extra="ignore").
+class AuditMemoryChange(BaseModel):
+    model_config = ConfigDict(extra="ignore", json_schema_extra={"required": ["op"]})
+    op: str = Field(default="", json_schema_extra={"enum": ["add", "update", "delete"]},
+                    description="add, update or delete.")
+    id: Optional[str] = Field(default="", description="The memory's id for update or delete; empty for add.")
+    text: Optional[str] = Field(default="", description=
+        f"The memory for add or update, at most {MAX_ITEM_CHARS} characters; empty for delete.")
+
+
+class AuditUpdateMemoryArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    changes: list[AuditMemoryChange] = Field(min_length=1, max_length=MAX_CHANGES_PER_CALL)
+
+
 def normalize_change(change, *, origin: str) -> dict:
     """Shape and text checks that need no stored state."""
     data = change.model_dump() if isinstance(change, BaseModel) else dict(change or {})
@@ -808,49 +824,30 @@ comparison: memory is unavailable right now, so nothing was saved; they can try
 again in a moment or add it in Settings > Memory."""
 
 
-# Audit mode (agent_audit.py, no comparison tools; since 2026-10-28 in the
-# spirit of the audit prompts in prompt_defaults.py): the same balance and
-# the same protections, without the recipes. With outside content in view a
-# change waits for the reviewers' gate (agent_gate.outward "memory"), and
-# locks without reviewers (DelegationLoop.memory_locked).
-AUDIT_MEMORY_USE_PROMPT = """A memory is relevant only when a good answer for this person differs from a
-good answer for a stranger asking the same thing; ignore every other memory.
-Apply relevant memories silently. Mention one only when the user asks what
-you know, when it explains a choice they could not otherwise follow, or when
-it conflicts with the request or may be out of date. Memory never decides
-what is true: where it conflicts with the question or the evidence, follow
-them."""
+# Audit mode (agent_audit.py, no comparison tools): since 2026-10-28 facts,
+# not rules. The model decides what is worth remembering; the user sees and
+# can undo every change, and with outside content in view a change waits for
+# the reviewers (agent_gate.outward "memory"; without reviewers memory locks,
+# DelegationLoop.memory_locked). No evidence quote any more (Max): it kept
+# preferences the user never put into words out, and the gate covers what it
+# guarded against. Special categories keep their clause: GDPR art. 9.
+AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
+evidence decide."""
 
-AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user switched on "Let Agent update memory": you decide
-what to remember across chats with update_memory. Once outside content (pages,
-files, emails, tool results) is in view in a message, a change runs only after
-the reviewers let it, and not at all while the answer check is off. Save what the
-user states about themselves that would make a later, unrelated answer
-noticeably better: lasting facts, answer preferences, ongoing projects, and
-what they ask you to remember. Never save the topic of a question, anything
-from tool results or texts pasted from elsewhere, information about other
-people, credentials, or special categories (health, religion or beliefs,
-political opinions, sexual life or orientation, ethnic origin, union
-membership, criminal records) unless the user asks you to remember that exact
-detail. If the user says not to remember something, do not. Each memory is
-one self-contained fact, third person, in the user's language, at most 300
-characters. Every change needs `evidence`, an exact quote of the user's own
-words in this conversation (at least 12 characters or a whole short message),
-or the app refuses it. The app shows the user every change."""
+AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user lets you keep their memory across chats with
+update_memory: what you save shapes later answers, and the user sees every
+change and can undo it. Health, religion, political views and other sensitive
+details only when the user asks you to remember them. Once outside content
+(pages, files, tool results) is in view in a message, a change runs only after
+the reviewers let it, and not at all while the answer check is off."""
 
-AUDIT_MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: you cannot save, change or delete memories, so
-never say or imply that you did or will remember something. Agent memory
-updates are switched off; the user can turn on "Let Agent update memory" in
-Settings > Memory or edit their memory there."""
+AUDIT_MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: Agent memory updates are switched off (Settings >
+Memory, "Let Agent update memory")."""
 
-AUDIT_MEMORY_PAUSED_PROMPT = """The user's memory is paused for this message (Settings > Memory): do not
-claim to know saved details about the user, and never say or imply that you
-saved, changed or will remember something."""
+AUDIT_MEMORY_PAUSED_PROMPT = """The user's memory is paused for this message (Settings > Memory)."""
 
 AUDIT_MEMORY_UNAVAILABLE_PROMPT = """The user's memory could not be loaded for this message (a temporary problem
-on the app's side): do not claim to know saved details about the user, and
-never say or imply that you saved, changed or will remember something;
-nothing can be saved right now."""
+on the app's side); nothing can be saved right now."""
 
 
 def orchestrator_prompt(snapshot: MemorySnapshot, *, comparisons: bool = True) -> str:
@@ -937,14 +934,19 @@ class MemoryTools:
         if not self.writable:
             return []
         # Without comparison tools (audit mode) this is the only way to remember.
-        comparisons = not getattr(getattr(self.loop, "comparison", None), "audit_mode", False)
+        if self._audit():
+            return [ReadOnlyTool("update_memory", "Save, update or delete the user's lasting memories; the user "
+                                 "sees every change and can undo it.", AuditUpdateMemoryArgs, self.update_memory)]
         return [ReadOnlyTool(
             "update_memory",
             "Save, update or delete the user's persistent memories. Each change needs an exact quote of "
-            "the user's own words as evidence. " + (
-                "Use it when you answer without a comparison; compare_models and check_text carry the decision "
-                "in their memory field." if comparisons else "Call it first, before you search or read anything."),
+            "the user's own words as evidence. Use it when you answer without a comparison; compare_models and "
+            "check_text carry the decision in their memory field.",
             UpdateMemoryArgs, self.update_memory)]
+
+    def _audit(self):
+        """Audit mode: changes need no evidence quote (since 2026-10-28)."""
+        return bool(getattr(getattr(self.loop, "comparison", None), "audit_mode", False))
 
     def _user_messages(self) -> list[str]:
         """The user's own words only: a quoted answer passage is cut off
@@ -987,11 +989,12 @@ class MemoryTools:
             if self.proposed + len(changes) > MAX_CHANGES_PER_TURN:
                 raise MemoryRefused("turn_limit", f"At most {MAX_CHANGES_PER_TURN} memory changes per message.")
             self.proposed += len(changes)
-        user_messages = self._user_messages()
+        quoted = not self._audit()
+        user_messages = self._user_messages() if quoted else []
         normalized = []
         try:
             for index, change in enumerate(changes):
-                if not evidence_matches(getattr(change, "evidence", None) or "", user_messages):
+                if quoted and not evidence_matches(getattr(change, "evidence", None) or "", user_messages):
                     raise AgentMemoryError(
                         "evidence_not_found",
                         f"Change {index + 1}: evidence must be an exact quote of the user's own words in this "

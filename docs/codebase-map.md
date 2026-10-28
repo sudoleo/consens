@@ -8432,7 +8432,7 @@ app/services/llm/
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
-  agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-/Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
+  agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-Prüfung (im Audit-Modus seit 2026-10-28 ohne, AuditMemoryChange), Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Agent-Prompt samt Kartenhinweis; startet nie eine Watch
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
