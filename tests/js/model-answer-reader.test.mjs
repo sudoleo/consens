@@ -211,6 +211,7 @@ describe("model answer reader", () => {
     expect(ctx.document.querySelector('.is-preview')).toBeNull();
     expect(ctx.document.getElementById('answerReaderColumns').textContent).toContain('GPT answer r1');
     expect(ctx.reader.directSummary()).toBe('1 of 2 ready');
+    expect(ctx.reader.directCounts()).toEqual({ ready: 1, total: 2, unavailable: 0 });
   });
 
   it.each([false, true])("replaces waiting skeletons on first text and terminal states (agent=%s)", agentMode => {
