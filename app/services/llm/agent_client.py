@@ -673,6 +673,9 @@ class AgentCompletion:
         # cites it. Transient evidence for the source excerpts (see _annotations).
         self.citations = []
         self._citation_keys = set()
+        # Distinct pages a step that searched kept (sources and citations),
+        # None for a step without a search (_record_missing_citations).
+        self.search_hits = None
         # Field names of a searching step's chunks (_note_shapes).
         self._shapes = set()
         # Text length when the first search results arrived (see _drop_presearch_text).
@@ -1043,8 +1046,15 @@ class AgentCompletion:
         step since at least 2026-10-23): its sources, the source excerpts and
         the reviewers' log have nothing of the search (agent_audit.review_entry
         says it searched). Logged with the chunk shapes seen, to find where
-        the hits went; never fails the step."""
+        the hits went; never fails the step. Every step that searched counts
+        as ``search_step`` and keeps ``search_hits`` for its receipt
+        (agent_runs.settle), so the share without hits per model can be read
+        (spec A-M9, scripts/audit_report.py)."""
         count = (self.usage or {}).get("web_search_requests")
+        if type(count) is int and count > 0:
+            self.search_hits = len({source.get("url") for source in self.sources}
+                                   | {citation.get("url") for citation in self.citations})
+            record_metric("search_step", model.model, processed=count)
         if type(count) is int and count > 0 and not self.sources and not self.citations:
             record_metric("search_without_citations", model.model, processed=count)
             logging.warning("Agent search without citations model=%s searches=%s shapes=%s",

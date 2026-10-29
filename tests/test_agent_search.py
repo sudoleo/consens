@@ -114,6 +114,46 @@ def test_a_search_without_citations_is_logged_with_the_chunk_shapes(monkeypatch,
     assert completion.sources and not [metric for metric in metrics if metric[0] == "search_without_citations"]
 
 
+def test_every_searching_step_is_counted_with_the_pages_it_kept(monkeypatch, store):
+    """A-M9: the share of searching steps without hits per model needs every
+    searching step, not only those without: a metric for each and the number
+    of pages it kept on its receipt."""
+    from app.services.agent_tools import search_tools
+    from app.services.llm import agent_client
+    from test_agent_delegation import make_loop
+    model = resolve_agent_model("claude-haiku-4-5")
+    metrics = []
+    monkeypatch.setattr(agent_client, "record_metric", lambda *args, **kwargs: metrics.append((*args, kwargs)))
+    hits = []
+    for annotations, searches in (([], 2), ([{"type": "url_citation", "url_citation": {"url": "https://a.example/x"}},
+                                             {"type": "url_citation", "url_citation": {"url": "https://b.example/y"}}], 1)):
+        transport(monkeypatch, [[packet({"content": "Answer.", "annotations": annotations}, finish="stop"),
+                                 packet(usage={"prompt_tokens": 900, "completion_tokens": 50, "cost": .01,
+                                               "server_tool_use_details": {"web_search_requests": searches}})]])
+        completion = AgentCompletion()
+        list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key",
+                               tools=search_tools(model, 2), native_searches=2))
+        hits.append(completion.search_hits)
+    assert hits == [0, 2]
+    assert [metric for metric in metrics if metric[0] == "search_step"] == [
+        ("search_step", "anthropic/claude-haiku-4.5", {"processed": 2}),
+        ("search_step", "anthropic/claude-haiku-4.5", {"processed": 1})]
+    # A step without a search keeps nothing.
+    transport(monkeypatch, [[packet({"content": "Answer."}, finish="stop"),
+                             packet(usage={"prompt_tokens": 900, "completion_tokens": 50, "cost": .01})]])
+    completion = AgentCompletion()
+    list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key"))
+    assert completion.search_hits is None
+    # The receipt keeps it.
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    value = receipt()
+    value.search_hits = 0
+    store.settle(*args, completion=value, status="succeeded", final=False)
+    assert store.receipt_ref(*args).get().to_dict()["search_hits"] == 0
+
+
 @pytest.mark.parametrize("value", [True, False, -1, "NaN", "Infinity", 1e100, "no", {}, None])
 def test_invalid_provider_cost_never_becomes_a_known_zero(value):
     assert provider_cost_nanos(value) is None

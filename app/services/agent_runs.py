@@ -415,6 +415,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
                 "settled_at": firestore.SERVER_TIMESTAMP,
             }
+            if getattr(completion, "search_hits", None) is not None:
+                # The pages a step that searched kept (agent_client._record_missing_citations).
+                receipt_patch["search_hits"] = completion.search_hits
             charged = agent_quota.measured_tokens(usage, weight)
             if daily_ref and charged is not None:
                 # What the account was charged: cache reads at their weight

@@ -5744,7 +5744,10 @@ dann noch, gelten seine Live-Befunde (`live`). Runden passen in den Platz des Pr
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und
 der Prüfer hielt den Schritt sonst für unrecherchiert (`AgentCompletion`
 loggt solche Schritte mit den Feldnamen der Chunks, „Agent search without
-citations“, Metrik `search_without_citations`);
+citations“, Metrik `search_without_citations`; seit 2026-10-29 zählt jeder
+Suchschritt als `search_step`, und sein Beleg trägt `search_hits`, die Zahl
+der behaltenen Seiten, damit `scripts/audit_report.py` den Anteil ohne Treffer
+je Modell zeigt, A-M9);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
 Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
