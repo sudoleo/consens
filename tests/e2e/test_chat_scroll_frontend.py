@@ -140,6 +140,11 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
           window.__sending = App.agentChat.send(); }""")
         page.wait_for_function("() => !!window.__streamHandlers")
         page.wait_for_function(f"() => scrollY > 500 && Math.abs(__askTop() - {landing}) < 3")
+        # The ride passes the landing on its way up; where it stops counts.
+        # Below the history the question lost its top margin (2026-10-29) and
+        # stopped 8px higher than the first one.
+        page.wait_for_function("() => !document.body.classList.contains('chat-scroll-following')")
+        assert abs(page.evaluate("__askTop()") - landing) < 3, (page.evaluate("__askTop()"), landing)
         assert page.evaluate("document.getElementById('threadAskText').textContent").startswith("Next message")
         before = page.evaluate("scrollY")
         page.evaluate("__streamHandlers.delta.append(Array.from({length:35}, (_, i) => `New answer ${i}. Text for the current turn.`).join('\\n\\n'))")

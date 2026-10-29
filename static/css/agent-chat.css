@@ -588,7 +588,13 @@ body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
    starts on the column's edge, so its question ends on the other one, where
    the composer ends. */
 body.single-agent-active .thread-ask { margin: var(--space-2) 0 var(--space-5); }
-body.single-agent-active .thread-history:not([hidden]) + .thread-ask { margin-top: 0; }
+/* Every question keeps that top margin: chat-scroll.js lands the newest one
+   below the column's padding and its own margin, where a first question
+   sits. Below the history the margin overlaps the end of the last turn
+   instead, so the row under its answer stays --space-7 above the question.
+   With the margin taken off the question (2026-10-29), every later question
+   landed 8px higher than the first. */
+body.single-agent-active .thread-history:not([hidden]):has(+ .thread-ask:not([hidden])) { margin-bottom: calc(-1 * var(--space-2)); }
 /* The empty Consensus section between question and answer (order 3) adds no
    gap of its own: the question's margin is the whole distance, as in the
    history (shell.css .thread-history-turn.is-agent-turn). */
