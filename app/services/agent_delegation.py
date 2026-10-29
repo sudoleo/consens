@@ -1747,6 +1747,19 @@ class DelegationLoop(AgentLoop):
             self.live_progress.clear()
         yield from events
 
+    def _send(self, event, slot):
+        """A frame of a hold (its card or its activity) for the stream. A
+        full queue (a stream not read for long) never fails the caller, a
+        reviewer's thread among them, nor leaves the hold without its card:
+        the frame waits in ``slot`` until the stream reads again, merged into
+        what waits there already, and the card stays sticky (agent_live)."""
+        try:
+            self.outgoing.put_nowait(event)
+        except queue.Full:
+            logging.warning("Agent hold frame waits: event queue full")
+            with self.live_lock:
+                self.live_progress[slot] = {**self.live_progress.get(slot, {}), **event}
+
     def _execute_stream(self, value, call, registry=None):
         """Keep SSE live while a tool fans out or waits for both judges."""
         from contextvars import copy_context
@@ -1830,14 +1843,14 @@ class DelegationLoop(AgentLoop):
             # answer to this run (decide_unsaved), never a 409.
             with self.condition:
                 self.hold_unsaved = self.hold is hold
-        self.outgoing.put_nowait({"type": "hold", "hold": hold})
-        self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                                **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
-                                                **({"gate": True} if hold.get("gate") else {}),
-                                                **({"domain": hold["domain"]} if hold.get("domain") else {}),
-                                                **({"ask": hold["ask"], "request": hold.get("request", "")}
-                                                   if hold.get("ask") else {}),
-                                                "halt": hold["kind"], "state": "waiting"}))
+        self._send({"type": "hold", "hold": hold}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
+                                  **({"gate": True} if hold.get("gate") else {}),
+                                  **({"domain": hold["domain"]} if hold.get("domain") else {}),
+                                  **({"ask": hold["ask"], "request": hold.get("request", "")}
+                                     if hold.get("ask") else {}),
+                                  "halt": hold["kind"], "state": "waiting"}), f"hold-{hold['id']}")
         if self.work_log is not None:
             before = " before its calls ran" if details.get("gate") else ""
             asked = details.get("ask")
@@ -2157,9 +2170,9 @@ class DelegationLoop(AgentLoop):
             self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
         except Exception as exc:
             logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
-        self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
-        self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                                "state": decision}))
+        self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  "state": decision}), f"hold-{hold['id']}")
         asked = hold.get("ask")
         if self.work_log is not None:
             said = {"continue": "The user let the work go on.",
@@ -3009,9 +3022,9 @@ class DelegationLoop(AgentLoop):
                     self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
                 except Exception as exc:
                     logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
-                self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
-                self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                                        "state": decision}))
+                self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
+                self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                          "state": decision}), f"hold-{hold['id']}")
             if self.notes:
                 # Arrived after the answer was written: said, not lost silently.
                 self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",

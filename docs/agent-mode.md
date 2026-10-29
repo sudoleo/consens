@@ -471,7 +471,9 @@ geschriebene Antwort zählt), ein laufender VM-Befehl endet sofort
 seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
 Pause). **Der Agent erfährt nichts davon.** Der Nutzer entscheidet über die
 Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
-`hold`, sticky in `agent_live.py`) per `POST
+`hold`, sticky in `agent_live.py`; ist die Ereignis-Queue voll, wartet er
+in einem eigenen Platz auf den nächsten Lesevorgang, `_send`, seit 2026-10-29,
+statt den Thread des Prüfers mit `queue.Full` zu beenden) per `POST
 /agent/chats/{chat}/requests/{request_id}/hold` (`{id, action, text}`):
 `continue` läuft weiter, als wäre nichts gewesen; `steer` ist eine Nachricht
 des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie

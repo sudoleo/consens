@@ -5767,7 +5767,7 @@ injection; `parse_halt`, `halt_step` für die Karte). `AnswerAudit.halt` (je
 Prüfer und Eintrag einmal, nicht nach `final_answer`) ruft
 `DelegationLoop.request_hold`: `VMTools.interrupt` beendet den laufenden
 Befehl als Nutzer-Stop, `store.set_hold` schreibt `hold` an den Lauf-Root,
-SSE-Frame `hold` (sticky) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
+SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der
 Antwort; `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
 `hold_decision` (`_receive_hold`, nach `_receive_notes`); läuft der Lauf im

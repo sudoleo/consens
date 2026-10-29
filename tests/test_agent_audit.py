@@ -1214,6 +1214,30 @@ def test_the_route_takes_the_users_decision_on_an_open_hold(api, monkeypatch):
     assert again.status_code == 409
 
 
+HALT = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": HALT_REASON, "entry": 1,
+        "step": "", "step_name": "", "step_kind": "", "step_source": ""}
+
+
+def test_a_full_event_queue_neither_loses_the_halt_nor_ends_its_reviewer(store):
+    """A-R8: the stream was not read for long. The halt opens all the same
+    (no queue.Full in the reviewer's thread), its card waits for the next
+    read, and so does its end."""
+    import queue
+    loop = audit_loop(store, Audit())
+    loop.outgoing = queue.Queue(maxsize=1)
+    loop.outgoing.put_nowait({"type": "activity", "id": "earlier"})
+    assert loop.request_hold(HALT) is True
+    frames = list(loop._events())
+    assert [frame["type"] for frame in frames] == ["activity", "hold", "activity"]
+    assert frames[1]["hold"]["id"] == loop.hold["id"] and frames[2]["state"] == "waiting"
+    loop.outgoing.put_nowait({"type": "activity", "id": "later"})
+    hold_id = loop.hold["id"]
+    loop._receive_hold({"hold_decision": {"id": hold_id, "action": "continue"}})
+    frames = list(loop._hold_wait())
+    assert [frame.get("hold", "-") for frame in frames] == ["-", None, "-"]
+    assert frames[1]["decision"] == "continue" and frames[2]["state"] == "continue"
+
+
 def test_deny_is_taken_only_where_it_answers_the_pause(api):
     """A-S5: a domain and the agent's own question can be declined; a
     reviewer's halt or a gate cannot (422), and nothing is decided."""
