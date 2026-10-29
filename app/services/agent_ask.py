@@ -44,8 +44,9 @@ TOOL = "ask_user"
 REQUEST_CHARS = 600
 # How often a waiting run looks whether the user handed the browser back
 # (the account's record, agent_workspace.control_state): the agent goes on
-# within about a second (2 s until the first games were played, 2026-10-29).
-HANDBACK_POLL_SECONDS = 1
+# within a few seconds. 2 s until the first games were played (2026-10-29),
+# then 1 s, a read every second through a card of up to 30 minutes.
+HANDBACK_POLL_SECONDS = 3
 
 # What the agent reads, by the card's kind and the user's answer.
 ANSWERS = {

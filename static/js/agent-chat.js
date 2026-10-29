@@ -1947,7 +1947,7 @@
     const workspace = App.workspaceView;
     const holder = workspace?.holder?.() || "";
     const browserTurn = hold && (hold.ask === "browser" || hold.ask === "takeover");
-    // Handed back in this window: the server sees it within a second or so
+    // Handed back in this window: the server sees it within a few seconds
     // (agent_ask.HANDBACK_POLL_SECONDS); until then nothing asks again.
     if (browserTurn && holder === "user") askSeen.set(hold.id, "user");
     const handedBack = browserTurn && holder === "agent" && askSeen.get(hold.id) === "user";

@@ -1446,6 +1446,35 @@ def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
     assert ("openai", 1) not in auditor.halts
 
 
+def test_the_watcher_looks_less_often_during_a_pause(store, monkeypatch):
+    """A-R9: during a pause the root is read every WATCH_PAUSED_SECONDS, not
+    every WATCH_SECONDS; a decision of this process comes at once (A-T4)."""
+    monkeypatch.setattr(agent_delegation, "WATCH_SECONDS", .05)
+    monkeypatch.setattr(agent_delegation, "WATCH_PAUSED_SECONDS", 30)
+    looks, check = [], type(store).check_delegation
+
+    def counted(self, *args, **kwargs):
+        looks.append(loop.hold is not None)
+        return check(self, *args, **kwargs)
+    monkeypatch.setattr(type(store), "check_delegation", counted)
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+
+    def decide_later():
+        hold = held(loop)
+        time.sleep(1)
+        loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "continue"}})
+    thread = threading.Thread(target=decide_later, daemon=True)
+    thread.start()
+    started = time.monotonic()
+    list(loop.run())
+    thread.join(5)
+    # At most the look already under way as the pause began; the run's end
+    # wakes the watcher, it never waits out its 30 s.
+    assert looks.count(True) <= 1 and time.monotonic() - started < 10
+    assert saved(store, loop)["status"] == "completed"
+
+
 def in_background(loop, request_id="one"):
     """The run as the route starts it: on agent_background's thread, known
     by its request (run_loop). Returns its events and whether it ended."""

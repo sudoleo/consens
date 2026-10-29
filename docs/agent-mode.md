@@ -504,7 +504,10 @@ ist der Stop-Knopf. Läuft der Lauf im selben Prozess, hat er die Entscheidung
 (und eine Nachricht über `…/notes`), sobald die Anfrage antwortet
 (`DelegationLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
 Blick des Wächters, bis 3 s); der gespeicherte Root bleibt die Wahrheit für
-andere Prozesse. Eine Pause bleibt entscheidbar, wenn ihr Speichern scheitert
+andere Prozesse. Während einer Pause liest der Wächter den Root deshalb nur
+alle `WATCH_PAUSED_SECONDS` (10 s statt `WATCH_SECONDS` = 3 s; eine Pause von
+30 min kostete ~600 Blicke mit je zwei Lesevorgängen), eine Browser-Karte
+`control_state` alle 3 s statt jede Sekunde. Eine Pause bleibt entscheidbar, wenn ihr Speichern scheitert
 (seit 2026-10-29): `set_hold` wird dreimal versucht (`_save_hold`, Pause ab
 `HOLD_SAVE_BACKOFF_SECONDS`, verdoppelt), die Karte kommt trotzdem, und der
 Endpunkt gibt die Entscheidung dann dem Lauf seines Prozesses
@@ -1228,7 +1231,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (Schreiben geht über das Eingabefeld, Stopp über dessen Stop-Knopf); die
   Frist erst in den letzten fünf Minuten (`ASK_CLOCK_MINUTES`).
   **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
-  liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; liegt ein
+  liest alle `HANDBACK_POLL_SECONDS` `control_state`; liegt ein
   `returned_at` nach dem Öffnen der Karte („Hand back“ oder Schließen der
   Ansicht, beide `POST /agent/workspace/control` mit `agent`), endet sie mit
   `handed_back`. Eine Übernahme, die nur abläuft (90 s ohne Auffrischen: Handy
@@ -1240,7 +1243,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Screenshot für Bildmodelle, sonst die Seite als Text), statt dass der nächste
   Schritt danach fragt; `ask_user` trägt im Protokoll deshalb die Herkunft `web`
   und sperrt Memory wie jedes Fremdergebnis. Die Rückgabe sieht der Lauf binnen
-  etwa einer Sekunde (`HANDBACK_POLL_SECONDS` = 1). Ist die Ansicht in diesem
+  etwa drei Sekunden (`HANDBACK_POLL_SECONDS` = 3 seit 2026-10-29, vorher 1:
+  ein Read je Sekunde über eine Karte von bis zu 30 min). Ist die Ansicht in diesem
   Fenster offen, gehört der Browser dem Nutzer, sobald der Agent fragt, ohne
   Klick (einmal je Frage), und die Karte im Chat tritt zurück: Die Leiste über
   dem Bild trägt Bitte und „Hand back“; nach einer Rückgabe in diesem Fenster

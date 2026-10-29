@@ -135,6 +135,10 @@ HOLD_TIMEOUT_SECONDS = 30 * 60
 HOLD_TIMEOUT_STOPPED = "Paused for 30 minutes without a decision, so the response stopped."
 # First pause between two attempts to save an open hold (_save_hold), doubled.
 HOLD_SAVE_BACKOFF_SECONDS = .5
+# How often the run's watcher reads its root (stop, notes, decisions, lease),
+# and during a pause (_watch).
+WATCH_SECONDS = 3
+WATCH_PAUSED_SECONDS = 10
 # Calls of a batch after the user paused the work and wrote to the agent: not
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
@@ -1859,7 +1863,9 @@ class DelegationLoop(AgentLoop):
     def _watch(self):
         from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
         last_verified = time.monotonic()
-        while not self.closed.wait(3):
+        # During a pause less often (decisions of this process reach the run
+        # at once, receive): a 30-minute pause read its root ~600 times.
+        while not self.closed.wait(WATCH_PAUSED_SECONDS if self.hold is not None else WATCH_SECONDS):
             try:
                 self._check()
                 if self.claimed:
