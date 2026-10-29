@@ -1030,7 +1030,7 @@
     const saving = running && !activeTool && !waiting && !reconnecting && !held && Boolean(review)
       && !['running', 'required', 'pending'].includes(review.status) && Boolean(String(answerText || '').trim());
     const heading = running && reconnecting ? 'Reconnecting…'
-      : asking ? 'Waiting for you' : held ? 'Paused for your decision' : waiting ? 'Waiting for available tokens…' : reviewStage
+      : asking ? 'Waiting for you' : held ? 'Paused' : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.
@@ -1064,7 +1064,10 @@
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
-    if (running && !saving && (!activeTool || waiting || reconnecting || held)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true, paused:held});
+    // A waiting pause stands once in the timeline (its entry, with who paused
+    // and why) and once on the card where the user decides; a status line
+    // under it said the same a third time (UX audit C9).
+    if (running && !saving && !held && (!activeTool || waiting || reconnecting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
     // While the comparison models answer, the main model is silent: one quiet
     // line quotes their reasoning in turn (comparisonLine).
     const comparing = reviewStage === 'Comparing perspectives…' || ['compare_models', 'check_text'].includes(activeTool?.name);
@@ -1153,8 +1156,6 @@
       p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
       p.classList.toggle('agent-progress-step', item.kind === 'step');
       p.classList.toggle('agent-current-status', Boolean(item.current));
-      // Paused for the user: nothing works, so nothing shines.
-      p.classList.toggle('is-paused', Boolean(item.paused));
       if (item.current) p.setAttribute('role', 'status'); else p.removeAttribute('role');
       if (item.status) p.dataset.status = item.status;
       // A reasoning line that changes in place (a comparison model's quote,

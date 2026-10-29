@@ -257,7 +257,8 @@ describe("VM calls in the activity", () => {
     // the current line says so.
     expect(host.querySelector(".agent-vm-fold summary").textContent).toBe("Ran 2 commands");
     expect(live.closest(".agent-vm-fold")).toBeNull();
-    expect(host.querySelector(".agent-current-status").textContent).toBe("Paused for your decision");
+    // The entry says it waits; no status line repeats it (UX audit C9).
+    expect(host.querySelector(".agent-current-status")).toBeNull();
     activity.receive(events, { version: 1, kind: "hold", step_id: "hold", id: "hold-a1b2c3d4e5f6", state: "steer" });
     activity.render(host, { running: true, status: "running", events });
     expect(live.dataset.state).toBe("steer");
@@ -436,7 +437,7 @@ describe("installing and asking for a domain", () => {
     const live = host.querySelector(".agent-progress .agent-hold-step");
     expect(live.querySelector("strong").textContent).toBe("Paused before a step ran");
     expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Not checked · Waiting for your decision");
-    expect(host.querySelector(".agent-current-status").textContent).toBe("Paused for your decision");
+    expect(host.querySelector(".agent-current-status")).toBeNull();
     activity.receive(events, { version: 1, kind: "hold", id: "hold-0123456789ab", step_id: "hold", state: "continue" });
     activity.render(host, { running: false, status: "completed", events });
     const saved = host.querySelector(".agent-activity-content .agent-hold-step");
@@ -456,7 +457,7 @@ describe("installing and asking for a domain", () => {
     // In the present while it waits (UX audit 2026-10-29 C14), in the past once over.
     expect(live.querySelector("strong").textContent).toBe("The agent asks you to take over the browser");
     expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Waiting for you");
-    expect(host.querySelector(".agent-current-status").textContent).toBe("Waiting for you");
+    expect(host.querySelector(".agent-current-status")).toBeNull();
     activity.receive(events, { version: 1, kind: "hold", id: "hold-a1b2c3d4e5f6", step_id: "hold", state: "handed_back" });
     activity.render(host, { running: false, status: "completed", events });
     const saved = host.querySelector(".agent-activity-content .agent-hold-step");

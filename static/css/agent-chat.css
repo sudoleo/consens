@@ -906,7 +906,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 /* Paused for the user's decision (a reviewer's halt): nothing works, so
    nothing shines. */
-.agent-current-status.is-paused::after { content: none; }
 .agent-activity.is-running .agent-activity-current.is-paused > strong {
   background: none; -webkit-text-fill-color: currentColor; animation: none;
 }
