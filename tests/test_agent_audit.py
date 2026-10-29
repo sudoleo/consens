@@ -1282,6 +1282,45 @@ def test_a_second_reviewers_halt_joins_the_open_card(store):
     assert saved(store, loop)["status"] == "completed"
 
 
+@pytest.mark.parametrize("action", ["continue", "steer"])
+def test_a_halt_during_the_closing_step_holds_its_answer_until_the_user_decides(store, action):
+    """A-S3: a turn limit led into the closing step (_merged_wrap_up) and a
+    reviewer halted meanwhile; before, that answer was fixed past the card."""
+    halted = []
+
+    def halt_once(step):
+        if step != "completion:0" and not halted:
+            halted.append(step)
+            script.loop.request_hold(HALT)
+    script = Audit(tool_steps=1, on_answer=halt_once)
+    loop = audit_loop(store, script)
+    loop._turn_limit = lambda: agent_delegation.TURN_STEP_LIMIT if loop.routing_steps >= 1 else None
+    at_decision = []
+
+    def decide():
+        hold = held(loop)
+        at_decision.append((loop.answer_fixed, list(loop.comparison.versions)))
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, hold["id"], action,
+                          "Name the source." if action == "steer" else "")
+        loop.receive(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict())
+    thread = threading.Thread(target=decide, daemon=True)
+    thread.start()
+    list(loop.run())
+    thread.join(5)
+    # Nothing was fixed while the card stood.
+    assert at_decision == [(False, [])]
+    closing = [step for step, _ in script.calls if step.startswith("completion:")][1:]
+    users = [m["content"] for m in loop.messages if m.get("role") == "user"]
+    if action == "steer":
+        # The user's message got another closing step, under the limit's rule.
+        assert f"{agent_delegation.USER_NOTE_OPEN}\nName the source." in users and len(closing) >= 2
+        assert users[-1].startswith("App rule: this message has reached its limit.")
+    else:
+        assert not any(agent_delegation.USER_NOTE_OPEN in u for u in users)
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+
+
 def test_from_the_fixed_answer_on_no_reviewer_halts_the_work(store):
     """A-R5: a halt between the last look and the fixed answer ends with it
     ("ended") instead of standing until the turn's end with the clock

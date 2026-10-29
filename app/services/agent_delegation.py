@@ -2769,6 +2769,15 @@ class DelegationLoop(AgentLoop):
             if value.finish_reason != "stop" or value.tool_calls or not value.text.strip():
                 raise ValueError("The model did not complete the answer before review.")
             self.messages.append(value.assistant_message())
+            if self.hold is not None and (yield from self._hold_wait()) == "steer":
+                # As at the end of run(): a reviewer's halt still open as the
+                # answer stands counts once the user decided (before
+                # 2026-10-29 this answer was fixed past it), and their
+                # message gets another closing step.
+                yield from self._retract(value)
+                self._take_notes(f"completion:{index}")
+                yield from self._merged_wrap_up(reason, steps, value)
+                return
             yield from self._finish_merged(value)
             return
         if not comparison.finalized:

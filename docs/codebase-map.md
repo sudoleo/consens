@@ -5770,7 +5770,7 @@ Halt bei offener Karte auf diese, `joined_halt`, `revision`): `VMTools.interrupt
 Befehl als Nutzer-Stop, `store.set_hold` schreibt `hold` an den Lauf-Root,
 SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der
-Antwort; `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
+Antwort, auch im Schlussschritt nach einem Limit (`_merged_wrap_up`); `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
 `hold_decision` (`_receive_hold`, nach `_receive_notes`); läuft der Lauf im
 selben Prozess, geben `POST …/hold` und `…/notes` das Gespeicherte sofort an
 ihn (`agent_background.run_loop` → `DelegationLoop.receive`, seit

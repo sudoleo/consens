@@ -475,9 +475,12 @@ ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
 halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
 zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
 Gezählt wird ein Halt in `AnswerAudit.halts` erst, wenn der Lauf ihn
-angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der Lauf hält vor seinem nächsten Schritt oder
-Aufruf (`_hold_wait`, auch zwischen den Aufrufen einer Runde und bevor eine
-geschriebene Antwort zählt), ein laufender VM-Befehl endet sofort
+angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der
+Lauf hält vor seinem nächsten Schritt oder Aufruf (`_hold_wait`, auch
+zwischen den Aufrufen einer Runde und bevor eine geschriebene Antwort zählt,
+seit 2026-10-29 auch die des Schlussschritts nach einem Turn-Limit,
+`_merged_wrap_up`, wo eine Nachricht einen weiteren Schlussschritt bekommt),
+ein laufender VM-Befehl endet sofort
 (`VMTools.interrupt`, für den Agenten „The user stopped this command“), und
 seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
 Pause). **Der Agent erfährt nichts davon.** Der Nutzer entscheidet über die
