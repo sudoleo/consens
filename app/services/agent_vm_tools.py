@@ -403,6 +403,14 @@ class VMSession:
                 except agent_vm.VMUnavailable:
                     # Works on without them, like without a checkpoint.
                     logging.warning("Agent workspace notes unavailable")
+                if self.claim.secrets:
+                    # The keys the user gave, so this message masks them (agent_secrets.scrub).
+                    from app.services import agent_secrets
+                    try:
+                        self.seconds += agent_secrets.load(self.backend, self.name, self.loop.uid,
+                                                           self.claim.secrets, cancellation)
+                    except agent_vm.VMUnavailable:
+                        logging.warning("Agent workspace keys unavailable")
                 self.state = "ready"
                 self.started = True
             except ProviderCancelled:
@@ -524,6 +532,10 @@ class VMSession:
             extra["inputs_unavailable"] = len(self.skipped)
         if self.notes is not None:
             extra["workspace_notes"] = self.notes
+        if self.claim is not None and self.claim.secrets:
+            from app.services import agent_secrets
+            extra["workspace_keys"] = {"names": list(self.claim.secrets), "folder": agent_secrets.DIR,
+                                       "note": agent_secrets.KEYS_NOTE}
         if self.claim is not None and self.claim.restored:
             extra["workspace_note"] = agent_workspace.RESTORED_NOTE
         return {**result, **extra}

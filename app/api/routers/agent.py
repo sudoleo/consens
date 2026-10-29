@@ -957,7 +957,7 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
             return JSONResponse({"error": "Your workspace is not reachable right now. Try again.",
                                  "code": "vm_unavailable"}, status_code=503)
         try:
-            agent_secrets.save(vm, uid, name, payload.value, ProviderCancellation())
+            agent_secrets.save(vm, uid, name, payload.value, ProviderCancellation(), db=db_firestore)
         except agent_vm.VMUnavailable as exc:
             logging.warning("Agent secret not saved category=%s", safe_exception(exc))
             return JSONResponse({"error": "Your workspace is not reachable right now. Try again.",

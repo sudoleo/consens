@@ -1837,6 +1837,8 @@ class DelegationLoop(AgentLoop):
             self.work_log.app("paused", (
                 "The user has the browser: the agent waits until they hand it back." if asked == "takeover" else
                 f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
+                else f"The agent asks the user for the key {details.get('secret', '')}: {details.get('request', '')}"
+                if asked == "secret"
                 else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
                 f"The agent asks to reach {details['domain']} (entry {details['entry']}): the user decides."
                 if details.get("domain") else

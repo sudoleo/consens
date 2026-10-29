@@ -1532,22 +1532,32 @@
     // Refused (no room for another message, decided in another tab): the
     // card stays until the run says the pause is over, so a decision stays
     // possible; Stop always is.
-    hold.deciding = null;
+    undecided(context, hold);
     renderHold();
     App.showPopup?.(typeof data.error === "string" && data.error ? data.error
       : "Your decision did not reach the server. Try again.");
     return false;
   }
+  // By the pause's id: the stream may have sent the same pause again
+  // meanwhile, as a new object (hold.receive keeps its decision on the way).
   function holdDone(context, hold) {
     context.metadata.holdDecided = hold.id;
-    if (context.metadata.hold === hold) context.metadata.hold = null;
+    if (context.metadata.hold?.id === hold.id) context.metadata.hold = null;
     renderHold();
     registry.update(context.runId, () => {});
+  }
+  function undecided(context, hold) {
+    hold.deciding = null;
+    if (context.metadata.hold?.id === hold.id) context.metadata.hold.deciding = null;
   }
   // The key the agent asked for (ask_user with secret, agent_secrets.py;
   // since 2026-10-29): it goes from this field to the workspace alone (POST
   // .../secret), never into the chat, and the field is no form, so nothing
-  // ever sends it by GET. Saved, the server answers the card.
+  // ever sends it by GET. Saved, the server answers the card. A text area
+  // whose letters show as dots, not a password field: Chrome offered to save
+  // a password field's value as the account's password once it disappeared,
+  // and a single line dropped the line breaks of a PEM key. Enter saves,
+  // Shift+Enter starts a new line.
   async function saveSecret(context, input) {
     const hold = openHold(context);
     if (!hold || hold.deciding) return;
@@ -1570,7 +1580,7 @@
       holdDone(context, hold);
       return;
     }
-    hold.deciding = null;
+    undecided(context, hold);
     renderHold();
     App.showPopup?.(typeof data.error === "string" && data.error ? data.error
       : "The key did not reach your workspace. Try again.");
@@ -1579,24 +1589,25 @@
     const name = String(hold.secret || "");
     const field = document.createElement("div");
     field.className = "agent-ask-secret";
-    const input = document.createElement("input");
-    input.type = "password";
+    const input = document.createElement("textarea");
     input.className = "agent-ask-secret-input";
+    input.rows = 1;
     input.autocomplete = "off";
     input.spellcheck = false;
     input.setAttribute("autocapitalize", "off");
+    input.setAttribute("autocorrect", "off");
     input.dataset.i18nSkip = "";
     input.placeholder = name;
     input.setAttribute("aria-label", App.t("Paste {name}", { name }));
     input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
       event.preventDefault();
       saveSecret(context, input);
     });
     const note = document.createElement("p");
     note.className = "agent-ask-secret-note";
     note.dataset.i18nSkip = "";
-    note.textContent = App.t("Saved in your workspace as {path} for the agent’s commands, never in the chat.",
+    note.textContent = App.t("Saved in your workspace as {path} for the agent’s commands, never in the chat. Only for keys and tokens: a password you type in the browser yourself.",
       { path: `~/.secrets/${name}` });
     field.append(input, note);
     return field;
@@ -1783,7 +1794,7 @@
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
         holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
     } else if (field) {
-      const input = field.querySelector("input");
+      const input = field.querySelector(".agent-ask-secret-input");
       actions.append(
         holdButton("Save", "btn agent-hold-continue", () => saveSecret(context, input)),
         holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
@@ -2245,7 +2256,10 @@
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         const hold = event.hold && typeof event.hold.id === "string" ? event.hold : null;
         if (hold && context.metadata.holdDecided === hold.id) return;
-        context.metadata.hold = hold ? { ...hold, receivedAt: Date.now() } : null;
+        // The same pause again (a resumed stream): a decision on its way stays.
+        const same = hold && context.metadata.hold?.id === hold.id ? context.metadata.hold : null;
+        context.metadata.hold = hold ? { ...hold, receivedAt: same?.receivedAt || Date.now(),
+          ...(same?.deciding ? { deciding: same.deciding } : {}) } : null;
         renderHold();
         registry.update(context.runId, () => {});
       } },

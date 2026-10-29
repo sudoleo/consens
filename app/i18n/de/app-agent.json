@@ -908,7 +908,7 @@
   "You allowed it": "Du hast es erlaubt",
   "The agent needs a key from you": "Der Agent braucht einen Key von dir",
   "Paste {name}": "{name} einfügen",
-  "Saved in your workspace as {path} for the agent’s commands, never in the chat.": "Wird in deinem Arbeitsplatz unter {path} für die Befehle des Agenten gespeichert, nie im Chat.",
+  "Saved in your workspace as {path} for the agent’s commands, never in the chat. Only for keys and tokens: a password you type in the browser yourself.": "Wird in deinem Arbeitsplatz unter {path} für die Befehle des Agenten gespeichert, nie im Chat. Nur für Keys und Tokens: Passwörter tippst du selbst im Browser.",
   "The key did not reach your workspace. Try again.": "Der Key kam nicht in deinem Arbeitsplatz an. Versuch es noch mal.",
   "The agent asked you for a key": "Der Agent hat dich nach einem Key gefragt",
   "You saved it in the workspace": "Du hast ihn im Arbeitsplatz gespeichert",

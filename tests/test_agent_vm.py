@@ -109,8 +109,21 @@ class _FakeBackend(VMBackend):
         return ExecOutcome(exit_code=exit_code, timed_out=exit_code is None, seconds=seconds)
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
-        """Only the browser VM's helper runs this way (agent_browser.py)."""
+        """The browser VM's helper (agent_browser.py) runs this way, and the
+        keys the user gives the agent (agent_secrets.py): saved to and read
+        from the workbench's files, as the agent's user."""
         self._call("run", name, argv[-1])
+        from app.services import agent_secrets
+        if agent_secrets.SAVE_SCRIPT in argv or agent_secrets.LOAD_SCRIPT in argv:
+            assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
+            files = self.vm.vms.setdefault(name, {"files": {}, "checkpoints": []})["files"]
+            if agent_secrets.SAVE_SCRIPT in argv:
+                files[agent_secrets.path(argv[-1])] = input
+            else:
+                names = argv[argv.index(agent_secrets.LOAD_SCRIPT) + 2:]
+                on_output("stdout", b"".join(name.encode() + b"\0" + files[agent_secrets.path(name)] + b"\0"
+                                             for name in names if agent_secrets.path(name) in files))
+            return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         request = json.loads(input or b"{}")
         if request.get("action") == "warm":
             self.vm.warmed.append(name)

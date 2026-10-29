@@ -1900,7 +1900,9 @@ describe("single-model agent chat", () => {
     expect(host.querySelector(".agent-ask-card.is-secret")).not.toBeNull();
     expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent needs a key from you");
     const input = host.querySelector(".agent-ask-secret-input");
-    expect(input.type).toBe("password");
+    // Dots, not a password field (no "save password?"), and line breaks of a PEM key stay.
+    expect(input.tagName).toBe("TEXTAREA");
+    expect(input.getAttribute("autocomplete")).toBe("off");
     expect(input.closest("form")).toBeNull();
     expect(input.placeholder).toBe("OPENAI_API_KEY");
     expect(host.querySelector(".agent-ask-secret-note").textContent).toContain("~/.secrets/OPENAI_API_KEY");
@@ -1909,6 +1911,10 @@ describe("single-model agent chat", () => {
     // Empty: nothing goes out.
     host.querySelector(".agent-hold-continue").click();
     expect(sent).toEqual([]);
+    // Shift+Enter is a new line of the key, not Save.
+    input.value = "line one";
+    input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }));
+    expect(sent).toEqual([]);
     // Refused by the server: the card and the typed key stay, the user hears why.
     input.value = "sk-test-0123456789abcdef";
     input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
@@ -1916,10 +1922,19 @@ describe("single-model agent chat", () => {
     expect(sent).toEqual([["secret", "POST", { id: "a1b2c3d4e5f6", value: "sk-test-0123456789abcdef" }]]);
     expect(host.querySelector(".agent-ask-secret-input").value).toBe("sk-test-0123456789abcdef");
     expect(host.querySelector(".agent-ask-secret-input").disabled).toBe(false);
-    // Saved: the field empties and the card goes.
-    answer = { ok: true, json: async () => ({ status: "saved" }) };
+    // Saved: the field empties and the card goes. The same pause sent again
+    // meanwhile (a resumed stream) keeps the save on its way: no second one.
+    let release;
+    answer = new Promise(resolve => { release = () => resolve({ ok: true, json: async () => ({ status: "saved" }) }); });
     host.querySelector(".agent-hold-continue").click();
+    await vi.waitFor(() => expect(sent.length).toBe(2));
+    handlers.hold.receive({ hold: { ...base, id: "a1b2c3d4e5f6", ask: "secret", secret: "OPENAI_API_KEY",
+      request: "Ich brauche deinen OpenAI-Key für die App." } });
+    expect(host.querySelector(".agent-hold-continue").disabled).toBe(true);
+    host.querySelector(".agent-hold-continue").click();
+    release();
     await vi.waitFor(() => expect(host.hidden).toBe(true));
+    expect(sent.length).toBe(2);
     expect(input.value).toBe("");
     expect(sent.at(-1)[0]).toBe("secret");
     // Not now: the card's ordinary decision.

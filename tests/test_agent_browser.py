@@ -401,32 +401,62 @@ def test_localhost_opens_through_the_tunnel_to_the_workbench(store, fake_vm, mon
     the only localhost pages browser.py reads. A port the browser VM uses
     itself is refused; a tunnel that does not start costs that address,
     never the browser."""
+    import threading
     from app.services import agent_tunnel
     loop, browser = tools(store)
-    opened = []
+    opened, resumed = [], []
 
-    def open_port(uid, port, backend_factory=None):
-        opened.append((uid, port))
+    def open_port(uid, port, backend_factory=None, db=None):
+        opened.append((uid, port, db is store.db))
         if port == 3001:
             return False
         agent_tunnel._asked.setdefault(uid, set()).add(port)
         return True
+    starting = []
+
+    def resume(uid, backend_factory=None, db=None, find=False):
+        resumed.append((uid, find))
+        if starting:
+            thread = threading.Thread(target=lambda: starting.append("joined"))
+            thread.start()
+            return thread
+        return None
     monkeypatch.setattr(agent_tunnel, "open_port", open_port)
-    monkeypatch.setattr(agent_tunnel, "resume", lambda uid, backend_factory=None: None)
+    monkeypatch.setattr(agent_tunnel, "resume", resume)
     monkeypatch.setattr(agent_tunnel, "_asked", {})
+    fake_vm.browser = lambda request: {"status": "ok", "text": f'Page: "Game"\nURL: {request.get("url") or "http://localhost:3000/"}'}
     call(browser, action="read")
-    assert "local_ports" not in fake_vm.requests[-1]
-    call(browser, action="open", url="localhost:3000")
-    assert opened == [(UID, 3000)]
+    assert "local_ports" not in fake_vm.requests[-1] and resumed == []
+    result = call(browser, action="open", url="localhost:3000")
+    assert opened == [(UID, 3000, True)]
+    # The other ports of the agent's servers follow in the background.
+    assert (UID, True) in resumed
     assert fake_vm.requests[-1]["url"] == "http://localhost:3000" and fake_vm.requests[-1]["local_ports"] == [3000]
+    # Said once, with the first open of the port.
+    assert result["note"] == agent_browser.LOCAL_OPENED.format(port=3000)
+    assert "note" not in call(browser, action="open", url="localhost:3000")
     call(browser, action="read")
     assert fake_vm.requests[-1] == {"action": "read", "local_ports": [3000]}
+    # A tunnel that is starting again: a click on a localhost page waits
+    # for it, a read does not need to.
+    starting.append("starting")
+    call(browser, action="read")
+    assert starting == ["starting", "joined"] or starting == ["starting"]
+    starting[:] = ["starting"]
+    call(browser, action="click", ref="e1")
+    assert starting == ["starting", "joined"]
+    starting.clear()
     with pytest.raises(ValueError, match="Port 3001 is the browser's own computer"):
         call(browser, action="open", url="http://localhost:3001/")
 
-    def down(uid, port, backend_factory=None):
+    def down(uid, port, backend_factory=None, db=None):
         raise agent_vm.VMUnavailable("exec: HTTP 502")
     monkeypatch.setattr(agent_tunnel, "open_port", down)
     with pytest.raises(ValueError, match="did not open"):
         call(browser, action="open", url="http://127.0.0.1:3002/")
     assert not browser.off and call(browser, action="read")["action"] == "read"
+    # The account's ports from its record (a restart of the server) count too.
+    agent_tunnel._asked.clear()
+    loop.vm_tools.session.claim = agent_workspace.Claim(restored=False, tunnel_ports=(5173,))
+    call(browser, action="read")
+    assert fake_vm.requests[-1]["local_ports"] == [5173]

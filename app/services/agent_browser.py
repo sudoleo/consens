@@ -131,6 +131,22 @@ class BrowserArgs(BaseModel):
 
 # localhost on the browser is the workbench's, port by port (agent_tunnel.py).
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+# Actions that may load from the page's server: on a localhost page they wait
+# for a tunnel that is starting again (_local_ports).
+NETWORK_ACTIONS = frozenset({"click", "type", "select", "key", "back", "forward", "tab", "wait", "upload"})
+
+
+def canonical_host(host):
+    """``host`` as Chrome reads it: the shorthands of an IPv4 address
+    (127.1, 2130706433, 0x7f.0.0.1) are that address, as in Chrome."""
+    import socket
+    host = host.lower().rstrip(".")
+    if re.fullmatch(r"(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+)){0,3}", host):
+        try:
+            return socket.inet_ntoa(socket.inet_aton(host))
+        except OSError:
+            return host
+    return host
 
 
 def check_url(url, *, local=True):
@@ -153,7 +169,7 @@ def check_url(url, *, local=True):
         raise ValueError(BROWSER_PRIVATE)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         raise ValueError("open takes an http or https address.")
-    host = parts.hostname.lower().rstrip(".")
+    host = canonical_host(parts.hostname)
     if host in LOCAL_HOSTS:
         if not local:
             raise ValueError(LOCAL_DOWNLOAD)
@@ -183,7 +199,7 @@ def local_port(url):
     never takes (below 1024, the browser's debugging port)."""
     from app.services import agent_tunnel
     parts = urlsplit(url)
-    if (parts.hostname or "").lower().rstrip(".") not in LOCAL_HOSTS:
+    if canonical_host(parts.hostname or "") not in LOCAL_HOSTS:
         return None
     try:
         port = parts.port
@@ -201,6 +217,9 @@ LOCAL_PORT = ("localhost in the browser is your workspace, port by port: name th
               "1024 and up (http://localhost:3000).")
 LOCAL_TAKEN = "Port {port} is the browser's own computer. Let your server listen on another port and open that."
 LOCAL_DOWN = "The way from the browser to your workspace did not open. Try again in a moment."
+# Said with the first open of a localhost address in a message.
+LOCAL_OPENED = ("localhost:{port} here is port {port} of your workspace. The browser also reaches the other ports "
+                "your servers listen on now; a server you start later, once you open its address.")
 LOCAL_DOWNLOAD = "download takes a file on the web: what your workspace serves is in your workspace already."
 
 
@@ -241,11 +260,16 @@ class BrowserTools:
         self.name = agent_vm.browser_name(vm_tools.loop.uid)
         self.ready = False
         self.off = False
+        # The localhost ports this message's results explained (LOCAL_OPENED).
+        self.told_ports = set()
+        # The address of the page in front, as the last answer said (None before it).
+        self.page_url = None
 
     def tools(self):
         return [ReadOnlyTool(
             "browser", "Use the browser you share with the user, a Chrome on a computer of its own that they see "
-                       "live and can take over, signed in where the user signed in. Pages come back as text with refs (e12) for click, "
+                       "live and can take over, signed in where the user signed in; http://localhost:<port> there is "
+                       "that port of your workspace. Pages come back as text with refs (e12) for click, "
                        "type, select and upload, and find looks up a text on the page with the refs it is in; every "
                        "action returns the page again. A file the page downloads, also one the user downloads there, "
                        "comes into your chat folder's downloads folder.",
@@ -321,27 +345,44 @@ class BrowserTools:
             raise agent_vm.VMUnavailable(f"browser: exit {outcome.exit_code}")
         return answer
 
+    def _db(self):
+        return getattr(getattr(self.vm.loop, "store", None), "db", None)
+
     def _tunnel(self, port):
         """localhost:``port`` in the browser reaches the workbench's port
-        (agent_tunnel.py), or ValueError saying why not; a tunnel that does
-        not start costs this address, never the browser."""
+        (agent_tunnel.py), or ValueError saying why not; the other ports the
+        agent's servers listen on follow in the background, before the page
+        calls them. A tunnel that does not start costs this address, never
+        the browser."""
         from app.services import agent_tunnel
+        uid, factory = self.vm.loop.uid, self.vm.session._factory
         try:
-            held = agent_tunnel.open_port(self.vm.loop.uid, port, backend_factory=self.vm.session._factory)
+            held = agent_tunnel.open_port(uid, port, backend_factory=factory, db=self._db())
         except agent_vm.VMUnavailable as exc:
             logging.warning("Agent tunnel unavailable category=%s", safe_exception(exc))
             raise ValueError(LOCAL_DOWN) from None
         if not held:
             raise ValueError(LOCAL_TAKEN.format(port=port))
+        agent_tunnel.resume(uid, backend_factory=factory, db=self._db(), find=True)
 
-    def _local_ports(self):
+    def _local_ports(self, action):
         """The ports the account's tunnel took, for browser.py, which reads
-        localhost on those alone; a tunnel that ended (idle, the VM's sleep)
-        starts again for them meanwhile."""
+        localhost on those alone (kept on the account's record, so a restart
+        of the server forgets none). A tunnel that ended (idle, the VM's
+        sleep, a restart) starts again for them meanwhile; an action that may
+        load from a localhost page waits for that, so its first click after a
+        pause does not find the way shut."""
         from app.services import agent_tunnel
-        ports = agent_tunnel.asked(self.vm.loop.uid)
+        uid = self.vm.loop.uid
+        claim = getattr(self.vm.session, "claim", None)
+        if claim is not None:
+            agent_tunnel.seed(uid, getattr(claim, "tunnel_ports", ()))
+        ports = agent_tunnel.asked(uid)
         if ports:
-            agent_tunnel.resume(self.vm.loop.uid, backend_factory=self.vm.session._factory)
+            starting = agent_tunnel.resume(uid, backend_factory=self.vm.session._factory, db=self._db())
+            if starting is not None and action in NETWORK_ACTIONS and (
+                    self.page_url is None or local_port(self.page_url) is not None):
+                starting.join(agent_tunnel.LISTEN_SECONDS)
         return sorted(ports)
 
     def _unavailable(self, exc):
@@ -421,7 +462,7 @@ class BrowserTools:
                 self.ready = True
             if port is not None:
                 self._tunnel(port)
-            ports = self._local_ports()
+            ports = self._local_ports(args.action)
             if ports:
                 request["local_ports"] = ports
             if args.action == "upload":
@@ -442,6 +483,9 @@ class BrowserTools:
                 except Exception as exc:
                     logging.info("Agent browser upload not removed category=%s", safe_exception(exc))
         status, text = answer.get("status"), str(answer.get("text") or "")
+        seen = re.search(r"^URL: (\S+)", text, re.M)
+        if seen:
+            self.page_url = seen.group(1)
         report({"page": text[:VIEW_CHARS]})
         if status in {"refused", "setup", "failed"}:
             raise ValueError(text or "The browser could not do that.")
@@ -449,12 +493,16 @@ class BrowserTools:
             from app.services.agent_vm_tools import VM_USER_HAS_BROWSER
             raise ValueError(VM_USER_HAS_BROWSER)
         result = {"action": args.action, "page": text}
+        if port is not None and port not in self.told_ports:
+            self.told_ports.add(port)
+            result["note"] = LOCAL_OPENED.format(port=port)
         files = answer.get("downloads")
         if isinstance(files, list) and files:
             kept, skipped = self._keep_downloads(files)
             if kept:
                 result["downloads"] = kept
-                result["note"] = "Downloaded into your workspace: " + ", ".join(item["path"] for item in kept) + "."
+                result["note"] = " ".join(filter(None, (result.get("note"), "Downloaded into your workspace: "
+                                                        + ", ".join(item["path"] for item in kept) + ".")))
             if skipped:
                 result["downloads_skipped"] = skipped
         if args.action == "screenshot" or (args.screenshot_after and answer.get("png")):

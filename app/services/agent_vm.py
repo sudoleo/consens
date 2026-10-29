@@ -111,6 +111,10 @@ class VMUnavailable(Exception):
     for logs only; the agent and the user get agent_vm_tools' own words."""
 
 
+class PortClosed(VMUnavailable):
+    """The provider reached the VM, but nothing answers on the port (open_port)."""
+
+
 class VMFileMissing(FileNotFoundError):
     """No file at the path the agent named."""
 
@@ -569,13 +573,21 @@ class SpritesBackend(VMBackend):
     def _open(self, url):
         if self._connect is not None:
             return self._connect(url, self._token)
+        import socket
         from websockets.sync.client import connect
-        return connect(url, additional_headers={"Authorization": f"Bearer {self._token}"},
-                       # The server keeps the socket open for seconds after the
-                       # exit frame; waiting for its close frame would add that
-                       # to every command (the Sprites SDKs do not wait either).
-                       open_timeout=WS_OPEN_SECONDS, ping_interval=15, ping_timeout=45, close_timeout=0,
-                       max_size=WS_MAX_FRAME, logger=_SOCKET_LOG)
+        ws = connect(url, additional_headers={"Authorization": f"Bearer {self._token}"},
+                     # The server keeps the socket open for seconds after the
+                     # exit frame; waiting for its close frame would add that
+                     # to every command (the Sprites SDKs do not wait either).
+                     open_timeout=WS_OPEN_SECONDS, ping_interval=15, ping_timeout=45, close_timeout=0,
+                     max_size=WS_MAX_FRAME, logger=_SOCKET_LOG)
+        try:
+            # Small frames go at once (a request through the tunnel, a key
+            # press), not after the last one's acknowledgement (Nagle).
+            ws.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except (AttributeError, OSError):
+            pass
+        return ws
 
     def exec_url(self, name, argv, *, cwd, stdin, tty=None):
         """The exec WebSocket's address on SPRITES_API, the only place the
@@ -688,9 +700,11 @@ class SpritesBackend(VMBackend):
         from websockets.exceptions import ConnectionClosed
         ws = self._connect_exec("wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/proxy",
                                 operation="proxy")
+        answered = False
         try:
             ws.send(json.dumps({"host": "localhost", "port": int(port)}))
             reply = ws.recv(timeout=WS_OPEN_SECONDS)
+            answered = True
             status = json.loads(reply).get("status") if isinstance(reply, str) else None
         except (ConnectionClosed, OSError, TimeoutError, ValueError, AttributeError):
             status = None
@@ -699,7 +713,8 @@ class SpritesBackend(VMBackend):
                 ws.close()
             except Exception:
                 pass
-            raise VMUnavailable("proxy: port not reached")
+            # An answer that is not "connected": the VM is there, the port is not.
+            raise (PortClosed if answered else VMUnavailable)("proxy: port not reached")
         return _PortStream(ws)
 
     def _kill(self, name, session):
@@ -744,12 +759,29 @@ class _ExecStream:
         return bytes(message[1:]) if message[0] == 1 else None
 
     def close(self):
-        try:
-            with self._send_lock:
+        """Never waits for a send that hangs (a stalled connection): its
+        socket goes under it instead."""
+        if self._send_lock.acquire(blocking=False):
+            try:
                 self.ws.send(b"\x04")
+            except Exception:
+                pass
+            finally:
+                self._send_lock.release()
+        else:
+            _shutdown(self.ws)
+        try:
+            self.ws.close()
         except Exception:
             pass
-        self.ws.close()
+
+
+def _shutdown(ws):
+    import socket
+    try:
+        ws.socket.shutdown(socket.SHUT_RDWR)
+    except (AttributeError, OSError):
+        pass
 
 
 class _PortStream:
@@ -774,7 +806,14 @@ class _PortStream:
         return b"" if isinstance(message, str) else bytes(message)
 
     def close(self):
-        self.ws.close()
+        if self._send_lock.acquire(blocking=False):
+            self._send_lock.release()
+        else:
+            _shutdown(self.ws)
+        try:
+            self.ws.close()
+        except Exception:
+            pass
 
 
 def configured():

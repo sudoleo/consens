@@ -63,9 +63,12 @@ ANSWERS = {
                                                             "take the step: finish with what you have and say what "
                                                             "waits for them."},
     ("secret", "continue"): {"status": "saved", "note": "The user saved it in {path}, which only your user reads. "
-                                                        "Use the file in the command that needs it, such as "
-                                                        "{name}=\"$(cat {path})\" before the command; never print "
-                                                        "it, copy it into your project or put it in your answer."},
+                                                        "Read it in the same command line that needs it (each "
+                                                        "command is a shell of its own), such as {name}=\"$(cat "
+                                                        "{path})\" npm start; never print it, copy it into your "
+                                                        "project or put it in your answer. Where an output shows "
+                                                        "it, you read a mask that says it is hidden from you: the "
+                                                        "file is fine, never write the mask into a file."},
     ("secret", "deny"): {"status": "declined", "note": "The user did not give it. Go on without it, or say in your "
                                                        "answer what it is needed for."},
     ("secret", "steer"): {"status": "message", "note": "The user answered with a message instead: it follows."},

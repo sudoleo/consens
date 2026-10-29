@@ -99,17 +99,29 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
     assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
 
 
-def test_the_view_starts_the_tunnel_again_for_the_agents_app(view_api, monkeypatch):
+def test_the_view_starts_the_tunnel_again_for_the_agents_app(view_api, fake_vm, monkeypatch):
     """localhost in the view keeps reaching the agent's server after its run
     (agent_tunnel.resume, since 2026-10-29)."""
-    client, *_ = view_api
+    client, store, _, _ = view_api
     resumed = []
     monkeypatch.setattr(workspace_router.agent_tunnel, "resume",
-                        lambda uid, backend_factory=None: resumed.append((uid, backend_factory)))
+                        lambda uid, backend_factory=None, db=None, find=False: resumed.append(
+                            (uid, backend_factory, find)))
+    monkeypatch.setattr(workspace_router.agent_tunnel, "_asked", {})
+    # Ports kept on the account's record from before a restart of the server.
+    agent_workspace.ref(store.db, UID).set({"tunnel_ports": [5173, 80]}, merge=True)
     with client.websocket_connect("/agent/workspace/view") as ws:
         ws.send_text(json.dumps({"id_token": "verified"}))
         assert [json.loads(ws.receive_text())["state"] for _ in range(3)] == ["connecting", "starting", "ready"]
-    assert resumed == [(UID, workspace_router._backend)]
+    # With the servers the agent started since.
+    assert resumed == [(UID, workspace_router._backend, True)]
+    assert workspace_router.agent_tunnel.asked(UID) == {5173}
+    # Taking the browser over keeps the tunnel from ending as idle and starts it again.
+    touched = []
+    monkeypatch.setattr(workspace_router.agent_tunnel, "touch", touched.append)
+    fake_vm.vms.setdefault(BROWSER, {"files": {}, "checkpoints": []})
+    assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 200
+    assert touched == [UID] and resumed[-1] == (UID, workspace_router._backend, False)
 
 
 # --- The user's terminal on the workbench (since 2026-10-28) --------------------------

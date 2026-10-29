@@ -109,10 +109,17 @@ def workspace_status(request: Request):
 def workspace_control(request: Request, payload: Control):
     """The user takes the browser over (refreshed by the open view every
     CONTROL_REFRESH_SECONDS, else it expires) or hands it back. Meanwhile
-    the agent waits (agent_workspace.set_control)."""
+    the agent waits (agent_workspace.set_control). While the user has the
+    browser, the localhost tunnel neither ends as idle nor stays ended: they
+    may be trying the agent's app (agent_tunnel.py)."""
     uid = owner(request)
-    if not agent_workspace.record(db_firestore, uid).get("name"):
+    record = agent_workspace.record(db_firestore, uid)
+    if not record.get("name"):
         raise HTTPException(status_code=404, detail="Open the workspace first.")
+    if payload.holder == "user":
+        agent_tunnel.seed(uid, agent_workspace.listed(record, "tunnel_ports", int))
+        agent_tunnel.touch(uid)
+        agent_tunnel.resume(uid, backend_factory=_backend, db=db_firestore)
     try:
         vm = _backend()
         try:
@@ -169,13 +176,16 @@ def _open(uid, seconds):
     """The browser VM for the view (created if nothing used it yet, its
     tools up to date): the exec address of its relay on the provider's API,
     for at most ``seconds`` (the VM ends the relay by itself then)."""
-    agent_workspace.record_for_view(_store(), uid, provider="sprites")
+    store = _store()
+    record = agent_workspace.record_for_view(store, uid, provider="sprites")
     vm = _backend()
     try:
         name = agent_workspace.open_browser(vm, uid)
         # The agent's app on localhost goes on working in the view after
-        # its run (agent_tunnel.py).
-        agent_tunnel.resume(uid, backend_factory=_backend)
+        # its run and a restart of the server, with the servers it started
+        # since (agent_tunnel.py).
+        agent_tunnel.seed(uid, agent_workspace.listed(record, "tunnel_ports", int))
+        agent_tunnel.resume(uid, backend_factory=_backend, db=store.db, find=True)
         argv = agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_RELAY}", seconds + RELAY_GRACE_SECONDS,
                                         False)
         return vm.exec_url(name, argv, cwd=agent_vm.SERVER_HOME, stdin=True)

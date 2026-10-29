@@ -504,9 +504,10 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
    name as its placeholder; the line under it says where it goes. */
 .agent-ask-secret { display: grid; gap: 6px; margin-top: 10px; }
 .agent-ask-secret-input {
-  box-sizing: border-box; width: 100%; min-height: 36px; margin: 0; padding: 7px 10px; border: 0; border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); font: inherit;
-  font-family: var(--font-mono); font-size: var(--font-size-sm);
+  box-sizing: border-box; width: 100%; min-height: 36px; max-height: 30vh; margin: 0; padding: 7px 10px; border: 0;
+  border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); font: inherit;
+  font-family: var(--font-mono); font-size: var(--font-size-sm); line-height: 1.5; resize: vertical;
+  -webkit-text-security: disc;
 }
 .agent-ask-secret-input::placeholder { color: var(--ink-3); font-family: var(--font-mono); }
 .agent-ask-secret-input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }

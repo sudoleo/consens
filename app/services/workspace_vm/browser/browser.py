@@ -641,6 +641,8 @@ OWN_COMPUTER = ("This page is on the browser's own computer, which you do not re
                 "http://localhost:<port> for a port of your workspace.")
 # The ports the tunnel holds for this request (run).
 LOCAL_PORTS = set()
+# Chrome's empty new tab, which shows nothing of the VM.
+NEW_TAB = ("chrome://newtab", "chrome://new-tab-page")
 
 
 def hidden(page):
@@ -660,8 +662,12 @@ def own_computer(url, local_ports=()):
     the workbench's."""
     from urllib.parse import urlsplit
     parts = urlsplit(url)
-    if parts.scheme not in {"http", "https"}:
+    if not url or parts.scheme in {"about", "chrome-error", "blob", "data"} or url.startswith(NEW_TAB):
         return False
+    if parts.scheme not in {"http", "https"}:
+        # file://, chrome://, view-source: and the like: the VM's own files and
+        # the browser's own pages, also after a takeover or with back.
+        return True
     host = (parts.hostname or "").lower().rstrip(".")
     if host in LOCAL_HOSTS:
         try:

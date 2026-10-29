@@ -335,17 +335,21 @@ def test_a_key_needs_a_plain_name_and_no_browser(store, monkeypatch, args):
     assert not holds(events) and "error" in results(loop)[0]
 
 
+MASK = "[secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
+
+
 def test_a_saved_key_is_masked_in_what_the_run_keeps(store, monkeypatch, no_keys):
     """An `echo $KEY` by mistake, or a page that shows it: what the models
-    read, the activity and the work record hold [secret] instead."""
+    read, the activity and the work record hold a mask that says where the
+    key lies instead."""
     Browser(monkeypatch)
-    no_keys.remember(UID, KEY)
-    no_keys.remember(UID, "short")
+    no_keys.remember(UID, KEY, "OPENAI_API_KEY")
+    no_keys.remember(UID, "short", "SHORT")
     assert no_keys.scrub(UID, {"page": f"key={KEY}; short", "list": [KEY]}) == {
-        "page": "key=[secret]; short", "list": ["[secret]"]}
+        "page": f"key={MASK}; short", "list": [MASK]}
     assert no_keys.scrub("someone-else", KEY) == KEY
     assert no_keys.scrub(UID, KEY, now=time.time() + no_keys.SCRUB_SECONDS + 1) == KEY
-    no_keys.remember(UID, KEY)
+    no_keys.remember(UID, KEY, "OPENAI_API_KEY")
     script = Audit(tool_steps=1, step_tools={0: "browser"}, step_args={0: {"action": "read"}}, live={})
     loop = audit_loop(store, script)
     loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool(
@@ -353,23 +357,26 @@ def test_a_saved_key_is_masked_in_what_the_run_keeps(store, monkeypatch, no_keys
         lambda arguments, *, cancellation: {"action": "read", "page": f"Your key: {KEY}"})],
         argument_limit=loop.registry.argument_limit)
     events = list(loop.run())
-    assert results(loop)[0]["page"] == "Your key: [secret]"
+    assert results(loop)[0]["page"] == f"Your key: {MASK}"
     assert KEY not in json.dumps(loop.messages) and KEY not in json.dumps(events, default=str)
     assert KEY not in json.dumps([content for _, content in loop.work_log.entries_after(0)], default=str)
 
 
 def test_the_route_saves_the_key_on_the_workbench_and_answers_the_card(api, monkeypatch, no_keys):
     from test_agent_vm import FakeVM
-    from app.services import agent_vm
+    from app.services import agent_vm, agent_workspace
     client, store, _ = api
     vm = FakeVM()
     monkeypatch.setattr(agent_vm, "backend", vm.backend)
     saved_runs = []
+    backend = type(vm.backend())
+    original = backend.run
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
         saved_runs.append((name, argv, cwd, input))
-        return agent_vm.ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
-    monkeypatch.setattr(type(vm.backend()), "run", run)
+        return original(self, name, argv, cwd=cwd, timeout=timeout, on_output=on_output,
+                        cancellation=cancellation, input=input)
+    monkeypatch.setattr(backend, "run", run)
     chat_id, turn = pending(store)
     url = f"/agent/chats/{chat_id}/requests/{turn['client_request_id']}/secret"
     ref = store.receipt_ref(UID, chat_id, turn["id"])
@@ -389,11 +396,36 @@ def test_the_route_saves_the_key_on_the_workbench_and_answers_the_card(api, monk
     assert name == agent_vm.workspace_name(UID) and data == KEY.encode() and cwd == "/"
     assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN] and argv[-1] == "OPENAI_API_KEY"
     assert KEY not in json.dumps(argv) and "umask 077" in argv[-3]
-    # The card is answered, and the key is nowhere in the turn's records.
+    assert vm.vms[name]["files"]["/home/agent/.secrets/OPENAI_API_KEY"] == KEY.encode()
+    # The card is answered; the account's record names the key, and the key
+    # itself is nowhere in the records.
     root = ref.get().to_dict()
     assert root["hold_decision"] == {"id": "a1b2c3d4e5f6", "action": "continue"}
-    assert KEY not in json.dumps(root, default=str) and KEY not in json.dumps(store.get_turn(UID, chat_id, turn["id"]),
-                                                                              default=str)
-    assert no_keys.scrub(UID, KEY) == "[secret]"
+    record = agent_workspace.record(store.db, UID)
+    assert record["secret_names"] == ["OPENAI_API_KEY"]
+    for kept in (root, store.get_turn(UID, chat_id, turn["id"]), record):
+        assert KEY not in json.dumps(kept, default=str)
+    assert no_keys.scrub(UID, KEY) == MASK
     again = client.post(url, json={"id": "a1b2c3d4e5f6", "value": KEY}, headers=AUTH)
     assert again.status_code == 409 and len(saved_runs) == 1
+
+
+def test_a_later_message_masks_the_keys_and_names_them(store, monkeypatch, no_keys):
+    """After a restart of the server nothing is in memory: the message's VM
+    start reads the keys the record names (a deleted one is left out), and
+    its first result names them for the agent."""
+    from test_agent_vm import NAME, Agent, FakeVM, results as vm_results, vm_loop
+    from app.services import agent_secrets, agent_vm, agent_workspace
+    vm = FakeVM()
+    monkeypatch.setattr(agent_vm, "backend", vm.backend)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
+    vm.vms[NAME] = {"files": {agent_secrets.path("OPENAI_API_KEY"): KEY.encode()}, "checkpoints": []}
+    agent_workspace.ref(store.db, UID).set({"secret_names": ["OPENAI_API_KEY", "GONE_KEY"]}, merge=True)
+    vm.commands["cat ~/.secrets/OPENAI_API_KEY"] = ([("stdout", KEY.encode() + b"\n")], 0, .1)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "cat ~/.secrets/OPENAI_API_KEY"})]]))
+    list(loop.run())
+    first = vm_results(loop)[0]
+    assert first["workspace_keys"]["names"] == ["OPENAI_API_KEY", "GONE_KEY"]
+    assert first["workspace_keys"]["folder"] == "/home/agent/.secrets"
+    assert MASK in json.dumps(first) and KEY not in json.dumps(loop.messages)
+    assert agent_secrets.scrub(UID, KEY) == MASK

@@ -121,6 +121,11 @@ class Claim:
     # The name of the chat's folder as the chat records it (make_chat_dir),
     # empty before its first message since 2026-10-28.
     folder: str = ""
+    # Since 2026-10-29: the ports the browser reached on the workbench
+    # (agent_tunnel.py) and the names of the keys the user gave the agent
+    # (agent_secrets.py), both kept on the account's record across restarts.
+    tunnel_ports: tuple = ()
+    secrets: tuple = ()
 
 
 def tool_files(kind="workbench"):
@@ -196,6 +201,8 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         outcome["folder"] = folder if isinstance(folder, str) else ""
         from app.services import agent_domains
         outcome["domains"] = agent_domains.granted(chat_data)
+        outcome["tunnel_ports"] = listed(record, "tunnel_ports", int)
+        outcome["secrets"] = listed(record, "secret_names", str)
         tx.set(workspace, {**{key: value for key, value in record.items() if key != "lease"},
                            "provider": provider, "name": name, "browser": agent_vm.browser_name(uid),
                            "created_at": record.get("created_at") or now.isoformat(),
@@ -209,7 +216,24 @@ def claim(store, uid, chat_id, turn_id, *, provider):
     store._transaction(operation)
     return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
                  started=outcome.get("started", ""), domains=tuple(outcome.get("domains") or ()),
-                 folder=outcome.get("folder", ""))
+                 folder=outcome.get("folder", ""), tunnel_ports=outcome.get("tunnel_ports", ()),
+                 secrets=outcome.get("secrets", ()))
+
+
+def listed(record, field, kind):
+    """A list field of the record, its entries of ``kind`` only."""
+    values = record.get(field)
+    return tuple(value for value in values if type(value) is kind) if isinstance(values, list) else ()
+
+
+def remember_values(db, uid, field, values, *, keep):
+    """Adds ``values`` to the list ``field`` of the account's record, the
+    newest last and at most ``keep`` (agent_tunnel's ports, agent_secrets'
+    names): the record outlives a restart of the server, the process's
+    memory does not."""
+    doc = ref(db, uid)
+    current = [value for value in ((doc.get().to_dict() or {}).get(field) or []) if value not in values]
+    doc.set({field: [*current, *values][-keep:]}, merge=True)
 
 
 def renew(store, uid, turn_id):
@@ -266,19 +290,23 @@ def mark_restored(store, uid):
 
 def record_for_view(store, uid, *, provider):
     """The view may open the workspace before any chat used it: both VMs
-    recorded on the account (no lease) before the provider creates one."""
+    recorded on the account (no lease) before the provider creates one.
+    Returns the record as it was."""
     from app.services import persistence_guard
     workspace = ref(store.db, uid)
+    seen = {}
 
     def operation(tx):
         persistence_guard.ensure_account_write_allowed(uid=uid, db=store.db, transaction=tx)
         current = workspace.get(transaction=tx).to_dict() or {}
+        seen["record"] = current
         if (current.get("name") != agent_vm.workspace_name(uid)
                 or current.get("browser") != agent_vm.browser_name(uid)):
             tx.set(workspace, {**current, "provider": provider, "name": agent_vm.workspace_name(uid),
                                "browser": agent_vm.browser_name(uid),
                                "created_at": current.get("created_at") or _now().isoformat()})
     store._transaction(operation)
+    return seen.get("record") or {}
 
 
 # The live view (routers/agent_workspace.py): one per account, the newest
@@ -532,7 +560,9 @@ def delete_for_account(db, uid, *, factory=None):
     record after one failed provider call: the VM stayed for good. Only a
     server without a provider skips an account without a record (it never
     made one there)."""
+    from app.services import agent_tunnel
     workspace = ref(db, uid)
+    agent_tunnel.close(uid)
     if agent_vm.configured() or factory is not None or workspace.get().exists:
         agent_vm.delete_workspace(uid, factory=factory)
     workspace.delete()

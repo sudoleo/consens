@@ -1216,23 +1216,38 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   API-Key oder ein Token des Nutzers, fragt der Agent mit dem Namen
   (`OPENAI_API_KEY`, Großbuchstaben, Ziffern, `_`; nicht zusammen mit
   `browser`). Karte „The agent needs a key from you“ mit Schlüssel-Glyphe, der
-  Bitte als Daten, einem Passwortfeld (Platzhalter = Name, kein `<form>`, also
-  nie ein GET), der Zeile „Saved in your workspace as ~/.secrets/NAME …“,
-  „Save“ und „Not now“ (`deny`). „Save“ (oder Enter) schickt den Wert per
+  Bitte als Daten, einem Textfeld mit Punkten statt Zeichen
+  (`-webkit-text-security`; ein Passwortfeld bot Chrome nach dem Verschwinden
+  an, den Key als Passwort von consens.io zu speichern, und eine Zeile verlor
+  die Umbrüche eines PEM-Keys; Platzhalter = Name, kein `<form>`, also nie ein
+  GET), der Zeile „Saved in your workspace as ~/.secrets/NAME … Only for keys
+  and tokens: a password you type in the browser yourself.“, „Save“ und „Not
+  now“ (`deny`). „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
+  schickt den Wert per
   `POST /agent/chats/{chat}/requests/{request}/secret` (`{id, value}`,
   10/min): Der Server prüft, dass der offene Halt dieser Frage gilt
   (`AgentSessionStore.open_hold`, `ask: "secret"`), schreibt den Wert als
   Agenten-Nutzer nach `~/.secrets/NAME` (`SAVE_SCRIPT`: `umask 077`, Ordner
   700, erst `.NAME.part`, dann `mv`; Name als Argument, Wert nur auf stdin)
-  und beantwortet erst danach die Karte (`continue`). Der Wert steht nie in
-  Firestore, einem Log oder einem Modellkontext; der Agent hört nur den Pfad
-  (`ANSWERS[("secret", "continue")]`: im Befehl `NAME="$(cat …)"`, nie
-  ausgeben, nie ins Projekt oder in die Antwort). Was ein Befehl oder eine
-  Seite danach vom Wert zeigt, maskiert `agent_secrets.scrub` 24 h lang in
-  diesem Prozess als `[secret]` (Werkzeug-Ergebnisse vor dem Modell und dem
-  Protokoll in `DelegationLoop`, jede Aktivität in `AgentLoop.activity`; ab 8
-  Zeichen). Die Datei bleibt auf der Werkbank, bis der Nutzer sie löscht
-  (Terminal), wie eine `.env` seines Rechners.
+  und beantwortet erst danach die Karte (`continue`). Der Name kommt auf den
+  Datensatz des Kontos (`secret_names`, höchstens 32, nie der Wert). Der Wert
+  steht nie in Firestore, einem Log oder einem Modellkontext; der Agent hört
+  nur den Pfad (`ANSWERS[("secret", "continue")]`: in derselben Befehlszeile
+  lesen, denn jeder Befehl ist eine eigene Shell, etwa `NAME="$(cat …)" npm
+  start`; nie ausgeben, nie ins Projekt oder in die Antwort). Was ein Befehl
+  oder eine Seite danach vom Wert zeigt, maskiert `agent_secrets.scrub` als
+  `[secret ~/.secrets/NAME, hidden from you]` (Werkzeug-Ergebnisse vor dem
+  Modell und dem Protokoll in `DelegationLoop`, jede Aktivität in
+  `AgentLoop.activity`; ab 8 Zeichen): Die Maske sagt, wo der Key liegt und
+  dass die Datei stimmt, damit der Agent sie nicht für einen Platzhalter hält
+  und neu fragt. Nach einem Neustart des Servers ist nichts mehr im Speicher:
+  Jeder VM-Start einer Nachricht liest die Keys, die `Claim.secrets` nennt,
+  als Agenten-Nutzer wieder ein (`agent_secrets.load`, `VMSession.ready`,
+  eine Ausführung, nur wenn es Keys gibt; ein gelöschter fehlt einfach), und
+  das erste VM-Ergebnis nennt dem Agenten die Namen (`workspace_keys`, auch
+  in späteren Chats; der VM-Prompt sagt, wo sie liegen). Die Datei bleibt auf
+  der Werkbank, bis der Nutzer sie löscht (Terminal), wie eine `.env` seines
+  Rechners.
 - **Der Agent wartet, solange der Nutzer übernommen hat** (Fund 3). Zwei
   Schichten aus `agent_workspace.set_control`:
   1. *Server:* Der Datensatz des Kontos trägt `control {holder, until}` (nur
@@ -1267,31 +1282,74 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `127.0.0.1`, `[::1]`; ab 1024, nie 9222) im Browser des Nutzers ist derselbe
   Port der Werkbank, in einer Richtung. `tunnel.py` (Standardbibliothek, als
   Nutzer des Anbieters über die Exec-API wie `relay.py`) lauscht auf
-  127.0.0.1 und ::1 der Browser-VM nur auf den Ports, die der Server nennt,
-  und reicht jede Verbindung von Chrome als Rahmen auf stdout an den Server
-  (`Art (1) | Verbindung (4) | Länge (4) | Daten`: `L` Port lauschen mit
-  Antwort, `O` geöffnet, `D` Daten, `C` geschlossen; schließt der Server, erst
-  FIN, dann zu, sonst kappte ein Reset das Ende der Antwort). Der Server
+  127.0.0.1 und ::1 der Browser-VM nur auf den Ports, die der Server nennt
+  (ist einer auf ::1 belegt, gilt er als belegt: Chromes localhost erreicht
+  beide), und reicht jede Verbindung von Chrome als Rahmen auf stdout an den
+  Server (`Art (1) | Verbindung (4) | Länge (4) | Daten`: `L` Port lauschen
+  mit Antwort, `O` geöffnet, `D` Daten, `C` geschlossen, `A` so viele Bytes
+  abgenommen; schließt der Server, erst FIN, dann zu, sonst kappte ein Reset
+  das Ende der Antwort). Flusssteuerung je Verbindung (`WINDOW` 512 KB je
+  Richtung): Keine Seite schickt mehr voraus, als die andere mit `A`
+  bestätigt hat. `tunnel.py` blockiert nie (Chromes Sockets und stdout
+  nicht blockierend, Rest in Puffern): Eine Seite, die nicht mehr liest (ein
+  pausiertes Video), hält nur ihre eigene Verbindung an, nicht den Tunnel
+  (Fund der Durchsicht vom 2026-10-29: vorher blockierte ein `sendall` die
+  ganze Schleife). Höchstens `MAX_CONNECTIONS` (64) Verbindungen. Der Server
   öffnet für jede Verbindung die Proxy-API des Anbieters zum Port der
   Werkbank (`agent_vm.open_port`, `wss://api.sprites.dev/v1/sprites/<name>/proxy`:
   JSON `{"host": "localhost", "port"}`, Antwort `connected`, dann Binärrahmen;
-  wie `proxy.go` der Sprites-SDKs). Nichts auf der Werkbank erreicht die
-  Browser-VM, der Token bleibt in den Anfragen des Servers. Ein Port, den die
-  Browser-VM selbst belegt (Chromes Debug-Port, ein Dienst des Anbieters),
-  wird nie genommen: `open` lehnt ihn ab (`LOCAL_TAKEN`), und `browser.py`
-  liest localhost nur auf gehaltenen Ports. Antwortet auf der Werkbank
-  nichts, sieht Chrome eine 502-Seite „Nothing answers on port N of the
-  agent's workspace“. Ein Tunnel je Konto in diesem Prozess, gestartet vom
-  ersten `open` auf localhost (`BrowserTools._tunnel`), beendet
-  `IDLE_SECONDS` (10 min) nach den letzten Bytes, auch bei offenen
-  Verbindungen (ein Live-Reload-Socket hielte sonst beide VMs wach); die Live-Ansicht
-  (`routers/agent_workspace._open`) und jeder Browser-Aufruf starten ihn für
-  die vorher genommenen Ports neu (`resume`), damit der Nutzer nach dem Lauf
-  in der App weiterklicken kann. Ein Tunnel, der nicht startet, kostet diese
-  Adresse (`LOCAL_DOWN`), nie den Browser. Der Prompt sagt es als Fakt: Was
-  der Agent dem Nutzer zum Ansehen oder Benutzen baut, läuft auf seinem Server
+  wie `proxy.go` der Sprites-SDKs; `TCP_NODELAY` auf allen WebSockets des
+  Servers, damit kleine Rahmen nicht auf die Bestätigung des letzten warten).
+  Nichts auf der Werkbank erreicht die Browser-VM, der Token bleibt in den
+  Anfragen des Servers. Die Browser-VM gilt dem Server als die weniger
+  vertrauenswürdige Seite: Ein Rahmen über `MAX_FRAME` beendet den Tunnel,
+  eine Verbindung zu einem Port, den der Tunnel nicht hält, lehnt er ab, und
+  mehr als die Gutschrift kostet die Verbindung. Ein Port, den die Browser-VM
+  selbst belegt (Chromes Debug-Port, ein Dienst des Anbieters), wird nie
+  genommen: `open` lehnt ihn ab (`LOCAL_TAKEN`), und `browser.py` liest
+  localhost nur auf gehaltenen Ports. Nur eine Absage der Browser-VM heißt
+  „belegt“; kam keine Antwort (Tunnel weg, Zeit um), hört der Agent
+  `LOCAL_DOWN` und versucht es noch einmal, statt seinen Server auf einen
+  anderen Port zu legen. Antwortet auf der Werkbank nichts, sieht Chrome eine
+  502-Seite „Nothing answers on port N of the agent's workspace“ (der Anbieter
+  antwortete, aber nicht `connected`: `agent_vm.PortClosed`); scheiterte der
+  Weg selbst, „The way to port N … failed. Reload in a moment.“, damit der
+  Agent keinen gesunden Server neu startet. **Welche Ports:** der geöffnete
+  und mit ihm im Hintergrund jeder Port, auf dem der Nutzer des Agenten
+  gerade lauscht (`agent_tunnel.discover`: `cat /proc/net/tcp /proc/net/tcp6`
+  als Agent, Zustand LISTEN, uid 1500, nie Ports des Anbieters), damit eine
+  Seite auf 5173, die ihre API auf 8000 ruft, funktioniert; das Ergebnis des
+  ersten `open` sagt es dem Agenten (`LOCAL_OPENED`, einmal je Port). Die
+  Ports stehen auf dem Datensatz des Kontos (`tunnel_ports`, höchstens 8,
+  `agent_workspace.remember_values`) und kommen über `Claim.tunnel_ports` und
+  `record_for_view` nach einem Neustart zurück (`agent_tunnel.seed`). **Wie
+  lange:** Ein Tunnel je Konto in diesem Prozess (Render: ein uvicorn, eine
+  Instanz), gestartet vom ersten `open` auf localhost
+  (`BrowserTools._tunnel`), beendet `IDLE_SECONDS` (10 min) nach den letzten
+  Bytes, auch bei offenen Verbindungen (ein Live-Reload-Socket hielte sonst
+  beide VMs wach). Die Live-Ansicht (`routers/agent_workspace._open`, mit
+  Suche nach neuen Servern), jede Übernahme und deren Auffrischung
+  (`workspace_control`: `touch` hält ihn wach, solange der Nutzer in der App
+  arbeitet) und jeder Browser-Aufruf starten ihn für die genommenen Ports neu
+  (`resume`); eine Aktion, die von einer localhost-Seite laden kann
+  (`NETWORK_ACTIONS`), wartet darauf, damit ihr erster Klick nach einer Pause
+  nicht vor verschlossener Tür steht. Ein neuer `tunnel.py` beendet einen
+  alten auf seiner VM (`end_others`: Prozesse mit seinem Pfad als eigenem
+  Argument): Beim Deploy hielt sonst der Tunnel des alten Servers die Ports.
+  Solange beide laufen, nimmt der jeweils neueste die Ports; das ist in
+  Kauf genommen. `SO_REUSEADDR` (nicht auf Windows) gibt einen Port nach dem
+  Neustart sofort wieder frei (TIME_WAIT, CI 2026-10-29). Die Löschung des
+  Kontos beendet den Tunnel (`delete_for_account`). Ein Tunnel, der nicht
+  startet, kostet diese Adresse (`LOCAL_DOWN`), nie den Browser. Der Prompt
+  und die Beschreibung des Werkzeugs `browser` sagen es als Fakt: Was der
+  Agent dem Nutzer zum Ansehen oder Benutzen baut, läuft auf seinem Server
   (`vm_start_process`) und öffnet sich in diesem Browser; das headless Chrome
   der Werkbank bleibt für Prüfungen, die der Nutzer nicht sehen muss.
+  `check_url` liest Kurzformen einer IPv4-Adresse wie Chrome (`127.1`,
+  `2130706433`, `0x7f.0.0.1` sind 127.0.0.1, `canonical_host`), und
+  `browser.py` liest seit 2026-10-29 auch keine `file://`-, `chrome://`- oder
+  `view-source:`-Seite (etwa nach einer Übernahme oder mit „back“); die leere
+  neue Seite, `about:` und Chromes Fehlerseiten liest es.
 - **Einfügen** (seit 2026-10-27, `workspace-view.js`): Solange der Nutzer
   übernommen hat, tippen Strg+V, Cmd+V, Umschalt+Einfg oder der Knopf
   „Paste“ den Text als Tastendrücke ein (`rfb.sendKey`), höchstens
