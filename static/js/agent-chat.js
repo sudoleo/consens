@@ -1526,22 +1526,33 @@
     return minutes > 1 ? App.t("Stops in {count} minutes without your decision", { count: minutes })
       : "Stops within a minute without your decision";
   }
+  // A decision's POST (…/hold, …/secret) within DECISION_TIMEOUT_MS: on a
+  // half-open connection it hung for minutes, every button of the card
+  // locked and nothing said so (A-B3). The card says "Sending…" meanwhile,
+  // and its Stop stays a Stop.
+  const DECISION_TIMEOUT_MS = 15000;
+  async function postDecision(context, path, body) {
+    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/${path}`;
+    let response = null, data = {};
+    try {
+      await App.withRequestDeadline(async signal => {
+        const token = await window.auth.currentUser.getIdToken();
+        response = await fetch(url, { method: "POST", body: JSON.stringify(body), signal,
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        if (!response.ok) data = await response.json().catch(() => ({}));
+      }, { timeoutMs: DECISION_TIMEOUT_MS });
+    } catch (_) { response = null; }
+    return { response, data: data && typeof data === "object" ? data : {} };
+  }
   async function decideHold(context, action, text = "") {
     const hold = openHold(context);
     if (!hold || hold.deciding) return false;
     hold.deciding = action;
     renderHold();
-    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/hold`;
-    let response = null;
-    try {
-      const token = await window.auth.currentUser.getIdToken();
-      response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, action, text }),
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
-    } catch (_) { /* below */ }
-    const data = response && !response.ok ? await response.json().catch(() => ({})) : {};
-    // Decided, or the response is over: the card goes, the activity keeps
-    // the record.
-    if (response && (response.ok || data.code === "not_running")) {
+    const { response, data } = await postDecision(context, "hold", { id: hold.id, action, text });
+    // Decided, or the response or the pause is over (decided in another tab,
+    // A-B5): the card goes, the activity keeps the record.
+    if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
       holdDone(context, hold);
       return true;
     }
@@ -1583,17 +1594,12 @@
     }
     hold.deciding = "secret";
     renderHold();
-    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/secret`;
-    let response = null;
-    try {
-      const token = await window.auth.currentUser.getIdToken();
-      response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, value: input.value }),
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
-    } catch (_) { /* below */ }
-    const data = response && !response.ok ? await response.json().catch(() => ({})) : {};
-    if (response && (response.ok || data.code === "not_running")) {
+    const { response, data } = await postDecision(context, "secret", { id: hold.id, value: input.value });
+    if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
       input.value = "";
       holdDone(context, hold);
+      // Over before it was saved: the key did not go anywhere, and the user hears so.
+      if (data.code === "hold_over" && typeof data.error === "string" && data.error) App.showPopup?.(data.error);
       return;
     }
     undecided(context, hold);
@@ -2000,10 +2006,14 @@
     }
     host.hidden = false;
     const clock = host.querySelector(".agent-hold-clock");
-    const time = holdClock(hold);
+    // While a decision is on its way the line says so (postDecision).
+    const time = hold.deciding ? "Sending…" : holdClock(hold);
     clock.hidden = !time;
     if (time && clock.textContent !== App.t(time)) clock.textContent = time;
-    for (const button of host.querySelectorAll("button")) button.disabled = Boolean(hold.deciding);
+    // Stop is never locked: it is the way out of a decision that hangs.
+    for (const button of host.querySelectorAll("button")) {
+      button.disabled = Boolean(hold.deciding) && !button.classList.contains("agent-hold-stop");
+    }
     for (const input of host.querySelectorAll(".agent-ask-secret-input")) input.disabled = Boolean(hold.deciding);
     // Send waits for words in the sheet's field.
     const reply = host.querySelector(".agent-hold-reply-input");
@@ -2490,6 +2500,17 @@
       context.metadata.restoreDraft = true;
     }
     context.bookmark.status = "failed";
+    // Nothing reviews any more: the review ends here as it will read after a
+    // reload (agent_runs.finish_run), not "Reviewing the answer…" until the
+    // chat is opened again (A-B5). A finished review keeps its result.
+    const review = context.metadata.agentReview;
+    if (review && !["succeeded", "partial", "off", "failed", "cancelled", "missing"].includes(review.status)) {
+      context.metadata.agentReview = { ...review, status: review.status === "required" ? "missing" : "failed",
+        ...(Array.isArray(review.comparisons) ? { comparisons: review.comparisons.map(comparison => comparison?.status === "running"
+          ? { ...comparison, status: "failed" } : comparison) } : {}),
+        ...(["waiting", "running"].includes(review.passage_check?.status)
+          ? { passage_check: { ...review.passage_check, status: "failed" } } : {}) };
+    }
     if (asked) App.trackAnswer?.(context, "failed");
     registry.setStatus(context.runId, "failed", { message: context.consensus.error.message });
     if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);

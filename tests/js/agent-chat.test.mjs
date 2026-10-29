@@ -1945,6 +1945,89 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A-B3, A-B5 (docs/agent-audit-readiness-2026-10-29.md): a decision that
+  // hangs on a half-open connection ends after its deadline, the card says
+  // "Sending…" meanwhile and Stop stays a Stop; a pause decided elsewhere
+  // closes the card.
+  it("sends a decision within a deadline, keeps Stop free and closes a pause that is over", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const deadlines = [];
+    const real = window.App.withRequestDeadline;
+    window.App.withRequestDeadline = (operation, options = {}) => {
+      deadlines.push(options.timeoutMs);
+      return real(operation, { ...options, timeoutMs: Math.min(options.timeoutMs ?? 15000, 40) });
+    };
+    const catalogFetch = window.fetch;
+    let answer = () => new Promise(() => {}); // a half-open connection
+    window.fetch = vi.fn((url, options) => String(url).endsWith("/hold") ? answer(options) : catalogFetch(url, options));
+    window.App.showPopup = vi.fn();
+    const hold = { id: "a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5", kind: "safety", entry: 3, reason: "Löscht den Ordner.",
+      step: "rm -rf ~/projekt", step_kind: "step", at: new Date().toISOString(), timeout_seconds: 1800 };
+    handlers.hold.receive({ hold });
+    host.querySelector(".agent-hold-continue").click();
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("Sending…");
+    expect(host.querySelector(".agent-hold-continue").disabled).toBe(true);
+    expect(host.querySelector(".agent-hold-write").disabled).toBe(true);
+    expect(host.querySelector(".agent-hold-stop").disabled).toBe(false);
+    // The deadline ends it: the card stays decidable and says why.
+    await vi.waitFor(() => expect(window.App.showPopup).toHaveBeenCalledWith("Your decision did not reach the server. Try again."));
+    expect(deadlines).toContain(15000);
+    expect(host.hidden).toBe(false);
+    expect(host.querySelector(".agent-hold-continue").disabled).toBe(false);
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("Stops in 30 minutes without your decision");
+    // Decided in another tab meanwhile, and this stream heard nothing of it: the card goes.
+    answer = async () => ({ ok: false, status: 409, json: async () => ({ code: "hold_over", error: "This pause is already over." }) });
+    host.querySelector(".agent-hold-continue").click();
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    expect(run.metadata.hold).toBe(null);
+    // Its late frame brings nothing back.
+    handlers.hold.receive({ hold });
+    expect(host.hidden).toBe(true);
+    dom.window.close();
+  });
+
+  it("ends a running review with the failed run instead of reviewing on", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    let handlers, fail;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers = received;
+      return new Promise(resolve => { fail = () => resolve({ ok: false, status: 200, streamed: true,
+        data: { error: "The model provider failed. Try again.", code: "provider_error" } }); });
+    });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    handlers.review.receive({ review: { mode: "audit", status: "running", answer_version: 1, answer_hash: "h",
+      versions: [{ id: 1, text: "Answer", hash: "h" }], passage_check: { status: "running" },
+      audit: { reviewers: [{ provider: "anthropic", provider_label: "Claude", status: "running" }] } } });
+    expect(run.metadata.agentReview.status).toBe("running");
+    fail();
+    await vi.waitFor(() => expect(run.status).toBe("failed"));
+    // As a reload will show it (agent_runs.finish_run): no "Reviewing the answer…" left.
+    expect(run.metadata.agentReview.status).toBe("failed");
+    expect(run.metadata.agentReview.passage_check.status).toBe("failed");
+    expect(document.getElementById("agentAnswerActivity").textContent).not.toContain("Reviewing the answer…");
+    dom.window.close();
+  });
+
   // A-S7 (docs/agent-audit-readiness-2026-10-29.md): with the key card open
   // the field below never sends. Only the card's state decides, never the
   // words: Enter puts them, as dots, into the card's key field.

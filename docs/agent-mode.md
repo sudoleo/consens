@@ -514,6 +514,18 @@ Steer-Entscheidung. Solange die Pause wartet, nennt die Aktivität ihren Grund
 nicht ein zweites Mal (er steht in der Karte); nach der Entscheidung steht er
 dort mit ihr.
 
+**Die Entscheidung unterwegs** (seit 2026-10-29, A-B3/A-B5): Der POST einer
+Entscheidung (`…/hold`, `…/secret`; `agent-chat.js` `postDecision`) läuft unter
+`App.withRequestDeadline` mit 15 s; die Zeile über den Knöpfen sagt solange
+„Sending…“, alle Knöpfe außer Stop sind gesperrt. Läuft die Frist ab, bleibt
+die Karte entscheidbar („Your decision did not reach the server.“). Vorher
+hing der POST bei einer halboffenen Verbindung minutenlang, Stop eingeschlossen.
+Antwortet der Server `409 hold_over` (anderswo entschieden, der Stream tot),
+geht die Karte (`holdDone`); bei der Key-Karte sagt ein Hinweis den Grund.
+Endet der Lauf mit einem Fehler (`failRun`), endet eine laufende Prüfung wie
+nach einem Reload (`failed`, `missing` vor dem Start), statt bis zum Neuöffnen
+„Reviewing the answer…“ zu zeigen.
+
 **Vorab-Prüfung** (seit 2026-10-27, Max' Entscheidung nach der
 Harness-Kritik; seit 2026-10-29 nur noch zwei Arten): Ein Halt kommt erst nach
 dem Aufruf, denn die App schreibt einen Schritt ins Protokoll und führt ihn
