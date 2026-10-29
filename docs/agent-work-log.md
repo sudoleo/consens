@@ -309,8 +309,11 @@ Agent-Panel.
    2026-10-29 nur noch `request_domain` und `update_memory`, sobald
    Fremdinhalt im Blick ist) laufen erst, wenn jeder Prüfer des Laufs in einer
    Gate-Runde ohne Websuche „go“ sagt. Ein Halt oder ein Prüfer ohne
-   verwertbare Antwort (ausgefallen, pausiert) fragt den Nutzer; Ausfall zählt
-   nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Domain für die
+   verwertbare Antwort (ausgefallen, pausiert, seit 2026-10-29 auch nach
+   `GATE_SECONDS` = 20 s ohne Urteil) fragt den Nutzer; Ausfall zählt
+   nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Gate-Runde bricht
+   seit 2026-10-29 die laufende Live-Runde desselben Prüfers ab, und eine
+   unlesbare Gate-Antwort bekommt einen zweiten Versuch mit `REPAIR_NOTE`. Eine Domain für die
    Werkbank geht nach der Gate-Runde immer an den Nutzer, das Urteil der
    Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im Protokoll:
    App-Eintrag `checked` bei Freigabe, sonst `paused`/`decision` wie beim

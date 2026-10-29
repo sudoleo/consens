@@ -202,6 +202,14 @@ GATE_MEMORY_NOTE = ("update_memory does not act outside the workspace: it change
 GATE_GO = frozenset({"go", "run", "allow", "allowed", "yes", "ok", "continue", "proceed"})
 # The card's kind when no reviewer could answer (AnswerAudit.gate_hold).
 GATE_UNCHECKED = "unchecked"
+# Each asked reviewer has GATE_SECONDS from the step's entry on for its
+# verdict; then it counts as "failed", so the user decides on the card, never
+# a silent go (A-T3, since 2026-10-29; Prod 28./29.10.: p90 9.6 s, max
+# 13 s). A gate round cuts the reviewer's live round at work short (its
+# entries go into the gate round), an unreadable reply (also a tool call)
+# gets one more request with REPAIR_NOTE within that time, and the wait
+# pauses the turn's clock like a halt (DelegationLoop._gate_wait).
+GATE_SECONDS = 20
 
 
 REVIEW_PROMPT_HEAD = (
@@ -608,7 +616,8 @@ class Gate:
     waiting for the reviewers (AnswerAudit.open_gate). ``entry``: the step's
     log entry once it is written; ``asked``: the reviewers that can answer
     then; ``verdicts``: provider -> ("go" | "halt" | "failed", halt or None);
-    ``decision``: what the run made of it ("continue", "steer")."""
+    ``decision``: what the run made of it ("continue", "steer");
+    ``ready_at``: when the reviewers were asked (the run's clock)."""
 
     def __init__(self, calls):
         self.id = uuid4().hex[:12]
@@ -616,6 +625,7 @@ class Gate:
         self.call_ids = {call.get("id") for call in calls}
         self.entry = None
         self.ready = False
+        self.ready_at = None
         self.asked = set()
         self.verdicts = {}
         self.decision = None
@@ -1158,14 +1168,23 @@ class ReviewerSession:
         no halt could come of it any more and the final round reads its
         entries anyway. The reviewer goes on; until 2026-10-29 its final
         round waited for it (MiMo Pro: up to 53 s) and paid for its entries
-        twice."""
+        twice. Also for a gate that asks this reviewer (its gate round
+        comes first and reads the entries) and for a gate round past
+        GATE_SECONDS (A-T3)."""
         live = self.live
         if live is not None:
             live.cancel()
 
-    def _round_due(self):
-        """Whether a live round must give way before it starts or as it does."""
-        return self.audit.final_answer is not None
+    def _round_due(self, gate=None):
+        """Whether a live round must give way before it starts or as it does:
+        the answer is fixed, or a gate other than the round's own ``gate``
+        waits for this reviewer's verdict."""
+        audit = self.audit
+        if audit.final_answer is not None:
+            return True
+        pending = audit.gate
+        return (pending is not None and pending is not gate and pending.ready and self.provider in pending.asked
+                and self.provider not in pending.verdicts)
 
     def run(self):
         audit, log = self.audit, self.audit.work_log
@@ -1282,7 +1301,8 @@ class ReviewerSession:
     def _gate_round(self, gate):
         """A live round that also decides whether the step's outward calls
         may run (Gate): the new entries, the calls, no web search. A round
-        that fails or cannot be read counts as no verdict ("failed")."""
+        that fails, cannot be read even after its repair or runs past
+        GATE_SECONDS counts as no verdict ("failed")."""
         entries = self.audit.work_log.entries_after(self.cursor)
         number = self.live_rounds + 1
         note = gate.note()
@@ -1301,9 +1321,11 @@ class ReviewerSession:
         last = entries[-1][0]["seq"] if entries else self.cursor
         known = set(range(1, last + 1))
         try:
-            _, (verdict, halt, marks) = self._request(text + "\n\n" + note, known=known,
+            _, (verdict, halt, marks) = self._request(text + "\n\n" + note, known=known, gate=gate,
                                                       parse=lambda reply: parse_gate(reply, known=known))
         except RoundCut:
+            # Past GATE_SECONDS (gate_result): no verdict, and its entries
+            # come with the next round.
             self.audit.gate_verdict(self, gate, "failed")
             return
         except ProviderCancelled:
@@ -1359,17 +1381,19 @@ class ReviewerSession:
                            sender=self.worker.id, recipient="orchestrator",
                            patch={"result_truncated": len(text) > self.loop.policy.result_chars}, wait=False)
 
-    def _request(self, message, *, known, parse=None):
+    def _request(self, message, *, known, parse=None, gate=None):
         """One paid live or gate round on the reviewer's session: (value,
         marks). A failed or unreadable round ends its session (the next round
-        opens a new one) and leaves the conversation as it was. ``parse``: a
+        opens a new one) and leaves the conversation as it was; an unreadable
+        reply in a gate round (``gate``, A-T3), also a tool call, first gets
+        one more request on the same session with REPAIR_NOTE. ``parse``: a
         gate round's reader (parse_gate), whose result stands for the marks;
         such a round does not search. The round runs under a stop of its own
         (``live``): cut short (cut_round), it raises RoundCut, its session
         ends "stopped" (``round_cut``) and hands the conversation on
         (conversation_key), and cursor, conversation and failures stay as
         they were."""
-        if self._round_due():
+        if self._round_due(gate):
             raise RoundCut()
         if self.worker is None:
             self.worker = self._open()
@@ -1377,35 +1401,48 @@ class ReviewerSession:
         cut = ProviderCancellation()
         unregister = self.cancellation.register(cut)
         self.live, self.live_started = cut, time.monotonic()
-        if self._round_due():
+        if self._round_due(gate):
             # It came as the round began: cut_round found no round yet.
             cut.cancel()
-        value = None
+        attempts = 1 if gate is None else 2
         try:
-            value = self.tools.worker_request(
-                self.worker, self.model, self.messages, cancellation=cut, slots=self.audit.slots,
-                searching=parse is None, search_rounds=LIVE_SEARCH_ROUNDS, one_off=False,
-                review_round="live" if parse is None else "gate")
-            marks = parse(value.text) if parse is not None else parse_review(value.text, known=known, final=False)
-        except BaseException as exc:
-            self.messages.pop()
-            worker, self.worker = self.worker, None
-            if isinstance(exc, ProviderCancelled) and cut.cancelled and not self.cancellation.cancelled:
-                # Cut short: the claimed step was settled as stopped, so its
-                # session ends; the next one goes on with the conversation on
-                # the same OpenRouter session.
-                self.loop._state(worker, "stopped", failure={"code": "round_cut"})
-                raise RoundCut() from None
-            self._unusable(reply_shape(exc, value) if isinstance(exc, Exception) else None, self.live_rounds + 1,
-                           False)
-            failure = review_failure(exc, self.cancellation)
-            if not isinstance(exc, ProviderCancelled):
-                # The reviewer goes on: the next round opens a new session.
-                failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
-            self.conversation_key = None
-            self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
-                                failure["error"], failure)
-            raise
+            for attempt in range(attempts):
+                value = None
+                try:
+                    value = self.tools.worker_request(
+                        self.worker, self.model, self.messages, cancellation=cut, slots=self.audit.slots,
+                        searching=parse is None, search_rounds=LIVE_SEARCH_ROUNDS, one_off=False,
+                        review_round="repair" if attempt else "live" if gate is None else "gate")
+                    marks = (parse(value.text) if parse is not None
+                             else parse_review(value.text, known=known, final=False))
+                    break
+                except BaseException as exc:
+                    if isinstance(exc, ProviderCancelled) and cut.cancelled and not self.cancellation.cancelled:
+                        # Cut short: the claimed step was settled as stopped, so
+                        # its session ends; the next one goes on with the
+                        # conversation on the same OpenRouter session.
+                        self.messages.pop()
+                        worker, self.worker = self.worker, None
+                        self.loop._state(worker, "stopped", failure={"code": "round_cut"})
+                        raise RoundCut() from None
+                    shape = reply_shape(exc, value) if isinstance(exc, Exception) else None
+                    again = attempt + 1 < attempts and shape is not None and shape["shape"] in MENDABLE_SHAPES
+                    self._unusable(shape, "gate" if gate is not None else self.live_rounds + 1, again)
+                    if again:
+                        # The reply came and was paid: the same session goes
+                        # on, within the gate's time (gate_result cuts it).
+                        self.messages[-1] = {"role": "user", "content": message + "\n\n" + REPAIR_NOTE}
+                        continue
+                    self.messages.pop()
+                    worker, self.worker = self.worker, None
+                    failure = review_failure(exc, self.cancellation)
+                    if not isinstance(exc, ProviderCancelled):
+                        # The reviewer goes on: the next round opens a new session.
+                        failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
+                    self.conversation_key = None
+                    self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
+                                        failure["error"], failure)
+                    raise
         finally:
             unregister()
             self.live = self.live_started = None
@@ -1647,9 +1684,10 @@ class AnswerAudit:
 
     def ready_gate(self, gate, entry):
         """The step is in the log as ``entry`` (None: it could not be
-        written): every reviewer that can answer now gets its gate round. One
-        that pauses after failures, follows no more or has ended is not
-        waited for."""
+        written): every reviewer that can answer now gets its gate round, and
+        a live round it is at gives way to it (cut_round, A-T3). One that
+        pauses after failures, follows no more or has ended is not waited
+        for."""
         now = time.monotonic()
         with self._gate_changed:
             gate.entry = entry
@@ -1657,8 +1695,11 @@ class AnswerAudit:
                 gate.asked = {provider for provider, session in self.sessions.items()
                               if session.following and now >= session.resume_at
                               and session.thread is not None and session.thread.is_alive()}
-            gate.ready = True
+            gate.ready, gate.ready_at = True, self._clock()
+            asked = [self.sessions[provider] for provider in gate.asked]
             self._gate_changed.notify_all()
+        for session in asked:
+            session.cut_round()
         if self.work_log is not None:
             self.work_log.wake()
 
@@ -1668,8 +1709,16 @@ class AnswerAudit:
             with self.tools.lock:
                 self.halts.add((session.provider, halt["entry"]))
         with self._gate_changed:
-            gate.verdicts.setdefault(session.provider, (verdict, halt))
+            self._verdict(session, gate, verdict, halt)
             self._gate_changed.notify_all()
+
+    def _verdict(self, session, gate, verdict, halt):
+        """The first verdict of ``session`` on ``gate`` counts (under _gate_changed)."""
+        gate.verdicts.setdefault(session.provider, (verdict, halt))
+
+    def _clock(self):
+        """The run's clock (DelegationLoop.clock, injectable for tests)."""
+        return getattr(self.tools.loop, "clock", time.monotonic)()
 
     def gate_wait(self, timeout):
         with self._gate_changed:
@@ -1681,11 +1730,24 @@ class AnswerAudit:
         reviewer of the run let the calls run, (GATE_UNCHECKED, []) when one
         could not answer (failed, paused or no longer following): the veto
         of one reviewer is enough, and a reviewer that could not answer is
-        never a go (security audit 2026-10-27); the user decides instead."""
+        never a go (security audit 2026-10-27); the user decides instead. An
+        asked reviewer without a verdict after GATE_SECONDS could not answer
+        (A-T3): its gate round stops."""
+        late = []
         with self._gate_changed:
-            if not gate.ready or (gate.asked - set(gate.verdicts) and not self.stopping):
+            if not gate.ready:
+                return None
+            missing = gate.asked - set(gate.verdicts)
+            if missing and not self.stopping and self._clock() - gate.ready_at >= GATE_SECONDS:
+                late = [self.sessions[provider] for provider in missing]
+                for session in late:
+                    self._verdict(session, gate, "failed", None)
+                missing = set()
+            if missing and not self.stopping:
                 return None
             verdicts = dict(gate.verdicts)
+        for session in late:
+            session.cut_round()
         # In the reviewers' order, not in the order they answered.
         halts = [(session, verdicts[provider][1]) for provider, session in self.sessions.items()
                  if verdicts.get(provider, (None,))[0] == "halt"]

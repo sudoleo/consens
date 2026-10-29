@@ -366,6 +366,10 @@ class DelegationLoop(AgentLoop):
         # clock is injectable for tests.
         self.clock = time.monotonic
         self.turn_started = self.clock()
+        # The time the run waited for the reviewers' gate rounds (_gate_wait,
+        # _domain_wait), the wait at hand since ``gate_started``: it pauses
+        # the turn's clock like a halt (A-T3).
+        self.gate_paused, self.gate_started = 0.0, None
         self.routing_steps = 0
         # Set once a routing step reasoned through its allowance: every later
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
@@ -652,7 +656,12 @@ class DelegationLoop(AgentLoop):
         on a reviewer's halt (request_hold)."""
         now = self.clock()
         paused = self.paused_seconds + (now - self.hold_started if self.hold is not None else 0.0)
-        return now - self.turn_started - paused
+        return now - self.turn_started - paused - self._gate_pause(now)
+
+    def _gate_pause(self, now):
+        """Seconds the run waited for gate rounds, the wait at hand included."""
+        started = self.gate_started
+        return self.gate_paused + (now - started if started is not None else 0.0)
 
     def _long_run(self):
         """Whether this turn works in its VM: from the VM's first start in
@@ -1878,19 +1887,26 @@ class DelegationLoop(AgentLoop):
             return gate.decision
         auditor = self.comparison.auditor
         announced = False
-        while True:
-            result = auditor.gate_result(gate)
-            if result is not None:
-                break
-            if not announced:
-                announced = True
-                yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
-                                     "text": "The reviewers check this step before it runs."})
-            auditor.gate_wait(.2)
-            if self.watch_error:
-                raise self.watch_error
-            self.cancellation.raise_if_cancelled()
-            yield from self._events()
+        # The wait pauses the turn's clock (_gate_pause); each reviewer has
+        # GATE_SECONDS for its verdict (gate_result).
+        self.gate_started = self.clock()
+        try:
+            while True:
+                result = auditor.gate_result(gate)
+                if result is not None:
+                    break
+                if not announced:
+                    announced = True
+                    yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
+                                         "text": "The reviewers check this step before it runs."})
+                auditor.gate_wait(.2)
+                if self.watch_error:
+                    raise self.watch_error
+                self.cancellation.raise_if_cancelled()
+                yield from self._events()
+        finally:
+            self.gate_paused += self.clock() - self.gate_started
+            self.gate_started = None
         verdict, halts = result
         if verdict == "go":
             gate.decision = "continue"
@@ -1938,19 +1954,25 @@ class DelegationLoop(AgentLoop):
         verdict, halts = "unchecked", []
         if gate is not None and auditor is not None and call["id"] in gate.call_ids:
             announced = False
-            while True:
-                result = auditor.gate_result(gate)
-                if result is not None:
-                    break
-                if not announced:
-                    announced = True
-                    yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
-                                         "text": "The reviewers check this request before you decide."})
-                auditor.gate_wait(.2)
-                if self.watch_error:
-                    raise self.watch_error
-                self.cancellation.raise_if_cancelled()
-                yield from self._events()
+            # As in _gate_wait: the turn's clock stands meanwhile.
+            self.gate_started = self.clock()
+            try:
+                while True:
+                    result = auditor.gate_result(gate)
+                    if result is not None:
+                        break
+                    if not announced:
+                        announced = True
+                        yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
+                                             "text": "The reviewers check this request before you decide."})
+                    auditor.gate_wait(.2)
+                    if self.watch_error:
+                        raise self.watch_error
+                    self.cancellation.raise_if_cancelled()
+                    yield from self._events()
+            finally:
+                self.gate_paused += self.clock() - self.gate_started
+                self.gate_started = None
             verdict, halts = result
         details = {"reviewer": "", "provider": "", "kind": "domain", "reason": "", "gate": True,
                    "entry": gate.entry if gate is not None else None, "step": "", "step_name": "",

@@ -5747,6 +5747,10 @@ der Prüfer hielt den Schritt sonst für unrecherchiert (`AgentCompletion`
 loggt solche Schritte mit den Feldnamen der Chunks, „Agent search without
 citations“, Metrik `search_without_citations`);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
+Gate-Runden haben seit 2026-10-29 Vorrang und eine Frist (`ready_gate` ruft
+`cut_round` für jeden gefragten Prüfer, `GATE_SECONDS` in `gate_result`,
+`REPAIR_NOTE` für eine unlesbare Gate-Antwort in `_request(gate=…)`), und
+`_gate_wait`/`_domain_wait` halten die Turn-Uhr an (`_gate_pause`).
 Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 `REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget

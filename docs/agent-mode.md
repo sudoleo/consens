@@ -565,7 +565,16 @@ Prüfer, die antworten können (folgend, nicht in der Fehlerpause, Thread
 lebt). Jeder davon bekommt eine Gate-Runde (`ReviewerSession._gate_round`):
 die neuen Einträge plus `GATE_NOTE` mit den Aufrufen, **ohne Websuche**, im
 selben Gespräch. Antwort `"gate": "go"` oder ein Halt (`parse_gate`; Marken
-dürfen dabei sein, ohne Entscheidung zählt sie als ausgefallen). Der Aufruf
+dürfen dabei sein, ohne Entscheidung zählt sie als ausgefallen). Seit
+2026-10-29 (A-T3) hat das Gate Vorrang und eine Frist: `ready_gate` bricht
+eine laufende Live-Runde jedes gefragten Prüfers ab (`cut_round`, ihre
+Einträge gehen in die Gate-Runde), jeder Prüfer hat `GATE_SECONDS` (20 s) ab
+dem Eintrag, danach zählt er als ausgefallen (`gate_result`, also Karte
+`unchecked`, nie ein Go), eine unlesbare Antwort, auch ein Tool-Aufruf statt
+JSON, bekommt in dieser Zeit einen zweiten Versuch mit `REPAIR_NOTE` in
+derselben Sitzung (Beleg `repair`), und die Wartezeit hält die Turn-Uhr an wie
+ein Halt (`gate_paused`/`gate_started`, `_gate_pause`; vorher zählte sie zur
+Turn-Zeit). Der Aufruf
 wartet in `_gate_wait` (Aktivität „The reviewers check this step before it
 runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`. **Ein
 Halt reicht** → die Karte (`request_hold` mit `gate: true`, „A reviewer
