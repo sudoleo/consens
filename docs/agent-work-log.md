@@ -99,6 +99,19 @@ Ergebnis steht als `tool`-Eintrag darin.
   als unvollständig zeigt, und `finish_run` läuft trotzdem. Prüfer-Threads
   bekommen nach ihrem Stopp höchstens `REVIEWER_JOIN_SECONDS` (10 s,
   `AnswerAudit._join`).
+- Im Speicher des Laufs: `WorkLog._entries` hält jeden Eintrag mit ganzem
+  Inhalt, solange der Lauf läuft (die Prüfer lesen daraus); mit seinem Ende
+  gibt `agent_background` den Lauf frei. Gemessen 2026-10-29
+  (`tests/test_agent_audit_tempo.py`, A-L2): 199 Befehle mit der längsten
+  Ausgabe, die ein Befehl dem Modell gibt (stdout und stderr je
+  `MODEL_STREAM_CHARS` = 12.000 Zeichen), dann die Antwort: 496 Einträge,
+  4,9 Mio. Zeichen, rund 5 MB (ASCII; Umlaute bis doppelt, Emoji bis
+  vierfach). Größenordnung also rund 25.000 Zeichen je Werkbank-Schritt mit
+  einem Befehl, höchstens etwa 5 Mio. Zeichen in den 200 Schritten eines
+  Laufs. Eine feste Grenze gibt es nicht: Ein Schritt darf bis zu vier
+  Aufrufe haben, und `vm_write_file` trägt bis 100.000 Zeichen als Argument
+  (im `step`-Eintrag ganz); 200 Schritte mit je vier vollen Schreibaufrufen
+  kämen auf über 80 Mio. Zeichen.
 - Große Inhalte: `PrivateObjects` aus `agent_files.py` (privater Bucket, lokal
   ein Ordner, ein Client je Konfiguration), Schlüssel
   `work-log/{uid}/{chat}/{turn}/{seq}`.
@@ -351,5 +364,6 @@ Agent-Panel.
 - **Keine Rollen:** Alle Prüfer sind gleich und prüfen unabhängig.
 
 Tests: `tests/test_agent_work_log.py`, `tests/test_agent_audit.py`,
+`tests/test_agent_audit_tempo.py` (Tempo, 200-Schritte-Lauf, Last),
 `tests/js/agent-work-log.test.mjs`, `tests/js/agent-review.test.mjs`,
 `tests/js/agent-delegation.test.mjs`.

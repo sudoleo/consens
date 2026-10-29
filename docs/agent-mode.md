@@ -720,7 +720,10 @@ Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
 
 Tests: `tests/test_agent_audit.py` (Turn, Live-Runden, Schlussrunde,
 Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
-Prompts, Route, Aussteuern), `tests/js/audit-marks.test.mjs`, die Halt-Fälle
+Prompts, Route, Aussteuern), `tests/test_agent_audit_tempo.py` (seit
+2026-10-29: Tempo mit drei und sechs Prüfern, 200-Schritte-Lauf, drei Turns
+gleichzeitig; Ergebnisse in der Spezifikation unten, Paket 5),
+`tests/js/audit-marks.test.mjs`, die Halt-Fälle
 in `agent-chat.test.mjs`, `agent-vm-activity.test.mjs` und
 `tab-status.test.mjs`, die Audit-Fälle in
 `tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,

@@ -307,6 +307,16 @@ Den Live-Lauf startet
 (bezahlt; `--only`, `--baseline FILE --pairwise MODEL` gegen gespeicherte
 Antworten, etwa die des früheren getrennten Antwortschritts, `--out`, siehe
 agent-mode.md).
+Audit-Modus: `tests/test_agent_audit.py` (Prüfer, Runden, Fristen, Stop,
+Halts) und `tests/test_agent_gate.py` (Vorab-Prüfung); `tests/test_agent_audit_tempo.py`
+(seit 2026-10-29, Spezifikation A-L1 bis A-L3, rund 40 s) spielt Werkbank-Läufe
+mit drei und sechs Prüfern, gemessenen Latenzen aus Prod im Maßstab 1:40 und
+einer Datenbank mit Rundreisen ohne Modell-Calls: Server-Anteil je Runde,
+Marken nach dem letzten Wort, Hedge, harte Frist, Gate-Wartezeit, keine
+lebenden Threads nach dem Turn, einen 200-Schritte-Lauf (neue Gespräche,
+Fehlerpause, `following=False`, Speicher des Protokolls) und drei Turns
+gleichzeitig. Gemessene Werte druckt `-s`; die Grenzen halten weiten Abstand
+für langsamere CI-Runner.
 `tests/test_agent_progress.py` prüft begrenzte
 Fortschrittsmeldungen aus validierten Toolargumenten, Reihenfolge vor Toolstart,
 Persistenz, unveränderte Übernahme mehrsprachiger Texte und Aufruf-/Tokenabrechnung. Provider-

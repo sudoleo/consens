@@ -5853,7 +5853,8 @@ eines Befunds zur Arbeit über `App.agentActivity.toolName` („Command“,
 Prüfer-Zeitleiste von `agent-delegation.js`), und eine Nachricht nach dem
 Fixieren der Antwort wartet auf das Laufende (`agent-chat.js`
 `readsMessages`). Browser-Test der ganzen Ansicht:
-`tests/e2e/test_agent_audit_frontend.py`. Details: `docs/agent-mode.md`,
+`tests/e2e/test_agent_audit_frontend.py`; Tempo, Langlauf und Last ohne
+Modell-Calls: `tests/test_agent_audit_tempo.py`. Details: `docs/agent-mode.md`,
 „Audit statt Vergleich“.
 
 **Aussteuern** (seit 2026-10-26, Details `docs/agent-mode.md` „Aussteuern“):

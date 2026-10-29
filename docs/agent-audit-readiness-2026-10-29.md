@@ -498,6 +498,49 @@ Browser:
   Prüfern in einem Prozess (Fakes mit realistischen Firestore-Rundreisen wie in
   `test_agent_tempo.py`): Z1 darf sich gegenüber einem Einzellauf um höchstens
   20 % verschlechtern.
+- *Stand 2026-10-29* (A-L1 bis A-L3 in `tests/test_agent_audit_tempo.py`,
+  rund 40 s): Fakes mit den Latenzen aus Abschnitt 2 im Maßstab 1:40, eine
+  Rundreise 0,1 s Prod, Transaktionen parallel bis auf den Konto-Lock;
+  gemessen unter Windows mit 4 Kernen. Die CPU-Zeit des Servers skaliert
+  nicht mit, in Prod-Sekunden umgerechnete Server-Anteile sind zu hoch.
+  - A-L1 (40 Schritte, Luna hängt in der ersten Schlussanfrage, MiMo Pro
+    steckt beim Fixieren in einer Live-Runde, ein Gate-Schritt): Marken nach
+    dem letzten Wort 0,95–1,02 s mit drei, 1,02–1,11 s mit sechs Prüfern,
+    davon 0,83 s Hedge-Weg (20 s Hedge-Zeit + Lunas Median 13 s). Erste
+    Schlussanfrage 0,13 bzw. 0,20–0,25 s nach dem Fixieren, Server je
+    Live-Runde Median 32–47 bzw. 63–79 ms, Gate 0,19–0,27 s (unter
+    `GATE_SECONDS`, ≈ 8–11 s Prod). Beide Anfragen hängen: Marken nach
+    2,33 s (90 s + Speichern), `no_time`. Nach jedem Turn 0 lebende Threads.
+  - Befund Konto-Lock: Jede Prüfer-Runde kostet rund vier Transaktionen
+    unter `account_lock` (Claim, Abrechnung, zwei Sitzungs-Updates des
+    Journals). Mit drei Prüfern war der Lock rund 60 % der Turn-Zeit belegt,
+    mit sechs rund 85 %; der Server-Anteil je Agentenschritt stieg von 37 ms
+    (ohne Prüfer) auf 38–53 bzw. 69–100 ms, der Turn dauerte 6,2–7,0 bzw.
+    7,3–9,0 s statt 4,5 s. Das ist die Zahl für A-T5.
+  - Befund Hedge-Zeit: `FINAL_HEDGE_SECONDS` (20 s) liegt auf Qwens Median.
+    Bis acht Schlussrunden eines Modells im Prozess liefen, bekommt etwa
+    jede zweite Qwen-Schlussrunde einen Hedge (hier in jedem Lauf), also
+    eine zweite bezahlte Anfrage. Bei rund zehn Audit-Turns am Tag und einem
+    Neustart je Deploy wird die Schwelle selten erreicht.
+  - A-L2 (199 Befehle mit voller Ausgabe, dann die Antwort): Jeder Prüfer
+    ging 26–28-mal in ein neues Gespräch, machte eine Fehlerpause, folgte ab
+    Schritt 190 nicht mehr, und seine Schlussrunde kam in einem neuen
+    Gespräch mit allen Live-Befunden; `fresh`, `pauses` und
+    `unfollowed_at_seq` stimmen. Protokoll im Speicher: 496 Einträge, 4,9
+    Mio. Zeichen, rund 5 MB ([agent-work-log.md](agent-work-log.md)). Mit dem
+    echten Tokenizer dauerte derselbe Lauf 17 statt 4 s: `input_estimate`
+    (tiktoken über das ganze Gespräch, bei jeder Reservierung) kostete 20 s
+    CPU in 1.528 Aufrufen. Auf Render Starter (0,5 CPU) hält das unter dem
+    GIL jeden Thread des Prozesses auf.
+  - A-L3 (drei Turns zugleich mit Daily, zwei in einem Konto, einer in
+    einem anderen; Tokens aus den Zeichen gezählt, weil der Tokenizer im
+    Maßstab 1:40 den GIL sättigt): kein Deadlock, keine Threads danach. Der
+    Turn im eigenen Konto: Marken 0 bis +15 % gegenüber dem Einzellauf
+    (0,41–0,44 s), das Ziel hält. Die zwei Turns eines Kontos: +7 bis
+    +54 %, das Ziel hält nicht; ihr Server-Anteil je Live-Runde stieg von 32
+    auf 94–140 ms, ihre Werkbank-Schritte liefen etwa 50 % langsamer.
+    Ursache: der gemeinsame Konto-Lock. Der Test prüft deshalb ≤ 20 % (plus
+    50 ms Uhrschritt) für das eigene Konto und < 2× für ein geteiltes.
 - **A-L4 Echter Smoke nach Deploy** (`docs/smoke-checklist.md` ergänzen):
   Daily mit drei Prüfern, ein Werkbank-Lauf über 10 min, auf dem iPhone
   ein Halt mit App-Wechsel und Rückkehr, eine Browser-Übergabe mit
