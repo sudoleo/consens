@@ -5761,7 +5761,9 @@ nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
 `agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
-`failed`. Eigene Suchtreffer bringen Fremdinhalt in den Blick
+`failed`. Nach `finish_run` zählt `agent_audit_metrics.record` den Turn anonym
+in `ops_metrics/agent-audit-{Tag}` (seit 2026-10-29, A-M1; nie in Tests oder
+unter `MOCK_LLM`). Eigene Suchtreffer bringen Fremdinhalt in den Blick
 (`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
 Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne sie sperrt `memory_locked`. Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
@@ -8546,6 +8548,7 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate)
+  agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt
   agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
@@ -9103,6 +9106,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
   `global_worker` trägt `claimed_until`, `owner` (zufälliges Token je Tick) und
   `acquired_at`; nur der Eigentümer darf erneuern oder freigeben (R30).
+- `ops_metrics/agent-audit-{YYYY-MM-DD}` (seit 2026-10-29, A-M1) — anonyme
+  Tageszähler der Audit-Turns (`agent_audit_metrics`): je Turn am Ende ein
+  Merge aus Increments (`turns`, `reviews`, `reviewers.n{k}`,
+  `reviewer_status`, Buckets `total_s`, `answer_s`, `marks_s`, `gate_s`,
+  `final_s.{modell}`, `backlog_entries`, `halts.{art}.{entscheidung}`,
+  `failures.{turn|reviewer|review}.{code}`), ohne UID, Chat, Turn oder Text;
+  übersteht das Löschen der Chats. Nur Server (Rules deny-all), kein Index.
 - `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
   Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
   Fehlern), Watch-Seiten-Follower, Topic-Follower und Morning Brief. Felder:

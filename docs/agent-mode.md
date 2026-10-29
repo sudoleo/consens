@@ -420,6 +420,19 @@ verlorener Laufzustand (`watch_error`) beendet den Turn dort als Fehler. Die
 Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
 keine `differences_stats`, kein Model-Pulse-Pick.
 
+**Messen** (seit 2026-10-29, Spezifikation A-M1/A-M8): Am Ende jedes
+Audit-Turns zählt `agent_audit_metrics.record` ihn anonym in
+`ops_metrics/agent-audit-{UTC-Tag}`: Status, Review-Status, Prüferzahl,
+Buckets für Gesamtzeit, Zeit bis zur fixierten Antwort, Marken nach dem
+letzten Wort, Gate-Wartezeit, Schlussrunde je Modell und Rückstand beim
+Fixieren, dazu Halts je Art und Entscheidung und Ausfälle je Code. Kopiert
+wird im Lauf nur, was im Speicher steht (Zeiten des Protokolls, Holds der
+Aktivität); ein Daemon-Thread liest den gespeicherten Turn einmal und schreibt
+einen Merge aus Increments. Ohne UID, Chat oder Text, die Zähler überstehen
+das Löschen der Chats. Felder späterer Pakete (`final_ms`, `backlog`,
+`agent_holds`, `gate_ms`) zählen, sobald es sie gibt. Auswertung samt Zielen
+Z1–Z8: `scripts/audit_report.py --days 5` (nur lesend).
+
 **Answer check aus** schaltet auch die Prüfer ab (`auditor` ist `None`): Der
 Agent antwortet allein, ohne Review, und der Prompt sagt es
 (`AUDIT_OFF_PROMPT`).

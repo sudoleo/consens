@@ -3001,5 +3001,9 @@ class DelegationLoop(AgentLoop):
                                       status=status, run_token=self.run_token)
             else:
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
+            if self.comparison is not None and self.comparison.audit_mode:
+                # Anonymous daily counters of audit turns, saved off this thread.
+                from app.services import agent_audit_metrics
+                agent_audit_metrics.record(self)
         yield from self._events()
         yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.completion.usage})
