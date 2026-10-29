@@ -186,13 +186,43 @@ def test_entries_that_cannot_be_saved_mark_the_log_incomplete_and_leave_no_conte
     assert objects.items == {} and objects.deleted == ["work-log/u/c/t/000001"]
 
 
-def test_the_runs_end_waits_for_the_log_at_most_its_limit():
+def test_the_runs_end_waits_for_the_log_at_most_its_limit(caplog):
+    import logging
     store = LogStore(delay=1)
     log = work_log(store)
     log.add("start", content={})
     started = time.monotonic()
-    log.close(timeout=.2)
+    with caplog.at_level(logging.WARNING):
+        log.close(timeout=.2)
     assert time.monotonic() - started < .6
+    # Said with the writer's thread (A-R3).
+    assert any("thread=agent-work-log" in r.getMessage() for r in caplog.records)
+
+
+def test_the_journal_and_the_log_wait_at_most_fifteen_seconds_together(store, monkeypatch):
+    """A-R3 (2026-10-29): the journal had no limit and the work log alone 20 s;
+    the run's end and finish_run waited for both."""
+    from app.services import agent_delegation
+    assert agent_delegation.CLOSE_WAIT_SECONDS == 15
+    monkeypatch.setattr(agent_delegation, "CLOSE_WAIT_SECONDS", 1)
+    loop = audit_loop(store, Audit())
+    waits = {}
+    journal_close, log_close = loop.journal.close, loop.work_log.close
+
+    def slow_journal(timeout=None):
+        waits["journal"] = timeout
+        journal_close(timeout)
+        time.sleep(.3)
+
+    def log(timeout=agent_work_log.CLOSE_SECONDS):
+        waits["log"] = timeout
+        log_close(timeout)
+    monkeypatch.setattr(loop.journal, "close", slow_journal)
+    monkeypatch.setattr(loop.work_log, "close", log)
+    list(loop.run())
+    # What the journal took is off the log's time (Windows' clock steps 16 ms).
+    assert waits["journal"] == 1 and waits["log"] < .75
+    assert saved(store, loop)["status"] == "completed"
 
 
 # --- In a turn --------------------------------------------------------------------

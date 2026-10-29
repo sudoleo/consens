@@ -136,6 +136,11 @@ HOLD_TIMEOUT_SECONDS = 30 * 60
 # the user.
 HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
 NOTES_UNREAD = ("Your message arrived after the answer was written. Send it again as a new message.")
+# The run's end waits this long in all for its journal and its work log to
+# save what they hold (A-R3, since 2026-10-29); what they have not saved by
+# then is logged by its thread's name, and finish_run runs anyway. Until then
+# the journal had no limit and the work log alone up to 20 s.
+CLOSE_WAIT_SECONDS = 15
 # Pause before the one retry of a session update after a short database
 # outage (_journal_write; a worker's end record, audit A12).
 TERMINAL_RETRY_SECONDS = .5
@@ -2955,8 +2960,11 @@ class DelegationLoop(AgentLoop):
             if self.comparison:
                 self.comparison.close()
             # Every session update is saved before the run closes: a later
-            # one would find the run finished.
-            self.journal.close()
+            # one would find the run finished. With the work log's writer at
+            # most CLOSE_WAIT_SECONDS in all.
+            closing = time.monotonic()
+            self.journal.close(timeout=CLOSE_WAIT_SECONDS)
+            close_wait = CLOSE_WAIT_SECONDS - (time.monotonic() - closing)
             # Provider threads are joined; retain and retry their original
             # measurements before finalizing. Never rerun a paid model step.
             for step, (value, step_status) in list(self.unsettled.items()):
@@ -3000,7 +3008,7 @@ class DelegationLoop(AgentLoop):
                     "vm": getattr(self.completion, "vm", None),
                     # The agent's last plan, to hold against what it did.
                     "plan": self.plan_tools.items if self.plan_tools is not None and self.plan_tools.items else None})
-                self.work_log.close()
+                self.work_log.close(timeout=max(0., close_wait))
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:
                 self.store.finish_run(self.uid, self.chat_id, self.turn_id, completion=self.completion,

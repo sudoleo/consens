@@ -4933,7 +4933,10 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   mit). Vorher war jeder Lesezugriff ein eigener Rundgang, ein Claim las neun
   Dokumente nacheinander.
 - Sitzungs-Updates schreibt das Journal des Laufs
-  (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf):
+  (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf; am
+  Laufende warten Journal und Arbeitsprotokoll seit 2026-10-29 zusammen
+  höchstens `CLOSE_WAIT_SECONDS` = 15 s, `close(timeout=…)`, danach eine
+  Logzeile mit dem Thread-Namen):
   `DelegationLoop._publish(wait=False)` übergibt und arbeitet weiter, das
   Journal schreibt je Sitzung in Reihenfolge. Seit 2026-10-22 geht alles, was
   fällig ist, sobald der Schreib-Thread frei ist, in **eine** Transaktion

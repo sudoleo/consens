@@ -91,9 +91,14 @@ Ergebnis steht als `tool`-Eintrag darin.
   ersten belegten Schritt des Laufs; ein Lauf ohne Modellaufruf hat kein
   Protokoll. Drei Versuche je Bündel; danach sind die Einträge verloren,
   schon abgelegte Inhalte werden wieder entfernt, und der Turn trägt
-  `work_log_incomplete`. Am Laufende wartet der Lauf höchstens 20 s auf den
-  Rest; was dann noch fehlt, ist verloren, und dem Protokoll fehlt der
-  `end`-Eintrag, was die Ansicht als unvollständig zeigt.
+  `work_log_incomplete`. Am Laufende wartet der Lauf auf den Rest, seit
+  2026-10-29 zusammen mit dem Journal der Sitzungen höchstens 15 s
+  (`agent_delegation.CLOSE_WAIT_SECONDS`, vorher das Protokoll allein 20 s und
+  das Journal unbegrenzt); was dann noch fehlt, ist verloren (Logzeile mit dem
+  Namen des Threads), dem Protokoll fehlt der `end`-Eintrag, was die Ansicht
+  als unvollständig zeigt, und `finish_run` läuft trotzdem. Prüfer-Threads
+  bekommen nach ihrem Stopp höchstens `REVIEWER_JOIN_SECONDS` (10 s,
+  `AnswerAudit._join`).
 - Große Inhalte: `PrivateObjects` aus `agent_files.py` (privater Bucket, lokal
   ein Ordner, ein Client je Konfiguration), Schlüssel
   `work-log/{uid}/{chat}/{turn}/{seq}`.

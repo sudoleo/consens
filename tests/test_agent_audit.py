@@ -929,6 +929,24 @@ def test_an_interruption_in_the_final_round_stops_the_review_with_its_live_marks
         ("OpenAI", step, "step", "Unchecked.", True)]
 
 
+def test_a_reviewer_thread_that_does_not_stop_is_named_and_left_behind(monkeypatch, caplog):
+    """A-R3 (2026-10-29): the run's end waited for every reviewer thread
+    without a limit, and a hung one held finish_run until the lease expired."""
+    from types import SimpleNamespace
+    monkeypatch.setattr(agent_audit, "REVIEWER_JOIN_SECONDS", .2)
+    release = threading.Event()
+    hung = threading.Thread(target=release.wait, name="agent-review-openai", daemon=True)
+    hung.start()
+    audit = agent_audit.AnswerAudit(SimpleNamespace(lock=threading.RLock()))
+    audit.sessions = {"openai": SimpleNamespace(thread=hung, requests=[])}
+    started = time.monotonic()
+    with caplog.at_level(logging.WARNING):
+        audit._stop()
+    assert time.monotonic() - started < 2
+    assert any("thread=agent-review-openai" in r.getMessage() for r in caplog.records)
+    release.set()
+
+
 def test_a_stop_before_the_review_starts_keeps_the_live_marks(store, monkeypatch):
     script = Audit(tool_steps=1, live={"anthropic": step_mark("Too early.")})
     loop = audit_loop(store, script)

@@ -152,6 +152,13 @@ FINAL_HEDGE_QUANTILE = .75
 FINAL_HEDGE_SAMPLES = 50
 FINAL_HEDGE_MIN_SAMPLES = 8
 FINAL_ROUND_SECONDS = 90
+# A reviewer's threads (its own, its final round's requests) get this long
+# after their stop to end (A-R3, since 2026-10-29); one still at work then is
+# logged by its thread's name and left behind (a daemon), and the run ends
+# anyway. Until then a hung thread held finish_run until the lease expired
+# and the reaper wrote run_interrupted. The final round itself waits at most
+# FINAL_ROUND_SECONDS plus this before its reviewers count as out of time.
+REVIEWER_JOIN_SECONDS = 10
 
 # Most severe first. The mark of a sentence takes its most severe kind.
 KINDS = ("wrong", "doubtful", "incomplete")
@@ -1967,8 +1974,15 @@ class AnswerAudit:
             # round (A-M4, A-T1).
             session.fixed()
         self.work_log.wake()
+        until = time.monotonic() + FINAL_ROUND_SECONDS + REVIEWER_JOIN_SECONDS
         for session in self.sessions.values():
-            session.thread.join()
+            session.thread.join(max(0., until - time.monotonic()))
+        late = [session for session in self.sessions.values() if session.thread.is_alive()]
+        for session in late:
+            # Held up outside its requests (FINAL_ROUND_SECONDS bound those).
+            session.cancellation.deadline = True
+            session.cancellation.cancel()
+        self._join(late)
         # The user's Stop, not the deadline: no marks after a stop.
         cancellation.raise_if_cancelled()
         loop.cancellation.raise_if_cancelled()
@@ -1999,12 +2013,20 @@ class AnswerAudit:
             self._gate_changed.notify_all()
         if self.work_log is not None:
             self.work_log.wake()
-        for session in self.sessions.values():
-            if session.thread is not None and session.thread is not threading.current_thread():
-                session.thread.join()
-            # A final round's request that another reply overtook, still stopping.
-            for request in session.requests:
-                request.thread.join()
+        self._join(self.sessions.values())
+
+    def _join(self, sessions):
+        """Waits for the threads of stopped reviewers, their final round's
+        requests included (one another reply overtook may still be
+        stopping), at most REVIEWER_JOIN_SECONDS in all (A-R3)."""
+        until = time.monotonic() + REVIEWER_JOIN_SECONDS
+        for session in list(sessions):
+            for thread in [session.thread, *(request.thread for request in session.requests)]:
+                if thread is None or thread is threading.current_thread():
+                    continue
+                thread.join(max(0., until - time.monotonic()))
+                if thread.is_alive():
+                    logging.warning("Agent reviewer still running after its stop thread=%s", thread.name)
 
     def _finish(self, answer, issues):
         tools = self.tools
