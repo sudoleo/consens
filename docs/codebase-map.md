@@ -5774,7 +5774,8 @@ und `empty` als `review_empty` statt `provider_error` (Texte in
 `agent-review.js` `auditReasons`).
 `agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
-`failed`. Eigene Suchtreffer bringen Fremdinhalt in den Blick
+`failed`, nach Crash oder Reap seit 2026-10-29 auch jede Zeile in
+`audit.reviewers[]` in `waiting`/`running` (`failed`, `run_interrupted`). Eigene Suchtreffer bringen Fremdinhalt in den Blick
 (`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
 Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne sie sperrt `memory_locked`. Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und

@@ -1011,6 +1011,29 @@ def test_a_completed_answer_never_keeps_a_review_that_says_reviewing(store, monk
     assert turn["agent_review"]["status"] == "failed"
 
 
+def test_a_crash_or_the_reaper_leaves_no_reviewer_at_work(store):
+    """A-R6 (2026-10-29): after a crash or reap finish_run set the review's
+    status, while single reviewers still said "running"."""
+    from datetime import datetime, timedelta, timezone
+    from test_agent_delegation import make_loop
+    from test_agent_runs import receipt
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    reviewers = [{"provider": "anthropic", "status": "completed", "marks": 0}, {"provider": "openai", "status": "running"},
+                 {"provider": "google", "status": "waiting"}]
+    store.save_review(*args, loop.run_token, {"version": 1, "status": "running", "mode": "audit", "comparisons": [],
+                                              "versions": [], "audit": {"reviewers": reviewers}}, "An answer.")
+    root = store.receipt_ref(*args)
+    store._transaction(lambda tx: tx.update(root, {"lease_until": datetime.now(timezone.utc) - timedelta(seconds=60)}))
+    store.reap_delegation(*args)
+    review = store.get_turn(*args)["agent_review"]
+    assert review["status"] == "cancelled"
+    assert [(r["provider"], r["status"], (r.get("failure") or {}).get("code")) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", None), ("openai", "failed", "run_interrupted"), ("google", "failed", "run_interrupted")]
+
+
 def test_memory_stays_open_while_the_agent_has_not_searched(store):
     script = Audit(search=False)
     loop = audit_loop(store, script)

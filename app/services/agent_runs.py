@@ -550,6 +550,15 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         for comparison in review.get("comparisons", []):
                             if comparison.get("status") == "running":
                                 comparison["status"] = "cancelled" if status == "cancelled" else "failed"
+                        audit = review.get("audit")
+                        if isinstance(audit, dict) and isinstance(audit.get("reviewers"), list):
+                            # Reviewers a crash or the reaper left at work
+                            # (AnswerAudit.close never ran): none still is
+                            # (A-R6, since 2026-10-29).
+                            review["audit"] = {**audit, "reviewers": [
+                                {**row, "status": "failed", "failure": {"code": "run_interrupted"}}
+                                if isinstance(row, dict) and row.get("status") in {"waiting", "running"} else row
+                                for row in audit["reviewers"]]}
                         passage = review.get("passage_check")
                         if isinstance(passage, dict) and passage.get("status") in {"waiting", "running"}:
                             review["passage_check"] = {**passage, "status": "cancelled" if status == "cancelled" else "failed"}

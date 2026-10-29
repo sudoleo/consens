@@ -428,7 +428,9 @@ endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem
 `completed`. Scheitert nur ein Speichern, bleibt der Stand im Speicher und
 `AnswerAudit.close` speichert am Laufende erneut; eine Audit-Review, die beim
 erfolgreichen Ende noch `required`/`running` sagt, setzt
-`agent_runs.finish_run` auf `failed`. Der Stop des Nutzers während der
+`agent_runs.finish_run` auf `failed`; nach Crash oder Reap setzt es seit
+2026-10-29 auch jede Prüferzeile in `waiting`/`running` auf `failed`
+(`run_interrupted`, Notes: „the run was interrupted“). Der Stop des Nutzers während der
 Prüfung stoppt die Prüfer, nicht die fertige Antwort: die Review endet
 `cancelled`, der Turn `completed` (`_finish_review`), auch wenn der Stop kurz
 vor dem Start der Prüfer kommt (dann setzt `close` die Review). Seit

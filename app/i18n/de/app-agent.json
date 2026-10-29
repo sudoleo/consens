@@ -691,6 +691,7 @@
   "the work did not fit its context": "die Arbeit passte nicht in seinen Kontext",
   "it called a tool instead of giving its review": "es rief ein Tool auf, statt seine Prüfung abzugeben",
   "its reply was empty": "seine Antwort war leer",
+  "the run was interrupted": "der Lauf wurde unterbrochen",
   "It called a tool instead of giving its review, so its marks are missing.": "Es rief ein Tool auf, statt seine Prüfung abzugeben, darum fehlen seine Markierungen.",
   "Its reply was empty, so its marks are missing.": "Seine Antwort war leer, darum fehlen seine Markierungen.",
   "Its final review reached its time limit, so its final marks are missing.": "Seine abschließende Prüfung erreichte ihr Zeitlimit, darum fehlen seine abschließenden Markierungen.",
