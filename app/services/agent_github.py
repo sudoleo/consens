@@ -531,16 +531,22 @@ class GitHubTools:
         return self._connections
 
     def tools(self):
-        return [
-            ReadOnlyTool("github_import", f"Copy a GitHub repository into {REPOS_DIR} in your VM, as a git "
-                         "repository with one commit of its state: any public one, and private ones the user "
-                         "connected. Returns the folder and the commit.", GithubImportArgs, self.import_repo,
-                         activity=self._activity, reports=True),
-            ReadOnlyTool("prepare_pull_request", "Prepare a pull request from your changes to a repository you "
-                         "imported with github_import: the user sees the changes on a card under your answer and "
-                         "decides; nothing goes to GitHub before that.", PreparePullRequestArgs, self.prepare,
-                         activity=self._pr_activity, reports=True),
-        ]
+        """github_import always: public repositories need no app. Private
+        ones and prepare_pull_request only where the app is set up (since
+        2026-10-29): before, an installation without it offered a tool that
+        could only answer NOT_SET_UP, one more choice for nothing."""
+        app = configured()
+        tools = [ReadOnlyTool("github_import", f"Copy a GitHub repository into {REPOS_DIR} in your VM, as a git "
+                              "repository with one commit of its state: any public one"
+                              + (", and private ones the user connected" if app else "")
+                              + ". Returns the folder and the commit.", GithubImportArgs, self.import_repo,
+                              activity=self._activity, reports=True)]
+        if app:
+            tools.append(ReadOnlyTool(
+                "prepare_pull_request", "Prepare a pull request from your changes to a repository you imported with "
+                "github_import: the user sees the changes on a card under your answer and decides; nothing goes to "
+                "GitHub before that.", PreparePullRequestArgs, self.prepare, activity=self._pr_activity, reports=True))
+        return tools
 
     def _dest(self, args):
         name = (args.dest.strip() or args.repo.split("/", 1)[1]).removesuffix(".git")

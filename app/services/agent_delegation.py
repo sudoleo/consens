@@ -552,9 +552,12 @@ class DelegationLoop(AgentLoop):
             from app.services.prompt_defaults import AGENT_VM_PROMPT
             self.vm_tools = VMTools(self)
             self.messages[0]["content"] += "\n\n" + AGENT_VM_PROMPT
-            # GitHub (agent_github.py): the tools come with the VM, so the prompt does too.
-            from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
-            self.messages[0]["content"] += "\n\n" + AGENT_GITHUB_PROMPT
+            # GitHub (agent_github.py): the tools come with the VM, so the prompt does too;
+            # without the app only the import of public repositories.
+            from app.services import agent_github
+            from app.services.prompt_defaults import AGENT_GITHUB_IMPORT_PROMPT, AGENT_GITHUB_PROMPT
+            self.messages[0]["content"] += "\n\n" + (AGENT_GITHUB_PROMPT if agent_github.configured()
+                                                     else AGENT_GITHUB_IMPORT_PROMPT)
             # The plan of a long task (agent_plan.py), with the VM where tasks run long.
             from app.services.agent_plan import PlanTools
             from app.services.prompt_defaults import AGENT_PLAN_PROMPT

@@ -152,7 +152,13 @@ update_plan shows the user the plan of a longer task while you work: its steps i
 
 AGENT_GITHUB_PROMPT = """GITHUB
 
-github_import copies a GitHub repository into your workspace: any public one, and private ones the user connected. The backend downloads it, so the workspace never holds GitHub credentials and does not reach github.com: git clone and git push do not work there. It lands in /home/agent/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes. prepare_pull_request on that folder puts the changes on a card under your answer, where the user creates the pull request. A pull request needs the repository connected; the tool says when GitHub is not connected or not set up. Files under .github/workflows cannot be changed this way."""
+github_import copies a GitHub repository into your workspace: any public one, and private ones the user connected. The backend downloads it, so the workspace never holds GitHub credentials and does not reach github.com: git clone and git push do not work there. It lands in /home/agent/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes. prepare_pull_request on that folder puts the changes on a card under your answer, where the user creates the pull request. A pull request needs the repository connected; the tool says when GitHub is not connected. Files under .github/workflows cannot be changed this way."""
+
+# The same without the GitHub app (agent_github.configured, since
+# 2026-10-29): public repositories only, and no pull requests to offer.
+AGENT_GITHUB_IMPORT_PROMPT = """GITHUB
+
+github_import copies a public GitHub repository into your workspace. The backend downloads it, so the workspace never holds GitHub credentials and does not reach github.com: git clone and git push do not work there. It lands in /home/agent/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes."""
 
 
 ANSWER_SYSTEM_PROMPT = (

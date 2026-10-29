@@ -223,9 +223,11 @@ def test_without_the_app_github_is_not_set_up(gh_api, fake_vm, monkeypatch):
     script = Agent([[("github_import", {"repo": "maxl/app"})]])
     loop = vm_loop(store, script)
     list(loop.run())
-    # The tools come with the VM and say it calmly.
-    assert {"github_import", "prepare_pull_request"} <= set(script.offered[0])
-    assert prompt_defaults.AGENT_GITHUB_PROMPT in script.systems[0]
+    # The import comes with the VM (public repositories need no app) and says
+    # it calmly; a pull request is not offered at all (since 2026-10-29).
+    assert "github_import" in script.offered[0] and "prepare_pull_request" not in script.offered[0]
+    assert prompt_defaults.AGENT_GITHUB_IMPORT_PROMPT in script.systems[0]
+    assert "prepare_pull_request" not in script.systems[0]
     assert results(loop) == [{"error": NOT_SET_UP}]
 
 
