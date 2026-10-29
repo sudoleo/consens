@@ -163,6 +163,9 @@ def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store):
     assert holds[0]["reason"] == HALT_REASON and holds[0]["reviewer"] == "GPT-5.4 mini"
     assert holds[0]["step_kind"] == "call" and holds[0]["step"].startswith("update_memory: ")
     assert REMEMBERED in holds[0]["step"]
+    # The card says the change in words, never its JSON (UX audit 2026-10-29 C1).
+    assert "{" not in holds[0]["step"]
+    assert [(c["tool"], c["text"]) for c in holds[0]["step_calls"]] == [("update_memory", REMEMBERED)]
     # The card's hold carries the gate's course, never a reason in it.
     assert type(holds[0]["gate_ms"]) is int
     assert [(v["provider"], v["verdict"]) for v in holds[0]["verdicts"]] == [("anthropic", "go"), ("openai", "halt")]
