@@ -1488,6 +1488,8 @@
   const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
     injection: "Prompt injection", unchecked: "Not checked" };
   let holdTimer = null;
+  // The agent's own question shows its clock from here on (askCard).
+  const ASK_CLOCK_MINUTES = 5;
   function openHold(context) {
     const hold = context?.metadata?.hold;
     return hold && registry.isExecuting(context.runId) && registry.isAuthCurrent(context) ? hold : null;
@@ -1498,8 +1500,10 @@
     const since = Number.isFinite(at) ? Math.min(at, hold.receivedAt) : hold.receivedAt;
     const left = since + (Number(hold.timeout_seconds) || 1800) * 1000 - Date.now();
     const minutes = Math.ceil(left / 60000);
-    // The agent's own question goes on without an answer; a reviewer's pause stops.
+    // The agent's own question goes on without an answer, so it says so only
+    // in its last minutes; a reviewer's pause stops, so it always says so.
     if (hold.ask) {
+      if (minutes > ASK_CLOCK_MINUTES) return "";
       return minutes > 1 ? App.t("The agent waits {count} more minutes", { count: minutes })
         : "The agent waits less than a minute more";
     }
@@ -1663,65 +1667,66 @@
   // request is data (untranslated). The one button follows who has the
   // browser in this window (App.workspaceView.holder, the event
   // consensio:workspace-holder re-draws the card).
+  // One edge, one line of decision: the glyph hangs in its tinted circle left
+  // of the words; title, request and buttons share the text's edge. One
+  // button and at most one link: writing to the agent is the field below,
+  // stopping is its Stop button. The clock only in the last minutes, since
+  // the agent goes on without an answer.
   const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
     takeover: "You have the browser" };
+  const askGlyphs = {
+    // A pointer: the user's hand in the browser.
+    browser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5l11 6.6-4.8 1.3 2.8 5.3-2.2 1.2-2.8-5.4-4 3.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
+    // A question.
+    confirm: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9.2a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.1-1.4 2v.6M12 17.6v.1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path></svg>',
+  };
   function askCard(context, hold) {
     const kind = askTitles[hold.ask] ? hold.ask : "confirm";
     const card = document.createElement("section");
     card.className = `agent-hold-card agent-ask-card is-${kind}`;
     card.setAttribute("aria-labelledby", "agentHoldTitle");
+    const glyph = document.createElement("span");
+    glyph.className = "agent-ask-glyph";
+    glyph.innerHTML = askGlyphs[kind === "confirm" ? "confirm" : "browser"];
+    const body = document.createElement("div");
+    body.className = "agent-ask-body";
+    // Said once when it appears: the title and what the agent asks.
     const alert = document.createElement("div");
     alert.className = "agent-hold-alert";
     alert.setAttribute("role", "alert");
-    const head = document.createElement("div");
-    head.className = "agent-hold-head";
-    const icon = document.createElement("span");
-    icon.className = "agent-hold-icon";
-    icon.innerHTML = kind === "confirm"
-      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M9.6 9.5a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.8v.5M12 16.8v.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>'
-      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5l11.5 7-5 1.2 2.9 5.6-2.3 1.2-2.9-5.6-3.7 3.4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>';
-    const heading = document.createElement("div");
-    heading.className = "agent-hold-heading";
     const title = document.createElement("h2");
     title.id = "agentHoldTitle";
     title.className = "agent-hold-title";
     title.textContent = askTitles[kind];
-    heading.append(title);
-    head.append(icon, heading);
     const what = document.createElement("p");
-    what.className = "agent-hold-reason";
+    what.className = "agent-ask-request";
     if (kind === "takeover") {
       what.textContent = "The agent waits until you hand it back.";
     } else {
       what.dataset.i18nSkip = "";
       what.textContent = String(hold.request || "");
     }
-    alert.append(head, what);
-    card.append(alert);
+    alert.append(title, what);
     const clock = document.createElement("p");
     clock.className = "agent-hold-clock";
-    const reply = holdReply(context);
+    clock.hidden = true;
     const actions = document.createElement("div");
     actions.className = "agent-hold-actions";
-    const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
-    const stop = holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user"));
     if (kind === "confirm") {
       actions.append(
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
-        holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
-        write, stop);
+        holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
     } else {
       // The server knows a takeover from any window; this one's view only its own.
       const holding = kind === "takeover" || App.workspaceView?.holder?.() === "user";
       actions.append(
         holding ? holdButton("Hand back", "btn agent-hold-hand-back", () => App.workspaceView?.handBack?.())
           : holdButton("Open the browser", "btn agent-hold-open", () => App.workspaceView?.open?.({ takeOver: true })),
-        ...(kind === "browser" ? [holdButton("Go on without it", "agent-hold-link agent-hold-skip",
-          () => decideHold(context, "continue"))] : []),
-        write, stop);
+        ...(kind === "browser" && !holding ? [holdButton("Not now", "agent-hold-link agent-hold-skip",
+          () => decideHold(context, "continue"))] : []));
     }
-    reply.bind(actions, write);
-    card.append(clock, reply.form, actions);
+    body.append(alert, clock, actions);
+    card.append(glyph, body);
     return card;
   }
   function holdCard(context, hold) {
@@ -1873,7 +1878,8 @@
     host.hidden = false;
     const clock = host.querySelector(".agent-hold-clock");
     const time = holdClock(hold);
-    if (clock.textContent !== App.t(time)) clock.textContent = time;
+    clock.hidden = !time;
+    if (time && clock.textContent !== App.t(time)) clock.textContent = time;
     for (const button of host.querySelectorAll("button")) button.disabled = Boolean(hold.deciding);
     // Send waits for words in the sheet's field.
     const reply = host.querySelector(".agent-hold-reply-input");

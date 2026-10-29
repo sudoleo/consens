@@ -163,10 +163,12 @@ on first open and xterm.js from `static/vendor/xterm/6.0.0` on the Terminal
 tab's first use, and wires `#composerWorkspaceButton`
 (start screen), the (+) menu's `#attachWorkspaceOption` (in a chat) and
 `#agentWorkspaceSettings`. Since 2026-10-29 the bar `.workspace-view-turn` above
-the picture says whose turn it is: the user's ("Hand back", the one `.btn`; a
-reminder after `IDLE_MS` = 60 s without input, never an automatic hand-back) or
-what the agent waits for there (`agentWaits`, set by `agent-chat.js renderHold`
-for an `ask_user` browser card, with "Take over"); `agent-activity.js` adds "Watch live"
+the picture says whose turn it is, without a surface (a state dot, a title over
+a quiet line, the one `.btn`): the user's (green dot, "Hand back", the picture's
+green edge `.is-user .workspace-view-screen::after`; an amber reminder after
+`IDLE_MS` = 60 s without input, never an automatic hand-back) or what the agent
+waits for there (`agentWaits`, set by `agent-chat.js renderHold` for an
+`ask_user` browser card, with "Take over"); `agent-activity.js` adds "Watch live"
 (`.agent-vm-watch`) to each step of the `browser` tool and `agent-delegation.js` the run
 header's shortcut (`.agent-workspace-toggle`, shown once a VM step stands in
 the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
@@ -5810,9 +5812,11 @@ Hat der Nutzer ungefragt übernommen, wartet jeder Aufruf aus
 `workspace_tools` vorher auf einer Karte `takeover` (`_takeover_wait`), statt
 nach 120 s zu scheitern (`TAKEOVER_TIMEOUT` erst nach 30 min). Ein
 Prüfer-Halt während einer Nutzerkarte wartet in `queued_hold` und hält dann
-vor dem nächsten Aufruf. Karte `askCard` in `agent-chat.js` („Open the
-browser“/„Hand back“ nach `App.workspaceView.holder`, „Go on without it“;
-„Allow“/„Don’t allow“; „You have the browser“), Aktivität `agent-activity.js`
+vor dem nächsten Aufruf. Karte `askCard` in `agent-chat.js` (`.agent-ask-card`:
+hängende Glyphe, eine Kante, ein Knopf und höchstens ein Link; „Open the
+browser“/„Hand back“ nach `App.workspaceView.holder`, „Not now“;
+„Allow“/„Don’t allow“; „You have the browser“; Frist erst in den letzten fünf
+Minuten), Aktivität `agent-activity.js`
 (`askHeads`, „Waiting for you“), `tab-status.js` („Waiting for you“).
 
 **Arbeitsprotokoll** (`docs/agent-work-log.md`, seit 2026-10-25): Im

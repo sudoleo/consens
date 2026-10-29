@@ -474,6 +474,32 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
 @media (pointer: coarse) { .agent-hold-link { min-height: 44px; } }
 .agent-hold-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-hold-card button:disabled { opacity: .5; cursor: default; }
+/* The agent's own question (askCard, since 2026-10-29): one edge. The glyph
+   hangs in its tinted circle left of the words, and title, request and the
+   decision (one button, at most one link, one line) share the text's edge.
+   Colour only on the glyph: the house green for the user's turn in the
+   browser, the pause tone before a step in their name. */
+.agent-hold-card.agent-ask-card {
+  grid-template-columns: 30px minmax(0, 1fr); gap: 0 12px; align-items: start; padding: 16px 18px 16px 16px;
+  border-radius: var(--radius-lg);
+}
+.agent-ask-glyph {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: color-mix(in srgb, var(--agree) 14%, transparent); color: var(--agree);
+}
+.agent-ask-card.is-confirm .agent-ask-glyph { background: var(--partial-bg); color: var(--partial); }
+.agent-ask-glyph svg { width: 16px; height: 16px; }
+.agent-ask-body { display: grid; gap: 2px; min-width: 0; }
+.agent-ask-card .agent-hold-alert { gap: 2px; }
+/* The title sits on the glyph's middle line. */
+.agent-ask-card .agent-hold-title {
+  padding-top: 5px; font-size: var(--font-size-sm); line-height: 20px; text-wrap: balance;
+}
+/* No word alone on its last line. */
+.agent-ask-request { margin: 0; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; text-wrap: pretty; }
+.agent-ask-card .agent-hold-clock { margin-top: 6px; }
+.agent-ask-card .agent-hold-clock[hidden] { display: none; }
+.agent-ask-card .agent-hold-actions { flex-wrap: nowrap; gap: 0 18px; margin-top: 12px; }
 /* "Write to the agent" opens the answer in the card itself: the field, then
    Send and Cancel in the same pair (before, the button only focused the
    composer, and a click seemed to do nothing). */

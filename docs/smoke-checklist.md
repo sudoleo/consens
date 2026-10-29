@@ -145,11 +145,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       zu): „Melde dich bei <Website mit Login> an und lies meine letzte
       Bestellung.“ → Karte „Der Agent braucht dich im Browser“ mit seiner
       Bitte, Tab-Titel im Hintergrund „Wartet auf dich“, Aktivität „Wartet auf
-      dich“. „Browser öffnen“ öffnet die Ansicht und übernimmt; über dem Bild
-      die grüne Leiste „Du steuerst den Browser …“ mit „Zurückgeben“, der
-      Knopf im Kopf ist weg, die Karte zeigt jetzt „Zurückgeben“. Eine Minute
-      nichts tun → Leiste „Fertig? Gib den Browser zurück …“ (gibt nicht von
-      selbst zurück). Anmelden, „Zurückgeben“ → der Agent macht innerhalb von
+      dich“; die Karte hat nur „Browser öffnen“ und „Nicht jetzt“, keine
+      Frist. „Browser öffnen“ öffnet die Ansicht und übernimmt; über dem Bild
+      grüner Punkt „Du hast den Browser“ / „Der Agent wartet.“ mit
+      „Zurückgeben“, das Bild hat einen grünen Rand, Knopf im Kopf und
+      Statuszeile sind weg, die Karte zeigt jetzt nur „Zurückgeben“. Eine
+      Minute nichts tun → Punkt bernstein, „Fertig?“ (gibt nicht von selbst
+      zurück). Hell, dunkel und am Handy ansehen. Anmelden, „Zurückgeben“ → der Agent macht innerhalb von
       ~2 s weiter und liest die Seite selbst. Dasselbe mit sofortigem
       Übernehmen und Zurückgeben: er macht trotzdem weiter. „Schreib Anna eine
       Nachricht auf <Website>, aber frag mich vorher“ → Karte „Der Agent

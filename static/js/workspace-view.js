@@ -253,18 +253,22 @@
     paster.hidden = true;
     head.append(title, tabs, status, paster, toggle, closer);
     const hint = node('p', 'workspace-view-hint', HINTS.browser);
-    // Whose turn it is (showTurn): the words, the agent's request as data, the one button.
+    // Whose turn it is (showTurn): a dot in the state's colour, a title over a
+    // quiet line (the app's words, or the agent's request as data), the one button.
     const turn = node('div', 'workspace-view-turn');
     turn.setAttribute('role', 'status');
     turn.hidden = true;
+    const turnDot = node('span', 'workspace-view-turn-dot');
+    turnDot.setAttribute('aria-hidden', 'true');
     const turnText = node('p', 'workspace-view-turn-text');
-    const turnSays = node('span', 'workspace-view-turn-says');
-    const turnRequest = node('span', 'workspace-view-turn-request');
+    const turnSays = node('strong', 'workspace-view-turn-says');
+    const turnNote = node('span', 'workspace-view-turn-note');
+    const turnRequest = node('span', 'workspace-view-turn-note workspace-view-turn-request');
     turnRequest.dataset.i18nSkip = '';
-    turnText.append(turnSays, turnRequest);
+    turnText.append(turnSays, turnNote, turnRequest);
     const turnButton = button('btn workspace-view-turn-button', 'Hand back',
       () => (view?.holder === 'user' ? handBack() : takeOver()));
-    turn.append(turnText, turnButton);
+    turn.append(turnDot, turnText, turnButton);
     const screen = node('div', 'workspace-view-screen is-loading');
     screen.id = 'workspacePane-browser';
     screen.setAttribute('role', 'tabpanel');
@@ -316,7 +320,7 @@
     });
     panel.append(resizer, head, hint, turn, screen, terminal);
     return { panel, status, hint, tabButtons, toggle, paster, cover, pasteTarget, screen, terminal, terminalHost,
-      turn, turnSays, turnRequest, turnButton, isIdle: false, idle: null, wantControl: false,
+      turn, turnSays, turnNote, turnRequest, turnButton, isIdle: false, idle: null, wantControl: false,
       restart, resizer, socket: null, rfb: null, holder: 'agent', refresh: null, width: 0, tab: 'browser',
       said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, slow: null,
       term: null, fit: null, termSocket: null, termReady: false, termResize: null };
@@ -446,7 +450,8 @@
     view.panel.classList.toggle('is-user', user);
     if (view.rfb) {
       view.rfb.viewOnly = !user;
-      say(user ? 'You have the browser.' : 'Watching. Click the screen to take over.');
+      // While the user has it, the bar says so: the head stays quiet.
+      say(user ? '' : 'Watching. Click the screen to take over.');
     }
     showTurn();
   }
@@ -459,12 +464,15 @@
     const waiting = waitingFor !== null && !user;
     const idle = user && view.isIdle;
     view.turn.hidden = !view.rfb || view.tab !== 'browser' || !(user || waiting);
+    // One way to take over or hand back at a time: the bar's, when it shows.
+    if (!view.turn.hidden) view.toggle.hidden = true;
     view.turn.classList.toggle('is-user', user);
     view.turn.classList.toggle('is-idle', Boolean(idle));
-    const says = idle ? 'Done? Hand the browser back so the agent can go on.'
-      : user ? 'You’re steering the browser. The agent waits until you hand it back.'
-        : waitingFor ? 'The agent is waiting for you:' : 'The agent is waiting for you.';
+    const says = idle ? 'Done?' : user ? 'You have the browser' : 'The agent is waiting for you';
+    const note = idle ? 'Hand the browser back so the agent can go on.' : user ? 'The agent waits.' : '';
     if (view.turnSays.textContent !== App.t(says)) view.turnSays.textContent = says;
+    if (view.turnNote.textContent !== (note && App.t(note))) view.turnNote.textContent = note;
+    view.turnNote.hidden = !note;
     const request = waiting ? String(waitingFor || '') : '';
     if (view.turnRequest.textContent !== request) view.turnRequest.textContent = request;
     view.turnRequest.hidden = !request;

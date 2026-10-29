@@ -252,11 +252,13 @@ describe("the workspace view", () => {
       expect(turn.hidden).toBe(true);
       env.document.querySelector(".workspace-view-cover").click();
       await vi.waitFor(() => expect(FakeRFB.made[0].viewOnly).toBe(false));
-      expect(env.document.querySelector(".workspace-view-status").textContent).toBe("You have the browser.");
+      // The bar says it, the head stays quiet; the picture wears the green edge (is-user).
+      expect(env.document.querySelector(".workspace-view-status").textContent).toBe("");
+      expect(env.document.querySelector(".workspace-view").classList.contains("is-user")).toBe(true);
       expect(turn.hidden).toBe(false);
       expect(turn.classList.contains("is-user")).toBe(true);
-      expect(turn.querySelector(".workspace-view-turn-says").textContent)
-        .toBe("You’re steering the browser. The agent waits until you hand it back.");
+      expect(turn.querySelector(".workspace-view-turn-says").textContent).toBe("You have the browser");
+      expect(turn.querySelector(".workspace-view-turn-note").textContent).toBe("The agent waits.");
       // Working there keeps it calm; a minute without a key or click reminds.
       await vi.advanceTimersByTimeAsync(40_000);
       env.document.querySelector("#workspacePane-browser").dispatchEvent(new env.window.Event("pointerdown"));
@@ -264,8 +266,9 @@ describe("the workspace view", () => {
       expect(turn.classList.contains("is-idle")).toBe(false);
       await vi.advanceTimersByTimeAsync(25_000);
       expect(turn.classList.contains("is-idle")).toBe(true);
-      expect(turn.querySelector(".workspace-view-turn-says").textContent)
-        .toBe("Done? Hand the browser back so the agent can go on.");
+      expect(turn.querySelector(".workspace-view-turn-says").textContent).toBe("Done?");
+      expect(turn.querySelector(".workspace-view-turn-note").textContent)
+        .toBe("Hand the browser back so the agent can go on.");
     } finally {
       vi.useRealTimers();
     }
@@ -291,7 +294,10 @@ describe("the workspace view", () => {
     // Watching again while the agent still waits: the bar says what for, the request as data.
     const turn = env.document.querySelector(".workspace-view-turn");
     expect(turn.hidden).toBe(false);
-    expect(turn.querySelector(".workspace-view-turn-says").textContent).toBe("The agent is waiting for you:");
+    expect(turn.querySelector(".workspace-view-turn-says").textContent).toBe("The agent is waiting for you");
+    expect(turn.querySelector(".workspace-view-turn-note:not(.workspace-view-turn-request)").hidden).toBe(true);
+    // One way to take over at a time: the bar's, not also the head's.
+    expect(env.document.querySelector(".workspace-view-toggle").hidden).toBe(true);
     const request = turn.querySelector(".workspace-view-turn-request");
     expect(request.textContent).toBe("Bitte melde dich bei der Post an.");
     expect(request.hasAttribute("data-i18n-skip")).toBe(true);

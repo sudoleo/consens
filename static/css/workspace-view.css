@@ -246,53 +246,96 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* Whose turn it is (since 2026-10-29, workspace-view.js showTurn): right
-   above the picture, in view while the user works there, with the one
-   strong button. Tinted and frameless: the user's turn in the house green;
-   the agent waiting for them, and the reminder after a minute without
-   input, in the pause tone. */
+   above the picture, in view while the user works there. No surface: a dot
+   carries the state's colour (the house green while the user steers, the
+   pause tone while the agent waits for them or after a minute without
+   input), a title over one quiet line on the panel's text edge, and the one
+   strong button. While the user steers, the picture wears a thin green edge
+   too, where their eyes are. */
 .workspace-view-turn {
-  display: flex;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  margin: 0 14px 10px;
-  padding: 8px 8px 8px 14px;
-  border-radius: var(--radius-md);
-  background: var(--partial-bg);
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.4;
+  column-gap: 10px;
+  margin: 0 14px 12px 18px;
 }
 
 .workspace-view-turn[hidden] {
   display: none;
 }
 
-.workspace-view-turn.is-user {
-  background: var(--agree-bg);
+.workspace-view-turn-dot {
+  align-self: start;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--partial);
 }
 
-.workspace-view-turn.is-idle {
-  background: var(--partial-bg);
+.workspace-view-turn.is-user:not(.is-idle) .workspace-view-turn-dot {
+  background: var(--agree);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-view-turn.is-user:not(.is-idle) .workspace-view-turn-dot {
+    animation: workspace-turn-live var(--dur-beat) var(--ease-standard) infinite;
+  }
+
+  @keyframes workspace-turn-live {
+    50% { opacity: .35; }
+  }
 }
 
 .workspace-view-turn-text {
-  flex: 1;
+  display: grid;
   min-width: 0;
   margin: 0;
+}
+
+.workspace-view-turn-says {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.workspace-view-turn-note {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
-.workspace-view-turn-request {
-  margin-left: 4px;
-  color: var(--ink-2);
-}
-
-.workspace-view-turn-request[hidden] {
+.workspace-view-turn-note[hidden] {
   display: none;
 }
 
 .workspace-view-turn-button {
-  flex: none;
+  min-height: 32px;
+  padding: 0 14px;
+}
+
+.workspace-view.is-user .workspace-view-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--agree);
+  pointer-events: none;
+}
+
+@media (forced-colors: active) {
+  .workspace-view-turn-dot {
+    background: CanvasText;
+  }
+
+  .workspace-view.is-user .workspace-view-screen::after {
+    box-shadow: inset 0 0 0 2px Highlight;
+  }
 }
 
 .workspace-view-screen {

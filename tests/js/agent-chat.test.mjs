@@ -1792,21 +1792,21 @@ describe("single-model agent chat", () => {
     handlers.hold.receive({ hold: { ...base, id: "a1b2c3d4e5f6", ask: "browser", request } });
     expect(host.querySelector(".agent-ask-card.is-browser")).not.toBeNull();
     expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent needs you in the browser");
-    const words = host.querySelector(".agent-hold-reason");
+    const words = host.querySelector(".agent-ask-request");
     expect(words.textContent).toBe(request);
     expect(words.hasAttribute("data-i18n-skip")).toBe(true);
-    // It goes on without an answer: the clock says how long it waits, not that it stops.
-    expect(host.querySelector(".agent-hold-clock").textContent).toBe("The agent waits 30 more minutes");
+    // It goes on without an answer: no clock until its last minutes.
+    expect(host.querySelector(".agent-hold-clock").hidden).toBe(true);
     expect(workspace.agentWaits).toHaveBeenLastCalledWith(request);
+    // One button and one link on one line: writing is the field below, Stop its Stop button.
     expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
-      ["Open the browser", "btn agent-hold-open"], ["Go on without it", "agent-hold-link agent-hold-skip"],
-      ["Write to the agent", "agent-hold-link agent-hold-write"], ["Stop", "agent-hold-link agent-hold-stop"]]);
+      ["Open the browser", "btn agent-hold-open"], ["Not now", "agent-hold-link agent-hold-skip"]]);
     host.querySelector(".agent-hold-open").click();
     expect(workspace.open).toHaveBeenCalledWith({ takeOver: true });
     // Taken over in this window: the one button hands it back, which answers the card on the server.
     holder = "user";
     window.dispatchEvent(new window.CustomEvent("consensio:workspace-holder", { detail: { holder: "user" } }));
-    expect(host.querySelector(".agent-hold-actions .btn").textContent).toBe("Hand back");
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => b.textContent)).toEqual(["Hand back"]);
     host.querySelector(".agent-hold-hand-back").click();
     expect(workspace.handBack).toHaveBeenCalledTimes(1);
     // The run says the card is over; the workspace's bar stops waiting.
@@ -1826,8 +1826,7 @@ describe("single-model agent chat", () => {
       request: "Soll ich die Nachricht an Anna senden?" } });
     expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent asks before it goes on");
     expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
-      ["Allow", "btn agent-hold-continue"], ["Don’t allow", "agent-hold-link agent-hold-deny"],
-      ["Write to the agent", "agent-hold-link agent-hold-write"], ["Stop", "agent-hold-link agent-hold-stop"]]);
+      ["Allow", "btn agent-hold-continue"], ["Don’t allow", "agent-hold-link agent-hold-deny"]]);
     expect(workspace.agentWaits).toHaveBeenLastCalledWith(null);
     host.querySelector(".agent-hold-deny").click();
     await vi.waitFor(() => expect(decisions).toEqual([{ id: "0123456789ab", action: "deny", text: "" }]));
@@ -1835,9 +1834,14 @@ describe("single-model agent chat", () => {
     // Taken over on their own (maybe in another window): handing back is the way, also from here.
     handlers.hold.receive({ hold: { ...base, id: "fedcba987654", ask: "takeover", request: "" } });
     expect(host.querySelector(".agent-hold-title").textContent).toBe("You have the browser");
-    expect(host.querySelector(".agent-hold-reason").textContent).toBe("The agent waits until you hand it back.");
-    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => b.textContent)).toEqual([
-      "Hand back", "Write to the agent", "Stop"]);
+    expect(host.querySelector(".agent-ask-request").textContent).toBe("The agent waits until you hand it back.");
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => b.textContent)).toEqual(["Hand back"]);
+    // In its last minutes the clock says how long the agent still waits, not that it stops.
+    handlers.hold.receive({ hold: { ...base, id: "aabbccddeeff", ask: "confirm", request: "Darf ich?",
+      at: new Date(Date.now() - 27 * 60000).toISOString() } });
+    const clock = host.querySelector(".agent-hold-clock");
+    expect(clock.hidden).toBe(false);
+    expect(clock.textContent).toBe("The agent waits 3 more minutes");
     dom.window.close();
   });
 

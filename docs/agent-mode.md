@@ -1116,19 +1116,23 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   nicht dem Nutzer.
 - **Wer dran ist, steht über dem Bild** (seit 2026-10-29, Max hatte am Vortag
   auf den Agenten gewartet, während der auf ihn wartete; nur ein kleiner
-  Umschalter im Kopf sagte, dass er den Browser noch hatte). Solange der
-  Nutzer steuert, zeigt die Leiste `.workspace-view-turn` direkt über dem Bild
-  „You’re steering the browser. The agent waits until you hand it back.“ im
-  Hausgrün getönt (`--agree-bg`) mit dem einen `.btn` „Hand back“; der
-  Umschalter im Kopf verschwindet dann. Nach `IDLE_MS` (60 s) ohne Taste,
-  Klick oder Scrollen im Bild erinnert sie im Pausenton („Done? Hand the
-  browser back so the agent can go on.“); zurückgegeben wird nie von selbst,
+  Umschalter im Kopf sagte, dass er den Browser noch hatte). Die Leiste
+  `.workspace-view-turn` direkt über dem Bild hat keine Fläche (Max: getönte
+  Kästen lesen sich wie Fehlerbanner): Die Farbe sitzt auf einem Punkt, dazu
+  ein Titel über einer leisen Zeile an der Textkante des Panels und der eine
+  `.btn`. Solange der Nutzer steuert: grüner Punkt (`--agree`, atmet im Takt
+  `--dur-beat`, ruhig bei reduzierter Bewegung), „You have the browser“ /
+  „The agent waits.“, „Hand back“, und das Bild trägt einen 2-px-Rand im
+  Hausgrün (`.workspace-view.is-user .workspace-view-screen::after`); Kopf-
+  Umschalter und Statuszeile schweigen dann. Nach `IDLE_MS` (60 s) ohne Taste,
+  Klick oder Scrollen im Bild wird der Punkt bernstein: „Done?“ / „Hand the
+  browser back so the agent can go on.“; zurückgegeben wird nie von selbst,
   denn der Nutzer holt vielleicht gerade sein Passwort oder einen 2FA-Code.
   Wartet der Agent auf ihn (`ask_user` mit `browser`), sagt die Leiste beim
-  Zuschauen „The agent is waiting for you:“ und die Bitte des Agenten (Daten,
-  unübersetzt) mit „Take over“ (`App.workspaceView.agentWaits`, gesetzt von
-  `agent-chat.js renderHold`). Ein Wechsel des Halters ist das Fenster-Event
-  `consensio:workspace-holder`.
+  Zuschauen mit bernsteinfarbenem Punkt „The agent is waiting for you“ und
+  darunter die Bitte des Agenten (Daten, unübersetzt), Knopf „Take over“
+  (`App.workspaceView.agentWaits`, gesetzt von `agent-chat.js renderHold`).
+  Ein Wechsel des Halters ist das Fenster-Event `consensio:workspace-holder`.
 - **Der Agent fragt den Nutzer** (`ask_user`, `agent_ask.py`, seit
   2026-10-29, nur mit dem Arbeitsplatz): Der Lauf hält auf einer Karte über
   dem Feld (ein Halt mit `ask`, `DelegationLoop._ask_wait` → `_user_hold`),
@@ -1136,8 +1140,14 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   er dem Nutzer den Browser (Anmelden, Passwort, Bezahlen, Prüfung auf einen
   Menschen, ein letzter Klick): Karte „The agent needs you in the browser“ mit
   der Bitte als Daten, „Open the browser“ (öffnet die Ansicht und übernimmt,
-  sobald ein Bild da ist) bzw. „Hand back“, „Go on without it“, „Write to the
-  agent“, „Stop“. **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
+  sobald ein Bild da ist) und „Not now“, solange er den Browser hat nur
+  „Hand back“. Gestaltung (`askCard`, `.agent-ask-card`): eine Kante, die
+  Glyphe hängt links in einem getönten Kreis (Hausgrün für den Browser,
+  Pausenton vor einem Schritt), Titel, Bitte (`--ink-3`) und Entscheidung
+  stehen bündig daneben; ein Knopf und höchstens ein Link in einer Zeile
+  (Schreiben geht über das Eingabefeld, Stopp über dessen Stop-Knopf); die
+  Frist erst in den letzten fünf Minuten (`ASK_CLOCK_MINUTES`).
+  **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
   liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; hatte der Nutzer
   den Browser und hat ihn nicht mehr, oder liegt ein `returned_at` nach dem
   Öffnen der Karte, endet sie mit `handed_back`. Ohne `browser` fragt er vor
@@ -1149,7 +1159,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   wartet wie nach `steer`). Ohne Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min)
   hört er `no_answer` und schreibt seine Antwort, statt dass die Antwort wie
   nach einem Prüfer-Halt stoppt; die Karte zeigt deshalb „The agent waits N
-  more minutes“. Ein Prüfer-Halt, der währenddessen kommt, wartet
+  more minutes“ (erst in den letzten fünf). Ein Prüfer-Halt, der währenddessen kommt, wartet
   (`queued_hold`) und hält dann vor dem nächsten Aufruf. Das Werkzeug
   ersetzt die Vorab-Prüfung jedes Browser-Klicks (siehe „Vorab-Prüfung“):
   Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers bewirkt,
