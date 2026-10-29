@@ -2842,6 +2842,12 @@ ul.md-task-list > .md-task-item > p:first-child > .md-task-box {
 .consensus-answer-body h2 { font-size: 1.25em; }
 .consensus-answer-body h3 { font-size: 1.125em; }
 .consensus-answer-body :is(h4, h5, h6) { font-size: 1em; }
+/* A subheading right under its heading belongs to it: closer to it than to
+   the section before (UX audit J5; it stood almost a full section apart). */
+.consensus-answer-body :is(h1, h2, h3) + :is(h2, h3, h4, h5, h6) { margin-top: .5em; }
+/* Inline code hugs its word, so a bracket or comma beside it stays with it:
+   "(Heizlastberechnung)" no longer reads "( Heizlastberechnung )" (J6). */
+.consensus-answer-body :not(pre) > code { padding: .1em .25em; margin-inline: -.05em; }
 .consensus-answer-body :is(strong, b) { font-weight: var(--font-weight-semibold); }
 .consensus-answer-body hr { margin-block: 1.5em; }
 .consensus-answer-body blockquote {

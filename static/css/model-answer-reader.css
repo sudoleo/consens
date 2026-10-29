@@ -84,6 +84,15 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   /* A docked inspector stays below modal backdrops and their dialogs. */
   z-index: calc(var(--z-modal) - 2);
 }
+/* An Agent answer's notes or sources: a sheet as large as its content, at
+   most 720px wide and 80% of the window high, centred (UX audit D6; before,
+   three sources stood at the top of a 1120 x 850 dialog). Its title is the
+   question, two lines at most. */
+@media (min-width: 1100px) {
+  .answer-reader-dialog.is-compact { inset: 0; margin: auto; width: min(720px, calc(100vw - 48px)); height: fit-content; max-height: 80dvh; }
+  .answer-reader-dialog.is-compact .model-answer-reader { height: auto; max-height: 80dvh; }
+  .answer-reader-dialog.is-compact #answerReaderTitle { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+}
 /* Only opening and closing the reader move it (the shared dialog motion,
    overlays.css); tab changes and streaming stay still. */
 .answer-reader-dialog .model-answer-reader { height: 100%; min-height: 0; padding: 24px 28px 0; }
@@ -93,6 +102,11 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-heading > span { color: var(--ink-2); font-size: var(--font-size-xs); }
 .answer-reader-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .model-answer-reader .answer-reader-icon-button { width: 36px; height: 36px; padding: 8px; color: var(--ink-2); }
+/* The reader closes with the app's one cross (foundation.css .close-button,
+   UX audit J1); the reader's own button rules do not redraw it. A finger
+   gets the whole 44px box. */
+.model-answer-reader .close-button { width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); color: var(--ink-3); }
+@media (pointer: coarse) { .model-answer-reader .close-button { width: 44px; height: 44px; } }
 .model-answer-reader button svg { flex-shrink: 0; }
 .answer-reader-context { margin: 22px 0 16px; padding: 12px 14px; min-width: 0; border-radius: var(--radius-sm); background: var(--raise); }
 .answer-reader-context-top { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: var(--font-size-xs); }
@@ -127,6 +141,10 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-mobile-tabs button { flex: 1; overflow-wrap: anywhere; font-size: var(--font-size-xs); color: var(--ink-2); }
 .answer-reader-mobile-tabs button[aria-pressed="true"] { background: var(--well); color: var(--ink); box-shadow: 0 1px 3px var(--line-soft); }
 .answer-reader-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--line) transparent; padding: 0 6px 32px 0; flex: 1; border-top: 1px solid var(--line-soft); }
+/* Notes and sources do not stream: no gutter kept for a scrollbar they may
+   never need, so their right edge is the tabs' edge, as wide as the left
+   (UX audit D10). */
+.model-answer-reader.is-inspecting .answer-reader-scroll { scrollbar-gutter: auto; padding-right: 0; }
 .is-direct .answer-reader-scroll { overflow: visible; }
 .answer-reader-columns { max-width: 720px; margin: 0 auto; }
 .answer-reader-columns.is-pair { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); max-width: none; gap: 28px; }
@@ -144,7 +162,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 /* Partial or cut-off text: shown, but marked, with its reason in one quiet line. */
 .answer-reader-state:is([data-state="incomplete"], [data-state="complete"]) { color: var(--partial); background: var(--partial-bg); }
 .answer-reader-note { margin: -8px 0 14px; font-size: var(--font-size-xs); line-height: 1.55; color: var(--ink-3); }
-.model-answer-reader .answer-reader-body { font: 15px/1.8 var(--font-sans); letter-spacing: -.006em; }
+.model-answer-reader .answer-reader-body { font: var(--font-size-base)/1.75 var(--font-sans); letter-spacing: -.006em; }
 .model-answer-reader .answer-reader-body :is(h1,h2,h3,h4) { line-height: 1.4; letter-spacing: -.02em; margin: 1.8em 0 .65em; font-weight: 600; text-align: left; }
 .model-answer-reader .answer-reader-body h1 { font-size: var(--font-size-xl); }
 .model-answer-reader .answer-reader-body h2 { font-size: var(--font-size-title); }
@@ -159,6 +177,23 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-body img { max-width: 100%; height: auto; }
 .answer-reader-body .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .answer-reader-body table { max-width: 100%; }
+/* A Compare answer reads like an Agent answer (UX audit B12): the answer's
+   size and rhythm (shell.css .consensus-answer-body, 17px/1.7, headings in
+   em), and the same row under it (directFooter, agent-chat.css). */
+.model-answer-reader.is-direct .answer-reader-body { font-size: var(--font-size-read); line-height: 1.7; letter-spacing: var(--tracking-normal); }
+.model-answer-reader.is-direct .answer-reader-body :is(h1, h2, h3, h4) { margin: 1.5em 0 .6em; line-height: 1.35; letter-spacing: var(--tracking-normal); }
+.model-answer-reader.is-direct .answer-reader-body h1 { font-size: 1.5em; }
+.model-answer-reader.is-direct .answer-reader-body h2 { font-size: 1.25em; }
+.model-answer-reader.is-direct .answer-reader-body h3 { font-size: 1.125em; }
+.model-answer-reader.is-direct .answer-reader-body h4 { font-size: 1em; }
+.model-answer-reader.is-direct .answer-reader-body :is(h1, h2, h3) + :is(h2, h3, h4) { margin-top: .5em; }
+.model-answer-reader.is-direct .answer-reader-body p { margin: 0 0 1em; }
+.model-answer-reader.is-direct .answer-reader-body li { margin-bottom: 0; }
+.model-answer-reader.is-direct .answer-reader-body > :first-child { margin-top: 0; }
+.model-answer-reader.is-direct .answer-reader-body > :last-child { margin-bottom: 0; }
+.answer-reader-sources.is-listed { margin-top: var(--space-3); padding: 0; background: transparent; }
+.answer-reader-sources.is-listed ol { display: grid; gap: var(--space-2); margin: 0; padding: 0; }
+.answer-reader-sources.is-listed li { padding: 0; }
 .answer-reader-answer-actions { margin: 24px 0 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); display: flex; flex-wrap: wrap; gap: 6px; }
 .answer-reader-answer-actions button { color: var(--ink-2); font-size: var(--font-size-xs); }
 .answer-reader-sources { font-size: var(--font-size-ui); padding: 0 12px; border-radius: var(--radius-xs); background: var(--raise); }
@@ -307,7 +342,8 @@ body.answer-reader-modal { overflow: hidden; }
 @media (hover: hover) and (pointer: fine) {
   .model-answer-reader li.answer-reader-source-card a:hover { text-decoration: underline !important; text-underline-offset: 3px; }
 }
-.model-answer-reader li.answer-reader-source-card .consensus-source-index { position: absolute; top: 18px; right: 20px; display: block; min-width: 0; height: auto; background: transparent; font-size: var(--font-size-xs); color: var(--ink-2); }
+/* No number beside the arrow (UX audit D12): a short list without order. */
+.model-answer-reader li.answer-reader-source-card .consensus-source-index { display: none; }
 .answer-reader-source-out { position: absolute; right: 19px; top: 38px; color: var(--ink-2); font-size: var(--font-size-base); }
 .answer-reader-source-excerpt { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 14px; }
 .answer-reader-source-excerpt summary { width: fit-content; font-size: var(--font-size-xs); }
@@ -405,11 +441,9 @@ body.answer-reader-modal { overflow: hidden; }
   border-radius: 0;
   background: transparent;
 }
-.answer-reader-dialog li.answer-reader-source-card .consensus-source-index {
-  top: 15px;
-  right: 16px;
-}
-.answer-reader-dialog .answer-reader-source-out { top: 34px; right: 15px; }
+/* The arrow on the title's first line (the title leads here), 16px from
+   the edge (UX audit D12). */
+.answer-reader-dialog .answer-reader-source-out { top: 10px; right: 16px; line-height: 21px; }
 
 /* Sources and differences use the same quiet document surface as Answers. */
 .answer-reader-dialog .answer-reader-inspector :is(.consensus-sources-list, .thread-history-sources) { gap: 0; }

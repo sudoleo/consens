@@ -43,7 +43,7 @@
       <div class="answer-reader-heading"><h2 id="answerReaderTitle">Model answers</h2><span id="answerReaderStatus" role="status" aria-live="polite"></span></div>
       <div class="answer-reader-actions">
         <button type="button" id="answerReaderExpand" class="answer-reader-icon-button" aria-pressed="false" aria-label="Expand" title="Expand"></button>
-        <button type="button" id="answerReaderClose" class="answer-reader-icon-button" aria-label="Back to chat" title="Back to chat"></button>
+        <button type="button" id="answerReaderClose" class="close-button" aria-label="Back to chat" title="Back to chat"></button>
       </div>
     </header>
     <p id="answerReaderMode" class="answer-reader-mode" hidden>Compare result. Each model answered independently.</p>
@@ -282,7 +282,7 @@
     polishSources(get('Inspector'));
   }
   function polishSources(container) {
-    container.querySelectorAll('.consensus-source-item, .thread-history-sources > li, .answer-reader-sources li').forEach((item, index) => {
+    container.querySelectorAll('.consensus-source-item, .thread-history-sources > li, .answer-reader-sources li').forEach(item => {
       if (item.dataset.sourcePolished) return;
       item.dataset.sourcePolished = 'true'; item.classList.add('answer-reader-source-card');
       const link = item.querySelector('a');
@@ -306,8 +306,8 @@
         img.addEventListener('error', () => { img.remove(); fallback.hidden = false; }); badge.append(img);
       }
       item.prepend(badge);
-      let number = item.querySelector('.consensus-source-index');
-      if (!number) { number = document.createElement('span'); number.className = 'consensus-source-index'; number.textContent = String(index + 1); item.append(number); }
+      // No number: the list is short and has no order, and a number over the
+      // arrow stood as two small marks on no common line (UX audit D12).
       if (link) {
         const arrow = document.createElement('span'); arrow.className = 'answer-reader-source-out'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '↗'; item.append(arrow);
       }
@@ -481,6 +481,9 @@
       if (Math.abs(shift) > .5) window.scrollTo({ top: Math.max(0, window.scrollY + shift), left: window.scrollX, behavior: "instant" });
     }
     document.body.classList.toggle("answer-reader-modal", modal);
+    // An answer's notes or sources (a context without model answers) open as
+    // a sheet as large as its content, not as the whole window (UX audit D6).
+    dialog.classList.toggle("is-compact", modal && !expanded && Boolean(inspector && selected?.renderPanel && !selected.answers?.length));
     root.classList.toggle("is-direct", direct);
     if (composer && composerAnchor.parentNode) {
       if (direct && host.nextElementSibling !== composer) host.after(composer);
@@ -589,7 +592,10 @@
     actions.append(copy);
     article.append(header, ...(noteLine ? [noteLine] : []), body);
     if (!direct) article.append(actions);
-    if (answer.sources?.length) {
+    const readable = Boolean(answer.text) && (!answer.error || answer.status === "incomplete");
+    if (direct && readable) {
+      article.append(...directFooter(answer));
+    } else if (answer.sources?.length) {
       const details = document.createElement("details");
       details.className = "answer-reader-sources";
       const summary = document.createElement("summary");
@@ -610,6 +616,73 @@
       // from this answer. Preserve native link / modifier-click behaviour.
     }
     return article;
+  }
+  // A Compare answer ends like an Agent answer (agent-chat.css .agent-review):
+  // one row of glyph and word, Sources with its count and Copy, the sources
+  // folding open under it as the reader lists them (UX audit B12; before, a
+  // grey "Sources · 1" disclosure with its arrow at the far right, and no
+  // Copy at all).
+  const ROW_GLYPHS = { sources: 'M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6', copy: 'M9 9h11v11H9zM15 5V3H3v12h2' };
+  let footerSerial = 0;
+  function rowButton(kind, label, count = null) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "consensus-tab agent-evidence-link";
+    button.dataset.section = kind;
+    button.innerHTML = `<svg class="agent-evidence-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${ROW_GLYPHS[kind]}"/></svg>`;
+    const word = document.createElement("span"); word.className = "consensus-tab-label"; word.textContent = label;
+    button.append(word);
+    if (count !== null) {
+      const number = document.createElement("span"); number.className = "consensus-tab-count"; number.textContent = String(count);
+      button.append(number);
+      button.setAttribute("aria-label", `${window.App.t(label)} ${count}`);
+    }
+    return button;
+  }
+  function directFooter(answer) {
+    const row = document.createElement("div");
+    row.className = "agent-review answer-reader-evidence";
+    const nav = document.createElement("nav");
+    nav.className = "consensus-footer-tabs agent-evidence-links agent-evidence-grid";
+    nav.setAttribute("aria-label", "Answer actions");
+    row.append(nav);
+    const parts = [row];
+    if (answer.sources?.length) {
+      const list = document.createElement("div");
+      list.className = "answer-reader-sources is-listed";
+      list.id = `answerReaderSources${++footerSerial}`;
+      list.hidden = true;
+      const items = document.createElement("ol");
+      answer.sources.forEach(source => {
+        const li = document.createElement("li");
+        let url;
+        try { url = new URL(source.url); } catch (_) {}
+        const link = document.createElement(url && ["https:", "http:"].includes(url.protocol) ? "a" : "span");
+        link.textContent = String(source.title || source.url || "Source");
+        if (link.tagName === "A") { link.href = url.href; link.target = "_blank"; link.rel = "noopener noreferrer"; }
+        li.appendChild(link); items.appendChild(li);
+      });
+      list.append(items);
+      polishSources(list);
+      const sources = rowButton("sources", "Sources", answer.sources.length);
+      sources.setAttribute("aria-controls", list.id);
+      sources.setAttribute("aria-expanded", "false");
+      sources.addEventListener("click", () => {
+        list.hidden = !list.hidden;
+        sources.setAttribute("aria-expanded", String(!list.hidden));
+      });
+      nav.append(sources);
+      parts.push(list);
+    }
+    const copy = rowButton("copy", "Copy");
+    copy.querySelector(".consensus-tab-label").setAttribute("aria-live", "polite");
+    copy.addEventListener("click", async () => {
+      const word = copy.querySelector(".consensus-tab-label");
+      try { await navigator.clipboard.writeText(answer.text); word.textContent = "Copied"; }
+      catch (_) { word.textContent = "Copy unavailable"; }
+    });
+    nav.append(copy);
+    return parts;
   }
   function render() {
     modeLayout();
@@ -634,6 +707,12 @@
     get('Question').querySelector('summary').title = longQuestion ? selected.question : '';
     get('Question').querySelector('summary').tabIndex = longQuestion || get('Question').open ? 0 : -1;
     get('Question').querySelector('summary').setAttribute('aria-disabled', String(!longQuestion && !get('Question').open));
+    // The compact sheet names its question in the title; the tabs name the
+    // section (the title "Notes" only repeated the tab, D6).
+    const questionTitle = dialog.classList.contains('is-compact') && Boolean(selected.question);
+    if (get('Question').hidden !== questionTitle) get('Question').hidden = questionTitle;
+    const contextBox = root.querySelector('.answer-reader-context');
+    if (contextBox.hidden !== (questionTitle && options.length < 2)) contextBox.hidden = questionTitle && options.length < 2;
     get('Sections').hidden = direct;
     get('Sections').querySelectorAll('button').forEach(button => {
       button.hidden = !!selected.sections && !selected.sections.includes(button.dataset.section);
@@ -644,7 +723,10 @@
     });
     root.classList.toggle('is-inspecting', !!inspector);
     get('Inspector').hidden = !inspector; get('Columns').hidden = !!inspector;
-    get('Title').textContent = inspector ? sectionLabel(inspector.kind) : (direct ? 'Direct comparison' : 'Model answers');
+    // Written only when it changes: the reader renders on every streamed chunk.
+    if (get('Title').hasAttribute('data-i18n-skip') !== questionTitle) get('Title').toggleAttribute('data-i18n-skip', questionTitle);
+    if (get('Title').title !== (questionTitle ? selected.question : '')) get('Title').title = questionTitle ? selected.question : '';
+    get('Title').textContent = questionTitle ? selected.question : inspector ? sectionLabel(inspector.kind) : (direct ? 'Direct comparison' : 'Model answers');
     get('Mode').hidden = true;
     root.querySelector('.answer-reader-header').hidden = direct;
     if (inspector) {

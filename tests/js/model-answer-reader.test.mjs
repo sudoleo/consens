@@ -320,10 +320,14 @@ describe("model answer reader", () => {
   it("preserves an untouched direct answer while another model streams", () => {
     const ctx = boot(); const state = run(); state.config.agentMode = false; ctx.project(state);
     const first = ctx.document.querySelector('.answer-reader-answer');
-    first.querySelector('details').open = true;
+    // A Compare answer ends in the row of an Agent answer: Sources opens its list (UX audit B12).
+    const sources = first.querySelector('.answer-reader-evidence [data-section="sources"]');
+    sources.click();
+    expect(sources.getAttribute('aria-expanded')).toBe('true');
+    expect(first.querySelector('[data-section="copy"]').textContent).toBe('Copy');
     state.modelResults.Anthropic.text += ' continued'; ctx.project(state);
     expect(ctx.document.querySelector('.answer-reader-answer')).toBe(first);
-    expect(first.querySelector('details').open).toBe(true);
+    expect(first.querySelector('.answer-reader-sources.is-listed').hidden).toBe(false);
     expect(ctx.document.querySelector('.answer-reader-body[data-provider="Anthropic"]').textContent).toContain('continued');
   });
 
