@@ -1105,11 +1105,13 @@ def test_a_message_without_the_workspace_keeps_the_short_limits_and_never_starts
 
 
 @pytest.mark.parametrize("setting,used,browser,closed", [
-    ("", False, False, True), ("off", False, False, False), ("", True, False, False), ("", False, True, False)])
+    ("", False, None, True), ("off", False, None, False), ("", True, None, False), ("", False, "now", False),
+    ("", False, "handed_back", False), ("", False, "handed_back_long_ago", True)])
 def test_where_a_message_starts(api, monkeypatch, setting, used, browser, closed):
     """Closed for every account with the VM (since 2026-10-29, Pro and
     admins), open where the chat's last message used the workspace or the
-    user has its browser right now, and everywhere with the emergency off."""
+    user has its browser right now or handed it back within ten minutes,
+    and everywhere with the emergency off."""
     import time
     from app.api.routers import agent
     client, store, calls = api
@@ -1119,14 +1121,20 @@ def test_where_a_message_starts(api, monkeypatch, setting, used, browser, closed
     monkeypatch.setenv("AGENT_WORKSPACE_ON_DEMAND", setting)
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     store._chat_ref(UID, chat_id).update({"agent_workspace_used": used})
+    control = {"now": {"holder": "user", "until": time.time() + 60},
+               "handed_back": {"holder": "agent", "until": 0, "returned_at": time.time() - 110},
+               "handed_back_long_ago": {"holder": "agent", "until": 0, "returned_at": time.time() - 3600}}
     if browser:
-        agent_workspace.ref(store.db, UID).set({"control": {"holder": "user", "until": time.time() + 60}})
+        agent_workspace.ref(store.db, UID).set({"control": control[browser]})
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
                "agent_preferences": {"audit": "on"}}
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
     assert ("open_workspace" in names) is closed and ("vm_exec" in names) is not closed
     assert (prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT in calls[0]["messages"][0]["content"]) is closed
+    # A hand-back shortly before says so with the question (the "Done in the browser." message).
+    told = any(agent_vm.HANDED_BACK_NOTE.format(minutes=2) in str(m["content"]) for m in calls[0]["messages"])
+    assert told is (browser == "handed_back")
     # The message answered without the workspace: the next one starts as this one.
     assert store._chat_ref(UID, chat_id).get().to_dict()["agent_workspace_used"] is False
 

@@ -116,21 +116,37 @@ def vm_allowed(uid):
         ) from None
 
 
-def workspace_closed(uid, chat_data):
+# The user handed the workspace's browser back this recently: they just
+# worked in it (the hand-back button sends "Done in the browser.",
+# agent-chat.js continueAfterHandback).
+RECENT_HANDBACK_SECONDS = 600
+
+
+def browser_turn(uid):
+    """The user and the workspace's browser (agent_workspace.control_state):
+    0 while they have it, the seconds since they handed it back when that was
+    within RECENT_HANDBACK_SECONDS, else None (also when it cannot be read)."""
+    import time
+    from app.services import agent_workspace
+    try:
+        has, returned = agent_workspace.control_state(db_firestore, uid)
+    except Exception as exc:
+        logging.warning("Agent workspace browser state unavailable category=%s", safe_exception(exc))
+        return None
+    if has:
+        return 0
+    ago = time.time() - returned if returned else None
+    return ago if ago is not None and 0 <= ago < RECENT_HANDBACK_SECONDS else None
+
+
+def workspace_closed(chat_data, browser):
     """Whether this message starts without the workspace's tools, only with
     open_workspace (agent_vm.on_demand, DelegationLoop._open_workspace).
     It starts with them where the chat's last message used the workspace
-    (finish_run: agent_workspace_used) or the user has its browser right now:
-    the work goes on there. With the browser's state unknown it starts
-    closed: the agent can open it."""
-    if not agent_vm.on_demand() or chat_data.get("agent_workspace_used"):
-        return False
-    from app.services import agent_workspace
-    try:
-        return not agent_workspace.user_has_browser(db_firestore, uid)
-    except Exception as exc:
-        logging.warning("Agent workspace browser state unavailable category=%s", safe_exception(exc))
-        return True
+    (finish_run: agent_workspace_used) or the user has its browser or just
+    handed it back (``browser``, browser_turn): the work goes on there. With
+    the browser's state unknown it starts closed: the agent can open it."""
+    return agent_vm.on_demand() and not chat_data.get("agent_workspace_used") and browser is None
 
 
 def effective_preferences(uid, preferences):
@@ -440,6 +456,10 @@ def run_agent(request: Request, payload: AgentRequest):
         restored = (chat_data.get("agent_vm") or {}).get("restored") if preferences.vm == "on" else None
         if isinstance(restored, dict) and not restored.get("told"):
             app_context += "\n" + agent_vm.VM_RESTORED_NOTE
+        # The user works in the workspace's browser or just did (browser_turn).
+        browser = browser_turn(uid) if preferences.vm == "on" else None
+        if browser:
+            app_context += "\n" + agent_vm.HANDED_BACK_NOTE.format(minutes=max(1, round(browser / 60)))
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -475,7 +495,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources,
-                         workspace_closed=preferences.vm == "on" and workspace_closed(uid, chat_data),
+                         workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)

@@ -91,6 +91,7 @@
   "Found no pictures": "Keine Bilder gefunden",
   "Looked at {count} pictures": "{count} Bilder angesehen",
   "Looked at a picture · {host}": "Bild angesehen · {host}",
+  "Done in the browser.": "Fertig im Browser.",
   "Opening the workspace…": "Öffnet den Arbeitsplatz…",
   "Opened the workspace": "Arbeitsplatz geöffnet",
   "Opened the workspace · {task}": "Arbeitsplatz geöffnet · {task}",

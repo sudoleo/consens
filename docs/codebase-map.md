@@ -166,7 +166,11 @@ server with a VM provider.
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
 `open({ takeOver })`, `close`, `init`, `isOpen`, `showTab`, `holder`, `handBack`
 (also without an open view), `agentWaits(request)`; window event
-`consensio:workspace-holder` on every change of holder) renders the panel with the tabs
+`consensio:workspace-holder` on every change of holder, and since 2026-10-29
+`consensio:workspace-handback` only for the hand-back button, on which
+`agent-chat.js continueAfterHandback` sends "Done in the browser." unless a run
+waits for the browser; `routers/agent.py browser_turn` then starts the message
+with the workspace open and `agent_vm.HANDED_BACK_NOTE`) renders the panel with the tabs
 Browser and Terminal and a pulsing skeleton while a tab loads (a calm
 "first start" line after 6 s), imports noVNC from `static/vendor/novnc/1.7.0`
 on first open and xterm.js from `static/vendor/xterm/6.0.0` on the Terminal

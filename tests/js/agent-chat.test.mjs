@@ -2244,6 +2244,54 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Max (2026-10-29): the hand-back button means "go on" (workspace-view.js
+  // consensio:workspace-handback); closing the view says nothing.
+  it("sends \"Done in the browser.\" after the hand-back button, once the running answer has ended", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const resolves = [];
+    const handlers = [];
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers.push(received);
+      return new Promise(r => resolves.push(r));
+    });
+    const done = (n, question, response) => resolves[n]({ ok: true, data: { response, chat_id: "a".repeat(32),
+      turn_id: String(n + 1).repeat(32), turn: { id: String(n + 1).repeat(32), question, consensus: response,
+        mode: "Agent", execution_mode: "agent" } } });
+    const handBack = () => window.dispatchEvent(new window.CustomEvent("consensio:workspace-handback"));
+    document.getElementById("questionInput").value = "Melde dich bei DHL an";
+    const first = window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalledTimes(1));
+    // Handed back while the answer is written: the message waits for its end.
+    handBack();
+    expect(window.streamSSERequest).toHaveBeenCalledTimes(1);
+    document.getElementById("questionInput").value = "Mein Entwurf";
+    done(0, "Melde dich bei DHL an", "Bitte melde dich im Browser an.");
+    await first;
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalledTimes(2));
+    const sent = window.streamSSERequest.mock.calls[1][1];
+    expect([sent.question, sent.chat_id]).toEqual(["Done in the browser.", "a".repeat(32)]);
+    // The user's own draft stays in the field.
+    expect(document.getElementById("questionInput").value).toBe("Mein Entwurf");
+    // While the agent waits for the browser, its run goes on by itself: no message.
+    handlers[1].hold.receive({ hold: { id: "a1b2c3d4e5f6", kind: "ask", ask: "browser", request: "Log in.",
+      reviewer: "", provider: "", reason: "", entry: null, at: new Date().toISOString(), timeout_seconds: 1800 } });
+    handBack();
+    handlers[1].hold.receive({ hold: null, id: "a1b2c3d4e5f6", decision: "handed_back" });
+    // A run that used the browser after the hand-back acted on it already: no message either.
+    handBack();
+    handlers[1].activity.receive({ version: 1, step_id: "completion:1", kind: "tool", id: "c1", name: "browser",
+      status: "succeeded", action: "read" });
+    done(1, "Done in the browser.", "Dein Paket ist in Hamburg.");
+    await new Promise(r => setTimeout(r, 20));
+    expect(window.streamSSERequest).toHaveBeenCalledTimes(2);
+    // After the answer, a hand-back sends at once.
+    handBack();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalledTimes(3));
+    expect(window.streamSSERequest.mock.calls[2][1].question).toBe("Done in the browser.");
+    dom.window.close();
+  });
+
   // Until 2026-10-26 a run locked model and reasoning, and the Reasoning
   // button below the composer followed only now and then.
   it("takes a new reasoning level while a response runs, for the next message", async () => {

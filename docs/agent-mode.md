@@ -1523,6 +1523,24 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   und der Nutzer entscheidet. Sein Ergebnis sperrt Memory (seit 2026-10-29
   kann es die Seite des Browsers enthalten). Aktivität „Your turn“, Tab-Titel „Waiting for
   you“ (`tab-status.js`), Kopf der Agent-Aktivität „Waiting for you“.
+- **Zurückgeben ohne wartenden Agenten** (seit 2026-10-29, Max: Wer bewusst
+  „Hand back“ drückt, erwartet eine Antwort; wer nicht, schließt die Ansicht).
+  Nur der Knopf meldet `consensio:workspace-handback` (`workspace-view.js
+  handBack`, auch über die Karte im Chat). Schließen und eine abgelaufene
+  Übernahme melden nichts. `agent-chat.js continueAfterHandback` entscheidet:
+  Wartet der sichtbare Lauf auf den Browser (`ask_user` `browser` oder
+  `takeover`), geht er von selbst weiter. Läuft er noch, ohne zu warten (er
+  schreibt etwa die Antwort), schickt der Chat nach dessen Ende „Done in the
+  browser.“ (deutsch „Fertig im Browser.“) als nächste Nachricht des Nutzers,
+  außer der Lauf rief nach der Rückgabe selbst ein Werkzeug des Arbeitsplatzes
+  auf oder endete nicht erfolgreich. Läuft keiner, geht die Nachricht sofort
+  raus; ein Entwurf im Feld bleibt stehen. Der Server
+  (`routers/agent.py browser_turn`) lässt jede Nachricht innerhalb von
+  `RECENT_HANDBACK_SECONDS` (10 min) nach einer Rückgabe mit offenem
+  Arbeitsplatz beginnen und schreibt `agent_vm.HANDED_BACK_NOTE` („… handed it
+  back to you N min ago: what it shows may have changed …“) in ihren
+  App-Kontext. Die Seite selbst liest der Agent mit dem Browser; der Server
+  weckt dafür nicht vorab die Browser-VM.
 - **Ein Key vom Nutzer** (`ask_user` mit `secret`, `agent_secrets.py`, seit
   2026-10-29, Max: Geheimnis-Dialog wie in T3 Code): Braucht die Arbeit einen
   API-Key oder ein Token des Nutzers, fragt der Agent mit dem Namen

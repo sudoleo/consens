@@ -1165,6 +1165,46 @@
       googleSelection: null, googleDataConsent: App.agentGoogle?.consent?.() === true,
     } });
   }
+  // Handing the workspace's browser back with its button (workspace-view.js,
+  // "consensio:workspace-handback") means the user expects the agent to go on
+  // (Max, 2026-10-29). A run that waits for them (ask_user, a takeover) goes
+  // on by itself. Otherwise the chat on screen gets "Done in the browser." as
+  // their next message: at once, or once its running message has succeeded,
+  // unless that message used the workspace after the hand-back. Closing the
+  // view or a lapsed takeover hands back without a word.
+  const WORKSPACE_TOOL = /^(vm_|browser$|ask_user$|request_domain$|github_)/;
+  let handback = null;
+  function continueAfterHandback() {
+    if (!looksAgent()) return;
+    const context = registry.visible();
+    const hold = openHold(context);
+    if (hold?.ask === "browser" || hold?.ask === "takeover") return;
+    if (context && registry.isExecuting(context.runId)) {
+      handback = { runId: context.runId, seen: (context.metadata.agentActivity || []).length };
+      return;
+    }
+    handback = null;
+    sendHandback();
+  }
+  function sendHandback() {
+    const basis = registry.getSelectedConversationBasis();
+    if (!basis?.chatId || basis.continuationUnavailable) return;
+    return send(null, { retry: {
+      question: App.t("Done in the browser."), basis, chatId: basis.chatId, bookmarkId: basis.bookmarkId,
+      fileIds: [], attachmentMeta: [], googleSelection: null, googleDataConsent: App.agentGoogle?.consent?.() === true,
+    } });
+  }
+  function settleHandback() {
+    if (!handback || registry.isExecuting(handback.runId)) return;
+    const { runId, seen } = handback;
+    handback = null;
+    const context = registry.get(runId);
+    const later = (context?.metadata.agentActivity || []).slice(seen);
+    if (context?.status !== "succeeded" || registry.visible()?.runId !== runId
+        || later.some(item => item?.kind === "tool" && WORKSPACE_TOOL.test(String(item.name || "")))) return;
+    // After the run's own completion code: its saved turn becomes the chat's basis first.
+    setTimeout(sendHandback, 0);
+  }
   // No byte for 45 s does not prove that a run died: some networks (company
   // proxies, virus scanners) hold an event stream back until it ends. Ask the
   // server instead. A saved answer or failure ends the wait; a run that is
@@ -2905,6 +2945,8 @@
   // The user took the workspace's browser over or handed it back (workspace-view.js):
   // the agent's browser card offers the other way.
   window.addEventListener("consensio:workspace-holder", () => renderHold());
+  window.addEventListener("consensio:workspace-handback", continueAfterHandback);
+  window.addEventListener("consensio:run-registry-change", settleHandback);
   window.addEventListener("resize", fitHold);
   window.visualViewport?.addEventListener?.("resize", fitHold);
   // The field opens and closes under the card (composer-collapse.js), the

@@ -782,6 +782,10 @@ def backend():
 VM_RESTORED_NOTE = ("Before this message the user restored your VM to how it was before an earlier message: "
                     "whatever later commands changed there is gone, background processes included. Check the files "
                     "before you rely on them.")
+# The user handed the workspace's browser back shortly before this message
+# (routers/agent.py browser_turn): its page is theirs, not what you last saw.
+HANDED_BACK_NOTE = ("The user worked in the workspace's browser themselves and handed it back to you {minutes} min "
+                    "ago: what it shows may have changed since you last looked.")
 
 
 def restore_workspace(uid, checkpoint, *, factory=None):

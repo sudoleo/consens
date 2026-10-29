@@ -49,7 +49,8 @@
 // Settings → Agent), holder(), handBack() (also without an open view, for the
 // card in the chat), agentWaits(request or null); agent-activity.js opens it
 // from an opened page's card (Open). A change of holder is the window's
-// event "consensio:workspace-holder".
+// event "consensio:workspace-holder", the hand-back button's own
+// "consensio:workspace-handback".
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -584,6 +585,9 @@
 
   // Also without an open view (the card in the chat after a takeover in
   // another window): the server's record is what the waiting run reads.
+  // The button's hand-back says so to the chat ("consensio:workspace-handback",
+  // agent-chat.js continueAfterHandback): the user expects the agent to go on.
+  // Closing the view and a lapsed takeover hand back without that.
   async function handBack() {
     if (!view) {
       try {
@@ -592,7 +596,9 @@
         announceHolder('agent');
       } catch (error) {
         App.showPopup?.(App.t('Could not hand back: {reason}', { reason: error.message || 'Try again.' }));
+        return;
       }
+      window.dispatchEvent(new CustomEvent('consensio:workspace-handback'));
       return;
     }
     if (view.holder !== 'user') return;
@@ -600,7 +606,9 @@
       await setHolder('agent');
     } catch (error) {
       say(App.t('Could not hand back: {reason}', { reason: error.message || 'Try again.' }));
+      return;
     }
+    window.dispatchEvent(new CustomEvent('consensio:workspace-handback'));
   }
 
   // The agent waits for the user in the browser (ask_user), or no longer (null).

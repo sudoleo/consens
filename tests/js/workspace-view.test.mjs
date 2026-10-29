@@ -215,11 +215,14 @@ describe("the workspace view", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const env = setup();
+      const handbacks = [];
+      env.window.addEventListener("consensio:workspace-handback", () => handbacks.push("button"));
       const socket = await opened(env);
       socket.deliver(JSON.stringify({ state: "ready" }));
       const [rfb] = FakeRFB.made;
       env.document.querySelector(".workspace-view-cover").click();
       await vi.waitFor(() => expect(rfb.viewOnly).toBe(false));
+      expect(handbacks).toEqual([]);
       // The way back is the bar's one button right above the picture, not the head's toggle.
       const toggle = env.document.querySelector(".workspace-view-toggle");
       const back = env.document.querySelector(".workspace-view-turn-button");
@@ -231,6 +234,8 @@ describe("the workspace view", () => {
       expect(controls(env.window)).toEqual(["user", "user"]);
       back.click();
       await vi.waitFor(() => expect(rfb.viewOnly).toBe(true));
+      // The button's hand-back tells the chat, which lets the agent go on (agent-chat.js).
+      expect(handbacks).toEqual(["button"]);
       expect(toggle.hidden).toBe(false);
       expect(toggle.textContent).toBe("Take over");
       expect(env.document.querySelector(".workspace-view-turn").hidden).toBe(true);
@@ -322,11 +327,14 @@ describe("the workspace view", () => {
   it("hands back from the chat's card without an open view", async () => {
     const env = setup();
     const holders = [];
+    let handbacks = 0;
     env.window.addEventListener("consensio:workspace-holder", (event) => holders.push(event.detail.holder));
+    env.window.addEventListener("consensio:workspace-handback", () => { handbacks += 1; });
     expect(env.workspace.holder()).toBeNull();
     await env.workspace.handBack();
     expect(controls(env.window)).toEqual(["agent"]);
     expect(holders).toEqual(["agent"]);
+    expect(handbacks).toBe(1);
   });
 
   // A-S6 (docs/agent-audit-readiness-2026-10-29.md): a phone in the 2FA app
@@ -389,12 +397,16 @@ describe("the workspace view", () => {
 
   it("gives the browser back when it closes while the user has it", async () => {
     const env = setup();
+    let handbacks = 0;
+    env.window.addEventListener("consensio:workspace-handback", () => { handbacks += 1; });
     const socket = await opened(env);
     socket.deliver(JSON.stringify({ state: "ready" }));
     env.document.querySelector(".workspace-view-cover").click();
     await vi.waitFor(() => expect(FakeRFB.made[0].viewOnly).toBe(false));
     env.document.querySelector(".workspace-view-close").click();
     await vi.waitFor(() => expect(controls(env.window)).toEqual(["user", "agent"]));
+    // Closing hands back without a word to the chat: no "Done in the browser.".
+    expect(handbacks).toBe(0);
     expect(FakeRFB.made[0].disconnected).toBe(true);
     expect(socket.closed).toBe(true);
     expect(env.workspace.isOpen()).toBe(false);
