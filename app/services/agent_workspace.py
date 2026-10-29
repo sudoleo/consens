@@ -78,6 +78,9 @@ BROWSER_DOWNLOADS = BROWSER_STATE + "/downloads"
 BROWSER_HELPER = WORKSPACE_DIR + "/browser.py"
 BROWSER_RELAY = WORKSPACE_DIR + "/relay.py"
 BROWSER_TUNNEL = WORKSPACE_DIR + "/tunnel.py"
+# tunnel.py on the workbench, where the agent's user reads it (setup.sh
+# installs it there, root's, 0644): its connect runs as that user.
+WORKBENCH_TUNNEL = "/usr/local/lib/consens/tunnel.py"
 NOTES_PATH = HOME + "/NOTES.md"
 # What of the notes comes with a message's first VM result; the rest the agent
 # reads itself.
@@ -88,7 +91,7 @@ OLD_GATEWAY_SERVICE = "view"
 # CONTROL_REFRESH_SECONDS while the user has the browser).
 CONTROL_SECONDS = 90
 CONTROL_REFRESH_SECONDS = 30
-WORKBENCH_FILES = ("agent-run", "setup.sh")
+WORKBENCH_FILES = ("agent-run", "setup.sh", "tunnel.py")
 BROWSER_FILES = ("browser.py", "display.sh", "relay.py", "setup.sh", "tunnel.py")
 SETUP_SECONDS = 180
 # setup.sh installs headless Chrome from Google's own server, which the
@@ -129,9 +132,11 @@ class Claim:
 
 
 def tool_files(kind="workbench"):
-    """A VM's tools as written there (LF line ends whatever the checkout)."""
+    """A VM's tools as written there (LF line ends whatever the checkout):
+    its own folder's, else the ones both VMs run (workspace_vm/tunnel.py)."""
     names = WORKBENCH_FILES if kind == "workbench" else BROWSER_FILES
-    return {name: (_FILES / kind / name).read_bytes().replace(b"\r\n", b"\n") for name in names}
+    return {name: (_FILES / kind / name if (_FILES / kind / name).exists() else _FILES / name)
+            .read_bytes().replace(b"\r\n", b"\n") for name in names}
 
 
 def _version(kind):

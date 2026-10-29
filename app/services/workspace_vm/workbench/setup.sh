@@ -146,6 +146,10 @@ tools() {
 }
 tools || echo "setup: a tool could not be installed (ripgrep, poppler-utils, Chrome)" >&2
 
+# The localhost tunnel's side here (tunnel.py connect, agent_tunnel.py) runs
+# as the agent's user, who cannot open this folder: a copy it reads, root's.
+install -D -m 0644 "$(dirname -- "$0")/tunnel.py" /usr/local/lib/consens/tunnel.py
+
 as_user() { setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs -- env -i HOME="$home" "$@"; }
 as_user mkdir -p "$home/chats" "$home/.local/bin" "$home/.config"
 exit 0

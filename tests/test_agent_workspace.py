@@ -27,7 +27,10 @@ VM_FILES = Path(agent_workspace.__file__).with_name("workspace_vm")
 
 
 def load(name, kind="browser"):
-    spec = importlib.util.spec_from_file_location(f"workspace_vm_{kind}_{name}", VM_FILES / kind / f"{name}.py")
+    path = VM_FILES / kind / f"{name}.py"
+    # Run by both VMs (tunnel.py): in the folder above.
+    spec = importlib.util.spec_from_file_location(f"workspace_vm_{kind}_{name}",
+                                                  path if path.exists() else VM_FILES / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -88,7 +91,11 @@ def test_a_deleted_chat_takes_no_lease(store):
 
 def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():
     workbench, browser = agent_workspace.tool_files("workbench"), agent_workspace.tool_files("browser")
-    assert set(workbench) == {"agent-run", "setup.sh"}
+    assert set(workbench) == {"agent-run", "setup.sh", "tunnel.py"}
+    # One tunnel.py for both VMs; the workbench installs it where its agent's user reads it.
+    assert workbench["tunnel.py"] == browser["tunnel.py"]
+    assert f'install -D -m 0644 "$(dirname -- "$0")/tunnel.py" {agent_workspace.WORKBENCH_TUNNEL}' in (
+        workbench["setup.sh"].decode())
     assert set(browser) == {"browser.py", "display.sh", "relay.py", "setup.sh", "tunnel.py"}
     assert all(b"\r\n" not in data for data in [*workbench.values(), *browser.values()])
     assert agent_workspace.VERSION == agent_workspace._version("workbench") and len(agent_workspace.VERSION) == 16
