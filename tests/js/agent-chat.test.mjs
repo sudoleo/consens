@@ -971,6 +971,24 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('says what the agent opened its workspace for, as text', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const step = event => {
+      w.App.agentActivity.render(host, {running:true, events:[event]});
+      return [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent)[0];
+    };
+    // The workspace on demand (DelegationLoop._open_workspace, 2026-10-29).
+    const opened = {id:'w', kind:'tool', name:'open_workspace', status:'succeeded', task:'Build the game and start it'};
+    expect(step(opened)).toBe('Opened the workspace · Build the game and start it');
+    expect(step({...opened, task:''})).toBe('Opened the workspace');
+    expect(step({...opened, task:'<img src=x>'})).toBe('Opened the workspace · <img src=x>');
+    expect(host.querySelector('img')).toBe(null);
+    w.App.agentActivity.render(host, {running:true, events:[{...opened, status:'running'}]});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Opening the workspace…');
+    dom.window.close();
+  });
+
   it('says which source the agent read, and "read" only for a real read', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');

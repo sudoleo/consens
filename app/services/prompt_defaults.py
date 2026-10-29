@@ -165,6 +165,18 @@ AGENT_GITHUB_IMPORT_PROMPT = """GITHUB
 github_import copies a public GitHub repository into your workspace. The backend downloads it, so the workspace never holds GitHub credentials and does not reach github.com: git clone and git push do not work there. It lands in /home/agent/repos/<name> as a git repository with one commit of the imported state, so git diff shows your changes."""
 
 
+# The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, since 2026-10-29,
+# docs/agent-mode.md "Arbeitsplatz auf Abruf"): in place of the three blocks
+# above until the agent opens it (DelegationLoop._open_workspace, which puts
+# them here). Tools invite their use: with all of them from the start, a
+# question search had answered in 30 s turned into five minutes of curl, PIL
+# and cropping in the workspace (Delay Sports, 2026-10-29). Facts only, like
+# the rest of the audit prompt.
+AGENT_WORKSPACE_CLOSED_PROMPT = """YOUR WORKSPACE
+
+You and the user share a Linux computer, the workspace, and a Chrome browser on a computer of its own, signed in as the user. open_workspace opens both for this message: their tools come with your next step, for commands, files, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
+
+
 ANSWER_SYSTEM_PROMPT = (
     'Please answer thoroughly and precisely, explaining your reasoning and covering the relevant '
     'details. Do not oversimplify. Do not ask any follow-up or clarifying questions; answer directly '

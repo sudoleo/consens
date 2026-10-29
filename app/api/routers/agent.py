@@ -116,6 +116,30 @@ def vm_allowed(uid):
         ) from None
 
 
+def workspace_closed(uid, chat_data):
+    """Whether this message starts without the workspace's tools, only with
+    open_workspace (agent_vm.on_demand_mode, DelegationLoop._open_workspace).
+    It starts with them where the chat's last message used the workspace
+    (finish_run: agent_workspace_used) or the user has its browser right now:
+    the work goes on there. With the browser's state unknown it starts
+    closed: the agent can open it."""
+    mode = agent_vm.on_demand_mode()
+    if not mode or chat_data.get("agent_workspace_used"):
+        return False
+    if mode == "admin":
+        try:
+            if not is_user_admin(uid):
+                return False
+        except TierStatusUnavailable:
+            return False
+    from app.services import agent_workspace
+    try:
+        return not agent_workspace.user_has_browser(db_firestore, uid)
+    except Exception as exc:
+        logging.warning("Agent workspace browser state unavailable category=%s", safe_exception(exc))
+        return True
+
+
 def effective_preferences(uid, preferences):
     """The Agent settings this message runs with. Audit runs only for an
     account allowed it (audit_allowed), also when saved settings still say
@@ -458,6 +482,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources,
+                         workspace_closed=preferences.vm == "on" and workspace_closed(uid, chat_data),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)

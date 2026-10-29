@@ -177,6 +177,21 @@ class VmShareFileArgs(BaseModel):
     name: str = Field(default="", max_length=120, description="File name the user sees; default the file's own name.")
 
 
+# The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, DelegationLoop._open_workspace):
+# a message that starts without the workspace has this one tool of it.
+OPEN_WORKSPACE = "open_workspace"
+OPEN_WORKSPACE_DESCRIPTION = ("Open your workspace for this message: the Linux computer and the browser you share "
+                              "with the user. Their tools (commands, files, background processes, the browser, "
+                              "GitHub) come with your next step.")
+WORKSPACE_OPENED = "Your workspace is open: its tools come with your next step."
+
+
+class OpenWorkspaceArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    task: str = Field(min_length=3, max_length=200, description="What you will do there for the user, in one "
+                      "sentence. The user sees it.")
+
+
 class _VMOff(ValueError):
     """The VM failed or was never reachable in this message."""
 

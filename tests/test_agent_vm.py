@@ -229,7 +229,7 @@ ANSWER = "The script printed 42: the mean of the column is 42."
 
 
 def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on", file_context=None,
-            google_data=False):
+            google_data=False, workspace_closed=False):
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -239,7 +239,7 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(audit=audit, judges="off", vm=vm), file_context=file_context,
-        google_data=google_data)
+        google_data=google_data, workspace_closed=workspace_closed)
 
 
 @pytest.fixture
@@ -1049,6 +1049,84 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
         memory=MemorySnapshot(available=True, enabled=True, auto=True))
     assert {"start_agent", "compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",
             "github_import", "update_plan"} <= set(loop.registry.tools)
+
+
+# --- The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, 2026-10-29) ----------------
+
+WORKSPACE_TOOLS = {"vm_exec", "vm_write_file", "browser", "ask_user", "request_domain", "github_import", "update_plan"}
+
+
+def test_a_message_opens_its_workspace_on_demand_and_goes_on_as_if_it_had_it_from_the_start(store, fake_vm):
+    script = Agent([[("open_workspace", {"task": "Run the  script\nand report its mean"})],
+                    [("vm_exec", {"command": "ls"})]])
+    loop = vm_loop(store, script, workspace_closed=True)
+    events = list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == ANSWER
+    # Before: open_workspace and a short block in place of the workspace's.
+    assert "open_workspace" in script.offered[0] and not WORKSPACE_TOOLS & set(script.offered[0])
+    assert prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT in script.systems[0]
+    assert prompt_defaults.AGENT_VM_PROMPT not in script.systems[0]
+    # After: the workspace's prompt and tools, as for a message that had them
+    # from the start (the same prompt and the same order of tools).
+    assert WORKSPACE_TOOLS <= set(script.offered[1]) and "open_workspace" not in script.offered[1]
+    assert prompt_defaults.AGENT_VM_PROMPT in script.systems[1]
+    assert prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT not in script.systems[1]
+    from_start = vm_loop(store, Agent(), request_id="from-start")
+    assert script.systems[1] == from_start.messages[0]["content"]
+    assert list(loop.registry.tools) == list(from_start.registry.tools)
+    # What the agent reads: open, with the long run's limits and what it took so far.
+    opened, ran = results(loop)
+    assert opened["workspace"] == "open" and opened["note"] == agent_vm_tools.WORKSPACE_OPENED
+    assert (opened["step_limit"], opened["time_limit_minutes"], opened["steps_so_far"]) == (200, 120, 1)
+    assert ran["exit_code"] == 0
+    # The long run's limits hold from the opening on, not from the VM's start.
+    assert loop._long_run() and loop._turn_steps() == 200
+    # The user sees what for, in one line.
+    shown = [e for e in tool_events(events, "open_workspace") if e["status"] == "succeeded"]
+    assert shown[0]["task"] == "Run the script and report its mean"
+    # It used the workspace: the chat's next message starts with it open.
+    assert store._chat_ref(UID, loop.chat_id).get().to_dict()["agent_workspace_used"] is True
+
+
+def test_a_message_without_the_workspace_keeps_the_short_limits_and_never_starts_it(store, fake_vm):
+    # A workspace tool it was not offered does not run.
+    script = Agent([[("vm_exec", {"command": "curl https://example.com"})]])
+    loop = vm_loop(store, script, workspace_closed=True)
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == ANSWER
+    assert "unknown tool" in results(loop)[0]["error"] and "open_workspace" in results(loop)[0]["error"]
+    assert fake_vm.calls == [] and loop.completion.vm is None
+    assert not loop._long_run() and loop._turn_steps() == 24
+    assert all("open_workspace" in offered and "vm_exec" not in offered for offered in script.offered)
+    assert store._chat_ref(UID, loop.chat_id).get().to_dict()["agent_workspace_used"] is False
+
+
+@pytest.mark.parametrize("mode,admin,used,browser,closed", [
+    ("on", False, False, False, True), ("admin", True, False, False, True), ("admin", False, False, False, False),
+    ("on", False, True, False, False), ("on", False, False, True, False), ("", True, False, False, False)])
+def test_where_a_message_starts(api, monkeypatch, mode, admin, used, browser, closed):
+    """Closed for the accounts the setting names, open where the chat's last
+    message used the workspace or the user has its browser right now."""
+    import time
+    from app.api.routers import agent
+    client, store, calls = api
+    monkeypatch.setattr(agent, "audit_allowed", lambda uid: True)
+    monkeypatch.setattr(agent, "vm_allowed", lambda uid: True)
+    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
+    monkeypatch.setenv("AGENT_WORKSPACE_ON_DEMAND", mode)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    store._chat_ref(UID, chat_id).update({"agent_workspace_used": used})
+    if browser:
+        agent_workspace.ref(store.db, UID).set({"control": {"holder": "user", "until": time.time() + 60}})
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
+               "agent_preferences": {"audit": "on"}}
+    assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+    names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
+    assert ("open_workspace" in names) is closed and ("vm_exec" in names) is not closed
+    assert (prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT in calls[0]["messages"][0]["content"]) is closed
+    # The message answered without the workspace: the next one starts as this one.
+    assert store._chat_ref(UID, chat_id).get().to_dict()["agent_workspace_used"] is False
 
 
 # --- Deletion -----------------------------------------------------------------------

@@ -877,7 +877,8 @@ Projekt (`nvm` verträgt kein eigenes `prefix`, `npx` für Werkzeuge). Dazu
 Werkbank“).
 Ab dem ersten VM-Start einer Nachricht ist sie ein langer Lauf mit eigenen
 Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
-unter „Tageskontingent“); VM-Aufrufe zählen nicht zur
+unter „Tageskontingent“; mit dem Arbeitsplatz auf Abruf schon ab
+`open_workspace`); VM-Aufrufe zählen nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
 Änderung sind Fortschritt). Jedes VM-Werkzeug sperrt Memory wie `read_file`
 (Memory-Sperre unten): Ausgaben, Dateien und die Notizen des Arbeitsplatzes
@@ -909,6 +910,57 @@ Chat ihn nutzt, und mit Hinweis an jeden Chat, der ihn vorher nutzte
 (`restores`/`restores_seen`). Die Sprite friert nach einigen Sekunden
 Leerlauf ein („warm“, ohne Rechenkosten, laufende Prozesse bleiben, gemessen
 2026-10-27); erst nach längerem Schlaf („cold“) sind sie weg.
+
+### Arbeitsplatz auf Abruf (seit 2026-10-29)
+
+Werkzeuge laden zum Benutzen ein. Im Delay-Sports-Lauf vom 2026-10-29 stand die
+Antwort nach 30 s; danach verbrachte der Agent fünf Minuten mit curl, PIL und
+Zuschneiden im Arbeitsplatz, und sein erster Browser-Aufruf hob nebenbei die
+Grenze von 24 auf 200 Schritte. Mit Arbeitsplatz sah das Modell 21 statt 7
+Werkzeuge; knapp zwei Drittel des Texts aus Werkzeugen und Anleitungen gehörten
+zum Arbeitsplatz (gemessen im Testaufbau ohne Memory und Dateien). Max' Wunsch:
+Chat und Arbeit am Rechner bleiben ein Chat, das Modell bekommt die Werkzeuge
+aber erst, wenn die Aufgabe sie braucht.
+
+`AGENT_WORKSPACE_ON_DEMAND` schaltet es ein: `admin` für Admins, `on` für jedes
+Konto mit VM; leer (der Standard) bleibt alles wie zuvor. Eine Nachricht beginnt
+dann in **Stufe 1**. Im Systemprompt steht an der Stelle von VM-, GitHub- und
+Plan-Block `AGENT_WORKSPACE_CLOSED_PROMPT` (vor dem Memory-Block). Statt der
+Werkzeuge des Arbeitsplatzes (VM, `browser`, `ask_user`, `request_domain`,
+GitHub, `update_plan`) gibt es nur `open_workspace` (`task`: wofür, ein Satz,
+bis 200 Zeichen). Suche, `read_source`, Bilder, Watch, Einstellungen,
+Chatsuche, Dokumente und Memory bleiben. Ein Werkzeug des Arbeitsplatzes, das
+das Modell trotzdem aufruft, läuft nicht („unknown tool“), und die VM startet
+nicht.
+
+`open_workspace` öffnet **Stufe 2**, sobald die Aufrufe seines Schritts gelaufen
+sind (`DelegationLoop._open_workspace`, auf dem Thread des Laufs): Die Blöcke
+des Arbeitsplatzes ersetzen den kurzen, seine Werkzeuge stehen an der Stelle von
+`open_workspace`. Prompt und Werkzeugliste sind danach dieselben wie bei einer
+Nachricht, die ihn von Anfang an hatte (Test). Weil die Werkzeuge den Request
+anführen, schreibt der Anbieter den Prompt-Cache einmal neu, samt Chatverlauf;
+das kostet einmal so viel wie ein Aufruf ohne Cache. Zurück geht es in derselben
+Nachricht nie. Ab dem Öffnen gelten die Grenzen eines langen Laufs
+(`_long_run`), nicht erst ab dem VM-Start. Das Ergebnis nennt sie
+(`step_limit`, `time_limit_minutes`) und was die Nachricht bis dahin brauchte
+(`steps_so_far`, `minutes_so_far`). Die VM selbst startet weiter erst mit dem
+ersten VM-Aufruf. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
+Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
+Fremdinhalt und sperrt Memory nicht (`MEMORY_KEEPING_TOOLS`).
+
+**Wo eine Nachricht beginnt** (`routers/agent.py::workspace_closed`): offen,
+wenn die letzte Nachricht des Chats ein Werkzeug des Arbeitsplatzes aufrief
+(`finish_run` schreibt `agent_workspace_used` bei jeder Nachricht mit VM an den
+Chat) oder der Nutzer gerade den Browser hat (`agent_workspace.user_has_browser`),
+sonst geschlossen. Ist der Zustand des Browsers nicht lesbar, beginnt sie
+geschlossen. Eine offen begonnene Nachricht, die den Arbeitsplatz nicht nutzt,
+lässt die nächste wieder geschlossen beginnen; so bricht der Cache höchstens
+einmal pro Wechsel. Die Tageszähler des Audit-Modus zählen `workspace`: `open`
+(von Anfang an), `opened`, `closed` (`agent_audit_metrics`).
+
+Offen (Stand 2026-10-29): eine Live-Probe, ob die Modelle die Schwelle treffen
+und ob Modelle mit signiertem Reasoning (Claude, Gemini) den Werkzeugwechsel im
+Lauf vertragen. Erst danach in Prod für Admins setzen.
 
 ### Arbeitsplatz (seit 2026-10-27)
 

@@ -53,6 +53,8 @@
     vm_stop_process: ['Background process', 'Stopping a background process…', 'Stopped a background process'],
     vm_view_image: ['Picture', 'Looking at a picture…', 'Looked at a picture'],
     vm_install_packages: ['Install', 'Installing packages…', 'Installed packages'],
+    // The workspace on demand (DelegationLoop._open_workspace): what for (workspaceSummary).
+    open_workspace: ['Workspace', 'Opening the workspace…', 'Opened the workspace'],
     // The workspace's browser, a computer of its own (agent_browser.py).
     browser: ['Browser', 'Using the browser…', 'Used the browser'],
     request_domain: ['Network', 'Asking for access…', 'Got access'],
@@ -116,6 +118,12 @@
     const host = pictureHost(item);
     return host ? `Looked at a picture · ${host}` : 'Looked at a picture';
   }
+  // "Opened the workspace · Build the game and start it": the task the agent
+  // opened it for, its own words (agent_vm_tools.OpenWorkspaceArgs).
+  function workspaceSummary(item) {
+    const task = typeof item.task === 'string' ? item.task.trim() : '';
+    return item.status === 'succeeded' && task ? `Opened the workspace · ${task}` : null;
+  }
   // A turn whose only check was that of a pasted text (saved on 2026-10-09
   // before the answer of such a turn was judged too): the answer judges did
   // not run.
@@ -134,6 +142,7 @@
     if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
     if (item.name === 'show_image' && pictureSummary(item)) return pictureSummary(item);
     if (item.name === 'find_pictures' && lookSummary(item)) return lookSummary(item);
+    if (item.name === 'open_workspace' && workspaceSummary(item)) return workspaceSummary(item);
     if (item.name === 'search_chats' && item.opened && ['running', 'succeeded'].includes(item.status)) {
       return item.status === 'running' ? 'Opening an earlier chat…' : 'Read an earlier chat';
     }

@@ -52,6 +52,11 @@ def _github():
     return AGENT_GITHUB_PROMPT
 
 
+def _workspace_closed():
+    from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
+    return AGENT_WORKSPACE_CLOSED_PROMPT
+
+
 def _delegation(name):
     from app.services import agent_delegation_config
     return agent_delegation_config.PROMPTS[name]
@@ -108,6 +113,11 @@ _ENTRIES = (
      "Appended after \"Agent: plan\" with the VM (agent_github.py): github_import brings a repository the "
      "user connected through the GitHub app into the VM, prepare_pull_request proposes its changes on a card.",
      "prompt_defaults.py:AGENT_GITHUB_PROMPT", _github),
+    ("agent_workspace_closed", "Agent: workspace on demand",
+     "In place of \"Agent: Linux VM\", \"Agent: plan\" and \"Agent: GitHub\" while a message has not opened the "
+     "workspace (AGENT_WORKSPACE_ON_DEMAND): only open_workspace is offered, and opening puts those three blocks "
+     "and their tools here (DelegationLoop._open_workspace).",
+     "prompt_defaults.py:AGENT_WORKSPACE_CLOSED_PROMPT", _workspace_closed),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "
      "personal instructions replace it.",

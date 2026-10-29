@@ -61,6 +61,13 @@ def test_a_turn_is_counted_by_status_times_halts_and_failures():
     assert metrics.turn_counters(None, {**captured, "entries": []})["turns"] == {"deleted": 1}
 
 
+def test_how_a_turn_had_the_workspace_is_counted_where_it_had_one():
+    turn = {"status": "completed", "created_at": START}
+    captured = {"ended_at": START + timedelta(seconds=5), "entries": []}
+    assert metrics.turn_counters(turn, {**captured, "workspace": "opened"})["workspace"] == {"opened": 1}
+    assert "workspace" not in metrics.turn_counters(turn, captured)
+
+
 def test_buckets_and_labels_are_plain_field_names():
     assert [metrics.bucket(value) for value in (0, 2, 2.1, 20, 7200, 7201)] == [
         "le2", "le2", "le5", "le20", "le7200", "over7200"]

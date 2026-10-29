@@ -171,7 +171,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
         "agent", "comparison", "agent_audit", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_plan",
-        "agent_github", "answers", "consensus",
+        "agent_github", "agent_workspace_closed", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
@@ -213,6 +213,10 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # GitHub: only with credentials in the backend (agent_github.py).
     from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
     assert texts["agent_github"] == AGENT_GITHUB_PROMPT and "github_import" in texts["agent_github"]
+    # The workspace on demand: its short block until open_workspace (2026-10-29).
+    from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
+    assert texts["agent_workspace_closed"] == AGENT_WORKSPACE_CLOSED_PROMPT
+    assert "open_workspace" in texts["agent_workspace_closed"]
 
 
 def test_code_prompts_fit_the_prepare_round_trip():

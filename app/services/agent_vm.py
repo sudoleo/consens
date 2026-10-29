@@ -762,6 +762,15 @@ def open_to_pro():
     return os.getenv("AGENT_VM_ACCESS", "").strip().lower() == "pro"
 
 
+def on_demand_mode():
+    """AGENT_WORKSPACE_ON_DEMAND (docs/agent-mode.md "Arbeitsplatz auf Abruf"):
+    "admin" or "on" starts a message without the workspace's tools until the
+    agent opens it (DelegationLoop._open_workspace), for admins or for every
+    account with the VM; "" (unset, the default) gives them from the start."""
+    mode = os.getenv("AGENT_WORKSPACE_ON_DEMAND", "").strip().lower()
+    return mode if mode in {"admin", "on"} else ""
+
+
 def backend():
     """The configured provider for one message, or None without one."""
     token = os.getenv("SPRITES_TOKEN", "").strip()

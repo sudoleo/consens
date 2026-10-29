@@ -103,7 +103,7 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # card's status. A new tool locks until shown otherwise; ask_user too, since
 # it brings the browser's page back with the user's hand-back.
 MEMORY_KEEPING_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
-                                  "update_plan", "create_document", "revise_document"})
+                                  "update_plan", "create_document", "revise_document", "open_workspace"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800
@@ -319,7 +319,8 @@ class Worker:
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
-                 agent_preferences=None, memory=None, google_data=False, chat_sources=None, **kwargs):
+                 agent_preferences=None, memory=None, google_data=False, chat_sources=None, workspace_closed=False,
+                 **kwargs):
         super().__init__(**kwargs)
         # With comparison tools the agent writes the answer itself as its last
         # step (agent_answer_mode); a delegation-only run ends with plain text.
@@ -595,6 +596,16 @@ class DelegationLoop(AgentLoop):
         self.vm_tools = None
         self.plan_tools = None
         self.workspace_tools = frozenset()
+        # The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, docs/agent-mode.md
+        # "Arbeitsplatz auf Abruf"): a message with ``workspace_closed`` starts
+        # with open_workspace in place of the workspace's prompt and tools
+        # (_open_workspace). ``workspace_task``: what the agent opened it for,
+        # set by the tool; ``workspace_opened``: since then; ``workspace_used``:
+        # a workspace tool was called, so the chat's next message starts with
+        # it open (finish_run: agent_workspace_used).
+        self.workspace_closed = self.workspace_opened = self.workspace_used = False
+        self.workspace_task = None
+        self.workspace_names = frozenset()
         # The user's answer on an ask_user card, for the tool to return (_ask_wait, agent_ask.py).
         self.ask_answer = None
         # Domains the user allowed on a card in this message: request_domain
@@ -607,26 +618,17 @@ class DelegationLoop(AgentLoop):
                 and not google_data and agent_preferences is not None and agent_preferences.vm == "on"
                 and agent_vm.configured()):
             from app.services.agent_vm_tools import VMTools
-            from app.services.prompt_defaults import AGENT_VM_PROMPT
             self.vm_tools = VMTools(self)
-            self.messages[0]["content"] += "\n\n" + AGENT_VM_PROMPT
-            # GitHub (agent_github.py): the tools come with the VM, so the prompt does too;
-            # without the app only the import of public repositories.
-            from app.services import agent_github
-            from app.services.prompt_defaults import AGENT_GITHUB_IMPORT_PROMPT, AGENT_GITHUB_PROMPT
-            self.messages[0]["content"] += "\n\n" + (AGENT_GITHUB_PROMPT if agent_github.configured()
-                                                     else AGENT_GITHUB_IMPORT_PROMPT)
-            # The plan of a long task (agent_plan.py), with the VM where tasks run long.
-            from app.services.agent_plan import PlanTools
-            from app.services.prompt_defaults import AGENT_PLAN_PROMPT
-            self.plan_tools = PlanTools()
-            self.messages[0]["content"] += "\n\n" + AGENT_PLAN_PROMPT
-            vm_tools = self.vm_tools.tools()
-            # Calls into the workspace wait while the user has its browser
-            # (_takeover_wait); asking the user and a domain request do not.
-            self.workspace_tools = frozenset(tool.name for tool in vm_tools) - {ASK_TOOL, "request_domain"}
-            self.registry = ToolRegistry([*self.registry.tools.values(), *vm_tools, *self.plan_tools.tools()],
-                                         argument_limit=max(self.registry.argument_limit, 24_000))
+            if workspace_closed:
+                from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
+                self.workspace_closed = True
+                self.messages[0]["content"] += "\n\n" + AGENT_WORKSPACE_CLOSED_PROMPT
+                self.registry = ToolRegistry([*self.registry.tools.values(), self._workspace_opener()],
+                                             argument_limit=max(self.registry.argument_limit, 24_000))
+            else:
+                self.messages[0]["content"] += self._workspace_prompt()
+                self.registry = ToolRegistry([*self.registry.tools.values(), *self._workspace_tool_list()],
+                                             argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
@@ -714,9 +716,70 @@ class DelegationLoop(AgentLoop):
 
     def _long_run(self):
         """Whether this turn works in its VM: from the VM's first start in
-        this message on it has the long-run limits (AgentPolicy.vm_turn_*)
+        this message on, or once the agent opened its workspace
+        (open_workspace), it has the long-run limits (AgentPolicy.vm_turn_*)
         and its old command output is compacted (_compact)."""
-        return self.vm_tools is not None and self.vm_tools.session.started
+        return self.vm_tools is not None and (self.workspace_opened or self.vm_tools.session.started)
+
+    def _workspace_prompt(self):
+        """The workspace's blocks of the system prompt, each after a blank line."""
+        from app.services import agent_github
+        from app.services.prompt_defaults import (AGENT_GITHUB_IMPORT_PROMPT, AGENT_GITHUB_PROMPT, AGENT_PLAN_PROMPT,
+                                                  AGENT_VM_PROMPT)
+        # GitHub (agent_github.py): the tools come with the VM, so the prompt does too;
+        # without the app only the import of public repositories. The plan of
+        # a long task (agent_plan.py) comes with the VM, where tasks run long.
+        github = AGENT_GITHUB_PROMPT if agent_github.configured() else AGENT_GITHUB_IMPORT_PROMPT
+        return "".join("\n\n" + block for block in (AGENT_VM_PROMPT, github, AGENT_PLAN_PROMPT))
+
+    def _workspace_tool_list(self):
+        """The workspace's tools: the VM's, the browser and GitHub among them, and the plan."""
+        from app.services.agent_plan import PlanTools
+        self.plan_tools = PlanTools()
+        vm_tools = self.vm_tools.tools()
+        self.workspace_names = frozenset(tool.name for tool in vm_tools)
+        # Calls into the workspace wait while the user has its browser
+        # (_takeover_wait); asking the user and a domain request do not.
+        self.workspace_tools = self.workspace_names - {ASK_TOOL, "request_domain"}
+        return [*vm_tools, *self.plan_tools.tools()]
+
+    def _workspace_opener(self):
+        from app.services.agent_vm_tools import OPEN_WORKSPACE, OPEN_WORKSPACE_DESCRIPTION, OpenWorkspaceArgs
+        return ReadOnlyTool(OPEN_WORKSPACE, OPEN_WORKSPACE_DESCRIPTION, OpenWorkspaceArgs, self._request_workspace,
+                            activity=lambda args, result: {"task": " ".join(args.task.split())})
+
+    def _request_workspace(self, args, *, cancellation):
+        """open_workspace: the workspace opens once this step's calls are done
+        (_open_workspace, on the run's own thread). Its result says what the
+        message may take from then on."""
+        from app.services.agent_vm_tools import WORKSPACE_OPENED
+        with self.condition:
+            self.workspace_task = " ".join(args.task.split())
+            steps = self.routing_steps
+        result = {"workspace": "open", "note": WORKSPACE_OPENED, "steps_so_far": steps,
+                  "minutes_so_far": round(self._turn_elapsed() / 60, 1)}
+        if self.policy.vm_turn_steps:
+            result["step_limit"] = self.policy.vm_turn_steps
+        if self.policy.vm_turn_seconds:
+            result["time_limit_minutes"] = self.policy.vm_turn_seconds // 60
+        return result
+
+    def _open_workspace(self):
+        """The workspace's prompt takes the place of AGENT_WORKSPACE_CLOSED_PROMPT
+        (before the memory block) and its tools that of open_workspace, so the
+        message goes on as one that had them from the start. The tools lead
+        the request: the provider writes its prompt cache once more, this once."""
+        from app.services.agent_vm_tools import OPEN_WORKSPACE
+        from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
+        content = self.messages[0]["content"]
+        self.messages[0] = {**self.messages[0], "content": content.replace(
+            "\n\n" + AGENT_WORKSPACE_CLOSED_PROMPT, self._workspace_prompt(), 1)}
+        tools = []
+        for tool in self.registry.tools.values():
+            tools.extend(self._workspace_tool_list() if tool.name == OPEN_WORKSPACE else [tool])
+        self.registry = ToolRegistry(tools, argument_limit=max(self.registry.argument_limit, 24_000))
+        self.workspace_closed, self.workspace_opened = False, True
+        logging.info("Agent workspace opened step=%s", self.routing_steps)
 
     def _turn_seconds(self):
         if self.policy.vm_turn_seconds and self._long_run():
@@ -3108,6 +3171,8 @@ class DelegationLoop(AgentLoop):
                         steered = False
                         for call in value.tool_calls:
                             name = (call.get("function") or {}).get("name")
+                            # The chat's next message starts with the workspace open.
+                            self.workspace_used = self.workspace_used or name in self.workspace_names
                             # Between the calls of a batch too: after a halt
                             # the next call waits for the user. Once the user
                             # wrote to the agent, the rest of the batch waits
@@ -3193,6 +3258,9 @@ class DelegationLoop(AgentLoop):
                                 # once all required checks have reached an end state.
                                 break
                         self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
+                        if self.workspace_closed and self.workspace_task is not None:
+                            # open_workspace ran in this batch: its tools from the next step on.
+                            self._open_workspace()
                         self._show_pictures()
                         yield from self._events()
                         if self._brought_outside_content(value, results):
@@ -3311,6 +3379,8 @@ class DelegationLoop(AgentLoop):
                 # and the commands' summed run time.
                 self.completion.vm = self.vm_tools.session.summary()
                 self.vm_tools.session.close()
+                # Where the chat's next message starts (finish_run: agent_workspace_used).
+                self.completion.workspace_used = self.workspace_used
             if self._long_run() or status != "succeeded":
                 # What the next message is told this one did (agent_compaction):
                 # after a VM run, and since 2026-10-27 after any run that broke

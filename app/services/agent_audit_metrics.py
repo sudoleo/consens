@@ -6,7 +6,9 @@ counts every audit turn once at its end: by status and review status, by
 number of reviewers, in histogram buckets of its times (total, until the
 answer was fixed, marks after the last word, each gate's wait, each
 reviewer's final round by model, the reviewers' backlog when the answer was
-fixed), and its halts by kind and decision and its failures by code. Never an
+fixed), its halts by kind and decision, its failures by code, and with the
+VM whether it had the workspace from the start, opened it or stayed without
+it (``workspace``: open, opened, closed). Never an
 account, a chat, a turn or any text: model ids, codes and bucket labels only.
 
 The run's thread only copies what it holds in memory (``capture``: the times
@@ -98,8 +100,14 @@ def capture(loop):
     holds = [{key: item.get(key) for key in ("halt", "gate", "ask", "domain", "state")}
              for item in loop.completion.activity or [] if item.get("kind") == "hold"]
     auditor = loop.comparison.auditor if loop.comparison is not None else None
-    return {"entries": entries, "holds": holds, "reviewers": len(auditor.reviewers) if auditor is not None else 0,
-            "ended_at": datetime.now(timezone.utc)}
+    captured = {"entries": entries, "holds": holds, "reviewers": len(auditor.reviewers) if auditor is not None else 0,
+                "ended_at": datetime.now(timezone.utc)}
+    if getattr(loop, "vm_tools", None) is not None:
+        # The workspace on demand (DelegationLoop._open_workspace): how often
+        # the agent opens it, stays without it, or has it from the start.
+        captured["workspace"] = ("opened" if loop.workspace_opened else "closed" if loop.workspace_closed
+                                 else "open")
+    return captured
 
 
 def _add(counters, *path):
@@ -133,6 +141,8 @@ def turn_counters(turn, captured):
     turn = turn or {}
     status = _status(turn)
     _add(counters, "turns", label(status))
+    if captured.get("workspace"):
+        _add(counters, "workspace", label(captured["workspace"]))
     review = turn.get("agent_review") or {}
     audit = review.get("audit") or {}
     reviewers = [item for item in audit.get("reviewers") or [] if isinstance(item, dict)]

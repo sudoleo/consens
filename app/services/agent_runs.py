@@ -595,6 +595,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 # Last: the activity takes the room the rest of the turn leaves.
                 patch["agent_activity"] = bounded_activity(completion.activity, activity_budget(turn_data, patch))
                 tx.update(turn_ref, patch)
+                if isinstance(getattr(completion, "workspace_used", None), bool):
+                    # Whether the chat's next message starts with the workspace
+                    # open (routers/agent.py, AGENT_WORKSPACE_ON_DEMAND).
+                    tx.update(chat_ref, {"agent_workspace_used": completion.workspace_used})
                 if pick:
                     persistence_guard.write_agent_vote(tx, self.db, vote_ref, uid=uid, chat_id=chat_id,
                                                        turn_id=turn_id, model=pick, participants=pick_field)
