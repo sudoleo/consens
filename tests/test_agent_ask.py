@@ -410,6 +410,31 @@ def test_the_route_saves_the_key_on_the_workbench_and_answers_the_card(api, monk
     assert again.status_code == 409 and len(saved_runs) == 1
 
 
+def test_a_key_card_that_could_not_be_saved_still_takes_the_key(api, monkeypatch, no_keys):
+    """A-S1: the card's save failed for good; the run of this process knows
+    the card and takes the answer, the key goes to the workbench as ever."""
+    from test_agent_audit import held, in_background, unsaved_holds
+    from test_agent_vm import FakeVM
+    from app.services import agent_vm
+    client, store, _ = api
+    vm = FakeVM()
+    monkeypatch.setattr(agent_vm, "backend", vm.backend)
+    Browser(monkeypatch)
+    unsaved_holds(store, monkeypatch)
+    script, loop, ran = asking(store, args={"request": "Ich brauche deinen OpenAI-Key.", "secret": "OPENAI_API_KEY"})
+    events, ended = in_background(loop)
+    hold = held(loop)
+    deadline = time.monotonic() + 5
+    while not loop.hold_unsaved and time.monotonic() < deadline:
+        time.sleep(.01)
+    response = client.post(f"/agent/chats/{loop.chat_id}/requests/one/secret", json={"id": hold["id"], "value": KEY},
+                           headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert vm.vms[agent_vm.workspace_name(UID)]["files"]["/home/agent/.secrets/OPENAI_API_KEY"] == KEY.encode()
+    assert ended.wait(10)
+    assert results(loop)[0]["status"] == "saved" and saved(store, loop)["status"] == "completed"
+
+
 def test_a_later_message_masks_the_keys_and_names_them(store, monkeypatch, no_keys):
     """After a restart of the server nothing is in memory: the message's VM
     start reads the keys the record names (a deleted one is left out), and

@@ -1259,6 +1259,54 @@ def test_a_decision_reaches_a_run_of_this_process_at_once(api):
     assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == ["continue"]
 
 
+def unsaved_holds(store, monkeypatch):
+    """set_hold fails for every hold that opens (a database outage); clears
+    still work. Returns the attempts."""
+    from google.api_core.exceptions import ServiceUnavailable
+    monkeypatch.setattr(agent_delegation, "HOLD_SAVE_BACKOFF_SECONDS", 0)
+    attempts, original = [], type(store).set_hold
+
+    def set_hold(self, uid, chat_id, turn_id, hold, *, replaces=None):
+        if hold is not None:
+            attempts.append(hold["id"])
+            raise ServiceUnavailable("Firestore is away")
+        return original(self, uid, chat_id, turn_id, hold, replaces=replaces)
+    monkeypatch.setattr(type(store), "set_hold", set_hold)
+    return attempts
+
+
+@pytest.mark.parametrize("action", ["continue", "steer", "stop"])
+def test_a_pause_that_could_not_be_saved_is_still_decided(api, monkeypatch, action):
+    """A-S1: the save is tried three times; failed for good, the card comes
+    all the same and the run of this process takes the decision, never 409."""
+    client, store, _ = api
+    attempts = unsaved_holds(store, monkeypatch)
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+    events, ended = in_background(loop)
+    hold = held(loop)
+    deadline = time.monotonic() + 5
+    while not loop.hold_unsaved and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert attempts == [hold["id"]] * 3 and loop.unsaved_hold()["id"] == hold["id"]
+    url = f"/agent/chats/{loop.chat_id}/requests/one/hold"
+    text = "Use only the official site." if action == "steer" else ""
+    assert client.post(url, json={"id": "ffffffffffff", "action": "continue"}, headers=AUTH).status_code == 409
+    response = client.post(url, json={"id": hold["id"], "action": action, "text": text}, headers=AUTH)
+    assert response.status_code == 200, response.text
+    again = client.post(url, json={"id": hold["id"], "action": "continue"}, headers=AUTH)
+    assert again.status_code == 409 and again.json()["code"] in {"hold_over", "not_running"}
+    assert ended.wait(10)
+    turn = saved(store, loop)
+    if action == "stop":
+        assert loop.cancellation.cancelled and turn["status"] == "failed"
+        return
+    assert turn["status"] == "completed"
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == [action]
+    notes = [m["content"] for m in loop.messages if m.get("role") == "user" and text and text in str(m["content"])]
+    assert notes == ([f"{agent_delegation.USER_NOTE_OPEN}\n{text}"] if text else [])
+
+
 # --- The route ---------------------------------------------------------------------
 
 # Audit for Pro accounts and admins since 2026-10-26 (routers/agent.py audit_allowed).

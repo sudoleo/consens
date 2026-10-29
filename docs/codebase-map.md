@@ -5773,7 +5773,11 @@ Antwort; `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
 `hold_decision` (`_receive_hold`, nach `_receive_notes`); läuft der Lauf im
 selben Prozess, geben `POST …/hold` und `…/notes` das Gespeicherte sofort an
 ihn (`agent_background.run_loop` → `DelegationLoop.receive`, seit
-2026-10-29), der Wächter bleibt das Netz. Entscheidung über
+2026-10-29), der Wächter bleibt das Netz. `set_hold` mit drei Versuchen
+(`_save_hold`); bleibt eine Pause ungespeichert, nehmen `…/hold` und
+`…/secret` die Entscheidung über den Lauf des Prozesses an
+(`routers/agent.py::_decide_hold`, `DelegationLoop.decide_unsaved`), erst
+dann 409. Entscheidung über
 `POST /agent/chats/{chat}/requests/{request_id}/hold`
 (`AgentHoldDecision`, `store.decide_hold`; `steer` hängt eine Nutzer-Notiz
 an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach

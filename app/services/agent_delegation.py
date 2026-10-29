@@ -131,6 +131,8 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # user's decision; then the response stops, as with the Stop button. It never
 # goes on by itself.
 HOLD_TIMEOUT_SECONDS = 30 * 60
+# First pause between two attempts to save an open hold (_save_hold), doubled.
+HOLD_SAVE_BACKOFF_SECONDS = .5
 # Calls of a batch after the user paused the work and wrote to the agent: not
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
@@ -344,6 +346,9 @@ class DelegationLoop(AgentLoop):
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
         self.hold_started = 0.0
+        # The open hold could not be saved (_save_hold): its decision comes
+        # in this process only (decide_unsaved).
+        self.hold_unsaved = False
         self.paused_seconds = 0.0
         self.tools_used = 0
         self.invalid_tool_rounds = 0
@@ -1816,13 +1821,15 @@ class DelegationLoop(AgentLoop):
             hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
                     "timeout_seconds": HOLD_TIMEOUT_SECONDS}
             self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
+            self.hold_unsaved = False
             self.condition.notify_all()
         if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
-        try:
-            self.store.set_hold(self.uid, self.chat_id, self.turn_id, hold)
-        except Exception as exc:
-            logging.warning("Agent hold could not be saved category=%s", safe_exception(exc))
+        if not self._save_hold(hold):
+            # The card comes all the same: the decision endpoint hands its
+            # answer to this run (decide_unsaved), never a 409.
+            with self.condition:
+                self.hold_unsaved = self.hold is hold
         self.outgoing.put_nowait({"type": "hold", "hold": hold})
         self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                                 **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
@@ -1845,6 +1852,56 @@ class DelegationLoop(AgentLoop):
                 f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
                 f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
                 f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."))
+        return True
+
+    def _save_hold(self, hold):
+        """The open hold on the run's root (set_hold), where the decision
+        endpoint checks against it; a short outage is retried like the work
+        log's writes (agent_work_log.WRITE_ATTEMPTS). Before 2026-10-29 one
+        failed write left a card that every decision met with 409. False
+        when it stayed unsaved."""
+        from app.services.agent_work_log import WRITE_ATTEMPTS
+        from app.services.chat_store import TurnStatusConflict
+        for attempt in range(WRITE_ATTEMPTS):
+            try:
+                self.store.set_hold(self.uid, self.chat_id, self.turn_id, hold)
+                return True
+            except TurnStatusConflict as exc:
+                # The run no longer runs: no later attempt can save it.
+                logging.info("Agent hold not saved category=%s", safe_exception(exc))
+                return False
+            except Exception as exc:
+                logging.warning("Agent hold could not be saved attempt=%s category=%s", attempt + 1,
+                                safe_exception(exc))
+                if attempt + 1 < WRITE_ATTEMPTS and self.closed.wait(HOLD_SAVE_BACKOFF_SECONDS * 2 ** attempt):
+                    return False
+        return False
+
+    def unsaved_hold(self):
+        """The open hold that could not be saved (request_hold), while no
+        decision has come: only this run knows it. Else None."""
+        with self.condition:
+            if (self.hold is None or not self.hold_unsaved or self.hold_decision is not None
+                    or self.closed.is_set() or self.cancellation.cancelled):
+                return None
+            return dict(self.hold)
+
+    def decide_unsaved(self, hold_id, action, text=""):
+        """The user's decision on that hold, from the decision endpoint of
+        this process (POST .../hold, .../secret): True when taken. A message
+        ("steer") is the user's note, as decide_hold would have saved it."""
+        from app.services.agent_sessions import USER_NOTE_CHARS
+        with self.condition:
+            hold = self.unsaved_hold()
+            if hold is None or hold["id"] != hold_id:
+                return False
+            if action == "steer":
+                note = {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
+                        "at": datetime.now(timezone.utc).isoformat()}
+                self.notes_seen.add(note["id"])
+                self.notes.append(note)
+            self.hold_decision = action
+            self.condition.notify_all()
         return True
 
     def _open_gate(self, value):

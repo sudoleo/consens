@@ -481,7 +481,14 @@ ist der Stop-Knopf. Läuft der Lauf im selben Prozess, hat er die Entscheidung
 (und eine Nachricht über `…/notes`), sobald die Anfrage antwortet
 (`DelegationLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
 Blick des Wächters, bis 3 s); der gespeicherte Root bleibt die Wahrheit für
-andere Prozesse. Text im Feld ist während der Pause die Steer-Entscheidung.
+andere Prozesse. Eine Pause bleibt entscheidbar, wenn ihr Speichern scheitert
+(seit 2026-10-29): `set_hold` wird dreimal versucht (`_save_hold`, Pause ab
+`HOLD_SAVE_BACKOFF_SECONDS`, verdoppelt), die Karte kommt trotzdem, und der
+Endpunkt gibt die Entscheidung dann dem Lauf seines Prozesses
+(`DelegationLoop.unsaved_hold`/`decide_unsaved`, auch für `…/secret`); erst
+wenn auch der sie nicht kennt, 409 `hold_over`. Vorher wurde der Fehler nur
+geloggt, und jede Entscheidung bekam 409. Text im Feld ist während der
+Pause die Steer-Entscheidung.
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
