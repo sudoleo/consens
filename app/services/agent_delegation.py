@@ -1911,7 +1911,8 @@ class DelegationLoop(AgentLoop):
         if verdict == "go":
             gate.decision = "continue"
             if self.work_log is not None:
-                self.work_log.app("checked", f"The reviewers let the calls of entry {gate.entry} run.")
+                self.work_log.app("checked", {"text": f"The reviewers let the calls of entry {gate.entry} run.",
+                                              **auditor.gate_trace(gate)})
             return gate.decision
         details = auditor.gate_hold(gate, halts)
         while True:
@@ -1977,7 +1978,9 @@ class DelegationLoop(AgentLoop):
         details = {"reviewer": "", "provider": "", "kind": "domain", "reason": "", "gate": True,
                    "entry": gate.entry if gate is not None else None, "step": "", "step_name": "",
                    "step_kind": "", "step_source": "", "domain": domain, "domain_reason": reason,
-                   "review": verdict if verdict in {"go", "halt"} else "unchecked"}
+                   "review": verdict if verdict in {"go", "halt"} else "unchecked",
+                   **(auditor.gate_trace(gate) if gate is not None and auditor is not None
+                      and call["id"] in gate.call_ids else {})}
         if halts:
             shown = auditor.gate_hold(gate, halts)
             details.update(reviewer=shown.get("reviewer", ""), provider=shown.get("provider", ""),

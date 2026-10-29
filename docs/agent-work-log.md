@@ -316,7 +316,10 @@ Agent-Panel.
    unlesbare Gate-Antwort bekommt einen zweiten Versuch mit `REPAIR_NOTE`. Eine Domain für die
    Werkbank geht nach der Gate-Runde immer an den Nutzer, das Urteil der
    Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im Protokoll:
-   App-Eintrag `checked` bei Freigabe, sonst `paused`/`decision` wie beim
+   App-Eintrag `checked` bei Freigabe (seit 2026-10-29 mit `gate_ms` und den
+   Urteilen je Prüfer: `verdicts` mit `provider`, `model`, `verdict` =
+   go/halt/failed, `ms`; eine Karte trägt dieselben Felder am Hold), sonst
+   `paused`/`decision` wie beim
    Aussteuern („The agent asks to reach …“, „The user did not allow it.“).
    Browser-Aktionen (`open`, `click`, `upload`, Enter, Leertaste) und
    `read_source`/`show_image` mit unbekannter Adresse standen vom 27./28. bis

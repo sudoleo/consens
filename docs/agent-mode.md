@@ -576,7 +576,10 @@ derselben Sitzung (Beleg `repair`), und die Wartezeit hält die Turn-Uhr an wie
 ein Halt (`gate_paused`/`gate_started`, `_gate_pause`; vorher zählte sie zur
 Turn-Zeit). Der Aufruf
 wartet in `_gate_wait` (Aktivität „The reviewers check this step before it
-runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`. **Ein
+runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`
+(seit 2026-10-29 als JSON `{text, gate_ms, verdicts: [{provider, model,
+verdict, ms}]}`, `AnswerAudit.gate_trace`, ohne Texte der Prüfer; dieselben
+Felder `gate_ms`/`verdicts` trägt der Hold einer Gate- oder Domain-Karte). **Ein
 Halt reicht** → die Karte (`request_hold` mit `gate: true`, „A reviewer
 stopped a step before it ran“, Knopf „Let it run“; halten mehrere an, steht
 jeder mit seinem Grund in `reasons`). **Kann nicht jeder Prüfer des Laufs

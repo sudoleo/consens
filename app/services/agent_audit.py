@@ -617,7 +617,8 @@ class Gate:
     log entry once it is written; ``asked``: the reviewers that can answer
     then; ``verdicts``: provider -> ("go" | "halt" | "failed", halt or None);
     ``decision``: what the run made of it ("continue", "steer");
-    ``ready_at``: when the reviewers were asked (the run's clock)."""
+    ``ready_at``: when the reviewers were asked (the run's clock), ``times``
+    the milliseconds from then to each verdict, ``ms`` to the result (A-M3)."""
 
     def __init__(self, calls):
         self.id = uuid4().hex[:12]
@@ -626,6 +627,7 @@ class Gate:
         self.entry = None
         self.ready = False
         self.ready_at = None
+        self.times, self.ms = {}, None
         self.asked = set()
         self.verdicts = {}
         self.decision = None
@@ -1714,7 +1716,10 @@ class AnswerAudit:
 
     def _verdict(self, session, gate, verdict, halt):
         """The first verdict of ``session`` on ``gate`` counts (under _gate_changed)."""
-        gate.verdicts.setdefault(session.provider, (verdict, halt))
+        if session.provider not in gate.verdicts:
+            gate.verdicts[session.provider] = (verdict, halt)
+            if gate.ready_at is not None:
+                gate.times[session.provider] = int((self._clock() - gate.ready_at) * 1000)
 
     def _clock(self):
         """The run's clock (DelegationLoop.clock, injectable for tests)."""
@@ -1746,6 +1751,8 @@ class AnswerAudit:
             if missing and not self.stopping:
                 return None
             verdicts = dict(gate.verdicts)
+            if gate.ms is None and gate.ready_at is not None:
+                gate.ms = int((self._clock() - gate.ready_at) * 1000)
         for session in late:
             session.cut_round()
         # In the reviewers' order, not in the order they answered.
@@ -1756,6 +1763,17 @@ class AnswerAudit:
         if self.sessions and all(verdicts.get(provider, (None,))[0] == "go" for provider in self.sessions):
             return "go", []
         return GATE_UNCHECKED, []
+
+    def gate_trace(self, gate):
+        """The gate's course without any text (A-M3): {gate_ms, verdicts:
+        [{provider, model, verdict, ms}]} in the reviewers' order; one not
+        asked (paused, following no more) could not answer: "failed"."""
+        with self._gate_changed:
+            verdicts, times, ms = dict(gate.verdicts), dict(gate.times), gate.ms
+        return {"gate_ms": ms, "verdicts": [
+            {"provider": provider, "model": session.model.model,
+             "verdict": verdicts.get(provider, ("failed",))[0], "ms": times.get(provider)}
+            for provider, session in self.sessions.items()]}
 
     def gate_hold(self, gate, halts):
         """What the card shows for a gate the user decides (request_hold): the
@@ -1772,7 +1790,7 @@ class AnswerAudit:
                     break
         except Exception as exc:
             logging.info("Agent gate step unavailable category=%s", safe_exception(exc))
-        details = {"entry": entry, "gate": True, **shown}
+        details = {"entry": entry, "gate": True, **shown, **self.gate_trace(gate)}
         if not halts:
             return {"reviewer": "", "provider": "", "kind": GATE_UNCHECKED, "reason": "", **details}
         session, halt = halts[0]

@@ -142,6 +142,12 @@ def test_every_reviewers_go_lets_the_call_run(store):
     assert REMEMBERED in gate_round["content"] and agent_audit.GATE_MEMORY_NOTE in gate_round["content"]
     names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "checked" in names and "paused" not in names
+    # The gate's course without texts (A-M3): its time and each verdict.
+    [checked] = [json.loads(text) for entry, text in loop.work_log.entries_after(0) if entry.get("name") == "checked"]
+    assert checked["text"].startswith("The reviewers let the calls of entry")
+    assert type(checked["gate_ms"]) is int and checked["gate_ms"] >= 0
+    assert [(v["provider"], v["verdict"]) for v in checked["verdicts"]] == [("anthropic", "go"), ("openai", "go")]
+    assert all(type(v["ms"]) is int and v["model"] for v in checked["verdicts"])
     assert saved(store, loop)["status"] == "completed"
 
 
@@ -156,6 +162,10 @@ def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store):
     assert holds[0]["reason"] == HALT_REASON and holds[0]["reviewer"] == "GPT-5.4 mini"
     assert holds[0]["step_kind"] == "call" and holds[0]["step"].startswith("update_memory: ")
     assert REMEMBERED in holds[0]["step"]
+    # The card's hold carries the gate's course, never a reason in it.
+    assert type(holds[0]["gate_ms"]) is int
+    assert [(v["provider"], v["verdict"]) for v in holds[0]["verdicts"]] == [("anthropic", "go"), ("openai", "halt")]
+    assert HALT_REASON not in json.dumps(holds[0]["verdicts"])
     # It ran only after the user's go; the agent never saw the reviewer's words.
     assert ran == [REMEMBERED]
     assert HALT_REASON not in json.dumps(loop.messages)
@@ -257,6 +267,8 @@ def test_a_reviewer_silent_past_the_gates_time_is_never_a_go(store, monkeypatch)
     assert time.monotonic() - started < 20
     holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
     assert len(holds) == 1 and holds[0]["kind"] == agent_audit.GATE_UNCHECKED and holds[0]["gate"] is True
+    assert [(v["provider"], v["verdict"]) for v in holds[0]["verdicts"]] == [("anthropic", "go"), ("openai", "failed")]
+    assert holds[0]["verdicts"][1]["ms"] >= 300 and holds[0]["gate_ms"] >= 300
     assert ran == [REMEMBERED]
     # Its gate round stopped; it goes on following, its entries come again.
     assert audit_sessions(store, loop, "openai")[0] == ("stopped", "round_cut")
@@ -390,6 +402,7 @@ def test_a_domain_goes_to_the_user_even_when_every_reviewer_lets_it(store):
     hold = holds[0]
     assert hold["domain"] == "api.weather.example" and hold["domain_reason"] == DOMAIN_REASON
     assert hold["review"] == "go" and hold["kind"] == "domain" and hold["reviewer"] == ""
+    assert [v["verdict"] for v in hold["verdicts"]] == ["go", "go"] and type(hold["gate_ms"]) is int
     # The reviewers were told the user decides in any case.
     gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
     assert agent_audit.GATE_DOMAIN_NOTE in gate_round["content"]
