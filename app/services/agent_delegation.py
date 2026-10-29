@@ -363,6 +363,9 @@ class DelegationLoop(AgentLoop):
         self.clock = time.monotonic
         self.turn_started = self.clock()
         self.routing_steps = 0
+        # What the reviewers' calls took from the allowance so far, at their
+        # weight (agent_quota.receipt_weight): _long_run_limit's estimate.
+        self.reviewer_charge = 0
         # Set once a routing step reasoned through its allowance: every later
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
@@ -730,9 +733,16 @@ class DelegationLoop(AgentLoop):
             # The next admission reads the ledger again and refuses then.
             logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
             return None
-        if remaining < 2 * inputs + routing_output_limit(model) + answer:
+        if remaining < 2 * inputs + routing_output_limit(model) + answer + 2 * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
+
+    def _reviewer_step_charge(self):
+        """What the reviewers take per agent step, from their charge in this
+        turn so far (0 without reviewers): the next step's live rounds and the
+        final rounds each need about that much (_long_run_limit)."""
+        with self.condition:
+            return self.reviewer_charge // max(1, self.routing_steps)
 
     def _show_pictures(self):
         """The pictures vm_view_image read, the browser's screenshots and
@@ -1020,13 +1030,27 @@ class DelegationLoop(AgentLoop):
         """Whether a comparison of this message holds paid answers."""
         return bool(self.comparison and any(c.get("answers") for c in self.comparison.comparisons))
 
+    def _paid_audit(self):
+        """Whether, in audit mode with reviewers, the agent has a paid step in
+        this message that they followed: its closing answer then may overdraw
+        the allowance, as after paid comparisons (spec A-R2)."""
+        return bool(self.comparison is not None and self.comparison.auditor is not None
+                    and any(message.get("role") == "assistant" for message in self.messages[self.turn_start:]))
+
+    def _final_review(self, worker):
+        """Whether ``worker`` is a reviewer at its final round (the answer is
+        fixed): its calls may overdraw the allowance, like the judges after
+        paid comparisons (spec A-R2)."""
+        auditor = self.comparison.auditor if self.comparison is not None else None
+        return getattr(worker, "kind", None) == "audit" and auditor is not None and auditor.final_answer is not None
+
     def _closing_index(self, exc):
         """The free step index of a routing step the allowance refused, when
         the turn closes with its answer instead (_merged_wrap_up, which may
         overdraw after paid comparisons), else None: the refusal ends it."""
         step = getattr(exc, "unclaimed_step", None)
-        if not (step and self.merged and self.policy.account_budget_only and self._paid_comparison()
-                and self._can_wrap_up()):
+        if not (step and self.merged and self.policy.account_budget_only
+                and (self._paid_comparison() or self._paid_audit()) and self._can_wrap_up()):
             return None
         return int(step.split(":")[1])
 
@@ -1188,8 +1212,11 @@ class DelegationLoop(AgentLoop):
         # comparison without answers, and the overdraft then paid an unchecked turn).
         # And only for what finishes them: until 2026-10-28 every further
         # routing step overdrew too, never refused before turn_steps (audit).
-        overdraft = self._paid_comparison() and (
-            closing if worker is None else getattr(worker, "kind", None) == "judge")
+        # In audit mode the same holds once the agent paid a step: its
+        # closing answer and the reviewers' final rounds on it (A-R2).
+        overdraft = (self._paid_comparison() and (
+            closing if worker is None else getattr(worker, "kind", None) == "judge")) or (
+            closing and self._paid_audit() if worker is None else self._final_review(worker))
         search_limited, waiting = False, False
         delay, recovered_at = .1, time.monotonic()
         while True:
@@ -1568,6 +1595,10 @@ class DelegationLoop(AgentLoop):
                     worker.usages.append(value.usage)
                 with self.condition:
                     self.unsettled[step] = (value, status)
+                    if getattr(worker, "kind", None) == "audit":
+                        from app.services import agent_quota
+                        self.reviewer_charge += agent_quota.measured_tokens(
+                            value.usage, agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT) or 0
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
                 if log_actor:
@@ -2970,5 +3001,9 @@ class DelegationLoop(AgentLoop):
                                       status=status, run_token=self.run_token)
             else:
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
+            if self.comparison is not None and self.comparison.audit_mode:
+                # Anonymous daily counters of audit turns, saved off this thread.
+                from app.services import agent_audit_metrics
+                agent_audit_metrics.record(self)
         yield from self._events()
         yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.completion.usage})

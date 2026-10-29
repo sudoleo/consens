@@ -90,6 +90,26 @@ def test_global_caps_evict_ended_runs_first_and_ttl_expires_them():
     assert buffers.read("u", "c", "new")["events"][0]["data"]["text"] == "y" * 150
 
 
+def test_a_running_buffer_expires_three_hours_after_its_newest_frame():
+    """A-R7: a workspace run with pauses outlasts three hours on the wall
+    clock; while frames come, its buffer stays."""
+    clock = Clock()
+    buffers = AgentLiveBuffers(clock=clock)
+    run = buffers.open("u", "c", "long")
+    for _ in range(4):
+        clock.now += live_module.ACTIVE_TTL_SECONDS - 60
+        buffers.record(run, "delta", {"text": "x"})
+        assert buffers.read("u", "c", "long")["known"] is True
+    clock.now += live_module.ACTIVE_TTL_SECONDS - 1
+    assert buffers.read("u", "c", "long")["known"] is True
+    clock.now += 1
+    assert buffers.read("u", "c", "long")["known"] is False
+    # A run without a single frame counts from its start.
+    quiet = buffers.open("u", "c", "quiet")
+    clock.now += live_module.ACTIVE_TTL_SECONDS
+    assert buffers.read("u", "c", "quiet")["known"] is False and quiet.evicted
+
+
 def test_a_dropped_buffer_keeps_numbering_the_stream():
     buffers = AgentLiveBuffers(max_runs=1)
     run = buffers.open("u", "c", "1")

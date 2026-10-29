@@ -400,9 +400,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
             estimate = None
+            # An audit reviewer's call counts at its weight (agent_quota.receipt_weight).
+            weight = agent_quota.receipt_weight(receipt_data)
             if daily_ref:
-                tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage))
-                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage)
+                tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage, weight))
+                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage, weight)
             leases = dict((active.to_dict() or {}).get("leases") or {})
             if final:
                 leases.pop(self.receipt_ref(uid, chat_id, turn_id).id, None)
@@ -413,10 +415,14 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
                 "settled_at": firestore.SERVER_TIMESTAMP,
             }
-            charged = agent_quota.measured_tokens(usage)
+            if getattr(completion, "search_hits", None) is not None:
+                # The pages a step that searched kept (agent_client._record_missing_citations).
+                receipt_patch["search_hits"] = completion.search_hits
+            charged = agent_quota.measured_tokens(usage, weight)
             if daily_ref and charged is not None:
                 # What the account was charged: cache reads at their weight
-                # (agent_quota.CACHED_INPUT_WEIGHT), the usage itself in full.
+                # (agent_quota.CACHED_INPUT_WEIGHT), a reviewer's call at its
+                # own (AUDIT_REVIEWER_QUOTA_WEIGHT), the usage itself in full.
                 receipt_patch["quota_charged"] = charged
             if estimate is not None:
                 # Bounded uncertainty: the ledger now carries this estimate.

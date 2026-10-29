@@ -23,7 +23,7 @@ const paths = [
   `users/${owner}/chats/chat/files/file`, `users/${owner}/usage_runs/day`,
   `api_consensus_keys/rules-${suffix}`,
   `users/${owner}/chats/chat/turns/turn/agents/agent`, `users/${owner}/llm_calls/receipt`,
-  `notification_outbox/rules-${suffix}`,
+  `notification_outbox/rules-${suffix}`, `ops_metrics/rules-${suffix}`,
 ];
 const settings = { projectId, firestore: { host: endpoint.hostname.replace(/^\[|\]$/g, ''), port: Number(endpoint.port), rules } };
 let env;

@@ -88,6 +88,24 @@ def test_reconciliation_replaces_the_estimate_exactly_once(store):
     assert lookups == ["gen-1"]
 
 
+def test_a_reviewers_estimate_is_reconciled_at_its_weight(store):
+    """A-K2: the measurement replaces the estimate at the reviewer's weight,
+    as settlement would have charged it."""
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    reviewer = "a" * 32
+    store.publish_agent(*args, run_token=loop.run_token, agent_id=reviewer, patch={
+        "assignment": {"goal": "Check"}, "status": "working", "kind": "audit"})
+    unknown_call(store, reservation=1000, step=f"agent:{reviewer}:0", loop=loop)
+    saved = store.receipt_ref(*args, f"agent:{reviewer}:0").get().to_dict()
+    # Half of the reservation is held, half of that charged as the estimate.
+    assert saved["quota_reserved"] == 500 and saved["quota_estimate"] == 250
+    assert reconciliation.reconcile_pending(store.db, UID, fetch_usage=lambda _gid: 130)["measured"] == 1
+    assert store.receipt_ref(*args, f"agent:{reviewer}:0").get().to_dict()["quota_measured_tokens"] == 65
+    assert agent_quota.snapshot(store.db, UID)["used"] == 65
+
+
 def test_parallel_reconciliation_passes_apply_the_measurement_once(store):
     unknown_call(store)
     with ThreadPoolExecutor(max_workers=4) as pool:

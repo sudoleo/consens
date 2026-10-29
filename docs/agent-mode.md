@@ -420,6 +420,19 @@ verlorener Laufzustand (`watch_error`) beendet den Turn dort als Fehler. Die
 Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
 keine `differences_stats`, kein Model-Pulse-Pick.
 
+**Messen** (seit 2026-10-29, Spezifikation A-M1/A-M8): Am Ende jedes
+Audit-Turns zählt `agent_audit_metrics.record` ihn anonym in
+`ops_metrics/agent-audit-{UTC-Tag}`: Status, Review-Status, Prüferzahl,
+Buckets für Gesamtzeit, Zeit bis zur fixierten Antwort, Marken nach dem
+letzten Wort, Gate-Wartezeit, Schlussrunde je Modell und Rückstand beim
+Fixieren, dazu Halts je Art und Entscheidung und Ausfälle je Code. Kopiert
+wird im Lauf nur, was im Speicher steht (Zeiten des Protokolls, Holds der
+Aktivität); ein Daemon-Thread liest den gespeicherten Turn einmal und schreibt
+einen Merge aus Increments. Ohne UID, Chat oder Text, die Zähler überstehen
+das Löschen der Chats. Felder späterer Pakete (`final_ms`, `backlog`,
+`agent_holds`, `gate_ms`) zählen, sobald es sie gibt. Auswertung samt Zielen
+Z1–Z8: `scripts/audit_report.py --days 5` (nur lesend).
+
 **Answer check aus** schaltet auch die Prüfer ab (`auditor` ist `None`): Der
 Agent antwortet allein, ohne Review, und der Prompt sagt es
 (`AUDIT_OFF_PROMPT`).
@@ -2848,6 +2861,15 @@ bleibt wie gemessen; der spätere Abgleich (`generation_tokens`) gewichtet
 halten weiter den vollen Input (wie viel davon im Cache liegt, weiß erst die
 Antwort), das Settlement gibt den Rest frei. Compare/Consensus/Reasoning-Läufe
 (`usage_meter`) zählen unverändert.
+**Seit 2026-10-29 (Max, Audit-Spezifikation A-K2) zählen Prüfer zur Hälfte**
+(`agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT` = 0,5, `receipt_weight`): ein Call
+einer Sitzung der Art `audit` (Beleg `session_kind`, das `_claim_delegated`
+aus der Sitzung übernimmt) oder mit einer Prüfer-Runde (`round`) reserviert,
+bucht (`quota_charged`), schätzt und gleicht ab mit dem halben Wert, die
+Cache-Reads darin weiter zu einem Viertel (zusammen also ein Achtel). Grund:
+Prüfer schicken in jeder Live-Runde ihr ganzes Gespräch erneut und nahmen am
+28.–29.10. 48 % des Kontingents eines Audit-Turns bei 22 % seiner Kosten. Die
+Budgets des Laufs selbst (`reserved_tokens`, `max_tokens`) zählen weiter voll.
 Provider-Gesamtkosten haben Vorrang; ohne sie berechnet die App eine gekennzeichnete
 Katalogschätzung. Kosten werden erfasst; im Agent-Chat gilt allein die zentrale
 Tokenquote als Verbrauchsgrenze.
@@ -3036,14 +3058,17 @@ send a follow-up message to continue.“); gespeicherte Vergleiche bleiben erhal
 gecachte Tokens voll zählt: Vor jedem Schritt prüft `_long_run_limit`, ob es
 noch zwei Schritte im heutigen Umfang plus Antwort trägt
 (`remaining_tokens`, ein Firestore-Lesezugriff je Schritt, nur in langen
-Läufen) und ob das Gespräch samt Antwort unter 80 % des Modellfensters bleibt
-(`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
+Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
+Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
+ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch
+samt Antwort unter 80 % des Modellfensters bleibt (`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
 `TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
 ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
 have, without tool calls.“), statt abzubrechen; sie bleibt wie jede Antwort
 ohne Vergleich ungeprüft. Ein Render-Deploy beendet laufende Läufe weiterhin
 nach `AGENT_SHUTDOWN_GRACE_SECONDS`; der Live-Puffer hält einen Lauf bis 3 h
-(`ACTIVE_TTL_SECONDS`).
+nach seinem letzten Frame (`ACTIVE_TTL_SECONDS`, seit 2026-10-29 nicht mehr ab
+dem Start: ein Werkbank-Lauf mit Pausen überschreitet 3 h Wanduhr).
 
 **Kompaktierung** (`agent_compaction.py`, nur in langen Läufen, vor jedem
 Schritt in `_compact`): Übersteigt der eigene Teil des Gesprächs (ab der Frage
@@ -3193,7 +3218,14 @@ Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Ein
 Steuer-Schritt danach läuft nur im Kontingent: Weist es ihn vor seinem Claim ab,
 nimmt der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
 Bis 2026-10-28 überzog jeder Steuer-Schritt nach dem ersten bezahlten Vergleich,
-ohne Absage bis `turn_steps` (Sicherheitsaudit). Ein
+ohne Absage bis `turn_steps` (Sicherheitsaudit). Im Audit-Modus gibt es keine
+Vergleiche; seit 2026-10-29 (A-R2) gilt dort dasselbe, sobald der Agent in
+dieser Nachricht einen bezahlten Schritt hat (`_paid_audit`, die Prüfer sind
+ihm gefolgt): Der Schlussschritt darf überziehen, und die Schlussrunden der
+Prüfer auf die fixierte Antwort (`_final_review`, Sitzung `audit` nach
+`final_answer`, mit Reparatur und neuer Sitzung) ebenso; Live- und
+Gate-Runden bleiben im Kontingent. Ohne bezahlten Schritt endet ein
+abgewiesener erster Schritt wie bisher mit der Absage. Ein
 Schritt des Agenten reserviert je Such-Segment das Steuer-Budget und das
 Antwortbudget darüber nur einmal (`answer_output`, siehe „Die Antwort schreibt
 der Agent selbst“). Grundlage, gemessen 2026-10-01 pro Runde: eigene

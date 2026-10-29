@@ -182,11 +182,16 @@ class AgentSessionStore:
                 previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
                 previous_daily = agent_quota.release(previous_daily, protected)
                 daily = agent_quota.reserve(daily, protected, limit=token_limit)
-            can_spend = agent_id == "orchestrator" or (agent and (agent.to_dict() or {}).get("kind") == "judge")
+            kind = (agent.to_dict() or {}).get("kind") if agent else None
+            can_spend = agent_id == "orchestrator" or kind == "judge"
             spend = min(protected, tokens) if can_spend else 0
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
-            daily = agent_quota.reserve(daily, tokens - spend, limit=token_limit,
+            # An audit reviewer's call holds and takes its weight of the
+            # allowance (agent_quota.receipt_weight); the run's own budgets
+            # below keep counting its tokens in full.
+            quota_tokens = agent_quota.weighted(tokens, agent_quota.receipt_weight({"session_kind": kind}))
+            daily = agent_quota.reserve(daily, quota_tokens - spend, limit=token_limit,
                                         overdraft=overdraft if limits.get("account_budget_only") else False)
             if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
@@ -203,9 +208,12 @@ class AgentSessionStore:
             if _serialized_size(patch) > ROOT_MAX_BYTES:
                 raise AnalysisBudgetExceeded(TECHNICAL_STEP_LIMIT)
             record = {"schema_version": 3, "purpose": "agent", "step": step, "agent_id": agent_id,
-                      "quota_day": day, "quota_reserved": tokens,
+                      "quota_day": day, "quota_reserved": quota_tokens,
                       "chat_id": chat_id, "turn_id": turn_id, "status": "running",
                       "model": model.snapshot(), "created_at": firestore.SERVER_TIMESTAMP}
+            if kind:
+                # The session's kind outlives the chat (scripts/audit_report.py).
+                record["session_kind"] = kind
             if root.exists:
                 tx.update(root_ref, patch)
                 tx.set(receipt_ref, record)

@@ -4002,7 +4002,16 @@ Seitenlesungen (`PageFetch`, Responses-API) senden ohnehin keinen Marker.
 Messen: `scripts/cache_hit_rate.py` (nur lesend; pro Tag, Familie und
 Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
 Anthropic die Netto-Ersparnis in vollen Input-Tokens; `--exclude-own` lässt
-Max' Konten weg).
+Max' Konten weg; seit 2026-10-29 `--by model` je Modell und `--kind audit` nur
+die Prüfer, Art aus dem Beleg `session_kind`, sonst aus der Sitzung).
+Prüfer 25.–29.10. (A-K1): MiMo Pro 85 %, Qwen 74 %, Luna 66 %, GLM 61 %,
+MiMo Flash 51 %, DeepSeek 44 %. Innerhalb einer Prüfer-Sitzung liest jede
+Folgerunde im Median ihr ganzes vorheriges Präfix (Verhältnis 0,96–1,0, kein
+Endpunkt-Wechsel, kein Reasoning-Bruch); MiMo Flash verfehlte es am 26.10. in
+24 von 60 Folgerunden, seit 29.10. in keiner. Unter 80 % liegt es an der
+kalten ersten Runde jeder Sitzung (eine Sitzung je Prüfer und Turn, im Median
+1–2,5 Calls, die erste Runde trägt 20–28 % des Prüfer-Inputs); teilen könnten
+die Sitzungen nur den Prüfer-Systemprompt (~1,5k Tokens).
 
 **Such-Tool und Cache (live gemessen 2026-10-21).** Die Probe bestand aus sechs
 Sonnet-5.5-Calls über OpenRouter, alle auf dem Anthropic-Endpunkt in einer Session,
@@ -4440,7 +4449,11 @@ danach nur im Kontingent; weist es ihn vor seinem Claim ab, schreibt der Agent
 die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
 `TURN_ALLOWANCE_LIMIT`), ohne bezahlte Vergleiche nicht. Bis 2026-10-28 überzog
 nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
-(Sicherheitsaudit). Jeder Schritt des Agenten im
+(Sicherheitsaudit). Im Audit-Modus (seit 2026-10-29, A-R2) steht ein bezahlter
+Schritt des Agenten für den bezahlten Vergleich (`_paid_audit`): Schlussschritt
+und `_closing_index` wie oben, dazu die Schlussrunden der Prüfer
+(`_final_review`); `_long_run_limit` hält zusätzlich zweimal den bisherigen
+Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`). Jeder Schritt des Agenten im
 Kontomodus kann die Antwort schreiben und wird mit dem Steuer-Budget zugelassen
 (`_routing_model`); sein Antwortbudget darüber (`_answer_output`) reserviert er
 einmal statt pro Suchrunde (`RunCosts.estimate(answer_output=…)`), und nur dieser
@@ -4899,7 +4912,8 @@ geprüften Hash. So bleiben Prüfungen und Markierungen nach Final-Event,
 Recovery und erneutem Öffnen des Verlaufs an denselben Text gebunden.
 AgentRunStore/AgentSessionStore verwenden users/{uid}/llm_calls mit deduplizierten
 completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
-Budget-/Tarifsnapshot und Status. Ein beanspruchter
+Budget-/Tarifsnapshot und Status (ein agent:-Beleg seit 2026-10-29 mit der Art
+seiner Sitzung, `session_kind`, die das Löschen des Chats übersteht). Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
 Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
 `reservations` enthalten alle laufenden Schritte, aber höchstens
@@ -5060,12 +5074,19 @@ Lifespan-Ende wartet per `agent_background.drain` (Grace + 8 s). Die Grace muss
 unter der Render-Frist bleiben; wer die Frist erhöht, erhöht beide. Prod (seit
 2026-10-08): `maxShutdownDelaySeconds` 300 am Render-Dienst, Env
 `AGENT_SHUTDOWN_GRACE_SECONDS=280`; zusammen mit Renders 60 s Überlappung hat
-ein laufender Turn beim Deploy gut sechs Minuten.
+ein laufender Turn beim Deploy gut sechs Minuten. **Vor jedem Deploy**
+(Render-API, manuell, nur auf Max' Ansage) nennt
+`scripts/running_agent_turns.py` (nur lesend, seit 2026-10-29, A-R10) die
+laufenden und pausierten Agent-Turns aus ihren Root-Belegen (`run_status`,
+`lease_until`, `hold`), ohne Inhalte; Exit 1, solange einer läuft oder
+pausiert. Ein Turn, der in einer Pause wartet, überlebt den Neustart nicht
+(Läufe sind prozesslokal); einer, der vor der Antwort endet, speichert seinen
+`agent_work_record`.
 
 *Puffer (`agent_live`).* Je Lauf ≤ 10000 Frames/4 MiB (älteste zuerst
 verworfen, das neueste nie, damit auch ein übergroßes `final`/`error` ankommt),
-≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende, 3 h für nie
-beendete; Schlüssel uid + chat_id + client_request_id. Gezählt wird echter
+≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende, 3 h nach dem
+letzten Frame für nie beendete (`LiveRun.last_frame_at`); Schlüssel uid + chat_id + client_request_id. Gezählt wird echter
 Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
 aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
 einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,
@@ -5524,7 +5545,12 @@ Agent-Aufruf bucht seit 2026-10-27 `charged_tokens` ab: Input und Output
 voll, Cache-Reads (`cached_input_tokens`) zu `CACHED_INPUT_WEIGHT` = 0,25
 (Max; `measured_tokens`, `provisional_lower_bound`, Abgleich
 `agent_usage_reconciliation.generation_tokens` mit `native_tokens_cached`),
-der Beleg trägt `quota_charged`; Pipeline-Läufe zählen unverändert. Agent ist
+der Beleg trägt `quota_charged`; Pipeline-Läufe zählen unverändert. Seit
+2026-10-29 zählt ein Call eines Audit-Prüfers mit
+`AUDIT_REVIEWER_QUOTA_WEIGHT` = 0,5 (`receipt_weight`: Beleg-Feld
+`session_kind == "audit"`, das `_claim_delegated` aus der Sitzung schreibt,
+oder `round` einer Prüfer-Runde; Reserve, Abbuchung, Schätzung und Abgleich
+gleich gewichtet, Details `docs/agent-mode.md`). Agent ist
 seit 2026-10-02 für jedes angemeldete Konto offen (`require_agent_access`);
 Pro bleiben Premium-Modelle und hohe Denkstufen.
 agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.
@@ -5734,7 +5760,10 @@ dann noch, gelten seine Live-Befunde (`live`). Runden passen in den Platz des Pr
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und
 der Prüfer hielt den Schritt sonst für unrecherchiert (`AgentCompletion`
 loggt solche Schritte mit den Feldnamen der Chunks, „Agent search without
-citations“, Metrik `search_without_citations`);
+citations“, Metrik `search_without_citations`; seit 2026-10-29 zählt jeder
+Suchschritt als `search_step`, und sein Beleg trägt `search_hits`, die Zahl
+der behaltenen Seiten, damit `scripts/audit_report.py` den Anteil ohne Treffer
+je Modell zeigt, A-M9);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
 Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
@@ -5748,7 +5777,12 @@ nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
 `agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
-`failed`. Eigene Suchtreffer bringen Fremdinhalt in den Blick
+`failed`. Nach `finish_run` zählt `agent_audit_metrics.record` den Turn anonym
+in `ops_metrics/agent-audit-{Tag}` (seit 2026-10-29, A-M1; nie in Tests oder
+unter `MOCK_LLM`). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
+`--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
+Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
+Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer bringen Fremdinhalt in den Blick
 (`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
 Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne sie sperrt `memory_locked`. Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
@@ -8533,6 +8567,7 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate)
+  agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt
   agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
@@ -9090,6 +9125,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   verhindert parallele Scheduler-Worker und begrenzt Watch-Versuche restartfest.
   `global_worker` trägt `claimed_until`, `owner` (zufälliges Token je Tick) und
   `acquired_at`; nur der Eigentümer darf erneuern oder freigeben (R30).
+- `ops_metrics/agent-audit-{YYYY-MM-DD}` (seit 2026-10-29, A-M1) — anonyme
+  Tageszähler der Audit-Turns (`agent_audit_metrics`): je Turn am Ende ein
+  Merge aus Increments (`turns`, `reviews`, `reviewers.n{k}`,
+  `reviewer_status`, Buckets `total_s`, `answer_s`, `marks_s`, `gate_s`,
+  `final_s.{modell}`, `backlog_entries`, `halts.{art}.{entscheidung}`,
+  `failures.{turn|reviewer|review}.{code}`), ohne UID, Chat, Turn oder Text;
+  übersteht das Löschen der Chats. Nur Server (Rules deny-all), kein Index.
 - `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
   Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
   Fehlern), Watch-Seiten-Follower, Topic-Follower und Morning Brief. Felder:
