@@ -2219,10 +2219,16 @@ class DelegationLoop(AgentLoop):
 
     def _handed_back(self, *, had):
         """``_hold_wait``'s poll for a browser card: "handed_back" once the
-        user had the browser and gave it back (agent_workspace.control_state,
-        every agent_ask.HANDBACK_POLL_SECONDS): seen to have it and then not,
-        or a hand-back noted since the card opened, also one between two
-        looks. ``had``: they have it already."""
+        user gave the browser back since the card opened ("Hand back" or
+        closing the view, which agent_workspace.set_control notes as
+        ``returned_at``; agent_workspace.control_state every
+        agent_ask.HANDBACK_POLL_SECONDS), also one between two looks. A
+        takeover that ran out is none: the view stopped refreshing (a phone in
+        the background, its 2FA app, a reload) while the user may be in the
+        middle of a sign-in. Until 2026-10-29 having it and then not counted.
+        ``had``: they took the browser on their own (_takeover_wait); then
+        not having it any more ends the wait, as the server lets the agent's
+        calls through again."""
         from app.services import agent_ask, agent_workspace
         state = {"had": had, "next": 0.0, "since": time.time()}
 
@@ -2236,7 +2242,6 @@ class DelegationLoop(AgentLoop):
             except Exception as exc:
                 logging.info("Agent workspace control unreadable category=%s", safe_exception(exc))
                 return None
-            state["had"] = state["had"] or holding
             if holding:
                 return None
             return "handed_back" if state["had"] or returned >= state["since"] else None

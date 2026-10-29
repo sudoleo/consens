@@ -117,7 +117,9 @@ def test_handing_the_browser_back_lets_the_agent_go_on(store, monkeypatch):
 
 
 def test_a_browser_card_waits_until_the_user_had_the_browser(store, monkeypatch):
-    """Not taken over yet is not handed back: the card stays until they had it."""
+    """Not taken over yet is not handed back, nor is a takeover that ran out
+    (A-S6: the phone went to its 2FA app, the view stopped refreshing): the
+    card stays until the user hands the browser back."""
     browser = Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": REQUEST, "browser": True})
     seen = []
@@ -125,15 +127,17 @@ def test_a_browser_card_waits_until_the_user_had_the_browser(store, monkeypatch)
     def later(hold):
         time.sleep(.5)
         seen.append(loop.hold is not None)
-        # Seen to have it, then not, without a noted hand-back (the
-        # takeover ran out when the view closed).
         browser.take_over()
         time.sleep(.5)
+        # Seen to have it, then not, without a noted hand-back.
         browser.holding = False
+        time.sleep(.5)
+        seen.append(loop.hold is not None)
+        browser.hand_back()
     watcher = when_held(loop, later)
     list(loop.run())
     watcher.join(5)
-    assert seen == [True] and browser.reads > 2
+    assert seen == [True, True] and browser.reads > 2
     assert results(loop)[0]["status"] == "handed_back"
 
 

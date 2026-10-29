@@ -5827,9 +5827,9 @@ mit dem Arbeitsplatz; Details `docs/agent-mode.md` „Arbeitsplatz“): Die
 Batch-Schleife fängt den Aufruf ab (`DelegationLoop._ask_wait` →
 `_user_hold`, wie `request_domain`): `request_hold` mit `kind: "ask"`, `ask`
 (`browser` | `confirm`) und `request`; die Zeit steht still. Eine Browser-Karte
-endet, wenn der Nutzer den Browser hatte und zurückgab (`_handed_back`, alle
-`HANDBACK_POLL_SECONDS` `agent_workspace.control_state`: gesehen oder
-`returned_at` nach dem Öffnen), die Bestätigung mit `continue`/`deny`, beide
+endet, wenn der Nutzer den Browser zurückgab (`_handed_back`, alle
+`HANDBACK_POLL_SECONDS` `agent_workspace.control_state`: `returned_at` nach
+dem Öffnen; eine abgelaufene Übernahme zählt seit 2026-10-29 nicht mehr), die Bestätigung mit `continue`/`deny`, beide
 mit `steer` (Nachricht = Antwort); das Werkzeug gibt danach
 `loop.ask_answer` zurück (`agent_ask.ANSWERS`). Ohne Antwort nach 30 min hört
 der Agent `no_answer`, die Antwort stoppt nicht (`_hold_wait` mit `ask`).

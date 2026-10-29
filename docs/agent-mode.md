@@ -1225,9 +1225,14 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (Schreiben geht über das Eingabefeld, Stopp über dessen Stop-Knopf); die
   Frist erst in den letzten fünf Minuten (`ASK_CLOCK_MINUTES`).
   **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
-  liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; hatte der Nutzer
-  den Browser und hat ihn nicht mehr, oder liegt ein `returned_at` nach dem
-  Öffnen der Karte, endet sie mit `handed_back`. Seit 2026-10-29 bringt das Ergebnis den
+  liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; liegt ein
+  `returned_at` nach dem Öffnen der Karte („Hand back“ oder Schließen der
+  Ansicht, beide `POST /agent/workspace/control` mit `agent`), endet sie mit
+  `handed_back`. Eine Übernahme, die nur abläuft (90 s ohne Auffrischen: Handy
+  im Hintergrund, 2FA-App, Reload), ist seit 2026-10-29 keine Rückgabe mehr;
+  vorher genügte „hatte ihn und hat ihn nicht mehr“, und der Agent übernahm
+  mitten im Login. Für `takeover` (der Nutzer übernahm ungefragt) bleibt es
+  dabei, denn dann lässt auch der Server die Aufrufe wieder durch. Seit 2026-10-29 bringt das Ergebnis den
   Browser gleich mit, wie der Nutzer ihn hinterließ (`BrowserTools.look`:
   Screenshot für Bildmodelle, sonst die Seite als Text), statt dass der nächste
   Schritt danach fragt; `ask_user` trägt im Protokoll deshalb die Herkunft `web`
