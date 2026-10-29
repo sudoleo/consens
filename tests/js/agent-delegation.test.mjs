@@ -568,7 +568,7 @@ describe("Agent sidebar", () => {
   // One overview and one timeline (2026-10-26): rounds without objection
   // fold into one line; before, each round stood under its own heading.
   it("shows a reviewer's rounds as one timeline with its notes, never its whole task (Agent audit)", async () => {
-    const reviewer = { ...agent(1, "completed"), kind: "audit", title: "Review · Haiku" };
+    const reviewer = { ...agent(1, "completed"), kind: "audit", title: "Review · Haiku", created_at: "2026-10-26T08:00:00Z" };
     const round = "- **doubtful** · #4: The lookup is unchecked. (https://www.example.org/a)";
     const notes = "- **wrong** · “14 euros”: The top costs 36.10 euros.";
     const quiet = (id, seq) => ({ id, seq, sender: agentId, recipient: "orchestrator", kind: "round", text: "No objections.",
@@ -586,7 +586,13 @@ describe("Agent sidebar", () => {
     expect(d.querySelector(".agent-session-role").textContent).toBe("Reviewer");
     d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-review-round")).not.toBeNull());
-    expect([...d.querySelectorAll(".agent-review-stats dd")].map(n => n.textContent)).toEqual(["5", "1", "1"]);
+    // One quiet line, no table between rules (UX audit F7).
+    expect(d.querySelector(".agent-review-stats").textContent).toBe("5 rounds · 1 note · Final review: 1 note");
+    // Each round's time counts from the reviewers' start (F6: every round
+    // read the same clock minute); the clock time stays on hover.
+    expect([...d.querySelectorAll(".agent-review-round-time")].map(time => time.textContent))
+      .toEqual(["1:00", "4:00", "5:00", "6:00"]);
+    expect(d.querySelector(".agent-review-round-time").dateTime).toBe("2026-10-26T08:01:00Z");
     expect([...d.querySelectorAll(".agent-review-round")].map(item => [item.querySelector(".agent-review-round-label").textContent,
       item.querySelector(".agent-review-round-state").textContent, item.classList.contains("is-quiet")])).toEqual([
       ["Rounds 1–3", "No objections", true], ["Round 4", "1 note", false], ["Round 5", "No objections", true],

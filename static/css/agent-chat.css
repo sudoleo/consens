@@ -141,13 +141,12 @@
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
 .agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
-/* A reviewer's work (agent-delegation.js reviewTimeline): three numbers, then
-   its rounds on one quiet line with dots, like the reasoning timeline. A
-   hollow dot is a round without objection, a filled one a round with notes.
-   The kinds wear the colours of their marks in the answer. */
-.agent-review-stats { display: flex; flex-wrap: wrap; gap: 8px 18px; overflow-wrap: normal; margin: 6px 0 14px; padding: 10px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
-.agent-review-stats dt { color: var(--ink-3); font-size: var(--font-size-xs); white-space: nowrap; }
-.agent-review-stats dd { margin: 3px 0 0; color: var(--ink); font-size: var(--font-size-xs); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A reviewer's work (agent-delegation.js reviewTimeline): one quiet line of
+   figures, then its rounds on a rail with dots, like the reasoning
+   timeline. A hollow dot is a round without objection, a filled one a round
+   with notes. The kinds wear the colours of their marks in the answer. The
+   figures stood as a table between two rules until 2026-10-29 (UX audit F7). */
+.agent-session-detail .agent-review-stats { margin: var(--space-1) 0 var(--space-3); color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-review-rounds { margin: 0; padding: 0; list-style: none; }
 .agent-review-round { position: relative; padding: 0 0 12px 18px; }
 .agent-review-round::before {
@@ -165,7 +164,7 @@
 .agent-review-round-state { flex: 1 1 auto; min-width: 0; color: var(--ink-3); }
 .agent-review-round-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .agent-session-detail .agent-review-round-reason { margin: 2px 0 0; color: var(--ink-3); line-height: 1.6; }
-.agent-review-notes { display: grid; gap: 10px; margin: 6px 0 2px; padding: 0; list-style: none; }
+.agent-review-notes { display: grid; gap: var(--space-2); margin: 6px 0 2px; padding: 0; list-style: none; }
 .agent-review-note { font-size: var(--font-size-xs); line-height: 1.6; }
 .agent-review-note-where { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; color: var(--ink-3); }
 .agent-review-note-where > * + *::before { content: "·"; margin-right: 6px; color: var(--ink-3); }

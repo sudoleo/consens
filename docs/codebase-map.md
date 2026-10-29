@@ -5397,12 +5397,16 @@ Die Sitzungen eines Prüfers (neue nach gescheiterter Runde oder vollem
 Gespräch) bilden eine Zeile unter der ID seiner ersten (`reviewerRows`;
 Zustand der arbeitenden bzw. letzten Sitzung, Tokens und `span` über alle,
 `rowDetail` legt ihre Nachrichten zusammen). Aufgeklappt zeigt ein Prüfer
-seit 2026-10-26 drei Zahlen (Runden, Anmerkungen, Schlussprüfung) und eine
+seit 2026-10-26 drei Zahlen (Runden, Anmerkungen, Schlussprüfung; seit
+2026-10-29 eine leise Satzzeile „4 rounds · 1 note · Final review: 2 notes“
+ohne Linien, `reviewSummary`, UX-Audit F7) und eine
 Zeitleiste (`reviewTimeline`, nach `created_at`): Runden ohne Einwand falten
 zu „Rounds 1–5 · No objections“, Runden mit Anmerkungen und die
 Schlussprüfung listen sie (`reviewNotes` liest `agent_audit.review_text`:
 Art in der Farbe ihrer Marke, Schritt, Zitat, Notiz, Quelle), Ausfälle
-stehen als „No result“ an ihrer Stelle.
+stehen als „No result“ an ihrer Stelle. Ihre Zeit zählt seit 2026-10-29 ab
+dem Start der Prüfer („0:17“, `sinceStart`; die Uhrzeit beim Darüberfahren),
+vorher trug jede Runde dieselbe Minute (F6).
 Der Kopf mit Titel, Stop/Schließen und die Übersicht bleiben außerhalb des
 Scrollbereichs sichtbar. Die Übersicht (`.agent-sidebar-overview`) nennt
 `n of m done` (plus `· k without result` für `failed`/`stopped`) und rechts den
@@ -5974,10 +5978,13 @@ Turn (`pending`) und Chat (aktiv), nie den Root-Beleg), lange Inhalte als
 `turn_detail` daraus `agent_work_log`. Löschen: `_delete_chat_tree` ruft je
 Turn `delete_turn_log` (nur genannte Inhalte, ohne Protokoll kein Aufruf des
 Objektspeichers); Aufräumen stündlich (`cleanup_expired_work_logs`). Lesen:
-`read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (nur
-Admins, Turn eines aktiven Chats). Anzeige: `agent-work-log.js`
+`read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (Pro
+und Admins mit Audit, `audit_allowed`; Turn eines aktiven Chats). Anzeige: `agent-work-log.js`
 (`App.agentWorkLog.render`, `reset` beim Kontowechsel) als letzter Abschnitt
-der Sitzungsliste in der Seitenleiste, `.admin-only`, lädt erst beim Öffnen,
+der Sitzungsliste in der Seitenleiste, `.admin-only` (vom 26. bis 29.10.
+`.audit-only`, also jedem Pro-Konto mit Rohnamen und JSON; UX-Audit F5: die
+Aktivität erzählt Pro denselben Lauf in Worten; ein Turn nur mit Protokoll
+öffnet für Nicht-Admins kein leeres Panel, `shownLog`), lädt erst beim Öffnen,
 folgt laufenden Turns nur, solange der Abschnitt sichtbar ist.
 
 ### Agent VM (Agent, mit Audit, seit 2026-10-25)

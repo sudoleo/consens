@@ -47,8 +47,9 @@ describe("Agent work log", () => {
     openPanel(d);
     const host = d.querySelector(".agent-work-log-host");
     expect(host.hidden).toBe(false);
-    // Audit with its VM is Pro and admins (style.css .audit-only).
-    expect(host.classList.contains("audit-only")).toBe(true);
+    // The raw log is the operator's (UX audit F5, style.css .admin-only):
+    // the activity tells a Pro account the same run in words.
+    expect(host.classList.contains("admin-only")).toBe(true);
     // The rows go above it: it stays the list's last section.
     expect(d.querySelector(".agent-session-list").lastElementChild).toBe(host);
     expect(host.querySelector(".agent-work-log-summary").textContent).toContain("Work log");
@@ -76,6 +77,25 @@ describe("Agent work log", () => {
     rows[1].querySelector(".agent-work-log-more").click();
     await vi.waitFor(() => expect(rows[1].querySelector("pre").textContent).toBe("Page begins and goes on to the end."));
     expect(rows[1].querySelector(".agent-work-log-more")).toBeNull();
+  });
+
+  // A turn whose only content in the panel is its log (audit, answer check
+  // off) opens no empty panel for an account that cannot see the log (F5).
+  it("keeps the panel of a turn with only a log to the admins who see it", async () => {
+    const { window: w, document: d } = loadScripts(["static/js/request-deadline.js", "static/js/agent-work-log.js", "static/js/agent-delegation.js"], {
+      body: '<div id="agentAnswerActivity"></div>', before(win) {
+        win.auth = { currentUser: { uid: "owner", getIdToken: async () => "token" } };
+        win.App = { runRegistry: { isAuthCurrent: () => true } };
+        win.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ agents: [], status: "succeeded" }) }));
+      } });
+    w.App.agentDelegation.project({ chatId, turnId, running: false, workLog: true });
+    await settle();
+    expect(d.querySelector(".agent-sidebar-toggle").hidden).toBe(true);
+    expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    d.body.classList.add("viewer-is-admin");
+    w.App.agentDelegation.project({ chatId, turnId, running: false, workLog: true });
+    await settle();
+    expect(d.querySelector(".agent-sidebar-toggle").hidden).toBe(false);
   });
 
   it("stays hidden for a turn without a log and never asks for one", async () => {
