@@ -150,7 +150,17 @@ GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 # Presets und Admin-Listen migrieren hierher (DEEPSEEK_MODEL_MIGRATIONS).
 DEEPSEEK_FLASH_MODEL = "deepseek-v4.1-flash"
 DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"  # alte ID, migriert
-DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
+# Seit 2026-10-29 V4.1 Flash 1017 statt V4 Pro als DeepSeek-Pro. Artificial
+# Analysis: 45 statt 39 Punkte gegenueber V4.1 Flash (Index v5: 32, mit GLM 5.3
+# bestes offenes Modell), Nicht-Halluzinationsrate 33 statt 4 %; schon V4.1
+# Flash lag dort vor V4 Pro 0813. Ueber die schnellste Route (Together) kostet
+# sie 0,30/1,20 $ je Mio. Token, V4 Pro im Katalog 0,96/1,91 $. Live-Probe mit dem echten
+# Vergleichsaufruf, 8 Fragen gegen V4.1 Flash: blind 8:8, sie denkt aber etwa
+# doppelt so lang (267 statt 206 s gesamt). Deshalb nur im Pro-Slot, Daily und
+# Open Models bleiben bei V4.1 Flash. Gespeicherte V4-Pro-Auswahlen migrieren
+# hierher (DEEPSEEK_MODEL_MIGRATIONS).
+DEEPSEEK_PRO_MODEL = "deepseek-v4.1-flash-1017"
+DEEPSEEK_V4_PRO_MODEL = "deepseek-v4-pro"  # alte ID, migriert
 # Basis-Default wie bei jeder anderen Familie das guenstige Modell. Stand hier
 # als einzige Familie auf dem Pro-Modell, was drei Stellen still verteuert hat:
 # die Consensus-Engine "DeepSeek" (als free ausgewiesen, lief aber auf Pro und
@@ -768,8 +778,10 @@ def canonical_model_ids(models, provider: str) -> list[str]:
         if canonical_model_id(model, provider)
     ))
 
-# V4 Flash -> V4.1 Flash (2026-10-15, Begruendung bei DEEPSEEK_FLASH_MODEL).
-DEEPSEEK_MODEL_MIGRATIONS = {DEEPSEEK_V4_FLASH_MODEL: DEEPSEEK_FLASH_MODEL}
+# V4 Flash -> V4.1 Flash (2026-10-15, Begruendung bei DEEPSEEK_FLASH_MODEL),
+# V4 Pro -> V4.1 Flash 1017 (2026-10-29, Begruendung bei DEEPSEEK_PRO_MODEL).
+DEEPSEEK_MODEL_MIGRATIONS = {DEEPSEEK_V4_FLASH_MODEL: DEEPSEEK_FLASH_MODEL,
+                             DEEPSEEK_V4_PRO_MODEL: DEEPSEEK_PRO_MODEL}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner", *DEEPSEEK_MODEL_MIGRATIONS}
 # K3 -> K3.1 Pro (2026-10-25, Begruendung bei KIMI_PRO_MODEL).
 KIMI_MODEL_MIGRATIONS = {KIMI_K3_MODEL: KIMI_PRO_MODEL}
@@ -840,7 +852,8 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
     GEMINI_PRO_MODEL: "Gemini 3.1",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4.1 Flash",
-    DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
+    DEEPSEEK_PRO_MODEL: "DeepSeek V4.1 Flash 1017",
+    DEEPSEEK_V4_PRO_MODEL: "DeepSeek V4 Pro",
     KIMI_BASE_MODEL: "Kimi K2.6",
     KIMI_PRO_MODEL: "Kimi K3.1 Pro",
     KIMI_K3_MODEL: "Kimi K3",
@@ -913,8 +926,9 @@ OPENROUTER_MODEL_ALIASES = {
     # Alte Grok-Varianten (migriert): falls eine ID ungeprueft durchkommt.
     ("grok", GROK_NO_REASONING_MODEL): "grok-4.3",
     ("grok", "grok-4.20-non-reasoning"): "grok-4.3",
-    # DeepSeek V4 Flash (migriert) ebenso.
+    # DeepSeek V4 Flash und V4 Pro (migriert) ebenso.
     ("deepseek", DEEPSEEK_V4_FLASH_MODEL): DEEPSEEK_FLASH_MODEL,
+    ("deepseek", DEEPSEEK_V4_PRO_MODEL): DEEPSEEK_PRO_MODEL,
 }
 
 

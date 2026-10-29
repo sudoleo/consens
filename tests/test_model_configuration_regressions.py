@@ -159,6 +159,43 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(normalized["deepseek"], [current, cfg.DEEPSEEK_PRO_MODEL])
         self.assertEqual(normalized["defaults"]["deepseek"], current)
 
+    def test_deepseek_v4_pro_migrates_to_v41_flash_1017(self):
+        """Seit 2026-10-29: V4.1 Flash 1017 liegt bei Artificial Analysis klar
+        vor V4 Pro und kostet weniger. Prod speichert V4 Pro in High Quality,
+        in der Familienliste und als Premium; alles laeuft ohne Firestore-Write
+        auf 1017. Daily und Open Models bleiben bei V4.1 Flash."""
+        legacy, current = "deepseek-v4-pro", "deepseek-v4.1-flash-1017"
+        self.assertEqual(cfg.DEEPSEEK_PRO_MODEL, current)
+        self.assertEqual(cfg.canonical_model_id(legacy, "deepseek"), current)
+        self.assertEqual(cfg.canonical_model_id(legacy), current)
+        self.assertNotIn(legacy, cfg.PROVIDERS["deepseek"].models)
+        self.assertIn(current, cfg.PROVIDERS["deepseek"].models)
+        self.assertIn(current, cfg.PREMIUM_MODELS)
+        self.assertNotIn(legacy, cfg.PREMIUM_MODELS)
+        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["DeepSeek-Pro"], ("deepseek", current))
+        self.assertEqual(cfg.get_model_label(current), "DeepSeek V4.1 Flash 1017")
+        self.assertEqual(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["deepseek"], cfg.DEEPSEEK_FLASH_MODEL)
+        request = build_provider_payload(
+            "deepseek", question="payload dry run", system_prompt="system",
+            model_override=legacy, max_output_tokens=123,
+        )
+        self.assertEqual(request["internal_model"], current)
+        self.assertEqual(request["api_model"], "deepseek/deepseek-v4.1-flash-1017")
+        normalized = normalize_models_document({
+            "deepseek": [cfg.DEEPSEEK_FLASH_MODEL, legacy],
+            "premium": [legacy],
+            "defaults": {"deepseek": cfg.DEEPSEEK_FLASH_MODEL},
+        })
+        self.assertEqual(normalized["deepseek"], [cfg.DEEPSEEK_FLASH_MODEL, current])
+        self.assertIn(current, normalized["premium"])
+        self.assertNotIn(legacy, normalized["premium"])
+        stored = {"glm": cfg.GLM_PRO_MODEL, "anthropic": cfg.ANTHROPIC_PRO_MODEL, "grok": cfg.GROK_PRO_MODEL,
+                  "gemini": cfg.GEMINI_PRO_MODEL, "deepseek": legacy, "openai": cfg.OPENAI_SOL_MODEL}
+        self.assertEqual(cfg._normalize_preset_answers("thorough", stored)["deepseek"], current)
+        for preset in ("fast", "balanced"):
+            self.assertEqual(cfg._BASE_CONSENSUS_PRESET_MODELS[preset]["answers"]["deepseek"],
+                             cfg.DEEPSEEK_FLASH_MODEL)
+
     def test_kimi_k3_migrates_to_k31_pro(self):
         """Seit 2026-10-25: K3.1 Pro kostet auf der Moonshot-Route 2/10 $
         statt 3/15 $ und suchte mit "low" jedes Mal. Gespeicherte Auswahlen

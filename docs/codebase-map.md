@@ -9469,7 +9469,14 @@ Free-Default, Judges und Chat-Memory schreibt er zurück (`schema_backfill`),
 Watch-Zuordnungen und Providerliste erst ein Admin-Save. Eine gespeicherte Reasoning-Ausnahme
 für ein Modell, das kein Sparmodell mehr ist, verwirft das Laden
 (`validate_reasoning_policy(drop_retired=True)`) statt die ganze Konfiguration
-abzulehnen; Admin-Saves bleiben strikt.
+abzulehnen; Admin-Saves bleiben strikt. Seit 2026-10-29 migriert ebenso
+`deepseek-v4-pro` auf `deepseek-v4.1-flash-1017` (`DEEPSEEK_PRO_MODEL`, also
+DeepSeek-Pro, High Quality und der Alias „DeepSeek-Pro“). Laut Artificial Analysis
+liegt 1017 klar vor V4 Pro, über die schnellste Route kostet es 0,30/1,20 $ je
+Mio. Token. In einer Live-Probe mit dem echten Vergleichsaufruf gegen V4.1 Flash
+stand es blind 8:8, 1017 dachte aber etwa doppelt so lang. Deshalb steht es nur im
+Pro-Slot, Daily und Open Models bleiben bei V4.1 Flash. 1017 läuft mit dem
+Standard-Denkaufwand des Anbieters (`high`, keine `MODEL_REQUEST_CONFIG`).
   Presets dürfen ausschließlich bereits konfigurierte Provider-Modelle
   referenzieren; sie fügen selbst keine Providerzeilen hinzu.
   `cfg.virtual_model_ids()` listet alle internen IDs, deren API-Modell

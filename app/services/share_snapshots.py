@@ -320,7 +320,7 @@ _CONSENSUS_ENGINE_MODELS = {
     "Gemini": cfg.GEMINI_FLASH_MODEL,
     "Gemini-Pro": cfg.GEMINI_PRO_MODEL,
     "DeepSeek": cfg.DEFAULT_DEEPSEEK_MODEL,
-    "DeepSeek-Pro": "deepseek-v4-pro",
+    "DeepSeek-Pro": cfg.DEEPSEEK_PRO_MODEL,
     "Grok": cfg.DEFAULT_GROK_MODEL,
     "Grok-Pro": cfg.GROK_PRO_MODEL,
     "Kimi": cfg.KIMI_BASE_MODEL,
