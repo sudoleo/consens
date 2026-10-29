@@ -18,12 +18,10 @@
 }
 .agent-google-btn.is-primary:disabled { border-color: var(--line); background: var(--raise); color: var(--ink-3); opacity: 1; }
 .agent-google-btn.is-small { min-height: 32px; padding: 4px 10px; font-size: var(--font-size-xs); }
-.agent-google-btn.is-link { min-height: 36px; padding: 6px 4px; border-color: transparent; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-google-btn.is-link:hover:not(:disabled) { background: transparent; color: var(--ink); }
-}
-.agent-google-btn.is-danger { color: var(--dispute); }
-.agent-google-btn.is-danger:not(.is-link) { border-color: color-mix(in srgb, var(--dispute) 45%, var(--line)); }
+/* A quiet second way is the app's text link (.text-link, foundation.css;
+   agent-google.js button with "is-link"). */
+:is(.agent-google-btn, .text-link).is-danger { color: var(--dispute); }
+.agent-google-btn.is-danger { border-color: color-mix(in srgb, var(--dispute) 45%, var(--line)); }
 @media (hover: hover) and (pointer: fine) {
   .agent-google-btn.is-danger:hover:not(:disabled) { background: var(--dispute-bg); color: var(--dispute); }
 }
@@ -109,10 +107,7 @@
 .agent-google-points { display: grid; gap: 8px; margin: 0 0 6px; padding: 0; list-style: none; color: var(--ink-2); font-size: var(--font-size-ui); }
 .agent-google-points li { display: flex; gap: 10px; align-items: flex-start; }
 .agent-google-points .agent-google-icon { margin-top: 2px; color: var(--ink-3); }
-.agent-google-link { display: inline-flex; align-items: center; min-height: 32px; color: var(--ink-2); font-size: var(--font-size-ui); text-decoration: underline; text-underline-offset: 3px; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-google-link:hover { color: var(--ink); }
-}
+.agent-google-link { font-size: var(--font-size-ui); }
 .agent-google-sheet-body > .agent-google-link { margin-left: 26px; }
 .agent-google-accounts { margin: 16px 0 0; padding: 0; border: 0; }
 .agent-google-accounts legend, .agent-google-empty h3 {
@@ -154,7 +149,7 @@
 .agent-google-more { margin-top: 14px; border-top: 1px solid var(--line-soft); }
 .agent-google-more > summary { display: flex; align-items: center; min-height: 44px; color: var(--ink-2); cursor: pointer; }
 .agent-google-more-body { display: grid; gap: 6px; padding-bottom: 4px; }
-.agent-google-more-body > .agent-google-btn.is-link { justify-self: start; }
+.agent-google-more-body > .text-link { justify-self: start; }
 .agent-google-confirm { padding: 12px; border-radius: var(--radius-sm); background: var(--dispute-bg); }
 .agent-google-confirm p { margin: 0 0 10px; }
 .agent-google-notice {
@@ -164,7 +159,7 @@
 .agent-google-notice > span { flex: 1 1 200px; min-width: 0; }
 .agent-google-notice.is-error { background: var(--dispute-bg); color: var(--ink); }
 .agent-google-notice.is-error > .agent-google-icon { color: var(--dispute); }
-.agent-google-notice .agent-google-btn.is-link { min-height: 32px; padding-block: 2px; color: var(--ink); }
+.agent-google-notice .text-link { padding-block: 2px; color: var(--ink); }
 
 @media (max-width: 699px) {
   .agent-google-overlay { align-items: flex-end; padding: 0; }
@@ -179,7 +174,7 @@
 @media (pointer: coarse) {
   .agent-google-chip-main, .agent-google-chip-remove, .agent-google-consent { min-height: 40px; }
   .agent-google-chip-remove { width: 40px; }
-  .agent-google-btn, .agent-google-btn.is-small, .agent-google-btn.is-link, .agent-google-cap, .google-calendar-list .agent-google-check { min-height: 44px; }
+  .agent-google-btn, .agent-google-btn.is-small, .agent-google-cap, .google-calendar-list .agent-google-check { min-height: 44px; }
 }
 
 /* ---- Action cards -------------------------------------------------------- */

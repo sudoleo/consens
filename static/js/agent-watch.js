@@ -71,8 +71,8 @@
     const view = { key, card, title, question, goal, settings, status, proposal: null, created: null, busy: false, message: '' };
     // The one primary button of every watch surface (Apple-Audit J18).
     view.start = button('wd-button is-primary agent-watch-start', 'Start watching', () => start(view));
-    view.adjust = button('agent-watch-link', 'Adjust', () => adjust(view));
-    view.manage = button('agent-watch-link', 'Open Watches', () => App.watchUi?.openWatchDialog?.('list'));
+    view.adjust = button('text-link agent-watch-link', 'Adjust', () => adjust(view));
+    view.manage = button('text-link agent-watch-link', 'Open Watches', () => App.watchUi?.openWatchDialog?.('list'));
     const actions = node('div', 'agent-watch-actions');
     actions.append(view.start, view.adjust, view.manage);
     card.append(head, question, goal, settings, status, actions);

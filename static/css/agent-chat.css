@@ -531,7 +531,7 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
 @media (hover: hover) and (pointer: fine) { .agent-queue-remove:hover { background: var(--hover); color: var(--ink); } }
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-composer-notice[hidden], .agent-composer-notice [hidden] { display: none; }
-.agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-composer-notice button { font: inherit; cursor: pointer; }
 .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
 @media (hover: hover) and (pointer: fine) {
@@ -1166,26 +1166,17 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-memory-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
 .agent-memory-head svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-memory-title { color: var(--ink-2); font-weight: 500; }
-.agent-memory-head button { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-memory-head button:hover { color: var(--ink); }
-}
-.agent-memory-head button:disabled { cursor: default; opacity: .6; }
-.agent-memory-head button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-memory-status { color: var(--ink-3); }
 .agent-memory-list { margin: 2px 0 0; padding: 0 0 0 25px; list-style: none; }
 .agent-memory-list li { overflow-wrap: anywhere; }
 .agent-memory-list li.is-undone { color: var(--ink-3); }
 .agent-memory-verb { color: var(--ink-2); }
-@media (pointer: coarse) {
-  .agent-memory-head button { min-height: 44px; }
-}
 
 /* ---- A Watch the Agent prepared (agent-watch.js) ----------------------------
    One raised block under the answer: what would be watched, for what, on
-   which schedule, and the one button that starts it. Frameless like the
-   shell; the state lives in the words ("Watching", "Watch paused"), not in
-   a colour. */
+   which schedule, and the one button that starts it, the other ways as
+   text links (.text-link). Frameless like the shell; the state lives in
+   the words ("Watching", "Watch paused"), not in a colour. */
 .agent-watch-card {
   max-width: 66ch;
   margin: 14px 0 6px;
@@ -1207,14 +1198,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-watch-card :is(.agent-watch-settings, .agent-watch-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-watch-start { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.agent-watch-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-watch-link:hover { color: var(--ink); }
-}
 .agent-watch-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-@media (pointer: coarse) {
-  .agent-watch-link { min-height: 44px; }
-}
 
 /* ---- A pull request the Agent prepared (agent-github.js) ------------------
    The Watch card's block: where it goes (repository, new branch -> base),
@@ -1251,32 +1235,15 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-pr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-pr-actions:not(:has(> :not([hidden]))) { display: none; }
 .agent-pr-create { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.agent-pr-link, .agent-pr-open { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  :is(.agent-pr-link, .agent-pr-open):hover { color: var(--ink); }
-}
 .agent-pr-card :is(button, a):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-@media (pointer: coarse) {
-  .agent-pr-link { min-height: 44px; }
-}
-/* GitHub in Settings (agent-github.js): the connection in words, the actions as quiet links. */
+/* GitHub in Settings (agent-github.js): the connection in words, the actions as quiet links (.text-link). */
 .agent-github-settings > strong { display: block; }
 .agent-github-settings > small { display: block; margin-top: 2px; }
 .agent-github-status, .agent-github-repos { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
 .agent-github-repos { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
 .agent-github-repos[hidden], .agent-github-actions [hidden] { display: none; }
 .agent-github-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
-.agent-github-actions .agent-github-link {
-  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; border: 0; background: transparent;
-  color: var(--ink-2); font: inherit; font-size: var(--font-size-sm); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) {
-  .agent-github-link:hover { color: var(--ink); }
-}
-.agent-github-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* Links look like the button links beside them (base.css takes every
-   underline away with !important, as components-modals.css also undoes). */
-a.agent-github-link, a.agent-pr-open { text-decoration: underline !important; text-underline-offset: 3px; }
+.agent-github-actions .agent-github-link { font-size: var(--font-size-sm); }
 
 /* ---- A settings change the Agent prepared (agent-settings.js) -------------
    The Watch card's block: each change as "now → new", the new value in the
@@ -1300,18 +1267,11 @@ a.agent-github-link, a.agent-pr-open { text-decoration: underline !important; te
 .agent-settings-to { color: var(--ink); font-weight: var(--font-weight-semibold); }
 .agent-settings-card :is(.agent-settings-note, .agent-settings-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
-.agent-settings-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-settings-link:hover { color: var(--ink); }
-}
 .agent-settings-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-settings-card[data-state="applied"] .agent-settings-actions { display: none; }
 @media (max-width: 480px) {
   .agent-settings-list { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .agent-settings-list dd { margin-bottom: 6px; }
-}
-@media (pointer: coarse) {
-  .agent-settings-link { min-height: 44px; }
 }
 
 /* ---- A pasted text the Agent checked (passage-check.js) --------------------

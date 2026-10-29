@@ -229,11 +229,14 @@
    The text link (UX audit 2026-10-29, J2). The quiet way beside a card's one
    filled button, and every "read more" between other words: --ink-2, an
    underline in the text's own colour at 40 %, 3px below it. A <button> or an
-   <a>; 32px tall under a mouse, 44px under a finger (the drawn line stays
-   where it is). Until then seven classes each drew it again, in four
-   versions of the line. A component that places it sets only its position.
+   <a>; 32px tall, and under a finger its hit area reaches 44px while the
+   drawing stays (H6: the focus ring then hugs the word with a control's
+   corners, not a square 44px box). Until then seven classes each drew it
+   again, in four versions of the line. A component that places it sets
+   only its position.
    -------------------------------------------------------------------------- */
 .text-link {
+  position: relative;
   display: inline-flex;
   align-items: center;
   min-height: 32px;
@@ -258,9 +261,22 @@
   }
 }
 
+/* base.css takes the underline from every <a> with !important. */
+a.text-link {
+  text-decoration-line: underline !important;
+}
+
+.text-link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-2xs);
+}
+
 @media (pointer: coarse) {
-  .text-link {
-    min-height: 44px;
+  .text-link::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
   }
 }
 

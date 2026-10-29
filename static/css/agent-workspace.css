@@ -191,7 +191,7 @@
 .agent-vm-picture-source {
   flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   margin-left: 8px; color: var(--ink-3); font-size: var(--font-size-xs); text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px;
 }
 .agent-vm-picture-source:first-child { margin: 0 auto 0 0; }
 @media (hover: hover) and (pointer: fine) {
