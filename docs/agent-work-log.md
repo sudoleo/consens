@@ -91,9 +91,14 @@ Ergebnis steht als `tool`-Eintrag darin.
   ersten belegten Schritt des Laufs; ein Lauf ohne Modellaufruf hat kein
   Protokoll. Drei Versuche je Bündel; danach sind die Einträge verloren,
   schon abgelegte Inhalte werden wieder entfernt, und der Turn trägt
-  `work_log_incomplete`. Am Laufende wartet der Lauf höchstens 20 s auf den
-  Rest; was dann noch fehlt, ist verloren, und dem Protokoll fehlt der
-  `end`-Eintrag, was die Ansicht als unvollständig zeigt.
+  `work_log_incomplete`. Am Laufende wartet der Lauf auf den Rest, seit
+  2026-10-29 zusammen mit dem Journal der Sitzungen höchstens 15 s
+  (`agent_delegation.CLOSE_WAIT_SECONDS`, vorher das Protokoll allein 20 s und
+  das Journal unbegrenzt); was dann noch fehlt, ist verloren (Logzeile mit dem
+  Namen des Threads), dem Protokoll fehlt der `end`-Eintrag, was die Ansicht
+  als unvollständig zeigt, und `finish_run` läuft trotzdem. Prüfer-Threads
+  bekommen nach ihrem Stopp höchstens `REVIEWER_JOIN_SECONDS` (10 s,
+  `AnswerAudit._join`).
 - Große Inhalte: `PrivateObjects` aus `agent_files.py` (privater Bucket, lokal
   ein Ordner, ein Client je Konfiguration), Schlüssel
   `work-log/{uid}/{chat}/{turn}/{seq}`.
@@ -189,8 +194,15 @@ beschäftigt und nimmt danach alles Neue auf einmal. Ein Schritt ohne Tool-Aufru
 meist die Antwort: Eine Antwort in einem Schritt hat nur die Schlussrunde. Die
 Schlussrunde beginnt, wenn die Antwort fixiert ist (`answer_fixed`), mit dem
 Rest des Protokolls und der Antwort, und ist kurz, weil der Prüfer den Weg
-dorthin schon kennt. Läuft beim Fixieren noch eine Live-Runde, endet sie
-zuerst. Der Agent hält dafür 240 s vor dem harten Stopp frei.
+dorthin schon kennt. Läuft beim Fixieren noch eine Live-Runde, bricht sie
+seit 2026-10-29 sofort ab (`ReviewerSession.cut_round`, eine eigene
+Cancellation je Runde unter der des Prüfers): Ihre Einträge gehen in die
+Schlussrunde, sie zählt weder als Runde noch als Fehlschlag, und ihre Sitzung
+endet „stopped“ (`round_cut`). Die nächste Sitzung führt das Gespräch auf
+derselben OpenRouter-Sitzung weiter (`conversation_key`, `Worker.session_key`),
+der Cache bleibt. Vorher wartete die Schlussrunde auf sie (MiMo Pro bis 53 s)
+und las ihre Einträge ein zweites Mal. Der Agent hält dafür 240 s vor dem
+harten Stopp frei.
 
 **Was sie liefern:** Befunde (`wrong`, `doubtful`, `incomplete`, Anmerkung,
 Quelle). Ein Befund verweist auf einen Protokolleintrag (`entry`, jede Runde,
@@ -235,9 +247,30 @@ Agent-Panel.
   more in a new session.“). Eine leere Antwort hatte ihren zweiten Versuch
   schon (`worker_request`), eine am Ausgabelimit abgeschnittene bekommt
   keinen. Anlass: 2 von 87 Schlussrunden in Prod endeten `review_unreadable`.
+- Hedging und Frist der Schlussrunde (seit 2026-10-29, A-T2): Jede Anfrage
+  der Schlussrunde läuft auf einem eigenen Thread (`FinalRequest`), der
+  Prüfer-Thread entscheidet (`_final_request`). Hat sie nach
+  `final_hedge_seconds` keine brauchbare Antwort, fragt eine zweite Anfrage
+  dasselbe auf einer neuen Sitzung (eigene OpenRouter-Sitzung, eigener Slot,
+  Beleg `round: hedge`). Die erste brauchbare Antwort gewinnt, die andere
+  Anfrage stoppt (Sitzung „stopped“, `superseded`, ohne Nachricht; das Panel
+  zeigt weiter eine Zeile je Prüfer). Die Hedge-Zeit ist das p75
+  (`FINAL_HEDGE_QUANTILE`) der letzten `FINAL_HEDGE_SAMPLES` (50)
+  Schlussrunden des Modells in diesem Prozess, ab `FINAL_HEDGE_MIN_SAMPLES`
+  (8), mindestens `FINAL_HEDGE_MIN_SECONDS` (12 s), sonst
+  `FINAL_HEDGE_SECONDS` (20 s). Bewusst nicht aus den Belegen gelesen: Das
+  wäre eine Abfrage vor jeder Schlussrunde; ein Deploy beginnt die Zählung
+  neu. Eine vom Hedge überholte Anfrage zählt mit der Zeit, die sie lief
+  (eine untere Grenze über der Hedge-Zeit), damit das p75 nicht nach unten
+  driftet. `FINAL_ROUND_SECONDS` (90 s) begrenzt die Schlussrunde samt
+  Hedge und zweitem Versuch: danach `no_time` („Its final review reached its
+  time limit …“), die Live-Befunde gelten, der Turn endet `completed`.
+  Denkstufe und Suchrunden bleiben (Max: keine Abstriche).
 - Fällt ein Prüfer in der Schlussrunde aus, gelten seine Live-Befunde; ohne
   solche fehlen nur seine Befunde.
-- Stop beendet die Prüfer, die fixierte Antwort bleibt.
+- Stop beendet die Prüfer, die fixierte Antwort bleibt; seit 2026-10-29 auch
+  jede andere Unterbrechung nach der fixierten Antwort (`watch_error`). Die
+  Review endet dann `cancelled` und behält die Live-Befunde (`live`).
 
 ## Anzeige
 
@@ -283,11 +316,17 @@ Agent-Panel.
    2026-10-29 nur noch `request_domain` und `update_memory`, sobald
    Fremdinhalt im Blick ist) laufen erst, wenn jeder Prüfer des Laufs in einer
    Gate-Runde ohne Websuche „go“ sagt. Ein Halt oder ein Prüfer ohne
-   verwertbare Antwort (ausgefallen, pausiert) fragt den Nutzer; Ausfall zählt
-   nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Domain für die
+   verwertbare Antwort (ausgefallen, pausiert, seit 2026-10-29 auch nach
+   `GATE_SECONDS` = 20 s ohne Urteil) fragt den Nutzer; Ausfall zählt
+   nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Gate-Runde bricht
+   seit 2026-10-29 die laufende Live-Runde desselben Prüfers ab, und eine
+   unlesbare Gate-Antwort bekommt einen zweiten Versuch mit `REPAIR_NOTE`. Eine Domain für die
    Werkbank geht nach der Gate-Runde immer an den Nutzer, das Urteil der
    Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im Protokoll:
-   App-Eintrag `checked` bei Freigabe, sonst `paused`/`decision` wie beim
+   App-Eintrag `checked` bei Freigabe (seit 2026-10-29 mit `gate_ms` und den
+   Urteilen je Prüfer: `verdicts` mit `provider`, `model`, `verdict` =
+   go/halt/failed, `ms`; eine Karte trägt dieselben Felder am Hold), sonst
+   `paused`/`decision` wie beim
    Aussteuern („The agent asks to reach …“, „The user did not allow it.“).
    Browser-Aktionen (`open`, `click`, `upload`, Enter, Leertaste) und
    `read_source`/`show_image` mit unbekannter Adresse standen vom 27./28. bis

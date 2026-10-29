@@ -358,9 +358,13 @@ weiter, mit dem Anfang des Laufs und seinen bisherigen Befunden. Ist die
 Antwort fertig, fixiert sie `capture` als Version, und
 die App ruft `audit_answer` (`app_tools`, nie dem Modell angeboten; Aktivität
 „Reviewing the answer…“ / „Reviewed the answer“): `AnswerAudit.run` gibt jedem
-Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort
-(`REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
-auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Die
+Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort (eine
+Live-Runde, die dann noch läuft, bricht seit 2026-10-29 ab und ihre Einträge
+gehen mit, `cut_round`; `REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
+auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Jeder
+Beleg eines Prüfers (`llm_calls`) nennt seit 2026-10-29 seine Rundenart
+(`round`: `live`, `gate`, `final`, `repair` für einen zweiten Versuch,
+`hedge`). Die
 Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
 note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
 aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer
@@ -370,7 +374,10 @@ höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde; `wrong`
 braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt, Max'
 Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
 Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
-lesbare Liste: die Runde scheitert mit `review_unreadable`. Eine gescheiterte
+lesbare Liste: die Runde scheitert mit `review_unreadable`; ein Tool-Aufruf
+statt JSON heißt seit 2026-10-29 `review_tool_calls`, eine leere Antwort
+`review_empty` (`review_failure`; vorher beide `provider_error`, das nur noch
+Fehler des Anbieters meint; Notes nennt beide im Klartext). Eine gescheiterte
 Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge mit der
 nächsten Runde, nach `MAX_ROUND_FAILURES` = 2 in Folge eine Pause ab 60 s,
 die sich verdoppelt), auch
@@ -397,7 +404,10 @@ nennen. Befunde zur Arbeit stehen in `audit.process` mit `entry`,
 `entry_kind`, `entry_name` und `live` (aus einer Live-Runde, weil die
 Schlussrunde ausfiel). Gespeichert wird alles in der Review: `mode: "audit"`,
 `audit.reviewers[]` (Status, `rounds`, Anzahl, `live_marks`,
-`failure.code`), erst am Ende `audit.claims`/`audit.unplaced`/`audit.process`,
+`failure.code`; seit 2026-10-29 auch `fresh` = neue Gespräche, `pauses` =
+Fehlerpausen, `unfollowed_at_seq`, `backlog` beim Fixieren `{entries, steps:
+davon Schritte mit Tool-Aufrufen, seconds: in der laufenden Live-Runde oder
+null}`, `final_ms` und `hedged`), erst am Ende `audit.claims`/`audit.unplaced`/`audit.process`,
 `audit.issues`. Status `succeeded` (alle Prüfer), `partial` (einige),
 `failed` (keiner), `cancelled` (Stop).
 
@@ -406,17 +416,30 @@ scheitert, nicht lesbar antwortet oder bei der Frist noch arbeitet, verliert
 nur seine Marken. Die Prüfer starten nur mit mindestens `REVIEW_MIN_SECONDS`
 bis zum harten Stopp und enden `REVIEW_TIME_MARGIN` davor (`no_time`); der
 Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`).
+Seit 2026-10-29 hat die Schlussrunde eine eigene Frist und Hedging (A-T2):
+ohne brauchbare Antwort nach `final_hedge_seconds` (p75 der letzten
+Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 20 s) dieselbe
+Anfrage auf neuer Sitzung, die erste brauchbare gewinnt; nach
+`FINAL_ROUND_SECONDS` (90 s) `no_time` mit den Live-Befunden (Einzelheiten
+in [agent-work-log.md](agent-work-log.md), „Fehler“).
 Scheitert die Prüfung als Ganzes (Fehler, Speicherbudget auch nach
 `trim_marks`, das erst die zitierten Worte und lange Anmerkungen kürzt),
 endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem
 `completed`. Scheitert nur ein Speichern, bleibt der Stand im Speicher und
 `AnswerAudit.close` speichert am Laufende erneut; eine Audit-Review, die beim
 erfolgreichen Ende noch `required`/`running` sagt, setzt
-`agent_runs.finish_run` auf `failed`. Der Stop des Nutzers während der
+`agent_runs.finish_run` auf `failed`; nach Crash oder Reap setzt es seit
+2026-10-29 auch jede Prüferzeile in `waiting`/`running` auf `failed`
+(`run_interrupted`, Notes: „the run was interrupted“). Der Stop des Nutzers während der
 Prüfung stoppt die Prüfer, nicht die fertige Antwort: die Review endet
 `cancelled`, der Turn `completed` (`_finish_review`), auch wenn der Stop kurz
-vor dem Start der Prüfer kommt (dann setzt `close` die Review). Nur ein
-verlorener Laufzustand (`watch_error`) beendet den Turn dort als Fehler. Die
+vor dem Start der Prüfer kommt (dann setzt `close` die Review). Seit
+2026-10-29 (A-R1) gilt das für jede Unterbrechung nach der fixierten Antwort,
+auch `watch_error` (Deploy nach der Grace-Zeit, Firestore weg, Stopp des
+Wächters), die den Turn vorher als Fehler beendete. Eine Review, die so
+`cancelled` endet, behält die Live-Befunde wie eine gescheiterte
+Schlussrunde (A-M7, `AnswerAudit._live_findings`: `claims`/`unplaced`/`process`,
+jede Marke `live: true`); vorher fehlten sie. Die
 Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
 keine `differences_stats`, kein Model-Pulse-Pick.
 
@@ -654,9 +677,21 @@ Prüfer, die antworten können (folgend, nicht in der Fehlerpause, Thread
 lebt). Jeder davon bekommt eine Gate-Runde (`ReviewerSession._gate_round`):
 die neuen Einträge plus `GATE_NOTE` mit den Aufrufen, **ohne Websuche**, im
 selben Gespräch. Antwort `"gate": "go"` oder ein Halt (`parse_gate`; Marken
-dürfen dabei sein, ohne Entscheidung zählt sie als ausgefallen). Der Aufruf
+dürfen dabei sein, ohne Entscheidung zählt sie als ausgefallen). Seit
+2026-10-29 (A-T3) hat das Gate Vorrang und eine Frist: `ready_gate` bricht
+eine laufende Live-Runde jedes gefragten Prüfers ab (`cut_round`, ihre
+Einträge gehen in die Gate-Runde), jeder Prüfer hat `GATE_SECONDS` (20 s) ab
+dem Eintrag, danach zählt er als ausgefallen (`gate_result`, also Karte
+`unchecked`, nie ein Go), eine unlesbare Antwort, auch ein Tool-Aufruf statt
+JSON, bekommt in dieser Zeit einen zweiten Versuch mit `REPAIR_NOTE` in
+derselben Sitzung (Beleg `repair`), und die Wartezeit hält die Turn-Uhr an wie
+ein Halt (`gate_paused`/`gate_started`, `_gate_pause`; vorher zählte sie zur
+Turn-Zeit). Der Aufruf
 wartet in `_gate_wait` (Aktivität „The reviewers check this step before it
-runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`. **Ein
+runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`
+(seit 2026-10-29 als JSON `{text, gate_ms, verdicts: [{provider, model,
+verdict, ms}]}`, `AnswerAudit.gate_trace`, ohne Texte der Prüfer; dieselben
+Felder `gate_ms`/`verdicts` trägt der Hold einer Gate- oder Domain-Karte). **Ein
 Halt reicht** → die Karte (`request_hold` mit `gate: true`, „A reviewer
 stopped a step before it ran“, Knopf „Let it run“; halten mehrere an, steht
 jeder mit seinem Grund in `reasons`). **Kann nicht jeder Prüfer des Laufs

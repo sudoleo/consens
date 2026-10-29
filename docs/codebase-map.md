@@ -4917,6 +4917,9 @@ completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
 Budget-/Tarifsnapshot und Status (ein agent:-Beleg seit 2026-10-29 mit der Art
 seiner Sitzung, `session_kind`, die das Löschen des Chats übersteht). Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
+Belege von Prüfer-Aufrufen (Audit-Modus) tragen seit 2026-10-29 `round`
+(`live`, `gate`, `final`, `repair`, `hedge`; `settle` aus
+`completion.review_round`, gesetzt über `worker_completion(review_round=…)`).
 Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
 `reservations` enthalten alle laufenden Schritte, aber höchstens
 `ROOT_SETTLED_STEP_WINDOW` (32) abgeschlossene. Ältere abgeschlossene Schritte
@@ -4946,7 +4949,10 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   mit). Vorher war jeder Lesezugriff ein eigener Rundgang, ein Claim las neun
   Dokumente nacheinander.
 - Sitzungs-Updates schreibt das Journal des Laufs
-  (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf):
+  (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf; am
+  Laufende warten Journal und Arbeitsprotokoll seit 2026-10-29 zusammen
+  höchstens `CLOSE_WAIT_SECONDS` = 15 s, `close(timeout=…)`, danach eine
+  Logzeile mit dem Thread-Namen):
   `DelegationLoop._publish(wait=False)` übergibt und arbeitet weiter, das
   Journal schreibt je Sitzung in Reihenfolge. Seit 2026-10-22 geht alles, was
   fällig ist, sobald der Schreib-Thread frei ist, in **eine** Transaktion
@@ -4976,6 +4982,14 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   schreibt, schreibt den neuesten Schnappschuss (`_latest`, seit 2026-10-22);
   wessen Schnappschuss darin steckt, kehrt ohne eigenen Schreibvorgang zurück.
   Eintreffende Vergleichsantworten speichern nach dem Lock.
+- Die Zeit unter `agent_quota.account_lock` misst seit 2026-10-29 jeder Store
+  (`AgentSessionStore._agent_transaction`, `lock_time`: Transaktionen,
+  Warten, Halten, längstes Warten; die Route macht einen Store je Turn). Am
+  Turn-Ende Metrik `agent_account_lock:waited`/`:held` und eine Logzeile nur
+  mit Zahlen („Agent account lock …“, `report_lock_time`), im Audit-Modus
+  dazu `agent_account_lock:final_rounds` (Warten vom Fixieren bis zum Ende
+  der Schlussrunden). Ob die Claims der Schlussrunde in eine Transaktion
+  gebündelt werden (A-T5), entscheidet diese Zahl.
 Belegt mit `tests/test_agent_tempo.py` (sechs Modelle, Datenbank mit Latenz je
 Rundgang, ein Konto-Lock) und `tests/test_agent_journal.py`. Prod-Befund und
 Zahlen: [agent-mode.md](agent-mode.md) „Wartezeit im Server“.
@@ -5765,16 +5779,26 @@ die fixierte Antwort steht in der Schlussrunde nur einmal
 Prüfers voll, geht er in einem neuen weiter, mit dem Anfang des Laufs und
 seinen bisherigen Befunden (`ReviewerSession._carry`, `opening_entries`).
 Nach der Antwort fixiert `capture` die Version, `_finish_review`
-ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`:
+ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`
+(eine laufende Live-Runde bricht seit 2026-10-29 ab, `cut_round`/`RoundCut`,
+ihre Sitzung endet `round_cut` und reicht die OpenRouter-Sitzung weiter):
 Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
 seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
 ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
-`review.audit.reviewers/claims/unplaced/process/issues`, `dissent[].mark` je
+`review.audit.reviewers/claims/unplaced/process/issues`, je Prüfer seit
+2026-10-29 `fresh`, `pauses`, `unfollowed_at_seq`, `backlog`
+(`ReviewerSession.fixed`), `final_ms`, `hedged`; `dissent[].mark` je
 Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
 `unplaced`); eine unlesbare Schlussrunde fragt seit 2026-10-27 einmal in
 derselben Sitzung nach (`REPAIR_NOTE`), ein vorübergehender Anbieterfehler
 läuft einmal in neuer Sitzung (`ReviewerSession._mendable`); scheitert sie
-dann noch, gelten seine Live-Befunde (`live`). Runden passen in den Platz des Prüfergesprächs
+dann noch, gelten seine Live-Befunde (`live`). Seit 2026-10-29 läuft jede
+Anfrage der Schlussrunde als `FinalRequest` auf eigenem Thread
+(`_final_request`): nach `final_hedge_seconds` ein Hedge auf neuer Sitzung
+(`_open(own=True)`, Beleg `hedge`), die erste brauchbare Antwort gewinnt, die
+andere endet `superseded` (`agent-delegation.js` `reviewerRows` lässt sie
+nicht für den Prüfer sprechen); `FINAL_ROUND_SECONDS` begrenzt alles
+(`ReviewCancellation.overtime`, `no_time`). Runden passen in den Platz des Prüfergesprächs
 (`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
 `review_entry` lässt den Verbrauch weg, nennt aber die Suchen eines Schritts
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und
@@ -5785,19 +5809,31 @@ Suchschritt als `search_step`, und sein Beleg trägt `search_hits`, die Zahl
 der behaltenen Seiten, damit `scripts/audit_report.py` den Anteil ohne Treffer
 je Modell zeigt, A-M9);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
+Gate-Runden haben seit 2026-10-29 Vorrang und eine Frist (`ready_gate` ruft
+`cut_round` für jeden gefragten Prüfer, `GATE_SECONDS` in `gate_result`,
+`REPAIR_NOTE` für eine unlesbare Gate-Antwort in `_request(gate=…)`), und
+`_gate_wait`/`_domain_wait` halten die Turn-Uhr an (`_gate_pause`);
+`gate_trace` (Zeit und Urteile je Prüfer ohne Texte) steht im `checked`-Eintrag
+und am Hold einer Gate- oder Domain-Karte.
 Die Judges laufen nicht. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 `REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
 trotzdem `completed`, auch nach einem Stop während der Prüfung
-(`_finish_review` fängt ihn ab, außer bei `watch_error`). Gescheiterte
+(`_finish_review` fängt ihn ab, seit 2026-10-29 auch `watch_error`; die
+Review endet `cancelled` mit den Live-Befunden, `_live_findings`). Gescheiterte
 Speicherungen holt `AnswerAudit.close` nach. Eine Prüferantwort, die kam, aber
 nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 („Agent reviewer reply unusable“: `reply_shape` mit `shape` empty/cut/no_json/
-cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
+cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens);
+`review_failure` nennt seit 2026-10-29 `tool_calls` als `review_tool_calls`
+und `empty` als `review_empty` statt `provider_error` (Texte in
+`agent-review.js` `auditReasons`).
 `agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
-`failed`. Nach `finish_run` zählt `agent_audit_metrics.record` den Turn anonym
+`failed`, nach Crash oder Reap seit 2026-10-29 auch jede Zeile in
+`audit.reviewers[]` in `waiting`/`running` (`failed`, `run_interrupted`). Nach
+`finish_run` zählt `agent_audit_metrics.record` den Turn anonym
 in `ops_metrics/agent-audit-{Tag}` (seit 2026-10-29, A-M1; nie in Tests oder
 unter `MOCK_LLM`). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
 `--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
@@ -8598,7 +8634,7 @@ app/services/
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
-  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate)
+  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
   agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt
   agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back

@@ -535,7 +535,10 @@
   const auditReasons = { review_unreadable: 'its review could not be read', no_time: 'it ran out of time',
     audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped',
     context_limit: 'the work did not fit its context',
-    review_tool_calls: 'it called a tool instead of writing its review', review_empty: 'its review came back empty' };
+    // Since 2026-10-29 (agent_audit.review_failure); before, provider_error.
+    review_tool_calls: 'it called a tool instead of giving its review', review_empty: 'its reply was empty',
+    // A crash or the reaper ended the run while it reviewed (agent_runs.finish_run).
+    run_interrupted: 'the run was interrupted' };
   function auditReason(failure) {
     return auditReasons[failure?.code] || failureReason(failure);
   }

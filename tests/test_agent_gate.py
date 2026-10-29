@@ -19,7 +19,8 @@ import pytest
 from app.services import agent_audit, agent_delegation, agent_domains
 from app.services.agent_gate import outward
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
-from test_agent_audit import ANSWER, Audit, LookupArgs, audit_loop, decide_when_held, saved
+from test_agent_audit import (ANSWER, TOOL_CALL_REPLY, Audit, LookupArgs, audit_loop, audit_sessions,
+                              decide_when_held, held, receipt_rounds, saved)
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 
 
@@ -142,6 +143,12 @@ def test_every_reviewers_go_lets_the_call_run(store):
     assert REMEMBERED in gate_round["content"] and agent_audit.GATE_MEMORY_NOTE in gate_round["content"]
     names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "checked" in names and "paused" not in names
+    # The gate's course without texts (A-M3): its time and each verdict.
+    [checked] = [json.loads(text) for entry, text in loop.work_log.entries_after(0) if entry.get("name") == "checked"]
+    assert checked["text"].startswith("The reviewers let the calls of entry")
+    assert type(checked["gate_ms"]) is int and checked["gate_ms"] >= 0
+    assert [(v["provider"], v["verdict"]) for v in checked["verdicts"]] == [("anthropic", "go"), ("openai", "go")]
+    assert all(type(v["ms"]) is int and v["model"] for v in checked["verdicts"])
     assert saved(store, loop)["status"] == "completed"
 
 
@@ -156,6 +163,10 @@ def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store):
     assert holds[0]["reason"] == HALT_REASON and holds[0]["reviewer"] == "GPT-5.4 mini"
     assert holds[0]["step_kind"] == "call" and holds[0]["step"].startswith("update_memory: ")
     assert REMEMBERED in holds[0]["step"]
+    # The card's hold carries the gate's course, never a reason in it.
+    assert type(holds[0]["gate_ms"]) is int
+    assert [(v["provider"], v["verdict"]) for v in holds[0]["verdicts"]] == [("anthropic", "go"), ("openai", "halt")]
+    assert HALT_REASON not in json.dumps(holds[0]["verdicts"])
     # It ran only after the user's go; the agent never saw the reviewer's words.
     assert ran == [REMEMBERED]
     assert HALT_REASON not in json.dumps(loop.messages)
@@ -224,6 +235,101 @@ def test_a_reviewers_halt_during_a_gate_card_joins_it(store):
     assert [h["kind"] for h in holds] == [agent_audit.GATE_UNCHECKED, "harm"]
     # The user's go still runs the step's call.
     assert ran == [REMEMBERED]
+
+
+# --- Time and priority of a gate (A-T3, since 2026-10-29) -----------------------------
+
+def remember(loop, ran):
+    """A fake update_memory for ``loop`` that records what it saved."""
+    def run(args, *, cancellation):
+        ran.append(args.changes[0]["text"])
+        return {"status": "saved"}
+    loop.registry = ToolRegistry([*loop.registry.tools.values(),
+                                  ReadOnlyTool("update_memory", "Remember.", MemoryArgs, run)],
+                                 argument_limit=loop.registry.argument_limit)
+
+
+def test_a_gate_cuts_the_reviewers_live_round_short_and_reads_its_entries(store):
+    """The gate round waited for a live round at work of the same reviewer
+    (MiMo Pro: up to 53 s), and that time counted as the turn's."""
+    ran, gate_rounds = [], []
+
+    def anthropic(messages):
+        if "Before it runs:" in messages[-1]["content"]:
+            gate_rounds.append(messages[-1]["content"])
+            return go(messages)
+        return held(30)(messages)
+    script = Audit(tool_steps=2, step_tools={1: "update_memory"},
+                   step_args={1: {"changes": [{"op": "add", "text": REMEMBERED}]}}, live={"anthropic": anthropic})
+    script.live["openai"] = replies(script, "openai", go)
+    loop = audit_loop(store, script)
+    remember(loop, ran)
+    started = time.monotonic()
+    events = list(loop.run())
+    assert time.monotonic() - started < 20
+    assert ran == [REMEMBERED] and not [e for e in events if e.get("type") == "hold"]
+    # The cut round counts as no round: the gate round is its first and reads
+    # the log from its start.
+    [message] = gate_rounds
+    assert message.startswith("Round 1.") and json.loads(message.split("\n")[1])["entries"][0]["seq"] == 1
+    assert audit_sessions(store, loop, "anthropic")[0] == ("stopped", "round_cut")
+    assert saved(store, loop)["agent_review"]["status"] == "succeeded"
+
+
+def test_a_reviewer_silent_past_the_gates_time_is_never_a_go(store, monkeypatch):
+    monkeypatch.setattr(agent_audit, "GATE_SECONDS", .3)
+    script, loop, ran = gated(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", held(30)))
+    waiter = decide_when_held(loop, store, "continue")
+    started = time.monotonic()
+    events = list(loop.run())
+    waiter.join(5)
+    assert time.monotonic() - started < 20
+    holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
+    assert len(holds) == 1 and holds[0]["kind"] == agent_audit.GATE_UNCHECKED and holds[0]["gate"] is True
+    assert [(v["provider"], v["verdict"]) for v in holds[0]["verdicts"]] == [("anthropic", "go"), ("openai", "failed")]
+    assert holds[0]["verdicts"][1]["ms"] >= 300 and holds[0]["gate_ms"] >= 300
+    assert ran == [REMEMBERED]
+    # Its gate round stopped; it goes on following, its entries come again.
+    assert audit_sessions(store, loop, "openai")[0] == ("stopped", "round_cut")
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_tool_call_in_a_gate_round_gets_its_repair_and_then_counts(store):
+    """DeepSeek answered a gate round once with a tool call and no text
+    (2026-10-28), and the user got an "unchecked" card at once."""
+    script, loop, ran = gated(store, live={})
+    asked = []
+
+    def tool_call_then_go(messages):
+        asked.append(messages[-1]["content"])
+        return TOOL_CALL_REPLY if len(asked) == 1 else go(messages)
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", tool_call_then_go))
+    events = list(loop.run())
+    assert ran == [REMEMBERED] and not [e for e in events if e.get("type") == "hold"]
+    assert len(asked) == 2 and asked[1].endswith(agent_audit.REPAIR_NOTE)
+    assert receipt_rounds(store, loop) == {"anthropic": ["gate", "final"], "openai": ["gate", "repair", "final"]}
+    # One session: the repair went on in it.
+    assert audit_sessions(store, loop, "openai") == [("completed", None)]
+
+
+def test_the_gate_wait_pauses_the_turns_clock(store):
+    script, loop, ran = gated(store, live={})
+    samples = []
+
+    def slow_go(messages):
+        deadline = time.monotonic() + 5
+        while loop.gate_started is None and time.monotonic() < deadline:
+            time.sleep(.01)
+        samples.append(loop._turn_elapsed())
+        time.sleep(.2)
+        samples.append(loop._turn_elapsed())
+        return go(messages)
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", slow_go))
+    list(loop.run())
+    assert ran == [REMEMBERED]
+    assert samples[1] == pytest.approx(samples[0], abs=1e-6)
+    assert loop.gate_paused >= .2 and loop.gate_started is None
 
 
 class BrowserArgs(LookupArgs):
@@ -316,6 +422,7 @@ def test_a_domain_goes_to_the_user_even_when_every_reviewer_lets_it(store):
     hold = holds[0]
     assert hold["domain"] == "api.weather.example" and hold["domain_reason"] == DOMAIN_REASON
     assert hold["review"] == "go" and hold["kind"] == "domain" and hold["reviewer"] == ""
+    assert [v["verdict"] for v in hold["verdicts"]] == ["go", "go"] and type(hold["gate_ms"]) is int
     # The reviewers were told the user decides in any case.
     gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
     assert agent_audit.GATE_DOMAIN_NOTE in gate_round["content"]

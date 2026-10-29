@@ -28,6 +28,7 @@ saves them in order per session:
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import deque
@@ -121,14 +122,19 @@ class AgentJournal:
             self._condition.notify_all()
         return job.result() if wait else job
 
-    def close(self):
-        """Write everything still queued, lines included, and stop."""
+    def close(self, timeout=None):
+        """Write everything still queued, lines included, and stop; wait at
+        most ``timeout`` seconds (since 2026-10-29, A-R3: a hung write held
+        the run's end until its lease expired). What is not written by then
+        is written later or lost, and the run ends anyway."""
         with self._condition:
             self._closing = True
             self._condition.notify_all()
             thread = self._thread
         if thread is not None:
-            thread.join()
+            thread.join(timeout)
+            if thread.is_alive():
+                logging.warning("Agent journal still saving at the run's end thread=%s", thread.name)
 
     def _start(self):
         if self._thread is None:

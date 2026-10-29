@@ -354,7 +354,7 @@ class WorkLog:
         if thread is not None:
             thread.join(timeout)
             if thread.is_alive():
-                logging.warning("Agent work log still saving at the run's end")
+                logging.warning("Agent work log still saving at the run's end thread=%s", thread.name)
 
     # --- Saving ---------------------------------------------------------------
 

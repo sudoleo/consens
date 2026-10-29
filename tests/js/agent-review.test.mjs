@@ -894,6 +894,23 @@ it('marks a reviewed answer with its reviewers\' notes, without a score or diffe
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
   dom.window.close();
 });
+it('names a reviewer that called a tool or replied empty, never as a provider failure', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = auditReview();
+  review.audit.reviewers[1] = { ...review.audit.reviewers[1], status: 'failed', failure: { code: 'review_empty' } };
+  review.audit.reviewers[2].failure = { code: 'review_tool_calls' };
+  // A crash or the reaper ended the run while it reviewed (agent_runs.finish_run).
+  review.audit.reviewers.push({ provider: 'x-ai', provider_label: 'Grok', model: { label: 'Grok' }, status: 'failed',
+    failure: { code: 'run_interrupted' } });
+  w.App.agentReview.render(body, review, { sources: [], question: 'Q', key: 't1' });
+  d.querySelector('.agent-evidence-link').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.textContent).toContain('No review: its reply was empty.');
+  expect(panel.textContent).toContain('No review: it called a tool instead of giving its review.');
+  expect(panel.textContent).toContain('No review: the run was interrupted.');
+  dom.window.close();
+});
 it('waits with the marks until every reviewer is done, and never marks another text', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';

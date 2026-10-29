@@ -249,3 +249,19 @@ def test_close_saves_everything_and_later_updates_are_dropped():
     assert log.submit(worker("a"), {"status": "stopped"}, wait=False) is None
     with pytest.raises(RuntimeError):
         log.submit(worker("a"), {"status": "stopped"}, wait=True)
+
+
+def test_close_waits_at_most_its_limit_and_names_the_writer(caplog):
+    """A-R3 (2026-10-29): a hung write held the run's end until its lease expired."""
+    import logging
+    recorder = Recorder()
+    log = journal(recorder)
+    release = hold_writer(log, recorder)
+    started = time.monotonic()
+    with caplog.at_level(logging.WARNING):
+        log.close(timeout=.2)
+    assert time.monotonic() - started < 2
+    assert any("thread=agent-journal" in r.getMessage() for r in caplog.records)
+    # The writer finishes what it holds afterwards.
+    release()
+    until(lambda: recorder.writes)

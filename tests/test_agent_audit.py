@@ -56,13 +56,19 @@ REVIEWS = {
 }
 
 
+#: A reviewer reply with a tool call and no text (DeepSeek in a gate round, 2026-10-28).
+TOOL_CALL_REPLY = {"tool_calls": [{"id": "r1", "type": "function",
+                                   "function": {"name": "web_search", "arguments": "{}"}}]}
+
+
 class Audit:
     """A scripted audit-mode turn: the agent's first ``tool_steps`` steps
     (completion:N) call the tool ``lookup``, the next one answers, each after
     its own search. Every other call is a reviewer: its final round replies
     with ``reviews[family]``, a live round with ``live[family]`` (a text, an
-    exception or "wait": until it is stopped). ``step_tools``: another tool
-    for some of the tool steps, {index: name}; ``step_args``: its arguments."""
+    exception, TOOL_CALL_REPLY or "wait": until it is stopped). ``step_tools``:
+    another tool for some of the tool steps, {index: name}; ``step_args``:
+    its arguments."""
 
     def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None, on_lookup=None,
                  on_answer=None, step_tools=None, step_args=None):
@@ -76,6 +82,8 @@ class Audit:
         self.search = search
         self.tool_steps = tool_steps
         self.calls, self.offered, self.searches, self.prompts, self.rounds = [], [], {}, {}, {}
+        # Per family: when each reviewer call began and its OpenRouter session.
+        self.times, self.session_ids = {}, {}
         self.loop = None
 
     def factory(self):
@@ -113,6 +121,8 @@ class Audit:
                 family = model.model.split("/")[0]
                 final = messages[-1]["content"].startswith("Final round.")
                 script.rounds.setdefault(family, []).append("final" if final else "live")
+                script.times.setdefault(family, []).append(time.monotonic())
+                script.session_ids.setdefault(family, []).append(self.session_id)
                 script.prompts[family] = list(messages)
                 script.searches[family] = kwargs.get("native_searches")
                 reply = (script.reviews if final else script.live).get(family, json.dumps({"marks": []}))
@@ -125,6 +135,10 @@ class Audit:
                     raise reply
                 if callable(reply):
                     reply = reply(messages)
+                if isinstance(reply, dict):
+                    # A tool call instead of the review (TOOL_CALL_REPLY).
+                    self.tool_calls, self.finish_reason = reply["tool_calls"], "tool_calls"
+                    return
                 self.text, self.finish_reason = reply, "stop"
                 yield {"type": "delta", "text": self.text}
         return Completion()
@@ -207,6 +221,23 @@ def entry_of(messages, kind, name=None):
 
 def by_anchor(review):
     return {claim["anchor"]: claim for claim in review["audit"]["claims"]}
+
+
+def receipt_rounds(store, loop):
+    """The kind of round each reviewer receipt names (``round``), per family,
+    in the order of its sessions."""
+    rounds = {}
+    sessions = sorted((a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                       if a.get("kind") == "audit"), key=lambda a: a["created_at"])
+    for session in sessions:
+        index = 0
+        while True:
+            receipt = store.receipt_ref(UID, loop.chat_id, loop.turn_id, f"agent:{session['id']}:{index}").get()
+            if not receipt.exists:
+                break
+            rounds.setdefault(session["model"]["model"].split("/")[0], []).append(receipt.to_dict().get("round"))
+            index += 1
+    return rounds
 
 
 # --- The turn -------------------------------------------------------------------
@@ -355,6 +386,154 @@ def test_the_reviewers_follow_the_work_in_rounds_and_mark_its_entries(store):
     assert sorted(kinds) == [[], ["round"], ["round", "result"]]
 
 
+def test_every_reviewer_receipt_names_its_round(store):
+    """A-M2 (2026-10-29): a receipt says which kind of round it paid for, so
+    the measurement and the daily account can tell them apart."""
+    script = Audit({"anthropic": json.dumps({"marks": []}), "openai": RuntimeError("provider down")}, tool_steps=1)
+    loop = audit_loop(store, script)
+    list(loop.run())
+    # OpenAI's final round failed in passing and tried once more.
+    assert receipt_rounds(store, loop) == {"anthropic": ["live", "final"], "openai": ["live", "final", "repair"]}
+    # The agent's own steps are no reviewer's.
+    assert "round" not in store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+
+
+def held(seconds, reply=json.dumps({"marks": []})):
+    """A reviewer reply that takes ``seconds`` unless its request is stopped first."""
+    def run(messages):
+        stop, deadline = current_provider_cancellation(), time.monotonic() + seconds
+        while not stop.cancelled and time.monotonic() < deadline:
+            time.sleep(.01)
+        if stop.cancelled:
+            raise ProviderCancelled("stopped")
+        return reply(messages) if callable(reply) else reply
+    return run
+
+
+def test_the_final_round_starts_at_once_and_cuts_a_live_round_short(store, monkeypatch):
+    """A-T1 (2026-10-29): the final round waited for a live round at work
+    (MiMo Pro up to 53 s) and then read its entries a second time."""
+    script = Audit(tool_steps=1, live={"anthropic": held(30)})
+    loop = audit_loop(store, script)
+    capture, fixed = loop.comparison.capture, []
+
+    def fix(text):
+        fixed.append(time.monotonic())
+        capture(text)
+    monkeypatch.setattr(loop.comparison, "capture", fix)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    assert script.rounds["anthropic"] == ["live", "final"]
+    assert script.times["anthropic"][1] - fixed[0] < 1
+    # The cut round is neither a round nor a failure; its entries go into the
+    # final round, which reads the log from its start.
+    session = loop.comparison.auditor.sessions["anthropic"]
+    assert session.live_rounds == 0 and session.failures == 0
+    entries, _ = round_entries(script.prompts["anthropic"][-1])
+    assert entries[0]["seq"] == 1
+    # Its session ended stopped and the next one goes on on the same
+    # OpenRouter session (the conversation in the endpoint's cache).
+    sessions = sorted((a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                       if a.get("kind") == "audit" and a["model"]["model"].startswith("anthropic")),
+                      key=lambda a: a["created_at"])
+    assert [(a["status"], (a.get("failure") or {}).get("code")) for a in sessions] == [
+        ("stopped", "round_cut"), ("completed", None)]
+    assert len(set(script.session_ids["anthropic"])) == 1
+    # Its receipt was settled as the live round it was.
+    assert receipt_rounds(store, loop)["anthropic"] == ["live", "final"]
+    # What each reviewer had not read when the answer was fixed (A-M4): the
+    # cut round's step that called a tool, and how far that round was.
+    backlog = {r["provider"]: r["backlog"] for r in review["audit"]["reviewers"]}
+    assert backlog["anthropic"]["steps"] == 1 and backlog["anthropic"]["seconds"] >= 0
+    assert backlog["openai"]["steps"] == 0 and backlog["openai"]["seconds"] is None
+    assert backlog["anthropic"]["entries"] > backlog["openai"]["entries"] > 0
+
+
+def audit_sessions(store, loop, family):
+    """One reviewer's sessions in the panel, oldest first: (status, failure code)."""
+    sessions = sorted((a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                       if a.get("kind") == "audit" and a["model"]["model"].startswith(family)),
+                      key=lambda a: a["created_at"])
+    return [(a["status"], (a.get("failure") or {}).get("code")) for a in sessions]
+
+
+def test_the_hedge_time_follows_the_models_final_rounds(monkeypatch):
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_SECONDS == 20
+    for seconds in (1, 2, 3, 4, 5, 6, 7):
+        agent_audit.record_final_seconds("m", seconds)
+    assert agent_audit.final_hedge_seconds("m") == 20
+    agent_audit.record_final_seconds("m", 8)
+    # Fast rounds: never earlier than FINAL_HEDGE_MIN_SECONDS.
+    assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_MIN_SECONDS == 12
+    for seconds in (30, 30, 35, 40, 45, 50, 55, 60):
+        agent_audit.record_final_seconds("slow", seconds)
+    assert agent_audit.final_hedge_seconds("slow") == 50
+    # The last FINAL_HEDGE_SAMPLES count.
+    for _ in range(agent_audit.FINAL_HEDGE_SAMPLES):
+        agent_audit.record_final_seconds("slow", 14)
+    assert agent_audit.final_hedge_seconds("slow") == 14
+
+
+def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store, monkeypatch):
+    """A-T2 (2026-10-29): the slowest reviewer set the time to the marks
+    (Luna p90 40 s, max 72 s); a hung request held the turn until its hard stop."""
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
+    asked = []
+
+    def final(messages):
+        asked.append(messages)
+        # The first request hangs, the hedge answers.
+        return held(30)(messages) if len(asked) == 1 else REVIEWS["openai"]
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": final})
+    loop = audit_loop(store, script)
+    started = time.monotonic()
+    list(loop.run())
+    assert time.monotonic() - started < 20
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    assert [(r["provider"], r["status"], r["marks"]) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", 2), ("openai", "completed", 3)]
+    # The same messages on a new session and OpenRouter session.
+    assert len(asked) == 2 and asked[0] == asked[1]
+    assert len(set(script.session_ids["openai"])) == 2
+    assert receipt_rounds(store, loop)["openai"] == ["final", "hedge"]
+    # The overtaken request stopped; the reviewer is one completed row (agent-delegation.js).
+    assert audit_sessions(store, loop, "openai") == [("stopped", "superseded"), ("completed", None)]
+    # It counts for the hedge time as long as it had run.
+    model = loop.comparison.auditor.sessions["openai"].model.model
+    assert len(agent_audit._final_seconds[model]) == 1 and agent_audit._final_seconds[model][0] >= .3
+    # The review says so (A-M4).
+    assert [(r["provider"], r["hedged"], type(r["final_ms"])) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", False, int), ("openai", True, int)]
+    assert review["audit"]["reviewers"][1]["final_ms"] >= 300
+
+
+def test_a_final_round_that_hangs_twice_ends_in_time_with_its_live_marks(store, monkeypatch):
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .2)
+    monkeypatch.setattr(agent_audit, "FINAL_ROUND_SECONDS", .6)
+    live = lambda messages: json.dumps({"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful",
+                                                    "note": "Unchecked lookup."}]})
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": held(30)}, tool_steps=1, live={"openai": live})
+    loop = audit_loop(store, script)
+    started = time.monotonic()
+    list(loop.run())
+    assert time.monotonic() - started < 20
+    turn = saved(store, loop)
+    review = turn["agent_review"]
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert review["status"] == "partial" and {"code": "no_time"} in review["audit"]["issues"]
+    assert [(r["provider"], r["status"], (r.get("failure") or {}).get("code")) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", None), ("openai", "failed", "no_time")]
+    assert [(p["model"], p["note"], p.get("live")) for p in review["audit"]["process"]] == [
+        ("OpenAI", "Unchecked lookup.", True)]
+    assert script.rounds["openai"] == ["live", "final", "final"]
+    assert receipt_rounds(store, loop)["openai"] == ["live", "final", "hedge"]
+    assert audit_sessions(store, loop, "openai") == [("failed", "no_time"), ("failed", "no_time")]
+
+
 def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):
     seen = []
 
@@ -401,10 +580,14 @@ def test_failures_in_a_row_pause_a_reviewer_but_never_end_its_following(store, m
     assert script.rounds["anthropic"] == ["live", "live", "live", "final"]
     session = loop.comparison.auditor.sessions["anthropic"]
     assert session.live_rounds == 1 and session.failures == 0
+    # The review counts its pauses (A-M4).
+    assert [(r["provider"], r["pauses"]) for r in saved(store, loop)["agent_review"]["audit"]["reviewers"]] == [
+        ("anthropic", 1), ("openai", 0)]
     # The pause doubles with every further failure in a row.
     monkeypatch.setattr(agent_audit, "FAILURE_PAUSE_SECONDS", 60)
     paused = agent_audit.ReviewerSession.__new__(agent_audit.ReviewerSession)
-    paused.live_rounds, paused.failures, paused.cursor, paused.tried = 1, 2, 5, 5
+    paused.live_rounds, paused.failures, paused.cursor, paused.tried, paused.pauses = 1, 2, 5, 5, 1
+    paused._set = lambda **fields: None
     paused.messages, paused.chars, paused.budget = [{}, {}], 0, 100_000
     paused.audit = type("Audit", (), {"brief": staticmethod(lambda: None)})()
     paused._request = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down"))
@@ -448,6 +631,25 @@ def test_the_reviewers_follow_a_long_run_to_its_end_in_new_conversations(store, 
     # The full conversation's session ended completed, the new one took over.
     views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 3
+    # The review counts the new conversations (A-M4).
+    assert [(r["provider"], r["fresh"]) for r in saved(store, loop)["agent_review"]["audit"]["reviewers"]] == [
+        ("anthropic", 1), ("openai", 0)]
+
+
+def test_a_reviewer_whose_rounds_fit_no_conversation_says_where_it_stopped_following(store, monkeypatch):
+    """A-M4 (2026-10-29): following=False left no trace (G4)."""
+    monkeypatch.setattr(agent_audit, "session_budget", lambda model: 100)
+    # A tool the run does not have: its step still starts a round.
+    script = Audit(tool_steps=1, step_tools={0: "unknown_tool"})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed"
+    reviewers = turn["agent_review"]["audit"]["reviewers"]
+    step = [entry["seq"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "step"][0]
+    assert [r["failure"]["code"] for r in reviewers] == ["context_limit"] * 2
+    assert all(r["unfollowed_at_seq"] >= step for r in reviewers)
+    assert "anthropic" not in script.rounds and "openai" not in script.rounds
 
 
 def test_a_live_mark_may_name_any_entry_read_so_far(store):
@@ -565,6 +767,27 @@ def test_a_failed_or_unreadable_review_costs_only_its_marks(store, caplog):
     assert {"code": "reviewers_unavailable", "count": 2} in review["audit"]["issues"]
 
 
+def test_a_tool_call_or_an_empty_reply_is_named_for_what_it_is(store):
+    """A-M6 (2026-10-29): both counted as provider_error, which mixed them
+    with failures of the provider (G6)."""
+    script = Audit({"anthropic": "", "openai": TOOL_CALL_REPLY})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert [(r["provider"], r["status"], r["failure"]["code"]) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "failed", "review_empty"), ("openai", "failed", "review_tool_calls")]
+    # The tool call was asked once more with the repair note, as any unreadable reply.
+    assert script.rounds["openai"] == ["final", "final"]
+    from types import SimpleNamespace
+    from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
+    assert agent_audit.review_failure(ModelEmptyAnswer())["code"] == "review_empty"
+    assert agent_audit.review_failure(ModelOutputLimit())["code"] == "output_limit"
+    assert agent_audit.review_failure(RuntimeError("provider down"))["code"] == "provider_error"
+    cut = ValueError("Model response did not complete")
+    cut.reply = SimpleNamespace(text='{"marks": [', finish_reason="error", tool_calls=[], usage=None)
+    assert agent_audit.review_failure(cut)["code"] == "provider_error"
+
+
 def test_an_unreadable_final_round_is_asked_once_more_on_its_session(store, caplog):
     replies = []
 
@@ -668,6 +891,78 @@ def test_a_stop_during_the_review_stops_the_reviewers_not_the_answer(store):
     assert {r["status"] for r in turn["agent_review"]["audit"]["reviewers"]} == {"stopped"}
 
 
+def step_mark(note):
+    """A live round that marks the newest step it read."""
+    return lambda messages: json.dumps({"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful",
+                                                   "note": note}]})
+
+
+@pytest.mark.parametrize("cause", ["stop", "interrupted"])
+def test_an_interruption_in_the_final_round_stops_the_review_with_its_live_marks(store, cause):
+    """A-R1 (2026-10-29): after the fixed answer an interruption of the run
+    (watch_error: a deploy past its grace time, saved state gone, the
+    watcher's stop) failed the turn, while the user's Stop completed it. A-M7:
+    either way the review keeps the live marks, as a failed final round does."""
+    from app.services.agent_background import SHUTDOWN_REASON
+    from app.services.agent_provider_limits import AgentRunInterrupted
+    script = Audit({"anthropic": "wait", "openai": "wait"}, tool_steps=1, live={"openai": step_mark("Unchecked.")})
+    loop = audit_loop(store, script)
+
+    def interrupt_in_the_final_round():
+        while sum(rounds.count("final") for rounds in script.rounds.values()) < 2:
+            time.sleep(.01)
+        if cause == "interrupted":
+            # As a shutdown does (routers/agent.py interrupt).
+            loop.watch_error = AgentRunInterrupted(SHUTDOWN_REASON)
+        loop.cancellation.cancel()
+    threading.Thread(target=interrupt_in_the_final_round, daemon=True).start()
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER and not turn.get("agent_failure")
+    review = turn["agent_review"]
+    assert review["status"] == "cancelled"
+    assert {r["status"] for r in review["audit"]["reviewers"]} == {"stopped"}
+    # The same fields and form as a partial review with live marks.
+    step = entry_of(script.prompts["openai"][:2], "step")
+    assert review["audit"]["claims"] == [] and review["audit"]["unplaced"] == []
+    assert [(p["model"], p["entry"], p["entry_kind"], p["note"], p["live"]) for p in review["audit"]["process"]] == [
+        ("OpenAI", step, "step", "Unchecked.", True)]
+
+
+def test_a_reviewer_thread_that_does_not_stop_is_named_and_left_behind(monkeypatch, caplog):
+    """A-R3 (2026-10-29): the run's end waited for every reviewer thread
+    without a limit, and a hung one held finish_run until the lease expired."""
+    from types import SimpleNamespace
+    monkeypatch.setattr(agent_audit, "REVIEWER_JOIN_SECONDS", .2)
+    release = threading.Event()
+    hung = threading.Thread(target=release.wait, name="agent-review-openai", daemon=True)
+    hung.start()
+    audit = agent_audit.AnswerAudit(SimpleNamespace(lock=threading.RLock()))
+    audit.sessions = {"openai": SimpleNamespace(thread=hung, requests=[])}
+    started = time.monotonic()
+    with caplog.at_level(logging.WARNING):
+        audit._stop()
+    assert time.monotonic() - started < 2
+    assert any("thread=agent-review-openai" in r.getMessage() for r in caplog.records)
+    release.set()
+
+
+def test_a_stop_before_the_review_starts_keeps_the_live_marks(store, monkeypatch):
+    script = Audit(tool_steps=1, live={"anthropic": step_mark("Too early.")})
+    loop = audit_loop(store, script)
+    capture = loop.comparison.capture
+
+    def stop_once_fixed(text):
+        capture(text)
+        loop.cancellation.cancel()
+    monkeypatch.setattr(loop.comparison, "capture", stop_once_fixed)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "cancelled"
+    assert [(p["model"], p["note"], p["live"]) for p in review["audit"]["process"]] == [
+        ("Anthropic", "Too early.", True)]
+
+
 def test_a_stop_before_the_review_starts_still_completes_the_answer(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)
@@ -714,6 +1009,59 @@ def test_a_completed_answer_never_keeps_a_review_that_says_reviewing(store, monk
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
     assert turn["agent_review"]["status"] == "failed"
+
+
+def test_the_turns_time_under_the_account_lock_is_measured(store):
+    """A-T5 (2026-10-29): up to six reviewers and the agent queue their claims
+    behind one lock per account; how much that costs was never measured."""
+    from app.core.observability import metrics_snapshot
+    from app.services import agent_quota
+    before = metrics_snapshot()
+    loop = audit_loop(store, Audit())
+    list(loop.run())
+    meter = store.lock_time()
+    # The fake database is faster than Windows' clock steps (16 ms): only the count is sure.
+    assert meter["calls"] > 0 and meter["held"] >= 0 and meter["waited"] >= 0
+    after = metrics_snapshot()
+    for name in ("waited", "held", "final_rounds"):
+        key = f"agent_account_lock:{name}"
+        assert after[key]["count"] == before.get(key, {}).get("count", 0) + 1
+    # A transaction behind another holder of the lock waits for it.
+    holding = threading.Event()
+
+    def hold():
+        with agent_quota.account_lock(UID):
+            holding.set()
+            time.sleep(.2)
+    threading.Thread(target=hold, daemon=True).start()
+    assert holding.wait(5)
+    waited = store.lock_time()["waited"]
+    store.repair_quota_period(UID, agent_quota.day_key())
+    assert store.lock_time()["waited"] - waited >= .15
+    assert store.lock_time()["longest_wait"] >= .15
+
+
+def test_a_crash_or_the_reaper_leaves_no_reviewer_at_work(store):
+    """A-R6 (2026-10-29): after a crash or reap finish_run set the review's
+    status, while single reviewers still said "running"."""
+    from datetime import datetime, timedelta, timezone
+    from test_agent_delegation import make_loop
+    from test_agent_runs import receipt
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    reviewers = [{"provider": "anthropic", "status": "completed", "marks": 0}, {"provider": "openai", "status": "running"},
+                 {"provider": "google", "status": "waiting"}]
+    store.save_review(*args, loop.run_token, {"version": 1, "status": "running", "mode": "audit", "comparisons": [],
+                                              "versions": [], "audit": {"reviewers": reviewers}}, "An answer.")
+    root = store.receipt_ref(*args)
+    store._transaction(lambda tx: tx.update(root, {"lease_until": datetime.now(timezone.utc) - timedelta(seconds=60)}))
+    store.reap_delegation(*args)
+    review = store.get_turn(*args)["agent_review"]
+    assert review["status"] == "cancelled"
+    assert [(r["provider"], r["status"], (r.get("failure") or {}).get("code")) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", None), ("openai", "failed", "run_interrupted"), ("google", "failed", "run_interrupted")]
 
 
 def test_memory_stays_open_while_the_agent_has_not_searched(store):
