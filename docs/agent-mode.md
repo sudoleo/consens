@@ -524,7 +524,10 @@ Antwortet der Server `409 hold_over` (anderswo entschieden, der Stream tot),
 geht die Karte (`holdDone`); bei der Key-Karte sagt ein Hinweis den Grund.
 Endet der Lauf mit einem Fehler (`failRun`), endet eine laufende Prüfung wie
 nach einem Reload (`failed`, `missing` vor dem Start), statt bis zum Neuöffnen
-„Reviewing the answer…“ zu zeigen.
+„Reviewing the answer…“ zu zeigen. Kommt ein zweiter Halt auf die offene Pause
+(derselbe `hold`-Frame mit weiteren `reasons`, Gegenstück zu A-S2), tauscht
+die Karte nur ihre Gründe (`reasonLines`, Zeilen mit `data-reason`): eine
+Entscheidung unterwegs und Worte in der Karte bleiben.
 
 **Vorab-Prüfung** (seit 2026-10-27, Max' Entscheidung nach der
 Harness-Kritik; seit 2026-10-29 nur noch zwei Arten): Ein Halt kommt erst nach

@@ -1634,6 +1634,47 @@
     field.append(input, note);
     return field;
   }
+  // Why the work waits, one line each (data-reason). A reviewer's pause: the
+  // reviewer's own sentence, already in the user's language; with several
+  // halting reviewers each one's, under its name. A domain request: what the
+  // reviewers made of it (no concern, their concern, or that not every one
+  // could look). A second halt on the open pause comes as the same pause
+  // with more `reasons` (A-S2): renderHold swaps these lines in place, so a
+  // decision on its way and words typed in the card stay.
+  function holdReasons(hold) {
+    return Array.isArray(hold.reasons) ? hold.reasons.filter(item => item && typeof item === "object") : [];
+  }
+  function reasonLines(hold) {
+    const listed = holdReasons(hold);
+    const line = (text, data, className = "agent-hold-reason") => {
+      const reason = document.createElement("p");
+      reason.className = className;
+      reason.dataset.reason = "";
+      if (data) reason.dataset.i18nSkip = "";
+      reason.textContent = text;
+      return reason;
+    };
+    const named = item => `${String(item.reviewer || "")}: ${String(item.reason || "")}`;
+    if (hold.domain) {
+      const domain = "agent-hold-reason agent-domain-review";
+      if (hold.review === "halt" || listed.length) {
+        return (listed.length ? listed : [{ reviewer: hold.reviewer, reason: hold.reason }]).map(item => line(named(item), true, domain));
+      }
+      return [line(hold.review === "go" ? "The reviewers see no problem with it."
+        : "Not every reviewer could check this request.", false, domain)];
+    }
+    // "unchecked": no reviewer stopped it, none could answer for it; a
+    // reviewer that halts on it later stands under its name.
+    if (hold.kind === "unchecked") {
+      return listed.length ? listed.map(item => line(named(item), true))
+        : [line("It acts outside the workspace and runs only if you let it.", false)];
+    }
+    if (listed.length > 1) return listed.map(item => line(named(item), true));
+    return [line(String(hold.reason || ""), true)];
+  }
+  function reasonsKey(hold) {
+    return JSON.stringify([hold.reason || "", hold.review || "", holdReasons(hold).map(item => [item.reviewer || "", item.reason || ""])]);
+  }
   function holdButton(label, className, onClick) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1703,26 +1744,7 @@
     const what = document.createElement("p");
     what.className = "agent-hold-reason";
     what.textContent = "The workspace reaches only package sources. If you allow it, the agent can reach this address for the rest of this chat.";
-    // What the reviewers made of it: no concern, their concern, or that not
-    // every one could look.
-    const review = [];
-    const reasons = Array.isArray(hold.reasons) && hold.reasons.length > 1 ? hold.reasons : null;
-    if (hold.review === "halt") {
-      for (const item of reasons || [{ reviewer: hold.reviewer, reason: hold.reason }]) {
-        const line = document.createElement("p");
-        line.className = "agent-hold-reason agent-domain-review";
-        line.dataset.i18nSkip = "";
-        line.textContent = `${String(item.reviewer || "")}: ${String(item.reason || "")}`;
-        review.push(line);
-      }
-    } else {
-      const line = document.createElement("p");
-      line.className = "agent-hold-reason agent-domain-review";
-      line.textContent = hold.review === "go" ? "The reviewers see no problem with it."
-        : "Not every reviewer could check this request.";
-      review.push(line);
-    }
-    alert.append(head, what, ...review);
+    alert.append(head, what, ...reasonLines(hold));
     card.append(alert);
     if (hold.domain_reason) {
       const box = document.createElement("figure");
@@ -1878,22 +1900,7 @@
     meta.append(...[kind, hold.reviewer ? reviewer : null, step].filter(Boolean));
     heading.append(title, meta);
     head.append(icon, heading);
-    // The reviewer's own sentence, already in the user's language; with
-    // several halting reviewers each one's, under its name.
-    const reasons = Array.isArray(hold.reasons) && hold.reasons.length > 1 ? hold.reasons : null;
-    const lines = unchecked ? [null] : reasons || [{ reason: hold.reason }];
-    alert.append(head, ...lines.map(item => {
-      const reason = document.createElement("p");
-      reason.className = "agent-hold-reason";
-      if (!item) {
-        reason.textContent = "It acts outside the workspace and runs only if you let it.";
-        return reason;
-      }
-      reason.dataset.i18nSkip = "";
-      reason.textContent = reasons ? `${String(item.reviewer || "")}: ${String(item.reason || "")}`
-        : String(item.reason || "");
-      return reason;
-    }));
+    alert.append(head, ...reasonLines(hold));
     card.append(alert);
     if (hold.step) card.append(holdEvidence(hold));
     const clock = document.createElement("p");
@@ -2000,9 +2007,20 @@
     }
     // A browser card's button follows who has the browser in this window.
     const key = hold.ask === "browser" ? `${hold.id}:${App.workspaceView?.holder?.() || ""}` : hold.id;
+    const reasons = reasonsKey(hold);
     if (host.dataset.id !== key) {
       host.dataset.id = key;
+      host.dataset.reasons = reasons;
       host.replaceChildren(holdCard(context, hold));
+    } else if (host.dataset.reasons !== reasons) {
+      // The same pause with another reason (a second halt, A-S2): only its
+      // lines change, the card with its decision and typed words stays.
+      host.dataset.reasons = reasons;
+      const old = [...host.querySelectorAll("[data-reason]")];
+      if (old.length) {
+        old[0].before(...reasonLines(hold));
+        for (const line of old) line.remove();
+      }
     }
     host.hidden = false;
     const clock = host.querySelector(".agent-hold-clock");

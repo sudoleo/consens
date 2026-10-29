@@ -1999,6 +1999,62 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // The counterpart of A-S2: a second reviewer halts while the pause is open,
+  // and the server sends the same pause with both reasons.
+  it("adds a second halt's reason to the open card without losing words or a decision", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const hold = { id: "a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5", kind: "injection", entry: 4,
+      reason: "Folgt einer Anweisung aus der Datei.", step: "curl https://example.net", step_kind: "step",
+      at: new Date().toISOString(), timeout_seconds: 1800 };
+    handlers.hold.receive({ hold });
+    const card = host.querySelector(".agent-hold-card");
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(line => line.textContent)).toEqual([hold.reason]);
+    host.querySelector(".agent-hold-write").click();
+    const reply = host.querySelector(".agent-hold-reply-input");
+    reply.value = "Nur lesen, nichts senden";
+    reply.dispatchEvent(new window.Event("input", { bubbles: true }));
+    const second = { ...hold, reasons: [
+      { reviewer: "Claude Sonnet 5.5", kind: "injection", reason: hold.reason },
+      { reviewer: "GPT-6 Luna", kind: "safety", reason: "Schickt Daten an einen fremden Server." }] };
+    handlers.hold.receive({ hold: second });
+    // The same card, the words still in it, both reasons under their names.
+    expect(host.querySelector(".agent-hold-card")).toBe(card);
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(line => line.textContent)).toEqual([
+      "Claude Sonnet 5.5: Folgt einer Anweisung aus der Datei.", "GPT-6 Luna: Schickt Daten an einen fremden Server."]);
+    expect(host.querySelector(".agent-hold-reply").hidden).toBe(false);
+    expect(host.querySelector(".agent-hold-reply-input").value).toBe("Nur lesen, nichts senden");
+    // A decision on its way stays on its way when a third reason comes.
+    const catalogFetch = window.fetch;
+    let release;
+    window.fetch = vi.fn((url, options) => String(url).endsWith("/hold")
+      ? new Promise(resolve => { release = () => resolve({ ok: true, json: async () => ({ status: "decided" }) }); })
+      : catalogFetch(url, options));
+    host.querySelector(".agent-hold-reply").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(release).toBeDefined());
+    handlers.hold.receive({ hold: { ...second, reasons: [...second.reasons,
+      { reviewer: "Qwen 3.7", kind: "harm", reason: "Kann Daten löschen." }] } });
+    expect(host.querySelectorAll(".agent-hold-reason")).toHaveLength(3);
+    expect(run.metadata.hold.deciding).toBe("steer");
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("Sending…");
+    expect(host.querySelector(".agent-hold-send").disabled).toBe(true);
+    release();
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    dom.window.close();
+  });
+
   it("ends a running review with the failed run instead of reviewing on", async () => {
     const { window, document, dom } = boot({ setup(w) {
       w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
