@@ -584,11 +584,13 @@
       const selected = new Set(turnInfo.fileIds || []);
       const readable = files.filter(file => selected.has(file.id) && partial(file));
       if (readable.length) resources.append(partialNotice(readable));
-      if (error) {
-        // Only worth a line when this answer's own files are missing.
-        const notice = node('div', 'agent-files-error');
-        notice.append(icon('warning'), node('span', '', `Couldn’t load this chat’s files. ${error}`));
-        const retry = node('button', 'agent-files-ghost', 'Retry'); retry.type = 'button';
+      if (error && selected.size) {
+        // Only worth a line when this answer's own files are missing: one
+        // quiet line, no surface and no technical reason, Retry as the text
+        // link (UX audit B13; before, a grey box under every answer).
+        const notice = node('p', 'agent-files-error');
+        notice.append(node('span', '', 'Files couldn’t load'), ' · ');
+        const retry = node('button', 'text-link', 'Retry'); retry.type = 'button';
         retry.addEventListener('click', () => refresh(chatId, true));
         notice.append(retry);
         resources.append(notice);

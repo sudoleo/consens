@@ -1004,23 +1004,24 @@ body.is-view-settle.is-watch-view .watch-page {
 /* --- The Watch and Share pills under an Agent answer (J20; Share since
    2026-10-21), same as under Consensus: Share follows Watch --- */
 .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.agent-watch-pill-row { display: flex; gap: 0 12px; margin: 10px 0 0 -8px; }
+/* Without an evidence row Watch and Share stand in a row of their own, the
+   same part at the same distances (agent-chat.css .agent-review; UX audit B1). */
+.agent-watch-pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); margin: var(--space-4) 0 0 -8px; }
 .agent-watch-pill-row :is(.agent-watch-pill, .agent-share-pill) { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 :is(.agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 15px; height: 15px; flex: none; }
 .watch-consensus-pill.is-watching { color: var(--ink); }
 /* Phones (2026-10-22): Watch and Share are two more cells of the evidence
-   row, drawn like its links (glyph over word, no surface), so an answer ends
-   in one toolbar row from edge to edge (agent-chat.css spreads it). 44px
-   wide at least, for the finger. */
-@media (max-width: 540px) {
+   row, drawn like its links (glyph over word, no surface), in its fixed
+   columns (agent-chat.css --cell). 44px wide at least, for the finger. */
+@media (max-width: 640px) {
   .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill),
   .agent-watch-pill-row > :is(.agent-watch-pill, .agent-share-pill) {
     display: grid; grid-template-rows: 16px auto; justify-items: center; align-content: start; gap: 5px;
-    flex: 0 0 auto; width: auto; min-width: 44px; min-height: 56px; height: auto; margin: 0; padding: 6px 0;
+    flex: 0 0 var(--cell); width: auto; min-width: 44px; min-height: 56px; height: auto; margin: 0; padding: 6px 0;
     /* The links' line height, so all five words sit on one baseline. */
     line-height: normal;
   }
-  .agent-watch-pill-row { gap: 16px; margin: 10px 0 0; }
+  .agent-watch-pill-row { margin-left: 0; }
   /* A watched question says "Watching" and fills the eye's pupil. */
   :is(.agent-review, .agent-watch-pill-row) > .agent-watch-pill.is-watching .share-pill-icon circle { fill: currentColor; }
 }

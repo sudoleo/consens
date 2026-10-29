@@ -170,9 +170,11 @@
 .agent-review-note-where { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; color: var(--ink-3); }
 .agent-review-note-where > * + *::before { content: "·"; margin-right: 6px; color: var(--ink-3); }
 .agent-review-note-where strong { font-weight: 600; color: var(--ink-2); }
-.agent-review-note[data-kind="wrong"] .agent-review-note-where strong { color: var(--dispute); }
-.agent-review-note[data-kind="doubtful"] .agent-review-note-where strong { color: var(--partial); }
-.agent-review-note-quote { display: block; margin-top: 1px; color: var(--ink-2); font-style: italic; quotes: "“" "”"; }
+.agent-review-note[data-kind="wrong"] .agent-review-note-where strong { color: var(--kind-wrong); }
+.agent-review-note[data-kind="doubtful"] .agent-review-note-where strong { color: var(--kind-doubtful); }
+/* The quote as in the reader (.agent-audit-quote): upright, in the page's
+   own quotation marks (UX audit D17). */
+.agent-review-note-quote { display: block; margin-top: 1px; color: var(--ink-2); }
 .agent-session-detail .agent-review-note-text { margin: 2px 0 0; color: var(--ink); }
 .agent-review-note-source { display: inline-block; margin-top: 2px; color: var(--ink-3); text-decoration: underline; text-underline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) { .agent-review-note-source:hover { color: var(--ink); } }
@@ -337,7 +339,14 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
   border-radius: var(--radius-2xs); font-size: var(--font-size-xs); white-space: nowrap;
 }
 :is(#agentModelsRetry, #agentRecover):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-.agent-answer { width: 100%; min-width: 0; padding: 22px 0; order: 4; }
+/* The turn's rhythm (UX audit B11), one step of the scale each: question to
+   "Thought for" --space-5, activity to text --space-3, text to the row under
+   it --space-4 (.agent-review), row to the next question --space-7
+   (shell.css .thread-history-turn.is-agent-turn). Live and history alike. */
+.agent-answer { width: 100%; min-width: 0; padding: 0; order: 4; }
+/* The live answer keeps the next question's distance to the composer at the
+   end of the page (in the history the turn's own margin takes it over). */
+body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
 .agent-answer[hidden] { display: none; }
 /* A class, not the ID: a failed turn that moved into the history (agent-chat.js
    liveTurn.take) keeps the look of its stop note (review B2). */
@@ -537,6 +546,14 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
 @media (hover: hover) and (pointer: fine) {
   .agent-evidence-links .agent-evidence-link:hover { background: var(--hover); color: var(--ink); }
 }
+/* Notes while the reviewers still work: in its place, quiet, not yet a way
+   (agent-review.js renderAudit; UX audit B3). */
+.agent-evidence-links .agent-evidence-link.is-pending { color: var(--ink-3); cursor: default; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-evidence-links .agent-evidence-link.is-pending:hover { background: transparent; color: var(--ink-3); }
+}
+/* "Read the notes" in the activity: glyph and word as in the row (D15). */
+.agent-activity-insight-actions .agent-activity-notes { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 .agent-evidence-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-composer-notice button:focus-visible, .agent-evidence-links .agent-evidence-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (pointer: coarse) {
@@ -556,7 +573,12 @@ body.single-agent-active #threadAsk:not([hidden]) { display: flex; }
 /* Consensus insets question and answer by 6px (shell.css); an Agent answer
    starts on the column's edge, so its question ends on the other one, where
    the composer ends. */
-body.single-agent-active .thread-ask { margin-inline: 0; }
+body.single-agent-active .thread-ask { margin: var(--space-2) 0 var(--space-5); }
+body.single-agent-active .thread-history:not([hidden]) + .thread-ask { margin-top: 0; }
+/* The empty Consensus section between question and answer (order 3) adds no
+   gap of its own: the question's margin is the whole distance, as in the
+   history (shell.css .thread-history-turn.is-agent-turn). */
+body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
 .attach-menu :is(button, label)[hidden] { display: none; }
 .attach-menu-item:disabled { opacity: .5; cursor: default; }
 #agentReasoningMenuOption .attach-menu-toggle-icon { flex: 0 0 16px; }
@@ -565,13 +587,32 @@ body.single-agent-active .thread-ask { margin-inline: 0; }
 
 .agent-model-picker .model-picker-display-text::before { content: none; }
 .agent-reasoning-option { border-top: 1px solid var(--line) !important; margin-top: 6px; padding-top: 12px !important; }
-.agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; margin: 18px 0 8px; color: var(--ink-2); font-size: var(--font-size-xs); }
+/* The row under an answer (UX audit 2026-10-29, B1-B11): one part for every
+   answer, whatever it holds (sources only, a comparison, a review, Watch and
+   Share), at fixed steps of the scale: --space-4 under the answer's text,
+   --space-3 between its cells, none below (the turn's own gap follows,
+   --space-7 to the next question, shell.css). A query on its own width
+   decides how it wraps, so an open Agent panel beside it counts too (B2). */
+.agent-review, .agent-watch-pill-row { container: agent-review / inline-size; }
+.agent-review { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); margin: var(--space-4) 0 0; color: var(--ink-2); font-size: var(--font-size-xs); }
 .agent-review[hidden], .agent-review-summary[hidden], .agent-review-status[hidden] { display: none; }
 /* One quiet row: the agreement score first, the evidence links after it.
    The summary line and the claims fallback keep their own full-width rows. */
-.agent-review > :not(.agent-evidence-links, .agent-agreement) { flex: 1 0 100%; }
+.agent-review > :not(.agent-evidence-links, .agent-agreement, .consensus-share-pill, .agent-review-status) { flex: 1 0 100%; }
 .agent-review > .agent-agreement { order: 1; }
-.agent-review > .agent-evidence-links { order: 2; margin-left: 0; }
+/* The first glyph on the answer's left edge: the link's own air goes
+   outside (B9), as for Watch and Share without a review. */
+.agent-review > .agent-evidence-links { order: 2; margin-left: -8px; }
+/* The review's state, where Watch and Share will stand: a quiet word at the
+   end of the row, no dot, no line of its own (B3, D8, D13). */
+.agent-review > .agent-review-status { order: 3; flex: 0 1 auto; min-width: 0; padding: 0 var(--space-1); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-review > .agent-review-status::before { content: none; }
+/* Too narrow for the score and every link in one line (an open Agent panel,
+   German): the score takes its own line above, as on a phone (B2). */
+@container agent-review (max-width: 720px) {
+  .agent-review > .agent-agreement { flex: 1 0 100%; }
+  .agent-review > .agent-agreement::after { content: none; }
+}
 /* The agreement score, discreet: row-sized type, only the number in the
    traffic-light ink, no meter, no tinted surface. Settings → Agreement score:
    "Summary only" swaps the number for the words, "Hidden" removes it. */
@@ -588,9 +629,13 @@ body.agreement-score-hidden .agent-agreement-level { display: inline; }
 body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Key claims (claims no inline mark could hold) read before the buttons, as
    a quiet list: text first, its model ratio right behind it. */
-.agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 10px; padding-top: 0; border-top: 0; }
-.agent-review .claims-fallback-title { margin-bottom: 4px; font-size: var(--font-size-xs); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
-.agent-review .claims-fallback-row { justify-content: flex-start; gap: 8px; padding: 2px 0; font-size: var(--font-size-ui); line-height: 1.5; color: var(--ink-2); }
+.agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 var(--space-3); padding-top: 0; border-top: 0; }
+/* A review's notes the text does not hold come under the row, not above it:
+   the row stands from the moment the answer is fixed (B3), and the end of the
+   review must not push its cells down. */
+.agent-review.is-audit > .consensus-claims-fallback { order: 4; margin: var(--space-3) 0 0; }
+.agent-review .claims-fallback-title { margin-bottom: var(--space-1); font-size: var(--font-size-xs); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+.agent-review .claims-fallback-row { justify-content: flex-start; gap: var(--space-2); padding: 2px 0; font-size: var(--font-size-ui); line-height: 1.5; color: var(--ink-2); }
 .agent-review .claims-fallback-row .claim-badge { margin: 0; }
 /* A reviewer's note whose words the answer does not hold (consensus-
    insights.js renderStoredAuditMarks): the whole line is the way to its
@@ -605,30 +650,32 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-review .claims-fallback-row.is-audit-note:focus-visible { outline: var(--focus-ring); outline-offset: 0; }
 @media (pointer: coarse) { .agent-review .claims-fallback-row.is-audit-note { min-height: 44px; padding-block: var(--space-3); } }
 .thread-history-footer[hidden] { display: none; }
-.agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
+.agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-2); }
 .agent-review-status { color: var(--ink-2); font-weight: 400; }
 .agent-review-status::before { content: ''; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--ink-3); }
 .agent-review-status[data-state="succeeded"]::before { background: var(--agree); }
 .agent-review-status:is([data-state="partial"], [data-state="failed"], [data-state="missing"])::before { background: var(--partial); }
-.agent-evidence-links { justify-content: flex-start; gap: 4px 12px; margin-left: -8px; }
+.agent-evidence-links { justify-content: flex-start; gap: var(--space-1) var(--space-3); margin-left: -8px; }
 .agent-evidence-link .consensus-tab-label { white-space: nowrap; }
-/* Phones: the evidence links take a full-width row of their own, so the
-   divider after the score would point at nothing. */
+/* Phones: one toolbar of fixed columns (2026-10-22; fixed columns since UX
+   audit B1/B7). The evidence links and the answer's Watch and Share
+   (components-watch.css) are its cells, each a glyph (with its count) over
+   a word, in equal columns from the left edge: every cell keeps its
+   place whatever the answer offers, so a row of two no longer spreads to
+   the edges, and Notes does not move when the review ends. The links' nav
+   steps aside (display: contents) so all share the row; the score keeps
+   its own line above, the review's state takes the free columns. Four
+   columns (a review: Notes, Sources, Watch, Share), five for a comparison's
+   three links: German words like „Anmerkungen“ need the width at 320px. */
 @media (max-width: 640px) {
-  .agent-review > .agent-agreement::after { content: none; }
-}
-@media (max-width: 540px) {
-  /* One toolbar row from edge to edge (2026-10-22): the evidence links and
-     the answer's Watch and Share (components-watch.css) are its cells, each
-     a glyph (with its count) over a word, the first on the left edge, the
-     last on the right, the rest spread evenly. The links' nav steps aside
-     (display: contents) so all five share the row; the score keeps its own
-     line above. Without Watch and Share, the links alone spread the same. */
-  .agent-review { justify-content: space-between; column-gap: 0; }
+  .agent-review, .agent-watch-pill-row { --cell: calc((100% - 3 * var(--space-3)) / 4); }
+  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) { --cell: calc((100% - 4 * var(--space-3)) / 5); }
   .agent-review > .agent-agreement { flex: 1 0 100%; }
+  .agent-review > .agent-agreement::after { content: none; }
   .agent-review > .agent-evidence-grid { display: contents; }
+  .agent-review > .agent-review-status { flex: 1 0 auto; align-self: flex-end; max-width: 100%; padding: 0 0 6px; line-height: normal; }
   /* width: Consensus' phone footer gives every .consensus-tab the row (shell.css). */
-  .agent-evidence-grid > .agent-evidence-link { order: 2; flex: 0 0 auto; width: auto; }
+  .agent-evidence-grid > .agent-evidence-link { order: 2; flex: 0 0 var(--cell); width: auto; }
   /* All links keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }
   .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 44px; min-height: 56px; padding: 6px 0; }
@@ -642,38 +689,50 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-evidence-panel { font-size: var(--font-size-ui); line-height: 1.7; overflow-wrap: anywhere; }
 /* A source the agent opened itself (read_source): metadata, not a link. */
 .agent-source-read { color: var(--ink-3); font-size: var(--font-size-xs); white-space: nowrap; }
-.agent-evidence-status { font-weight: 550; margin-top: 0; }
+.agent-evidence-status { font-weight: var(--font-weight-semibold); margin-top: 0; }
 .agent-evidence-context { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; color: var(--ink-2); }
 .agent-evidence-context > summary { cursor: pointer; color: var(--ink-3); min-height: 32px; }
 .agent-evidence-context p { white-space: pre-wrap; }
 .agent-review-note { color: var(--ink-3); line-height: 1.6; margin: 6px 0 12px; }
-/* Agent audit: each reviewer's notes in the reader (agent-review.js auditPanel). */
-.agent-audit-reviewer + .agent-audit-reviewer { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
-/* "Unmarked text means no objection" belongs to every reviewer below it, not
-   to the first one: a breath before their names. */
-.answer-reader-inspector .agent-audit-panel > .agent-review-note + .agent-audit-reviewer { margin-top: 16px; }
-.agent-audit-reviewer-name { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: var(--font-size-ui); font-weight: 550; }
-/* The model's logo at icon size: an SVG logo without its own size (Z.ai,
+/* Agent audit in the reader (agent-review.js auditPanel), passage by passage
+   in the order of the answer (UX audit D5): the status apart from what
+   follows (D9), the tally in the marks' colours, then each passage's words
+   once with every note on them. Sections part by a hairline that fades at
+   both ends (D10), as the card's ways do. */
+.agent-audit-panel > .agent-evidence-status { margin: 0 0 var(--space-4); }
+.agent-audit-tally { margin: 0; color: var(--ink-3); }
+.agent-audit-tally + .agent-review-note { margin: var(--space-1) 0 0; }
+.agent-audit-passage { padding-top: var(--space-4); }
+.agent-audit-passage + .agent-audit-passage, .agent-audit-group, .agent-audit-reviewers {
+  margin-top: var(--space-4); border-top: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--line-soft) 8px, var(--line-soft) calc(100% - 8px), transparent) 1;
+}
+.agent-audit-group, .agent-audit-reviewers { margin-top: var(--space-5); padding-top: var(--space-4); }
+.agent-audit-group > .agent-review-note { margin: 0; }
+.agent-audit-reviewers > .agent-review-note { margin: 0; }
+.agent-audit-reviewers > .agent-review-note + .agent-review-note { margin-top: var(--space-1); }
+.agent-audit-quote { display: block; margin: 0 0 var(--space-2); color: var(--ink-2); }
+.agent-audit-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.agent-audit-note { display: grid; gap: var(--space-1); }
+.agent-audit-note-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); color: var(--ink-2); font-size: var(--font-size-xs); }
+.agent-audit-by { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* The reviewer's logo at icon size: an SVG logo without its own size (Z.ai,
    Kimi, Qwen) otherwise fills the whole panel. */
-.agent-audit-reviewer-name > img { width: 18px; height: 18px; object-fit: contain; flex-shrink: 0; }
-.agent-audit-reviewer-name > .model-mark-fallback { width: 18px; height: 18px; flex-shrink: 0; }
-.agent-audit-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.agent-audit-note { display: grid; gap: 2px; }
-.agent-audit-kind { font-weight: 550; color: var(--ink-2); }
-/* The kind in the colour of its mark in the answer, as in the reviewer's
-   timeline (.agent-review-note): wrong red, doubtful amber. */
-.agent-audit-note[data-kind="wrong"] .agent-audit-kind { color: var(--dispute); }
-.agent-audit-note[data-kind="doubtful"] .agent-audit-kind { color: var(--partial); }
-.agent-audit-quote { color: var(--ink-2); }
+.agent-audit-by > :is(img, .model-mark-fallback) { width: 16px; height: 16px; object-fit: contain; flex: none; }
+.agent-audit-by + .agent-audit-kind::before { content: "·"; content: "·" / ""; margin-right: var(--space-2); color: var(--ink-3); font-weight: var(--font-weight-regular); }
+/* The kind in the colour of its mark in the answer, here, on the mark's card,
+   in the list under the answer and in the reviewer's timeline (D1). */
+.agent-audit-kind { font-weight: var(--font-weight-semibold); color: var(--kind-incomplete); }
+:is(.agent-audit-note, .agent-audit-kind)[data-kind="wrong"] .agent-audit-kind, .agent-audit-kind[data-kind="wrong"] { color: var(--kind-wrong); }
+:is(.agent-audit-note, .agent-audit-kind)[data-kind="doubtful"] .agent-audit-kind, .agent-audit-kind[data-kind="doubtful"] { color: var(--kind-doubtful); }
 .agent-audit-text { margin: 0; color: var(--ink); }
-.agent-audit-source { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.2em; justify-self: start; }
-.agent-audit-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* A note on the work: the log entry it concerns (#12 · Tool · read_source). */
-.agent-audit-work-head { margin: 14px 0 6px; font-size: var(--font-size-xs); font-weight: 550; color: var(--ink-3); }
-.agent-audit-entry { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
+/* Its source: the text link, a finger's height on a phone (D3, D16). */
+.agent-audit-source { justify-self: start; font-size: var(--font-size-xs); }
+/* "Other notes", "On the work": a section, not a label (D11). */
+.agent-audit-work-head { margin: 0 0 var(--space-1); color: var(--ink); font-size: var(--font-size-ui); font-weight: var(--font-weight-semibold); }
+.agent-audit-entry { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); min-width: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-audit-entry-seq { font-variant-numeric: tabular-nums; }
 .agent-audit-entry code { color: var(--ink-2); overflow-wrap: anywhere; }
-.agent-audit-live { color: var(--ink-3); font-style: italic; }
 .agent-review :is(select, button):focus-visible, .agent-evidence-context > summary:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 @media (max-width: 400px) {
   .agent-model-picker .model-picker-display-text::before { content: ''; }
@@ -698,7 +757,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    the height: the answer jumped up and back down on every open and close.
    The answer's first child has no top margin, so nothing moves at rest. */
 .agent-answer-activity { display: flow-root; }
-.agent-activity { margin: 0 0 18px; color: var(--ink-2); font-size: var(--font-size-ui); }
+.agent-activity { margin: 0 0 var(--space-3); color: var(--ink-2); font-size: var(--font-size-ui); }
 .agent-activity > summary {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
   min-height: 36px; padding: 4px 4px 4px 0; box-sizing: border-box; list-style: none;
@@ -1052,13 +1111,14 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    place without a jump, its quiet ink and size, no motion of its own. The
    text sits in the row's first line: the agreement score and the links on
    one row, on phones the score above the grid of links. */
-.agent-check-status { min-height: 36px; margin: 18px 0 8px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 36px; }
+.agent-check-status { min-height: 36px; margin: var(--space-4) 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 36px; }
 @media (pointer: coarse) {
   .agent-check-status { min-height: 44px; line-height: 44px; }
 }
-@media (max-width: 540px) {
+@media (max-width: 640px) {
   .agent-check-status { min-height: 92px; line-height: 36px; }
-  body.agreement-verdict-hidden .agent-check-status { min-height: 56px; line-height: 56px; }
+  /* No score above a review's cells: the row is one line of cells. */
+  body.agreement-verdict-hidden .agent-check-status, .agent-check-status.is-audit { min-height: 56px; line-height: 56px; }
 }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {

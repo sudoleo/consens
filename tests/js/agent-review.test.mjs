@@ -874,9 +874,14 @@ it('marks a reviewed answer with its reviewers\' notes, without a score or diffe
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
   expect(w.renderStoredDifferenceCards).not.toHaveBeenCalled();
   expect(d.querySelector('.agent-agreement')).toBeNull();
-  expect(d.querySelector('.agent-review-status').textContent).toBe('2 of 3 models reviewed the answer');
+  // A partial review: a quiet word at the end of the row, no line of its own (D13).
+  const status = d.querySelector('.agent-review > .agent-review-status');
+  expect(status.textContent).toBe('2 of 3 reviewed');
+  expect(status.classList.contains('visually-hidden')).toBe(false);
   const buttons = [...d.querySelectorAll('.agent-evidence-link')];
   expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 2', 'Sources 1']);
+  // The reviewers' own glyph, not the comparison's fork (B10).
+  expect(buttons[0].querySelector('path').getAttribute('d')).toContain('M4 5h16v11');
   buttons[0].click();
   const [context, options] = w.App.answerReader.openContext.mock.calls.at(-1);
   expect(options.section).toBe('differences');
@@ -886,8 +891,10 @@ it('marks a reviewed answer with its reviewers\' notes, without a score or diffe
   expect(panel.textContent).toContain('Unmarked text means no objection, not confirmed.');
   expect(panel.textContent).toContain('It is not exact.');
   expect(panel.textContent).toContain('Missing context.');
-  expect(panel.textContent).toContain('No objections.');
-  expect(panel.textContent).toContain('No review: its review could not be read.');
+  expect(panel.textContent).toContain('No objections from Claude.');
+  expect(panel.textContent).toContain('No review from Gemini: its review could not be read.');
+  // The tally in the order of seriousness, one phrase each (D5).
+  expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => span.textContent)).toEqual(['1 wrong', '1 incomplete']);
   expect(panel.querySelector('a.agent-audit-source').href).toBe('https://example.org/proof');
   // Opening the notes from a mark's card leads to the same panel.
   w.renderStoredAuditMarks.mock.calls[0][4].openNotes();
@@ -906,9 +913,9 @@ it('names a reviewer that called a tool or replied empty, never as a provider fa
   w.App.agentReview.render(body, review, { sources: [], question: 'Q', key: 't1' });
   d.querySelector('.agent-evidence-link').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  expect(panel.textContent).toContain('No review: its reply was empty.');
-  expect(panel.textContent).toContain('No review: it called a tool instead of giving its review.');
-  expect(panel.textContent).toContain('No review: the run was interrupted.');
+  expect(panel.textContent).toContain('No review from Claude: its reply was empty.');
+  expect(panel.textContent).toContain('No review from Gemini: it called a tool instead of giving its review.');
+  expect(panel.textContent).toContain('No review from Grok: the run was interrupted.');
   dom.window.close();
 });
 it('waits with the marks until every reviewer is done, and never marks another text', () => {
@@ -916,14 +923,25 @@ it('waits with the marks until every reviewer is done, and never marks another t
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   w.App.agentReview.render(body, auditReview('running'));
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
-  expect(d.querySelector('.agent-review').hidden).toBe(true);
+  // The row stands while the reviewers work, as it will: Notes waiting in
+  // grey, the state where Watch and Share will stand (B3).
+  const row = d.querySelector('.agent-review');
+  expect(row.hidden).toBe(false);
+  const waiting = row.querySelector('.agent-evidence-link');
+  expect([waiting.disabled, waiting.classList.contains('is-pending'), waiting.textContent]).toEqual([true, true, 'Notes']);
+  const status = row.querySelector('.agent-review-status');
+  expect(status.textContent).toBe('Reviewing the answer…');
   body.dataset.markdown = 'Changed answer.';
   w.App.agentReview.render(body, auditReview('succeeded'));
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  expect(row.hidden).toBe(true);
   body.dataset.markdown = 'Exact answer.';
   w.App.agentReview.render(body, auditReview('succeeded'));
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
-  expect(d.querySelector('.agent-review-status').hidden).toBe(true);
+  // The same live region says the result, for screen readers only (H5).
+  expect(row.querySelector('.agent-review-status')).toBe(status);
+  expect(status.textContent).toBe('Review finished: 2 notes');
+  expect([status.hidden, status.classList.contains('visually-hidden')]).toEqual([false, true]);
   dom.window.close();
 });
 it('shows the review in the duration disclosure and opens its notes', () => {
@@ -938,10 +956,12 @@ it('shows the review in the duration disclosure and opens its notes', () => {
   expect(reserved.querySelector('button').disabled).toBe(true);
   w.App.agentReview.renderActivity(details, auditReview(), 'Exact answer.');
   expect(details.querySelector('.is-reserved')).toBeNull();
-  expect(details.textContent).toContain('Review · 3 models');
-  expect(details.textContent).toContain('Models: GPT, Claude, Gemini');
+  expect(details.textContent).toContain('Review · 3 reviewers');
+  expect(details.textContent).toContain('Reviewers: GPT, Claude, Gemini');
   expect(details.textContent).toContain('No review: Gemini');
-  expect(details.textContent).toContain('2 marked passages');
+  // The row's number, and "marked" only for what is coloured in the text (B5).
+  expect(details.querySelector('.agent-activity-check').textContent).toBe('2 notes · 1 passage marked in the text');
+  expect(details.querySelector('button .agent-evidence-icon')).not.toBeNull();
   details.querySelector('button').click();
   const [context, options] = w.App.answerReader.openContext.mock.calls.at(-1);
   expect(context.key).toBe('agent-audit:audit-hash');
@@ -962,10 +982,11 @@ it('counts and lists a mark over several sentences once', () => {
   expect(buttons[0].getAttribute('aria-label')).toBe('Notes 1');
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  expect([...panel.querySelectorAll('.agent-audit-note')].map(n => n.querySelector('q').textContent)).toEqual(['First one. Second']);
+  expect([...panel.querySelectorAll('.agent-audit-passage')].map(n => n.querySelector('q').textContent)).toEqual(['First one. Second']);
+  expect(panel.querySelectorAll('.agent-audit-note')).toHaveLength(1);
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, review, 'Exact answer.');
-  expect(details.textContent).toContain('1 marked passage');
+  expect(details.querySelector('.agent-activity-check').textContent).toBe('1 note · 2 passages marked in the text');
   dom.window.close();
 });
 it('lists the notes on the work with their log entry, also those of a failed final round', () => {
@@ -983,27 +1004,31 @@ it('lists the notes on the work with their log entry, also those of a failed fin
   expect(buttons[0].getAttribute('aria-label')).toBe('Notes 4');
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  const [openai, , gemini] = panel.querySelectorAll('.agent-audit-reviewer');
-  expect(openai.querySelector('.agent-audit-work-head').textContent).toBe('On the work');
-  const work = openai.querySelectorAll('.agent-audit-notes')[1];
+  // Passage by passage, then the notes elsewhere, then those on the work (D5).
+  const groups = [...panel.querySelectorAll('.agent-audit-group')];
+  expect(groups.map(group => group.querySelector('.agent-audit-work-head').textContent)).toEqual(['Other notes', 'On the work']);
+  const work = groups[1].querySelectorAll('.agent-audit-note');
+  // The most serious first, each with its reviewer and kind.
+  expect([...work].map(note => [note.dataset.kind, note.querySelector('.agent-audit-by > span:last-child').textContent])).toEqual([
+    ['wrong', 'Gemini'], ['doubtful', 'GPT']]);
   // The step in the activity's words; the log's number and name for admins only.
   w.App.agentActivity = { toolName: name => ({ read_source: 'Read source' })[name] || 'Tool' };
   const again = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  const entry = again.querySelectorAll('.agent-audit-reviewer')[0].querySelectorAll('.agent-audit-notes')[1]
+  const entry = [...again.querySelectorAll('.agent-audit-group')][1].querySelectorAll('.agent-audit-note')[1]
     .querySelector('.agent-audit-entry');
   expect([...entry.children].map(el => [el.textContent, el.classList.contains('admin-only')])).toEqual([
     ['Read source', false], ['#9', true], ['read_source', true]]);
   // Without the activity's words, the log's kind names it.
-  expect(work.querySelector('.agent-audit-entry').firstChild.textContent).toBe('Tool');
-  expect(work.textContent).toContain('The lookup names no source.');
-  // Its final round failed: its notes from the run stand, marked as such.
-  expect(gemini.textContent).toContain('No final review: its review could not be read.');
-  expect(gemini.querySelector('.agent-audit-entry').firstChild.textContent).toBe('Agent step');
-  expect(gemini.querySelector('.agent-audit-live').textContent).toBe('During the run');
-  expect(gemini.textContent).toContain('The step skipped the file.');
+  expect(work[1].querySelector('.agent-audit-entry').firstChild.textContent).toBe('Tool');
+  expect(work[1].textContent).toContain('The lookup names no source.');
+  // Its final round failed: its notes from the run stand, its reason once.
+  expect(panel.textContent).toContain('No final review from Gemini: its review could not be read.');
+  expect(work[0].querySelector('.agent-audit-entry').firstChild.textContent).toBe('Agent step');
+  expect(panel.querySelector('.agent-audit-live')).toBeNull();
+  expect(work[0].textContent).toContain('The step skipped the file.');
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, review, 'Exact answer.');
-  expect(details.querySelector('.agent-activity-check').textContent).toBe('2 marked passages · 2 notes on the work');
+  expect(details.querySelector('.agent-activity-check').textContent).toBe('4 notes · 1 passage marked in the text');
   dom.window.close();
 });
 it('ends the review in the disclosure when it was stopped or never started, and keeps the answer complete', () => {
@@ -1043,17 +1068,18 @@ it('offers the notes of a stopped review that kept findings from the run', () =>
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  const [gpt, mimo] = panel.querySelectorAll('.agent-audit-reviewer');
-  expect(gpt.textContent).toContain('No final review: the review was stopped.');
-  expect(gpt.querySelector('.agent-audit-live').textContent).toBe('During the run');
-  expect(gpt.textContent).toContain('The command deleted more than asked.');
+  // Stopped: said once, above; a reviewer's own reason only where it differs (D7).
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('Stopped – these notes came while the agent was working.');
+  expect(panel.textContent).not.toContain('the review was stopped');
+  expect(panel.textContent).toContain('The command deleted more than asked.');
   // A reply without its review has its own words (A-M6).
-  expect(mimo.textContent).toContain('No review: its reply was empty.');
+  expect(panel.textContent).toContain('No review from MiMo: its reply was empty.');
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, stopped, 'Partial text');
   expect(details.textContent).toContain('Review stopped');
   const read = details.querySelector('.agent-activity-insight-actions button');
   expect(read.textContent).toBe('Read the notes');
+  expect(read.querySelector('.agent-evidence-icon')).not.toBeNull();
   expect(read.disabled).toBe(false);
   read.click();
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
@@ -1080,25 +1106,89 @@ it('offers the notes of a run stopped before it wrote any answer', () => {
       claims: [], unplaced: [],
       process: [{ model: 'OpenAI', kind: 'doubtful', note: 'The lookup names no source.', entry: 7,
         entry_kind: 'step', entry_name: 'openai/gpt', mark: 1, live: true }] } };
+  // The stop notice and Retry first, the notes after them (B8).
+  const notice = d.createElement('p'); notice.className = 'agent-answer-error'; notice.textContent = 'Stopped.';
+  body.after(notice);
   w.App.agentReview.render(body, stopped, { key: 't1', question: 'Q' });
   expect(body.textContent).toBe('');
-  expect(d.querySelector('.agent-review').hidden).toBe(false);
-  expect(d.querySelector('.agent-review-status').textContent).toBe('Review stopped');
+  const row = d.querySelector('.agent-review');
+  expect(row.hidden).toBe(false);
+  expect(row.previousElementSibling).toBe(notice);
+  // The notice says it: no status line of the row's own.
+  expect(row.querySelector('.agent-review-status').hidden).toBe(true);
   const buttons = [...d.querySelectorAll('.agent-evidence-link')];
   expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 1']);
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  const [gpt, claude] = panel.querySelectorAll('.agent-audit-reviewer');
-  expect(gpt.textContent).toContain('No final review: the review was stopped.');
-  expect(gpt.textContent).toContain('The lookup names no source.');
-  expect(gpt.querySelector('.agent-audit-live').textContent).toBe('During the run');
-  expect(claude.textContent).toContain('No review: the review was stopped.');
-  // Without an answer the turn's own stop notice stands, not "may be incomplete".
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('Stopped – these notes came while the agent was working.');
+  expect(panel.textContent).toContain('The lookup names no source.');
+  expect(panel.textContent).not.toContain('the review was stopped');
+  // Without an answer the turn's own stop notice stands, not "may be incomplete";
+  // a stop of the user's says once what the reviewers found by then (B8).
   expect(w.App.agentReview.failureNote({ error: 'Response stopped.' }, stopped, '')).toBe('Response stopped.');
+  expect(w.App.agentReview.failureNote({ code: 'cancelled', error: 'Response stopped.' }, stopped, ''))
+    .toBe('Stopped. The reviewers had 1 note by then.');
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, stopped, '');
   expect(details.textContent).toContain('Review stopped');
   expect(details.querySelector('.agent-activity-insight-actions button').disabled).toBe(false);
+  dom.window.close();
+});
+// UX audit B4: a review without a single note says so in the row itself;
+// a failed one offers its reasons under Notes, without a number.
+it('says "No objections" in the row when the reviewers found nothing, and no number for a failed review', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const clean = auditReview('succeeded');
+  clean.audit.claims = []; clean.audit.unplaced = [];
+  w.App.agentReview.render(body, clean);
+  const cell = d.querySelector('.agent-evidence-link');
+  expect([cell.textContent, cell.dataset.section]).toEqual(['No objections', 'differences']);
+  expect(cell.querySelector('path').getAttribute('d')).toBe('M5 12.5l4.5 4.5L19 7');
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Review finished: no objections');
+  const failed = auditReview('failed');
+  failed.audit.reviewers = failed.audit.reviewers.map(r => ({ ...r, status: 'failed', failure: { code: 'no_time' } }));
+  failed.audit.claims = []; failed.audit.unplaced = [];
+  w.App.agentReview.render(body, failed);
+  const notes = d.querySelector('.agent-evidence-link');
+  expect([notes.textContent, notes.getAttribute('aria-label')]).toEqual(['Notes', 'Notes']);
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Not reviewed – the reviewers did not finish');
+  notes.click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  // One reason for all three, in one line.
+  expect([...panel.querySelectorAll('.agent-audit-reviewers p')].map(p => p.textContent))
+    .toEqual(['No review from GPT, Claude, Gemini: it ran out of time.']);
+  dom.window.close();
+});
+// UX audit B1: the row of an answer with sources only is the same part as a
+// review's row (its phone grid needs .agent-evidence-grid).
+it('builds the sources-only row like every other row under an answer', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Plain answer.';
+  w.App.agentReview.render(body, null, { sources: [{ url: 'https://example.org', title: 'Source' }], key: 't1', question: 'Q' });
+  const nav = d.querySelector('.agent-review > nav');
+  expect([...nav.classList]).toEqual(['consensus-footer-tabs', 'agent-evidence-links', 'agent-evidence-grid']);
+  expect(d.querySelector('.agent-review').getAttribute('aria-label')).toBe('Answer evidence');
+  dom.window.close();
+});
+// UX audit B6: an audited turn in the history keeps its reviewers beside
+// "Thought for …", as the live turn shows them; each opens the notes.
+it('puts the reviewers of an audited turn in the history beside its "Thought for" line', () => {
+  const {window: w, document: d, dom} = setup();
+  const answer = d.querySelector('section');
+  const activity = d.createElement('div');
+  activity.innerHTML = '<details class="agent-activity"><summary>Thought for 1m</summary></details>';
+  answer.prepend(activity);
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  body.classList.add('thread-history-answer-body');
+  w.App.agentReview.render(body, auditReview('succeeded'));
+  const models = activity.querySelectorAll('summary > .agent-history-models .agent-inline-model');
+  expect([...models].map(button => button.getAttribute('aria-label'))).toEqual(['Notes from GPT', 'Notes from Claude', 'Notes from Gemini']);
+  models[1].click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
+  // Another render keeps one row of them.
+  w.App.agentReview.render(body, { ...auditReview('succeeded'), answer_hash: 'audit-hash' });
+  expect(activity.querySelectorAll('.agent-history-models')).toHaveLength(1);
   dom.window.close();
 });

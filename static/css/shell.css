@@ -1882,7 +1882,10 @@ body.dark-mode .run-provenance {
     grid-column: 2;
   }
 
-  .consensus-footer-tabs {
+  /* The row under an Agent answer has its own phone grid (agent-chat.css
+     .agent-evidence-grid): stretched here, a lone "Sources" took the whole
+     width and Watch and Share fell to the edges below (UX audit B1). */
+  .consensus-footer-tabs:not(.agent-evidence-links) {
     display: grid;
     grid-template-columns: none;
     grid-auto-flow: column;
@@ -1891,7 +1894,7 @@ body.dark-mode .run-provenance {
     width: 100%;
   }
 
-  .consensus-tab {
+  .consensus-tab:not(.agent-evidence-link) {
     width: 100%;
     min-width: 0;
     min-height: 44px;
@@ -2544,19 +2547,25 @@ body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-sectio
 /* An Agent turn in the history keeps the live turn's boxes to the pixel:
    when a follow-up starts, the live question and answer move up into the
    history as they are (agent-chat.js liveTurn), and a reopened chat builds
-   the same boxes. The question keeps .thread-ask's margins; the answer keeps
-   .agent-answer's padding, and its 16px top margin stands in for the empty
-   .consensus-section (order 3) that separates them in the live turn. */
+   the same boxes. Both keep one rhythm from the spacing scale (UX audit
+   B11): --space-5 from the question to its answer (the live turn's empty
+   .consensus-section adds nothing in Agent mode, agent-chat.css), --space-7
+   from the row under the answer to the next question. */
 .thread-history-turn.is-agent-turn {
   gap: 0;
+  margin-bottom: var(--space-7);
 }
 
 .thread-history-turn.is-agent-turn > .thread-history-question {
-  margin: 10px 0 18px;
+  margin: 0 0 var(--space-5);
+}
+
+.thread-history-turn.is-agent-turn:first-child > .thread-history-question {
+  margin-top: var(--space-2);
 }
 
 .thread-history-turn.is-agent-turn > .thread-history-answer {
-  margin: 16px 0 0;
+  margin: 0;
 }
 
 .thread-history-answer-label {

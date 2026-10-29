@@ -29,7 +29,9 @@ describe("activity clock", () => {
     activity.render(host, { running: false, elapsedMs: 72000, status: "succeeded", events: [] });
     expect(title.textContent).toBe("Thought for 1m 12s");
     expect(time.dataset.unit).toBe("minutes");
-    expect(verb.dataset.ghost).toBe("Working for");
+    // A settled time keeps its own width: the wider ghost left a German
+    // "Fertig nach" a double gap before the time (UX audit B14).
+    expect(verb.dataset.ghost).toBeUndefined();
     activity.render(host, { running: false, elapsedMs: 72000, status: "failed", events: [] });
     expect(title.textContent).toBe("Failed after 1m 12s");
     expect(verb.dataset.ghost).toBeUndefined();

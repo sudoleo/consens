@@ -660,7 +660,8 @@
     body._checkStatus = null;
     if (!checking) return;
     const line = document.createElement('p');
-    line.className = 'agent-check-status';
+    // Audit: as tall as the review's row (no score line above it on a phone).
+    line.className = audit ? 'agent-check-status is-audit' : 'agent-check-status';
     line.setAttribute('role', 'status');
     line.textContent = words;
     // Under the answer's pictures, where the evidence row will stand.
@@ -888,8 +889,12 @@
     setAnswerChecking(answerBody, checking, { audit: liveReview?.mode === 'audit'
       || (!liveReview && context.config.agentPreferences?.audit === 'on') });
     if (checking) context.metadata.revealMarks = true;
-    if (!running || framed || checked) {
-      const live = running && !checked;
+    // In audit mode the row under the fixed answer stands while the reviewers
+    // work, Notes waiting and Sources already counted (agent-review.js; UX
+    // audit B3): the end of the review changes a word, not the row.
+    const reviewing = fixed && liveReview?.mode === 'audit';
+    if (!running || framed || checked || reviewing) {
+      const live = running && !checked && !reviewing;
       App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
           key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });

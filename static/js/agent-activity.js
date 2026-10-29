@@ -177,7 +177,9 @@
     if (verbEl.textContent !== window.App.t(verb)) verbEl.textContent = verb;
     // The other verb stands invisibly in the same cell (agent-chat.css), so
     // the field is as wide as the wider one; it is no text of the title.
-    const paired = verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : verb === SETTLED_VERBS.done ? SETTLED_VERBS.running : "";
+    // Only while the clock ticks: a settled time keeps its own width, or a
+    // German "Fertig nach" stood a wider ghost's gap before the time (UX audit B14).
+    const paired = !running ? "" : verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : verb === SETTLED_VERBS.done ? SETTLED_VERBS.running : "";
     const holder = verbEl.parentElement;
     if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
     view.title.querySelector(".agent-activity-gap").textContent = time ? " " : "";

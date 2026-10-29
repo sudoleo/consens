@@ -4807,9 +4807,13 @@ davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
 `#agentAnswerBody`. Seit 2026-10-21 steht dabei an der Stelle der späteren
 Evidenzzeile die leise Statuszeile `p.agent-check-status` („Checking the
 answer…“, `App.words.checking`, `role="status"`; Ränder und Höhe wie
-`.agent-review`: 36 px, 44 px bei `pointer: coarse`, bis 540 px 92 px bzw.
-56 px ohne Agreement-Score), die einzige Anzeige bei reduced-motion und
-forced-colors; die Evidenzzeile ersetzt sie im selben Render. Der Prüfzustand
+`.agent-review`: 36 px, 44 px bei `pointer: coarse`, bis 640 px 92 px bzw.
+56 px ohne Agreement-Score und im Audit, `.is-audit`), die einzige Anzeige bei reduced-motion und
+forced-colors; die Evidenzzeile ersetzt sie im selben Render. Im Audit-Modus
+rendert `project` die Leiste schon, sobald die Review die fixierte Antwort als
+Version hält (`reviewing`): `renderAudit` baut sie dann mit wartendem „Notes“
+und „Reviewing the answer…“ am Ende und nimmt `body._checkStatus` weg
+(UX-Audit 2026-10-29, B3). Der Prüfzustand
 beginnt mit dem letzten Wort: `_step` sendet das SSE-Ereignis `answer_check`
 (live, nie gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
 (Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
@@ -5258,10 +5262,29 @@ oder im Antwortleser. Folgefragen verwenden direkt den Composer, ohne
 zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
 gibt Contradictions/Review, Answers und Sources dieselbe dezente Icon-Gestaltung
 und lesbare ARIA-Namen samt Anzahl; der Antwortleser-Vertrag bleibt unverändert.
-Bis 540 px stehen die Vergleichsaktionen in gleich breiten Spalten mit
-Icon/Anzahl über dem Label (`grid-auto-columns`: drei, ohne Review bei
-ausgeschalteter Antwortprüfung zwei). Einzelne Quellenaktionen ohne Vergleich bleiben
-kompakt. Die Gestaltung gilt auch für gespeicherte und archivierte Antworten.
+**Die Leiste unter einer Agent-Antwort ist ein Bauteil** (UX-Audit
+2026-10-29, B1–B11): `section.agent-review` mit `evidenceNav()`
+(`consensus-footer-tabs agent-evidence-links agent-evidence-grid`) für
+Nur-Quellen, Vergleich und Audit; Watch und Teilen hängen sich dahinter
+(`watch.js`, `share-dialog.js`), ohne Leiste in `.agent-watch-pill-row`, die
+dieselben Abstände trägt. Abstände aus der Skala (`foundation.css`
+`--space-*`): `--space-4` vom Antworttext, `--space-3` zwischen den Zellen,
+die erste Glyphe auf der Textkante (`margin-left: -8px`). Eine
+Container-Query auf der Leiste (`container: agent-review`, ≤ 720 px) stellt
+den Score in eine eigene Zeile darüber, damit die Links auch neben der
+offenen Agent-Leiste einzeilig bleiben. Bis 640 px sind die Zellen ein Raster
+fester Spalten (`--cell`: vier, fünf bei einem Vergleich mit Answers), Glyphe
+und Anzahl über dem Wort, links beginnend; die Telefonregeln von
+`shell.css` für `.consensus-footer-tabs`/`.consensus-tab` gelten nicht für
+`.agent-evidence-links`. Der Status einer Prüfung steht als leises Wort am
+Ende der Leiste (`.agent-review > .agent-review-status`). Ohne Antworttext
+setzt `placeRow` die Leiste hinter Meldung und Retry (B8). Compare-Antworten
+enden in derselben Leiste (`model-answer-reader.js` `directFooter`: Sources
+mit Anzahl klappt die Liste auf, Copy), in der Typografie der Antwort (17 px/1.7).
+Die Gestaltung gilt auch für gespeicherte und archivierte Antworten; der
+Rhythmus eines Agent-Turns (Frage → „Thought for“ `--space-5`, Aktivität →
+Text `--space-3`, Leiste → nächste Frage `--space-7`) ist live und im
+Verlauf derselbe.
 
 **UI-Verträge.** agent-activity.js zeigt die Laufzeit in der Überschrift des
 standardmäßig geschlossenen Disclosures. Live zählt sie sekündlich ab dem Start
@@ -7340,7 +7363,15 @@ dekorative Quellen-Favicons nutzen den bestehenden `/api/topics/favicon?d=`-Prox
 
 `#modelAnswerReader` ist eine einzige Leseflaeche: inline in `.response-section`
 beim Direktvergleich, sonst in einem nativen `dialog` ausserhalb `.container`.
-Der Direktvergleich zeigt alle Modelle ohne Auswahl-Tabs und ohne aeusseren Rahmen.
+Der Direktvergleich zeigt alle Modelle ohne Auswahl-Tabs und ohne aeusseren Rahmen;
+jede Antwort liest sich in der Typografie der Agent-Antwort (17 px/1.7) und endet in
+deren Leiste (`directFooter`: Sources mit Anzahl klappt die Quellenliste auf, Copy;
+UX-Audit 2026-10-29, B12). Ein Kontext ohne Modellantworten (Notes und Sources
+einer Agent-Antwort) oeffnet von 1100 bis 1399 px (darunter fuellt der Leser den
+Schirm, darueber dockt er an) als Blatt nach Inhalt (`.is-compact`,
+hoechstens 720 px breit und 80 % hoch), mit der Frage als Titel (D6); Quellenzeilen
+tragen keine Nummer mehr, der Pfeil steht auf der ersten Titelzeile (D12); das
+Kreuz ist `.close-button` (J1).
 Der Ergebnis-Kopf bleibt verborgen; der Composer zeigt den Bereitschaftsstatus
 („6 of 6 ready“; seit 2026-10-25 ohne „Shown: Compare result“, Agent hat einen
 eigenen Composer). Nur die leere
