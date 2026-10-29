@@ -143,6 +143,42 @@ def test_reaped_session_preserves_confirmed_duration_without_growing_after_reloa
     assert first['ended_at'] == again['ended_at']
 
 
+def test_an_audit_reviewers_call_counts_at_half_weight_in_the_allowance(store):
+    """A-K2: a reviewer's reservation, its charge and its receipt take
+    AUDIT_REVIEWER_QUOTA_WEIGHT of its tokens, cache reads at a quarter on
+    top; other sessions count in full. The kind of the session alone is
+    enough, and so is the round of a reviewer call."""
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    reviewer, judge = 'a' * 32, 'b' * 32
+    for aid, kind in ((reviewer, 'audit'), (judge, 'judge')):
+        store.publish_agent(*args, run_token=loop.run_token, agent_id=aid, patch={
+            'assignment': {'goal': 'Check'}, 'status': 'working', 'kind': kind})
+    usage = {'input_tokens': 1000, 'output_tokens': 100, 'cached_input_tokens': 800}
+    for aid in (reviewer, judge):
+        before = agent_quota.snapshot(store.db, UID)['reserved']
+        assert store.claim(*args, loop.model, step=f'agent:{aid}:0', run_token=loop.run_token,
+                           policy=loop.policy.snapshot(), reservation=(3001, 100))
+        reserved = agent_quota.snapshot(store.db, UID)['reserved'] - before
+        assert reserved == (1501 if aid == reviewer else 3001)
+        value = AgentCompletion()
+        value.usage, value.finish_reason = dict(usage), 'stop'
+        store.settle(*args, completion=value, status='succeeded', step=f'agent:{aid}:0', final=False)
+    receipts = {aid: store.receipt_ref(*args, f'agent:{aid}:0').get().to_dict() for aid in (reviewer, judge)}
+    # 200 fresh + 800 cached at a quarter + 100 output = 500, the reviewer's at half.
+    assert receipts[judge]['quota_charged'] == 500 and receipts[judge]['session_kind'] == 'judge'
+    assert receipts[reviewer]['quota_charged'] == 250 and receipts[reviewer]['session_kind'] == 'audit'
+    assert receipts[reviewer]['quota_reserved'] == 1501
+    budget = agent_quota.snapshot(store.db, UID)
+    assert budget['used'] == 750 and budget['reserved'] == 500
+    assert agent_quota.receipt_weight({'round': 'final'}) == agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT == 0.5
+    assert agent_quota.receipt_weight({'round': 'other'}) == agent_quota.receipt_weight({}) == 1
+    # Without final usage the estimate keeps the weight too.
+    assert agent_quota.unknown_estimate(100, {'input_tokens': 1000, 'output_tokens': 0, 'provisional': True},
+                                        0.5) == 500
+
+
 def test_ledger_versions_cover_reservation_settlement_and_released_review_hold():
     data = agent_quota.reserve({}, 500)
     assert data['revision'] == 1

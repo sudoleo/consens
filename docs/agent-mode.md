@@ -2848,6 +2848,15 @@ bleibt wie gemessen; der spätere Abgleich (`generation_tokens`) gewichtet
 halten weiter den vollen Input (wie viel davon im Cache liegt, weiß erst die
 Antwort), das Settlement gibt den Rest frei. Compare/Consensus/Reasoning-Läufe
 (`usage_meter`) zählen unverändert.
+**Seit 2026-10-29 (Max, Audit-Spezifikation A-K2) zählen Prüfer zur Hälfte**
+(`agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT` = 0,5, `receipt_weight`): ein Call
+einer Sitzung der Art `audit` (Beleg `session_kind`, das `_claim_delegated`
+aus der Sitzung übernimmt) oder mit einer Prüfer-Runde (`round`) reserviert,
+bucht (`quota_charged`), schätzt und gleicht ab mit dem halben Wert, die
+Cache-Reads darin weiter zu einem Viertel (zusammen also ein Achtel). Grund:
+Prüfer schicken in jeder Live-Runde ihr ganzes Gespräch erneut und nahmen am
+28.–29.10. 48 % des Kontingents eines Audit-Turns bei 22 % seiner Kosten. Die
+Budgets des Laufs selbst (`reserved_tokens`, `max_tokens`) zählen weiter voll.
 Provider-Gesamtkosten haben Vorrang; ohne sie berechnet die App eine gekennzeichnete
 Katalogschätzung. Kosten werden erfasst; im Agent-Chat gilt allein die zentrale
 Tokenquote als Verbrauchsgrenze.

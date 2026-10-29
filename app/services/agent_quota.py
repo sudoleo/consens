@@ -1,5 +1,6 @@
 """UTC-day token account. Agent calls are charged input + output, prompt
-tokens read from the provider's cache at CACHED_INPUT_WEIGHT (charged_tokens).
+tokens read from the provider's cache at CACHED_INPUT_WEIGHT (charged_tokens),
+an audit reviewer's calls at AUDIT_REVIEWER_QUOTA_WEIGHT (receipt_weight).
 
 One ledger document per account and period serves Agent and the Consensus
 pipeline alike; the limit comes from the account tier (agent_budget_config).
@@ -195,6 +196,32 @@ UNKNOWN_ESTIMATE_FRACTION = 0.5
 # from the account (Prod, 24.-27.10.). Cache writes count in full.
 CACHED_INPUT_WEIGHT = 0.25
 
+# An audit reviewer's call counts this much of its charge (Max, 2026-10-29:
+# "alle Pakete umsetzen", spec A-K2), its cache reads at CACHED_INPUT_WEIGHT
+# on top. Reviewers send their whole conversation again in every live round:
+# measured 28.-29.10. they took 48 % of an audit turn's allowance at 22 % of
+# its cost. At half weight their share of the allowance is about their share
+# of the cost, and the limit still bounds a reviewer that runs away.
+AUDIT_REVIEWER_QUOTA_WEIGHT = 0.5
+# The rounds of a reviewer's call (its receipt's ``round``, agent_audit).
+REVIEWER_ROUNDS = frozenset({"live", "gate", "final", "repair", "hedge"})
+
+
+def receipt_weight(receipt):
+    """The weight of one call's receipt in the allowance: an audit reviewer's
+    call (its session's kind, or its reviewer round) counts
+    AUDIT_REVIEWER_QUOTA_WEIGHT, any other call in full. Either field alone
+    is enough."""
+    receipt = receipt or {}
+    if receipt.get("session_kind") == "audit" or receipt.get("round") in REVIEWER_ROUNDS:
+        return AUDIT_REVIEWER_QUOTA_WEIGHT
+    return 1
+
+
+def weighted(tokens, weight=1):
+    """``tokens`` at ``weight``, rounded up; whole tokens at weight 1."""
+    return tokens if weight == 1 else math.ceil(tokens * weight)
+
 
 def _cached(usage):
     """The usage's cache reads, within its input; 0 when unknown."""
@@ -202,35 +229,37 @@ def _cached(usage):
     return cached if type(cached) is int and 0 <= cached <= usage["input_tokens"] else 0
 
 
-def charged_tokens(prompt, completion, cached=0):
+def charged_tokens(prompt, completion, cached=0, weight=1):
     """What one call takes from the account: its fresh input and output in
-    full, its cache reads at CACHED_INPUT_WEIGHT (rounded up)."""
+    full, its cache reads at CACHED_INPUT_WEIGHT (rounded up), all of it at
+    ``weight`` (receipt_weight)."""
     cached = cached if type(cached) is int and 0 <= cached <= prompt else 0
-    return prompt - cached + math.ceil(cached * CACHED_INPUT_WEIGHT) + completion
+    return weighted(prompt - cached + math.ceil(cached * CACHED_INPUT_WEIGHT) + completion, weight)
 
 
-def measured_tokens(usage):
+def measured_tokens(usage, weight=1):
     """The charge of a measured call (charged_tokens), or None when its usage
     is not final. Reasoning is part of output; cache reads and writes are
     parts of input."""
     if usage and not usage.get("provisional") and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
-        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage))
+        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage), weight)
     return None
 
 
-def provisional_lower_bound(usage):
+def provisional_lower_bound(usage, weight=1):
     """Cumulative counts seen before a lost final chunk: a lower bound only."""
     if usage and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
-        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage))
+        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage), weight)
     return 0
 
 
-def unknown_estimate(reserved, usage):
-    """Bounded charge for a started call without final usage, else None."""
+def unknown_estimate(reserved, usage, weight=1):
+    """Bounded charge for a started call without final usage, else None.
+    ``reserved`` is the ledger's reservation, already at the call's weight."""
     if measured_tokens(usage) is not None:
         return None
     floor = math.ceil(max(0, reserved) * UNKNOWN_ESTIMATE_FRACTION)
-    return max(provisional_lower_bound(usage), floor)
+    return max(provisional_lower_bound(usage, weight), floor)
 
 
 # A pipeline run holds its expected cost against concurrent admissions for at
@@ -365,9 +394,10 @@ def release(data, amount):
     return data
 
 
-def settle(data, reserved, usage):
+def settle(data, reserved, usage, weight=1):
+    """Swap a call's reservation for its charge at ``weight`` (receipt_weight)."""
     data = normalize(data)
-    actual = measured_tokens(usage)
+    actual = measured_tokens(usage, weight)
     data['reserved'] = max(0, data.get('reserved', 0) - reserved)
     if actual is not None:
         data["used"] = data.get("used", 0) + actual
@@ -376,7 +406,7 @@ def settle(data, reserved, usage):
         # a bounded estimate is charged until reconciliation replaces it.
         data["unknown"] = data.get("unknown", 0) + reserved
         data['unknown_released'] = data.get('unknown_released', 0) + reserved
-        data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage)
+        data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage, weight)
     data["revision"] = data.get("revision", 0) + 1
     return data
 

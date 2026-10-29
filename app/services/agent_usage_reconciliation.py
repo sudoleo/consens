@@ -159,15 +159,17 @@ def _apply(db, uid, receipt_ref, *, actual, now, retry=False) -> bool:
         if actual is None:
             tx.update(receipt_ref, {"quota_reconcile": FINAL, "quota_reconciled_at": now})
             return True
+        # Measured at the call's weight, as settlement charges it (agent_quota.receipt_weight).
+        charged = agent_quota.weighted(actual, agent_quota.receipt_weight(receipt))
         if daily_ref:
-            tx.set(daily_ref, agent_quota.reconcile(daily, estimate, actual))
+            tx.set(daily_ref, agent_quota.reconcile(daily, estimate, charged))
         if user is not None and user.exists:
             totals = dict((user.to_dict() or {}).get("agent_usage") or {})
             totals["reconciled_calls"] = totals.get("reconciled_calls", 0) + 1
-            totals["reconciled_tokens"] = totals.get("reconciled_tokens", 0) + actual
+            totals["reconciled_tokens"] = totals.get("reconciled_tokens", 0) + charged
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
-        tx.update(receipt_ref, {"quota_reconcile": MEASURED, "quota_measured_tokens": actual,
+        tx.update(receipt_ref, {"quota_reconcile": MEASURED, "quota_measured_tokens": charged,
                                 "quota_reconciled_at": now})
         return True
 
