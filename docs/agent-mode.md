@@ -586,6 +586,10 @@ Ansicht (Marken, Notes, Aktivität, Prüfer-Zeitleiste, Prüfung läuft,
 Pause-Karte auf Desktop und Handy) ohne Modellkosten in
 `tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`).
 
+Produktionsreife (Prod-Messung 25.–29.10., Befunde zu Tempo, Abbrüchen und
+Randfällen, Anforderungen in Paketen):
+[agent-audit-readiness-2026-10-29.md](agent-audit-readiness-2026-10-29.md).
+
 ### Agent VM (seit 2026-10-25; seit 2026-10-26 Teil von Audit)
 
 Seit 2026-10-26 gibt es keine eigene VM-Einstellung mehr: Einstellungen →
