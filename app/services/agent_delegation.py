@@ -3015,5 +3015,9 @@ class DelegationLoop(AgentLoop):
                                       status=status, run_token=self.run_token)
             else:
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
+            # The turn's time under the account lock (A-T5).
+            report = getattr(self.store, "report_lock_time", None)
+            if callable(report):
+                report()
         yield from self._events()
         yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.completion.usage})

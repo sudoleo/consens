@@ -54,7 +54,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from app.core import config as cfg
-from app.core.observability import safe_exception
+from app.core.observability import record_metric, safe_exception
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
 
@@ -1974,6 +1974,7 @@ class AnswerAudit:
             # round (A-M4, A-T1).
             session.fixed()
         self.work_log.wake()
+        locked = self._lock_time()
         until = time.monotonic() + FINAL_ROUND_SECONDS + REVIEWER_JOIN_SECONDS
         for session in self.sessions.values():
             session.thread.join(max(0., until - time.monotonic()))
@@ -1983,6 +1984,12 @@ class AnswerAudit:
             session.cancellation.deadline = True
             session.cancellation.cancel()
         self._join(late)
+        if locked is not None:
+            # What the final rounds waited for the account lock, their claims
+            # all at once (A-T5): whether bundling them would pay.
+            now = self._lock_time()
+            record_metric("agent_account_lock", "final_rounds", duration_ms=(now["waited"] - locked["waited"]) * 1000,
+                          processed=now["calls"] - locked["calls"])
         # The user's Stop, not the deadline: no marks after a stop.
         cancellation.raise_if_cancelled()
         loop.cancellation.raise_if_cancelled()
@@ -1998,6 +2005,11 @@ class AnswerAudit:
         if any((state.get("failure") or {}).get("code") == "no_time" for state in self.reviewers.values()):
             issues.append({"code": "no_time"})
         self._finish(answer, issues)
+
+    def _lock_time(self):
+        """The turn's time under the account lock so far (AgentSessionStore.lock_time), or None."""
+        meter = getattr(getattr(self.tools.loop, "store", None), "lock_time", None)
+        return meter() if callable(meter) else None
 
     def _expire(self):
         """The turn's time is up: reviewers still at work stop, their final marks are missing."""

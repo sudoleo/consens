@@ -4,10 +4,14 @@ The root receipt fences a producer, all paid steps and ordered event writes.
 There is deliberately no resume path for paid steps after process loss.
 """
 from datetime import datetime, timedelta, timezone
+import logging
+import threading
+import time
 from uuid import uuid4
 
 from firebase_admin import firestore
 
+from app.core.observability import record_metric
 from app.services import persistence_guard
 from app.services import agent_quota, agent_budget_config
 from app.services.agent_costs import USAGE_FIELDS, aggregate_usage, remaining_reservation
@@ -32,6 +36,8 @@ TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent t
 # receipt, which the run's watcher reads every few seconds anyway.
 USER_NOTES_MAX = 10
 USER_NOTE_CHARS = 4000
+# Updates of a store's time under the account lock (lock_time).
+_LOCK_TIMES = threading.Lock()
 
 
 class NotesFull(TurnStatusConflict):
@@ -98,9 +104,45 @@ class AgentSessionStore:
 
     def _agent_transaction(self, uid, operation):
         # Shared with the pipeline's usage transactions: both write the same
-        # token-account document.
+        # token-account document. How long this store's transactions waited
+        # for it and held it (lock_time, A-T5).
+        asked = time.monotonic()
         with agent_quota.account_lock(uid):
-            return self._transaction(operation)
+            got = time.monotonic()
+            try:
+                return self._transaction(operation)
+            finally:
+                self._lock_used(got - asked, time.monotonic() - got)
+
+    def _lock_used(self, waited, held):
+        with _LOCK_TIMES:
+            meter = self.__dict__.setdefault("_lock_meter", {"calls": 0, "waited": 0.0, "held": 0.0,
+                                                             "longest_wait": 0.0})
+            meter["calls"] += 1
+            meter["waited"] += waited
+            meter["held"] += held
+            meter["longest_wait"] = max(meter["longest_wait"], waited)
+
+    def lock_time(self):
+        """{calls, waited, held, longest_wait} (seconds) of this store's
+        transactions under agent_quota.account_lock so far. The route makes
+        one store per turn, so it is the turn's (A-T5, since 2026-10-29: up to
+        six reviewers and the agent queue their claims and settlements there,
+        each a Firestore round trip; how much that costs was not measured)."""
+        with _LOCK_TIMES:
+            return dict(self.__dict__.get("_lock_meter") or {"calls": 0, "waited": 0.0, "held": 0.0,
+                                                               "longest_wait": 0.0})
+
+    def report_lock_time(self):
+        """The turn's time under the account lock as a metric and one log
+        line with numbers only (DelegationLoop.run at its end)."""
+        meter = self.lock_time()
+        if not meter["calls"]:
+            return
+        record_metric("agent_account_lock", "waited", duration_ms=meter["waited"] * 1000, processed=meter["calls"])
+        record_metric("agent_account_lock", "held", duration_ms=meter["held"] * 1000, processed=meter["calls"])
+        logging.info("Agent account lock calls=%d waited_ms=%d held_ms=%d longest_wait_ms=%d", meter["calls"],
+                     meter["waited"] * 1000, meter["held"] * 1000, meter["longest_wait"] * 1000)
 
     def agent_ref(self, uid, chat_id, turn_id, agent_id):
         import re

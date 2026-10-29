@@ -1011,6 +1011,35 @@ def test_a_completed_answer_never_keeps_a_review_that_says_reviewing(store, monk
     assert turn["agent_review"]["status"] == "failed"
 
 
+def test_the_turns_time_under_the_account_lock_is_measured(store):
+    """A-T5 (2026-10-29): up to six reviewers and the agent queue their claims
+    behind one lock per account; how much that costs was never measured."""
+    from app.core.observability import metrics_snapshot
+    from app.services import agent_quota
+    before = metrics_snapshot()
+    loop = audit_loop(store, Audit())
+    list(loop.run())
+    meter = store.lock_time()
+    assert meter["calls"] > 0 and meter["held"] > 0 and meter["waited"] >= 0
+    after = metrics_snapshot()
+    for name in ("waited", "held", "final_rounds"):
+        key = f"agent_account_lock:{name}"
+        assert after[key]["count"] == before.get(key, {}).get("count", 0) + 1
+    # A transaction behind another holder of the lock waits for it.
+    holding = threading.Event()
+
+    def hold():
+        with agent_quota.account_lock(UID):
+            holding.set()
+            time.sleep(.2)
+    threading.Thread(target=hold, daemon=True).start()
+    assert holding.wait(5)
+    waited = store.lock_time()["waited"]
+    store.repair_quota_period(UID, agent_quota.day_key())
+    assert store.lock_time()["waited"] - waited >= .15
+    assert store.lock_time()["longest_wait"] >= .15
+
+
 def test_a_crash_or_the_reaper_leaves_no_reviewer_at_work(store):
     """A-R6 (2026-10-29): after a crash or reap finish_run set the review's
     status, while single reviewers still said "running"."""

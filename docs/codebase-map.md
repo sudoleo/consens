@@ -4966,6 +4966,14 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   schreibt, schreibt den neuesten Schnappschuss (`_latest`, seit 2026-10-22);
   wessen Schnappschuss darin steckt, kehrt ohne eigenen Schreibvorgang zurück.
   Eintreffende Vergleichsantworten speichern nach dem Lock.
+- Die Zeit unter `agent_quota.account_lock` misst seit 2026-10-29 jeder Store
+  (`AgentSessionStore._agent_transaction`, `lock_time`: Transaktionen,
+  Warten, Halten, längstes Warten; die Route macht einen Store je Turn). Am
+  Turn-Ende Metrik `agent_account_lock:waited`/`:held` und eine Logzeile nur
+  mit Zahlen („Agent account lock …“, `report_lock_time`), im Audit-Modus
+  dazu `agent_account_lock:final_rounds` (Warten vom Fixieren bis zum Ende
+  der Schlussrunden). Ob die Claims der Schlussrunde in eine Transaktion
+  gebündelt werden (A-T5), entscheidet diese Zahl.
 Belegt mit `tests/test_agent_tempo.py` (sechs Modelle, Datenbank mit Latenz je
 Rundgang, ein Konto-Lock) und `tests/test_agent_journal.py`. Prod-Befund und
 Zahlen: [agent-mode.md](agent-mode.md) „Wartezeit im Server“.

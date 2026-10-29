@@ -412,6 +412,12 @@ oder Fake) alle Kennzahlen aus; Unit-Tests für A-M1 bis A-M7.
   `agent_quota.account_lock` je Turn messen (Metrik). Liegt der Anteil an der
   Zeit Fixieren → erste Schluss-Anfrage über 1 s, Claims der Schlussrunde in
   eine Transaktion bündeln (wie `publish_agents`).
+  *Stand 2026-10-29:* gemessen (`AgentSessionStore.lock_time`, Metriken
+  `agent_account_lock:waited`/`held`/`final_rounds`, Logzeile je Turn),
+  gebündelt noch nicht: Jeder Prüfer beansprucht seine Anfrage in seinem
+  eigenen Thread über `_admit_chat_step` mit eigener Reservierung; eine
+  gemeinsame Transaktion bräuchte einen Sammelpunkt quer über diese Threads
+  im Claim-Pfad, und ihr Nutzen ist erst mit den Zahlen belegt.
 
 ### Paket 4 · Abbrüche und Randfälle
 
