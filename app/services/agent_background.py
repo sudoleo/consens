@@ -72,6 +72,9 @@ class BackgroundRun:
     turn_id: str
     cancel: Callable[[], None]
     interrupt: Callable[[Exception], None]
+    # The turn's DelegationLoop: a decision or a note the user's request just
+    # saved reaches it at once (run_loop), not with its watcher's next look.
+    loop: object = None
     finished: threading.Event = field(default_factory=threading.Event)
     stopped: bool = False
 
@@ -107,10 +110,17 @@ class AgentBackgroundRuns:
             run = self._runs.get(self.key(uid, chat_id, request_id))
             return run is not None and not run.finished.is_set()
 
-    def start(self, *, uid, chat_id, request_id, turn_id, target, cancel, interrupt) -> BackgroundRun:
+    def run_loop(self, uid, chat_id, request_id):
+        """The DelegationLoop of this request's turn while this process runs
+        it, else None (another worker, finished, not started)."""
+        with self._lock:
+            run = self._runs.get(self.key(uid, chat_id, request_id))
+            return run.loop if run is not None and not run.finished.is_set() else None
+
+    def start(self, *, uid, chat_id, request_id, turn_id, target, cancel, interrupt, loop=None) -> BackgroundRun:
         """Run ``target`` on its own thread; refused after a Stop or during shutdown."""
         run = BackgroundRun(uid=str(uid), chat_id=str(chat_id), request_id=str(request_id), turn_id=str(turn_id),
-                            cancel=cancel, interrupt=interrupt)
+                            cancel=cancel, interrupt=interrupt, loop=loop)
         with self._lock:
             # A running duplicate first: its turn and buffer are not ours to end.
             current = self._runs.get(run.key)

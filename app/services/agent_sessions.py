@@ -495,7 +495,8 @@ class AgentSessionStore:
     def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text=""):
         """The user's decision on an open hold: "continue", "stop" or "steer"
         (continue with ``text`` as their message into the run, like a note).
-        The run's watcher reads it from the root (DelegationLoop._receive_hold)."""
+        The run's watcher reads it from the root (DelegationLoop._receive_hold);
+        returns the fields saved, for a run in this process (DelegationLoop.receive)."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
@@ -515,6 +516,7 @@ class AgentSessionStore:
                 update["user_notes"] = [*notes, {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
                                                  "at": datetime.now(timezone.utc).isoformat()}]
             tx.update(ref, update)
+            return update
         return self._agent_transaction(uid, operation)
 
     def add_user_note(self, uid, chat_id, turn_id, text):

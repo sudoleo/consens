@@ -1214,6 +1214,51 @@ def test_the_route_takes_the_users_decision_on_an_open_hold(api, monkeypatch):
     assert again.status_code == 409
 
 
+def in_background(loop, request_id="one"):
+    """The run as the route starts it: on agent_background's thread, known
+    by its request (run_loop). Returns its events and whether it ended."""
+    from app.services.agent_background import agent_background
+    events, ended = [], threading.Event()
+
+    def produce():
+        try:
+            events.extend(loop.run())
+        finally:
+            ended.set()
+    agent_background.start(uid=UID, chat_id=loop.chat_id, request_id=request_id, turn_id=loop.turn_id,
+                           target=produce, cancel=loop.cancellation.cancel,
+                           interrupt=lambda reason: loop.cancellation.cancel(), loop=loop)
+    return events, ended
+
+
+def held(loop, seconds=5):
+    deadline = time.monotonic() + seconds
+    while loop.hold is None and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert loop.hold is not None
+    return loop.hold
+
+
+def test_a_decision_reaches_a_run_of_this_process_at_once(api):
+    """A-T4: not with the watcher's next look, up to 3 s later; the root
+    keeps the decision for every other process."""
+    client, store, _ = api
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+    events, ended = in_background(loop)
+    hold = held(loop)
+    response = client.post(f"/agent/chats/{loop.chat_id}/requests/one/hold",
+                           json={"id": hold["id"], "action": "continue"}, headers=AUTH)
+    assert response.status_code == 200
+    # Taken by the time the request answered.
+    assert loop.hold_decision == "continue" or (loop.hold or {}).get("id") != hold["id"]
+    assert ended.wait(10)
+    assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["hold_decision"] == {
+        "id": hold["id"], "action": "continue"}
+    assert saved(store, loop)["status"] == "completed"
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == ["continue"]
+
+
 # --- The route ---------------------------------------------------------------------
 
 # Audit for Pro accounts and admins since 2026-10-26 (routers/agent.py audit_allowed).

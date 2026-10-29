@@ -5770,7 +5770,10 @@ Befehl als Nutzer-Stop, `store.set_hold` schreibt `hold` an den Lauf-Root,
 SSE-Frame `hold` (sticky) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der
 Antwort; `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
-`hold_decision` (`_receive_hold`, nach `_receive_notes`). Entscheidung über
+`hold_decision` (`_receive_hold`, nach `_receive_notes`); läuft der Lauf im
+selben Prozess, geben `POST …/hold` und `…/notes` das Gespeicherte sofort an
+ihn (`agent_background.run_loop` → `DelegationLoop.receive`, seit
+2026-10-29), der Wächter bleibt das Netz. Entscheidung über
 `POST /agent/chats/{chat}/requests/{request_id}/hold`
 (`AgentHoldDecision`, `store.decide_hold`; `steer` hängt eine Nutzer-Notiz
 an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach
@@ -8554,7 +8557,7 @@ app/services/
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
   agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
-  agent_background.py        Agent-Turns auf eigenem Thread statt an der Verbindung (start/stop per Request oder Turn, Stop-vor-Start-Marke, Drain bei SIGTERM)
+  agent_background.py        Agent-Turns auf eigenem Thread statt an der Verbindung (start/stop per Request oder Turn, Stop-vor-Start-Marke, Drain bei SIGTERM, run_loop für Entscheidungen im Prozess)
   agent_live.py              Prozesslokale Frames je laufendem Turn (SSE-Tail für POST /agent, JSON für /live, reset bei Fensterverlust)
   agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung

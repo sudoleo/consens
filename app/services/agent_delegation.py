@@ -1976,6 +1976,15 @@ class DelegationLoop(AgentLoop):
                 self.hold_decision = decision.get("action")
                 self.condition.notify_all()
 
+    def receive(self, saved):
+        """What the user's request just saved on the run's root in this
+        process (POST .../hold, .../notes; agent_background.run_loop): taken
+        at once instead of with the watcher's next look, up to 3 s later. The
+        saved root stays the truth for every other process, and the watcher
+        reads the same again (notes and decisions count once)."""
+        self._receive_notes(saved)
+        self._receive_hold(saved)
+
     def _ask_wait(self, call):
         """ask_user (agent_ask.py): the run pauses on the user's card until
         they answer. With ``browser`` handing the browser back answers it

@@ -477,7 +477,11 @@ Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
 des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie
 wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen
 nicht, `HOLD_STEERED`, und eine schon geschriebene Antwort geht zurück); Stop
-ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung.
+ist der Stop-Knopf. Läuft der Lauf im selben Prozess, hat er die Entscheidung
+(und eine Nachricht über `…/notes`), sobald die Anfrage antwortet
+(`DelegationLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
+Blick des Wächters, bis 3 s); der gespeicherte Root bleibt die Wahrheit für
+andere Prozesse. Text im Feld ist während der Pause die Steer-Entscheidung.
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge

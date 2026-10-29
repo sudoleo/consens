@@ -610,7 +610,8 @@ def run_agent(request: Request, payload: AgentRequest):
 
     try:
         agent_background.start(uid=uid, chat_id=payload.chat_id, request_id=payload.client_request_id,
-                               turn_id=turn["id"], target=produce, cancel=cancellation.cancel, interrupt=interrupt)
+                               turn_id=turn["id"], target=produce, cancel=cancellation.cancel, interrupt=interrupt,
+                               loop=loop)
     except AgentRunDuplicate as exc:
         # Two identical requests at once: the first one runs this turn; its
         # buffer and saved state stay untouched.
@@ -864,6 +865,10 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
             return JSONResponse({"error": "Messages during a response need Agent VM.", "code": "notes_unavailable"},
                                 status_code=409)
         note = store.add_user_note(uid, chat_id, turn_id, text)
+        loop = agent_background.run_loop(uid, chat_id, request_id)
+        if loop is not None:
+            # This process runs it: the run has it at once.
+            loop.receive({"user_notes": [note]})
         return JSONResponse({"status": "added", "id": note["id"]}, headers={"Cache-Control": "private, no-store"})
     except TurnStatusConflict as exc:
         return JSONResponse({"error": str(exc), "code": "not_running"}, status_code=409)
@@ -905,7 +910,12 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
         if not turn or turn.get("status") != "pending":
             return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
         try:
-            store.decide_hold(uid, chat_id, turn_id, payload.id, payload.action, text)
+            saved = store.decide_hold(uid, chat_id, turn_id, payload.id, payload.action, text)
+            loop = agent_background.run_loop(uid, chat_id, request_id)
+            if loop is not None:
+                # This process runs it: the run goes on at once, not with its
+                # watcher's next look (which still reads the same).
+                loop.receive(saved)
         except NotesFull as exc:
             # Nothing decided: the card stays for another answer.
             return JSONResponse({"error": str(exc), "code": "notes_full"}, status_code=409)

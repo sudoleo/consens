@@ -5,6 +5,7 @@ the watcher reads it with the lease check, and the agent gets it before its
 next step. Stop stays Stop. No provider and no VM provider is called.
 """
 import json
+import threading
 
 import pytest
 
@@ -45,6 +46,26 @@ def test_a_message_goes_onto_the_running_response(api):
         assert client.post(url, json={"text": "more"}, headers=AUTH).status_code == 200
     refused = client.post(url, json={"text": "one too many"}, headers=AUTH)
     assert refused.status_code == 409 and refused.json()["code"] == "not_running"
+
+
+def test_a_message_reaches_a_run_of_this_process_at_once(api):
+    """A-T4: the run has it when the request answers, not with its watcher's
+    next look; that look finds it on the root again and takes it once."""
+    from app.services.agent_background import agent_background
+    client, store, _ = api
+    chat, turn_id, loop = running(store)
+    release = threading.Event()
+    agent_background.start(uid=UID, chat_id=chat, request_id="req-1", turn_id=turn_id, target=release.wait,
+                           cancel=release.set, interrupt=lambda reason: release.set(), loop=loop)
+    try:
+        response = client.post(f"/agent/chats/{chat}/requests/req-1/notes", json={"text": "Run the tests."},
+                               headers=AUTH)
+        assert response.status_code == 200
+        assert [(note["id"], note["text"]) for note in loop.notes] == [(response.json()["id"], "Run the tests.")]
+        loop._receive_notes(store.check_delegation(UID, chat, turn_id, loop.run_token))
+        assert len(loop.notes) == 1
+    finally:
+        release.set()
 
 
 def test_only_a_running_vm_response_takes_messages(api):
