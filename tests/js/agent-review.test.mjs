@@ -1048,7 +1048,7 @@ it('offers the notes of a stopped review that kept findings from the run', () =>
   expect(gpt.querySelector('.agent-audit-live').textContent).toBe('During the run');
   expect(gpt.textContent).toContain('The command deleted more than asked.');
   // A reply without its review has its own words (A-M6).
-  expect(mimo.textContent).toContain('No review: its review came back empty.');
+  expect(mimo.textContent).toContain('No review: its reply was empty.');
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, stopped, 'Partial text');
   expect(details.textContent).toContain('Review stopped');
