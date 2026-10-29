@@ -3060,8 +3060,8 @@ noch zwei Schritte im heutigen Umfang plus Antwort trägt
 (`remaining_tokens`, ein Firestore-Lesezugriff je Schritt, nur in langen
 Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
 Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
-ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch samt Antwort unter 80 % des Modellfensters bleibt
-(`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
+ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch
+samt Antwort unter 80 % des Modellfensters bleibt (`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
 `TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
 ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
 have, without tool calls.“), statt abzubrechen; sie bleibt wie jede Antwort
