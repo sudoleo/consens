@@ -319,10 +319,17 @@ Commit nachgezogen.
   Übernahme bei `visibilitychange` → sichtbar sofort auf.
   *Abnahme:* Server-Test „control abgelaufen bei offener browser-Karte → kein
   handed_back“; JS-Test für das Auffrischen beim Sichtbarwerden.
-- **A-S7 Keys nie über das Hauptfeld.** Ist `hold.ask === "secret"`, sendet
-  das Hauptfeld nichts als Entscheidung. Es zeigt auf das Key-Feld der Karte,
-  und der Entwurf bleibt im Feld.
-  *Abnahme:* JS-Test.
+- **A-S7 Keys nie über das Hauptfeld.** Ohne Erkennung von Schlüsseln (keine
+  Muster, kein Raten am Text): Es zählt nur der Zustand. Hat der Agent um
+  einen Key gebeten und die Key-Karte ist offen (`hold.ask === "secret"`),
+  wird Text im Hauptfeld nie als Nachricht gesendet. Enter legt ihn verdeckt
+  ins Key-Feld der Karte, und der Nutzer bestätigt dort mit einem Klick
+  („Als Key speichern“). Wer statt eines Keys etwas schreiben will („hab ich
+  nicht“), nimmt „Write to the agent“ an der Karte. Ein Key, den jemand
+  ungefragt in eine normale Nachricht schreibt, bleibt eine normale
+  Nachricht: Das ist seine Wahl, wie in jedem Chat.
+  *Abnahme:* JS-Test „Key-Karte offen + Enter im Hauptfeld → kein steer,
+  Text steht verdeckt im Key-Feld“.
 
 ### Paket 2 · Messbarkeit
 
