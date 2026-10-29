@@ -34,6 +34,25 @@ def test_counts_reads_and_writes_per_day_family_and_kind():
     assert totals(rows)[("anthropic", "chat")]["calls"] == 2
 
 
+def test_reviewers_per_model_from_the_receipts_session_kind():
+    """A-K1: the reviewers' hit rate per model. A receipt names its session's
+    kind since 2026-10-29 (session_kind), also once the chat is deleted."""
+    receipts = [
+        {**receipt("agent:" + "a" * 32 + ":0", "openai/gpt-6-luna", 1000, agent_id="a" * 32), "session_kind": "audit"},
+        {**receipt("agent:" + "a" * 32 + ":1", "openai/gpt-6-luna", 1200, read=1000, agent_id="a" * 32),
+         "session_kind": "audit"},
+        receipt("agent:" + "b" * 32 + ":0", "openai/gpt-6-mini", 400, read=100, agent_id="b" * 32),
+        receipt("completion:0", "openai/gpt-6-luna", 900, read=800),
+    ]
+    agents = {("c1", "t1"): {"b" * 32: {"kind": "audit"}}}
+    rows = aggregate(receipts, agents, by="model", only_kind="audit")
+    assert set(rows) == {("2026-10-21", "openai/gpt-6-luna", "audit"), ("2026-10-21", "openai/gpt-6-mini", "audit")}
+    assert described("openai/gpt-6-luna", rows[("2026-10-21", "openai/gpt-6-luna", "audit")])["hit"] == 0.455
+    # Anthropic's net saving by its family, also per model.
+    assert "net" in described("anthropic/claude-haiku-5.5", {"calls": 1, "input": 10, "read": 5, "write": 0,
+                                                             "writing": 0, "reading": 1})
+
+
 class Query:
     def __init__(self, docs):
         self.docs = docs

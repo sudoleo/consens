@@ -4002,7 +4002,16 @@ Seitenlesungen (`PageFetch`, Responses-API) senden ohnehin keinen Marker.
 Messen: `scripts/cache_hit_rate.py` (nur lesend; pro Tag, Familie und
 Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
 Anthropic die Netto-Ersparnis in vollen Input-Tokens; `--exclude-own` lässt
-Max' Konten weg).
+Max' Konten weg; seit 2026-10-29 `--by model` je Modell und `--kind audit` nur
+die Prüfer, Art aus dem Beleg `session_kind`, sonst aus der Sitzung).
+Prüfer 25.–29.10. (A-K1): MiMo Pro 85 %, Qwen 74 %, Luna 66 %, GLM 61 %,
+MiMo Flash 51 %, DeepSeek 44 %. Innerhalb einer Prüfer-Sitzung liest jede
+Folgerunde im Median ihr ganzes vorheriges Präfix (Verhältnis 0,96–1,0, kein
+Endpunkt-Wechsel, kein Reasoning-Bruch); MiMo Flash verfehlte es am 26.10. in
+24 von 60 Folgerunden, seit 29.10. in keiner. Unter 80 % liegt es an der
+kalten ersten Runde jeder Sitzung (eine Sitzung je Prüfer und Turn, im Median
+1–2,5 Calls, die erste Runde trägt 20–28 % des Prüfer-Inputs); teilen könnten
+die Sitzungen nur den Prüfer-Systemprompt (~1,5k Tokens).
 
 **Such-Tool und Cache (live gemessen 2026-10-21).** Die Probe bestand aus sechs
 Sonnet-5.5-Calls über OpenRouter, alle auf dem Anthropic-Endpunkt in einer Session,
