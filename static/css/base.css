@@ -29,10 +29,26 @@ h1, h2 {
   margin-bottom: 5px;
 }
 
+/* A link draws no line by default: navigation, logos and controls that are
+   links look like controls. What reads as a link draws its own: the text
+   link (.text-link, foundation.css), a source under a note, and every plain
+   link inside written text (below). Until 2026-10-29 an !important here took
+   every such line away, and a link in an answer looked like the words beside
+   it (UX audit D3). */
 a {
-  text-decoration: none !important;
+  text-decoration: none;
   color: inherit;
   transition: opacity var(--dur-state) var(--ease-standard), color var(--dur-layer) var(--ease-standard);
+}
+
+/* A link in an answer or a note: the line in the text's own colour, 3px
+   below it. Links that are parts with a look of their own (source pills,
+   buttons) carry a class and keep it. */
+:where(.consensus-answer-body, .markdown-content) a:where(:not([class])) {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 /* One focus ring for every control that does not draw its own (foundation.css).

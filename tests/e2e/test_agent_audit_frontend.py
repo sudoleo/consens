@@ -179,8 +179,13 @@ def test_the_review_runs_under_a_fixed_answer(browser, phase4_server):
     context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events, hang_live=True)
     try:
         expect(page.locator("#agentAnswerBody")).to_contain_text("Colosseum opened in 80 AD")
-        # The line under the answer says what the activity says: the reviewers review it.
-        expect(page.locator(".agent-check-status")).to_have_text("Reviewing the answer…")
+        # The row under the fixed answer stands while the reviewers work (UX
+        # audit B3): Notes waiting in grey, and where Watch and Share will
+        # stand, what the activity says: the reviewers review it.
+        row = page.locator("#agentAnswer .agent-review")
+        expect(row.locator(".agent-review-status")).to_have_text("Reviewing the answer…")
+        expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
+        expect(page.locator("#agentAnswer .agent-check-status")).to_have_count(0)
         page.wait_for_timeout(600)
         _snapshot(page, "audit-reviewing-1280")
         # A message typed now waits for the next turn: the agent takes no more steps.

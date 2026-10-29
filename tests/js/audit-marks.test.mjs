@@ -67,7 +67,7 @@ it("marks reviewed sentences by kind, colours the quoted words and keeps unmarke
   expect(marks(document)).toHaveLength(2);
   expect(body.querySelector(".is-unanimous, .claim-badge")).toBeNull();
   expect(tickets.getAttribute("role")).toBe("button");
-  expect(tickets.getAttribute("aria-label")).toContain("Wrong: 2 models object");
+  expect(tickets.getAttribute("aria-label")).toContain("Wrong: 2 reviewers object");
   // A note whose passage the answer does not hold is listed below it.
   expect(fallback.hidden).toBe(false);
   expect(fallback.textContent).toContain("Other notes");

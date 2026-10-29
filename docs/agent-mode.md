@@ -468,31 +468,57 @@ Agent antwortet allein, ohne Review, und der Prompt sagt es
 
 **Anzeige** (`agent-review.js` `renderAudit`, `consensus-insights.js`
 `renderStoredAuditMarks`): Während die Prüfer arbeiten, läuft der bekannte
-Schimmer, die Zeile darunter sagt seit 2026-10-27 dasselbe wie die Aktivität
-(„Reviewing the answer…“, `setAnswerChecking(…, { audit })`; vorher
-„Checking the answer…“ unter der Antwort und „Reviewing…“ darüber). Die Marken erscheinen erst, wenn alle
+Schimmer, und unter der fixierten Antwort steht seit 2026-10-29 schon die
+fertige Leiste (UX-Audit B3): „Notes“ grau und ohne Zahl (`is-pending`,
+deaktiviert), „Sources“ mit der Zahl aus der Aktivität, am Ende der Zeile
+„Reviewing the answer…“, wo später Watch und Teilen stehen
+(`agent-chat.js` rendert die Leiste dafür auch während des Laufs, sobald die
+Review die Antwort als Version hält; die Prüfzeile `.agent-check-status`
+von `setAnswerChecking(…, { audit })` gilt nur bis dahin, auf dem Handy
+56 px hoch wie die Leiste). Am Ende tauscht nur ein Wort. Die Marken erscheinen erst, wenn alle
 fertig sind, und nur auf genau diesem Text: falsch `is-major` (rot),
-zweifelhaft `is-split` (gelb), unvollständig `is-minor` (grau), dazu
+zweifelhaft `is-split` (gelb), unvollständig `is-minor` (das kräftigere Grau
+mit gestrichelter Linie in `--ink-3`, D2), dazu
 `is-audit`; die zitierten Worte tragen die Farbe (`wrapSpots`). Die Karte der
-Marke zeigt die markierten Worte und je Prüfer Art, Anmerkung und Quelle.
-Unmarkierter Text heißt „kein Einwand“, nicht „bestätigt“: kein Grün, keine
+Marke zeigt die markierten Worte und je Prüfer Art (in ihrer Farbe,
+`--kind-wrong`/`--kind-doubtful`/`--kind-incomplete`), Anmerkung und Quelle
+(Textlink). Unmarkierter Text heißt „kein Einwand“, nicht „bestätigt“: kein Grün, keine
 Quote, kein Score. Die Highlight-Einstellung zeigt unter „Disagreements &
 issues“ (Standard) und „All“ jede Marke, unter „Contradictions“ und
-„Critical“ nur `wrong`. Nicht platzierte Anmerkungen stehen unter der Antwort
-(„Other notes“). Die Leiste bietet **Notes** (Leser mit den Anmerkungen je
-Prüfer, die Art in der Farbe ihrer Marke, darunter „On the work“ die Befunde
-zur Arbeit mit dem Schritt in den Worten der Aktivität, etwa „Command“ oder
-„Agent step“ (`App.agentActivity.toolName`, seit 2026-10-27); `#seq` und
-Rohname des Eintrags nur für Admins, Live-Befunde als „During the run“, Ausfällen samt Grund
-und „Unmarked text means no objection, not confirmed.“) und Sources; die
-Aktivität zeigt eine Karte „Review · n models“ mit markierten Stellen und
-Befunden zur Arbeit, die auch bei `cancelled`/`missing` endet („Review
-stopped“, „Not reviewed“). Hat eine solche Prüfung Befunde aus den
+„Critical“ nur `wrong`. Nicht platzierte Anmerkungen stehen unter der Leiste
+(„Other notes“, `.agent-review.is-audit`: sie schieben die Leiste am Ende der
+Prüfung nicht nach unten) als ganze Zeile, die ihre Karte öffnet: Prüfer und
+Anmerkung, die Art in Farbe, das Zitat leise dahinter; die Karte sagt dann
+„Not found in the text“ statt „In the answer“ (D4, D14). Die Leiste bietet
+**Notes** mit eigener Glyphe (Notiz am Rand statt der Gabel des Widerspruchs,
+auch auf der Karte, B10) und der Zahl aller Anmerkungen (Marken, nicht platzierte und zur
+Arbeit; dieselbe Zahl in der Aktivität, B5), „No objections“ mit Haken,
+wenn kein Prüfer etwas fand (B4), „Notes“ ohne Zahl bei einer gescheiterten
+Prüfung, und Sources. Der Leser zeigt die Anmerkungen nach Stelle in der
+Reihenfolge der Antwort, je Stelle das Zitat einmal und darunter jede
+Anmerkung mit Prüfer und Art, die schwerste zuerst; oben eine Zeile
+„1 wrong · 4 doubtful · 3 incomplete“, danach „Other notes“, „On the work“
+(deutsch „Zum Ablauf“; Befunde zur Arbeit mit dem Schritt in den Worten der
+Aktivität, etwa „Command“ oder „Agent step“, `App.agentActivity.toolName`;
+`#seq` und Rohname nur für Admins) und zuletzt, wer keinen Einwand hatte
+und wer ohne (Schluss-)Prüfung blieb, gleiche Gründe in einer Zeile (D5).
+Die Statuszeile darunter ist ein leises Wort am Ende der Leiste („2 of 3
+reviewed“, „Not reviewed – the reviewers did not finish“, „Review
+stopped“); eine fertige Prüfung sagt dieselbe Live-Region nur für
+Screenreader an („Review finished: 11 notes“, H5). Die Aktivität zeigt eine
+Karte „Review · n reviewers“ mit „Reviewers: …“, „11 notes · 6 passages
+marked in the text“ und „Read the notes“ (Glyphe und Wort wie die Leiste),
+die auch bei `cancelled`/`missing` endet („Review stopped“, „Not
+reviewed“). Hat eine solche Prüfung Befunde aus den
 Live-Runden behalten (`live: true` in `audit.claims`/`unplaced`/`process`,
 seit 2026-10-29, A-M7/B8), bietet die Leiste „Notes“ und die Aktivität „Read
 the notes“, auch unter einer Antwort, die nie fixiert wurde
-(`auditReadable`); je Prüfer „No final review: the review was stopped.“ und
-die Befunde als „During the run“, Marken auf dem Text gibt es dann nicht.
+(`auditReadable`); der Leser sagt einmal oben „Stopped – these notes came
+while the agent was working.“ statt je Prüfer, Marken auf dem Text gibt es
+dann nicht. Ohne Antworttext stehen Meldung und Retry vor der Leiste
+(`placeRow`), und ein Stopp des Nutzers sagt „Stopped. The reviewers had n
+notes by then.“ (`failureNote`, B8). Im Verlauf stehen die Prüfer-Logos
+neben „Thought for …“ wie live und öffnen die Notes (B6).
 Eigene Gründe für `review_tool_calls` („it called a tool instead of writing
 its review“) und `review_empty` (A-M6); ein Turn mit `hold_timeout` sagt
 „Paused for 30 minutes without a decision, so the response stopped.“

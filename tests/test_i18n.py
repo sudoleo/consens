@@ -363,6 +363,20 @@ def test_a_sentence_composed_from_chosen_words_is_found():
     assert i18n_tool.composed_in("x.js", whole, current) == []
 
 
+def test_a_label_read_aloud_from_a_word_and_a_value_is_found():
+    """`${label} ${count}` as an aria-label has no entry as a whole: a German
+    screen reader heard "Notes 4" (UX audit I4). The word through App.t first;
+    a value with words of its own is a pattern key and passes."""
+    composed = "button.setAttribute('aria-label', count === null ? label : `${label} ${count}`);"
+    translated = "button.setAttribute('aria-label', `${App.t(label, null, 'answer tabs')} ${count}`);"
+    pattern = "li.setAttribute('aria-label', `${App.t(state)}: ${text}`); b.setAttribute('title', `Choose model: ${displayLabel}`);"
+    assert [gap.key for gap in i18n_tool.composed_attributes("x.js", composed)] == ["aria-label: {label} {count} (App.t(label) first)"]
+    assert i18n_tool.composed_attributes("x.js", translated) == []
+    assert i18n_tool.composed_attributes("x.js", pattern) == []
+    # A label with its value after a middle dot is a key of its own.
+    assert i18n_tool.looks_like_text("Activity · {0}")
+
+
 def test_a_tag_inside_a_label_marks_its_key():
     """{% if %} inside a label's value renders whole sentences that the key
     glued from both branches stands for neither of: the German page kept

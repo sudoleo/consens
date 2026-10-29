@@ -4,6 +4,18 @@
 
 @import url('./components-consensus-visuals.css');
 
+/* The kinds of a reviewer's note (Agent audit): one colour each wherever the
+   kind is named - the reader, a mark's card, the list under the answer and
+   the reviewer's timeline (UX audit D1). Wrong is the contradiction's red,
+   doubtful the pause's amber, incomplete stays the quiet ink. Declared again
+   on .dark-mode: a token naming another one resolves where it is declared. */
+:root,
+.dark-mode {
+  --kind-wrong: var(--dispute);
+  --kind-doubtful: var(--partial);
+  --kind-incomplete: var(--ink-2);
+}
+
 /* Karte, die ein Inline-Marker gerade geoeffnet hat: kurzer Wash in der
    Bernstein-Note des Markers, der von selbst verblasst. Bewusst kein Ring -
    ein 2px-Rahmen um die volle Breite der Liste las sich als grauer Rahmen um
@@ -104,7 +116,7 @@
   border-radius: var(--radius-md);
   background: var(--cx-card-bg);
   color: var(--ink);
-  font-size: 0.9375rem;
+  font-size: var(--font-size-sm);
   line-height: 1.42;
   letter-spacing: -0.006em;
   filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.3)) drop-shadow(0 2px 5px rgba(0, 0, 0, 0.05))
@@ -277,19 +289,34 @@
 }
 
 /* Agent audit (agent_audit.py): a reviewer's note names its kind beside
-   the reviewer and its source as a quiet link below. */
+   the reviewer, in the kind's colour (D1), and its source below as the text
+   link (foundation.css .text-link: the line in the text's own colour, a
+   finger's height on a phone; D3, D16). */
+.cx-card-side[data-kind] .cx-card-tag { font-weight: var(--font-weight-medium); color: var(--kind-incomplete); }
+.cx-card-side[data-kind="wrong"] .cx-card-tag { color: var(--kind-wrong); }
+.cx-card-side[data-kind="doubtful"] .cx-card-tag { color: var(--kind-doubtful); }
+.cx-audit-kind { color: var(--kind-incomplete); }
+.cx-audit-kind[data-kind="wrong"] { color: var(--kind-wrong); }
+.cx-audit-kind[data-kind="doubtful"] { color: var(--kind-doubtful); }
+
 .cx-card-source {
-  display: inline-block;
-  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin-top: 0;
   font-size: var(--font-size-ui);
   color: var(--ink-2);
-  text-decoration: underline;
-  text-decoration-color: var(--line);
-  text-underline-offset: 0.2em;
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .cx-card-source:hover { color: var(--ink); }
+}
+@media (pointer: coarse) {
+  .cx-card-source { min-height: 44px; }
 }
 .cx-card-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 

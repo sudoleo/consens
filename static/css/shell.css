@@ -1882,7 +1882,10 @@ body.dark-mode .run-provenance {
     grid-column: 2;
   }
 
-  .consensus-footer-tabs {
+  /* The row under an Agent answer has its own phone grid (agent-chat.css
+     .agent-evidence-grid): stretched here, a lone "Sources" took the whole
+     width and Watch and Share fell to the edges below (UX audit B1). */
+  .consensus-footer-tabs:not(.agent-evidence-links) {
     display: grid;
     grid-template-columns: none;
     grid-auto-flow: column;
@@ -1891,7 +1894,7 @@ body.dark-mode .run-provenance {
     width: 100%;
   }
 
-  .consensus-tab {
+  .consensus-tab:not(.agent-evidence-link) {
     width: 100%;
     min-width: 0;
     min-height: 44px;
@@ -2544,19 +2547,25 @@ body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-sectio
 /* An Agent turn in the history keeps the live turn's boxes to the pixel:
    when a follow-up starts, the live question and answer move up into the
    history as they are (agent-chat.js liveTurn), and a reopened chat builds
-   the same boxes. The question keeps .thread-ask's margins; the answer keeps
-   .agent-answer's padding, and its 16px top margin stands in for the empty
-   .consensus-section (order 3) that separates them in the live turn. */
+   the same boxes. Both keep one rhythm from the spacing scale (UX audit
+   B11): --space-5 from the question to its answer (the live turn's empty
+   .consensus-section adds nothing in Agent mode, agent-chat.css), --space-7
+   from the row under the answer to the next question. */
 .thread-history-turn.is-agent-turn {
   gap: 0;
+  margin-bottom: var(--space-7);
 }
 
 .thread-history-turn.is-agent-turn > .thread-history-question {
-  margin: 10px 0 18px;
+  margin: 0 0 var(--space-5);
+}
+
+.thread-history-turn.is-agent-turn:first-child > .thread-history-question {
+  margin-top: var(--space-2);
 }
 
 .thread-history-turn.is-agent-turn > .thread-history-answer {
-  margin: 16px 0 0;
+  margin: 0;
 }
 
 .thread-history-answer-label {
@@ -2842,6 +2851,12 @@ ul.md-task-list > .md-task-item > p:first-child > .md-task-box {
 .consensus-answer-body h2 { font-size: 1.25em; }
 .consensus-answer-body h3 { font-size: 1.125em; }
 .consensus-answer-body :is(h4, h5, h6) { font-size: 1em; }
+/* A subheading right under its heading belongs to it: closer to it than to
+   the section before (UX audit J5; it stood almost a full section apart). */
+.consensus-answer-body :is(h1, h2, h3) + :is(h2, h3, h4, h5, h6) { margin-top: .5em; }
+/* Inline code hugs its word, so a bracket or comma beside it stays with it:
+   "(Heizlastberechnung)" no longer reads "( Heizlastberechnung )" (J6). */
+.consensus-answer-body :not(pre) > code { padding: .1em .25em; margin-inline: -.05em; }
 .consensus-answer-body :is(strong, b) { font-weight: var(--font-weight-semibold); }
 .consensus-answer-body hr { margin-block: 1.5em; }
 .consensus-answer-body blockquote {

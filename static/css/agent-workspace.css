@@ -211,12 +211,9 @@
 .agent-file-item { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
 .agent-file-actions { display: flex; align-items: center; gap: 2px; flex: none; margin: -3px 0 0; }
 
-.agent-files-error {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: var(--radius-sm, 10px);
-  background: var(--raise); color: var(--ink-2); font-size: var(--font-size-ui); line-height: 1.5;
-}
-.agent-files-error > .agent-files-icon { color: var(--dispute); }
-.agent-files-error > span { flex: 1 1 200px; min-width: 0; }
+/* This answer's own files could not load (agent-workspace.js): one quiet
+   line in the row's ink, Retry as the text link (UX audit B13). */
+.agent-files-error { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
 
 /* Composer and message chips (attachments.js). */
 .attachment-chip.has-error { border-color: color-mix(in srgb, var(--dispute) 50%, var(--line)) !important; }

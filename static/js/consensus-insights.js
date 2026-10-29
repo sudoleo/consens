@@ -1978,17 +1978,20 @@
           // weiss, wohin sie fuehren. `differences`: der Unterschied dieser
           // Marke im Leser. `answers`: die erste Antwort, die sich oeffnen
           // laesst, zuerst die der Gegenseite, an ihrem Zitat.
+          // `notes`: die Anmerkungen der Pruefer (Audit), wie in der Leiste
+          // eine Notiz am Rand statt der Gabel des Widerspruchs (UX-Audit B10).
           const CARD_ACTION_ICONS = {
             differences: "M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5",
-            answers: "M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"
+            answers: "M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4",
+            notes: "M4 5h16v11H10l-5 4v-4H4V5ZM8 9h8M8 12.5h5"
           };
 
-          function cardAction(section, label, run, ctx) {
+          function cardAction(section, label, run, ctx, glyph) {
             const button = cardNode("button", "cx-card-action");
             button.type = "button";
             button.dataset.section = section;
             button.innerHTML = '<svg class="cx-card-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="'
-              + CARD_ACTION_ICONS[section] + '"/></svg>';
+              + CARD_ACTION_ICONS[glyph || section] + '"/></svg>';
             button.appendChild(cardNode("span", "cx-card-action-label", label));
             button.addEventListener("click", function () {
               closeCard(ctx);
@@ -2001,7 +2004,7 @@
             if (!ctx.interactive) return null;
             const row = cardNode("div", "cx-card-actions");
             if (ctx.openInDrawer) {
-              row.appendChild(cardAction("differences", options.differenceLabel || "Differences", ctx.openInDrawer, ctx));
+              row.appendChild(cardAction("differences", options.differenceLabel || "Differences", ctx.openInDrawer, ctx, options.differenceGlyph));
             }
             const answer = (options.answers || []).find(function (item) {
               return ctx.navigation?.canOpen?.(cardModel(item.model));
@@ -2550,12 +2553,13 @@
             return Array.from(new Set(items.map(function (item) { return cardModel(item.model); })));
           }
 
-          // Whole sentences per count (docs/i18n.md); the kind first.
+          // Whole sentences per count (docs/i18n.md); the kind first. The
+          // reviewers are "reviewers", never "models" (glossary, UX audit I1).
           function auditSummary(claim) {
             const t = window.App.t;
             const count = auditModels(claim.dissent).length;
             return t(AUDIT_KINDS[claim.kind] || "Doubtful") + ": "
-              + (count === 1 ? t("1 model objects") : t("{count} models object", { count }));
+              + (count === 1 ? t("1 reviewer objects") : t("{count} reviewers object", { count }));
           }
 
           function auditLabel(claim) {
@@ -2575,11 +2579,15 @@
           }
 
           // Die Karte einer Marke: die markierten Worte der Antwort, darunter
-          // jede Anmerkung mit ihrem Pruefer, ihrer Art und ihrer Quelle.
+          // jede Anmerkung mit ihrem Pruefer, ihrer Art und ihrer Quelle. Eine
+          // Anmerkung, deren Zitat die Antwort nicht enthaelt, sagt das, statt
+          // "In the answer" ueber Worte zu schreiben, die dort nicht stehen
+          // (UX-Audit D4).
           function auditCard(claim, ctx) {
             const card = cardNode("div", "cx-card cx-card-audit");
             card.appendChild(cardHeading(auditSummary(claim)));
-            card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), [], ctx, { label: "In the answer" }));
+            card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), [], ctx,
+              { label: claim.unplaced ? "Not found in the text" : "In the answer" }));
             claim.dissent.forEach(function (item) {
               const side = cardSide({ text: item.note }, [item.model], ctx, { label: AUDIT_KINDS[item.kind] || "Doubtful" });
               side.dataset.kind = item.kind;
@@ -2587,7 +2595,7 @@
               if (source) side.appendChild(source);
               card.appendChild(side);
             });
-            const actions = cardActions(ctx, { differenceLabel: "Notes", answers: [] });
+            const actions = cardActions(ctx, { differenceLabel: "Notes", differenceGlyph: "notes", answers: [] });
             if (actions) card.appendChild(actions);
             return card;
           }
@@ -2642,24 +2650,34 @@
               fallbackBox.hidden = !unplaced.length;
               if (unplaced.length) {
                 fallbackBox.appendChild(cardNode("div", "claims-fallback-title", "Other notes"));
+                // Each line says the note, not a fragment of words: its
+                // reviewer and note, the kind in the colour of its marks, the
+                // quoted words quietly after it. The whole line opens its card,
+                // a target a finger can hit (UX audit D4, D14).
                 unplaced.forEach(function (item) {
-                  const row = cardNode("div", "claims-fallback-row");
+                  const row = cardNode("button", "claims-fallback-row is-audit-note");
+                  row.type = "button";
                   // Shown under "Disagreements & issues" like a split claim.
                   row.dataset.coverage = "split";
-                  const text = cardNode("span", "claims-fallback-text");
-                  text.textContent = String(item.quote || "");
-                  text.setAttribute("data-i18n-skip", "");
                   const kind = AUDIT_CLASSES[item.kind] ? item.kind : "doubtful";
-                  const note = { anchor: String(item.quote || ""), kind: kind, dissent: [item] };
-                  const button = cardNode("button", "claim-badge has-dissent cx-audit-note", AUDIT_KINDS[kind]);
-                  button.type = "button";
-                  button.setAttribute("aria-label", auditLabel(note));
-                  button.addEventListener("click", function () {
-                    openCard(button, null, function (ctx) {
-                      return auditCard(note, Object.assign(ctx, { spans: [text], navigation: navigation, openInDrawer: openNotes }));
+                  row.dataset.kind = kind;
+                  const text = cardNode("span", "claims-fallback-text");
+                  const who = modelDisplayName(cardModel(item.model));
+                  text.textContent = (who ? who + ": " : "") + String(item.note || "");
+                  text.setAttribute("data-i18n-skip", "");
+                  const label = cardNode("span", "cx-audit-kind", AUDIT_KINDS[kind]);
+                  label.dataset.kind = kind;
+                  const quote = cardNode("q", "claims-fallback-quote", String(item.quote || ""));
+                  quote.setAttribute("data-i18n-skip", "");
+                  const note = { anchor: String(item.quote || ""), kind: kind, dissent: [item], unplaced: true };
+                  row.setAttribute("aria-label", auditLabel(note));
+                  row.addEventListener("click", function () {
+                    openCard(row, null, function (ctx) {
+                      return auditCard(note, Object.assign(ctx, { spans: [quote], navigation: navigation, openInDrawer: openNotes }));
                     }, "audit");
                   });
-                  row.append(text, button);
+                  row.append(text, " ", label);
+                  if (item.quote) row.append(" ", quote);
                   fallbackBox.appendChild(row);
                 });
               }

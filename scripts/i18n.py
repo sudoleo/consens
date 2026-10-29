@@ -424,6 +424,10 @@ def looks_like_text(text: str) -> bool:
     # A count and its noun ("{length} answers", "{count} sources").
     if re.fullmatch(r"\{\w+\} [a-z’']{3,}[.…]?", text.strip()):
         return True
+    # A label and its value after a middle dot ("Activity · {0}"): a German
+    # screen reader read it in English, and nothing reported it (UX audit I4).
+    if re.fullmatch(r"[A-Z][a-z’']{2,}(?: [a-z’']+)* · \{\w+\}", text.strip()):
+        return True
     # A lowercase phrase around a number or a value ("of {total} checked
     # statements", " of 1 statement") is a piece of a sentence, not a class list.
     if (re.search(r"\{[^{}]*\}|\d", text) and len(re.findall(r"[A-Za-z’']{2,}", plain)) >= 2
@@ -742,10 +746,43 @@ def composed_in(relative: str, source: str, current: i18n.Catalog) -> list[Found
     return gaps
 
 
+# A label read aloud, put together from values only, one of them a word in
+# a variable (``setAttribute("aria-label", `${label} ${count}`)``): the page
+# looks the whole value up, finds no entry, and a German screen reader heard
+# "Notes 4" (UX audit I4). The word goes through App.t first; a variable
+# named like an interface word (label, word, text, …Word) that does not is
+# reported. A value with words of its own is a pattern ("Choose model:
+# {displayLabel}") and found as a key instead.
+_READ_ATTRIBUTES = {"aria-label", "title", "placeholder", "aria-description", "aria-roledescription"}
+_WORD_VARIABLE = re.compile(r"label|word|[a-z]\w*(?:Label|Word)")
+
+
+def composed_attributes(relative: str, source: str) -> list[Found]:
+    gaps: list[Found] = []
+    tokens = tokenize(source)
+    for index, token in enumerate(tokens[:-3]):
+        opening, attribute, comma = tokens[index + 1:index + 4]
+        if not (token.kind == "name" and token.value == "setAttribute" and opening.value == "("
+                and attribute.kind == "string" and attribute.value in _READ_ATTRIBUTES and comma.value == ","):
+            continue
+        # Every template of the value, also in a branch (`n === null ? label : `${label} ${n}``).
+        for value in tokens[index + 4:_close(tokens, index + 1)]:
+            if value.kind != "template":
+                continue
+            chunks, expressions = value.parts
+            words = [expression.strip() for expression in expressions
+                     if _WORD_VARIABLE.fullmatch(expression.strip()) and not _TRANSLATED_CALL.search(expression)]
+            if words and len(expressions) > 1 and not re.search(r"[A-Za-z]", "".join(chunks)):
+                gaps.append(Found(f"{attribute.value}: {_template_text(value)} (App.t({words[0]}) first)", relative, value.line))
+    return gaps
+
+
 def composed_gaps(language: str = "de") -> list[Found]:
     current = i18n.catalog(language) or i18n.Catalog({})
     gaps = [gap for relative in script_files()
             for gap in composed_in(relative, (ROOT / relative).read_text(encoding="utf-8"), current)]
+    gaps.extend(gap for relative in script_files()
+                for gap in composed_attributes(relative, (ROOT / relative).read_text(encoding="utf-8")))
     gaps.extend(item for relative in template_files() for item in template_keys(relative) if TAG_IN_VALUE in item.key)
     return gaps
 
