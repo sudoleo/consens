@@ -88,7 +88,7 @@ describe("VM calls in the activity", () => {
     expect(edit.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/calc.py");
     // Nothing to open without output.
     expect(write.classList.contains("has-output")).toBe(false);
-    expect(failed.querySelector(".agent-vm-meta").textContent).toBe("VM not available");
+    expect(failed.querySelector(".agent-vm-meta").textContent).toBe("Workspace not available");
     expect(failed.textContent).not.toMatch(/error|exception|HTTP/i);
   });
 

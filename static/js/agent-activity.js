@@ -597,7 +597,8 @@
     }
     return item.path || item.process;
   }
-  const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left',
+  // The glossary's word: the workspace, never "VM" on the page (docs/i18n.md).
+  const vmOutcomes = { unavailable: 'Workspace not available', no_time: 'Skipped · no time left',
     day_limit: 'Skipped · VM time for today used up', busy: 'Skipped · workspace in use by another chat' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);

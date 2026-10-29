@@ -993,6 +993,25 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-plan > summary:hover { color: var(--ink-2); }
 }
 .agent-plan > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+/* 44px to the finger in the activity (UX audit H1, Apple-Audit F5): the
+   lines that open (a command, the plan, the earlier steps), the sources of a
+   step, the reviewers' marks and the toggles beside them measured 19-28px.
+   What is drawn keeps its size; the area reaches out (foundation.css
+   --hit-slop). On a touch screen the marks stand side by side instead of
+   overlapping, so each keeps its own width to the finger. */
+@media (pointer: coarse) {
+  :is(.agent-vm, .agent-vm-fold, .agent-plan) > summary { position: relative; }
+  :is(.agent-vm.has-output, .agent-vm-fold, .agent-plan) > summary::before {
+    content: ""; position: absolute; inset: var(--hit-slop) 0;
+  }
+  .agent-activity .agent-activity-sources { --src-ref-line: 44px; }
+  .agent-answer-activity .agent-model-stack .agent-inline-model { margin-left: 0; }
+  .agent-answer-activity .agent-inline-models :is(.agent-sidebar-toggle, .agent-workspace-toggle) { position: relative; }
+  .agent-answer-activity .agent-model-stack .agent-inline-model::after,
+  .agent-answer-activity .agent-inline-models :is(.agent-sidebar-toggle, .agent-workspace-toggle)::after {
+    content: ""; position: absolute; inset: var(--hit-slop);
+  }
+}
 .agent-plan-list { margin: 4px 0 0; padding: 0; list-style: none; }
 .agent-plan-list > li { position: relative; padding-left: 1.4em; color: var(--ink-2); overflow-wrap: anywhere; }
 .agent-plan-list > li::before {
