@@ -1613,7 +1613,7 @@ def join_when_held(loop, store, action, *, provider="openai", entry=2, reason="D
     seen = []
 
     def run():
-        hold = held(loop)
+        hold = open_hold(loop)
         auditor = loop.comparison.auditor
         auditor.halt(auditor.sessions[provider], {"entry": entry, "kind": "harm", "reason": reason})
         seen.append({**loop.hold, "halts": set(auditor.halts),
@@ -1710,7 +1710,7 @@ def test_a_halt_during_the_closing_step_holds_its_answer_until_the_user_decides(
     at_decision = []
 
     def decide():
-        hold = held(loop)
+        hold = open_hold(loop)
         at_decision.append((loop.answer_fixed, list(loop.comparison.versions)))
         store.decide_hold(UID, loop.chat_id, loop.turn_id, hold["id"], action,
                           "Name the source." if action == "steer" else "")
@@ -1809,7 +1809,7 @@ def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
     loop = audit_loop(store, script)
 
     def deny():
-        hold = held(loop)
+        hold = open_hold(loop)
         loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "deny"}})
     thread = threading.Thread(target=deny, daemon=True)
     thread.start()
@@ -1843,7 +1843,7 @@ def test_the_watcher_looks_less_often_during_a_pause(store, monkeypatch):
     loop = audit_loop(store, script)
 
     def decide_later():
-        hold = held(loop)
+        hold = open_hold(loop)
         time.sleep(1)
         loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "continue"}})
     thread = threading.Thread(target=decide_later, daemon=True)
@@ -1874,7 +1874,7 @@ def in_background(loop, request_id="one"):
     return events, ended
 
 
-def held(loop, seconds=5):
+def open_hold(loop, seconds=5):
     deadline = time.monotonic() + seconds
     while loop.hold is None and time.monotonic() < deadline:
         time.sleep(.01)
@@ -1889,7 +1889,7 @@ def test_a_decision_reaches_a_run_of_this_process_at_once(api):
     script = Audit(tool_steps=2, live={"anthropic": halting_live})
     loop = audit_loop(store, script)
     events, ended = in_background(loop)
-    hold = held(loop)
+    hold = open_hold(loop)
     response = client.post(f"/agent/chats/{loop.chat_id}/requests/one/hold",
                            json={"id": hold["id"], "action": "continue"}, headers=AUTH)
     assert response.status_code == 200
@@ -1927,7 +1927,7 @@ def test_a_pause_that_could_not_be_saved_is_still_decided(api, monkeypatch, acti
     script = Audit(tool_steps=2, live={"anthropic": halting_live})
     loop = audit_loop(store, script)
     events, ended = in_background(loop)
-    hold = held(loop)
+    hold = open_hold(loop)
     deadline = time.monotonic() + 5
     while not loop.hold_unsaved and time.monotonic() < deadline:
         time.sleep(.01)

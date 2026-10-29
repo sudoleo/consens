@@ -418,7 +418,7 @@ def test_the_route_saves_the_key_on_the_workbench_and_answers_the_card(api, monk
 def test_a_key_card_that_could_not_be_saved_still_takes_the_key(api, monkeypatch, no_keys):
     """A-S1: the card's save failed for good; the run of this process knows
     the card and takes the answer, the key goes to the workbench as ever."""
-    from test_agent_audit import held, in_background, unsaved_holds
+    from test_agent_audit import in_background, open_hold, unsaved_holds
     from test_agent_vm import FakeVM
     from app.services import agent_vm
     client, store, _ = api
@@ -428,7 +428,7 @@ def test_a_key_card_that_could_not_be_saved_still_takes_the_key(api, monkeypatch
     unsaved_holds(store, monkeypatch)
     script, loop, ran = asking(store, args={"request": "Ich brauche deinen OpenAI-Key.", "secret": "OPENAI_API_KEY"})
     events, ended = in_background(loop)
-    hold = held(loop)
+    hold = open_hold(loop)
     deadline = time.monotonic() + 5
     while not loop.hold_unsaved and time.monotonic() < deadline:
         time.sleep(.01)

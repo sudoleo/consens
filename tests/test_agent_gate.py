@@ -453,14 +453,14 @@ def test_a_domain_the_user_does_not_allow_never_runs(store):
 def test_a_domain_card_nobody_answers_stays_closed_and_the_work_goes_on(store, monkeypatch):
     """A-R4: after 30 minutes without a decision the domain is not allowed,
     as with "Don't allow"; before, the whole response stopped."""
-    from test_agent_audit import held
+    from test_agent_audit import open_hold
     script, loop, ran = asking(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     clock = {"skew": 0.0}
     loop.clock = lambda: time.monotonic() + clock["skew"]
 
     def later():
-        held(loop)
+        open_hold(loop)
         clock.update(skew=agent_delegation.HOLD_TIMEOUT_SECONDS + 1)
     thread = threading.Thread(target=later, daemon=True)
     thread.start()
