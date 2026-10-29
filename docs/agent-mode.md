@@ -1221,7 +1221,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   an, den Key als Passwort von consens.io zu speichern, und eine Zeile verlor
   die Umbrüche eines PEM-Keys; Platzhalter = Name, kein `<form>`, also nie ein
   GET), der Zeile „Saved in your workspace as ~/.secrets/NAME … Only for keys
-  and tokens: a password you type in the browser yourself.“, „Save“ und „Not
+  like this one: a password you type in the browser yourself.“, „Save“ und „Not
   now“ (`deny`). „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
   schickt den Wert per
   `POST /agent/chats/{chat}/requests/{request}/secret` (`{id, value}`,

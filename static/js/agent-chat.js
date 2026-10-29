@@ -1607,7 +1607,7 @@
     const note = document.createElement("p");
     note.className = "agent-ask-secret-note";
     note.dataset.i18nSkip = "";
-    note.textContent = App.t("Saved in your workspace as {path} for the agent’s commands, never in the chat. Only for keys and tokens: a password you type in the browser yourself.",
+    note.textContent = App.t("Saved in your workspace as {path} for the agent’s commands, never in the chat. Only for keys like this one: a password you type in the browser yourself.",
       { path: `~/.secrets/${name}` });
     field.append(input, note);
     return field;
