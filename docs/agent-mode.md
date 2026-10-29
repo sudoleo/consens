@@ -737,6 +737,8 @@ zweiter Tab, der einem pausierten Turn folgt, in
 Produktionsreife (Prod-Messung 25.–29.10., Befunde zu Tempo, Abbrüchen und
 Randfällen, Anforderungen in Paketen):
 [agent-audit-readiness-2026-10-29.md](agent-audit-readiness-2026-10-29.md).
+UX-Audit auf Apple-Niveau (98 Befunde in 10 Paketen, Entscheidung offen):
+[ux-audit-agent-audit-2026-10-29.md](ux-audit-agent-audit-2026-10-29.md).
 
 ### Agent VM (seit 2026-10-25; seit 2026-10-26 Teil von Audit)
 
