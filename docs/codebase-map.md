@@ -4724,7 +4724,13 @@ wie ein hängender Lauf. `_step` verdichtet es mit
 `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)` zu
 kurzen wörtlichen Auszügen in EINER Fortschrittszeile `completion:N/thinking`
 (kind `progress`, höchstens alle 3 s ersetzt, seit 2026-10-21 nur der neueste
-vollständige Auszug; im Browser blendet die Zeile weich über). Seit 2026-10-08 auch über
+vollständige Auszug; im Browser blendet die Zeile weich über). Seit 2026-10-29
+trägt sie `summary_source`, und am Ende des Schritts schickt
+`_closing_thoughts` sie einmal mit dem letzten Wort und `sections`
+(`ReasoningProgress.closing`/`sections`: Überschrift + Absätze bzw. ganze
+Sätze je Absatz, ≤ 4.000 Zeichen aus den ersten 16.000 empfangenen); die
+Zeitleiste zeigt sie aufgeklappt (`agent-activity.js` `updateThought`),
+`bounded_activity` lässt sie vor dem Kürzen der Texte fallen. Seit 2026-10-08 auch über
 `REASONING_STORAGE_CHARS` (32.000) hinaus: `reasoning_events` speichert nur bis
 dahin und liefert den Rest als `transient`-Ereignis nur an die Fortschritts-
 anzeigen (nie in `AgentCompletion.activity`). In die Antwort gelangt es nie;
@@ -5369,8 +5375,11 @@ oder deutschen Ordinalzahlen („am 3. Oktober“, `_ends_sentence`); rohes Denk
 zeigt den letzten passenden Satz der neuesten fertigen Zeile (die offene Zeile
 nur, solange keine fertig ist), eine Überschrift („**Comparing options**“,
 OpenAI-/Gemini-Summaries; jeder Summary-Teil mit eigener `id` beginnt einen
-neuen Block) steht für ihren Abschnitt, Summaries ohne Überschrift sprechen mit
-ihrem ersten Satz. Gekürzt wird nichts mehr (vorher 177 Zeichen + „…“): ein Satz
+neuen Block) steht für ihren Abschnitt, seit 2026-10-29 mit dem ersten Satz
+darunter („Heading – Satz“, sobald er da ist; eine nach Zeit getaktete Zeile
+wartet nicht mehr zusätzlich auf 400 Zeichen), Summaries ohne Überschrift sprechen mit
+ihrem ersten Satz. Notizen blenden Reasoning seit 2026-10-29 nicht mehr aus,
+nur das eines Schritts, das seine Notiz wörtlich wiederholt (A1). Gekürzt wird nichts mehr (vorher 177 Zeichen + „…“): ein Satz
 über 160 Zeichen weicht einem kürzeren, sonst bleibt der alte Auszug stehen.
 `compactReasoning` (agent-activity.js) wendet dieselben Satzgrenzen auf
 gespeicherte Zeilen an (≤ 180 Zeichen, abgeschnittene „…“-Zeilen fallen weg).
@@ -6057,7 +6066,11 @@ VM-Befehle, und lange Notizen des Agenten kürzt die Live-Ansicht auf drei
 Zeilen (`.agent-progress-note`): Die Live-Zeilen wachsen in langen Läufen
 nicht mehr endlos. Der Plan (`update_plan`, seit 2026-10-26) steht
 als `planView` angeheftet über den Live-Zeilen (neuester gültiger Plan, offen)
-und je Änderung eingeklappt in der Zeitleiste. `vm_share_file` (seit 2026-10-26) kopiert eine
+und eingeklappt in der Zeitleiste, seit 2026-10-29 nur einmal an seiner ersten
+Stelle mit dem neuesten Stand (vorher je Änderung, UX-Audit A5). Ein Befehl
+mit Fehler sagt „Failed · code N“ in `--dispute` (`commandFailed`,
+`data-outcome`), eine Seitensuche steht als Zitat, eine geöffnete Seite mit
+Titel und Host (`vmTargetKind`, A8/A9). `vm_share_file` (seit 2026-10-26) kopiert eine
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;

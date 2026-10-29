@@ -152,8 +152,13 @@ def test_answer_step_shows_reasoning_excerpts_while_thinking_but_never_in_the_an
     events = list(loop.run())
     assert len(requests) == 1 and requests[0].get("reasoning", {}).get("exclude") is not True
     thinking = [e for e in events if e.get("kind") == "progress" and e["id"].endswith("/thinking")]
-    assert thinking and "Weighing the cost of both options" in thinking[-1]["text"]
+    assert thinking and "Weighing the cost of both options" in thinking[0]["text"]
     assert thinking[-1]["id"] == "completion:1/thinking"
+    # The end of the step says its last word and keeps what it thought
+    # (ReasoningProgress.closing, UX audit A2).
+    assert thinking[-1]["text"] == "The first option fits the stated budget exactly."
+    assert thinking[-1]["sections"] == [{"title": "", "text": "Weighing the cost of both options against the budget. "
+                                         "The first option fits the stated budget exactly."}]
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["consensus"] == answer == _deltas(events)
     assert review_is_bound(saved["agent_review"], answer)

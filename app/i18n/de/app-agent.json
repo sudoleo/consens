@@ -882,6 +882,7 @@
   "Running…": "Läuft…",
   "Timed out": "Zeitlimit erreicht",
   "Exit {code}": "Exit-Code {code}",
+  "Failed · code {code}": "Fehlgeschlagen · Code {code}",
   "VM {time}": "VM {time}",
   "VM": "VM",
   "Security-critical step": "Sicherheitskritischer Schritt",

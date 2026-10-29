@@ -103,14 +103,111 @@ def test_each_summary_part_is_quoted_by_its_heading():
     assert progress.update(part(0, "**Comparing the two")) is None
     assert progress.update(part(0, " heat pump models**")) is None
     value = progress.update(part(0, "\n\nI'm looking at the efficiency figures of both. " + "Detail. " * 60))
-    assert value["text"] == "Comparing the two heat pump models"
-    # The next part starts without a line break: its heading stands alone.
+    # The heading with the first sentence of its section (UX audit A2: a
+    # heading alone said nothing of what was thought).
+    assert value["text"] == "Comparing the two heat pump models – I'm looking at the efficiency figures of both."
+    # The next part starts without a line break: its heading stands apart.
     value = progress.update(part(1, "**Weighing installation costs**\n\nI'm checking quotes. " + "Detail. " * 60))
-    assert value["text"].splitlines() == ["Comparing the two heat pump models", "Weighing installation costs"]
+    assert value["text"].splitlines() == ["Comparing the two heat pump models – I'm looking at the efficiency figures of both.",
+                                          "Weighing installation costs – I'm checking quotes."]
     # A summary without headings speaks with the topic sentence of a finished paragraph.
     plain = ReasoningProgress()
     value = plain.update(event("Checking the official tariff tables first. Then the rest.\n", "summary"))
     assert value["text"] == "Checking the official tariff tables first."
+
+
+TERRA_SUMMARY = (
+    "**Checking the numbers**\n\nThe search found a new-contract gas price of about 11.8 ct/kWh and heat-pump "
+    "tariffs between 26 and 29 ct/kWh. I will compute the running costs in the workspace so the arithmetic is "
+    "visible and can be checked.\n\n**Choosing the efficiency**\n\nA SCOP of 3.4 is a cautious value for radiators "
+    "at a 50 °C flow temperature; I will also run 3.0 and 3.8 to show the range.")
+
+
+def test_an_opened_step_keeps_the_sentences_under_its_headings():
+    """UX audit 2026-10-29 A2: a Terra summary kept only "Checking the
+    numbers"; the history now holds its paragraphs under their headings."""
+    now = [0.0]
+    progress = ReasoningProgress(unlimited=True, min_seconds=3, clock=lambda: now[0])
+    lines = []
+    for index in range(0, len(TERRA_SUMMARY), 70):
+        now[0] += 1.5
+        value = progress.update(event(TERRA_SUMMARY[index:index + 70], "summary", "reasoning.summary:0"))
+        if value:
+            lines.append(value["text"].splitlines()[-1])
+    # The heading first, then with its first sentence: paced by time only.
+    assert lines[:2] == ["Checking the numbers", "Checking the numbers – The search found a new-contract gas price of "
+                         "about 11.8 ct/kWh and heat-pump tariffs between 26 and 29 ct/kWh."]
+    # While the summary streams, only finished paragraphs are read.
+    assert progress.sections()[0]["title"] == "Checking the numbers"
+    assert all(section["text"] != "A SCOP" for section in progress.sections())
+    closing = progress.closing()
+    # The last section arrived after the pacing let the line rest: the end of the step says it.
+    assert closing["text"] == ("Choosing the efficiency – A SCOP of 3.4 is a cautious value for radiators at a "
+                               "50 °C flow temperature; I will also run 3.0 and 3.8 to show the range.")
+    assert closing["summary_source"] == "provider_summary"
+    assert closing["sections"] == [
+        {"title": "Checking the numbers", "text": "The search found a new-contract gas price of about 11.8 ct/kWh and "
+         "heat-pump tariffs between 26 and 29 ct/kWh. I will compute the running costs in the workspace so the "
+         "arithmetic is visible and can be checked."},
+        {"title": "Choosing the efficiency", "text": "A SCOP of 3.4 is a cautious value for radiators at a 50 °C flow "
+         "temperature; I will also run 3.0 and 3.8 to show the range."}]
+    # Nothing new: no second closing.
+    assert progress.closing() is None
+
+
+def test_an_opened_step_keeps_whole_sentences_of_raw_reasoning_within_its_bound():
+    progress = ReasoningProgress(unlimited=True)
+    text = ("The user asks about a heat pump. Let me think about what matters here. The key numbers are "
+            "the gas use and the efficiency.\n\nI should search for current prices. Then I can run the "
+            "numbers so they are checkable. And then the half")
+    progress.update(event(text))
+    sections = progress.closing()["sections"]
+    # Complete sentences per paragraph, fragments left out: still excerpts.
+    assert sections == [{"title": "", "text": "The user asks about a heat pump. Let me think about what matters here. "
+                         "The key numbers are the gas use and the efficiency.\n\nI should search for current prices. "
+                         "Then I can run the numbers so they are checkable."}]
+    long = ReasoningProgress(unlimited=True)
+    paragraph = "This paragraph weighs one more source against the others. " * 6
+    long.update(event(("\n\n" + paragraph) * 40))
+    kept = long.closing()["sections"][0]["text"]
+    assert len(kept) <= 4000 + 2 * 40 and kept.endswith("against the others.")
+
+
+def test_answer_step_thinking_saves_its_sections_once_the_step_is_over(store):
+    """The orchestrator's thinking line (completion:N/thinking) carries its
+    sections in one closing update; the saved turn keeps them."""
+    script = Script()
+    original = script.factory
+    def factory():
+        value = original()
+        stream = value.stream
+        def thinking_stream(**kwargs):
+            for index in range(0, len(TERRA_SUMMARY), 90):
+                yield {"type": "activity", "version": 1, "step_id": value.step_id, "kind": "reasoning",
+                       "id": "reasoning.summary:0", "format": "summary", "text": TERRA_SUMMARY[index:index + 90],
+                       "append": True}
+            yield from stream(**kwargs)
+        value.stream = thinking_stream
+        return value
+    script.factory = factory
+    loop = make_loop(store, script)
+    events = list(loop.run())
+    thinking = [e for e in events if e.get("kind") == "progress" and e["id"].endswith("/thinking")]
+    assert thinking and sum(1 for e in thinking if "sections" in e) == len({e["id"] for e in thinking})
+    assert thinking[-1]["sections"][-1]["title"] == "Choosing the efficiency"
+    saved = store.get_turn(loop.uid, loop.chat_id, loop.turn_id)
+    kept = [e for e in saved["agent_activity"] if e["kind"] == "progress" and e["id"].endswith("/thinking")]
+    assert kept and kept[0]["sections"][0]["title"] == "Checking the numbers"
+
+
+def test_saved_activity_drops_thinking_sections_before_shortening_texts():
+    from app.services.agent_runs import bounded_activity, json_bytes
+    sections = [{"title": "Checking the numbers", "text": "A sentence about prices. " * 100}]
+    activity = [{"id": f"completion:{i}/thinking", "kind": "progress", "text": "Checking the numbers – A sentence.",
+                 "sections": sections} for i in range(4)]
+    bounded = bounded_activity(activity, json_bytes(activity) - 2000)
+    assert len(bounded) == 4 and "sections" not in bounded[0] and "sections" in bounded[-1]
+    assert all(item["text"] == "Checking the numbers – A sentence." for item in bounded)
 
 
 def test_live_and_saved_activity_never_contain_full_reasoning(store):

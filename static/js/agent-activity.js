@@ -517,12 +517,31 @@
     tabs: ['Listing the tabs', 'Listed the tabs'], tab: ['Switching the tab', 'Switched the tab'],
     screenshot: ['Taking a screenshot', 'Took a screenshot'], upload: ['Uploading', 'Uploaded'],
     download: ['Downloading', 'Downloaded'], wait: ['Waiting for the page', 'Waited for the page'] };
+  // A page by its name: the host of its address, without "www.".
+  function hostOf(address) {
+    try {
+      const url = new URL(String(address || ''));
+      return ['http:', 'https:'].includes(url.protocol) ? url.hostname.replace(/^www\./, '') : '';
+    } catch (_) { return ''; }
+  }
+  // What a step names, in its own type (UX audit A8/A9): a command, a path
+  // or code in mono; a search term on a page as a quote in the text's type
+  // („Förderfähige Kosten“); an opened page by its title (its host after it,
+  // the address on hover). Before, all three stood in mono, the page as its
+  // raw address.
+  function vmTargetKind(item) {
+    if (item.name !== 'browser') return 'code';
+    if (item.action === 'find' && item.query) return 'quote';
+    if (item.action === 'open' && (item.title || hostOf(item.url))) return 'text';
+    return 'code';
+  }
   function vmTarget(item) {
     if (['vm_exec', 'vm_start_process'].includes(item.name)) return item.command;
     if (item.name === 'vm_install_packages') return Array.isArray(item.packages) ? item.packages.join(' ') : '';
     if (item.name === 'request_domain') return item.domain;
     if (item.name === 'browser') {
-      return item.action === 'open' || item.action === 'download' ? item.url || item.downloads?.[0] || item.title
+      if (item.action === 'open') return item.title || hostOf(item.url) || item.url;
+      return item.action === 'download' ? item.url || item.downloads?.[0] || item.title
         : item.action === 'upload' ? item.file
         : item.action === 'key' ? item.key : item.action === 'find' ? item.query
         // A place of the screenshot, or how many strokes (agent_browser._activity).
@@ -544,10 +563,26 @@
     if (item.status === 'failed') return App.t('Failed');
     const parts = [];
     if (item.timed_out) parts.push(App.t('Timed out'));
-    else if (Number.isInteger(item.exit_code) && item.exit_code !== 0) parts.push(App.t('Exit {code}', { code: item.exit_code }));
+    else if (Number.isInteger(item.exit_code) && item.exit_code !== 0) {
+      // A command's exit code is its verdict, in words (UX audit F1); a
+      // stopped process's code (143) is only how it ended.
+      parts.push(commandFailed(item) ? App.t('Failed · code {code}', { code: item.exit_code })
+        : App.t('Exit {code}', { code: item.exit_code }));
+    }
+    // The opened page's host after its title (vmTarget).
+    if (vmTargetKind(item) === 'text' && item.title && hostOf(item.url)) parts.push(hostOf(item.url));
     // A quick command needs no clock ("0s" says nothing).
     if (Number.isFinite(item.duration_ms) && item.duration_ms >= 1000) parts.push(App.format.duration(item.duration_ms));
     return parts.join(' · ');
+  }
+  // A command that ended with an error (or ran out of time), or a step that
+  // failed: its line says so in the disagreement's tone (agent-chat.css).
+  // Before, "Exit 1" stood as grey as "3s" beside a command that worked,
+  // and data-status said "succeeded".
+  const commandTools = new Set(['vm_exec', 'vm_install_packages']);
+  function commandFailed(item) {
+    return item.status === 'succeeded' && commandTools.has(item.name)
+      && (item.timed_out === true || (Number.isInteger(item.exit_code) && item.exit_code !== 0));
   }
   function vmView(className) {
     const details = document.createElement('details');
@@ -586,11 +621,17 @@
     details.dataset.signature = signature;
     details.dataset.status = item.status;
     details.dataset.tool = item.name;
+    if (item.status === 'failed' || commandFailed(item)) details.dataset.outcome = 'failed';
+    else delete details.dataset.outcome;
     const [verb, target, meta] = details.firstElementChild.children;
     const verbs = item.name === 'browser' ? browserVerbs[item.action] : vmVerbs[item.name];
     verb.hidden = !verbs;
     verb.textContent = verbs ? App.t(verbs[item.status === 'running' ? 0 : 1]) : '';
+    details.dataset.target = vmTargetKind(item);
     target.textContent = String(vmTarget(item) || '');
+    // An opened page's address, on hover.
+    if (details.dataset.target === 'text' && item.url) target.title = String(item.url).slice(0, 500);
+    else target.removeAttribute('title');
     meta.textContent = vmMeta(item);
     const watch = details.firstElementChild.children[3];
     watch.hidden = !(item.name === 'browser' && document.body.classList.contains('viewer-has-workspace')
@@ -713,6 +754,33 @@
     // the reason once the user decided (on a phone both stood one above the other).
     node._reason.hidden = state === 'waiting';
     node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t((domain ? domainStates : holdStates)[state])}`;
+  }
+
+  // A step's thinking line (agent_delegation `completion:N/thinking`).
+  const isThought = item => item.kind === 'progress' && /\/thinking$/.test(String(item.id || ''));
+  // What a step thought, in its opened history (ReasoningProgress.sections,
+  // UX audit A2): each heading over its paragraphs, as ChatGPT and Claude
+  // open "Thought for …". Before, a step kept only its newest line, and a
+  // provider summary only its headings. The words are the model's: never
+  // translated; a step still thinking (no sections yet) shows its line.
+  function updateThought(node, item) {
+    const sections = (Array.isArray(item.sections) ? item.sections : [])
+      .filter(section => section && (section.title || section.text)).slice(0, 40);
+    const signature = JSON.stringify([item.text, sections]);
+    if (node.dataset.signature === signature) return;
+    node.dataset.signature = signature;
+    const paragraph = (text, className) => {
+      const p = document.createElement('p');
+      if (className) p.className = className;
+      p.dataset.i18nSkip = '';
+      p.translate = false;
+      p.textContent = String(text).slice(0, 4000);
+      return p;
+    };
+    node.replaceChildren(...(sections.length ? sections.flatMap(section => [
+      ...(section.title ? [paragraph(section.title, 'agent-thought-title')] : []),
+      ...String(section.text || '').split(/\n{2,}/).filter(text => text.trim()).map(text => paragraph(text)),
+    ]) : [paragraph(item.text)]));
   }
 
   function userNote(className, text) {
@@ -864,8 +932,14 @@
     }
     const view = host._agentActivity;
     const progress = events.filter(item => item.kind === 'progress' && item.text);
-    const reasoning = progress.length ? [] : events.filter(item => item.kind === "reasoning"
-      && ["text", "summary"].includes(item.format) && item.text);
+    // Reasoning stays beside the agent's notes (UX audit A1): until
+    // 2026-10-29 any progress line, a note as much as a gate or retry line,
+    // hid every thought of the run, live and saved (a rule from the time
+    // progress lines were summaries standing in for it). Only a step's
+    // reasoning that its own note repeats word for word stands back.
+    const said = step => progress.filter(item => item.step_id === step).map(item => item.text).join('\n');
+    const reasoning = events.filter(item => item.kind === "reasoning" && ["text", "summary"].includes(item.format)
+      && item.text && !(item.step_id && compactReasoning(item.text).split('\n').every(line => said(item.step_id).includes(line))));
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
     // `answer` only ends the steering; the answer itself is what follows.
@@ -1047,8 +1121,13 @@
       }
     } else hidePreview(view, answering);
     const ids = new Set();
-    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item)
-      || holds.includes(item))) {
+    // The plan stands once in the history, where it was first made, with its
+    // latest state (UX audit A5): every change of the checklist was an entry
+    // of its own ("Plan · 1 of 4 done", "2 of 4", "3 of 4"). An update that
+    // failed keeps its own line ("Plan not updated").
+    const firstPlan = tools.find(item => hasPlan(item) && item.status !== 'failed');
+    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || (tools.includes(item)
+      && !(hasPlan(item) && item.status !== 'failed' && item !== firstPlan)) || holds.includes(item))) {
       ids.add(item.id);
       let node = view.nodes.get(item.id);
       if (!node) {
@@ -1056,8 +1135,10 @@
           : item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
           : hasPlan(item) ? planView('agent-activity-tool agent-plan')
           : item.from_user ? userNote('agent-activity-update agent-user-note', item.text)
-          : document.createElement(item.kind === 'progress' ? 'p' : 'div');
-        if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
+          : document.createElement(item.kind === 'progress' && !isThought(item) ? 'p' : 'div');
+        if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool"
+          : isThought(item) ? 'agent-activity-update agent-activity-thought'
+          : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
         view.content.appendChild(node);
         if (item.kind === 'progress' && view.details.open && running) reveal(node);
@@ -1069,7 +1150,10 @@
       } else if (node.classList.contains('agent-user-note')) {
         // The user's words, written once at creation.
       } else if (node.classList.contains('agent-plan')) {
-        if (hasPlan(item)) updatePlan(node, item, false);
+        if (hasPlan(item)) updatePlan(node, item === firstPlan ? plan || item : item, false);
+      } else if (node.classList.contains('agent-activity-thought')) {
+        updateThought(node, item);
+        node.setAttribute('aria-label', item.summary_source === 'provider_summary' ? 'Reasoning summary' : 'Reasoning highlights');
       } else if (item.kind === "tool") {
         const signature = JSON.stringify([item, textOnly]);
         if (node.dataset.signature !== signature) {

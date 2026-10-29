@@ -1571,7 +1571,8 @@ class DelegationLoop(AgentLoop):
                                     if not compact:
                                         continue
                                     event = {"step_id": step, "id": "thinking", "kind": "progress",
-                                             "text": compact["text"].rsplit("\n", 1)[-1]}
+                                             "text": compact["text"].rsplit("\n", 1)[-1],
+                                             "summary_source": compact["summary_source"]}
                                 event = self.activity(event)
                             if event and event["type"] == "activity" and event.get("id") == f"{step}/tool_call":
                                 yield event
@@ -1606,6 +1607,9 @@ class DelegationLoop(AgentLoop):
                         source.close()
                     finally:
                         streaming.close()
+                closing = self._closing_thoughts(step, thinking)
+                if closing:
+                    yield closing
             self._check(cancellation)
             status = "succeeded"
             if stream_answer and self._answer_check_follows(value):
@@ -1628,6 +1632,9 @@ class DelegationLoop(AgentLoop):
             # user decided (_past_halts); the work log keeps it as cancelled.
             value.halted = exc
             status, log_status = "succeeded", "cancelled"
+            closing = self._closing_thoughts(step, thinking)
+            if closing:
+                yield closing
         except Exception as exc:
             value.record_rejection(exc, model)
             # A reviewer's 429 (audit mode, alongside the agent) costs its
@@ -2626,6 +2633,16 @@ class DelegationLoop(AgentLoop):
                 "answer_output": self._answer_output()}
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                 rate_limit=bool(self.comparison.comparisons), **args))
+
+    def _closing_thoughts(self, step, thinking):
+        """The step's thinking line once its stream is over, with what it
+        thought in sections (ReasoningProgress.closing): the history shows it
+        opened, the live line its last word past the pacing. Once per step,
+        not with every update, so the live buffer and the journal stay lean."""
+        closing = thinking.closing() if thinking is not None else None
+        if not closing:
+            return None
+        return self.activity({"step_id": step, "id": "thinking", "kind": "progress", **closing})
 
     def _candidate_delta(self, value, research):
         """What of a merged step's text may show now, as one delta, or None.
