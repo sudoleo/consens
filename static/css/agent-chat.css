@@ -592,6 +592,18 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-review .claims-fallback-title { margin-bottom: 4px; font-size: var(--font-size-xs); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
 .agent-review .claims-fallback-row { justify-content: flex-start; gap: 8px; padding: 2px 0; font-size: var(--font-size-ui); line-height: 1.5; color: var(--ink-2); }
 .agent-review .claims-fallback-row .claim-badge { margin: 0; }
+/* A reviewer's note whose words the answer does not hold (consensus-
+   insights.js renderStoredAuditMarks): the whole line is the way to its
+   card, the reviewer and the note first, the kind in the colour of its
+   marks, the quoted words after it (UX audit D4, D14). */
+.agent-review .claims-fallback-row.is-audit-note { display: block; width: 100%; min-height: 32px; margin: 0 0 0 -8px; padding: var(--space-1) var(--space-2); box-sizing: border-box; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-ui); line-height: 1.5; text-align: start; cursor: pointer; }
+.agent-review .claims-fallback-row.is-audit-note .cx-audit-kind { font-weight: var(--font-weight-medium); white-space: nowrap; }
+.agent-review .claims-fallback-row.is-audit-note .claims-fallback-quote { color: var(--ink-3); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-review .claims-fallback-row.is-audit-note:hover { background: var(--hover); color: var(--ink); }
+}
+.agent-review .claims-fallback-row.is-audit-note:focus-visible { outline: var(--focus-ring); outline-offset: 0; }
+@media (pointer: coarse) { .agent-review .claims-fallback-row.is-audit-note { min-height: 44px; padding-block: var(--space-3); } }
 .thread-history-footer[hidden] { display: none; }
 .agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
 .agent-review-status { color: var(--ink-2); font-weight: 400; }

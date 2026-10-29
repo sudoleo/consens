@@ -554,6 +554,25 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-f
   --cx-mark-strong: var(--cx-mark-split-strong);
 }
 
+/* A reviewer's "incomplete" (Agent audit) is the quietest of its three
+   kinds, but never one to search for: the stronger grey, about as far from
+   the page as the amber, and a dashed line in the quiet ink under its words,
+   in both themes (UX audit D2; the grey alone was 1.18:1, in the dark
+   almost nothing). */
+.cx-claim.is-audit.is-minor {
+  --cx-mark: var(--cx-mark-note-strong);
+  --cx-mark-strong: color-mix(in srgb, var(--cx-mark-note-strong), var(--ink) 8%);
+}
+
+body:not(.consensus-markers-hidden) .cx-claim.is-audit.is-minor:not(.is-marker-filtered, .has-spot, .was-provisional),
+body:not(.consensus-markers-hidden) .cx-claim.is-audit.has-spot.is-minor:not(.is-marker-filtered, .was-provisional) .cx-spot {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 0.22em;
+}
+
 .cx-claim.is-major {
   --cx-mark: var(--cx-mark-major);
   --cx-mark-strong: var(--cx-mark-major-strong);
