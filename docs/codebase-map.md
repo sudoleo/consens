@@ -4901,6 +4901,9 @@ AgentRunStore/AgentSessionStore verwenden users/{uid}/llm_calls mit dedupliziert
 completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
 Budget-/Tarifsnapshot und Status. Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
+Belege von Prüfer-Aufrufen (Audit-Modus) tragen seit 2026-10-29 `round`
+(`live`, `gate`, `final`, `repair`; `settle` aus
+`completion.review_round`, gesetzt über `worker_completion(review_round=…)`).
 Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
 `reservations` enthalten alle laufenden Schritte, aber höchstens
 `ROOT_SETTLED_STEP_WINDOW` (32) abgeschlossene. Ältere abgeschlossene Schritte

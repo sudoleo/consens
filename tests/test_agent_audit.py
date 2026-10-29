@@ -209,6 +209,23 @@ def by_anchor(review):
     return {claim["anchor"]: claim for claim in review["audit"]["claims"]}
 
 
+def receipt_rounds(store, loop):
+    """The kind of round each reviewer receipt names (``round``), per family,
+    in the order of its sessions."""
+    rounds = {}
+    sessions = sorted((a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                       if a.get("kind") == "audit"), key=lambda a: a["created_at"])
+    for session in sessions:
+        index = 0
+        while True:
+            receipt = store.receipt_ref(UID, loop.chat_id, loop.turn_id, f"agent:{session['id']}:{index}").get()
+            if not receipt.exists:
+                break
+            rounds.setdefault(session["model"]["model"].split("/")[0], []).append(receipt.to_dict().get("round"))
+            index += 1
+    return rounds
+
+
 # --- The turn -------------------------------------------------------------------
 
 def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(store):
@@ -353,6 +370,18 @@ def test_the_reviewers_follow_the_work_in_rounds_and_mark_its_entries(store):
         messages = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=session["id"])["messages"]
         kinds.append([m["kind"] for m in messages if m["kind"] in {"round", "result"}])
     assert sorted(kinds) == [[], ["round"], ["round", "result"]]
+
+
+def test_every_reviewer_receipt_names_its_round(store):
+    """A-M2 (2026-10-29): a receipt says which kind of round it paid for, so
+    the measurement and the daily account can tell them apart."""
+    script = Audit({"anthropic": json.dumps({"marks": []}), "openai": RuntimeError("provider down")}, tool_steps=1)
+    loop = audit_loop(store, script)
+    list(loop.run())
+    # OpenAI's final round failed in passing and tried once more.
+    assert receipt_rounds(store, loop) == {"anthropic": ["live", "final"], "openai": ["live", "final", "repair"]}
+    # The agent's own steps are no reviewer's.
+    assert "round" not in store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
 
 
 def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):

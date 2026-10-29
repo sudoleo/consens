@@ -1630,17 +1630,20 @@ class DelegationLoop(AgentLoop):
                 logging.warning("Agent receipt write retry attempt=%d", attempt + 1)
                 time.sleep(.1 * 2 ** attempt)
 
-    def worker_completion(self, worker, *, one_off=False):
+    def worker_completion(self, worker, *, one_off=False, review_round=None):
         """A fresh completion for one request of ``worker``, on the worker's
         own OpenRouter session: its next step (a delegated session) or its
         retry (a comparison answer that ended empty) re-sends the prefix it
         cached and finds it on the same endpoint; for a single request the
         session changes nothing. ``one_off``: no later request continues
         this one (comparison answers, judges), so its prompt is cached only
-        for its own search rounds (AgentCompletion.stream)."""
+        for its own search rounds (AgentCompletion.stream).
+        ``review_round``: a reviewer's kind of round (agent_audit), which its
+        receipt keeps as ``round`` (AgentRunStore.settle)."""
         value = self.factory()
         value.session_id = provider_session_id(self.uid, self.chat_id, worker.id)
         value.one_off = one_off
+        value.review_round = review_round
         return value
 
     def _work(self, worker):

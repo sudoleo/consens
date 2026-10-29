@@ -413,6 +413,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 "generation_id": completion.generation_id, "finish_reason": completion.finish_reason,
                 "settled_at": firestore.SERVER_TIMESTAMP,
             }
+            review_round = getattr(completion, "review_round", None)
+            if isinstance(review_round, str) and review_round:
+                # A reviewer's call (audit mode): live, gate, final, repair
+                # or hedge (agent_audit; DelegationLoop.worker_completion).
+                receipt_patch["round"] = review_round
             charged = agent_quota.measured_tokens(usage)
             if daily_ref and charged is not None:
                 # What the account was charged: cache reads at their weight

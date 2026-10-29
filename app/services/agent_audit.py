@@ -1216,7 +1216,8 @@ class ReviewerSession:
                 value = self.tools.worker_request(
                     self.worker, self.model, self.messages, cancellation=self.cancellation, slots=self.audit.slots,
                     searching=parse is None, search_rounds=REVIEW_SEARCH_ROUNDS if final else LIVE_SEARCH_ROUNDS,
-                    one_off=final)
+                    one_off=final, review_round="repair" if attempt else "final" if final
+                    else "live" if parse is None else "gate")
                 marks = parse(value.text) if parse is not None else parse_review(value.text, known=known, final=final)
                 break
             except BaseException as exc:

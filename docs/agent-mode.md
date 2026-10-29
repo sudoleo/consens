@@ -360,7 +360,9 @@ die App ruft `audit_answer` (`app_tools`, nie dem Modell angeboten; Aktivität
 „Reviewing the answer…“ / „Reviewed the answer“): `AnswerAudit.run` gibt jedem
 Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort
 (`REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
-auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Die
+auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Jeder
+Beleg eines Prüfers (`llm_calls`) nennt seit 2026-10-29 seine Rundenart
+(`round`: `live`, `gate`, `final`, `repair` für einen zweiten Versuch). Die
 Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
 note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
 aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer

@@ -948,7 +948,7 @@ class ComparisonTools:
             self.checkpoint()
 
     def worker_request(self, worker, model, messages, *, cancellation, slots, budget=None, searching=False,
-                       search_rounds=1, one_off=True, keep_truncated=False):
+                       search_rounds=1, one_off=True, keep_truncated=False, review_round=None):
         """One paid request of ``worker`` at its next step index
         (``agent:{id}:{n}``), within ``slots``. An answer that ended without a
         word (ModelEmptyAnswer) is chance, not a limit: a searching call gets
@@ -958,7 +958,8 @@ class ComparisonTools:
         still paid, usable evidence (a comparison answer, marked
         ``truncated``); JSON (judges, reviewers) is worthless when cut off.
         ``one_off=False``: a later request continues this one (a reviewer's
-        next round), so its prompt is cached for it."""
+        next round), so its prompt is cached for it. ``review_round``: a
+        reviewer's kind of round for its receipt (worker_completion)."""
         loop = self.loop
         with bind_provider_cancellation(cancellation), bind_analysis_budget(budget or loop.budget):
             while not slots.acquire(timeout=.1):
@@ -970,7 +971,8 @@ class ComparisonTools:
                     generator = loop._step(model, messages, step, ToolRegistry(), cancellation, worker=worker,
                                            searches_enabled=searching, search_rounds=search_rounds,
                                            retry_empty=attempt == 0 and searching,
-                                           completion=loop.worker_completion(worker, one_off=one_off))
+                                           completion=loop.worker_completion(worker, one_off=one_off,
+                                                                             review_round=review_round))
                     try:
                         while True:
                             next(generator)
