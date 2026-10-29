@@ -4902,7 +4902,7 @@ completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
 Budget-/Tarifsnapshot und Status. Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
 Belege von Prüfer-Aufrufen (Audit-Modus) tragen seit 2026-10-29 `round`
-(`live`, `gate`, `final`, `repair`; `settle` aus
+(`live`, `gate`, `final`, `repair`, `hedge`; `settle` aus
 `completion.review_round`, gesetzt über `worker_completion(review_round=…)`).
 Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
 `reservations` enthalten alle laufenden Schritte, aber höchstens
@@ -5733,7 +5733,13 @@ Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
 `unplaced`); eine unlesbare Schlussrunde fragt seit 2026-10-27 einmal in
 derselben Sitzung nach (`REPAIR_NOTE`), ein vorübergehender Anbieterfehler
 läuft einmal in neuer Sitzung (`ReviewerSession._mendable`); scheitert sie
-dann noch, gelten seine Live-Befunde (`live`). Runden passen in den Platz des Prüfergesprächs
+dann noch, gelten seine Live-Befunde (`live`). Seit 2026-10-29 läuft jede
+Anfrage der Schlussrunde als `FinalRequest` auf eigenem Thread
+(`_final_request`): nach `final_hedge_seconds` ein Hedge auf neuer Sitzung
+(`_open(own=True)`, Beleg `hedge`), die erste brauchbare Antwort gewinnt, die
+andere endet `superseded` (`agent-delegation.js` `reviewerRows` lässt sie
+nicht für den Prüfer sprechen); `FINAL_ROUND_SECONDS` begrenzt alles
+(`ReviewCancellation.overtime`, `no_time`). Runden passen in den Platz des Prüfergesprächs
 (`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
 `review_entry` lässt den Verbrauch weg, nennt aber die Suchen eines Schritts
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und

@@ -444,6 +444,87 @@ def test_the_final_round_starts_at_once_and_cuts_a_live_round_short(store, monke
     assert receipt_rounds(store, loop)["anthropic"] == ["live", "final"]
 
 
+def audit_sessions(store, loop, family):
+    """One reviewer's sessions in the panel, oldest first: (status, failure code)."""
+    sessions = sorted((a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                       if a.get("kind") == "audit" and a["model"]["model"].startswith(family)),
+                      key=lambda a: a["created_at"])
+    return [(a["status"], (a.get("failure") or {}).get("code")) for a in sessions]
+
+
+def test_the_hedge_time_follows_the_models_final_rounds(monkeypatch):
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_SECONDS == 20
+    for seconds in (1, 2, 3, 4, 5, 6, 7):
+        agent_audit.record_final_seconds("m", seconds)
+    assert agent_audit.final_hedge_seconds("m") == 20
+    agent_audit.record_final_seconds("m", 8)
+    # Fast rounds: never earlier than FINAL_HEDGE_MIN_SECONDS.
+    assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_MIN_SECONDS == 12
+    for seconds in (30, 30, 35, 40, 45, 50, 55, 60):
+        agent_audit.record_final_seconds("slow", seconds)
+    assert agent_audit.final_hedge_seconds("slow") == 50
+    # The last FINAL_HEDGE_SAMPLES count.
+    for _ in range(agent_audit.FINAL_HEDGE_SAMPLES):
+        agent_audit.record_final_seconds("slow", 14)
+    assert agent_audit.final_hedge_seconds("slow") == 14
+
+
+def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store, monkeypatch):
+    """A-T2 (2026-10-29): the slowest reviewer set the time to the marks
+    (Luna p90 40 s, max 72 s); a hung request held the turn until its hard stop."""
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
+    asked = []
+
+    def final(messages):
+        asked.append(messages)
+        # The first request hangs, the hedge answers.
+        return held(30)(messages) if len(asked) == 1 else REVIEWS["openai"]
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": final})
+    loop = audit_loop(store, script)
+    started = time.monotonic()
+    list(loop.run())
+    assert time.monotonic() - started < 20
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    assert [(r["provider"], r["status"], r["marks"]) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", 2), ("openai", "completed", 3)]
+    # The same messages on a new session and OpenRouter session.
+    assert len(asked) == 2 and asked[0] == asked[1]
+    assert len(set(script.session_ids["openai"])) == 2
+    assert receipt_rounds(store, loop)["openai"] == ["final", "hedge"]
+    # The overtaken request stopped; the reviewer is one completed row (agent-delegation.js).
+    assert audit_sessions(store, loop, "openai") == [("stopped", "superseded"), ("completed", None)]
+    # It counts for the hedge time as long as it had run.
+    model = loop.comparison.auditor.sessions["openai"].model.model
+    assert len(agent_audit._final_seconds[model]) == 1 and agent_audit._final_seconds[model][0] >= .3
+    assert loop.comparison.auditor.sessions["openai"].hedged
+
+
+def test_a_final_round_that_hangs_twice_ends_in_time_with_its_live_marks(store, monkeypatch):
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .2)
+    monkeypatch.setattr(agent_audit, "FINAL_ROUND_SECONDS", .6)
+    live = lambda messages: json.dumps({"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful",
+                                                    "note": "Unchecked lookup."}]})
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": held(30)}, tool_steps=1, live={"openai": live})
+    loop = audit_loop(store, script)
+    started = time.monotonic()
+    list(loop.run())
+    assert time.monotonic() - started < 20
+    turn = saved(store, loop)
+    review = turn["agent_review"]
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert review["status"] == "partial" and {"code": "no_time"} in review["audit"]["issues"]
+    assert [(r["provider"], r["status"], (r.get("failure") or {}).get("code")) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", None), ("openai", "failed", "no_time")]
+    assert [(p["model"], p["note"], p.get("live")) for p in review["audit"]["process"]] == [
+        ("OpenAI", "Unchecked lookup.", True)]
+    assert script.rounds["openai"] == ["live", "final", "final"]
+    assert receipt_rounds(store, loop)["openai"] == ["live", "final", "hedge"]
+    assert audit_sessions(store, loop, "openai") == [("failed", "no_time"), ("failed", "no_time")]
+
+
 def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):
     seen = []
 

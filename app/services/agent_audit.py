@@ -39,11 +39,14 @@ still completes.
 """
 from __future__ import annotations
 
+from collections import deque
 from contextvars import copy_context
 from dataclasses import replace
 from datetime import datetime, timezone
 import json
 import logging
+import math
+import queue
 import re
 import threading
 import time
@@ -127,6 +130,28 @@ REPAIR_NOTE = ("Your previous reply to this round could not be read. Reply with 
 REVIEW_RESERVE_SECONDS = 240
 REVIEW_TIME_MARGIN = 15
 REVIEW_MIN_SECONDS = 30
+# A final round without a usable reply after its hedge time
+# (final_hedge_seconds) gets a second request on a new session with the
+# same messages (the hedge, A-T2); the first usable reply wins and the other
+# request stops. Until 2026-10-29 the slowest reviewer alone set the time to
+# the marks (GPT-6 Luna p90 40 s, max 72 s), and a hung request held the
+# turn until its hard stop. The hedge time is the FINAL_HEDGE_QUANTILE of
+# the model's last FINAL_HEDGE_SAMPLES final rounds in this process, from
+# FINAL_HEDGE_MIN_SAMPLES on, at least FINAL_HEDGE_MIN_SECONDS, else
+# FINAL_HEDGE_SECONDS. The receipts hold the same durations, but reading
+# them would put a query in front of every final round; a deploy starts the
+# count over. A request the hedge overtook counts with the time it had run:
+# a lower bound above the hedge time, so the quantile does not drift down.
+# FINAL_ROUND_SECONDS bounds the final round, both requests and a repair
+# included; then the reviewer's live marks stand (no_time) and the turn
+# completes. Thinking and search stay as they are (Max: no cuts, hangs are
+# caught by hedging).
+FINAL_HEDGE_SECONDS = 20
+FINAL_HEDGE_MIN_SECONDS = 12
+FINAL_HEDGE_QUANTILE = .75
+FINAL_HEDGE_SAMPLES = 50
+FINAL_HEDGE_MIN_SAMPLES = 8
+FINAL_ROUND_SECONDS = 90
 
 # Most severe first. The mark of a sentence takes its most severe kind.
 KINDS = ("wrong", "doubtful", "incomplete")
@@ -775,8 +800,10 @@ def review_text(marks):
 
 
 class ReviewCancellation(ProviderCancellation):
-    """One reviewer's calls; ``deadline``: stopped because the turn's time ran out."""
+    """One reviewer's calls; ``deadline``: stopped because the turn's time
+    ran out, or with ``overtime`` its final round's (FINAL_ROUND_SECONDS)."""
     deadline = False
+    overtime = False
 
 
 class RoundCut(Exception):
@@ -834,6 +861,9 @@ def review_failure(error, cancellation=None):
         return {"code": "context_limit",
                 "error": "The work and the answer did not fit its context, so its marks are missing."}
     if isinstance(error, ProviderCancelled):
+        if getattr(cancellation, "overtime", False):
+            return {"code": "no_time",
+                    "error": "Its final review reached its time limit, so its final marks are missing."}
         if getattr(cancellation, "deadline", False):
             return {"code": "no_time",
                     "error": "It was still reviewing when the response reached its time limit, so its marks are missing."}
@@ -989,6 +1019,88 @@ def trim_marks(audit):
 
 # --- One reviewer -------------------------------------------------------------
 
+# Seconds of each model's recent final rounds in this process (final_hedge_seconds).
+_final_seconds = {}
+_final_lock = threading.Lock()
+
+
+def final_hedge_seconds(model):
+    """Seconds after which a final round on ``model`` (its API id) gets its
+    hedge: FINAL_HEDGE_QUANTILE of its recent final rounds, at least
+    FINAL_HEDGE_MIN_SECONDS, FINAL_HEDGE_SECONDS before there are enough."""
+    with _final_lock:
+        samples = sorted(_final_seconds.get(model, ()))
+    if len(samples) < FINAL_HEDGE_MIN_SAMPLES:
+        return FINAL_HEDGE_SECONDS
+    return max(FINAL_HEDGE_MIN_SECONDS, samples[math.ceil(len(samples) * FINAL_HEDGE_QUANTILE) - 1])
+
+
+def record_final_seconds(model, seconds):
+    """How long a final round's first request on ``model`` took (or had run
+    when the hedge overtook it)."""
+    with _final_lock:
+        _final_seconds.setdefault(model, deque(maxlen=FINAL_HEDGE_SAMPLES)).append(seconds)
+
+
+class FinalRequest:
+    """One request of a reviewer's final round on a thread of its own
+    (ReviewerSession._final_request): the round's ``kind`` "final", its
+    "repair" or its "hedge". Once its thread is done: ``value`` and
+    ``marks``, or ``error`` and the reply's ``shape``, and ``seconds``."""
+
+    def __init__(self, session, worker, messages, kind, known, results, slots):
+        self.session, self.worker, self.messages, self.kind = session, worker, messages, kind
+        self.cancellation = ProviderCancellation()
+        self._unregister = session.cancellation.register(self.cancellation)
+        self.started = time.monotonic()
+        self.value = self.marks = self.error = self.shape = self.seconds = None
+        # How its session ends once the request is no longer needed (stop).
+        self._lock = threading.Lock()
+        self._finished, self._ending = False, None
+        self.thread = threading.Thread(target=copy_context().run, args=(self._run, known, results, slots),
+                                       name=f"agent-review-{session.provider}-{kind}", daemon=True)
+        self.thread.start()
+
+    def _run(self, known, results, slots):
+        session, value = self.session, None
+        try:
+            value = session.tools.worker_request(
+                self.worker, session.model, self.messages, cancellation=self.cancellation, slots=slots,
+                searching=True, search_rounds=REVIEW_SEARCH_ROUNDS, one_off=True, review_round=self.kind)
+            self.marks, self.value = parse_review(value.text, known=known, final=True), value
+        except BaseException as exc:
+            self.error = exc
+            self.shape = reply_shape(exc, value) if isinstance(exc, Exception) else None
+        finally:
+            self._unregister()
+            self.seconds = time.monotonic() - self.started
+            with self._lock:
+                self._finished, ending = True, self._ending
+            if ending is not None:
+                self._end(*ending)
+            results.put(self)
+
+    def stop(self, state, failure, text=None):
+        """The round needs this request no more (another reply won, its time
+        ran out): it stops, and its session ends as ``state``, with ``text``
+        as its last message, once its thread is done."""
+        with self._lock:
+            if self._ending is not None:
+                return
+            self._ending = (state, failure, text)
+            finished = self._finished
+        self.cancellation.cancel()
+        if finished:
+            self._end(state, failure, text)
+
+    def _end(self, state, failure, text):
+        loop = self.session.loop
+        if text is None:
+            loop._state(self.worker, state, failure=failure)
+        else:
+            loop._terminal(self.worker, state, text, failure)
+
+
 class ReviewerSession:
     """One comparison model following the work log: its rounds as one
     conversation (``messages``) on one agent session, a new session after a
@@ -1027,6 +1139,10 @@ class ReviewerSession:
         # a session that ends because its round was cut short hands it on,
         # so the next one finds the conversation in the endpoint's cache.
         self.conversation_key = None
+        # The final round's requests (FinalRequest), joined at the run's end;
+        # ``hedged``: its hedge started.
+        self.requests = []
+        self.hedged = False
         self.thread = None
 
     @property
@@ -1137,7 +1253,7 @@ class ReviewerSession:
         # Every entry up to this round's last one: the reviewer has read it.
         known = set(range(1, entries[-1][0]["seq"] + 1))
         try:
-            value, marks = self._request(message, final=False, known=known)
+            value, marks = self._request(message, known=known)
         except RoundCut:
             # Cut short: its entries go into the final round, nothing failed.
             return
@@ -1185,7 +1301,7 @@ class ReviewerSession:
         last = entries[-1][0]["seq"] if entries else self.cursor
         known = set(range(1, last + 1))
         try:
-            _, (verdict, halt, marks) = self._request(text + "\n\n" + note, final=False, known=known,
+            _, (verdict, halt, marks) = self._request(text + "\n\n" + note, known=known,
                                                       parse=lambda reply: parse_gate(reply, known=known))
         except RoundCut:
             self.audit.gate_verdict(self, gate, "failed")
@@ -1227,7 +1343,7 @@ class ReviewerSession:
         try:
             if message is None:
                 raise ReviewTooLong("The work and the answer do not fit the reviewer's context.")
-            value, marks = self._request(message, final=True, known=known)
+            value, marks = self._final_request(message, known)
         except BaseException as exc:
             failure = review_failure(exc, self.cancellation)
             self._set(status="stopped" if failure["code"] == "stopped" else "failed", failure={"code": failure["code"]},
@@ -1243,92 +1359,162 @@ class ReviewerSession:
                            sender=self.worker.id, recipient="orchestrator",
                            patch={"result_truncated": len(text) > self.loop.policy.result_chars}, wait=False)
 
-    def _request(self, message, *, final, known, parse=None):
-        """One paid round on the reviewer's session: (value, marks). A failed
-        or unreadable round ends its session (the next round opens a new one)
-        and leaves the conversation as it was; a final round may first try
-        once more (_mendable). ``parse``: a gate round's reader (parse_gate),
-        whose result stands for the marks; such a round does not search.
-        A live or gate round runs under a stop of its own (``live``): cut
-        short (cut_round), it raises RoundCut, its session ends "stopped"
-        (``round_cut``) and hands the conversation on (conversation_key),
-        and cursor, conversation and failures stay as they were."""
-        if not final and self._round_due():
+    def _request(self, message, *, known, parse=None):
+        """One paid live or gate round on the reviewer's session: (value,
+        marks). A failed or unreadable round ends its session (the next round
+        opens a new one) and leaves the conversation as it was. ``parse``: a
+        gate round's reader (parse_gate), whose result stands for the marks;
+        such a round does not search. The round runs under a stop of its own
+        (``live``): cut short (cut_round), it raises RoundCut, its session
+        ends "stopped" (``round_cut``) and hands the conversation on
+        (conversation_key), and cursor, conversation and failures stay as
+        they were."""
+        if self._round_due():
             raise RoundCut()
         if self.worker is None:
             self.worker = self._open()
         self.messages.append({"role": "user", "content": message})
-        cancellation, unregister = self.cancellation, None
-        if not final:
-            cancellation = ProviderCancellation()
-            unregister = self.cancellation.register(cancellation)
-            self.live, self.live_started = cancellation, time.monotonic()
-            if self._round_due():
-                # It came as the round began: cut_round found no round yet.
-                cancellation.cancel()
-        attempts = 2 if final else 1
+        cut = ProviderCancellation()
+        unregister = self.cancellation.register(cut)
+        self.live, self.live_started = cut, time.monotonic()
+        if self._round_due():
+            # It came as the round began: cut_round found no round yet.
+            cut.cancel()
+        value = None
         try:
-            for attempt in range(attempts):
-                value = None
-                try:
-                    value = self.tools.worker_request(
-                        self.worker, self.model, self.messages, cancellation=cancellation, slots=self.audit.slots,
-                        searching=parse is None, search_rounds=REVIEW_SEARCH_ROUNDS if final else LIVE_SEARCH_ROUNDS,
-                        one_off=final, review_round="repair" if attempt else "final" if final
-                        else "live" if parse is None else "gate")
-                    marks = (parse(value.text) if parse is not None
-                             else parse_review(value.text, known=known, final=final))
-                    break
-                except BaseException as exc:
-                    if (unregister is not None and isinstance(exc, ProviderCancelled) and cancellation.cancelled
-                            and not self.cancellation.cancelled):
-                        # Cut short: the claimed step was settled as stopped,
-                        # so its session ends; the next one goes on with the
-                        # conversation on the same OpenRouter session.
-                        self.messages.pop()
-                        worker, self.worker = self.worker, None
-                        self.loop._state(worker, "stopped", failure={"code": "round_cut"})
-                        raise RoundCut() from None
-                    shape = reply_shape(exc, value) if isinstance(exc, Exception) else None
-                    again = attempt + 1 < attempts and self._mendable(exc, shape)
-                    if shape:
-                        # A reply came and could not be used: how, never its words.
-                        logging.warning("Agent reviewer reply unusable model=%s round=%s shape=%s chars=%s "
-                                        "finish=%s output_tokens=%s reasoning_tokens=%s again=%s", self.model.model,
-                                        "final" if final else self.live_rounds + 1, shape["shape"], shape["chars"],
-                                        shape["finish"], shape["output_tokens"], shape["reasoning_tokens"], again)
-                    if again:
-                        if shape:
-                            # The reply came and was paid: the same session goes on.
-                            self.messages[-1] = {"role": "user", "content": message + "\n\n" + REPAIR_NOTE}
-                        else:
-                            # A failed step ends its session for good
-                            # (AgentSessionStore._claim_delegated): a new one tries again.
-                            failure = {**review_failure(exc, self.cancellation),
-                                       "error": "This attempt failed. The reviewer tries once more in a new session."}
-                            self.loop._terminal(self.worker, "failed", failure["error"], failure)
-                            self.conversation_key = None
-                            self.worker = self._open()
-                        continue
-                    self.messages.pop()
-                    failure = review_failure(exc, self.cancellation)
-                    if not final and not isinstance(exc, ProviderCancelled):
-                        # The reviewer goes on: the next round opens a new session.
-                        failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
-                    worker, self.worker = self.worker, None
-                    self.conversation_key = None
-                    self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
-                                        failure["error"], failure)
-                    raise
+            value = self.tools.worker_request(
+                self.worker, self.model, self.messages, cancellation=cut, slots=self.audit.slots,
+                searching=parse is None, search_rounds=LIVE_SEARCH_ROUNDS, one_off=False,
+                review_round="live" if parse is None else "gate")
+            marks = parse(value.text) if parse is not None else parse_review(value.text, known=known, final=False)
+        except BaseException as exc:
+            self.messages.pop()
+            worker, self.worker = self.worker, None
+            if isinstance(exc, ProviderCancelled) and cut.cancelled and not self.cancellation.cancelled:
+                # Cut short: the claimed step was settled as stopped, so its
+                # session ends; the next one goes on with the conversation on
+                # the same OpenRouter session.
+                self.loop._state(worker, "stopped", failure={"code": "round_cut"})
+                raise RoundCut() from None
+            self._unusable(reply_shape(exc, value) if isinstance(exc, Exception) else None, self.live_rounds + 1,
+                           False)
+            failure = review_failure(exc, self.cancellation)
+            if not isinstance(exc, ProviderCancelled):
+                # The reviewer goes on: the next round opens a new session.
+                failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
+            self.conversation_key = None
+            self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
+                                failure["error"], failure)
+            raise
         finally:
-            if unregister is not None:
-                unregister()
-                self.live = self.live_started = None
+            unregister()
+            self.live = self.live_started = None
         reply = value.assistant_message()
         self.messages.append(reply)
         # What every later round sends again, its replayed reasoning included.
         self.chars += len(self.messages[-2]["content"]) + len(_dumps(reply))
         return value, marks
+
+    def _unusable(self, shape, label, again):
+        """A reply came and could not be used: how, never its words."""
+        if shape:
+            logging.warning("Agent reviewer reply unusable model=%s round=%s shape=%s chars=%s finish=%s "
+                            "output_tokens=%s reasoning_tokens=%s again=%s", self.model.model, label, shape["shape"],
+                            shape["chars"], shape["finish"], shape["output_tokens"], shape["reasoning_tokens"], again)
+
+    def _final_request(self, message, known):
+        """The final round's requests (A-T2): (value, marks) of the first
+        usable reply. Its first request runs on the reviewer's session; one
+        that could not be used may try once more (_mendable: on the same
+        session with REPAIR_NOTE after an unreadable reply, on a new one
+        after a provider failing in passing). Without a usable reply after
+        final_hedge_seconds a second request on a new session asks the same
+        (the hedge). The first usable reply wins and the others stop, their
+        sessions "stopped" (``superseded``). FINAL_ROUND_SECONDS bound them
+        all: then ProviderCancelled with ``overtime`` (no_time). Each request
+        runs on a thread of its own (FinalRequest); this one decides."""
+        if self.worker is None:
+            self.worker = self._open()
+        self.messages.append({"role": "user", "content": message})
+        results = queue.Queue()
+        started = time.monotonic()
+        hedge_at, deadline = started + final_hedge_seconds(self.model.model), started + FINAL_ROUND_SECONDS
+        first = self._ask(self.worker, self.messages, "final", known, results)
+        running, hedge, mended, winner = [first], None, False, None
+        while winner is None:
+            now = time.monotonic()
+            if now >= deadline:
+                break
+            if hedge is None and now >= hedge_at and not self.cancellation.cancelled:
+                # The same messages as the request at work, on a new session
+                # (and OpenRouter session), within a slot of its own.
+                hedge = self._ask(self._open(own=True), list(self.messages), "hedge", known, results,
+                                  threading.BoundedSemaphore(1))
+                running.append(hedge)
+                self.hedged = True
+            try:
+                done = results.get(timeout=max(0., (deadline if hedge is not None else min(hedge_at, deadline))
+                                               - time.monotonic()))
+            except queue.Empty:
+                continue
+            running.remove(done)
+            if done.error is None:
+                winner = done
+                continue
+            again = done is not hedge and not mended and self._mendable(done.error, done.shape)
+            self._unusable(done.shape, done.kind, again)
+            if again:
+                mended = True
+                if done.shape:
+                    # The reply came and was paid: the same session goes on.
+                    self.messages[-1] = {"role": "user", "content": message + "\n\n" + REPAIR_NOTE}
+                else:
+                    # A failed step ends its session for good
+                    # (AgentSessionStore._claim_delegated): a new one tries again.
+                    failure = {**review_failure(done.error, self.cancellation),
+                               "error": "This attempt failed. The reviewer tries once more in a new session."}
+                    self.loop._terminal(done.worker, "failed", failure["error"], failure)
+                    self.conversation_key = None
+                    self.worker = self._open()
+                running.append(self._ask(self.worker, self.messages, "repair", known, results))
+                continue
+            failure = review_failure(done.error, self.cancellation)
+            self.loop._terminal(done.worker, "stopped" if isinstance(done.error, ProviderCancelled) else "failed",
+                                failure["error"], failure)
+            if done.worker is self.worker:
+                self.worker = None
+            if not running:
+                self.messages.pop()
+                raise done.error
+        if winner is None:
+            # Out of time, also for the hedge: the live marks stand.
+            self.cancellation.deadline = self.cancellation.overtime = True
+            failure = review_failure(ProviderCancelled("overtime"), self.cancellation)
+            for request in running:
+                request.stop("failed", failure, failure["error"])
+            self.messages.pop()
+            self.worker = None
+            raise ProviderCancelled("The final round reached its time limit")
+        for request in running:
+            request.stop("stopped", {"code": "superseded"})
+        if winner is first:
+            record_final_seconds(self.model.model, first.seconds)
+        elif first in running:
+            # Overtaken by the hedge: at least as long as it had run.
+            record_final_seconds(self.model.model, time.monotonic() - first.started)
+        self.worker = winner.worker
+        if winner is hedge:
+            self.messages = list(hedge.messages)
+        reply = winner.value.assistant_message()
+        self.messages.append(reply)
+        self.chars += len(self.messages[-2]["content"]) + len(_dumps(reply))
+        return winner.value, winner.marks
+
+    def _ask(self, worker, messages, kind, known, results, slots=None):
+        """One request of the final round on its own thread (FinalRequest)."""
+        request = FinalRequest(self, worker, messages, kind, known, results, slots or self.audit.slots)
+        self.requests.append(request)
+        return request
 
     def _mendable(self, error, shape):
         """Whether one more request may mend this final round: an unreadable
@@ -1344,16 +1530,18 @@ class ReviewerSession:
         left = self.loop._hard_stop_left() if callable(getattr(self.loop, "_hard_stop_left", None)) else None
         return mendable and (left is None or left - REVIEW_TIME_MARGIN >= REVIEW_MIN_SECONDS)
 
-    def _open(self):
+    def _open(self, *, own=False):
         """A new agent session for this reviewer (agent panel row), on the
-        OpenRouter session of its conversation if one hands it on."""
+        OpenRouter session of its conversation if one hands it on; ``own``:
+        on one of its own (the final round's hedge)."""
         from app.services.agent_delegation import Worker
         title = f"Review · {self.model.label}"
         worker = Worker(uuid4().hex, self.model, self.messages)
         worker.kind = "audit"
         worker.file_ids = self.audit.file_ids
-        worker.session_key = self.conversation_key or ""
-        self.conversation_key = self.conversation_key or worker.id
+        if not own:
+            worker.session_key = self.conversation_key or ""
+            self.conversation_key = self.conversation_key or worker.id
         self.loop._publish(worker, patch={
             "title": title, "kind": "audit", "comparison_id": None,
             "assignment": {"goal": title, "context": REVIEW_ASSIGNMENT}, "model": self.model.settings(),
@@ -1678,6 +1866,9 @@ class AnswerAudit:
         for session in self.sessions.values():
             if session.thread is not None and session.thread is not threading.current_thread():
                 session.thread.join()
+            # A final round's request that another reply overtook, still stopping.
+            for request in session.requests:
+                request.thread.join()
 
     def _finish(self, answer, issues):
         tools = self.tools

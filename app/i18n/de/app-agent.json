@@ -693,6 +693,7 @@
   "its reply was empty": "seine Antwort war leer",
   "It called a tool instead of giving its review, so its marks are missing.": "Es rief ein Tool auf, statt seine Prüfung abzugeben, darum fehlen seine Markierungen.",
   "Its reply was empty, so its marks are missing.": "Seine Antwort war leer, darum fehlen seine Markierungen.",
+  "Its final review reached its time limit, so its final marks are missing.": "Seine abschließende Prüfung erreichte ihr Zeitlimit, darum fehlen seine abschließenden Markierungen.",
   "Command": "Befehl",
   "Running a command…": "Führt einen Befehl aus…",
   "Ran a command": "Befehl ausgeführt",

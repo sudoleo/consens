@@ -363,7 +363,8 @@ Live-Runde, die dann noch läuft, bricht seit 2026-10-29 ab und ihre Einträge
 gehen mit, `cut_round`; `REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
 auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Jeder
 Beleg eines Prüfers (`llm_calls`) nennt seit 2026-10-29 seine Rundenart
-(`round`: `live`, `gate`, `final`, `repair` für einen zweiten Versuch). Die
+(`round`: `live`, `gate`, `final`, `repair` für einen zweiten Versuch,
+`hedge`). Die
 Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
 note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
 aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer
@@ -412,6 +413,12 @@ scheitert, nicht lesbar antwortet oder bei der Frist noch arbeitet, verliert
 nur seine Marken. Die Prüfer starten nur mit mindestens `REVIEW_MIN_SECONDS`
 bis zum harten Stopp und enden `REVIEW_TIME_MARGIN` davor (`no_time`); der
 Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`).
+Seit 2026-10-29 hat die Schlussrunde eine eigene Frist und Hedging (A-T2):
+ohne brauchbare Antwort nach `final_hedge_seconds` (p75 der letzten
+Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 20 s) dieselbe
+Anfrage auf neuer Sitzung, die erste brauchbare gewinnt; nach
+`FINAL_ROUND_SECONDS` (90 s) `no_time` mit den Live-Befunden (Einzelheiten
+in [agent-work-log.md](agent-work-log.md), „Fehler“).
 Scheitert die Prüfung als Ganzes (Fehler, Speicherbudget auch nach
 `trim_marks`, das erst die zitierten Worte und lange Anmerkungen kürzt),
 endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem

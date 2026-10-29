@@ -70,7 +70,11 @@
     for (const sessions of groups.values()) {
       if (sessions.length === 1) { rows.set(sessions[0].id, sessions[0]); continue; }
       sessions.sort((a, b) => (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0));
-      const latest = sessions.find(agent => activeStates.has(agent.status)) || sessions.at(-1);
+      // A final round's second request (its hedge, since 2026-10-29) is a
+      // session too: the one another reply overtook ("superseded") never
+      // speaks for the reviewer.
+      const latest = sessions.find(agent => activeStates.has(agent.status))
+        || sessions.filter(agent => agent.failure?.code !== "superseded").at(-1) || sessions.at(-1);
       const metered = sessions.filter(agent => measured(agent.usage));
       const row = { ...latest, id: sessions[0].id, sessions: sessions.map(agent => agent.id), progressId: latest.id,
         sources: sessions.flatMap(agent => agent.sources || []),

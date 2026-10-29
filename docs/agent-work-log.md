@@ -242,6 +242,25 @@ Agent-Panel.
   more in a new session.“). Eine leere Antwort hatte ihren zweiten Versuch
   schon (`worker_request`), eine am Ausgabelimit abgeschnittene bekommt
   keinen. Anlass: 2 von 87 Schlussrunden in Prod endeten `review_unreadable`.
+- Hedging und Frist der Schlussrunde (seit 2026-10-29, A-T2): Jede Anfrage
+  der Schlussrunde läuft auf einem eigenen Thread (`FinalRequest`), der
+  Prüfer-Thread entscheidet (`_final_request`). Hat sie nach
+  `final_hedge_seconds` keine brauchbare Antwort, fragt eine zweite Anfrage
+  dasselbe auf einer neuen Sitzung (eigene OpenRouter-Sitzung, eigener Slot,
+  Beleg `round: hedge`). Die erste brauchbare Antwort gewinnt, die andere
+  Anfrage stoppt (Sitzung „stopped“, `superseded`, ohne Nachricht; das Panel
+  zeigt weiter eine Zeile je Prüfer). Die Hedge-Zeit ist das p75
+  (`FINAL_HEDGE_QUANTILE`) der letzten `FINAL_HEDGE_SAMPLES` (50)
+  Schlussrunden des Modells in diesem Prozess, ab `FINAL_HEDGE_MIN_SAMPLES`
+  (8), mindestens `FINAL_HEDGE_MIN_SECONDS` (12 s), sonst
+  `FINAL_HEDGE_SECONDS` (20 s). Bewusst nicht aus den Belegen gelesen: Das
+  wäre eine Abfrage vor jeder Schlussrunde; ein Deploy beginnt die Zählung
+  neu. Eine vom Hedge überholte Anfrage zählt mit der Zeit, die sie lief
+  (eine untere Grenze über der Hedge-Zeit), damit das p75 nicht nach unten
+  driftet. `FINAL_ROUND_SECONDS` (90 s) begrenzt die Schlussrunde samt
+  Hedge und zweitem Versuch: danach `no_time` („Its final review reached its
+  time limit …“), die Live-Befunde gelten, der Turn endet `completed`.
+  Denkstufe und Suchrunden bleiben (Max: keine Abstriche).
 - Fällt ein Prüfer in der Schlussrunde aus, gelten seine Live-Befunde; ohne
   solche fehlen nur seine Befunde.
 - Stop beendet die Prüfer, die fixierte Antwort bleibt.

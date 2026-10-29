@@ -645,6 +645,26 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  // The final round's hedge (agent_audit, since 2026-10-29): a second
+  // request on a new session; the one another reply overtook stops.
+  it("shows a reviewer whose hedge was overtaken by its own reply as one completed row", async () => {
+    const hedge = "c".repeat(32);
+    const reviewer = (id, status, at) => ({ ...agent(1, status, id), kind: "audit", title: "Review · Luna",
+      model: { model: "openai/gpt-6-luna", label: "GPT-6 Luna" }, created_at: at, usage: null, duration_ms: 8000 });
+    const first = reviewer(agentId, "completed", "2026-10-29T08:00:00Z");
+    const second = { ...reviewer(hedge, "stopped", "2026-10-29T08:00:20Z"), failure: { code: "superseded" } };
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () =>
+      ({ agents: [first, second], status: "succeeded", agent: { assignment: { goal: "Review · Luna" } }, messages: [] }) }));
+    for (const session of [first, second]) receive(w, session);
+    w.App.agentDelegation.project({ chatId, turnId });
+    d.querySelector(".agent-sidebar-toggle").click();
+    await settle();
+    const rows = [...d.querySelectorAll(".agent-session")];
+    expect(rows.length).toBe(1);
+    expect(rows[0].querySelector(".agent-session-state").textContent).toMatch(/^Completed · /);
+    dom.window.close();
+  });
+
   it("keeps the text of a comparison model stopped mid-answer, marked as incomplete", async () => {
     const stopped = { ...agent(1, "stopped"), kind: "comparison", title: "Comparison 1 · Haiku", partial: true };
     const note = "It was still writing when the answer was finished. The answer and its check use the other answers.";
