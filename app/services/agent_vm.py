@@ -762,13 +762,13 @@ def open_to_pro():
     return os.getenv("AGENT_VM_ACCESS", "").strip().lower() == "pro"
 
 
-def on_demand_mode():
-    """AGENT_WORKSPACE_ON_DEMAND (docs/agent-mode.md "Arbeitsplatz auf Abruf"):
-    "admin" or "on" starts a message without the workspace's tools until the
-    agent opens it (DelegationLoop._open_workspace), for admins or for every
-    account with the VM; "" (unset, the default) gives them from the start."""
-    mode = os.getenv("AGENT_WORKSPACE_ON_DEMAND", "").strip().lower()
-    return mode if mode in {"admin", "on"} else ""
+def on_demand():
+    """The workspace on demand (docs/agent-mode.md "Arbeitsplatz auf Abruf"),
+    since 2026-10-29 for every account with the VM (Pro and admins): a message
+    starts without the workspace's tools until the agent opens it
+    (DelegationLoop._open_workspace). AGENT_WORKSPACE_ON_DEMAND=off, the
+    emergency off, gives them from the start again."""
+    return os.getenv("AGENT_WORKSPACE_ON_DEMAND", "").strip().lower() != "off"
 
 
 def backend():

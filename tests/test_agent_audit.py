@@ -1198,7 +1198,8 @@ def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     texts = (agent_memory.AUDIT_MEMORY_USE_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT,
              agent_memory.AUDIT_MEMORY_READ_ONLY_PROMPT, agent_memory.AUDIT_MEMORY_PAUSED_PROMPT,
              agent_memory.AUDIT_MEMORY_UNAVAILABLE_PROMPT, agent_watch.AUDIT_PROMPT, agent_settings.AUDIT_PROMPT,
-             agent_files.AUDIT_UNTRUSTED, prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT, prompt_defaults.AGENT_VM_PROMPT)
+             agent_files.AUDIT_UNTRUSTED, prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT, prompt_defaults.AGENT_VM_PROMPT,
+             prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT)
     for text in texts:
         assert "comparison" not in text.lower() and "compare_models" not in text, text[:80]
     # Since 2026-10-28 a constitution and facts (Max: the model decides with
@@ -1217,7 +1218,7 @@ def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     assert "evidence" in agent_settings.AUDIT_PROMPT and "only the user starts" in agent_watch.AUDIT_PROMPT
     # Facts, no rules: the blocks name no "never" and no "do not" any more.
     for text in (agent_watch.AUDIT_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED,
-                 prompt_defaults.AGENT_VM_PROMPT):
+                 prompt_defaults.AGENT_VM_PROMPT, prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT):
         assert not re.search(r"(never|do not)", text, re.I), text[:80]
 
 

@@ -6057,8 +6057,8 @@ VM-Werkzeug, kein Prompt und kein `vm_time` in `/user_status`, seit
 (`vm_exec`, `vm_read_file`, `vm_write_file`, `vm_edit_file`, `vm_share_file`,
 `vm_install_packages`, Prozesse, `browser`, `request_domain`, GitHub) und hängt
 `AGENT_VM_PROMPT` vor dem Memory-Block an; in beiden Modi. **Arbeitsplatz auf
-Abruf** (seit 2026-10-29, `AGENT_WORKSPACE_ON_DEMAND` = `admin`/`on`, leer =
-aus): `routers/agent.py::workspace_closed` lässt eine Nachricht ohne diese
+Abruf** (seit 2026-10-29 Standard für Pro und Admins, Notaus
+`AGENT_WORKSPACE_ON_DEMAND=off`): `routers/agent.py::workspace_closed` lässt eine Nachricht ohne diese
 Werkzeuge beginnen (`DelegationLoop(workspace_closed=True)`): an ihrer Stelle nur
 `open_workspace` (`agent_vm_tools.OpenWorkspaceArgs`, `task`) und
 `AGENT_WORKSPACE_CLOSED_PROMPT` statt VM-, GitHub- und Plan-Block. Nach dem
@@ -9439,9 +9439,10 @@ alte Gemini-ADC-JSON ist entfernt.
   VM); ohne ihn melden die VM-Werkzeuge „not available“ (`agent_vm.backend`).
   `AGENT_VM_ACCESS`: leer = VM nur für Admins (seit 2026-10-27), `pro` = für
   jedes Konto mit Audit (`agent_vm.open_to_pro`, `routers/agent.py::vm_allowed`).
-  `AGENT_WORKSPACE_ON_DEMAND`: leer = Werkzeuge des Arbeitsplatzes von Anfang
-  an, `admin` = Admins beginnen ohne sie und öffnen ihn mit `open_workspace`,
-  `on` = jedes Konto mit VM (`agent_vm.on_demand_mode`, seit 2026-10-29).
+  `AGENT_WORKSPACE_ON_DEMAND`: leer (Standard) = jede Nachricht mit VM
+  beginnt ohne die Werkzeuge des Arbeitsplatzes und öffnet ihn mit
+  `open_workspace`; `off` = Notaus, alle von Anfang an (`agent_vm.on_demand`,
+  seit 2026-10-29).
   GitHub für die VM (seit 2026-10-26): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`,
   `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, nur im
   Backend (`agent_github.py`, Einrichtung `docs/github-app-setup.md`); fehlt

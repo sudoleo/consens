@@ -977,8 +977,10 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, audit, is_
     # Audit always has its reviewers: no answer-check choice turns them off.
     assert settings["agent_preferences"]["judges"] == ("on" if audit else "off")
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
-    assert ("vm_exec" in names) is vm
-    assert (prompt_defaults.AGENT_VM_PROMPT in calls[0]["messages"][0]["content"]) is vm
+    # The workspace on demand (since 2026-10-29): it opens with open_workspace.
+    assert ("open_workspace" in names) is vm and "vm_exec" not in names
+    assert (prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT in calls[0]["messages"][0]["content"]) is vm
+    assert prompt_defaults.AGENT_VM_PROMPT not in calls[0]["messages"][0]["content"]
     # The same request again is the same message, with the same effective settings.
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
 
@@ -1020,8 +1022,9 @@ def test_a_server_without_a_vm_provider_offers_no_vm(api, monkeypatch):
                "agent_preferences": {"audit": "on"}}
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
-    assert not any(name.startswith("vm_") for name in names)
+    assert not any(name.startswith("vm_") for name in names) and "open_workspace" not in names
     assert prompt_defaults.AGENT_VM_PROMPT not in calls[0]["messages"][0]["content"]
+    assert prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT not in calls[0]["messages"][0]["content"]
 
 
 def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, monkeypatch):
@@ -1101,20 +1104,19 @@ def test_a_message_without_the_workspace_keeps_the_short_limits_and_never_starts
     assert store._chat_ref(UID, loop.chat_id).get().to_dict()["agent_workspace_used"] is False
 
 
-@pytest.mark.parametrize("mode,admin,used,browser,closed", [
-    ("on", False, False, False, True), ("admin", True, False, False, True), ("admin", False, False, False, False),
-    ("on", False, True, False, False), ("on", False, False, True, False), ("", True, False, False, False)])
-def test_where_a_message_starts(api, monkeypatch, mode, admin, used, browser, closed):
-    """Closed for the accounts the setting names, open where the chat's last
-    message used the workspace or the user has its browser right now."""
+@pytest.mark.parametrize("setting,used,browser,closed", [
+    ("", False, False, True), ("off", False, False, False), ("", True, False, False), ("", False, True, False)])
+def test_where_a_message_starts(api, monkeypatch, setting, used, browser, closed):
+    """Closed for every account with the VM (since 2026-10-29, Pro and
+    admins), open where the chat's last message used the workspace or the
+    user has its browser right now, and everywhere with the emergency off."""
     import time
     from app.api.routers import agent
     client, store, calls = api
     monkeypatch.setattr(agent, "audit_allowed", lambda uid: True)
     monkeypatch.setattr(agent, "vm_allowed", lambda uid: True)
-    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
     monkeypatch.setattr(agent_vm, "configured", lambda: True)
-    monkeypatch.setenv("AGENT_WORKSPACE_ON_DEMAND", mode)
+    monkeypatch.setenv("AGENT_WORKSPACE_ON_DEMAND", setting)
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     store._chat_ref(UID, chat_id).update({"agent_workspace_used": used})
     if browser:

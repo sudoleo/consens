@@ -922,9 +922,9 @@ zum Arbeitsplatz (gemessen im Testaufbau ohne Memory und Dateien). Max' Wunsch:
 Chat und Arbeit am Rechner bleiben ein Chat, das Modell bekommt die Werkzeuge
 aber erst, wenn die Aufgabe sie braucht.
 
-`AGENT_WORKSPACE_ON_DEMAND` schaltet es ein: `admin` für Admins, `on` für jedes
-Konto mit VM; leer (der Standard) bleibt alles wie zuvor. Eine Nachricht beginnt
-dann in **Stufe 1**. Im Systemprompt steht an der Stelle von VM-, GitHub- und
+Seit 2026-10-29 Standard für jedes Konto mit VM, also Pro und Admins (Max nach
+der Probe unten). `AGENT_WORKSPACE_ON_DEMAND=off` ist der Notaus: Dann hat jede
+Nachricht alles von Anfang an, wie zuvor. Eine Nachricht beginnt in **Stufe 1**. Im Systemprompt steht an der Stelle von VM-, GitHub- und
 Plan-Block `AGENT_WORKSPACE_CLOSED_PROMPT` (vor dem Memory-Block). Statt der
 Werkzeuge des Arbeitsplatzes (VM, `browser`, `ask_user`, `request_domain`,
 GitHub, `update_plan`) gibt es nur `open_workspace` (`task`: wofür, ein Satz,
@@ -958,9 +958,15 @@ lässt die nächste wieder geschlossen beginnen; so bricht der Cache höchstens
 einmal pro Wechsel. Die Tageszähler des Audit-Modus zählen `workspace`: `open`
 (von Anfang an), `opened`, `closed` (`agent_audit_metrics`).
 
-Offen (Stand 2026-10-29): eine Live-Probe, ob die Modelle die Schwelle treffen
-und ob Modelle mit signiertem Reasoning (Claude, Gemini) den Werkzeugwechsel im
-Lauf vertragen. Erst danach in Prod für Admins setzen.
+**Probe 2026-10-29** (rund 0,20 $; je 12 Fragen nur im ersten Schritt, im
+Audit-Modus mit geschlossenem Arbeitsplatz, eine Suchrunde): DeepSeek V4.1
+Flash, Claude Haiku 5.5 und GPT-6.1 Terra öffneten ihn bei keiner der 18
+Chatfragen (Delay Sports: alle sofort `find_pictures`) und bei 16 von 18
+Aufgaben am Rechner. Beim Kündigungsformular fragten alle drei zuerst nach Link
+und Daten, was richtig ist; Haiku schrieb das Snake-Spiel als Code in die
+Antwort. Den Werkzeugwechsel im Lauf vertrug Haiku 5.5 mit signiertem Reasoning
+(effort low): Schritt 2 rief ohne Fehler `vm_exec` auf, DeepSeek ebenso. Nicht
+geprüft: Gemini und spätes Öffnen nach vielen Schritten; das zeigen die Zähler.
 
 ### Arbeitsplatz (seit 2026-10-27)
 

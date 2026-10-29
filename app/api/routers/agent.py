@@ -118,20 +118,13 @@ def vm_allowed(uid):
 
 def workspace_closed(uid, chat_data):
     """Whether this message starts without the workspace's tools, only with
-    open_workspace (agent_vm.on_demand_mode, DelegationLoop._open_workspace).
+    open_workspace (agent_vm.on_demand, DelegationLoop._open_workspace).
     It starts with them where the chat's last message used the workspace
     (finish_run: agent_workspace_used) or the user has its browser right now:
     the work goes on there. With the browser's state unknown it starts
     closed: the agent can open it."""
-    mode = agent_vm.on_demand_mode()
-    if not mode or chat_data.get("agent_workspace_used"):
+    if not agent_vm.on_demand() or chat_data.get("agent_workspace_used"):
         return False
-    if mode == "admin":
-        try:
-            if not is_user_admin(uid):
-                return False
-        except TierStatusUnavailable:
-            return False
     from app.services import agent_workspace
     try:
         return not agent_workspace.user_has_browser(db_firestore, uid)
