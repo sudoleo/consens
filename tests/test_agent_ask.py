@@ -244,7 +244,8 @@ def test_a_reviewers_halt_during_the_users_card_comes_before_the_next_call(store
     decided = []
 
     def halt_then_hand_back(hold):
-        assert loop.request_hold(halt) is False
+        # Taken (it waits), so the reviewer does not halt the entry again.
+        assert loop.request_hold(halt) is True and loop.queued_hold == halt
         browser.take_over()
         browser.hand_back()
         while loop.hold is None or not loop.hold.get("reviewer"):

@@ -5764,8 +5764,9 @@ Fixieren der Antwort wartet auf das Laufende (`agent-chat.js`
 **Aussteuern** (seit 2026-10-26, Details `docs/agent-mode.md` „Aussteuern“):
 Eine Live-Runde darf `halt` setzen (`HALT_KINDS`: safety, harm, off_goal,
 injection; `parse_halt`, `halt_step` für die Karte). `AnswerAudit.halt` (je
-Prüfer und Eintrag einmal, nicht nach `final_answer`) ruft
-`DelegationLoop.request_hold`: `VMTools.interrupt` beendet den laufenden
+Prüfer und Eintrag einmal, gezählt erst, wenn der Lauf ihn nahm; nicht nach
+`final_answer`) ruft `DelegationLoop.request_hold` (seit 2026-10-29 kommt ein
+Halt bei offener Karte auf diese, `joined_halt`, `revision`): `VMTools.interrupt` beendet den laufenden
 Befehl als Nutzer-Stop, `store.set_hold` schreibt `hold` an den Lauf-Root,
 SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der

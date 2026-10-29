@@ -1349,12 +1349,13 @@ class AnswerAudit:
     def halt(self, session, halt):
         """A reviewer stops the work for the user: the run pauses before its
         next step and asks the user (DelegationLoop.request_hold). The agent
-        never learns of it. Once per reviewer and entry."""
+        never learns of it. Once per reviewer and entry, counted once the run
+        showed it, joined it to the open card or holds it for after the
+        user's own card; a halt the run did not take may come again."""
         key = (session.provider, halt["entry"])
         with self.tools.lock:
             if key in self.halts or self.final_answer is not None:
                 return
-            self.halts.add(key)
         shown = {"step": "", "step_name": "", "step_kind": "", "step_source": ""}
         try:
             for entry, content in self.work_log.entries_after(halt["entry"] - 1):
@@ -1363,9 +1364,11 @@ class AnswerAudit:
                     break
         except Exception as exc:
             logging.info("Agent halt step unavailable category=%s", safe_exception(exc))
-        self.tools.loop.request_hold({"reviewer": session.model.label, "provider": session.provider,
-                                      "kind": halt["kind"], "reason": halt["reason"], "entry": halt["entry"],
-                                      **shown})
+        if self.tools.loop.request_hold({"reviewer": session.model.label, "provider": session.provider,
+                                         "kind": halt["kind"], "reason": halt["reason"], "entry": halt["entry"],
+                                         **shown}):
+            with self.tools.lock:
+                self.halts.add(key)
 
     # --- Before a call that acts outside the workspace (agent_gate) ---------
 

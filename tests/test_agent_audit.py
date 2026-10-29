@@ -1238,6 +1238,50 @@ def test_a_full_event_queue_neither_loses_the_halt_nor_ends_its_reviewer(store):
     assert frames[1]["decision"] == "continue" and frames[2]["state"] == "continue"
 
 
+def join_when_held(loop, store, action, *, provider="openai", entry=2, reason="Deletes the user's files."):
+    """Once a card is open, a reviewer's live halt on another entry comes
+    (AnswerAudit.halt), then the user decides on the card as it then is
+    (a copy of the hold in ``seen``)."""
+    seen = []
+
+    def run():
+        hold = held(loop)
+        auditor = loop.comparison.auditor
+        auditor.halt(auditor.sessions[provider], {"entry": entry, "kind": "harm", "reason": reason})
+        seen.append({**loop.hold, "halts": set(auditor.halts),
+                     "saved": store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("hold")})
+        assert loop.hold["id"] == hold["id"]
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, hold["id"], action)
+        loop.receive(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict())
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, seen
+
+
+def test_a_second_reviewers_halt_joins_the_open_card(store):
+    """A-S2: before, request_hold refused it while the first card was open,
+    the reviewer's key was taken all the same, and its reason was lost."""
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+    thread, seen = join_when_held(loop, store, "continue")
+    events = list(loop.run())
+    thread.join(5)
+    labels = {provider: session.model.label for provider, session in loop.comparison.auditor.sessions.items()}
+    [card] = seen
+    assert [(r["reviewer"], r["kind"], r["reason"]) for r in card["reasons"]] == [
+        (labels["anthropic"], "injection", HALT_REASON), (labels["openai"], "harm", "Deletes the user's files.")]
+    assert card["reviewer"] == f"{labels['anthropic']} · {labels['openai']}" and card["revision"] == 1
+    assert card["saved"]["reasons"] == card["reasons"] and {("anthropic", 1), ("openai", 2)} <= card["halts"]
+    # The same card again, one decision for both.
+    holds = [e for e in events if e.get("type") == "hold"]
+    assert [h["hold"]["id"] if h["hold"] else h["decision"] for h in holds] == [card["id"], card["id"], "continue"]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert f"{labels['openai']} also paused the work for the user (harm, entry 2): Deletes the user's files." in said
+    record = next(e for e in saved(store, loop)["agent_activity"] if e["kind"] == "hold")
+    assert len(record["reasons"]) == 2 and record["state"] == "continue"
+    assert saved(store, loop)["status"] == "completed"
+
+
 def test_deny_is_taken_only_where_it_answers_the_pause(api):
     """A-S5: a domain and the agent's own question can be declined; a
     reviewer's halt or a gate cannot (422), and nothing is decided."""
@@ -1282,6 +1326,11 @@ def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
     assert [e.get("decision") for e in events if e.get("type") == "hold" and not e.get("hold")] == ["stop"]
     said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "The user stopped the work." in said and saved(store, loop)["status"] == "failed"
+    # A halt the run no longer takes (A-S2) is not counted: it may come again.
+    auditor = loop.comparison.auditor
+    assert auditor.final_answer is None and ("anthropic", 1) in auditor.halts
+    auditor.halt(auditor.sessions["openai"], {"entry": 1, "kind": "harm", "reason": "Late."})
+    assert ("openai", 1) not in auditor.halts
 
 
 def in_background(loop, request_id="one"):

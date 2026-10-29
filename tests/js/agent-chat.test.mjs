@@ -1710,6 +1710,40 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A second reviewer's halt joins the open pause (A-S2, 2026-10-29): the
+  // same pause again with a new revision, drawn again with both reasons and
+  // the words already typed into its reply.
+  it("draws a pause again when another reviewer's halt joins it", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const hold = { id: "a1b2c3d4e5f6", reviewer: "Claude Haiku 4.5", kind: "injection", entry: 4, reason: "Erster Grund.",
+      step: "", at: new Date().toISOString(), timeout_seconds: 1800 };
+    handlers.hold.receive({ hold });
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(p => p.textContent)).toEqual(["Erster Grund."]);
+    host.querySelector(".agent-hold-write").click();
+    host.querySelector(".agent-hold-reply-input").value = "Nur lesen";
+    handlers.hold.receive({ hold: { ...hold, revision: 1, reviewer: "Claude Haiku 4.5 · GPT-5.4 mini",
+      reasons: [{ reviewer: "Claude Haiku 4.5", kind: "injection", reason: "Erster Grund." },
+        { reviewer: "GPT-5.4 mini", kind: "harm", reason: "Zweiter Grund." }] } });
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(p => p.textContent)).toEqual([
+      "Claude Haiku 4.5: Erster Grund.", "GPT-5.4 mini: Zweiter Grund."]);
+    expect(host.querySelector(".agent-hold-reply").hidden).toBe(false);
+    expect(host.querySelector(".agent-hold-reply-input").value).toBe("Nur lesen");
+    dom.window.close();
+  });
+
   // A domain for the workspace (agent_domains.py, 2026-10-27): the user
   // decides every one, after the reviewers; "Allow for this chat" goes on,
   // "Don't allow" tells the agent no.

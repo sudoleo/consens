@@ -205,6 +205,25 @@ def test_a_reviewer_that_could_not_answer_is_never_a_go(store):
     assert ran == []
 
 
+def test_a_reviewers_halt_during_a_gate_card_joins_it(store):
+    """A-S2: the card said only that no reviewer could check the step; a
+    live halt that comes meanwhile stands on it with its reason."""
+    from test_agent_audit import join_when_held
+    script, loop, ran = gated(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", lambda m: "I cannot tell."),
+                       openai=replies(script, "openai", lambda m: json.dumps({"marks": []})))
+    thread, seen = join_when_held(loop, store, "continue", provider="anthropic", entry=1)
+    events = list(loop.run())
+    thread.join(5)
+    [card] = seen
+    assert card["gate"] is True and card["kind"] == "harm" and card["reason"] == "Deletes the user's files."
+    assert card["reviewer"] == "Claude Haiku 4.5" and "reasons" not in card and ("anthropic", 1) in card["halts"]
+    holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
+    assert [h["kind"] for h in holds] == [agent_audit.GATE_UNCHECKED, "harm"]
+    # The user's go still runs the step's call.
+    assert ran == [REMEMBERED]
+
+
 class BrowserArgs(LookupArgs):
     action: str = ""
     ref: str = ""
@@ -320,6 +339,21 @@ def test_a_domain_the_user_does_not_allow_never_runs(store):
     names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "paused" in names and "decision" in names
     assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_reviewers_halt_during_a_domain_card_joins_it(store):
+    """A-S2: the reviewers had let the domain; a live halt that comes while
+    the user reads the card turns its verdict into that concern."""
+    from test_agent_audit import join_when_held
+    script, loop, ran = asking(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
+    thread, seen = join_when_held(loop, store, "deny", provider="openai", entry=1)
+    list(loop.run())
+    thread.join(5)
+    [card] = seen
+    assert card["kind"] == "domain" and card["review"] == "halt" and card["reviewer"] == "GPT-5.4 mini"
+    assert card["reason"] == "Deletes the user's files." and card["revision"] == 1
+    assert ran == [] and loop.allowed_domains == set()
 
 
 def test_a_domain_the_chat_already_has_needs_no_card(store):

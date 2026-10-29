@@ -464,7 +464,14 @@ Anweisungen aus Seite, Datei, Mail oder Befehlsausgabe). Zweifel bleiben
 Marken; in der Schlussrunde gibt es keinen Halt. `parse_halt` nimmt nur einen
 der vier Gründe, einen Satz und einen gesehenen Eintrag; `AnswerAudit.halt`
 lässt je Prüfer und Eintrag einen zu (ein Prüfer reicht) und ruft
-`DelegationLoop.request_hold`. Der Lauf hält vor seinem nächsten Schritt oder
+`DelegationLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt,
+eine Gate- oder Domain-Karte), kommt der Halt seit 2026-10-29 auf diese
+Karte (`joined_halt`: jeder Grund mit seinem Prüfer in `reasons`, eine Karte
+ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
+halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
+zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
+Gezählt wird ein Halt in `AnswerAudit.halts` erst, wenn der Lauf ihn
+angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der Lauf hält vor seinem nächsten Schritt oder
 Aufruf (`_hold_wait`, auch zwischen den Aufrufen einer Runde und bevor eine
 geschriebene Antwort zählt), ein laufender VM-Befehl endet sofort
 (`VMTools.interrupt`, für den Agenten „The user stopped this command“), und
@@ -1227,7 +1234,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   hört er `no_answer` und schreibt seine Antwort, statt dass die Antwort wie
   nach einem Prüfer-Halt stoppt; die Karte zeigt deshalb „The agent waits N
   more minutes“ (erst in den letzten fünf). Ein Prüfer-Halt, der währenddessen kommt, wartet
-  (`queued_hold`) und hält dann vor dem nächsten Aufruf. Das Werkzeug
+  (`queued_hold`, ein zweiter kommt dazu) und hält dann vor dem nächsten
+  Aufruf. Das Werkzeug
   ersetzt die Vorab-Prüfung jedes Browser-Klicks (siehe „Vorab-Prüfung“):
   Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers bewirkt,
   und der Nutzer entscheidet. Sein Ergebnis sperrt Memory (seit 2026-10-29

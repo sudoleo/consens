@@ -216,6 +216,28 @@ def _passing_failure(error):
     return agent_failure(error).get("code") in PASSING_FAILURE_CODES
 
 
+def joined_halt(hold, details):
+    """``hold`` with a reviewer's halt (``details``) that came while it was
+    open (request_hold): every reason in ``reasons`` with its reviewer, as
+    AnswerAudit.gate_hold lists several, and the reviewers' names together.
+    A card without a reason of its own (not every reviewer could check, a
+    domain the reviewers let) takes the halt's. ``revision`` counts the
+    joins, so the card is drawn again (agent-chat.js renderHold)."""
+    own = [{"reviewer": hold["reviewer"], "kind": hold["kind"], "reason": hold["reason"]}] if hold.get("reason") else []
+    reasons = [*(hold.get("reasons") or own),
+               {"reviewer": details["reviewer"], "kind": details["kind"], "reason": details["reason"]}]
+    joined = {**hold, "revision": hold.get("revision", 0) + 1,
+              "reviewer": " · ".join(dict.fromkeys(item["reviewer"] for item in reasons if item["reviewer"]))}
+    if len(reasons) > 1:
+        joined["reasons"] = reasons
+    else:
+        joined.update(provider=details["provider"], reason=details["reason"],
+                      **({} if hold.get("domain") else {"kind": details["kind"]}))
+    if hold.get("domain"):
+        joined["review"] = "halt"
+    return joined
+
+
 class StrictArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -1822,20 +1844,35 @@ class DelegationLoop(AgentLoop):
         of it. One hold at a time; True when this one opened.
         The agent's own question to the user (``ask``, agent_ask.py) opens
         one too, between calls, so no VM command runs then; a reviewer's halt
-        that comes while it is open waits until it is answered."""
+        that comes while it is open waits until it is answered. A reviewer's
+        halt while another hold is open joins that card (joined_halt), and
+        counts as shown: True as well. The app's own cards (``gate``,
+        ``ask``) wait for the open one: False."""
         from uuid import uuid4
+        joined = None
         with self.condition:
             if self.closed.is_set() or self.cancellation.cancelled:
                 return False
             if self.hold is not None:
-                if self.hold.get("ask") and not details.get("ask") and self.queued_hold is None:
-                    self.queued_hold = details
-                return False
-            hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
-                    "timeout_seconds": HOLD_TIMEOUT_SECONDS}
-            self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
-            self.hold_unsaved = False
-            self.condition.notify_all()
+                if details.get("gate") or details.get("ask"):
+                    return False
+                if self.hold.get("ask"):
+                    # Opens once the user answered their card; a second
+                    # halt meanwhile joins the first.
+                    self.queued_hold = details if self.queued_hold is None else joined_halt(self.queued_hold, details)
+                    return True
+                # Before 2026-10-29 the second halt was lost, its reason
+                # neither on the card nor in the log.
+                joined = self.hold = joined_halt(self.hold, details)
+            else:
+                hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
+                        "timeout_seconds": HOLD_TIMEOUT_SECONDS}
+                self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
+                self.hold_unsaved = False
+                self.condition.notify_all()
+        if joined is not None:
+            self._show_joined(joined, details)
+            return True
         if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
         if not self._save_hold(hold):
@@ -1866,6 +1903,20 @@ class DelegationLoop(AgentLoop):
                 f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
                 f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."))
         return True
+
+    def _show_joined(self, hold, details):
+        """The open card with a reviewer's halt that joined it: saved, sent
+        again (the same id, a new ``revision`` redraws it) and in the log
+        with the new reason. Nothing runs meanwhile: the open hold holds it.
+        Saved or not, its id is the one the root knows (or not) already."""
+        self._save_hold(hold)
+        self._send({"type": "hold", "hold": hold}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  "reviewer": hold["reviewer"], "reasons": hold.get("reasons") or []}),
+                   f"hold-{hold['id']}")
+        if self.work_log is not None:
+            self.work_log.app("paused", f"{details['reviewer']} also paused the work for the user "
+                                        f"({details['kind']}, entry {details['entry']}): {details['reason']}")
 
     def _save_hold(self, hold):
         """The open hold on the run's root (set_hold), where the decision

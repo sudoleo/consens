@@ -1966,11 +1966,20 @@
       host.hidden = true;
       return;
     }
-    // A browser card's button follows who has the browser in this window.
-    const key = hold.ask === "browser" ? `${hold.id}:${App.workspaceView?.holder?.() || ""}` : hold.id;
+    // A browser card's button follows who has the browser in this window; a
+    // reviewer's halt that joined the open pause (revision) adds its reason.
+    const key = `${hold.ask === "browser" ? `${hold.id}:${App.workspaceView?.holder?.() || ""}` : hold.id}#${hold.revision || 0}`;
     if (host.dataset.id !== key) {
+      // Drawn again, the same pause keeps the words typed into its reply.
+      const typed = host.dataset.id?.startsWith(`${hold.id}#`)
+        ? host.querySelector(".agent-hold-reply:not([hidden]) .agent-hold-reply-input")?.value || "" : "";
       host.dataset.id = key;
       host.replaceChildren(holdCard(context, hold));
+      if (typed) {
+        host.querySelector(".agent-hold-write")?.click();
+        const reply = host.querySelector(".agent-hold-reply-input");
+        if (reply) reply.value = typed;
+      }
     }
     host.hidden = false;
     const clock = host.querySelector(".agent-hold-clock");
