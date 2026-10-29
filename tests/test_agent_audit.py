@@ -1282,6 +1282,33 @@ def test_a_second_reviewers_halt_joins_the_open_card(store):
     assert saved(store, loop)["status"] == "completed"
 
 
+def test_from_the_fixed_answer_on_no_reviewer_halts_the_work(store):
+    """A-R5: a halt between the last look and the fixed answer ends with it
+    ("ended") instead of standing until the turn's end with the clock
+    stopped; during the final round request_hold takes none."""
+    taken = []
+
+    def final(messages):
+        taken.append(script.loop.request_hold(HALT))
+        return REVIEWS["anthropic"]
+    script = Audit(reviews={**REVIEWS, "anthropic": final})
+    loop = audit_loop(store, script)
+    finish = loop._finish_merged
+
+    def late_halt(value):
+        assert loop.request_hold(HALT) is True
+        return (yield from finish(value))
+    loop._finish_merged = late_halt
+    events = list(loop.run())
+    holds = [e for e in events if e.get("type") == "hold"]
+    assert len(holds) == 2 and holds[1]["hold"] is None and holds[1]["decision"] == "ended"
+    review = next(i for i, e in enumerate(events) if e.get("type") == "review")
+    assert events.index(holds[1]) < review
+    assert taken == [False] and loop.hold is None
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["agent_review"]["status"] == "succeeded"
+
+
 def test_deny_is_taken_only_where_it_answers_the_pause(api):
     """A-S5: a domain and the agent's own question can be declined; a
     reviewer's halt or a gate cannot (422), and nothing is decided."""

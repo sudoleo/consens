@@ -371,6 +371,8 @@ class DelegationLoop(AgentLoop):
         # The open hold could not be saved (_save_hold): its decision comes
         # in this process only (decide_unsaved).
         self.hold_unsaved = False
+        # The answer is fixed (_finish_merged): reviewers halt nothing more.
+        self.answer_fixed = False
         self.paused_seconds = 0.0
         self.tools_used = 0
         self.invalid_tool_rounds = 0
@@ -1853,6 +1855,9 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             if self.closed.is_set() or self.cancellation.cancelled:
                 return False
+            if self.answer_fixed and not details.get("ask"):
+                # The answer stands (_finish_merged); its marks say the rest.
+                return False
             if self.hold is not None:
                 if details.get("gate") or details.get("ask"):
                     return False
@@ -2185,6 +2190,18 @@ class DelegationLoop(AgentLoop):
             return "handed_back" if state["had"] or returned >= state["since"] else None
         return poll
 
+    def _end_hold(self, hold, decision):
+        """A hold that is over (``decision``) leaves the run's root (only
+        while it is the stored one) and the page: its card closes, its
+        activity says how it ended."""
+        try:
+            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
+        except Exception as exc:
+            logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
+        self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  "state": decision}), f"hold-{hold['id']}")
+
     def _hold_wait(self, poll=None):
         """Wait while a reviewer's halt is open; events keep flowing and Stop
         works. Returns the decision ("continue", "steer") or None without a
@@ -2217,13 +2234,7 @@ class DelegationLoop(AgentLoop):
             # No answer to this hold (decide_hold refuses it): never a
             # "continue", as before 2026-10-29, but a stop.
             decision = "stop"
-        try:
-            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
-        except Exception as exc:
-            logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
-        self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
-        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                  "state": decision}), f"hold-{hold['id']}")
+        self._end_hold(hold, decision)
         asked = hold.get("ask")
         if self.work_log is not None:
             said = {"continue": "The user let the work go on.",
@@ -2644,6 +2655,18 @@ class DelegationLoop(AgentLoop):
         if not value.text.strip():
             # Nothing to show or check: never start the judges on no text.
             raise ValueError("The model did not complete the answer before review.")
+        with self.condition:
+            # The answer stands from here on: no reviewer's halt any more
+            # (request_hold), and one that came after the last look ends
+            # with it. Before 2026-10-29 its card stood until the turn's end,
+            # doing nothing, and the turn's clock stood still.
+            self.answer_fixed = True
+            late = self.hold if self.hold is not None and not self.hold.get("ask") else None
+            if late is not None:
+                self.paused_seconds += self.clock() - self.hold_started
+                self.hold = self.hold_decision = None
+        if late is not None:
+            self._end_hold(late, "ended")
         yield from self._show_answer(value)
         # Saved with the turn also when a check fails afterwards.
         self.completion.text = value.text
@@ -3065,17 +3088,11 @@ class DelegationLoop(AgentLoop):
             self.completion.usage = self.costs.total()
             if self.hold is not None:
                 # Still open as the run ended: stopped while it waited (the
-                # card's Stop is the Stop button), or opened as the answer's
-                # check began. Nothing waits for it any more.
+                # card's Stop is the Stop button), or the run broke off.
+                # Nothing waits for it any more.
                 hold, self.hold = self.hold, None
                 decision = "stop" if status == "cancelled" else "ended"
-                try:
-                    self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
-                except Exception as exc:
-                    logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
-                self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
-                self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                          "state": decision}), f"hold-{hold['id']}")
+                self._end_hold(hold, decision)
             if self.notes:
                 # Arrived after the answer was written: said, not lost silently.
                 self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",

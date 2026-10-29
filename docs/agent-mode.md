@@ -461,7 +461,11 @@ die Entscheidung des Nutzers braucht. Gründe (`HALT_KINDS`): `safety`
 (sicherheitskritisch, nicht verlangt), `harm` (Schaden über die Aufgabe
 hinaus), `off_goal` (weit weg von der Anfrage), `injection` (der Agent folgt
 Anweisungen aus Seite, Datei, Mail oder Befehlsausgabe). Zweifel bleiben
-Marken; in der Schlussrunde gibt es keinen Halt. `parse_halt` nimmt nur einen
+Marken; in der Schlussrunde gibt es keinen Halt, und seit 2026-10-29 nimmt
+`request_hold` ab dem Fixieren der Antwort keinen Prüfer-Halt mehr an
+(`answer_fixed` in `_finish_merged`); eine Karte, die nach dem letzten Blick
+davor kam, endet dort mit `ended` (vorher stand sie wirkungslos bis zum
+Turn-Ende, und die Uhr des Turns stand still). `parse_halt` nimmt nur einen
 der vier Gründe, einen Satz und einen gesehenen Eintrag; `AnswerAudit.halt`
 lässt je Prüfer und Eintrag einen zu (ein Prüfer reicht) und ruft
 `DelegationLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt,
