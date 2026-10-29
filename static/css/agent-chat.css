@@ -1020,7 +1020,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm-fold-list > .agent-vm { margin: 0 0 var(--trace-gap); }
 .agent-vm-fold-list > :last-child { margin-bottom: 0; }
 .agent-vm-output[hidden] { display: none; }
-/* Restore the VM to before this message (agent-activity.js, admins): a quiet
+/* Restore the workspace to before this message (agent-activity.js, admins): a quiet
    text action under the usage line, no frame. */
 .agent-vm-restore {
   display: block; margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--ink-3);

@@ -785,7 +785,7 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not vm_allowed(uid):
-        raise HTTPException(status_code=403, detail="Agent VM is not available on your account.")
+        raise HTTPException(status_code=403, detail="The workspace is not available on your account.")
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", turn_id):
         raise HTTPException(status_code=404, detail="Message not found")
     store = AgentRunStore(db_firestore)
@@ -798,7 +798,7 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
         _raise_store_error(exc, operation="read agent vm restore", uid=uid)
     checkpoint = (turn.get("agent_vm") or {}).get("checkpoint")
     if not checkpoint:
-        return JSONResponse({"error": "This message has no VM state to go back to.", "code": "no_checkpoint"},
+        return JSONResponse({"error": "This message has no saved workspace to go back to.", "code": "no_checkpoint"},
                             status_code=409)
     lock = chat.get("agent_lock_until")
     from app.services import agent_workspace
@@ -806,18 +806,18 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     # Only a checkpoint of this account's workspace, recent and taken after
     # the last sign-out everywhere or chat deletion (security audit 2026-10-27).
     if not agent_workspace.restorable(workspace, turn.get("agent_vm")):
-        return JSONResponse({"error": "The VM can no longer go back to before this message.", "code": "expired"},
+        return JSONResponse({"error": "The workspace can no longer go back to before this message.", "code": "expired"},
                             status_code=409)
     # The workspace is the account's: no chat's message may be using it.
     if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)) or \
             agent_workspace.held_by(db_firestore, uid):
-        return JSONResponse({"error": "Wait until the response is done, then restore the VM.", "code": "running"},
+        return JSONResponse({"error": "Wait until the response is done, then restore the workspace.", "code": "running"},
                             status_code=409)
     try:
         agent_vm.restore_workspace(uid, checkpoint)
     except agent_vm.VMUnavailable as exc:
         logging.warning("Agent VM restore unavailable category=%s", safe_exception(exc))
-        return JSONResponse({"error": "The VM could not be restored right now. Try again later.",
+        return JSONResponse({"error": "The workspace could not be restored right now. Try again later.",
                              "code": "vm_unavailable"}, status_code=503)
     ref = store._chat_ref(uid, chat_id)
 
@@ -865,7 +865,7 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
             return JSONResponse({"error": "This response is no longer running. Send your message as a new one.",
                                  "code": "not_running"}, status_code=409)
         if ((turn.get("agent_settings") or {}).get("agent_preferences") or {}).get("vm") != "on":
-            return JSONResponse({"error": "Messages during a response need Agent VM.", "code": "notes_unavailable"},
+            return JSONResponse({"error": "Messages during a response need the workspace.", "code": "notes_unavailable"},
                                 status_code=409)
         note = store.add_user_note(uid, chat_id, turn_id, text)
         loop = agent_background.run_loop(uid, chat_id, request_id)

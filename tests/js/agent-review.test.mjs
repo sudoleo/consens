@@ -956,8 +956,9 @@ it('shows the review in the duration disclosure and opens its notes', () => {
   expect(reserved.querySelector('button').disabled).toBe(true);
   w.App.agentReview.renderActivity(details, auditReview(), 'Exact answer.');
   expect(details.querySelector('.is-reserved')).toBeNull();
-  expect(details.textContent).toContain('Review · 3 reviewers');
-  expect(details.textContent).toContain('Reviewers: GPT, Claude, Gemini');
+  // One line: who reviewed (UX audit A6), not a label and a list.
+  expect(details.textContent).toContain('Reviewed by GPT, Claude, Gemini');
+  expect(details.textContent).not.toContain('Review · ');
   expect(details.textContent).toContain('No review: Gemini');
   // The row's number, and "marked" only for what is coloured in the text (B5).
   expect(details.querySelector('.agent-activity-check').textContent).toBe('2 notes · 1 passage marked in the text');

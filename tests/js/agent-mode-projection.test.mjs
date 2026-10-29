@@ -279,6 +279,9 @@ describe("agent mode panel projection", () => {
     expect(reviewers.getAttribute("aria-label")).toBe("1 AI cross-checks");
     // In words beside the marks, and what they do in the tooltip (2026-10-28).
     expect(document.getElementById("composerReviewersLabel").textContent).toBe("1 AI cross-checks");
+    // Its short form for a narrow field, the same on the start screen (UX audit E4, E5).
+    expect(document.getElementById("composerReviewersLabel").dataset.short).toBe("1 AI");
+    expect(label.dataset.short).toBe("1 AI");
     expect(reviewers.title).toBe("Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.");
     const [mark] = reviewers.querySelectorAll(".composer-model-icon");
     expect(mark.dataset.provider).toBe("openai");

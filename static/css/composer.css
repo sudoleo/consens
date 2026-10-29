@@ -109,12 +109,20 @@
    two read as one kind of control. */
 .composer-reviewers-label { margin-left: 6px; color: var(--ink); font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
 .composer-reviewers-label:empty { display: none; }
-@media (max-width: 560px) { .composer-reviewers-label { display: none; } }
-/* Beside the open activity panel the column is ~626px at 1280: with the
-   words and the model chip the field kept 172px, too little for its hint
-   (UX audit 2026-10-29 H2). There the marks speak alone, as on a phone. */
+/* Narrow, the short form ("3 AIs", data-short from agent-mode.js) instead
+   of nothing: at the same width as the start screen's bar (shell.css), one
+   rule for one control (UX audit 2026-10-29 E4, E5). Beside the open
+   activity panel the column is ~626px at 1280: with the words and the model
+   chip the field kept 172px, too little for its hint (H2); there too. */
+@media (max-width: 700px) {
+  .composer-reviewers-label[data-short] { font-size: 0; }
+  .composer-reviewers-label[data-short]::after { content: attr(data-short); font-size: var(--font-size-xs); }
+}
 @media (min-width: 1200px) and (max-width: 1365px) {
-  body.agent-sidebar-open:not(.is-hero) .composer-reviewers-label { display: none; }
+  body.agent-sidebar-open:not(.is-hero) .composer-reviewers-label[data-short] { font-size: 0; }
+  body.agent-sidebar-open:not(.is-hero) .composer-reviewers-label[data-short]::after {
+    content: attr(data-short); font-size: var(--font-size-xs);
+  }
 }
 .composer-reviewers[aria-expanded="true"] { background: var(--hover); }
 @media (hover: hover) and (pointer: fine) {

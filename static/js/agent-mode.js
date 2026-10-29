@@ -449,6 +449,11 @@
   function renderReviewers(beta, start, count) {
     const auditing = beta && window.App.agentPreferences?.auditing?.() === true;
     const words = auditing ? window.App.words.crossCheck(count, 1) : "";
+    // Where the words do not fit, their short form ("3 AIs"), the same in the
+    // chat and on the start screen: the marks never stand without a word on a
+    // phone (UX audit E4, E5). An attribute is not translated by i18n.js.
+    const short = !auditing ? "" : count === 1 ? "1 AI" : `${count} AIs`;
+    const shortText = window.App.t?.(short) ?? short;
     // One write, and only of a change: i18n.js translates what is written.
     const write = (node, name, value) => {
       const current = name === "text" ? node.textContent : node.getAttribute(name);
@@ -461,6 +466,7 @@
     if (label) {
       label.hidden = !auditing;
       if (auditing) write(label, "text", words);
+      if (auditing) label.dataset.short = shortText; else delete label.dataset.short;
     }
     if (picker) {
       // The name holds the words on screen (WCAG 2.5.3).
@@ -476,7 +482,10 @@
     // Max: new users did not know why a logo stood there).
     write(reviewers, "title", "Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.");
     const caption = document.getElementById("composerReviewersLabel");
-    if (caption) write(caption, "text", words);
+    if (caption) {
+      write(caption, "text", words);
+      caption.dataset.short = shortText;
+    }
     // The bar's marks, the same nodes: they are drawn there in every mode.
     const marks = document.getElementById("composerModelIcons");
     const own = document.getElementById("composerReviewerIcons");

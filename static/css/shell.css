@@ -3876,8 +3876,10 @@ body .theme-toggle:focus-visible {
   .composer-mode-bar { padding: 0 8px; gap: 8px; font-size: var(--font-size-xs); }
   .composer-mode-controls { gap: 6px; }
   .composer-agent-toggle { gap: 4px; }
-  .composer-model-icon { width: 22px; height: 22px; margin-left: -10px; }
-  .composer-model-icons { padding-left: 10px; }
+  /* 16px apart as on the desktop: at -10px a mark covered 45 % of the one
+     before it, OpenAI's showed as half a "C" (UX audit E4). */
+  .composer-model-icon { width: 22px; height: 22px; margin-left: -6px; }
+  .composer-model-icons { padding-left: 6px; }
   .composer-mode-models { gap: 5px; }
   .composer-comparison-status { font-size: 0; }
   .composer-comparison-status::after { content: attr(data-compact); font-size: var(--font-size-xs); }
@@ -3885,11 +3887,21 @@ body .theme-toggle:focus-visible {
 @media (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
+  /* The reviewers keep their short form ("3 AIs"), as in a chat (E4, E5). */
+  .composer-mode-models .composer-tool-label[data-short]:not([hidden]) { display: inline; font-size: 0; }
+  .composer-mode-models .composer-tool-label[data-short]:not([hidden])::after {
+    content: attr(data-short); font-size: var(--font-size-xs);
+  }
 }
 /* A docked reader can narrow the desktop composer below the viewport width. */
 @container composer-options (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
+  /* The reviewers keep their short form ("3 AIs"), as in a chat (E4, E5). */
+  .composer-mode-models .composer-tool-label[data-short]:not([hidden]) { display: inline; font-size: 0; }
+  .composer-mode-models .composer-tool-label[data-short]:not([hidden])::after {
+    content: attr(data-short); font-size: var(--font-size-xs);
+  }
 }
 /* 44px to the finger (Apple-Audit F5): Reasoning, Attach and the models keep
    their drawing; on touch each reaches out to 44px, and on a phone the

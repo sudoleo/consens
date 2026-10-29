@@ -152,6 +152,9 @@ def test_only_a_recent_checkpoint_of_the_workspace_after_the_last_sign_out_goes_
     after_sign_out = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
     assert after_sign_out.status_code == 409 and after_sign_out.json()["code"] == "expired"
     assert not [call for call in fake_vm.calls if call[0] == "restore"]
-    chat, turn_id, _ = vm_turn(store, checkpoint="v8")
+    # A checkpoint taken after the sign-out goes back. Stated a second later:
+    # taken in the same instant as the floor it tied with it, by the clock alone.
+    later = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+    chat, turn_id, _ = vm_turn(store, checkpoint="v8", taken=later)
     assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 200
     assert ("restore", agent_vm.workspace_name(UID), "v8") in fake_vm.calls

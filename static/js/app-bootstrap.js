@@ -444,8 +444,12 @@
       // puts them after), so they are parsed by now.
       const label = document.getElementById("composerModelLabel");
       if (label && agentLook && rememberedLook()?.audit === true) {
-        const words = window.App.words.crossCheck(checkedFamilies().length, 1);
+        const count = checkedFamilies().length;
+        const words = window.App.words.crossCheck(count, 1);
         label.textContent = words;
+        // The short form a narrow bar shows (agent-mode.js renderReviewers).
+        const short = count === 1 ? "1 AI" : `${count} AIs`;
+        label.dataset.short = window.App.t?.(short) ?? short;
         label.hidden = false;
         label.parentElement.setAttribute("aria-label", words);
       }

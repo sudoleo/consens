@@ -1315,20 +1315,20 @@
   // The VM back to how it was before this message (routers/agent.py
   // restore_agent_vm, admins): asked first, since later changes are lost.
   async function restoreVm(chatId, turnId) {
-    const confirmed = await App.confirm?.({ title: "Restore the VM?", danger: true, confirmLabel: "Restore",
+    const confirmed = await App.confirm?.({ title: "Restore the workspace?", danger: true, confirmLabel: "Restore",
       body: "Your workspace goes back to how it was before this message: every chat’s folder and the browser with the sites it is logged in to. Everything changed there since is lost, and running background processes stop." });
     if (!confirmed) return;
-    let message = "The VM is back to how it was before this message.";
+    let message = "The workspace is back to how it was before this message.";
     try {
       const token = await window.auth.currentUser.getIdToken();
       const response = await fetch(`/agent/chats/${encodeURIComponent(chatId)}/turns/${encodeURIComponent(turnId)}/vm-restore`,
         { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        message = data.error || "The VM could not be restored.";
+        message = data.error || "The workspace could not be restored.";
       }
     } catch (_) {
-      message = "The VM could not be restored. Check your connection.";
+      message = "The workspace could not be restored. Check your connection.";
     }
     App.showPopup?.(message);
   }

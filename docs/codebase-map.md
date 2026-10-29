@@ -5599,7 +5599,7 @@ Leser-Kontext (`agent-audit:<answer_hash>`) hat `sections: ['differences',
 benennt Abschnittsknopf und Titel nach `labels` (sonst Answers/Differences/
 Sources). Kein Score, keine Unterschiedskarten. `auditMarks` zählt und listet
 eine Markierung über mehrere Sätze einmal (`dissent[].mark`). `renderActivity`
-zeigt eine Karte „Review · n models“, die auch bei `cancelled`/`missing`
+zeigt eine Karte „Reviewed by …“ (eine Zeile, UX-Audit A6), die auch bei `cancelled`/`missing`
 endet, die Seitenleiste Prüfer (`kind: "audit"`) als „Reviewer“ ohne ihren
 Auftrag. `failureNote` sieht eine fixierte Audit-Antwort als vollständig an
 (`reviewedAnswer`). Ein kompakter Footer öffnet Widersprüche, formatierte
@@ -5804,8 +5804,9 @@ Bedienelement: Der Agent-Chip nennt im Audit-Modus das Chatmodell
 (`#composerModelLabel`) neben den Marken der Leiste (`#composerModelPicker`),
 im Chat (ohne Leiste) stehen dieselben Marken vor dem Chip
 (`#composerReviewers`, `agent-mode.js` `renderReviewers`), seit 2026-10-28
-mit den Worten daneben („3 AIs cross-check“, `#composerReviewersLabel`, unter
-561 px ausgeblendet) und einem Titel, der sagt, was Prüfer tun. Beide öffnen die
+mit den Worten daneben („3 AIs cross-check“, `#composerReviewersLabel`; bis 700 px
+und neben der offenen Aktivität die Kurzform „3 AIs“ aus `data-short`, dieselbe
+Grenze wie die Leiste des Startbildschirms, seit 2026-10-29, UX-Audit E4/E5) und einem Titel, der sagt, was Prüfer tun. Beide öffnen die
 Prüfer-Ebene des Agent-Menüs, das aus dem geklickten Knopf kommt
 (`openModelPicker(…, { anchor })`, `fitComposerPicker`, `aria-expanded` am
 Anker, der Chip bleibt in Ruhe). Der erste Frame zeichnet das nach

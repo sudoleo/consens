@@ -599,7 +599,7 @@
   }
   // The glossary's word: the workspace, never "VM" on the page (docs/i18n.md).
   const vmOutcomes = { unavailable: 'Workspace not available', no_time: 'Skipped · no time left',
-    day_limit: 'Skipped · VM time for today used up', busy: 'Skipped · workspace in use by another chat' };
+    day_limit: 'Skipped · workspace time for today used up', busy: 'Skipped · workspace in use by another chat' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
     if (item.status === 'running') return ['vm_exec', 'vm_install_packages'].includes(item.name) ? App.t('Running…') : '';
@@ -950,7 +950,7 @@
       const vmRestoreEl = document.createElement("button");
       vmRestoreEl.type = "button";
       vmRestoreEl.className = "agent-vm-restore audit-only";
-      vmRestoreEl.textContent = "Restore the VM to before this message";
+      vmRestoreEl.textContent = "Restore the workspace to before this message";
       vmRestoreEl.hidden = true;
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');

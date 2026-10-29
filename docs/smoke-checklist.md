@@ -118,7 +118,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       die Nachricht erscheint vor dem nächsten Schritt als „You …“ in den
       Fortschrittszeilen, der Agent geht darauf ein; Stop bleibt Stop. Ohne
       Agent VM passiert bei Enter während eines Laufs nichts. Danach unter der
-      Verbrauchszeile „Restore the VM to before this message“: Dialog,
+      Verbrauchszeile „Restore the workspace to before this message“: Dialog,
       Bestätigen, Hinweis „The VM is back …“; ein `ls` in der nächsten
       Nachricht zeigt den alten Stand, und der Agent erwähnt den Restore.
       Automatisiert: `test_agent_notes.py`, `test_agent_vm_restore.py`,

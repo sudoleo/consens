@@ -85,8 +85,8 @@
     const limit = Number(time?.limit_seconds) > 0 ? Math.round(time.limit_seconds / 60) : null;
     line.hidden = !time || !auditing();
     line.textContent = !time ? "" : limit === null
-      ? App.t("VM time today: {used} min, no daily limit", { used })
-      : App.t("VM time today: {used} of {limit} min", { used: Math.min(used, limit), limit });
+      ? App.t("Workspace time today: {used} min, no daily limit", { used })
+      : App.t("Workspace time today: {used} of {limit} min", { used: Math.min(used, limit), limit });
   }
 
   function bind() {

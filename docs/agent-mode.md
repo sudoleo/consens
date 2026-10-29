@@ -506,7 +506,8 @@ Die Statuszeile darunter ist ein leises Wort am Ende der Leiste („2 of 3
 reviewed“, „Not reviewed – the reviewers did not finish“, „Review
 stopped“); eine fertige Prüfung sagt dieselbe Live-Region nur für
 Screenreader an („Review finished: 11 notes“, H5). Die Aktivität zeigt eine
-Karte „Review · n reviewers“ mit „Reviewers: …“, „11 notes · 6 passages
+Karte mit einer Zeile „Reviewed by GPT-6 Luna, …“ (während der Prüfung „Reviewing
+the answer…“, UX-Audit A6), darunter „11 notes · 6 passages
 marked in the text“ und „Read the notes“ (Glyphe und Wort wie die Leiste),
 die auch bei `cancelled`/`missing` endet („Review stopped“, „Not
 reviewed“). Hat eine solche Prüfung Befunde aus den
@@ -1858,7 +1859,7 @@ des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
 `github_import` und die offene Live-Ansicht. Ein Befehl läuft nie
 über den Rest (`VMTools._timeout`), ein Prozess höchstens so lange; ist nichts
 mehr übrig, bekommt der Agent `VM_DAY_LIMIT` und arbeitet ohne VM weiter, die
-Aktivität sagt „Skipped · VM time for today used up“. Gebucht wird beim Ende der
+Aktivität sagt „Skipped · workspace time for today used up“. Gebucht wird beim Ende der
 Nachricht (`VMSession.close`, `users/{uid}/chat_state/agent_vm_time_<Tag>`);
 `/user_status` liefert `vm_time`, die Einstellungen zeigen „VM time today“. Die App selbst nutzt ihn nur für Hintergrundprozesse,
 gedeckelt (siehe unten).
@@ -1889,7 +1890,7 @@ VM:
   übersetzt), das Arbeitsprotokoll mit Herkunft `user`. Kommt sie erst nach der
   fertigen Antwort an, sagt die Aktivität das (`NOTES_UNREAD`).
 - *Checkpoint wiederherstellen.* Unter der Verbrauchszeile der letzten
-  Antwort steht für Admins „Restore the VM to before this message“, wenn der
+  Antwort steht für Admins „Restore the workspace to before this message“, wenn der
   Turn einen Checkpoint hat; nach Bestätigung (`App.confirm`, gefährlich)
   setzt `POST /agent/chats/{chat}/turns/{turn}/vm-restore` den Arbeitsplatz
   über `agent_vm.restore_workspace` (Sprites `POST …/checkpoints/{id}/restore`,

@@ -809,10 +809,13 @@
     const card = node('section', 'agent-activity-insight');
     const done = AUDIT_DONE.has(review.status), ended = AUDIT_ENDED.has(review.status);
     const count = reviewers.length;
-    card.append(node('h4', '', !ended ? 'Review · Reviewing the answer…'
-      : count === 1 ? 'Review · 1 reviewer' : `Review · ${count} reviewers`));
+    // One line says who reviews and how far it is (UX audit A6: "Review ·
+    // Reviewing the answer…", "Review · 3 reviewers" and "Reviewers: …" said
+    // it twice over, like a form); the outcome stands under it.
     const names = reviewers.map(r => reviewerName(r)).filter(Boolean);
-    if (names.length) card.append(node('p', 'agent-activity-models', `Reviewers: ${names.join(', ')}`));
+    card.append(node('h4', '', !ended ? 'Reviewing the answer…'
+      : names.length ? (done ? `Reviewed by ${names.join(', ')}` : `Reviewers: ${names.join(', ')}`)
+      : count === 1 ? '1 reviewer' : `${count} reviewers`));
     // A failed review says so once, in the line below (D8).
     const missing = review.status === 'failed' ? [] : reviewers.filter(r => done && r.status !== 'completed').map(r => reviewerName(r));
     if (missing.length) card.append(node('p', '', `No review: ${missing.join(', ')}`));
@@ -821,13 +824,16 @@
     const outcome = review.status !== 'succeeded' && review.status !== 'partial'
       ? { cancelled: 'Review stopped', failed: 'Not reviewed – the reviewers did not finish' }[review.status] || 'Not reviewed'
       : found.length ? '' : 'No objections.';
-    const check = node('p', 'agent-activity-check', !ended ? 'Waiting for the reviews.' : outcome);
-    // Each count its own element: one phrase per element for the translation.
-    if (ended && !outcome) for (const [index, text] of found.entries()) {
-      if (index) check.append(document.createTextNode(' · '));
-      check.append(node('span', '', text));
+    // While the reviewers work the line above says so; no second line waits.
+    if (ended) {
+      const check = node('p', 'agent-activity-check', outcome);
+      // Each count its own element: one phrase per element for the translation.
+      if (!outcome) for (const [index, text] of found.entries()) {
+        if (index) check.append(document.createTextNode(' · '));
+        check.append(node('span', '', text));
+      }
+      card.append(check);
     }
-    card.append(check);
     // Stopped with notes from the run: they can be read like a done review's.
     // A failed review without notes has only its reasons, under Notes below
     // the answer: no second way to the same list here.

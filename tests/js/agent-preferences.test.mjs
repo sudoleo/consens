@@ -103,10 +103,10 @@ it("audits only for an account allowed it and redraws the chip when audit change
   w.App.agentPreferences.sync();
   expect(vm.hidden).toBe(false);
   expect(line.hidden).toBe(false);
-  expect(line.textContent).toBe("VM time today: 42 of 120 min");
+  expect(line.textContent).toBe("Workspace time today: 42 of 120 min");
   w.App.vmTime = { used_seconds: 90, limit_seconds: null };
   w.App.agentPreferences.sync();
-  expect(line.textContent).toBe("VM time today: 2 min, no daily limit");
+  expect(line.textContent).toBe("Workspace time today: 2 min, no daily limit");
   expect(w.syncCustomModelPickers).toHaveBeenCalledTimes(1);
   expect(w.updateQuestionInputAccess).toHaveBeenCalledTimes(1);
   // Another setting leaves the chip alone.

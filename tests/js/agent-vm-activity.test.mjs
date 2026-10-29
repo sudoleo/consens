@@ -295,7 +295,7 @@ describe("VM calls in the activity", () => {
     expect(button.hidden).toBe(false);
     // Audit with its VM is Pro and admins (style.css .audit-only).
     expect(button.classList.contains("audit-only")).toBe(true);
-    expect(button.textContent).toBe("Restore the VM to before this message");
+    expect(button.textContent).toBe("Restore the workspace to before this message");
     button.click();
     expect(restored).toBe(1);
     // No action without a checkpoint or a handler.
