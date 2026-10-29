@@ -474,6 +474,8 @@ Karte (`joined_halt`: jeder Grund mit seinem Prüfer in `reasons`, eine Karte
 ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
 halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
 zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
+Ist die Karte schon entschieden, aber noch nicht geschlossen, wartet er und
+öffnet danach als nächste Karte (`queued_hold`).
 Gezählt wird ein Halt in `AnswerAudit.halts` erst, wenn der Lauf ihn
 angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der
 Lauf hält vor seinem nächsten Schritt oder Aufruf (`_hold_wait`, auch

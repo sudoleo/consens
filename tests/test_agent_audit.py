@@ -1412,6 +1412,23 @@ def test_from_the_fixed_answer_on_no_reviewer_halts_the_work(store):
     assert turn["status"] == "completed" and turn["agent_review"]["status"] == "succeeded"
 
 
+def test_a_halt_as_the_user_decides_comes_right_after(store):
+    """A-S2: the card was decided, the run had not closed it yet; the halt
+    that came in that moment would have joined a card nobody reads again.
+    It waits and opens as the next card, before the next step."""
+    loop = audit_loop(store, Audit())
+    assert loop.request_hold(HALT) is True
+    first = loop.hold["id"]
+    loop._receive_hold({"hold_decision": {"id": first, "action": "continue"}})
+    assert loop.request_hold({**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic", "entry": 2}) is True
+    assert loop.hold["id"] == first and "reasons" not in loop.hold
+    list(loop._events())
+    frames = [*loop._hold_wait(), *loop._events()]
+    assert loop.hold["id"] != first and loop.hold["provider"] == "anthropic" and loop.hold["entry"] == 2
+    assert [frame["hold"]["id"] if frame["hold"] else None for frame in frames if frame.get("type") == "hold"] == [
+        None, loop.hold["id"]]
+
+
 def test_deny_is_taken_only_where_it_answers_the_pause(api):
     """A-S5: a domain and the agent's own question can be declined; a
     reviewer's halt or a gate cannot (422), and nothing is decided."""

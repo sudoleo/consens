@@ -1917,8 +1917,9 @@ class DelegationLoop(AgentLoop):
             if self.hold is not None:
                 if details.get("gate") or details.get("ask"):
                     return False
-                if self.hold.get("ask"):
-                    # Opens once the user answered their card; a second
+                if self.hold.get("ask") or self.hold_decision is not None:
+                    # Opens once the user's own card is answered, or the
+                    # card they just decided is over (_hold_wait); a second
                     # halt meanwhile joins the first.
                     self.queued_hold = details if self.queued_hold is None else joined_halt(self.queued_hold, details)
                     return True
@@ -1978,7 +1979,10 @@ class DelegationLoop(AgentLoop):
         again (the same id, a new ``revision`` redraws it) and in the log
         with the new reason. Nothing runs meanwhile: the open hold holds it.
         Saved or not, its id is the one the root knows (or not) already."""
-        self._save_hold(hold)
+        if self._save_hold(hold):
+            with self.condition:
+                # The root knows it now: decisions go through it again.
+                self.hold_unsaved = self.hold_unsaved and self.hold is not hold
         self._send({"type": "hold", "hold": hold}, "hold")
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                   "reviewer": hold["reviewer"], "reasons": hold.get("reasons") or []}),
