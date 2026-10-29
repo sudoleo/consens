@@ -518,7 +518,10 @@ nach `continue` (auch ein gegatetes `update_memory`). Kommt `deny` doch an
 einen anderen Halt, wirkt es wie Stop. Text im Feld ist während der
 Pause die Steer-Entscheidung.
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
-mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
+mit Stop, seit 2026-10-29 mit eigenem Grund (`failure.code = hold_timeout`,
+„Paused for 30 minutes without a decision, so the response stopped.“, auch im
+SSE-Fehler; vorher nur „Response stopped“); eine Domain-Karte wirkt dann wie
+„Don’t allow“, und der Lauf geht weiter (vorher stoppte auch sie). Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“

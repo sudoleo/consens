@@ -128,9 +128,11 @@ TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
 # opens the user-role message the agent gets before its next step.
 USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the user:]"
 # A reviewer's halt (agent_audit.AnswerAudit.halt) waits this long for the
-# user's decision; then the response stops, as with the Stop button. It never
-# goes on by itself.
+# user's decision; then the response stops, as with the Stop button, and says
+# why (HOLD_TIMEOUT_STOPPED, failure code hold_timeout). It never goes on by
+# itself; a domain nobody allowed stays closed.
 HOLD_TIMEOUT_SECONDS = 30 * 60
+HOLD_TIMEOUT_STOPPED = "Paused for 30 minutes without a decision, so the response stopped."
 # First pause between two attempts to save an open hold (_save_hold), doubled.
 HOLD_SAVE_BACKOFF_SECONDS = .5
 # Calls of a batch after the user paused the work and wrote to the agent: not
@@ -2305,6 +2307,8 @@ class DelegationLoop(AgentLoop):
                             **({"continue": "The user allowed it."} if asked == "confirm" else
                                {"continue": "The user saved the key in the workspace.",
                                 "deny": "The user did not give the key."} if asked == "secret" else {}))
+            elif hold.get("domain"):
+                said.update(timeout="No decision in 30 minutes: not allowed, the work goes on.")
             self.work_log.app("decision", said[decision])
         yield from self._events()
         with self.condition:
@@ -2312,8 +2316,12 @@ class DelegationLoop(AgentLoop):
         if queued is not None and decision != "stop":
             # The reviewer's halt that came meanwhile: before the next call.
             self.request_hold(queued)
-        if decision == "stop" or (decision == "timeout" and not asked):
+        # A domain nobody decided stays closed and the work goes on
+        # (_domain_wait: "deny"); before 2026-10-29 the response stopped.
+        if decision == "stop" or (decision == "timeout" and not asked and not hold.get("domain")):
             if decision == "timeout":
+                # Said as such, not as a plain stop.
+                self.completion.failure = {"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED}
                 # As the Stop button does (routers/agent.py stop_agent_request).
                 try:
                     self.store.stop_delegation(self.uid, self.chat_id, self.turn_id)

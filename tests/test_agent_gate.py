@@ -11,6 +11,8 @@ live and the agent asks the user before a step in their name (agent_ask.py).
 """
 import json
 import re
+import threading
+import time
 
 import pytest
 
@@ -338,6 +340,31 @@ def test_a_domain_the_user_does_not_allow_never_runs(store):
     assert results == [{"error": agent_domains.DOMAIN_DENIED.format(domain="api.weather.example")}]
     names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "paused" in names and "decision" in names
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_domain_card_nobody_answers_stays_closed_and_the_work_goes_on(store, monkeypatch):
+    """A-R4: after 30 minutes without a decision the domain is not allowed,
+    as with "Don't allow"; before, the whole response stopped."""
+    from test_agent_audit import held
+    script, loop, ran = asking(store, live={})
+    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
+    clock = {"skew": 0.0}
+    loop.clock = lambda: time.monotonic() + clock["skew"]
+
+    def later():
+        held(loop)
+        clock.update(skew=agent_delegation.HOLD_TIMEOUT_SECONDS + 1)
+    thread = threading.Thread(target=later, daemon=True)
+    thread.start()
+    events = list(loop.run())
+    thread.join(5)
+    assert [e.get("decision") for e in events if e.get("type") == "hold" and not e.get("hold")] == ["timeout"]
+    assert ran == [] and loop.allowed_domains == set() and not loop.cancellation.cancelled
+    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert results == [{"error": agent_domains.DOMAIN_DENIED.format(domain="api.weather.example")}]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert "No decision in 30 minutes: not allowed, the work goes on." in said
     assert saved(store, loop)["status"] == "completed"
 
 

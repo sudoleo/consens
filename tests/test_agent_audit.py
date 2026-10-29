@@ -1163,6 +1163,9 @@ def test_a_halt_without_a_decision_stops_the_response_after_its_time(store, monk
     assert [e.get("decision") for e in events if e.get("type") == "hold" and not e.get("hold")] == ["timeout"]
     assert loop.cancellation.cancelled
     assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("cancel_requested")
+    # A-R4: the turn says why, not only "Response stopped".
+    assert saved(store, loop)["agent_failure"] == {"code": "hold_timeout",
+                                                   "error": agent_delegation.HOLD_TIMEOUT_STOPPED}
 
 
 def test_a_halt_while_the_agent_writes_its_answer_holds_the_answer_until_the_user_decides(store):

@@ -538,6 +538,9 @@ def run_agent(request: Request, payload: AgentRequest):
             status = "cancelled"
             error = "This response was stopped."
             failure = {"code": "cancelled"}
+            if (getattr(completion, "failure", None) or {}).get("code") == "hold_timeout":
+                # A pause nobody decided (DelegationLoop._hold_wait): said so.
+                error, failure = completion.failure["error"], {"code": "hold_timeout"}
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             failure = agent_failure(exc)
             error = failure.pop("error")
