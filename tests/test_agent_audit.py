@@ -1138,6 +1138,23 @@ def test_a_reviewers_halt_waits_for_the_user_and_the_agent_never_learns_of_it(st
     assert "paused" in names and "decision" in names
     # One halt per reviewer and step: the next rounds halting again change nothing.
     assert len([e for e in holds if e["hold"]]) == 1
+    # A-M5: the turn's document keeps the pause, without its reason (not
+    # for the page: turn_detail leaves it out).
+    stored = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["agent_holds"]
+    [kept] = stored
+    assert {key: value for key, value in kept.items() if key != "seconds"} == {
+        "kind": "injection", "gate": False, "ask": None, "domain": None, "reviewer": record["reviewer"],
+        "decision": "continue"}
+    assert kept["seconds"] >= .05 and HALT_REASON not in json.dumps(stored) and "agent_holds" not in turn
+
+
+def test_a_turn_keeps_at_most_twenty_holds(store):
+    loop = audit_loop(store, Audit())
+    for number in range(agent_delegation.HOLDS_KEPT + 5):
+        loop._end_hold({"id": f"{number:012x}", "kind": "ask", "ask": "confirm", "reviewer": ""}, "deny", 2)
+    assert len(loop.holds) == agent_delegation.HOLDS_KEPT == 20
+    assert loop.holds[0] == {"kind": "ask", "gate": False, "ask": "confirm", "domain": None, "reviewer": None,
+                             "decision": "deny", "seconds": 2}
 
 
 def test_a_halt_answered_with_a_message_goes_on_with_the_users_words(store):

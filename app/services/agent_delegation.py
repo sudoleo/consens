@@ -133,6 +133,8 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # itself; a domain nobody allowed stays closed.
 HOLD_TIMEOUT_SECONDS = 30 * 60
 HOLD_TIMEOUT_STOPPED = "Paused for 30 minutes without a decision, so the response stopped."
+# Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
+HOLDS_KEPT = 20
 # First pause between two attempts to save an open hold (_save_hold), doubled.
 HOLD_SAVE_BACKOFF_SECONDS = .5
 # How often the run's watcher reads its root (stop, notes, decisions, lease),
@@ -381,6 +383,8 @@ class DelegationLoop(AgentLoop):
         self.answer_fixed = False
         # The cancellation of the agent's step that streams now (_halt_scope).
         self.step_halt = None
+        # Every hold of the turn as it ended, without its reasons (_end_hold).
+        self.holds = []
         self.paused_seconds = 0.0
         self.tools_used = 0
         self.invalid_tool_rounds = 0
@@ -2255,10 +2259,15 @@ class DelegationLoop(AgentLoop):
             return "handed_back" if state["had"] or returned >= state["since"] else None
         return poll
 
-    def _end_hold(self, hold, decision):
-        """A hold that is over (``decision``) leaves the run's root (only
-        while it is the stored one) and the page: its card closes, its
-        activity says how it ended."""
+    def _end_hold(self, hold, decision, seconds):
+        """A hold that is over (``decision``, after ``seconds``) leaves the
+        run's root (only while it is the stored one) and the page: its card
+        closes, its activity says how it ended. The turn keeps what it was
+        and how it ended, never its reasons (``holds``, agent_holds)."""
+        if len(self.holds) < HOLDS_KEPT:
+            self.holds.append({"kind": hold.get("kind"), "gate": bool(hold.get("gate")), "ask": hold.get("ask"),
+                               "domain": hold.get("domain"), "reviewer": hold.get("reviewer") or None,
+                               "decision": decision, "seconds": round(max(seconds, 0.0), 1)})
         try:
             self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
         except Exception as exc:
@@ -2286,7 +2295,8 @@ class DelegationLoop(AgentLoop):
                 if decision is None and self.clock() - self.hold_started >= HOLD_TIMEOUT_SECONDS:
                     decision = "timeout"
                 if decision is not None:
-                    self.paused_seconds += self.clock() - self.hold_started
+                    waited = self.clock() - self.hold_started
+                    self.paused_seconds += waited
                     self.hold = self.hold_decision = None
                     break
                 self.condition.wait(.2)
@@ -2299,7 +2309,7 @@ class DelegationLoop(AgentLoop):
             # No answer to this hold (decide_hold refuses it): never a
             # "continue", as before 2026-10-29, but a stop.
             decision = "stop"
-        self._end_hold(hold, decision)
+        self._end_hold(hold, decision, waited)
         asked = hold.get("ask")
         if self.work_log is not None:
             said = {"continue": "The user let the work go on.",
@@ -2753,10 +2763,11 @@ class DelegationLoop(AgentLoop):
             self.answer_fixed = True
             late = self.hold if self.hold is not None and not self.hold.get("ask") else None
             if late is not None:
-                self.paused_seconds += self.clock() - self.hold_started
+                waited = self.clock() - self.hold_started
+                self.paused_seconds += waited
                 self.hold = self.hold_decision = None
         if late is not None:
-            self._end_hold(late, "ended")
+            self._end_hold(late, "ended", waited)
         yield from self._show_answer(value)
         # Saved with the turn also when a check fails afterwards.
         self.completion.text = value.text
@@ -3191,7 +3202,9 @@ class DelegationLoop(AgentLoop):
                 # Nothing waits for it any more.
                 hold, self.hold = self.hold, None
                 decision = "stop" if status == "cancelled" else "ended"
-                self._end_hold(hold, decision)
+                self._end_hold(hold, decision, self.clock() - self.hold_started)
+            # Saved with the turn (agent_runs.finish_run: agent_holds).
+            self.completion.holds = self.holds
             if self.notes:
                 # Arrived after the answer was written: said, not lost silently.
                 self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",

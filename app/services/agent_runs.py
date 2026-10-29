@@ -516,6 +516,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if getattr(completion, "work_record", None):
                     # What the next message is told this one did (messages).
                     patch["agent_work_record"] = completion.work_record
+                if getattr(completion, "holds", None):
+                    # The turn's pauses (DelegationLoop._end_hold): kind, gate,
+                    # ask, domain, reviewer, decision and seconds, no reasons.
+                    patch["agent_holds"] = completion.holds
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])

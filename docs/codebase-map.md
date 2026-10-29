@@ -5784,7 +5784,9 @@ dann 409. Entscheidung über
 (`AgentHoldDecision`, `store.decide_hold`; `steer` hängt eine Nutzer-Notiz
 an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach
 `HOLD_TIMEOUT_SECONDS` Stop mit `failure.code = hold_timeout`
-(`HOLD_TIMEOUT_STOPPED`), eine Domain-Karte dann `deny`. Der Agent sieht nur Nutzer-Stopps und
+(`HOLD_TIMEOUT_STOPPED`), eine Domain-Karte dann `deny`. Jede beendete Pause
+steht ohne Grund in `agent_holds[]` am Turn (`_end_hold`, höchstens 20,
+`agent_runs.finish_run`). Der Agent sieht nur Nutzer-Stopps und
 -Nachrichten (`HOLD_STEERED`). Browser: `agent-chat.js` (`hold`-Handler,
 `renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`; seit
 2026-10-27 in der Sprache der Watch-/Einstellungskarten (ein `.btn`, sonst

@@ -527,7 +527,10 @@ SSE-Fehler; vorher nur „Response stopped“); eine Domain-Karte wirkt dann wie
 „Don’t allow“, und der Lauf geht weiter (vorher stoppte auch sie). Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
-mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
+mit), `hold`/`hold_decision` am Lauf-Root, seit 2026-10-29 `agent_holds[]` am
+Turn-Dokument (jede beendete Pause, höchstens `HOLDS_KEPT` = 20: `kind`,
+`gate`, `ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
+Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`), Tab-Titel „Paused“
 (`tab-status.js`). Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
 (`halt_step`, seit 2026-10-27 als `step_kind`/`step_source`/`step`): den
 Aufruf eines Modellschritts (Befehl, Adresse oder Suche), eine Datei mit ihrem
