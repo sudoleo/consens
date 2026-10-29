@@ -5748,7 +5748,10 @@ trotzdem `completed`, auch nach einem Stop während der Prüfung
 Speicherungen holt `AnswerAudit.close` nach. Eine Prüferantwort, die kam, aber
 nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 („Agent reviewer reply unusable“: `reply_shape` mit `shape` empty/cut/no_json/
-cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
+cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens);
+`review_failure` nennt seit 2026-10-29 `tool_calls` als `review_tool_calls`
+und `empty` als `review_empty` statt `provider_error` (Texte in
+`agent-review.js` `auditReasons`).
 `agent_runs.finish_run` setzt
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
 `failed`. Eigene Suchtreffer bringen Fremdinhalt in den Blick

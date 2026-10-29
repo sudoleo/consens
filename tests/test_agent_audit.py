@@ -56,13 +56,19 @@ REVIEWS = {
 }
 
 
+#: A reviewer reply with a tool call and no text (DeepSeek in a gate round, 2026-10-28).
+TOOL_CALL_REPLY = {"tool_calls": [{"id": "r1", "type": "function",
+                                   "function": {"name": "web_search", "arguments": "{}"}}]}
+
+
 class Audit:
     """A scripted audit-mode turn: the agent's first ``tool_steps`` steps
     (completion:N) call the tool ``lookup``, the next one answers, each after
     its own search. Every other call is a reviewer: its final round replies
     with ``reviews[family]``, a live round with ``live[family]`` (a text, an
-    exception or "wait": until it is stopped). ``step_tools``: another tool
-    for some of the tool steps, {index: name}; ``step_args``: its arguments."""
+    exception, TOOL_CALL_REPLY or "wait": until it is stopped). ``step_tools``:
+    another tool for some of the tool steps, {index: name}; ``step_args``:
+    its arguments."""
 
     def __init__(self, reviews=None, *, answer=ANSWER, search=True, tool_steps=0, live=None, on_lookup=None,
                  on_answer=None, step_tools=None, step_args=None):
@@ -125,6 +131,10 @@ class Audit:
                     raise reply
                 if callable(reply):
                     reply = reply(messages)
+                if isinstance(reply, dict):
+                    # A tool call instead of the review (TOOL_CALL_REPLY).
+                    self.tool_calls, self.finish_reason = reply["tool_calls"], "tool_calls"
+                    return
                 self.text, self.finish_reason = reply, "stop"
                 yield {"type": "delta", "text": self.text}
         return Completion()
@@ -592,6 +602,27 @@ def test_a_failed_or_unreadable_review_costs_only_its_marks(store, caplog):
     assert [(r["status"], r["failure"]["code"]) for r in review["audit"]["reviewers"]] == [
         ("failed", "provider_error"), ("failed", "review_unreadable")]
     assert {"code": "reviewers_unavailable", "count": 2} in review["audit"]["issues"]
+
+
+def test_a_tool_call_or_an_empty_reply_is_named_for_what_it_is(store):
+    """A-M6 (2026-10-29): both counted as provider_error, which mixed them
+    with failures of the provider (G6)."""
+    script = Audit({"anthropic": "", "openai": TOOL_CALL_REPLY})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert [(r["provider"], r["status"], r["failure"]["code"]) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "failed", "review_empty"), ("openai", "failed", "review_tool_calls")]
+    # The tool call was asked once more with the repair note, as any unreadable reply.
+    assert script.rounds["openai"] == ["final", "final"]
+    from types import SimpleNamespace
+    from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
+    assert agent_audit.review_failure(ModelEmptyAnswer())["code"] == "review_empty"
+    assert agent_audit.review_failure(ModelOutputLimit())["code"] == "output_limit"
+    assert agent_audit.review_failure(RuntimeError("provider down"))["code"] == "provider_error"
+    cut = ValueError("Model response did not complete")
+    cut.reply = SimpleNamespace(text='{"marks": [', finish_reason="error", tool_calls=[], usage=None)
+    assert agent_audit.review_failure(cut)["code"] == "provider_error"
 
 
 def test_an_unreadable_final_round_is_asked_once_more_on_its_session(store, caplog):

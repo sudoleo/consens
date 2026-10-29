@@ -372,7 +372,10 @@ höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde; `wrong`
 braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt, Max'
 Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
 Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
-lesbare Liste: die Runde scheitert mit `review_unreadable`. Eine gescheiterte
+lesbare Liste: die Runde scheitert mit `review_unreadable`; ein Tool-Aufruf
+statt JSON heißt seit 2026-10-29 `review_tool_calls`, eine leere Antwort
+`review_empty` (`review_failure`; vorher beide `provider_error`, das nur noch
+Fehler des Anbieters meint; Notes nennt beide im Klartext). Eine gescheiterte
 Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge mit der
 nächsten Runde, nach `MAX_ROUND_FAILURES` = 2 in Folge eine Pause ab 60 s,
 die sich verdoppelt), auch

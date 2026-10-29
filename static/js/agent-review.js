@@ -531,7 +531,9 @@
   const AUDIT_KINDS = { wrong: 'Wrong', doubtful: 'Doubtful', incomplete: 'Incomplete' };
   const auditReasons = { review_unreadable: 'its review could not be read', no_time: 'it ran out of time',
     audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped',
-    context_limit: 'the work did not fit its context' };
+    context_limit: 'the work did not fit its context',
+    // Since 2026-10-29 (agent_audit.review_failure); before, provider_error.
+    review_tool_calls: 'it called a tool instead of giving its review', review_empty: 'its reply was empty' };
   function auditReason(failure) {
     return auditReasons[failure?.code] || failureReason(failure);
   }

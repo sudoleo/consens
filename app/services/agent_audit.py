@@ -810,9 +810,18 @@ def reply_shape(error, reply=None):
 
 
 def review_failure(error, cancellation=None):
-    """Why a reviewer left no marks, as {code, error} (agent panel, review)."""
+    """Why a reviewer left no marks, as {code, error} (agent panel, review).
+    A reply with a tool call instead of the review is ``review_tool_calls``,
+    an empty one ``review_empty`` (since 2026-10-29; until then both counted
+    as ``provider_error``, which stays for failures of the provider)."""
     from app.services.agent_comparison import COMPARISON_FAILURES
     from app.services.agent_provider_limits import agent_failure
+    shape = (reply_shape(error) or {}).get("shape")
+    if shape == "tool_calls":
+        return {"code": "review_tool_calls",
+                "error": "It called a tool instead of giving its review, so its marks are missing."}
+    if shape == "empty":
+        return {"code": "review_empty", "error": "Its reply was empty, so its marks are missing."}
     if isinstance(error, ReviewUnreadable):
         return {"code": "review_unreadable", "error": "Its review could not be read, so its marks are missing."}
     if isinstance(error, ReviewTooLong):
