@@ -477,7 +477,8 @@ Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
 des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie
 wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen
 nicht, `HOLD_STEERED`, und eine schon geschriebene Antwort geht zurück); Stop
-ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung.
+ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung
+(außer bei einer offenen Key-Karte, siehe „Ein Key vom Nutzer“).
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
@@ -1226,7 +1227,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   die Umbrüche eines PEM-Keys; Platzhalter = Name, kein `<form>`, also nie ein
   GET), der Zeile „Saved in your workspace as ~/.secrets/NAME … Only for keys
   like this one: a password you type in the browser yourself.“, „Save“ und „Not
-  now“ (`deny`). „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
+  now“ (`deny`) und „Write to the agent“ (Antwort in der Karte, `steer`).
+  **Solange die Key-Karte offen ist, sendet das Eingabefeld nie** (A-S7, seit
+  2026-10-29): Enter oder Senden legt seinen Text verdeckt ins Key-Feld der
+  Karte (`agent-chat.js` `steer`), der Nutzer bestätigt dort mit „Save“; es
+  zählt nur der Zustand der Karte, keine Erkennung am Text. Vorher ging ein
+  dort eingefügter Key als `steer` an Agent, Prüfer und Arbeitsprotokoll.
+  „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
   schickt den Wert per
   `POST /agent/chats/{chat}/requests/{request}/secret` (`{id, value}`,
   10/min): Der Server prüft, dass der offene Halt dieser Frage gilt

@@ -1907,7 +1907,8 @@ describe("single-model agent chat", () => {
     expect(input.placeholder).toBe("OPENAI_API_KEY");
     expect(host.querySelector(".agent-ask-secret-note").textContent).toContain("~/.secrets/OPENAI_API_KEY");
     expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
-      ["Save", "btn agent-hold-continue"], ["Not now", "agent-hold-link agent-hold-deny"]]);
+      ["Save", "btn agent-hold-continue"], ["Not now", "agent-hold-link agent-hold-deny"],
+      ["Write to the agent", "agent-hold-link agent-hold-write"]]);
     // Empty: nothing goes out.
     host.querySelector(".agent-hold-continue").click();
     expect(sent).toEqual([]);
@@ -1941,6 +1942,60 @@ describe("single-model agent chat", () => {
     handlers.hold.receive({ hold: { ...base, id: "0123456789ab", ask: "secret", secret: "GITHUB_TOKEN", request: "Token?" } });
     host.querySelector(".agent-hold-deny").click();
     await vi.waitFor(() => expect(sent.at(-1)).toEqual(["hold", "POST", { id: "0123456789ab", action: "deny", text: "" }]));
+    dom.window.close();
+  });
+
+  // A-S7 (docs/agent-audit-readiness-2026-10-29.md): with the key card open
+  // the field below never sends. Only the card's state decides, never the
+  // words: Enter puts them, as dots, into the card's key field.
+  it("puts the field's words into the open key card instead of sending them", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    window.App.workspaceView = { holder: () => "agent", open: vi.fn(), handBack: vi.fn(), agentWaits: vi.fn() };
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    const field = document.getElementById("questionInput");
+    field.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const sent = [];
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => {
+      if (!/\/(secret|hold|notes)$/.test(String(url))) return catalogFetch(url, options);
+      sent.push([String(url).split("/").pop(), JSON.parse(options.body)]);
+      return { ok: true, json: async () => ({ status: "decided" }) };
+    });
+    handlers.hold.receive({ hold: { kind: "ask", ask: "secret", secret: "OPENAI_API_KEY", id: "a1b2c3d4e5f6",
+      request: "Ich brauche deinen OpenAI-Key.", at: new Date().toISOString(), timeout_seconds: 1800 } });
+    field.value = "sk-proj-0123456789abcdef";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Put it in the key field" });
+    expect(await window.App.agentChat.steer()).toBe(true);
+    // Nothing went anywhere: the key waits in the card's own field for Save.
+    expect(sent).toEqual([]);
+    const key = host.querySelector(".agent-ask-secret-input");
+    expect(key.value).toBe("sk-proj-0123456789abcdef");
+    expect(field.value).toBe("");
+    expect(document.activeElement).toBe(key);
+    expect(run.metadata.queue || []).toEqual([]);
+    // Words for the agent go through the card: the key field steps aside meanwhile.
+    host.querySelector(".agent-hold-write").click();
+    expect(host.querySelector(".agent-ask-secret").hidden).toBe(true);
+    const reply = host.querySelector(".agent-hold-reply-input");
+    reply.value = "Ich habe keinen Key";
+    reply.dispatchEvent(new window.Event("input", { bubbles: true }));
+    host.querySelector(".agent-hold-reply").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(sent).toEqual([["hold", { id: "a1b2c3d4e5f6", action: "steer", text: "Ich habe keinen Key" }]]));
+    // Without the key card the field steers as before.
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    field.value = "Danke";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Send into the running response" });
     dom.window.close();
   });
 

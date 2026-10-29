@@ -920,6 +920,7 @@
   "Waiting for you…": "Wartet auf dich …",
   "Asked you": "Hat dich gefragt",
   "Send to the agent and let it go on": "An den Agenten senden und weiterlaufen lassen",
+  "Put it in the key field": "Ins Key-Feld legen",
   "Stops in {count} minutes without your decision": "Stoppt in {count} Minuten, wenn du nicht entscheidest",
   "Stops within a minute without your decision": "Stoppt in unter einer Minute, wenn du nicht entscheidest",
   "Your decision did not reach the server. Try again.": "Deine Entscheidung kam nicht beim Server an. Versuch es noch mal.",

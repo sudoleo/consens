@@ -1333,7 +1333,9 @@
     const context = registry.visible();
     const text = String(document.getElementById("questionInput")?.value || "").trim();
     if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text) return null;
-    return { title: openHold(context) ? "Send to the agent and let it go on"
+    const hold = openHold(context);
+    return { title: hold?.ask === "secret" ? "Put it in the key field"
+      : hold ? "Send to the agent and let it go on"
       : readsMessages(context) ? "Send into the running response" : "Send after this response" };
   }
   async function steer() {
@@ -1341,6 +1343,20 @@
     const input = document.getElementById("questionInput");
     if (!steering() || !input) return false;
     const text = String(input.value).trim();
+    // The agent asked for a key and its card is open (A-S7): the field never
+    // sends a message then. Its words go, as dots, into the card's key field,
+    // and the user saves them there; words for the agent go through "Write to
+    // the agent" on the card. Only the open card decides, nothing guesses at
+    // the words: a key someone writes into a message unasked stays a message.
+    if (openHold(context)?.ask === "secret") {
+      const field = document.querySelector("#agentHold .agent-ask-secret-input");
+      if (!field || field.disabled) return true;
+      field.value = text;
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      field.focus({ preventScroll: true });
+      return true;
+    }
     input.value = "";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     if (openHold(context)) {
@@ -1741,8 +1757,9 @@
   // One edge, one line of decision: the glyph hangs in its tinted circle left
   // of the words; title, request and buttons share the text's edge. One
   // button and at most one link: writing to the agent is the field below,
-  // stopping is its Stop button. The clock only in the last minutes, since
-  // the agent goes on without an answer.
+  // stopping is its Stop button. A key card also has "Write to the agent",
+  // since the field below fills its key field (A-S7). The clock only in the
+  // last minutes, since the agent goes on without an answer.
   const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
     secret: "The agent needs a key from you", takeover: "You have the browser" };
   // Per question: "offered" (the open view took the browser for the user),
@@ -1789,15 +1806,21 @@
     const actions = document.createElement("div");
     actions.className = "agent-hold-actions";
     const field = kind === "secret" ? secretField(context, hold) : null;
+    // A key card takes no words from the field below (steer, A-S7): "I don't
+    // have one" is written here, and the key field steps aside meanwhile.
+    const reply = field ? holdReply(context) : null;
     if (kind === "confirm") {
       actions.append(
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
         holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
     } else if (field) {
       const input = field.querySelector(".agent-ask-secret-input");
+      const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
       actions.append(
         holdButton("Save", "btn agent-hold-continue", () => saveSecret(context, input)),
-        holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
+        holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
+        write);
+      reply.bind(actions, write, field);
     } else {
       // The server knows a takeover from any window; this one's view only its own.
       const holding = kind === "takeover" || App.workspaceView?.holder?.() === "user";
@@ -1807,7 +1830,7 @@
         ...(kind === "browser" && !holding ? [holdButton("Not now", "agent-hold-link agent-hold-skip",
           () => decideHold(context, "continue"))] : []));
     }
-    body.append(...[alert, field, clock, actions].filter(Boolean));
+    body.append(...[alert, field, clock, reply?.form, actions].filter(Boolean));
     card.append(glyph, body);
     return card;
   }
@@ -1905,10 +1928,11 @@
     buttons.className = "agent-hold-reply-actions";
     buttons.append(send, cancel);
     form.append(input, buttons);
-    let actions = null, write = null;
+    let actions = null, write = null, aside = null;
     const close = () => {
       form.hidden = true;
       if (actions) actions.hidden = false;
+      if (aside) aside.hidden = false;
       write?.focus({ preventScroll: true });
     };
     input.addEventListener("input", () => { send.disabled = !input.value.trim() || Boolean(openHold(context)?.deciding); });
@@ -1929,10 +1953,12 @@
     });
     return {
       form,
-      bind(row, button) { actions = row; write = button; },
+      // `other`: what else steps aside while the user writes (a key card's field).
+      bind(row, button, other = null) { actions = row; write = button; aside = other; },
       open() {
         form.hidden = false;
         if (actions) actions.hidden = true;
+        if (aside) aside.hidden = true;
         input.focus({ preventScroll: true });
       },
     };
