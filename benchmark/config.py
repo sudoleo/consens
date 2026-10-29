@@ -102,7 +102,9 @@ MODELS: tuple[BenchmarkModel, ...] = (
     BenchmarkModel("mistral", cfg.MISTRAL_PRO_MODEL, "mistralai/mistral-medium-3-5", "provider_default"),
     BenchmarkModel("anthropic", cfg.ANTHROPIC_PRO_MODEL, "anthropic/claude-opus-4.8", "provider_default"),
     BenchmarkModel("gemini", BENCHMARK_GEMINI_MODEL, "google/gemini-3.5-flash", "provider_default"),
-    BenchmarkModel("deepseek", cfg.DEEPSEEK_PRO_MODEL, "deepseek/deepseek-v4-pro", "provider_default"),
+    # Seit 2026-10-29 V4.1 Flash 1017: die App migriert V4 Pro dorthin, ein
+    # V4-Pro-Pin liesse sich nicht mehr ausfuehren. final_v1 lief mit V4 Pro.
+    BenchmarkModel("deepseek", cfg.DEEPSEEK_PRO_MODEL, "deepseek/deepseek-v4.1-flash-1017", "provider_default"),
     BenchmarkModel("grok", "grok-4.3", "x-ai/grok-4.3", "provider_default"),
 )
 
@@ -119,7 +121,7 @@ PRICING_USD_PER_1M: dict[str, dict[str, float]] = {
     "mistralai/mistral-medium-3-5": {"input": 0.40, "output": 2.0},
     "anthropic/claude-opus-4.8": {"input": 5.0, "output": 25.0},
     "google/gemini-3.5-flash": {"input": 1.50, "output": 9.0},
-    "deepseek/deepseek-v4-pro": {"input": 0.435, "output": 0.87},
+    "deepseek/deepseek-v4.1-flash-1017": {"input": 0.30, "output": 1.20},
     "x-ai/grok-4.3": {"input": 1.25, "output": 2.5},
 }
 

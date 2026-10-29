@@ -1,6 +1,7 @@
 """Regression cases for evidence coverage, shared inputs and paid-call bounds."""
 import asyncio
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
 
@@ -182,7 +183,7 @@ def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
     started = threading.Event()
     stopped = threading.Event()
     cancellation = runtime.ProviderCancellation()
-    budget = runtime.AnalysisBudget(seconds=0.15 if stop == "deadline" else 5)
+    budget = runtime.AnalysisBudget(seconds=5)
 
     async def waiting_transport(request):
         started.set()
@@ -194,12 +195,17 @@ def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
     client_type = httpx.AsyncClient
     def client(**kwargs):
         return client_type(transport=httpx.MockTransport(waiting_transport), **kwargs)
-    def cancel():
+    def stop_while_waiting():
         assert started.wait(2)
-        cancellation.cancel()
-    worker = threading.Thread(target=cancel) if stop == "disconnect" else None
-    if worker:
-        worker.start()
+        if stop == "disconnect":
+            cancellation.cancel()
+        else:
+            # The deadline passes while the request waits for headers. A fixed
+            # 0.15 s budget could run out on a slow runner before the request
+            # even started, leaving no HTTP task to cancel (CI 2026-10-29).
+            budget.deadline = time.monotonic()
+    worker = threading.Thread(target=stop_while_waiting)
+    worker.start()
     try:
         with mock.patch.object(runtime.httpx, "AsyncClient", side_effect=client):
             with runtime.bind_provider_cancellation(cancellation), runtime.bind_analysis_budget(budget):
@@ -207,8 +213,7 @@ def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
                     runtime.cancellable_post_json("https://example.invalid/chat", json={}, headers={})
         assert stopped.is_set(), "the HTTP task itself must be cancelled, not abandoned"
     finally:
-        if worker:
-            worker.join(2)
+        worker.join(2)
 
 
 def test_paid_transport_is_not_called_after_budget_exhaustion():
