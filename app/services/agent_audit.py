@@ -462,6 +462,16 @@ def fitted_round(number, entries, room, *, answer=None, earlier=None, opening=No
     return None
 
 
+def _acting(entry, text):
+    """Whether a log entry is a model step that called a tool."""
+    if entry.get("kind") != "step":
+        return False
+    try:
+        return bool((json.loads(text) or {}).get("tool_calls"))
+    except (ValueError, AttributeError):
+        return False
+
+
 def work_goes_on(entries):
     """Whether these new entries are worth a live round: a model step (the
     agent's or a worker's) that called a tool beyond QUIET_TOOLS, or
@@ -1139,6 +1149,8 @@ class ReviewerSession:
         # False once a live round does not fit even a new conversation: the
         # final round still comes.
         self.following = True
+        # New conversations and failure pauses so far (A-M4, in the review).
+        self.fresh = self.pauses = 0
         self.worker = None
         # Marks of the live rounds (kept if the final round fails) and the
         # final round's complete list.
@@ -1164,6 +1176,16 @@ class ReviewerSession:
     def _set(self, **fields):
         with self.tools.lock:
             self.state.update(fields)
+
+    def fixed(self):
+        """The answer is fixed: what this reviewer has not read yet goes into
+        the review (``backlog``, A-M4: the entries, the steps among them that
+        called a tool, the seconds into the live round at work, None without
+        one), and that round gives way (cut_round)."""
+        started, rest = self.live_started, self.audit.work_log.entries_after(self.cursor)
+        self._set(backlog={"entries": len(rest), "steps": sum(_acting(entry, text) for entry, text in rest),
+                           "seconds": round(time.monotonic() - started, 1) if started is not None else None})
+        self.cut_round()
 
     def cut_round(self):
         """The live round at work gives way (A-T1): the answer is fixed, so
@@ -1258,6 +1280,8 @@ class ReviewerSession:
         self.messages = [self.messages[0]]
         self.chars = len(self.messages[0]["content"])
         self.conversation_key = None
+        self.fresh += 1
+        self._set(fresh=self.fresh)
 
     def _round(self, entries):
         number = self.live_rounds + 1
@@ -1270,6 +1294,7 @@ class ReviewerSession:
         if message is None:
             # Not even a new conversation holds them.
             self.following = False
+            self._set(unfollowed_at_seq=entries[-1][0]["seq"])
             return
         # Every entry up to this round's last one: the reviewer has read it.
         known = set(range(1, entries[-1][0]["seq"] + 1))
@@ -1287,6 +1312,8 @@ class ReviewerSession:
             self.tried = entries[-1][0]["seq"]
             if self.failures >= MAX_ROUND_FAILURES:
                 self.resume_at = time.monotonic() + FAILURE_PAUSE_SECONDS * 2 ** (self.failures - MAX_ROUND_FAILURES)
+                self.pauses += 1
+                self._set(pauses=self.pauses)
             return
         self.failures = 0
         self.cursor = entries[-1][0]["seq"]
@@ -1364,6 +1391,7 @@ class ReviewerSession:
                                     brief=self.audit.brief())
                        or fitted_round(1, rest, room, answer=answer, **self._carry()))
         self._set(status="running")
+        started = time.monotonic()
         try:
             if message is None:
                 raise ReviewTooLong("The work and the answer do not fit the reviewer's context.")
@@ -1371,12 +1399,14 @@ class ReviewerSession:
         except BaseException as exc:
             failure = review_failure(exc, self.cancellation)
             self._set(status="stopped" if failure["code"] == "stopped" else "failed", failure={"code": failure["code"]},
+                      final_ms=int((time.monotonic() - started) * 1000), hedged=self.hedged,
                       **({"live_marks": len(self.live_marks)} if self.live_marks else {}))
             if not isinstance(exc, Exception):
                 raise
             return
         self.final_marks = marks
-        self._set(status="completed", marks=len(marks))
+        self._set(status="completed", marks=len(marks), final_ms=int((time.monotonic() - started) * 1000),
+                  hedged=self.hedged)
         self.loop._state(self.worker, "completed", sources=value.sources, finish_reason=value.finish_reason)
         text = review_text(marks)
         self.loop._publish(self.worker, text=text[:self.loop.policy.result_chars], kind="result",
@@ -1819,7 +1849,8 @@ class AnswerAudit:
         share = tools._output_share(len(models))
         with tools.lock:
             self.reviewers = {provider: {"provider": provider, "provider_label": cfg.provider_label(provider),
-                                         "model": model.settings(), "status": "waiting", "rounds": 0}
+                                         "model": model.settings(), "status": "waiting", "rounds": 0,
+                                         "fresh": 0, "pauses": 0}
                               for provider, model in models.items()}
         loop.cancellation.register(self._limit)
         for provider, model in models.items():
@@ -1908,8 +1939,9 @@ class AnswerAudit:
             self._timer.start()
         self.final_answer = answer
         for session in self.sessions.values():
-            # A live round at work gives way to the final round (A-T1).
-            session.cut_round()
+            # Its backlog, and a live round at work gives way to the final
+            # round (A-M4, A-T1).
+            session.fixed()
         self.work_log.wake()
         for session in self.sessions.values():
             session.thread.join()

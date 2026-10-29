@@ -442,6 +442,12 @@ def test_the_final_round_starts_at_once_and_cuts_a_live_round_short(store, monke
     assert len(set(script.session_ids["anthropic"])) == 1
     # Its receipt was settled as the live round it was.
     assert receipt_rounds(store, loop)["anthropic"] == ["live", "final"]
+    # What each reviewer had not read when the answer was fixed (A-M4): the
+    # cut round's step that called a tool, and how far that round was.
+    backlog = {r["provider"]: r["backlog"] for r in review["audit"]["reviewers"]}
+    assert backlog["anthropic"]["steps"] == 1 and backlog["anthropic"]["seconds"] >= 0
+    assert backlog["openai"]["steps"] == 0 and backlog["openai"]["seconds"] is None
+    assert backlog["anthropic"]["entries"] > backlog["openai"]["entries"] > 0
 
 
 def audit_sessions(store, loop, family):
@@ -499,7 +505,10 @@ def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store,
     # It counts for the hedge time as long as it had run.
     model = loop.comparison.auditor.sessions["openai"].model.model
     assert len(agent_audit._final_seconds[model]) == 1 and agent_audit._final_seconds[model][0] >= .3
-    assert loop.comparison.auditor.sessions["openai"].hedged
+    # The review says so (A-M4).
+    assert [(r["provider"], r["hedged"], type(r["final_ms"])) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", False, int), ("openai", True, int)]
+    assert review["audit"]["reviewers"][1]["final_ms"] >= 300
 
 
 def test_a_final_round_that_hangs_twice_ends_in_time_with_its_live_marks(store, monkeypatch):
@@ -571,10 +580,14 @@ def test_failures_in_a_row_pause_a_reviewer_but_never_end_its_following(store, m
     assert script.rounds["anthropic"] == ["live", "live", "live", "final"]
     session = loop.comparison.auditor.sessions["anthropic"]
     assert session.live_rounds == 1 and session.failures == 0
+    # The review counts its pauses (A-M4).
+    assert [(r["provider"], r["pauses"]) for r in saved(store, loop)["agent_review"]["audit"]["reviewers"]] == [
+        ("anthropic", 1), ("openai", 0)]
     # The pause doubles with every further failure in a row.
     monkeypatch.setattr(agent_audit, "FAILURE_PAUSE_SECONDS", 60)
     paused = agent_audit.ReviewerSession.__new__(agent_audit.ReviewerSession)
-    paused.live_rounds, paused.failures, paused.cursor, paused.tried = 1, 2, 5, 5
+    paused.live_rounds, paused.failures, paused.cursor, paused.tried, paused.pauses = 1, 2, 5, 5, 1
+    paused._set = lambda **fields: None
     paused.messages, paused.chars, paused.budget = [{}, {}], 0, 100_000
     paused.audit = type("Audit", (), {"brief": staticmethod(lambda: None)})()
     paused._request = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down"))
@@ -618,6 +631,25 @@ def test_the_reviewers_follow_a_long_run_to_its_end_in_new_conversations(store, 
     # The full conversation's session ended completed, the new one took over.
     views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 3
+    # The review counts the new conversations (A-M4).
+    assert [(r["provider"], r["fresh"]) for r in saved(store, loop)["agent_review"]["audit"]["reviewers"]] == [
+        ("anthropic", 1), ("openai", 0)]
+
+
+def test_a_reviewer_whose_rounds_fit_no_conversation_says_where_it_stopped_following(store, monkeypatch):
+    """A-M4 (2026-10-29): following=False left no trace (G4)."""
+    monkeypatch.setattr(agent_audit, "session_budget", lambda model: 100)
+    # A tool the run does not have: its step still starts a round.
+    script = Audit(tool_steps=1, step_tools={0: "unknown_tool"})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed"
+    reviewers = turn["agent_review"]["audit"]["reviewers"]
+    step = [entry["seq"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "step"][0]
+    assert [r["failure"]["code"] for r in reviewers] == ["context_limit"] * 2
+    assert all(r["unfollowed_at_seq"] >= step for r in reviewers)
+    assert "anthropic" not in script.rounds and "openai" not in script.rounds
 
 
 def test_a_live_mark_may_name_any_entry_read_so_far(store):

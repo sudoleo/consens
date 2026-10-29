@@ -5728,7 +5728,9 @@ ihre Sitzung endet `round_cut` und reicht die OpenRouter-Sitzung weiter):
 Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
 seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
 ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
-`review.audit.reviewers/claims/unplaced/process/issues`, `dissent[].mark` je
+`review.audit.reviewers/claims/unplaced/process/issues`, je Prüfer seit
+2026-10-29 `fresh`, `pauses`, `unfollowed_at_seq`, `backlog`
+(`ReviewerSession.fixed`), `final_ms`, `hedged`; `dissent[].mark` je
 Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
 `unplaced`); eine unlesbare Schlussrunde fragt seit 2026-10-27 einmal in
 derselben Sitzung nach (`REPAIR_NOTE`), ein vorübergehender Anbieterfehler

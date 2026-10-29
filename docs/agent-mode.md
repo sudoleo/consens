@@ -404,7 +404,10 @@ nennen. Befunde zur Arbeit stehen in `audit.process` mit `entry`,
 `entry_kind`, `entry_name` und `live` (aus einer Live-Runde, weil die
 Schlussrunde ausfiel). Gespeichert wird alles in der Review: `mode: "audit"`,
 `audit.reviewers[]` (Status, `rounds`, Anzahl, `live_marks`,
-`failure.code`), erst am Ende `audit.claims`/`audit.unplaced`/`audit.process`,
+`failure.code`; seit 2026-10-29 auch `fresh` = neue Gespräche, `pauses` =
+Fehlerpausen, `unfollowed_at_seq`, `backlog` beim Fixieren `{entries, steps:
+davon Schritte mit Tool-Aufrufen, seconds: in der laufenden Live-Runde oder
+null}`, `final_ms` und `hedged`), erst am Ende `audit.claims`/`audit.unplaced`/`audit.process`,
 `audit.issues`. Status `succeeded` (alle Prüfer), `partial` (einige),
 `failed` (keiner), `cancelled` (Stop).
 
