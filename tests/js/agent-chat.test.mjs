@@ -3482,6 +3482,62 @@ describe("agent turns that outlive their connection", () => {
     dom.window.close();
   });
 
+  // A-B4 (docs/agent-audit-readiness-2026-10-29.md): the waiting messages
+  // stand in the pending record, so a reload keeps them; what the run did not
+  // read goes out after it as before.
+  it("keeps the waiting messages through a reload and sends the unread ones after the run", async () => {
+    const queued = { at: Date.now(), title: "Question", followup: false,
+      settings: { model_id: CATALOG.default_model_id, reasoning_effort: "default", label: "DeepSeek V4.1 Flash" },
+      body: { chat_id: CHAT, question: "Question", client_request_id: "req-queue", bookmark_id: "b_agent_queue",
+        recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
+        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        google_selection: null, google_data_consent: false },
+      queue: [{ text: "Danach bitte kürzer", state: "queued" }, { text: "Schon gelesen", state: "waiting", noteId: "n1" },
+        { text: "Unterwegs gewesen", state: "sending" }] };
+    const { window: w, document: d, dom } = bootFollow({
+      before: window => {
+        window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([queued]));
+        const host = window.document.createElement("div"); host.id = "agentQueue"; host.hidden = true;
+        window.document.body.append(host);
+        window.sendQuestion = vi.fn();
+      },
+      pages: [
+        { known: true, done: false, last_seq: 3, events: [{ seq: 1, type: "accepted", data: { chat_id: CHAT, turn_id: TURN } },
+          { seq: 2, type: "activity", data: { version: 1, kind: "progress", id: "completion:2/note-n1", from_user: true, text: "Schon gelesen" } },
+          { seq: 3, type: "activity", data: { version: 1, kind: "progress", id: "completion:3/note-n2", from_user: true, text: "Unterwegs gewesen" } }] },
+        { known: true, done: false, last_seq: 3, events: [] },
+      ] });
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-queue")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-queue");
+    // The run read two of them (one by its id, one whose POST had no answer by its words): one waits on.
+    await vi.waitFor(() => expect(run.metadata.queue.map(item => item.text)).toEqual(["Danach bitte kürzer"]));
+    const host = d.getElementById("agentQueue");
+    expect(host.hidden).toBe(false);
+    expect(host.querySelector(".agent-queue-text").textContent).toBe("Danach bitte kürzer");
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"))[0].queue)
+      .toEqual([{ text: "Danach bitte kürzer", state: "queued" }]);
+    // A message typed now joins it, in the record too.
+    const input = d.getElementById("questionInput");
+    input.value = "Und mit Quellen";
+    await w.App.agentChat.steer();
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"))[0].queue.map(item => item.text))
+      .toEqual(["Danach bitte kürzer", "Und mit Quellen"]);
+    // The run ends: what it did not read goes out as the next message.
+    const fetchLive = w.fetch.getMockImplementation();
+    w.fetch.mockImplementation(async (url, init) => String(url).includes("/live?")
+      ? { ok: true, status: 200, json: async () => ({ known: true, done: true, last_seq: 4,
+        events: [{ seq: 4, type: "final", data: finalData("Answer") }] }) }
+      : fetchLive(url, init));
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    await vi.waitFor(() => expect(w.sendQuestion).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe("Danach bitte kürzer\n\nUnd mit Quellen");
+    expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
+    dom.window.close();
+  });
+
   // A record of a turn long over, or one the server no longer knows, took the
   // screen on every reload: the field slid down and back up (2026-10-26).
   it("drops a record whose turn is over or unknown and stays on the start screen", async () => {

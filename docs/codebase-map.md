@@ -5121,7 +5121,7 @@ im Pending-Eintrag, ein Reload liefert ihn dann nach, statt dem Turn zu folgen.
 Antwortet der Server `not_running` für einen angenommenen Turn, holt
 `recoverAnswer` das gespeicherte Ergebnis. Logout/Kontowechsel stoppen den
 Turn nicht. Nach dem Absenden liegt `{at, body, title, followup, settings,
-attachmentMeta, stop?}` in `sessionStorage["agent_pending_runs_<uid>"]` (≤ 4,
+attachmentMeta, stop?, queue?}` in `sessionStorage["agent_pending_runs_<uid>"]` (≤ 4,
 3 h: lange VM-Läufe mit Pause), bis der Tab ein bekanntes Ende gesehen hat
 (Erfolg/gespeicherter Fehler; ein Transportproblem behält ihn); nach einem
 Reload fragt `resumePending` (sobald Katalog bereit, Agent-Modus) erst still
@@ -5130,7 +5130,12 @@ vor höchstens 10 min endete (`RESUME_FRESH_MS`, gezählt ab `completed_at`/
 `failed_at` des Turns; bis 2026-10-28 ab dem Absenden, sodass ein über 10 min
 langer VM-Lauf, der kurz vor dem Reload endete, verworfen wurde), bekommt wieder einen
 Run-Context und wird ohne neuen Aufruf verfolgt; einen längst beendeten oder
-dem Server unbekannten Turn verwirft es (`dropPending`). Bis 2026-10-26 nahm
+dem Server unbekannten Turn verwirft es (`dropPending`). `queue` sind die
+wartenden Nachrichten (`#agentQueue`, `{text, state, noteId?}`, nach jeder
+Änderung geschrieben, `persistQueue`; seit 2026-10-29, A-B4): Ein Reload
+stellt sie wieder auf (`restoreQueue`), was der Lauf nicht gelesen hat, geht
+danach wie ohne Reload als nächste Nachricht; eine Nachricht, deren POST beim
+Reload unterwegs war, erkennt `delivered` an ihren Worten. Bis 2026-10-26 nahm
 jeder Reload einen solchen Eintrag wieder auf und schob den Startbildschirm
 weg (das Feld rutschte nach unten und zurück). Ein Follow-up öffnet danach
 seinen Bookmark ganz. Analytics:

@@ -1268,8 +1268,10 @@
     const uid = context.auth.uid;
     if (!uid) return;
     const list = readPending(uid).filter(item => item.body.client_request_id !== body.client_request_id);
+    const queue = queueOf(context).map(item => ({ text: item.text, state: item.state }));
     list.push({ at: Date.now(), body, title: context.bookmark.title, followup: Boolean(context.basis),
-      settings: context.metadata.agentSettings || null, attachmentMeta: context.attachmentMeta || [] });
+      settings: context.metadata.agentSettings || null, attachmentMeta: context.attachmentMeta || [],
+      ...(queue.length ? { queue } : {}) });
     writePending(uid, list.slice(-4));
   }
   function forgetPending(context) {
@@ -1320,6 +1322,36 @@
   function queueOf(context) {
     return context?.metadata ? (context.metadata.queue ||= []) : [];
   }
+  // The waiting messages live in the run's pending record too, so a reload
+  // keeps them (A-B4; before, they lived only in memory, also everything
+  // typed during the final review): what the run did not read goes out after
+  // it, as without a reload. Called after every change of the queue.
+  function persistQueue(context) {
+    const uid = context?.auth?.uid;
+    if (!uid) return;
+    const list = readPending(uid);
+    const record = list.find(entry => entry.body.client_request_id === context.requestIdentity);
+    if (!record) return;
+    const queue = queueOf(context).map(item => ({ text: item.text, state: item.state,
+      ...(item.noteId ? { noteId: item.noteId } : {}) }));
+    if (JSON.stringify(record.queue || []) === JSON.stringify(queue)) return;
+    if (queue.length) record.queue = queue;
+    else delete record.queue;
+    writePending(uid, list);
+  }
+  // After a reload. A message whose POST was on its way (no id came back)
+  // may have reached the run: it waits like a delivered one and is known by
+  // its words once the run reads it (delivered), else it goes out after.
+  function restoreQueue(saved) {
+    return (Array.isArray(saved) ? saved : [])
+      .filter(item => item && typeof item.text === "string" && item.text.trim()).slice(0, 20)
+      .map(item => {
+        const noteId = typeof item.noteId === "string" && item.noteId ? item.noteId : null;
+        const unsure = item.state === "sending";
+        return { key: ++queueSerial, text: item.text, state: noteId || unsure ? "waiting" : "queued",
+          ...(noteId ? { noteId } : {}), ...(unsure && !noteId ? { unsure: true } : {}) };
+      });
+  }
   // Once the answer is fixed (a version under review) the run takes no more
   // steps: a message then waits for its end like any other (2026-10-27;
   // before, it went to the run as "Read before the next step" and came back
@@ -1369,6 +1401,7 @@
     }
     const item = { key: ++queueSerial, text, state: "queued" };
     queueOf(context).push(item);
+    persistQueue(context);
     renderQueue();
     if (readsMessages(context)) await deliver(context, item);
     return true;
@@ -1378,6 +1411,7 @@
     // Before the response has started, the message waits for its end.
     if (!chatId || !context.metadata.requestSent) return;
     item.state = "sending";
+    persistQueue(context);
     renderQueue();
     const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/notes`;
     try {
@@ -1395,6 +1429,7 @@
       // Unreachable now: it goes out with the next message instead.
       item.state = "queued";
     }
+    persistQueue(context);
     renderQueue();
   }
   // The activity showed the message under "You": the run has read it. Its
@@ -1407,14 +1442,17 @@
     const match = typeof event?.id === "string" ? /(?:^|\/)note-([^/]+)$/.exec(event.id) : null;
     if (!event?.from_user || !match) return;
     const queue = queueOf(context);
-    const index = queue.findIndex(item => item.noteId === match[1]);
-    if (index >= 0) { queue.splice(index, 1); renderQueue(); }
+    let index = queue.findIndex(item => item.noteId === match[1]);
+    // A message restored after a reload whose POST had no answer yet: its words.
+    if (index < 0) index = queue.findIndex(item => item.unsure && item.text === String(event.text || "").trim());
+    if (index >= 0) { queue.splice(index, 1); persistQueue(context); renderQueue(); }
     else (context.metadata.readNotes ||= []).push(match[1]);
   }
   // The response is over: what it did not read goes out now, or back into
   // the field when it stopped or failed.
   function flushQueue(context) {
     const queue = queueOf(context).splice(0);
+    persistQueue(context);
     renderQueue();
     // An open pause ends with the response too.
     renderHold();
@@ -1482,6 +1520,7 @@
         remove.addEventListener("click", () => {
           const index = queue.indexOf(item);
           if (index >= 0) queue.splice(index, 1);
+          persistQueue(context);
           renderQueue();
           document.getElementById("questionInput")?.focus({ preventScroll: true });
         });
@@ -2180,6 +2219,8 @@
         usage: { status: "simulation", key: null },
       });
     } catch (_) { return; }
+    // What waited for this run before the reload waits again (A-B4).
+    context.metadata.queue = restoreQueue(record.queue);
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
     context.cancelHook = reason => cancelRun(context, reason);
