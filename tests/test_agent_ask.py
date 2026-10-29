@@ -117,7 +117,9 @@ def test_handing_the_browser_back_lets_the_agent_go_on(store, monkeypatch):
 
 
 def test_a_browser_card_waits_until_the_user_had_the_browser(store, monkeypatch):
-    """Not taken over yet is not handed back: the card stays until they had it."""
+    """Not taken over yet is not handed back, nor is a takeover that ran out
+    (A-S6: the phone went to its 2FA app, the view stopped refreshing): the
+    card stays until the user hands the browser back."""
     browser = Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": REQUEST, "browser": True})
     seen = []
@@ -125,15 +127,17 @@ def test_a_browser_card_waits_until_the_user_had_the_browser(store, monkeypatch)
     def later(hold):
         time.sleep(.5)
         seen.append(loop.hold is not None)
-        # Seen to have it, then not, without a noted hand-back (the
-        # takeover ran out when the view closed).
         browser.take_over()
         time.sleep(.5)
+        # Seen to have it, then not, without a noted hand-back.
         browser.holding = False
+        time.sleep(.5)
+        seen.append(loop.hold is not None)
+        browser.hand_back()
     watcher = when_held(loop, later)
     list(loop.run())
     watcher.join(5)
-    assert seen == [True] and browser.reads > 2
+    assert seen == [True, True] and browser.reads > 2
     assert results(loop)[0]["status"] == "handed_back"
 
 
@@ -244,7 +248,8 @@ def test_a_reviewers_halt_during_the_users_card_comes_before_the_next_call(store
     decided = []
 
     def halt_then_hand_back(hold):
-        assert loop.request_hold(halt) is False
+        # Taken (it waits), so the reviewer does not halt the entry again.
+        assert loop.request_hold(halt) is True and loop.queued_hold == halt
         browser.take_over()
         browser.hand_back()
         while loop.hold is None or not loop.hold.get("reviewer"):
@@ -408,6 +413,31 @@ def test_the_route_saves_the_key_on_the_workbench_and_answers_the_card(api, monk
     assert no_keys.scrub(UID, KEY) == MASK
     again = client.post(url, json={"id": "a1b2c3d4e5f6", "value": KEY}, headers=AUTH)
     assert again.status_code == 409 and len(saved_runs) == 1
+
+
+def test_a_key_card_that_could_not_be_saved_still_takes_the_key(api, monkeypatch, no_keys):
+    """A-S1: the card's save failed for good; the run of this process knows
+    the card and takes the answer, the key goes to the workbench as ever."""
+    from test_agent_audit import held, in_background, unsaved_holds
+    from test_agent_vm import FakeVM
+    from app.services import agent_vm
+    client, store, _ = api
+    vm = FakeVM()
+    monkeypatch.setattr(agent_vm, "backend", vm.backend)
+    Browser(monkeypatch)
+    unsaved_holds(store, monkeypatch)
+    script, loop, ran = asking(store, args={"request": "Ich brauche deinen OpenAI-Key.", "secret": "OPENAI_API_KEY"})
+    events, ended = in_background(loop)
+    hold = held(loop)
+    deadline = time.monotonic() + 5
+    while not loop.hold_unsaved and time.monotonic() < deadline:
+        time.sleep(.01)
+    response = client.post(f"/agent/chats/{loop.chat_id}/requests/one/secret", json={"id": hold["id"], "value": KEY},
+                           headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert vm.vms[agent_vm.workspace_name(UID)]["files"]["/home/agent/.secrets/OPENAI_API_KEY"] == KEY.encode()
+    assert ended.wait(10)
+    assert results(loop)[0]["status"] == "saved" and saved(store, loop)["status"] == "completed"
 
 
 def test_a_later_message_masks_the_keys_and_names_them(store, monkeypatch, no_keys):

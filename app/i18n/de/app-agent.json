@@ -924,6 +924,8 @@
   "Stops in {count} minutes without your decision": "Stoppt in {count} Minuten, wenn du nicht entscheidest",
   "Stops within a minute without your decision": "Stoppt in unter einer Minute, wenn du nicht entscheidest",
   "Your decision did not reach the server. Try again.": "Deine Entscheidung kam nicht beim Server an. Versuch es noch mal.",
+  "This pause cannot be declined. Let it continue, write to the agent or stop it.": "Diese Pause lässt sich nicht ablehnen. Lass den Agenten weiterlaufen, schreib ihm oder stopp ihn.",
+  "Paused for 30 minutes without a decision, so the response stopped.": "30 Minuten pausiert, ohne dass du entschieden hast, deshalb wurde die Antwort gestoppt.",
   "A reviewer paused the work": "Ein Prüfer hat die Arbeit pausiert",
   "Step {entry}": "Schritt {entry}",
   "Let it continue": "Weiterlaufen lassen",

@@ -483,40 +483,94 @@ die Entscheidung des Nutzers braucht. Gründe (`HALT_KINDS`): `safety`
 (sicherheitskritisch, nicht verlangt), `harm` (Schaden über die Aufgabe
 hinaus), `off_goal` (weit weg von der Anfrage), `injection` (der Agent folgt
 Anweisungen aus Seite, Datei, Mail oder Befehlsausgabe). Zweifel bleiben
-Marken; in der Schlussrunde gibt es keinen Halt. `parse_halt` nimmt nur einen
+Marken; in der Schlussrunde gibt es keinen Halt, und seit 2026-10-29 nimmt
+`request_hold` ab dem Fixieren der Antwort keinen Prüfer-Halt mehr an
+(`answer_fixed` in `_finish_merged`); eine Karte, die nach dem letzten Blick
+davor kam, endet dort mit `ended` (vorher stand sie wirkungslos bis zum
+Turn-Ende, und die Uhr des Turns stand still). `parse_halt` nimmt nur einen
 der vier Gründe, einen Satz und einen gesehenen Eintrag; `AnswerAudit.halt`
 lässt je Prüfer und Eintrag einen zu (ein Prüfer reicht) und ruft
-`DelegationLoop.request_hold`. Der Lauf hält vor seinem nächsten Schritt oder
-Aufruf (`_hold_wait`, auch zwischen den Aufrufen einer Runde und bevor eine
-geschriebene Antwort zählt), ein laufender VM-Befehl endet sofort
-(`VMTools.interrupt`, für den Agenten „The user stopped this command“), und
-seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
+`DelegationLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt,
+eine Gate- oder Domain-Karte), kommt der Halt seit 2026-10-29 auf diese
+Karte (`joined_halt`: jeder Grund mit seinem Prüfer in `reasons`, eine Karte
+ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
+halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
+zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
+Ist die Karte schon entschieden, aber noch nicht geschlossen, wartet er und
+öffnet danach als nächste Karte (`queued_hold`).
+Gezählt wird ein Halt in `AnswerAudit.halts` erst, wenn der Lauf ihn
+angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der
+Lauf hält vor seinem nächsten Schritt oder Aufruf (`_hold_wait`, auch
+zwischen den Aufrufen einer Runde und bevor eine geschriebene Antwort zählt,
+seit 2026-10-29 auch die des Schlussschritts nach einem Turn-Limit,
+`_merged_wrap_up`, wo eine Nachricht einen weiteren Schlussschritt bekommt),
+ein laufender VM-Befehl endet sofort
+(`VMTools.interrupt`, für den Agenten „The user stopped this command“),
+seit 2026-10-29 bricht auch ein Modellschritt des Agenten ab, der gerade
+streamt (vorher lief er zu Ende, bis zu fünf Suchrunden eingeschlossen):
+Jeder Schritt des Agenten streamt unter einer eigenen Cancellation unter der
+des Turns (`_halt_scope`, `step_halt`; nie Worker- oder Prüferrunden), wird
+wie ein unterwegs abgebrochener Schritt mit dem Verbrauchten abgerechnet
+(`value.halted`, im Protokoll `cancelled`), sein sichtbarer Text geht zurück
+(`_retract`), und nach der Entscheidung läuft er auf dem nächsten Index neu,
+nach `steer` mit der Nachricht (`_past_halts`). Seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
 Pause). **Der Agent erfährt nichts davon.** Der Nutzer entscheidet über die
 Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
-`hold`, sticky in `agent_live.py`) per `POST
+`hold`, sticky in `agent_live.py`; ist die Ereignis-Queue voll, wartet er
+in einem eigenen Platz auf den nächsten Lesevorgang, `_send`, seit 2026-10-29,
+statt den Thread des Prüfers mit `queue.Full` zu beenden) per `POST
 /agent/chats/{chat}/requests/{request_id}/hold` (`{id, action, text}`):
 `continue` läuft weiter, als wäre nichts gewesen; `steer` ist eine Nachricht
 des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie
 wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen
 nicht, `HOLD_STEERED`, und eine schon geschriebene Antwort geht zurück); Stop
-ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung
-(außer bei einer offenen Key-Karte, siehe „Ein Key vom Nutzer“).
+ist der Stop-Knopf. Läuft der Lauf im selben Prozess, hat er die Entscheidung
+(und eine Nachricht über `…/notes`), sobald die Anfrage antwortet
+(`DelegationLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
+Blick des Wächters, bis 3 s); der gespeicherte Root bleibt die Wahrheit für
+andere Prozesse. Während einer Pause liest der Wächter den Root deshalb nur
+alle `WATCH_PAUSED_SECONDS` (10 s statt `WATCH_SECONDS` = 3 s; eine Pause von
+30 min kostete ~600 Blicke mit je zwei Lesevorgängen), eine Browser-Karte
+`control_state` alle 3 s statt jede Sekunde. Eine Pause bleibt entscheidbar, wenn ihr Speichern scheitert
+(seit 2026-10-29): `set_hold` wird dreimal versucht (`_save_hold`, Pause ab
+`HOLD_SAVE_BACKOFF_SECONDS`, verdoppelt), die Karte kommt trotzdem, und der
+Endpunkt gibt die Entscheidung dann dem Lauf seines Prozesses
+(`DelegationLoop.unsaved_hold`/`decide_unsaved`, auch für `…/secret`); erst
+wenn auch der sie nicht kennt, 409 `hold_over`. Vorher wurde der Fehler nur
+geloggt, und jede Entscheidung bekam 409. `deny` nimmt der Endpunkt seit
+2026-10-29 nur, wo es eine Antwort ist (`agent_sessions.deniable`: eine
+Domain, die Frage des Agenten mit `confirm` oder `secret`), sonst 422
+`invalid_action`; vorher lief ein Prüfer- oder Gate-Halt danach weiter wie
+nach `continue` (auch ein gegatetes `update_memory`). Kommt `deny` doch an
+einen anderen Halt, wirkt es wie Stop. Text im Feld ist während der Pause die
+Steer-Entscheidung (außer bei einer offenen Key-Karte, siehe „Ein Key vom
+Nutzer“).
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
-mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
-`state` = `waiting` → Entscheidung, `timeout` oder `ended`; in der
-Live-Aktivität seit 2026-10-29 mit eigenem Platz für 20 Pausen neben den 63
-übrigen Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
+mit Stop, seit 2026-10-29 mit eigenem Grund (`failure.code = hold_timeout`,
+„Paused for 30 minutes without a decision, so the response stopped.“, auch im
+SSE-Fehler; vorher nur „Response stopped“); eine Domain-Karte wirkt dann wie
+„Don’t allow“, und der Lauf geht weiter (vorher stoppte auch sie). Spuren:
+Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag, `state` =
+`waiting` → Entscheidung, `timeout` oder `ended`; in der Live-Aktivität seit
+2026-10-29 mit eigenem Platz für 20 Pausen neben den 63 übrigen
+Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
-mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
-(`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2): Tab-Titel und
-Seitenleisten-Zeile sagen „Paused“ bzw. „Waiting for you“ (`App.words.paused`,
-`yourTurn`) für den Lauf jedes Chats, auch eines nicht geöffneten (die Zeile
-pulsiert dann nicht, `.run-entry.is-paused`), die Karte hängt am Lauf auf dem
-Schirm statt am Modus-Schalter, ein Reload folgt dem Lauf auch mit dem
-Schalter auf Compare, und ein zweiter Tab oder ein anderes Gerät, das den
-Chat öffnet, folgt dem laufenden Turn über `/live` mit dessen `request_id`
-(`running` aus `GET /bookmarks/{id}/conversation`, `agent-chat.js`
-`followRunning`) und zeigt die Karte. Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
+mit), `hold`/`hold_decision` am Lauf-Root, seit 2026-10-29 `agent_holds[]` am
+Turn-Dokument (jede beendete Pause, höchstens `HOLDS_KEPT` = 20: `kind`,
+`gate`, `ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
+Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`), Tab-Titel
+„Paused“ (`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2):
+Tab-Titel und Seitenleisten-Zeile sagen „Paused“ bzw. „Waiting for you“
+(`App.words.paused`, `yourTurn`) für den Lauf jedes Chats, auch eines nicht
+geöffneten (die Zeile pulsiert dann nicht, `.run-entry.is-paused`), die Karte
+hängt am Lauf auf dem Schirm statt am Modus-Schalter, ein Reload folgt dem
+Lauf auch mit dem Schalter auf Compare, und ein zweiter Tab oder ein anderes
+Gerät, das den Chat öffnet, folgt dem laufenden Turn über `/live` mit dessen
+`request_id` (`running` aus `GET /bookmarks/{id}/conversation`,
+`agent-chat.js` `followRunning`) und zeigt die Karte. Kommt ein zweiter Halt
+in die offene Pause (`reasons`, neue `revision`), tauscht die Karte nur ihre
+Gründe (`reasonsKey`/`reasonLines`); Entscheidung und getippte Worte bleiben.
+Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
 (`halt_step`, seit 2026-10-27 als `step_kind`/`step_source`/`step`): den
 Aufruf eines Modellschritts (Befehl, Adresse oder Suche), eine Datei mit ihrem
 Namen („In the file tabelle.csv“), das Ergebnis eines Werkzeugs mit dessen
@@ -1243,14 +1297,20 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (Schreiben geht über das Eingabefeld, Stopp über dessen Stop-Knopf); die
   Frist erst in den letzten fünf Minuten (`ASK_CLOCK_MINUTES`).
   **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
-  liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; hatte der Nutzer
-  den Browser und hat ihn nicht mehr, oder liegt ein `returned_at` nach dem
-  Öffnen der Karte, endet sie mit `handed_back`. Seit 2026-10-29 bringt das Ergebnis den
+  liest alle `HANDBACK_POLL_SECONDS` `control_state`; liegt ein
+  `returned_at` nach dem Öffnen der Karte („Hand back“ oder Schließen der
+  Ansicht, beide `POST /agent/workspace/control` mit `agent`), endet sie mit
+  `handed_back`. Eine Übernahme, die nur abläuft (90 s ohne Auffrischen: Handy
+  im Hintergrund, 2FA-App, Reload), ist seit 2026-10-29 keine Rückgabe mehr;
+  vorher genügte „hatte ihn und hat ihn nicht mehr“, und der Agent übernahm
+  mitten im Login. Für `takeover` (der Nutzer übernahm ungefragt) bleibt es
+  dabei, denn dann lässt auch der Server die Aufrufe wieder durch. Seit 2026-10-29 bringt das Ergebnis den
   Browser gleich mit, wie der Nutzer ihn hinterließ (`BrowserTools.look`:
   Screenshot für Bildmodelle, sonst die Seite als Text), statt dass der nächste
   Schritt danach fragt; `ask_user` trägt im Protokoll deshalb die Herkunft `web`
   und sperrt Memory wie jedes Fremdergebnis. Die Rückgabe sieht der Lauf binnen
-  etwa einer Sekunde (`HANDBACK_POLL_SECONDS` = 1). Ist die Ansicht in diesem
+  etwa drei Sekunden (`HANDBACK_POLL_SECONDS` = 3 seit 2026-10-29, vorher 1:
+  ein Read je Sekunde über eine Karte von bis zu 30 min). Ist die Ansicht in diesem
   Fenster offen, gehört der Browser dem Nutzer, sobald der Agent fragt, ohne
   Klick (einmal je Frage), und die Karte im Chat tritt zurück: Die Leiste über
   dem Bild trägt Bitte und „Hand back“; nach einer Rückgabe in diesem Fenster
@@ -1266,7 +1326,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   hört er `no_answer` und schreibt seine Antwort, statt dass die Antwort wie
   nach einem Prüfer-Halt stoppt; die Karte zeigt deshalb „The agent waits N
   more minutes“ (erst in den letzten fünf). Ein Prüfer-Halt, der währenddessen kommt, wartet
-  (`queued_hold`) und hält dann vor dem nächsten Aufruf. Das Werkzeug
+  (`queued_hold`, ein zweiter kommt dazu) und hält dann vor dem nächsten
+  Aufruf. Das Werkzeug
   ersetzt die Vorab-Prüfung jedes Browser-Klicks (siehe „Vorab-Prüfung“):
   Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers bewirkt,
   und der Nutzer entscheidet. Sein Ergebnis sperrt Memory (seit 2026-10-29

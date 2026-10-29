@@ -128,9 +128,19 @@ TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
 # opens the user-role message the agent gets before its next step.
 USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the user:]"
 # A reviewer's halt (agent_audit.AnswerAudit.halt) waits this long for the
-# user's decision; then the response stops, as with the Stop button. It never
-# goes on by itself.
+# user's decision; then the response stops, as with the Stop button, and says
+# why (HOLD_TIMEOUT_STOPPED, failure code hold_timeout). It never goes on by
+# itself; a domain nobody allowed stays closed.
 HOLD_TIMEOUT_SECONDS = 30 * 60
+HOLD_TIMEOUT_STOPPED = "Paused for 30 minutes without a decision, so the response stopped."
+# Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
+HOLDS_KEPT = 20
+# First pause between two attempts to save an open hold (_save_hold), doubled.
+HOLD_SAVE_BACKOFF_SECONDS = .5
+# How often the run's watcher reads its root (stop, notes, decisions, lease),
+# and during a pause (_watch).
+WATCH_SECONDS = 3
+WATCH_PAUSED_SECONDS = 10
 # Calls of a batch after the user paused the work and wrote to the agent: not
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
@@ -212,6 +222,28 @@ def _passing_failure(error):
     if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
         return False
     return agent_failure(error).get("code") in PASSING_FAILURE_CODES
+
+
+def joined_halt(hold, details):
+    """``hold`` with a reviewer's halt (``details``) that came while it was
+    open (request_hold): every reason in ``reasons`` with its reviewer, as
+    AnswerAudit.gate_hold lists several, and the reviewers' names together.
+    A card without a reason of its own (not every reviewer could check, a
+    domain the reviewers let) takes the halt's. ``revision`` counts the
+    joins, so the card is drawn again (agent-chat.js renderHold)."""
+    own = [{"reviewer": hold["reviewer"], "kind": hold["kind"], "reason": hold["reason"]}] if hold.get("reason") else []
+    reasons = [*(hold.get("reasons") or own),
+               {"reviewer": details["reviewer"], "kind": details["kind"], "reason": details["reason"]}]
+    joined = {**hold, "revision": hold.get("revision", 0) + 1,
+              "reviewer": " · ".join(dict.fromkeys(item["reviewer"] for item in reasons if item["reviewer"]))}
+    if len(reasons) > 1:
+        joined["reasons"] = reasons
+    else:
+        joined.update(provider=details["provider"], reason=details["reason"],
+                      **({} if hold.get("domain") else {"kind": details["kind"]}))
+    if hold.get("domain"):
+        joined["review"] = "halt"
+    return joined
 
 
 class StrictArgs(BaseModel):
@@ -344,6 +376,15 @@ class DelegationLoop(AgentLoop):
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
         self.hold_started = 0.0
+        # The open hold could not be saved (_save_hold): its decision comes
+        # in this process only (decide_unsaved).
+        self.hold_unsaved = False
+        # The answer is fixed (_finish_merged): reviewers halt nothing more.
+        self.answer_fixed = False
+        # The cancellation of the agent's step that streams now (_halt_scope).
+        self.step_halt = None
+        # Every hold of the turn as it ended, without its reasons (_end_hold).
+        self.holds = []
         self.paused_seconds = 0.0
         self.tools_used = 0
         self.invalid_tool_rounds = 0
@@ -1408,6 +1449,10 @@ class DelegationLoop(AgentLoop):
         thinking = (ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)
                     if answer_candidate and not worker else None)
         stream_progress = StreamProgress(worker.stream_chars) if worker else None
+        # The agent's own step streams under a cancellation of its own, under
+        # the turn's: a reviewer's halt breaks off this step (request_hold),
+        # never the turn, a worker's step or a reviewer's round.
+        halt = ProviderCancellation() if worker is None else None
         status = "failed"
         search_limited = False
         try:
@@ -1475,12 +1520,13 @@ class DelegationLoop(AgentLoop):
             else:
                 self._check(cancellation)
                 provider_attempted = True
+                streaming = self._halt_scope(halt)
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
                                       native_searches=searches, allow_tool_calls=allow_tools,
                                       session_id=None if worker else self.provider_session)
                 try:
                     for event in source:
-                        self._check(cancellation)
+                        self._check(halt or cancellation)
                         if worker and event.get("type") == "activity":
                             compact = worker_progress.update(event)
                             if compact:
@@ -1538,7 +1584,10 @@ class DelegationLoop(AgentLoop):
                     value.output_limited = True
                     value.empty_answer = bool(worker)
                 finally:
-                    source.close()
+                    try:
+                        source.close()
+                    finally:
+                        streaming.close()
             self._check(cancellation)
             status = "succeeded"
             if stream_answer and self._answer_check_follows(value):
@@ -1552,7 +1601,15 @@ class DelegationLoop(AgentLoop):
             status = "cancelled"
             # Cancelled before the request was dispatched: free.
             value.record_rejection(exc, model)
-            raise
+            if (isinstance(exc, GeneratorExit) or halt is None or not halt.cancelled or not claimed
+                    or self.cancellation.cancelled):
+                raise
+            # A reviewer's halt broke the step off (request_hold), not the
+            # turn: settled with what it used, as a step that broke off in
+            # passing is, so that it runs again on the next index once the
+            # user decided (_past_halts); the work log keeps it as cancelled.
+            value.halted = exc
+            status, log_status = "succeeded", "cancelled"
         except Exception as exc:
             value.record_rejection(exc, model)
             # A reviewer's 429 (audit mode, alongside the agent) costs its
@@ -1605,7 +1662,9 @@ class DelegationLoop(AgentLoop):
                     # Outward calls of the agent's step wait for the
                     # reviewers (agent_gate): the gate opens before the
                     # entry, so no reviewer reads it in an ordinary round first.
-                    gate = self._open_gate(value) if log_actor == "agent" and status == "succeeded" else None
+                    # Not for a step a halt broke off: its calls never run.
+                    gate = (self._open_gate(value) if log_actor == "agent" and status == "succeeded"
+                            and getattr(value, "halted", None) is None else None)
                     entry = None
                     try:
                         # What the step thought, wrote, called and found, also
@@ -1642,6 +1701,30 @@ class DelegationLoop(AgentLoop):
             if value.sources or (type(count) is int and count > 0):
                 yield self.tool_event(step + ":web_search", "web_search", "succeeded", sources=value.sources, count=count, server_tool=True)
         return value
+
+    def _halt_scope(self, halt):
+        """While the agent's own step streams, ``halt`` is the provider's
+        cancellation (a child of the turn's: Stop still ends it) and what
+        request_hold cancels; a hold already open breaks the step off at
+        once. Returns what ends that (``close``)."""
+        from contextlib import ExitStack
+        scope = ExitStack()
+        if halt is None:
+            return scope
+        scope.callback(self.cancellation.register(halt))
+        scope.enter_context(bind_provider_cancellation(halt))
+        with self.condition:
+            self.step_halt = halt
+            held = self.hold is not None and not self.hold.get("ask")
+        scope.callback(self._step_streamed, halt)
+        if held:
+            halt.cancel()
+        return scope
+
+    def _step_streamed(self, halt):
+        with self.condition:
+            if self.step_halt is halt:
+                self.step_halt = None
 
     def _settle_step(self, step, value, status):
         """Retry only the idempotent receipt write, including ambiguous commits."""
@@ -1773,6 +1856,19 @@ class DelegationLoop(AgentLoop):
             self.live_progress.clear()
         yield from events
 
+    def _send(self, event, slot):
+        """A frame of a hold (its card or its activity) for the stream. A
+        full queue (a stream not read for long) never fails the caller, a
+        reviewer's thread among them, nor leaves the hold without its card:
+        the frame waits in ``slot`` until the stream reads again, merged into
+        what waits there already, and the card stays sticky (agent_live)."""
+        try:
+            self.outgoing.put_nowait(event)
+        except queue.Full:
+            logging.warning("Agent hold frame waits: event queue full")
+            with self.live_lock:
+                self.live_progress[slot] = {**self.live_progress.get(slot, {}), **event}
+
     def _execute_stream(self, value, call, registry=None):
         """Keep SSE live while a tool fans out or waits for both judges."""
         from contextvars import copy_context
@@ -1802,7 +1898,9 @@ class DelegationLoop(AgentLoop):
     def _watch(self):
         from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
         last_verified = time.monotonic()
-        while not self.closed.wait(3):
+        # During a pause less often (decisions of this process reach the run
+        # at once, receive): a 30-minute pause read its root ~600 times.
+        while not self.closed.wait(WATCH_PAUSED_SECONDS if self.hold is not None else WATCH_SECONDS):
             try:
                 self._check()
                 if self.claimed:
@@ -1835,33 +1933,62 @@ class DelegationLoop(AgentLoop):
         of it. One hold at a time; True when this one opened.
         The agent's own question to the user (``ask``, agent_ask.py) opens
         one too, between calls, so no VM command runs then; a reviewer's halt
-        that comes while it is open waits until it is answered."""
+        that comes while it is open waits until it is answered. A reviewer's
+        halt while another hold is open joins that card (joined_halt), and
+        counts as shown: True as well. The app's own cards (``gate``,
+        ``ask``) wait for the open one: False."""
         from uuid import uuid4
+        joined = None
         with self.condition:
             if self.closed.is_set() or self.cancellation.cancelled:
                 return False
-            if self.hold is not None:
-                if self.hold.get("ask") and not details.get("ask") and self.queued_hold is None:
-                    self.queued_hold = details
+            if self.answer_fixed and not details.get("ask"):
+                # The answer stands (_finish_merged); its marks say the rest.
                 return False
-            hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
-                    "timeout_seconds": HOLD_TIMEOUT_SECONDS}
-            self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
-            self.condition.notify_all()
+            if self.hold is not None:
+                if details.get("gate") or details.get("ask"):
+                    return False
+                if self.hold.get("ask") or self.hold_decision is not None:
+                    # Opens once the user's own card is answered, or the
+                    # card they just decided is over (_hold_wait); a second
+                    # halt meanwhile joins the first.
+                    self.queued_hold = details if self.queued_hold is None else joined_halt(self.queued_hold, details)
+                    return True
+                # Before 2026-10-29 the second halt was lost, its reason
+                # neither on the card nor in the log.
+                joined = self.hold = joined_halt(self.hold, details)
+            else:
+                hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
+                        "timeout_seconds": HOLD_TIMEOUT_SECONDS}
+                self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
+                self.hold_unsaved = False
+                self.condition.notify_all()
+        if joined is not None:
+            self._show_joined(joined, details)
+            return True
         if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
-        try:
-            self.store.set_hold(self.uid, self.chat_id, self.turn_id, hold)
-        except Exception as exc:
-            logging.warning("Agent hold could not be saved category=%s", safe_exception(exc))
-        self.outgoing.put_nowait({"type": "hold", "hold": hold})
-        self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                                **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
-                                                **({"gate": True} if hold.get("gate") else {}),
-                                                **({"domain": hold["domain"]} if hold.get("domain") else {}),
-                                                **({"ask": hold["ask"], "request": hold.get("request", "")}
-                                                   if hold.get("ask") else {}),
-                                                "halt": hold["kind"], "state": "waiting"}))
+        if not details.get("ask"):
+            # The agent's step that streams now breaks off (_step): its
+            # searches and calls wait for the user too. Since 2026-10-29;
+            # before, it ran to its end, up to five search rounds included.
+            with self.condition:
+                streaming = self.step_halt
+            if streaming is not None:
+                streaming.cancel()
+        if not self._save_hold(hold):
+            # The card comes all the same: the decision endpoint hands its
+            # answer to this run (decide_unsaved), never a 409.
+            with self.condition:
+                self.hold_unsaved = self.hold is hold
+        self._send({"type": "hold", "hold": hold}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
+                                  **({"gate": True} if hold.get("gate") else {}),
+                                  **({"domain": hold["domain"]} if hold.get("domain") else {}),
+                                  **({"ask": hold["ask"], "request": hold.get("request", "")}
+                                     if hold.get("ask") else {}),
+                                  "halt": hold["kind"], "state": "waiting"}), f"hold-{hold['id']}")
         if self.work_log is not None:
             before = " before its calls ran" if details.get("gate") else ""
             asked = details.get("ask")
@@ -1876,6 +2003,75 @@ class DelegationLoop(AgentLoop):
                 f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
                 f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
                 f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."))
+        return True
+
+    def _show_joined(self, hold, details):
+        """The open card with a reviewer's halt that joined it: saved, sent
+        again (the same id, a new ``revision`` redraws it) and in the log
+        with the new reason. Nothing runs meanwhile: the open hold holds it.
+        Saved or not, its id is the one the root knows (or not) already."""
+        if self._save_hold(hold):
+            with self.condition:
+                # The root knows it now: decisions go through it again.
+                self.hold_unsaved = self.hold_unsaved and self.hold is not hold
+        self._send({"type": "hold", "hold": hold}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  "reviewer": hold["reviewer"], "reasons": hold.get("reasons") or []}),
+                   f"hold-{hold['id']}")
+        if self.work_log is not None:
+            self.work_log.app("paused", f"{details['reviewer']} also paused the work for the user "
+                                        f"({details['kind']}, entry {details['entry']}): {details['reason']}")
+
+    def _save_hold(self, hold):
+        """The open hold on the run's root (set_hold), where the decision
+        endpoint checks against it; a short outage is retried like the work
+        log's writes (agent_work_log.WRITE_ATTEMPTS). Before 2026-10-29 one
+        failed write left a card that every decision met with 409. False
+        when it stayed unsaved."""
+        from app.services.agent_work_log import WRITE_ATTEMPTS
+        from app.services.chat_store import TurnStatusConflict
+        for attempt in range(WRITE_ATTEMPTS):
+            try:
+                self.store.set_hold(self.uid, self.chat_id, self.turn_id, hold)
+                return True
+            except TurnStatusConflict as exc:
+                # The run no longer runs: no later attempt can save it.
+                logging.info("Agent hold not saved category=%s", safe_exception(exc))
+                return False
+            except Exception as exc:
+                logging.warning("Agent hold could not be saved attempt=%s category=%s", attempt + 1,
+                                safe_exception(exc))
+                if attempt + 1 < WRITE_ATTEMPTS and self.closed.wait(HOLD_SAVE_BACKOFF_SECONDS * 2 ** attempt):
+                    return False
+        return False
+
+    def unsaved_hold(self):
+        """The open hold that could not be saved (request_hold), while no
+        decision has come: only this run knows it. Else None."""
+        with self.condition:
+            if (self.hold is None or not self.hold_unsaved or self.hold_decision is not None
+                    or self.closed.is_set() or self.cancellation.cancelled):
+                return None
+            return dict(self.hold)
+
+    def decide_unsaved(self, hold_id, action, text=""):
+        """The user's decision on that hold, from the decision endpoint of
+        this process (POST .../hold, .../secret): True when taken. A message
+        ("steer") is the user's note, as decide_hold would have saved it."""
+        from app.services.agent_sessions import HOLD_NOT_DENIABLE, USER_NOTE_CHARS, HoldActionRefused, deniable
+        with self.condition:
+            hold = self.unsaved_hold()
+            if hold is None or hold["id"] != hold_id:
+                return False
+            if action == "deny" and not deniable(hold):
+                raise HoldActionRefused(HOLD_NOT_DENIABLE)
+            if action == "steer":
+                note = {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
+                        "at": datetime.now(timezone.utc).isoformat()}
+                self.notes_seen.add(note["id"])
+                self.notes.append(note)
+            self.hold_decision = action
+            self.condition.notify_all()
         return True
 
     def _open_gate(self, value):
@@ -1931,7 +2127,8 @@ class DelegationLoop(AgentLoop):
                 return gate.decision
             if self.request_hold(details):
                 break
-        gate.decision = "steer" if (yield from self._hold_wait()) == "steer" else "continue"
+        # Only the user's "continue" runs the calls.
+        gate.decision = "continue" if (yield from self._hold_wait()) == "continue" else "steer"
         return gate.decision
 
     def _domain_wait(self, gate, call):
@@ -2007,6 +2204,15 @@ class DelegationLoop(AgentLoop):
                 self.hold_decision = decision.get("action")
                 self.condition.notify_all()
 
+    def receive(self, saved):
+        """What the user's request just saved on the run's root in this
+        process (POST .../hold, .../notes; agent_background.run_loop): taken
+        at once instead of with the watcher's next look, up to 3 s later. The
+        saved root stays the truth for every other process, and the watcher
+        reads the same again (notes and decisions count once)."""
+        self._receive_notes(saved)
+        self._receive_hold(saved)
+
     def _ask_wait(self, call):
         """ask_user (agent_ask.py): the run pauses on the user's card until
         they answer. With ``browser`` handing the browser back answers it
@@ -2060,10 +2266,16 @@ class DelegationLoop(AgentLoop):
 
     def _handed_back(self, *, had):
         """``_hold_wait``'s poll for a browser card: "handed_back" once the
-        user had the browser and gave it back (agent_workspace.control_state,
-        every agent_ask.HANDBACK_POLL_SECONDS): seen to have it and then not,
-        or a hand-back noted since the card opened, also one between two
-        looks. ``had``: they have it already."""
+        user gave the browser back since the card opened ("Hand back" or
+        closing the view, which agent_workspace.set_control notes as
+        ``returned_at``; agent_workspace.control_state every
+        agent_ask.HANDBACK_POLL_SECONDS), also one between two looks. A
+        takeover that ran out is none: the view stopped refreshing (a phone in
+        the background, its 2FA app, a reload) while the user may be in the
+        middle of a sign-in. Until 2026-10-29 having it and then not counted.
+        ``had``: they took the browser on their own (_takeover_wait); then
+        not having it any more ends the wait, as the server lets the agent's
+        calls through again."""
         from app.services import agent_ask, agent_workspace
         state = {"had": had, "next": 0.0, "since": time.time()}
 
@@ -2077,11 +2289,27 @@ class DelegationLoop(AgentLoop):
             except Exception as exc:
                 logging.info("Agent workspace control unreadable category=%s", safe_exception(exc))
                 return None
-            state["had"] = state["had"] or holding
             if holding:
                 return None
             return "handed_back" if state["had"] or returned >= state["since"] else None
         return poll
+
+    def _end_hold(self, hold, decision, seconds):
+        """A hold that is over (``decision``, after ``seconds``) leaves the
+        run's root (only while it is the stored one) and the page: its card
+        closes, its activity says how it ended. The turn keeps what it was
+        and how it ended, never its reasons (``holds``, agent_holds)."""
+        if len(self.holds) < HOLDS_KEPT:
+            self.holds.append({"kind": hold.get("kind"), "gate": bool(hold.get("gate")), "ask": hold.get("ask"),
+                               "domain": hold.get("domain"), "reviewer": hold.get("reviewer") or None,
+                               "decision": decision, "seconds": round(max(seconds, 0.0), 1)})
+        try:
+            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
+        except Exception as exc:
+            logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
+        self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
+        self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
+                                  "state": decision}), f"hold-{hold['id']}")
 
     def _hold_wait(self, poll=None):
         """Wait while a reviewer's halt is open; events keep flowing and Stop
@@ -2102,7 +2330,8 @@ class DelegationLoop(AgentLoop):
                 if decision is None and self.clock() - self.hold_started >= HOLD_TIMEOUT_SECONDS:
                     decision = "timeout"
                 if decision is not None:
-                    self.paused_seconds += self.clock() - self.hold_started
+                    waited = self.clock() - self.hold_started
+                    self.paused_seconds += waited
                     self.hold = self.hold_decision = None
                     break
                 self.condition.wait(.2)
@@ -2110,13 +2339,12 @@ class DelegationLoop(AgentLoop):
                 raise self.watch_error
             self.cancellation.raise_if_cancelled()
             yield from self._events()
-        try:
-            self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
-        except Exception as exc:
-            logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
-        self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
-        self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                                "state": decision}))
+        from app.services.agent_sessions import deniable
+        if decision == "deny" and not deniable(hold):
+            # No answer to this hold (decide_hold refuses it): never a
+            # "continue", as before 2026-10-29, but a stop.
+            decision = "stop"
+        self._end_hold(hold, decision, waited)
         asked = hold.get("ask")
         if self.work_log is not None:
             said = {"continue": "The user let the work go on.",
@@ -2130,6 +2358,8 @@ class DelegationLoop(AgentLoop):
                             **({"continue": "The user allowed it."} if asked == "confirm" else
                                {"continue": "The user saved the key in the workspace.",
                                 "deny": "The user did not give the key."} if asked == "secret" else {}))
+            elif hold.get("domain"):
+                said.update(timeout="No decision in 30 minutes: not allowed, the work goes on.")
             self.work_log.app("decision", said[decision])
         yield from self._events()
         with self.condition:
@@ -2137,8 +2367,12 @@ class DelegationLoop(AgentLoop):
         if queued is not None and decision != "stop":
             # The reviewer's halt that came meanwhile: before the next call.
             self.request_hold(queued)
-        if decision == "stop" or (decision == "timeout" and not asked):
+        # A domain nobody decided stays closed and the work goes on
+        # (_domain_wait: "deny"); before 2026-10-29 the response stopped.
+        if decision == "stop" or (decision == "timeout" and not asked and not hold.get("domain")):
             if decision == "timeout":
+                # Said as such, not as a plain stop.
+                self.completion.failure = {"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED}
                 # As the Stop button does (routers/agent.py stop_agent_request).
                 try:
                     self.store.stop_delegation(self.uid, self.chat_id, self.turn_id)
@@ -2224,8 +2458,8 @@ class DelegationLoop(AgentLoop):
         ``step_args`` as for _step."""
         step = f"completion:{index}"
         try:
-            value = yield from self._step(model, messages, step, registry, self.cancellation,
-                                          retry_rate_limit=rate_limit, retry_passing=True, **step_args)
+            value, step = yield from self._past_halts(model, messages, step, steps, registry,
+                                                      retry_rate_limit=rate_limit, retry_passing=True, **step_args)
         except AgentProviderCooldown as exc:
             # The process gate refused before any claim: the step index is still free.
             delay = self._rate_limit_delay(exc.retry_after) if rate_limit else None
@@ -2252,8 +2486,27 @@ class DelegationLoop(AgentLoop):
             yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
                                  "text": "The model's provider is busy right now. Trying again in a few seconds."})
         yield from self._pause(delay)
-        return (yield from self._step(model, messages, step, registry, self.cancellation,
-                                      check_cooldown=False, **step_args))
+        return (yield from self._past_halts(model, messages, step, steps, registry, check_cooldown=False,
+                                            **step_args))[0]
+
+    def _past_halts(self, model, messages, step, steps, registry, **step_args):
+        """The agent's step (_step), once more after a reviewer's halt broke
+        it off while it streamed (``value.halted``): what it showed goes
+        back, the run waits for the user, and the step runs again on the next
+        index, after a message ("steer") with that message in view. Returns
+        the value and the step it ran as."""
+        while True:
+            value = yield from self._step(model, messages, step, registry, self.cancellation, **step_args)
+            if getattr(value, "halted", None) is None:
+                return value, step
+            yield from self._retract(value)
+            if (yield from self._hold_wait()) == "steer":
+                self._take_notes(step)
+            index = next(steps, None)
+            if index is None:
+                raise AnalysisBudgetExceeded("Agent orchestration call limit reached")
+            # Past the process gate already (cooldowns.check).
+            step, step_args = f"completion:{index}", {**step_args, "check_cooldown": False}
 
     def _passing_delay(self):
         """Seconds before the one retry of a step that broke off, or None
@@ -2537,6 +2790,19 @@ class DelegationLoop(AgentLoop):
         if not value.text.strip():
             # Nothing to show or check: never start the judges on no text.
             raise ValueError("The model did not complete the answer before review.")
+        with self.condition:
+            # The answer stands from here on: no reviewer's halt any more
+            # (request_hold), and one that came after the last look ends
+            # with it. Before 2026-10-29 its card stood until the turn's end,
+            # doing nothing, and the turn's clock stood still.
+            self.answer_fixed = True
+            late = self.hold if self.hold is not None and not self.hold.get("ask") else None
+            if late is not None:
+                waited = self.clock() - self.hold_started
+                self.paused_seconds += waited
+                self.hold = self.hold_decision = None
+        if late is not None:
+            self._end_hold(late, "ended", waited)
         yield from self._show_answer(value)
         # Saved with the turn also when a check fails afterwards.
         self.completion.text = value.text
@@ -2639,6 +2905,15 @@ class DelegationLoop(AgentLoop):
             if value.finish_reason != "stop" or value.tool_calls or not value.text.strip():
                 raise ValueError("The model did not complete the answer before review.")
             self.messages.append(value.assistant_message())
+            if self.hold is not None and (yield from self._hold_wait()) == "steer":
+                # As at the end of run(): a reviewer's halt still open as the
+                # answer stands counts once the user decided (before
+                # 2026-10-29 this answer was fixed past it), and their
+                # message gets another closing step.
+                yield from self._retract(value)
+                self._take_notes(f"completion:{index}")
+                yield from self._merged_wrap_up(reason, steps, value)
+                return
             yield from self._finish_merged(value)
             return
         if not comparison.finalized:
@@ -2958,17 +3233,13 @@ class DelegationLoop(AgentLoop):
             self.completion.usage = self.costs.total()
             if self.hold is not None:
                 # Still open as the run ended: stopped while it waited (the
-                # card's Stop is the Stop button), or opened as the answer's
-                # check began. Nothing waits for it any more.
+                # card's Stop is the Stop button), or the run broke off.
+                # Nothing waits for it any more.
                 hold, self.hold = self.hold, None
                 decision = "stop" if status == "cancelled" else "ended"
-                try:
-                    self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
-                except Exception as exc:
-                    logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
-                self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
-                self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                                        "state": decision}))
+                self._end_hold(hold, decision, self.clock() - self.hold_started)
+            # Saved with the turn (agent_runs.finish_run: agent_holds).
+            self.completion.holds = self.holds
             if self.notes:
                 # Arrived after the answer was written: said, not lost silently.
                 self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",

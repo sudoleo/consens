@@ -32,10 +32,25 @@ TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent t
 # receipt, which the run's watcher reads every few seconds anyway.
 USER_NOTES_MAX = 10
 USER_NOTE_CHARS = 4000
+HOLD_NOT_DENIABLE = "This pause cannot be declined. Let it continue, write to the agent or stop it."
 
 
 class NotesFull(TurnStatusConflict):
     """A message into the run would exceed USER_NOTES_MAX (decide_hold)."""
+
+
+class HoldActionRefused(ValueError):
+    """"deny" on a hold it is no answer to (decide_hold, deniable)."""
+
+
+def deniable(hold):
+    """Whether "deny" answers ``hold``: a domain the agent asked for
+    (agent_domains.py) or the agent's own question to allow a step or to give
+    a key (agent_ask.py). A reviewer's halt or a gate goes on, gets a
+    message or stops; before 2026-10-29 a "deny" there went on like
+    "continue", and a gated update_memory ran."""
+    hold = hold or {}
+    return bool(hold.get("domain")) or hold.get("ask") in {"confirm", "secret"}
 
 
 def root_usage(root):
@@ -503,7 +518,8 @@ class AgentSessionStore:
     def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text=""):
         """The user's decision on an open hold: "continue", "stop" or "steer"
         (continue with ``text`` as their message into the run, like a note).
-        The run's watcher reads it from the root (DelegationLoop._receive_hold)."""
+        The run's watcher reads it from the root (DelegationLoop._receive_hold);
+        returns the fields saved, for a run in this process (DelegationLoop.receive)."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
@@ -514,6 +530,8 @@ class AgentSessionStore:
                 raise TurnStatusConflict("This response is no longer running.")
             if (data.get("hold") or {}).get("id") != hold_id or (data.get("hold_decision") or {}).get("id") == hold_id:
                 raise TurnStatusConflict("This pause is already over.")
+            if action == "deny" and not deniable(data.get("hold")):
+                raise HoldActionRefused(HOLD_NOT_DENIABLE)
             update = {"hold_decision": {"id": hold_id, "action": action}}
             if action == "steer":
                 notes = list(data.get("user_notes") or [])
@@ -523,6 +541,7 @@ class AgentSessionStore:
                 update["user_notes"] = [*notes, {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
                                                  "at": datetime.now(timezone.utc).isoformat()}]
             tx.update(ref, update)
+            return update
         return self._agent_transaction(uid, operation)
 
     def add_user_note(self, uid, chat_id, turn_id, text):

@@ -22,7 +22,7 @@ from app.services import agent_quota, agent_secrets, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
-from app.services.agent_sessions import NotesFull
+from app.services.agent_sessions import HoldActionRefused, NotesFull
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
@@ -538,6 +538,9 @@ def run_agent(request: Request, payload: AgentRequest):
             status = "cancelled"
             error = "This response was stopped."
             failure = {"code": "cancelled"}
+            if (getattr(completion, "failure", None) or {}).get("code") == "hold_timeout":
+                # A pause nobody decided (DelegationLoop._hold_wait): said so.
+                error, failure = completion.failure["error"], {"code": "hold_timeout"}
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             failure = agent_failure(exc)
             error = failure.pop("error")
@@ -610,7 +613,8 @@ def run_agent(request: Request, payload: AgentRequest):
 
     try:
         agent_background.start(uid=uid, chat_id=payload.chat_id, request_id=payload.client_request_id,
-                               turn_id=turn["id"], target=produce, cancel=cancellation.cancel, interrupt=interrupt)
+                               turn_id=turn["id"], target=produce, cancel=cancellation.cancel, interrupt=interrupt,
+                               loop=loop)
     except AgentRunDuplicate as exc:
         # Two identical requests at once: the first one runs this turn; its
         # buffer and saved state stay untouched.
@@ -864,6 +868,10 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
             return JSONResponse({"error": "Messages during a response need Agent VM.", "code": "notes_unavailable"},
                                 status_code=409)
         note = store.add_user_note(uid, chat_id, turn_id, text)
+        loop = agent_background.run_loop(uid, chat_id, request_id)
+        if loop is not None:
+            # This process runs it: the run has it at once.
+            loop.receive({"user_notes": [note]})
         return JSONResponse({"status": "added", "id": note["id"]}, headers={"Cache-Control": "private, no-store"})
     except TurnStatusConflict as exc:
         return JSONResponse({"error": str(exc), "code": "not_running"}, status_code=409)
@@ -871,10 +879,31 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
         _raise_store_error(exc, operation="add agent note", uid=uid)
 
 
+def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text=""):
+    """The user's decision on the run's open hold: saved on its root
+    (decide_hold) and, when this process runs it, handed to the run at once
+    (DelegationLoop.receive), not with its watcher's next look, which still
+    reads the same. A hold whose save failed is known only to its run
+    (DelegationLoop.unsaved_hold): the run takes the decision itself, so a
+    pause stays decidable. Raises as decide_hold when neither knows it open."""
+    loop = agent_background.run_loop(uid, chat_id, request_id)
+    try:
+        saved = store.decide_hold(uid, chat_id, turn_id, hold_id, action, text)
+    except NotesFull:
+        raise
+    except TurnStatusConflict:
+        if loop is None or not loop.decide_unsaved(hold_id, action, text):
+            raise
+        return
+    if loop is not None:
+        loop.receive(saved)
+
+
 class AgentHoldDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[0-9a-f]{12}$")
-    # "deny": not allowed, for a domain the agent asked for (agent_domains.py).
+    # "deny": not allowed, for a domain the agent asked for (agent_domains.py)
+    # or its own question (agent_ask.py); on any other hold 422 (deniable).
     action: Literal["continue", "stop", "steer", "deny"]
     text: str = Field(default="", max_length=4000)
 
@@ -905,10 +934,13 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
         if not turn or turn.get("status") != "pending":
             return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
         try:
-            store.decide_hold(uid, chat_id, turn_id, payload.id, payload.action, text)
+            _decide_hold(store, uid, chat_id, request_id, turn_id, payload.id, payload.action, text)
         except NotesFull as exc:
             # Nothing decided: the card stays for another answer.
             return JSONResponse({"error": str(exc), "code": "notes_full"}, status_code=409)
+        except HoldActionRefused as exc:
+            # "deny" on a pause it is no answer to (agent_sessions.deniable).
+            return JSONResponse({"error": str(exc), "code": "invalid_action"}, status_code=422)
         except TurnStatusConflict as exc:
             return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
         if payload.action == "stop" and not agent_background.stop(uid, chat_id, request_id=request_id):
@@ -949,6 +981,10 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
         if not turn or turn.get("status") != "pending":
             return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
         hold = store.open_hold(uid, chat_id, turn_id)
+        if not hold:
+            # Its save failed: only the run of this process knows it (_decide_hold).
+            loop = agent_background.run_loop(uid, chat_id, request_id)
+            hold = loop.unsaved_hold() if loop is not None else None
         name = str((hold or {}).get("secret") or "")
         if not hold or hold.get("id") != payload.id or hold.get("ask") != "secret" or not agent_secrets.NAME.fullmatch(name):
             return JSONResponse({"error": "This question is already over.", "code": "hold_over"}, status_code=409)
@@ -965,7 +1001,7 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
         finally:
             vm.close()
         try:
-            store.decide_hold(uid, chat_id, turn_id, payload.id, "continue")
+            _decide_hold(store, uid, chat_id, request_id, turn_id, payload.id, "continue")
         except TurnStatusConflict as exc:
             return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
         return JSONResponse({"status": "saved", "path": agent_secrets.path(name)},

@@ -1138,6 +1138,23 @@ def test_a_reviewers_halt_waits_for_the_user_and_the_agent_never_learns_of_it(st
     assert "paused" in names and "decision" in names
     # One halt per reviewer and step: the next rounds halting again change nothing.
     assert len([e for e in holds if e["hold"]]) == 1
+    # A-M5: the turn's document keeps the pause, without its reason (not
+    # for the page: turn_detail leaves it out).
+    stored = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["agent_holds"]
+    [kept] = stored
+    assert {key: value for key, value in kept.items() if key != "seconds"} == {
+        "kind": "injection", "gate": False, "ask": None, "domain": None, "reviewer": record["reviewer"],
+        "decision": "continue"}
+    assert kept["seconds"] >= .05 and HALT_REASON not in json.dumps(stored) and "agent_holds" not in turn
+
+
+def test_a_turn_keeps_at_most_twenty_holds(store):
+    loop = audit_loop(store, Audit())
+    for number in range(agent_delegation.HOLDS_KEPT + 5):
+        loop._end_hold({"id": f"{number:012x}", "kind": "ask", "ask": "confirm", "reviewer": ""}, "deny", 2)
+    assert len(loop.holds) == agent_delegation.HOLDS_KEPT == 20
+    assert loop.holds[0] == {"kind": "ask", "gate": False, "ask": "confirm", "domain": None, "reviewer": None,
+                             "decision": "deny", "seconds": 2}
 
 
 def test_a_halt_answered_with_a_message_goes_on_with_the_users_words(store):
@@ -1163,6 +1180,9 @@ def test_a_halt_without_a_decision_stops_the_response_after_its_time(store, monk
     assert [e.get("decision") for e in events if e.get("type") == "hold" and not e.get("hold")] == ["timeout"]
     assert loop.cancellation.cancelled
     assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("cancel_requested")
+    # A-R4: the turn says why, not only "Response stopped".
+    assert saved(store, loop)["agent_failure"] == {"code": "hold_timeout",
+                                                   "error": agent_delegation.HOLD_TIMEOUT_STOPPED}
 
 
 def test_a_halt_while_the_agent_writes_its_answer_holds_the_answer_until_the_user_decides(store):
@@ -1212,6 +1232,374 @@ def test_the_route_takes_the_users_decision_on_an_open_hold(api, monkeypatch):
     # Decided once: a second click finds the pause over.
     again = client.post(url, json={"id": "a1b2c3d4e5f6", "action": "continue"}, headers=AUTH)
     assert again.status_code == 409
+
+
+HALT = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": HALT_REASON, "entry": 1,
+        "step": "", "step_name": "", "step_kind": "", "step_source": ""}
+
+
+def test_a_full_event_queue_neither_loses_the_halt_nor_ends_its_reviewer(store):
+    """A-R8: the stream was not read for long. The halt opens all the same
+    (no queue.Full in the reviewer's thread), its card waits for the next
+    read, and so does its end."""
+    import queue
+    loop = audit_loop(store, Audit())
+    loop.outgoing = queue.Queue(maxsize=1)
+    loop.outgoing.put_nowait({"type": "activity", "id": "earlier"})
+    assert loop.request_hold(HALT) is True
+    frames = list(loop._events())
+    assert [frame["type"] for frame in frames] == ["activity", "hold", "activity"]
+    assert frames[1]["hold"]["id"] == loop.hold["id"] and frames[2]["state"] == "waiting"
+    loop.outgoing.put_nowait({"type": "activity", "id": "later"})
+    hold_id = loop.hold["id"]
+    loop._receive_hold({"hold_decision": {"id": hold_id, "action": "continue"}})
+    frames = list(loop._hold_wait())
+    assert [frame.get("hold", "-") for frame in frames] == ["-", None, "-"]
+    assert frames[1]["decision"] == "continue" and frames[2]["state"] == "continue"
+
+
+def join_when_held(loop, store, action, *, provider="openai", entry=2, reason="Deletes the user's files."):
+    """Once a card is open, a reviewer's live halt on another entry comes
+    (AnswerAudit.halt), then the user decides on the card as it then is
+    (a copy of the hold in ``seen``)."""
+    seen = []
+
+    def run():
+        hold = held(loop)
+        auditor = loop.comparison.auditor
+        auditor.halt(auditor.sessions[provider], {"entry": entry, "kind": "harm", "reason": reason})
+        seen.append({**loop.hold, "halts": set(auditor.halts),
+                     "saved": store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("hold")})
+        assert loop.hold["id"] == hold["id"]
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, hold["id"], action)
+        loop.receive(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict())
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, seen
+
+
+def test_a_second_reviewers_halt_joins_the_open_card(store):
+    """A-S2: before, request_hold refused it while the first card was open,
+    the reviewer's key was taken all the same, and its reason was lost."""
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+    thread, seen = join_when_held(loop, store, "continue")
+    events = list(loop.run())
+    thread.join(5)
+    labels = {provider: session.model.label for provider, session in loop.comparison.auditor.sessions.items()}
+    [card] = seen
+    assert [(r["reviewer"], r["kind"], r["reason"]) for r in card["reasons"]] == [
+        (labels["anthropic"], "injection", HALT_REASON), (labels["openai"], "harm", "Deletes the user's files.")]
+    assert card["reviewer"] == f"{labels['anthropic']} · {labels['openai']}" and card["revision"] == 1
+    assert card["saved"]["reasons"] == card["reasons"] and {("anthropic", 1), ("openai", 2)} <= card["halts"]
+    # The same card again, one decision for both.
+    holds = [e for e in events if e.get("type") == "hold"]
+    assert [h["hold"]["id"] if h["hold"] else h["decision"] for h in holds] == [card["id"], card["id"], "continue"]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert f"{labels['openai']} also paused the work for the user (harm, entry 2): Deletes the user's files." in said
+    record = next(e for e in saved(store, loop)["agent_activity"] if e["kind"] == "hold")
+    assert len(record["reasons"]) == 2 and record["state"] == "continue"
+    assert saved(store, loop)["status"] == "completed"
+
+
+@pytest.mark.parametrize("action", ["continue", "steer"])
+def test_a_halt_breaks_off_the_step_that_streams_and_it_runs_again(store, action):
+    """A-S4: the halt for step N came while step N+1 streamed; before, N+1
+    ran to its end, its searches included. It breaks off under its own
+    cancellation (the turn's stays), is settled with what it used, and runs
+    again after the decision, after "steer" with the user's message."""
+    seen = []
+
+    def halt_mid_stream(step):
+        if step == "completion:1":
+            stop = current_provider_cancellation()
+            assert script.loop.request_hold(HALT) is True
+            deadline = time.monotonic() + 5
+            while not stop.cancelled and time.monotonic() < deadline:
+                time.sleep(.01)
+            seen.append((stop.cancelled, script.loop.cancellation.cancelled))
+            raise ProviderCancelled("halted")
+    script = Audit(tool_steps=1, on_answer=halt_mid_stream)
+    loop = audit_loop(store, script)
+    waiter = decide_when_held(loop, store, action, "Name the source." if action == "steer" else "")
+    events = list(loop.run())
+    waiter.join(5)
+    assert seen == [(True, False)]
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == [
+        "completion:0", "completion:1", "completion:2"]
+    # Settled (paid) like a step that broke off in passing; the log says it broke off.
+    receipt = store.receipt_ref(UID, loop.chat_id, loop.turn_id, "completion:1").get().to_dict()
+    assert receipt["status"] == "succeeded"
+    step = next(content for entry, content in loop.work_log.entries_after(0)
+                if entry["kind"] == "step" and entry.get("step") == "completion:1")
+    assert json.loads(step)["status"] == "cancelled"
+    users = [m["content"] for m in loop.messages if m.get("role") == "user"]
+    assert (f"{agent_delegation.USER_NOTE_OPEN}\nName the source." in users) == (action == "steer")
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == [action]
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert loop.step_halt is None
+
+
+@pytest.mark.parametrize("action", ["continue", "steer"])
+def test_a_halt_during_the_closing_step_holds_its_answer_until_the_user_decides(store, action):
+    """A-S3: a turn limit led into the closing step (_merged_wrap_up) and a
+    reviewer halted as it ended; before, that answer was fixed past the card.
+    (A halt while it streams breaks it off, as any step: A-S4.)"""
+    halted = []
+    script = Audit(tool_steps=1)
+    loop = audit_loop(store, script)
+    loop._turn_limit = lambda: agent_delegation.TURN_STEP_LIMIT if loop.routing_steps >= 1 else None
+    attempt = loop._answer_attempt
+
+    def halt_as_it_ends(model, messages, index, steps, **kwargs):
+        value = yield from attempt(model, messages, index, steps, **kwargs)
+        if kwargs.get("allow_tools") is False and not halted:
+            halted.append(index)
+            assert loop.request_hold(HALT) is True
+        return value
+    loop._answer_attempt = halt_as_it_ends
+    at_decision = []
+
+    def decide():
+        hold = held(loop)
+        at_decision.append((loop.answer_fixed, list(loop.comparison.versions)))
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, hold["id"], action,
+                          "Name the source." if action == "steer" else "")
+        loop.receive(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict())
+    thread = threading.Thread(target=decide, daemon=True)
+    thread.start()
+    list(loop.run())
+    thread.join(5)
+    # Nothing was fixed while the card stood.
+    assert at_decision == [(False, [])]
+    closing = [step for step, _ in script.calls if step.startswith("completion:")][1:]
+    users = [m["content"] for m in loop.messages if m.get("role") == "user"]
+    if action == "steer":
+        # The user's message got another closing step, under the limit's rule.
+        assert f"{agent_delegation.USER_NOTE_OPEN}\nName the source." in users and len(closing) >= 2
+        assert users[-1].startswith("App rule: this message has reached its limit.")
+    else:
+        assert not any(agent_delegation.USER_NOTE_OPEN in u for u in users)
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+
+
+def test_from_the_fixed_answer_on_no_reviewer_halts_the_work(store):
+    """A-R5: a halt between the last look and the fixed answer ends with it
+    ("ended") instead of standing until the turn's end with the clock
+    stopped; during the final round request_hold takes none."""
+    taken = []
+
+    def final(messages):
+        taken.append(script.loop.request_hold(HALT))
+        return REVIEWS["anthropic"]
+    script = Audit(reviews={**REVIEWS, "anthropic": final})
+    loop = audit_loop(store, script)
+    finish = loop._finish_merged
+
+    def late_halt(value):
+        assert loop.request_hold(HALT) is True
+        return (yield from finish(value))
+    loop._finish_merged = late_halt
+    events = list(loop.run())
+    holds = [e for e in events if e.get("type") == "hold"]
+    assert len(holds) == 2 and holds[1]["hold"] is None and holds[1]["decision"] == "ended"
+    review = next(i for i, e in enumerate(events) if e.get("type") == "review")
+    assert events.index(holds[1]) < review
+    assert taken == [False] and loop.hold is None
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["agent_review"]["status"] == "succeeded"
+
+
+def test_a_halt_as_the_user_decides_comes_right_after(store):
+    """A-S2: the card was decided, the run had not closed it yet; the halt
+    that came in that moment would have joined a card nobody reads again.
+    It waits and opens as the next card, before the next step."""
+    loop = audit_loop(store, Audit())
+    assert loop.request_hold(HALT) is True
+    first = loop.hold["id"]
+    loop._receive_hold({"hold_decision": {"id": first, "action": "continue"}})
+    assert loop.request_hold({**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic", "entry": 2}) is True
+    assert loop.hold["id"] == first and "reasons" not in loop.hold
+    list(loop._events())
+    frames = [*loop._hold_wait(), *loop._events()]
+    assert loop.hold["id"] != first and loop.hold["provider"] == "anthropic" and loop.hold["entry"] == 2
+    assert [frame["hold"]["id"] if frame["hold"] else None for frame in frames if frame.get("type") == "hold"] == [
+        None, loop.hold["id"]]
+
+
+def test_deny_is_taken_only_where_it_answers_the_pause(api):
+    """A-S5: a domain and the agent's own question can be declined; a
+    reviewer's halt or a gate cannot (422), and nothing is decided."""
+    from app.services import agent_ask
+    client, store, _ = api
+    chat_id, turn = pending(store)
+    ref = store.receipt_ref(UID, chat_id, turn["id"])
+    ref.set({**(ref.get().to_dict() or {}), "run_status": "running"}, merge=True)
+    url = f"/agent/chats/{chat_id}/requests/{turn['client_request_id']}/hold"
+    for number, (hold, status) in enumerate([
+            ({"kind": "harm", "reviewer": "Claude Haiku 4.5"}, 422),
+            ({"kind": "unchecked", "gate": True}, 422),
+            (agent_ask.hold("browser", "Bitte anmelden."), 422),
+            ({"kind": "domain", "gate": True, "domain": "api.example.org"}, 200),
+            (agent_ask.hold("confirm", "Soll ich senden?"), 200),
+            (agent_ask.hold("secret", "Key?", "OPENAI_API_KEY"), 200)]):
+        hold = {**hold, "id": f"{number:012x}"}
+        store.set_hold(UID, chat_id, turn["id"], hold)
+        response = client.post(url, json={"id": hold["id"], "action": "deny"}, headers=AUTH)
+        assert response.status_code == status, hold
+        decided = ref.get().to_dict().get("hold_decision") or {}
+        assert (decided.get("id") == hold["id"]) == (status == 200)
+        if status == 422:
+            assert response.json()["code"] == "invalid_action"
+
+
+def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
+    """Internally too: a "deny" past the endpoint is a stop, not a continue."""
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+
+    def deny():
+        hold = held(loop)
+        loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "deny"}})
+    thread = threading.Thread(target=deny, daemon=True)
+    thread.start()
+    events = []
+    with pytest.raises(ProviderCancelled):
+        for event in loop.run():
+            events.append(event)
+    thread.join(5)
+    assert [e.get("decision") for e in events if e.get("type") == "hold" and not e.get("hold")] == ["stop"]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert "The user stopped the work." in said and saved(store, loop)["status"] == "failed"
+    # A halt the run no longer takes (A-S2) is not counted: it may come again.
+    auditor = loop.comparison.auditor
+    assert auditor.final_answer is None and ("anthropic", 1) in auditor.halts
+    auditor.halt(auditor.sessions["openai"], {"entry": 1, "kind": "harm", "reason": "Late."})
+    assert ("openai", 1) not in auditor.halts
+
+
+def test_the_watcher_looks_less_often_during_a_pause(store, monkeypatch):
+    """A-R9: during a pause the root is read every WATCH_PAUSED_SECONDS, not
+    every WATCH_SECONDS; a decision of this process comes at once (A-T4)."""
+    monkeypatch.setattr(agent_delegation, "WATCH_SECONDS", .05)
+    monkeypatch.setattr(agent_delegation, "WATCH_PAUSED_SECONDS", 30)
+    looks, check = [], type(store).check_delegation
+
+    def counted(self, *args, **kwargs):
+        looks.append(loop.hold is not None)
+        return check(self, *args, **kwargs)
+    monkeypatch.setattr(type(store), "check_delegation", counted)
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+
+    def decide_later():
+        hold = held(loop)
+        time.sleep(1)
+        loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "continue"}})
+    thread = threading.Thread(target=decide_later, daemon=True)
+    thread.start()
+    started = time.monotonic()
+    list(loop.run())
+    thread.join(5)
+    # At most the look already under way as the pause began; the run's end
+    # wakes the watcher, it never waits out its 30 s.
+    assert looks.count(True) <= 1 and time.monotonic() - started < 10
+    assert saved(store, loop)["status"] == "completed"
+
+
+def in_background(loop, request_id="one"):
+    """The run as the route starts it: on agent_background's thread, known
+    by its request (run_loop). Returns its events and whether it ended."""
+    from app.services.agent_background import agent_background
+    events, ended = [], threading.Event()
+
+    def produce():
+        try:
+            events.extend(loop.run())
+        finally:
+            ended.set()
+    agent_background.start(uid=UID, chat_id=loop.chat_id, request_id=request_id, turn_id=loop.turn_id,
+                           target=produce, cancel=loop.cancellation.cancel,
+                           interrupt=lambda reason: loop.cancellation.cancel(), loop=loop)
+    return events, ended
+
+
+def held(loop, seconds=5):
+    deadline = time.monotonic() + seconds
+    while loop.hold is None and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert loop.hold is not None
+    return loop.hold
+
+
+def test_a_decision_reaches_a_run_of_this_process_at_once(api):
+    """A-T4: not with the watcher's next look, up to 3 s later; the root
+    keeps the decision for every other process."""
+    client, store, _ = api
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+    events, ended = in_background(loop)
+    hold = held(loop)
+    response = client.post(f"/agent/chats/{loop.chat_id}/requests/one/hold",
+                           json={"id": hold["id"], "action": "continue"}, headers=AUTH)
+    assert response.status_code == 200
+    # Taken by the time the request answered.
+    assert loop.hold_decision == "continue" or (loop.hold or {}).get("id") != hold["id"]
+    assert ended.wait(10)
+    assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["hold_decision"] == {
+        "id": hold["id"], "action": "continue"}
+    assert saved(store, loop)["status"] == "completed"
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == ["continue"]
+
+
+def unsaved_holds(store, monkeypatch):
+    """set_hold fails for every hold that opens (a database outage); clears
+    still work. Returns the attempts."""
+    from google.api_core.exceptions import ServiceUnavailable
+    monkeypatch.setattr(agent_delegation, "HOLD_SAVE_BACKOFF_SECONDS", 0)
+    attempts, original = [], type(store).set_hold
+
+    def set_hold(self, uid, chat_id, turn_id, hold, *, replaces=None):
+        if hold is not None:
+            attempts.append(hold["id"])
+            raise ServiceUnavailable("Firestore is away")
+        return original(self, uid, chat_id, turn_id, hold, replaces=replaces)
+    monkeypatch.setattr(type(store), "set_hold", set_hold)
+    return attempts
+
+
+@pytest.mark.parametrize("action", ["continue", "steer", "stop"])
+def test_a_pause_that_could_not_be_saved_is_still_decided(api, monkeypatch, action):
+    """A-S1: the save is tried three times; failed for good, the card comes
+    all the same and the run of this process takes the decision, never 409."""
+    client, store, _ = api
+    attempts = unsaved_holds(store, monkeypatch)
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+    events, ended = in_background(loop)
+    hold = held(loop)
+    deadline = time.monotonic() + 5
+    while not loop.hold_unsaved and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert attempts == [hold["id"]] * 3 and loop.unsaved_hold()["id"] == hold["id"]
+    url = f"/agent/chats/{loop.chat_id}/requests/one/hold"
+    text = "Use only the official site." if action == "steer" else ""
+    assert client.post(url, json={"id": "ffffffffffff", "action": "continue"}, headers=AUTH).status_code == 409
+    response = client.post(url, json={"id": hold["id"], "action": action, "text": text}, headers=AUTH)
+    assert response.status_code == 200, response.text
+    again = client.post(url, json={"id": hold["id"], "action": "continue"}, headers=AUTH)
+    assert again.status_code == 409 and again.json()["code"] in {"hold_over", "not_running"}
+    assert ended.wait(10)
+    turn = saved(store, loop)
+    if action == "stop":
+        assert loop.cancellation.cancelled and turn["status"] == "failed"
+        return
+    assert turn["status"] == "completed"
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == [action]
+    notes = [m["content"] for m in loop.messages if m.get("role") == "user" and text and text in str(m["content"])]
+    assert notes == ([f"{agent_delegation.USER_NOTE_OPEN}\n{text}"] if text else [])
 
 
 # --- The route ---------------------------------------------------------------------
