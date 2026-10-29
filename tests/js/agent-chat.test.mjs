@@ -395,6 +395,26 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A-R4/A-B6 (docs/agent-audit-readiness-2026-10-29.md): a pause nobody
+  // decided stops the response with its own code; the notice says why, also
+  // under the text written before the pause.
+  it('says that a pause without a decision stopped the response', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_u, _p, _s, handlers) => {
+      handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'c'.repeat(32) });
+      handlers.delta.append('Erster Teil');
+      return { ok: false, status: 200, streamed: true, data: { error: 'Response stopped.', code: 'hold_timeout' } };
+    });
+    d.getElementById('questionInput').value = 'Lösche die alten Dateien';
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerError').textContent).toBe('Paused for 30 minutes without a decision, so the response stopped.');
+    expect([...d.querySelectorAll('#agentAnswerErrorActions button')].map(b => b.textContent)).toEqual(['Retry']);
+    dom.window.close();
+  });
+
   // Review B2: a follow-up replaces the live surface by a fresh copy
   // (liveTurn.take). Its buttons acted only on the first copy.
   it('runs Retry and "Choose another model" from a fresh copy of the live surface', async () => {

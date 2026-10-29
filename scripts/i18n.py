@@ -9,7 +9,9 @@ sources, so a new label cannot go out untranslated:
 - scripts: string and template literals that read as interface text,
   markup built in strings, and ``"…" + value + "…"`` chains as patterns
   (``App.t("…", params, "watch schedule")`` under its context);
-- server sentences: ``HTTPException`` details and ``{"error": …}`` bodies.
+- server sentences: ``HTTPException`` details and ``{"error": …}`` bodies,
+  and the sentences of exceptions a service raises for a card
+  (``SERVER_RAISED``).
 
     python scripts/i18n.py missing            # keys without an entry, by file
     python scripts/i18n.py missing --json out.json
@@ -782,6 +784,11 @@ SERVER_TEXT_KEYS = {"app/services/starter_questions.py": {"label", "question"}, 
 # Files that mark every fixed word themselves: the first argument of these
 # calls is a key, whatever it looks like ("Why" is no prose to the heuristic).
 SERVER_MARKED = {"app/services/mailer.py": {"_t", "_h", "_N"}}
+# Services whose exceptions carry a sentence for the page: the first argument
+# of ``raise Name("…")`` for these classes reaches a card as the server's
+# ``error`` (routers/agent.py: the hold, secret and notes endpoints answer
+# with ``str(exc)``), e.g. "This pause is already over." (B7).
+SERVER_RAISED = {"app/services/agent_sessions.py": {"TurnStatusConflict", "NotesFull"}}
 
 
 def server_keys(relative: str) -> list[Found]:
@@ -798,6 +805,11 @@ def server_keys(relative: str) -> list[Found]:
             found.append(Found(i18n.normalize(text), relative, getattr(node, "lineno", 0)))
 
     for node in ast.walk(tree):
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) and node.exc.args:
+            raised = node.exc.func
+            name = raised.attr if isinstance(raised, ast.Attribute) else (raised.id if isinstance(raised, ast.Name) else "")
+            if name in SERVER_RAISED.get(relative, ()):
+                add(node.exc.args[0])
         if isinstance(node, ast.Call):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else (node.func.id if isinstance(node.func, ast.Name) else "")
             if name in SERVER_MARKED.get(relative, ()) and node.args:
@@ -840,7 +852,7 @@ def script_files() -> list[str]:
 
 def server_files() -> list[str]:
     files = sorted((ROOT / "app" / "api" / "routers").glob("*.py")) + [ROOT / "main.py"]
-    files += [ROOT / name for name in (*SERVER_TEXT_KEYS, *SERVER_MARKED)]
+    files += [ROOT / name for name in (*SERVER_TEXT_KEYS, *SERVER_MARKED, *SERVER_RAISED)]
     return [path.relative_to(ROOT).as_posix() for path in files if path.name != "admin.py"]
 
 

@@ -316,6 +316,16 @@ def test_every_visible_english_text_has_german():
         f"{len(lines)} texts without German (python scripts/i18n.py missing; docs/i18n.md):\n" + "\n".join(lines[:60]))
 
 
+def test_a_service_sentence_that_reaches_a_card_is_found():
+    """The hold, secret and notes endpoints answer with the sentence of the
+    exception agent_sessions.py raised ("This pause is already over.", B7 in
+    docs/agent-audit-readiness-2026-10-29.md): it needs German like any other."""
+    keys = {item.key for item in i18n_tool.server_keys("app/services/agent_sessions.py")}
+    assert {"This pause is already over.", "This response is no longer running.",
+            "This response already has the most messages it takes while it runs."} <= keys
+    assert "app/services/agent_sessions.py" in i18n_tool.server_files()
+
+
 def test_a_sentence_composed_from_chosen_words_is_found():
     """"Difference: ${text}" with the word picked inside ${…} has no entry of
     its own; whole sentences or App.t for each part do (docs/i18n.md)."""

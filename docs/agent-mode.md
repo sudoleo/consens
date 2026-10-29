@@ -445,7 +445,16 @@ Rohname des Eintrags nur für Admins, Live-Befunde als „During the run“, Aus
 und „Unmarked text means no objection, not confirmed.“) und Sources; die
 Aktivität zeigt eine Karte „Review · n models“ mit markierten Stellen und
 Befunden zur Arbeit, die auch bei `cancelled`/`missing` endet („Review
-stopped“, „Not reviewed“).
+stopped“, „Not reviewed“). Hat eine solche Prüfung Befunde aus den
+Live-Runden behalten (`live: true` in `audit.claims`/`unplaced`/`process`,
+seit 2026-10-29, A-M7/B8), bietet die Leiste „Notes“ und die Aktivität „Read
+the notes“, auch unter einer Antwort, die nie fixiert wurde
+(`auditReadable`); je Prüfer „No final review: the review was stopped.“ und
+die Befunde als „During the run“, Marken auf dem Text gibt es dann nicht.
+Eigene Gründe für `review_tool_calls` („it called a tool instead of writing
+its review“) und `review_empty` (A-M6); ein Turn mit `hold_timeout` sagt
+„Paused for 30 minutes without a decision, so the response stopped.“
+(`failureNotice`, mit Retry).
 Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
@@ -1180,7 +1189,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   nach einem Reload dieses Tabs öffnet sich die Ansicht wieder in der Hand des
   Nutzers (`sessionStorage["workspace_view_holder"]`, höchstens 30 min alt,
   nur für dasselbe Konto, Schließen oder „Hand back“ löscht es; seit
-  2026-10-29, A-S6, der Server-Teil „Ablauf ist keine Rückgabe“ in Strang 1).
+  2026-10-29, Browser-Teil von A-S6 in
+  [agent-audit-readiness-2026-10-29.md](agent-audit-readiness-2026-10-29.md)).
   Die Prüfer folgen dem Agenten, nicht dem Nutzer.
 - **Wer dran ist, steht über dem Bild** (seit 2026-10-29, Max hatte am Vortag
   auf den Agenten gewartet, während der auf ihn wartete; nur ein kleiner

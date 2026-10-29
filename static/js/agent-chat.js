@@ -705,6 +705,10 @@
       actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
     }
     if (code === 'agent_tokens_exhausted') return { text: `You’ve used today’s allowance. It resets at ${resetTime()}.` };
+    // A pause nobody decided (A-R4): why it stopped, also under a partial answer.
+    if (code === 'hold_timeout') {
+      return { text: 'Paused for 30 minutes without a decision, so the response stopped.', actions: retry ? [['retry', 'Retry']] : [] };
+    }
     // The answer is complete; only its sidebar entry was not saved. Said even
     // under a checked answer, which failureNote treats as settled: the
     // reader must know to free space and recover it (2026-10-19).

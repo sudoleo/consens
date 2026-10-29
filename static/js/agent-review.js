@@ -529,9 +529,13 @@
   const AUDIT_DONE = new Set(['succeeded', 'partial', 'failed']);
   const AUDIT_ENDED = new Set([...AUDIT_DONE, 'cancelled', 'missing']);
   const AUDIT_KINDS = { wrong: 'Wrong', doubtful: 'Doubtful', incomplete: 'Incomplete' };
+  // review_tool_calls / review_empty (since 2026-10-29, A-M6): a reply with a
+  // tool call instead of the review, or an empty one, no longer counts as
+  // the provider's failure.
   const auditReasons = { review_unreadable: 'its review could not be read', no_time: 'it ran out of time',
     audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped',
-    context_limit: 'the work did not fit its context' };
+    context_limit: 'the work did not fit its context',
+    review_tool_calls: 'it called a tool instead of writing its review', review_empty: 'its review came back empty' };
   function auditReason(failure) {
     return auditReasons[failure?.code] || failureReason(failure);
   }
@@ -561,6 +565,14 @@
   function auditNotes(audit, reviewer) {
     const label = reviewer.provider_label || reviewer.provider;
     return auditMarks(audit).filter(item => item.model === label);
+  }
+  // The notes can be read: every reviewer ended, or the review was stopped
+  // (or never reached its final round) and kept what the reviewers found
+  // while the agent worked (``live``, since 2026-10-29, A-M7/B8). Before,
+  // a stopped review had them only in its sessions.
+  function auditReadable(review) {
+    if (AUDIT_DONE.has(review.status)) return true;
+    return AUDIT_ENDED.has(review.status) && auditMarks(review.audit).length + auditWork(review.audit).length > 0;
   }
   // The notes on the agent's work (``process``): the log entry each concerns;
   // ``live``: from a round while the agent worked (its final round failed).
@@ -631,6 +643,8 @@
     if (AUDIT_DONE.has(review.status) && reviewers.length > missing.length) {
       panel.append(node('p', 'agent-review-note', 'Unmarked text means no objection, not confirmed.'));
     }
+    // A stopped review names its reason once for every reviewer it stopped.
+    const stopped = review.status === 'cancelled' ? { code: 'stopped' } : null;
     for (const reviewer of reviewers) {
       const section = node('section', 'agent-audit-reviewer');
       const name = reviewer.model?.label || reviewer.provider_label || reviewer.provider;
@@ -641,10 +655,12 @@
       section.append(head);
       const work = auditWork(audit, reviewer);
       if (reviewer.status !== 'completed') {
-        // Its final round failed: the notes of its rounds during the run stand.
-        section.append(node('p', 'agent-review-note', work.length
-          ? `No final review: ${auditReason(reviewer.failure)}.` : `No review: ${auditReason(reviewer.failure)}.`));
-        if (work.length) section.append(auditList(work));
+        // Its final round failed or was stopped: the notes of its rounds
+        // during the run stand.
+        const found = [...auditNotes(audit, reviewer), ...work];
+        section.append(node('p', 'agent-review-note', found.length
+          ? `No final review: ${auditReason(reviewer.failure || stopped)}.` : `No review: ${auditReason(reviewer.failure || stopped)}.`));
+        if (found.length) section.append(auditList(found));
         panel.append(section);
         continue;
       }
@@ -701,10 +717,12 @@
       check.append(node('span', '', text));
     }
     card.append(check);
-    if (done || !ended) {
+    // Stopped with notes from the run: they can be read like a done review's.
+    const readable = auditReadable(review);
+    if (readable || !ended) {
       const actions = node('div', 'agent-activity-insight-actions');
       const button = node('button', 'consensus-tab', 'Read the notes'); button.type = 'button';
-      if (done) {
+      if (readable) {
         button.addEventListener('click', () => {
           const current = host._activityReview;
           const context = contextsByKey.get(`agent-audit:${current.answer_hash}`) || auditContext(current);
@@ -726,6 +744,9 @@
     const version = review.versions?.find(v => v.id === review.answer_version);
     const exact = Boolean(version) && raw === version.text && version.hash === review.answer_hash;
     const done = AUDIT_DONE.has(review.status);
+    // Stopped or not reviewed, with notes from the run (auditReadable): the
+    // row offers them, also under an answer that was never fixed.
+    const notesOnly = !done && auditReadable(review);
     if (!host?.isConnected) {
       host = node('section', 'agent-review'); (App.answerTail?.(body) || body).after(host); body._agentReview = host;
       host.setAttribute('aria-label', 'Answer evidence');
@@ -735,10 +756,10 @@
     if (host.dataset.signature === signature) { window.linkifyAgentSources?.(body, turnSources); return; }
     host.dataset.signature = signature; host._hasReview = true;
     // Until every reviewer is done the row waits (the answer shows the check).
-    host.hidden = !exact || !AUDIT_ENDED.has(review.status);
+    host.hidden = !(exact || notesOnly) || !AUDIT_ENDED.has(review.status);
     host.replaceChildren();
     const summary = node('div', 'agent-review-summary');
-    const status = node('span', 'agent-review-status', exact ? auditStatus(review) : states.required);
+    const status = node('span', 'agent-review-status', exact || notesOnly ? auditStatus(review) : states.required);
     status.setAttribute('role', 'status'); status.dataset.state = review.status;
     status.hidden = !status.textContent;
     summary.append(status); summary.hidden = status.hidden; host.append(summary);
@@ -755,7 +776,7 @@
     });
     body._markSignature = null;
     const marks = auditMarks(review.audit).length + auditWork(review.audit).length;
-    const links = [...(done ? [['differences', 'Notes', marks]] : []), ...(turnSources.length ? [['sources', 'Sources', turnSources.length]] : [])];
+    const links = [...(done || notesOnly ? [['differences', 'Notes', marks]] : []), ...(turnSources.length ? [['sources', 'Sources', turnSources.length]] : [])];
     for (const [section, label, count] of links) {
       const button = evidenceButton(section, label, count);
       button.addEventListener('click', () => open(section, { trigger: button }));
@@ -770,7 +791,8 @@
     const raw = body.dataset.markdown ?? version?.text;
     const turnSources = sourcesOf(body, review, evidence, raw);
     let host = body._agentReview;
-    if (isAudit(review) && review.versions?.length) {
+    // Also a review stopped before any answer was fixed, when it kept notes from the run.
+    if (isAudit(review) && (review.versions?.length || auditReadable(review))) {
       renderAudit(body, review, evidence, host, raw, turnSources);
       return;
     }
