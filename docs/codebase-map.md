@@ -4440,7 +4440,11 @@ danach nur im Kontingent; weist es ihn vor seinem Claim ab, schreibt der Agent
 die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
 `TURN_ALLOWANCE_LIMIT`), ohne bezahlte Vergleiche nicht. Bis 2026-10-28 überzog
 nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
-(Sicherheitsaudit). Jeder Schritt des Agenten im
+(Sicherheitsaudit). Im Audit-Modus (seit 2026-10-29, A-R2) steht ein bezahlter
+Schritt des Agenten für den bezahlten Vergleich (`_paid_audit`): Schlussschritt
+und `_closing_index` wie oben, dazu die Schlussrunden der Prüfer
+(`_final_review`); `_long_run_limit` hält zusätzlich zweimal den bisherigen
+Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`). Jeder Schritt des Agenten im
 Kontomodus kann die Antwort schreiben und wird mit dem Steuer-Budget zugelassen
 (`_routing_model`); sein Antwortbudget darüber (`_answer_output`) reserviert er
 einmal statt pro Suchrunde (`RunCosts.estimate(answer_output=…)`), und nur dieser

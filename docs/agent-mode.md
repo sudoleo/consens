@@ -3045,7 +3045,9 @@ send a follow-up message to continue.“); gespeicherte Vergleiche bleiben erhal
 gecachte Tokens voll zählt: Vor jedem Schritt prüft `_long_run_limit`, ob es
 noch zwei Schritte im heutigen Umfang plus Antwort trägt
 (`remaining_tokens`, ein Firestore-Lesezugriff je Schritt, nur in langen
-Läufen) und ob das Gespräch samt Antwort unter 80 % des Modellfensters bleibt
+Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
+Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
+ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch samt Antwort unter 80 % des Modellfensters bleibt
 (`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
 `TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
 ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
@@ -3203,7 +3205,14 @@ Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Ein
 Steuer-Schritt danach läuft nur im Kontingent: Weist es ihn vor seinem Claim ab,
 nimmt der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
 Bis 2026-10-28 überzog jeder Steuer-Schritt nach dem ersten bezahlten Vergleich,
-ohne Absage bis `turn_steps` (Sicherheitsaudit). Ein
+ohne Absage bis `turn_steps` (Sicherheitsaudit). Im Audit-Modus gibt es keine
+Vergleiche; seit 2026-10-29 (A-R2) gilt dort dasselbe, sobald der Agent in
+dieser Nachricht einen bezahlten Schritt hat (`_paid_audit`, die Prüfer sind
+ihm gefolgt): Der Schlussschritt darf überziehen, und die Schlussrunden der
+Prüfer auf die fixierte Antwort (`_final_review`, Sitzung `audit` nach
+`final_answer`, mit Reparatur und neuer Sitzung) ebenso; Live- und
+Gate-Runden bleiben im Kontingent. Ohne bezahlten Schritt endet ein
+abgewiesener erster Schritt wie bisher mit der Absage. Ein
 Schritt des Agenten reserviert je Such-Segment das Steuer-Budget und das
 Antwortbudget darüber nur einmal (`answer_output`, siehe „Die Antwort schreibt
 der Agent selbst“). Grundlage, gemessen 2026-10-01 pro Runde: eigene
