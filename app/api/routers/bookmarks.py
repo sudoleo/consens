@@ -711,6 +711,32 @@ def predict_starter_questions(request: Request):
     return {"status": "success", "questions": questions} if questions else skipped
 
 
+_RUNNING_SETTINGS = ("selection", "comparison_selection", "agent_preferences", "file_ids",
+                     "google_selection", "google_data_consent")
+
+
+def _running_agent_turn(turns: list[dict]) -> dict | None:
+    """The chat's Agent turn that still runs (started in another tab or on
+    another device), with what a browser needs to follow it: its request
+    identity for GET /agent/chats/{chat}/live and the settings its
+    recover_only request must repeat (agent-chat.js followRunning, A-B2).
+    The newest only; a stale one is settled by recover_only itself."""
+    for turn in reversed(turns):
+        request_id = turn.get("client_request_id")
+        if turn.get("status") != "pending" or not isinstance(request_id, str) or not request_id:
+            continue
+        settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
+        return {
+            "id": turn.get("id"),
+            "question": turn.get("question", ""),
+            "client_request_id": request_id,
+            "position": turn.get("position"),
+            "attachments": turn.get("attachments") or [],
+            "agent_settings": {key: settings[key] for key in _RUNNING_SETTINGS if key in settings},
+        }
+    return None
+
+
 @router.get("/bookmarks/{bookmark_id}/conversation")
 @limiter.limit("30/minute")
 # Deliberately sync so FastAPI runs it in the threadpool: one page walks the
@@ -769,7 +795,8 @@ def load_bookmark_conversation(
                 "turns": [
                     store.get_turn(uid, chat_id, turn["id"])
                     for turn in metadata_page["turns"]
-                    if turn.get("status") == "completed" or (agent_history and turn.get("status") == "failed")
+                    if turn.get("status") == "completed"
+                    or (agent_history and turn.get("status") in {"failed", "pending"})
                 ],
                 "next_cursor": metadata_page.get("next_cursor"),
                 "has_more": metadata_page.get("has_more") is True,
@@ -781,6 +808,7 @@ def load_bookmark_conversation(
                       or (agent_history and t.get("status") == "failed")],
             "next_cursor": page.get("next_cursor"),
             "has_more": page.get("has_more") is True,
+            "running": _running_agent_turn(page["turns"]) if agent_history else None,
         }
     except HTTPException:
         raise

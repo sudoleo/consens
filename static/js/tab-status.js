@@ -1,6 +1,7 @@
 // Tab status: a run takes 20 to 60 seconds, and many people switch tabs while
 // it works. While the page is hidden, its title says what the visible run is
-// doing ("Working…") and, once it is done, that the answer is ready. The
+// doing ("Working…") and, once it is done, that the answer is ready; a run of
+// any chat that waits for the user comes first ("Paused"). The
 // moment the page is shown again the normal title returns. Nothing changes
 // while the page is in front: there the page itself shows the run.
 // A screen reader hears that the answer is ready there too (#answerStatus).
@@ -10,9 +11,9 @@
   const WORKING = "Working…";
   const FAILED = "Failed";
   // A reviewer paused the work and the user decides (agent-chat.js renderHold).
-  const PAUSED = "Paused";
+  const PAUSED = window.App?.words?.paused || "Paused";
   // The agent handed a step to the user (ask_user, agent-chat.js askCard).
-  const YOUR_TURN = "Waiting for you";
+  const YOUR_TURN = window.App?.words?.yourTurn || "Waiting for you";
   let baseTitle = document.title;
   let shown = null; // the label currently in the title, or null for the base
   let watched = { runId: null, status: null };
@@ -20,6 +21,17 @@
   function visibleRun() {
     try {
       return window.App?.runRegistry?.visible?.() || null;
+    } catch (_) {
+      return null;
+    }
+  }
+  // A run of another chat that waits for the user says so too (A-B2): its
+  // pause runs into its timeout otherwise, while the tab said nothing.
+  function waitingRun() {
+    try {
+      const runs = window.App?.runRegistry?.list?.() || [];
+      const waiting = runs.filter(run => (run?.status === "starting" || run?.status === "running") && run?.metadata?.hold);
+      return waiting.find(run => run.metadata.hold.ask) || waiting[0] || null;
     } catch (_) {
       return null;
     }
@@ -72,7 +84,7 @@
 
   function sync() {
     if (!document.hidden) { apply(null); return; }
-    const next = label(visibleRun());
+    const next = label(waitingRun() || visibleRun());
     // A run that finished before the page was hidden is not news; one that
     // waits for the user still is.
     if (next && next !== WORKING && next !== PAUSED && next !== YOUR_TURN && shown === null) return;

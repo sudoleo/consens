@@ -1003,3 +1003,49 @@ it('ends the review in the disclosure when it was stopped or never started, and 
   expect(w.App.agentReview.failureNote({ error: 'stopped' }, auditReview('running'), 'Exact answer.')).not.toBe('');
   dom.window.close();
 });
+// B8 / A-M7 (docs/agent-audit-readiness-2026-10-29.md): a review stopped
+// before its final round keeps what the reviewers found while the agent
+// worked (`live`); the row offers Notes and the disclosure "Read the notes".
+it('offers the notes of a stopped review that kept findings from the run', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Partial text';
+  const stopped = { mode: 'audit', status: 'cancelled', comparisons: [], versions: [],
+    audit: { reviewers: [
+      { provider: 'openai', provider_label: 'OpenAI', model: { label: 'GPT' }, status: 'cancelled' },
+      { provider: 'xiaomi', provider_label: 'Xiaomi', model: { label: 'MiMo' }, status: 'failed', failure: { code: 'review_empty' } }],
+      claims: [], unplaced: [],
+      process: [{ model: 'OpenAI', kind: 'doubtful', note: 'The command deleted more than asked.', entry: 5,
+        entry_kind: 'step', entry_name: 'openai/gpt', mark: 1, live: true }] } };
+  w.App.agentReview.render(body, stopped);
+  const row = d.querySelector('.agent-review');
+  expect(row.hidden).toBe(false);
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Review stopped');
+  const buttons = [...d.querySelectorAll('.agent-evidence-link')];
+  expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 1']);
+  // Never marks on a text that was not reviewed.
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  buttons[0].click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const [gpt, mimo] = panel.querySelectorAll('.agent-audit-reviewer');
+  expect(gpt.textContent).toContain('No final review: the review was stopped.');
+  expect(gpt.querySelector('.agent-audit-live').textContent).toBe('During the run');
+  expect(gpt.textContent).toContain('The command deleted more than asked.');
+  // A reply without its review has its own words (A-M6).
+  expect(mimo.textContent).toContain('No review: its review came back empty.');
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, stopped, 'Partial text');
+  expect(details.textContent).toContain('Review stopped');
+  const read = details.querySelector('.agent-activity-insight-actions button');
+  expect(read.textContent).toBe('Read the notes');
+  expect(read.disabled).toBe(false);
+  read.click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
+  // Stopped without anything found: nothing to read, and no row under an unreviewed text.
+  const empty = { ...stopped, audit: { ...stopped.audit, process: [] } };
+  const other = d.createElement('div');
+  w.App.agentReview.renderActivity(other, empty, 'Partial text');
+  expect(other.querySelector('.agent-activity-insight-actions')).toBeNull();
+  w.App.agentReview.render(body, empty);
+  expect(d.querySelector('.agent-review:not([hidden])')).toBeNull();
+  dom.window.close();
+});

@@ -1294,6 +1294,10 @@ body:has(.sidebar.active) .brand-float {
   white-space: nowrap;
   transform: translateY(-50%);
 }
+/* A run that waits for the user (a pause, the agent's question): it does not
+   work, so its name does not pulse; the word takes the pause's tone. */
+.sidebar .bookmark.run-entry.is-paused p { animation: none; }
+.run-entry.is-paused .run-entry-status { color: var(--partial); }
 .run-status-succeeded .run-entry-status { color: var(--agree); }
 .run-status-failed .run-entry-status { color: var(--dispute); }
 .run-status-canceled .run-entry-status { color: var(--sidebar-text-muted); }

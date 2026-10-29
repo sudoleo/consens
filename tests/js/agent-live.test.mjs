@@ -276,6 +276,51 @@ describe("agent live fallback", () => {
     dom.window.close();
   });
 
+  // A-B1 (docs/agent-audit-readiness-2026-10-29.md): the follow limit counted
+  // from the start of following, so a healthy run followed for 40 minutes
+  // ended with the next tab switch ("Connection lost"), its pause card too.
+  // The page's clock is faked; the timers stay real and short.
+  it("follows a run past 40 minutes while it streams, polls frames or waits for the user", async () => {
+    const { window: w, dom } = boot();
+    let now = Date.now();
+    w.Date.now = () => now;
+    const minutes = count => { now += count * 60000; };
+    let page = { known: true, done: false, last_seq: 0, events: [] };
+    w.fetch = vi.fn(async () => reply(page));
+    let paused = false;
+    const { live } = watcher(w, { paused: () => paused });
+    live.reconnect();
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalled());
+    // 41 minutes of a healthy stream (bytes), then the tab comes back: it polls and follows on.
+    minutes(41);
+    live.bytes();
+    now += 250; // the stream fell silent (STREAM_QUIET_MS here is 200 ms)
+    let calls = w.fetch.mock.calls.length;
+    w.document.dispatchEvent(new w.Event("visibilitychange"));
+    await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBeGreaterThan(calls));
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(live.reconnecting).toBe(true);
+    // 41 quiet minutes, then a poll that brings frames: they count, the run goes on.
+    minutes(41);
+    page = { known: true, done: false, last_seq: 1, events: [{ seq: 1, type: "activity", data: { kind: "status" } }] };
+    calls = w.fetch.mock.calls.length;
+    await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBeGreaterThan(calls + 1));
+    expect(live.reconnecting).toBe(true);
+    // A pause waits for the user: no frame for 41 minutes, empty polls, still followed.
+    page = { known: true, done: false, last_seq: 1, events: [] };
+    paused = true;
+    minutes(41);
+    calls = w.fetch.mock.calls.length;
+    await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBeGreaterThan(calls + 2));
+    expect(live.reconnecting).toBe(true);
+    // Decided, then nothing at all for 41 minutes: an empty poll ends the follow.
+    paused = false;
+    minutes(41);
+    await expect(live.finished).resolves.toBe(null);
+    expect(live.reconnecting).toBe(false);
+    dom.window.close();
+  });
+
   it("delivers lasting frames from the dropped window before the reset", async () => {
     const { window: w, dom } = boot();
     w.fetch = vi.fn(async () => reply({ known: true, done: false, last_seq: 7,

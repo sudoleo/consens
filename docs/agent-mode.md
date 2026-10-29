@@ -458,7 +458,16 @@ Rohname des Eintrags nur für Admins, Live-Befunde als „During the run“, Aus
 und „Unmarked text means no objection, not confirmed.“) und Sources; die
 Aktivität zeigt eine Karte „Review · n models“ mit markierten Stellen und
 Befunden zur Arbeit, die auch bei `cancelled`/`missing` endet („Review
-stopped“, „Not reviewed“).
+stopped“, „Not reviewed“). Hat eine solche Prüfung Befunde aus den
+Live-Runden behalten (`live: true` in `audit.claims`/`unplaced`/`process`,
+seit 2026-10-29, A-M7/B8), bietet die Leiste „Notes“ und die Aktivität „Read
+the notes“, auch unter einer Antwort, die nie fixiert wurde
+(`auditReadable`); je Prüfer „No final review: the review was stopped.“ und
+die Befunde als „During the run“, Marken auf dem Text gibt es dann nicht.
+Eigene Gründe für `review_tool_calls` („it called a tool instead of writing
+its review“) und `review_empty` (A-M6); ein Turn mit `hold_timeout` sagt
+„Paused for 30 minutes without a decision, so the response stopped.“
+(`failureNotice`, mit Retry).
 Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
@@ -490,13 +499,24 @@ Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
 des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie
 wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen
 nicht, `HOLD_STEERED`, und eine schon geschriebene Antwort geht zurück); Stop
-ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung.
+ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung
+(außer bei einer offenen Key-Karte, siehe „Ein Key vom Nutzer“).
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
-`state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
+`state` = `waiting` → Entscheidung, `timeout` oder `ended`; in der
+Live-Aktivität seit 2026-10-29 mit eigenem Platz für 20 Pausen neben den 63
+übrigen Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
-(`tab-status.js`). Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
+(`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2): Tab-Titel und
+Seitenleisten-Zeile sagen „Paused“ bzw. „Waiting for you“ (`App.words.paused`,
+`yourTurn`) für den Lauf jedes Chats, auch eines nicht geöffneten (die Zeile
+pulsiert dann nicht, `.run-entry.is-paused`), die Karte hängt am Lauf auf dem
+Schirm statt am Modus-Schalter, ein Reload folgt dem Lauf auch mit dem
+Schalter auf Compare, und ein zweiter Tab oder ein anderes Gerät, das den
+Chat öffnet, folgt dem laufenden Turn über `/live` mit dessen `request_id`
+(`running` aus `GET /bookmarks/{id}/conversation`, `agent-chat.js`
+`followRunning`) und zeigt die Karte. Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
 (`halt_step`, seit 2026-10-27 als `step_kind`/`step_source`/`step`): den
 Aufruf eines Modellschritts (Befehl, Adresse oder Suche), eine Datei mit ihrem
 Namen („In the file tabelle.csv“), das Ergebnis eines Werkzeugs mit dessen
@@ -525,6 +545,21 @@ wie die Agent-Hinweise). Text im Eingabefeld bleibt ebenfalls die
 Steer-Entscheidung. Solange die Pause wartet, nennt die Aktivität ihren Grund
 nicht ein zweites Mal (er steht in der Karte); nach der Entscheidung steht er
 dort mit ihr.
+
+**Die Entscheidung unterwegs** (seit 2026-10-29, A-B3/A-B5): Der POST einer
+Entscheidung (`…/hold`, `…/secret`; `agent-chat.js` `postDecision`) läuft unter
+`App.withRequestDeadline` mit 15 s; die Zeile über den Knöpfen sagt solange
+„Sending…“, alle Knöpfe außer Stop sind gesperrt. Läuft die Frist ab, bleibt
+die Karte entscheidbar („Your decision did not reach the server.“). Vorher
+hing der POST bei einer halboffenen Verbindung minutenlang, Stop eingeschlossen.
+Antwortet der Server `409 hold_over` (anderswo entschieden, der Stream tot),
+geht die Karte (`holdDone`); bei der Key-Karte sagt ein Hinweis den Grund.
+Endet der Lauf mit einem Fehler (`failRun`), endet eine laufende Prüfung wie
+nach einem Reload (`failed`, `missing` vor dem Start), statt bis zum Neuöffnen
+„Reviewing the answer…“ zu zeigen. Kommt ein zweiter Halt auf die offene Pause
+(derselbe `hold`-Frame mit weiteren `reasons`, Gegenstück zu A-S2), tauscht
+die Karte nur ihre Gründe (`reasonLines`, Zeilen mit `data-reason`): eine
+Entscheidung unterwegs und Worte in der Karte bleiben.
 
 **Vorab-Prüfung** (seit 2026-10-27, Max' Entscheidung nach der
 Harness-Kritik; seit 2026-10-29 nur noch zwei Arten): Ein Halt kommt erst nach
@@ -597,7 +632,9 @@ in `agent-chat.test.mjs`, `agent-vm-activity.test.mjs` und
 `model-answer-reader.test.mjs` und `agent-preferences.test.mjs`; die gebaute
 Ansicht (Marken, Notes, Aktivität, Prüfer-Zeitleiste, Prüfung läuft,
 Pause-Karte auf Desktop und Handy) ohne Modellkosten in
-`tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`).
+`tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`); ein
+zweiter Tab, der einem pausierten Turn folgt, in
+`tests/e2e/test_agent_pause_elsewhere.py`.
 
 Produktionsreife (Prod-Messung 25.–29.10., Befunde zu Tempo, Abbrüchen und
 Randfällen, Anforderungen in Paketen):
@@ -1163,8 +1200,15 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   erneuert alle 30 s), „Zurückgeben“ oder Schließen setzt `agent` und notiert
   `returned_at` (seit 2026-10-29: eine wartende Antwort sieht die Rückgabe auch
   zwischen zwei Blicken, `agent_workspace.control_state`). Ein geschlossener
-  Tab lässt die Übernahme einfach ablaufen. Die Prüfer folgen dem Agenten,
-  nicht dem Nutzer.
+  Tab lässt die Übernahme einfach ablaufen. Kommt die Seite wieder nach vorn
+  (Handy aus der 2FA-App zurück, dort lief kein Intervall), frischt
+  `workspace-view.js` die Übernahme sofort auf und startet das Intervall neu;
+  nach einem Reload dieses Tabs öffnet sich die Ansicht wieder in der Hand des
+  Nutzers (`sessionStorage["workspace_view_holder"]`, höchstens 30 min alt,
+  nur für dasselbe Konto, Schließen oder „Hand back“ löscht es; seit
+  2026-10-29, Browser-Teil von A-S6 in
+  [agent-audit-readiness-2026-10-29.md](agent-audit-readiness-2026-10-29.md)).
+  Die Prüfer folgen dem Agenten, nicht dem Nutzer.
 - **Wer dran ist, steht über dem Bild** (seit 2026-10-29, Max hatte am Vortag
   auf den Agenten gewartet, während der auf ihn wartete; nur ein kleiner
   Umschalter im Kopf sagte, dass er den Browser noch hatte). Die Leiste
@@ -1239,7 +1283,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   die Umbrüche eines PEM-Keys; Platzhalter = Name, kein `<form>`, also nie ein
   GET), der Zeile „Saved in your workspace as ~/.secrets/NAME … Only for keys
   like this one: a password you type in the browser yourself.“, „Save“ und „Not
-  now“ (`deny`). „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
+  now“ (`deny`) und „Write to the agent“ (Antwort in der Karte, `steer`).
+  **Solange die Key-Karte offen ist, sendet das Eingabefeld nie** (A-S7, seit
+  2026-10-29): Enter oder Senden legt seinen Text verdeckt ins Key-Feld der
+  Karte (`agent-chat.js` `steer`), der Nutzer bestätigt dort mit „Save“; es
+  zählt nur der Zustand der Karte, keine Erkennung am Text. Vorher ging ein
+  dort eingefügter Key als `steer` an Agent, Prüfer und Arbeitsprotokoll.
+  „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
   schickt den Wert per
   `POST /agent/chats/{chat}/requests/{request}/secret` (`{id, value}`,
   10/min): Der Server prüft, dass der offene Halt dieser Frage gilt

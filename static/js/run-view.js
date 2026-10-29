@@ -220,6 +220,11 @@
     if (context.status === "failed") return "Failed";
     if (context.config?.executionMode === "agent") {
       if (context.status === "canceled") return "Stopped";
+      // A pause waits for the user (agent-chat.js renderHold): said in the
+      // row of every chat, also one not on screen (A-B2; before it read
+      // "Working" while its pause ran into the timeout unseen).
+      const hold = context.metadata?.hold;
+      if (hold) return hold.ask ? window.App.words?.yourTurn || "Waiting for you" : window.App.words?.paused || "Paused";
       const latest = context.metadata?.agentActivity?.filter(event => event.kind === 'status').at(-1);
       if (latest?.status === 'waiting') return 'Waiting for allowance';
       if (context.consensus?.streamText) return "Writing answer";
@@ -277,6 +282,9 @@
     }
     for (const status of RUN_STATUSES) row.classList.toggle(`run-status-${status}`, status === context.status);
     row.classList.toggle("is-pending", context.status === "starting" || context.status === "running");
+    // Waiting for the user: nothing works, so nothing pulses (layout.css).
+    row.classList.toggle("is-paused", (context.status === "starting" || context.status === "running")
+      && Boolean(context.metadata?.hold));
     setAttributeIfChanged(row, "aria-label", `${context.bookmark.title || context.question}. ${statusLabel(context)}. Open run.`);
     setIfChanged(row, "title", `${statusLabel(context)} — open this run`);
     const label = row.querySelector(":scope > p");

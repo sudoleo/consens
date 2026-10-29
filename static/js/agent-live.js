@@ -27,7 +27,8 @@
 //   watch({ chatId, requestId, headers (object | async () => object), signal,
 //           deliver(type, data, seq), cursor() -> number,
 //           recover() -> Promise<result with data.turn | 'running' | 'offline' | null>,
-//           onEngage(), onState({ reconnecting, offline }) })
+//           onEngage(), onState({ reconnecting, offline }),
+//           paused() -> boolean (a pause waits for the user: no follow limit) })
 //     -> { bytes(), stop(), reconnect(), finished: Promise<result|null> }
 // `finished` resolves when polling ended the run: with the terminal frame
 // (same shape as streamSSERequest's result) or recover()'s saved answer. After
@@ -62,7 +63,11 @@
   // Following stops after this long without a new frame. A turn can run for
   // hours (Agent VM), and a pause for the user (a reviewer's halt) sends
   // nothing for up to 30 minutes: counted from the start of following, a
-  // paused turn was given up while the user could still decide.
+  // paused turn was given up while the user could still decide. Since
+  // 2026-10-29 (A-B1) stream bytes count as news too, the limit is checked
+  // only after a poll that brought nothing, and never while a pause waits
+  // for the user (`paused()`): before, a healthy run followed for 40 minutes
+  // ended as "Connection lost" with the next tab switch, its card with it.
   const MAX_FOLLOW_MS = 40 * 60 * 1000;
 
   function sequence() {
@@ -84,6 +89,7 @@
     const { chatId, requestId, signal, deliver, recover, onEngage, onState } = options;
     const headersOf = typeof options.headers === 'function' ? options.headers : async () => options.headers || {};
     const cursorOf = typeof options.cursor === 'function' ? options.cursor : () => 0;
+    const pausedOf = typeof options.paused === 'function' ? options.paused : () => false;
     // Read at watch time, so tests can shorten them on App.agentLive.
     const silenceMs = api.SILENCE_MS, pollMs = api.POLL_MS, elsewhereMs = api.RUNNING_ELSEWHERE_MS;
     const quietMs = api.STREAM_QUIET_MS, goneMs = api.GONE_MS, followMs = api.MAX_FOLLOW_MS;
@@ -158,11 +164,18 @@
     }
     async function poll() {
       if (stopped || !polling || inFlight) return;
-      if (persistent && Date.now() - followSince > followMs) { finish(null); return; }
       // One poll at a time, including its saved-state check: `online` and a
       // visible tab must not start a second one beside it.
       inFlight = true;
       try { await pollOnce(); } finally { inFlight = false; }
+    }
+    // Asked after a poll that brought no frame: nothing new for followMs,
+    // neither polled nor streamed, and no pause waiting for the user.
+    function expired() {
+      let paused = false;
+      try { paused = Boolean(pausedOf()); } catch (_) { /* no verdict: not paused */ }
+      if (paused) { followSince = Date.now(); return false; }
+      return persistent && Date.now() - followSince > followMs;
     }
     // After reconnect(): the server holds no frames (or ended without a
     // terminal frame). The saved turn decides.
@@ -171,6 +184,7 @@
       if (stopped || !polling) return;
       if (outcome?.data?.turn) { finish(outcome); return; }
       if (outcome === 'offline') { failures += 1; setOffline(true); schedule(backoff()); return; }
+      if (expired()) { finish(null); return; }
       if (outcome === 'running') {
         gone = 0;
         schedule(elsewhereDelay);
@@ -252,6 +266,7 @@
         idle();
         return;
       }
+      if (!reset && !data.events?.length && expired()) { finish(null); return; }
       schedule();
     }
 
@@ -290,7 +305,8 @@
         bytesSeen = true;
         if (stopped) return;
         if (persistent) {
-          lastByte = Date.now();
+          // A live stream is news, as a polled frame is (MAX_FOLLOW_MS).
+          lastByte = followSince = Date.now();
           setOffline(false);
           if (!inFlight && pollTimer) schedule();
           return;

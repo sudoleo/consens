@@ -51,6 +51,32 @@ describe("tab status", () => {
     expect(app.title()).toBe("Waiting for you · consens.io");
   });
 
+  // A-B2 (docs/agent-audit-readiness-2026-10-29.md): a pause of a chat not
+  // on screen ran into its timeout while the tab said nothing.
+  it("says that a run of another chat waits for the user", () => {
+    let runs = [];
+    const result = loadScripts(["static/js/tab-status.js"], {
+      before(window) {
+        window.document.title = "consens.io";
+        Object.defineProperty(window.document, "hidden", { configurable: true, get: () => true });
+        window.App = { runRegistry: { visible: () => runs[0] || null, list: () => runs } };
+      },
+    });
+    const { window } = result;
+    const emit = () => window.dispatchEvent(new window.CustomEvent("consensio:run-registry-change"));
+    runs = [{ status: "running", metadata: {} }, { status: "running", metadata: { hold: { id: "a1b2c3d4e5f6" } } }];
+    emit();
+    expect(window.document.title).toBe("Paused · consens.io");
+    // The agent's own question to the user comes first.
+    runs = [...runs, { status: "running", metadata: { hold: { id: "0123456789ab", ask: "browser" } } }];
+    emit();
+    expect(window.document.title).toBe("Waiting for you · consens.io");
+    // A pause of a run that ended is over.
+    runs = [{ status: "running", metadata: {} }, { status: "failed", metadata: { hold: { id: "a1b2c3d4e5f6" } } }];
+    emit();
+    expect(window.document.title).toBe("Working… · consens.io");
+  });
+
   // Each projection of the visible run sets the page title again
   // (App.setAppTitle from run-view.js and agent-chat.js), right after the
   // registry event: a Compare run did it with every streamed chunk and wiped

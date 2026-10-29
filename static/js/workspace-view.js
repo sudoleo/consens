@@ -4,7 +4,9 @@
 // The user watches; a click on the screen takes the browser over, and the
 // agent waits (agent_workspace.py "Takeover") until "Hand back"; its server
 // on the workbench keeps answering localhost here (agent_tunnel.py). While the user has it, the panel refreshes the takeover every
-// REFRESH_MS; a closed tab lets it expire by itself. Sign-ins happen here, by
+// REFRESH_MS, and at once when the page comes back to the front; a reload of
+// this tab opens the view again in the user's hands (A-S6, 2026-10-29); a
+// closed tab lets it expire by itself. Sign-ins happen here, by
 // the user: the agent never types a password.
 //
 // Pasting (Ctrl+V, Cmd+V, Shift+Insert or "Paste", only while the user has the
@@ -50,6 +52,10 @@
   const XTERM_FIT = '/static/vendor/xterm/6.0.0/addon-fit.js';
   const XTERM_CSS = '/static/vendor/xterm/6.0.0/xterm.css';
   const REFRESH_MS = 30_000;
+  // Who had the browser in this tab, for a reload (returnToHolder); a
+  // takeover older than RETURN_MS (a pause's own time) is not taken up again.
+  const HOLDER_KEY = 'workspace_view_holder';
+  const RETURN_MS = 30 * 60_000;
   // The user has the browser and did nothing there for this long: the bar reminds them to hand it back.
   const IDLE_MS = 60_000;
   // A start that takes longer than this (the workspace's first start, outside
@@ -495,16 +501,51 @@
     window.dispatchEvent(new CustomEvent('consensio:workspace-holder', { detail: { holder } }));
   }
 
+  // The user has the browser (A-S6): remembered in this tab, so a reload
+  // (a phone that discarded the page while the user was in the 2FA app)
+  // opens the view again in their hands instead of letting it lapse.
+  function rememberHolder(holder) {
+    try {
+      if (holder === 'user') {
+        sessionStorage.setItem(HOLDER_KEY, JSON.stringify({ uid: window.auth?.currentUser?.uid || '', at: Date.now() }));
+      } else sessionStorage.removeItem(HOLDER_KEY);
+    } catch (_) { /* private mode: no return after a reload */ }
+  }
+  function refreshNow() {
+    rememberHolder('user');
+    post('/agent/workspace/control', { holder: 'user' }).catch(() => {});
+  }
   async function setHolder(holder) {
     await post('/agent/workspace/control', { holder });
     if (!view) return;
     view.holder = holder;
+    rememberHolder(holder);
     restartIdle();
     clearInterval(view.refresh);
-    view.refresh = holder === 'user'
-      ? setInterval(() => post('/agent/workspace/control', { holder: 'user' }).catch(() => {}), REFRESH_MS) : null;
+    view.refresh = holder === 'user' ? setInterval(refreshNow, REFRESH_MS) : null;
     showHolder();
     announceHolder(holder);
+  }
+  // A page in the background (the 2FA app, a call, a locked phone) may not
+  // run its interval: the takeover lapsed after CONTROL_SECONDS and the agent
+  // went on mid-login. Back in front, it is refreshed at once and the
+  // interval starts over (A-S6; the server no longer takes a lapse for a
+  // hand-back while the agent waits for the user).
+  function onVisible() {
+    if (document.visibilityState === 'hidden' || view?.holder !== 'user') return;
+    clearInterval(view.refresh);
+    view.refresh = setInterval(refreshNow, REFRESH_MS);
+    refreshNow();
+  }
+  // After a reload: the user had the browser in this tab a moment ago, so the
+  // view opens again and takes it, once this tab's account is signed in.
+  function returnToHolder() {
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(HOLDER_KEY) || 'null'); } catch (_) { saved = null; }
+    const uid = window.auth?.currentUser?.uid;
+    if (!saved || !uid) return;
+    if (saved.uid !== uid || !(Date.now() - Number(saved.at) < RETURN_MS)) { rememberHolder('agent'); return; }
+    if (!view) open({ takeOver: true });
   }
 
   async function takeOver() {
@@ -524,6 +565,7 @@
     if (!view) {
       try {
         await post('/agent/workspace/control', { holder: 'agent' });
+        rememberHolder('agent');
         announceHolder('agent');
       } catch (error) {
         App.showPopup?.(App.t('Could not hand back: {reason}', { reason: error.message || 'Try again.' }));
@@ -766,6 +808,7 @@
     clearTimeout(closing.idle);
     // The agent may go on at once; an unsent hand-back expires by itself.
     if (closing.holder === 'user') post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
+    rememberHolder('agent');
     announceHolder('agent');
     try { closing.rfb?.disconnect(); } catch (error) { /* already gone */ }
     try { closing.socket?.close(); } catch (error) { /* already gone */ }
@@ -829,4 +872,9 @@
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+  document.addEventListener('visibilitychange', onVisible);
+  // The account is known (auth-session-state.js): a takeover from before a
+  // reload is taken up again, also when that was said before this script ran.
+  window.addEventListener('consensio:auth-state', returnToHolder);
+  if (window.__consensioAuthState?.known) returnToHolder();
 })();

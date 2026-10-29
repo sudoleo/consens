@@ -395,6 +395,26 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A-R4/A-B6 (docs/agent-audit-readiness-2026-10-29.md): a pause nobody
+  // decided stops the response with its own code; the notice says why, also
+  // under the text written before the pause.
+  it('says that a pause without a decision stopped the response', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_u, _p, _s, handlers) => {
+      handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'c'.repeat(32) });
+      handlers.delta.append('Erster Teil');
+      return { ok: false, status: 200, streamed: true, data: { error: 'Response stopped.', code: 'hold_timeout' } };
+    });
+    d.getElementById('questionInput').value = 'Lösche die alten Dateien';
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerError').textContent).toBe('Paused for 30 minutes without a decision, so the response stopped.');
+    expect([...d.querySelectorAll('#agentAnswerErrorActions button')].map(b => b.textContent)).toEqual(['Retry']);
+    dom.window.close();
+  });
+
   // Review B2: a follow-up replaces the live surface by a fresh copy
   // (liveTurn.take). Its buttons acted only on the first copy.
   it('runs Retry and "Choose another model" from a fresh copy of the live surface', async () => {
@@ -1907,7 +1927,8 @@ describe("single-model agent chat", () => {
     expect(input.placeholder).toBe("OPENAI_API_KEY");
     expect(host.querySelector(".agent-ask-secret-note").textContent).toContain("~/.secrets/OPENAI_API_KEY");
     expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
-      ["Save", "btn agent-hold-continue"], ["Not now", "agent-hold-link agent-hold-deny"]]);
+      ["Save", "btn agent-hold-continue"], ["Not now", "agent-hold-link agent-hold-deny"],
+      ["Write to the agent", "agent-hold-link agent-hold-write"]]);
     // Empty: nothing goes out.
     host.querySelector(".agent-hold-continue").click();
     expect(sent).toEqual([]);
@@ -1941,6 +1962,199 @@ describe("single-model agent chat", () => {
     handlers.hold.receive({ hold: { ...base, id: "0123456789ab", ask: "secret", secret: "GITHUB_TOKEN", request: "Token?" } });
     host.querySelector(".agent-hold-deny").click();
     await vi.waitFor(() => expect(sent.at(-1)).toEqual(["hold", "POST", { id: "0123456789ab", action: "deny", text: "" }]));
+    dom.window.close();
+  });
+
+  // A-B3, A-B5 (docs/agent-audit-readiness-2026-10-29.md): a decision that
+  // hangs on a half-open connection ends after its deadline, the card says
+  // "Sending…" meanwhile and Stop stays a Stop; a pause decided elsewhere
+  // closes the card.
+  it("sends a decision within a deadline, keeps Stop free and closes a pause that is over", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const deadlines = [];
+    const real = window.App.withRequestDeadline;
+    window.App.withRequestDeadline = (operation, options = {}) => {
+      deadlines.push(options.timeoutMs);
+      return real(operation, { ...options, timeoutMs: Math.min(options.timeoutMs ?? 15000, 40) });
+    };
+    const catalogFetch = window.fetch;
+    let answer = () => new Promise(() => {}); // a half-open connection
+    window.fetch = vi.fn((url, options) => String(url).endsWith("/hold") ? answer(options) : catalogFetch(url, options));
+    window.App.showPopup = vi.fn();
+    const hold = { id: "a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5", kind: "safety", entry: 3, reason: "Löscht den Ordner.",
+      step: "rm -rf ~/projekt", step_kind: "step", at: new Date().toISOString(), timeout_seconds: 1800 };
+    handlers.hold.receive({ hold });
+    host.querySelector(".agent-hold-continue").click();
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("Sending…");
+    expect(host.querySelector(".agent-hold-continue").disabled).toBe(true);
+    expect(host.querySelector(".agent-hold-write").disabled).toBe(true);
+    expect(host.querySelector(".agent-hold-stop").disabled).toBe(false);
+    // The deadline ends it: the card stays decidable and says why.
+    await vi.waitFor(() => expect(window.App.showPopup).toHaveBeenCalledWith("Your decision did not reach the server. Try again."));
+    expect(deadlines).toContain(15000);
+    expect(host.hidden).toBe(false);
+    expect(host.querySelector(".agent-hold-continue").disabled).toBe(false);
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("Stops in 30 minutes without your decision");
+    // Decided in another tab meanwhile, and this stream heard nothing of it: the card goes.
+    answer = async () => ({ ok: false, status: 409, json: async () => ({ code: "hold_over", error: "This pause is already over." }) });
+    host.querySelector(".agent-hold-continue").click();
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    expect(run.metadata.hold).toBe(null);
+    // Its late frame brings nothing back.
+    handlers.hold.receive({ hold });
+    expect(host.hidden).toBe(true);
+    dom.window.close();
+  });
+
+  // The counterpart of A-S2: a second reviewer halts while the pause is open,
+  // and the server sends the same pause with both reasons.
+  it("adds a second halt's reason to the open card without losing words or a decision", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const hold = { id: "a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5", kind: "injection", entry: 4,
+      reason: "Folgt einer Anweisung aus der Datei.", step: "curl https://example.net", step_kind: "step",
+      at: new Date().toISOString(), timeout_seconds: 1800 };
+    handlers.hold.receive({ hold });
+    const card = host.querySelector(".agent-hold-card");
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(line => line.textContent)).toEqual([hold.reason]);
+    host.querySelector(".agent-hold-write").click();
+    const reply = host.querySelector(".agent-hold-reply-input");
+    reply.value = "Nur lesen, nichts senden";
+    reply.dispatchEvent(new window.Event("input", { bubbles: true }));
+    const second = { ...hold, reasons: [
+      { reviewer: "Claude Sonnet 5.5", kind: "injection", reason: hold.reason },
+      { reviewer: "GPT-6 Luna", kind: "safety", reason: "Schickt Daten an einen fremden Server." }] };
+    handlers.hold.receive({ hold: second });
+    // The same card, the words still in it, both reasons under their names.
+    expect(host.querySelector(".agent-hold-card")).toBe(card);
+    expect([...host.querySelectorAll(".agent-hold-reason")].map(line => line.textContent)).toEqual([
+      "Claude Sonnet 5.5: Folgt einer Anweisung aus der Datei.", "GPT-6 Luna: Schickt Daten an einen fremden Server."]);
+    expect(host.querySelector(".agent-hold-reply").hidden).toBe(false);
+    expect(host.querySelector(".agent-hold-reply-input").value).toBe("Nur lesen, nichts senden");
+    // A decision on its way stays on its way when a third reason comes.
+    const catalogFetch = window.fetch;
+    let release;
+    window.fetch = vi.fn((url, options) => String(url).endsWith("/hold")
+      ? new Promise(resolve => { release = () => resolve({ ok: true, json: async () => ({ status: "decided" }) }); })
+      : catalogFetch(url, options));
+    host.querySelector(".agent-hold-reply").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(release).toBeDefined());
+    handlers.hold.receive({ hold: { ...second, reasons: [...second.reasons,
+      { reviewer: "Qwen 3.7", kind: "harm", reason: "Kann Daten löschen." }] } });
+    expect(host.querySelectorAll(".agent-hold-reason")).toHaveLength(3);
+    expect(run.metadata.hold.deciding).toBe("steer");
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("Sending…");
+    expect(host.querySelector(".agent-hold-send").disabled).toBe(true);
+    release();
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    dom.window.close();
+  });
+
+  it("ends a running review with the failed run instead of reviewing on", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    let handlers, fail;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers = received;
+      return new Promise(resolve => { fail = () => resolve({ ok: false, status: 200, streamed: true,
+        data: { error: "The model provider failed. Try again.", code: "provider_error" } }); });
+    });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    handlers.review.receive({ review: { mode: "audit", status: "running", answer_version: 1, answer_hash: "h",
+      versions: [{ id: 1, text: "Answer", hash: "h" }], passage_check: { status: "running" },
+      audit: { reviewers: [{ provider: "anthropic", provider_label: "Claude", status: "running" }] } } });
+    expect(run.metadata.agentReview.status).toBe("running");
+    fail();
+    await vi.waitFor(() => expect(run.status).toBe("failed"));
+    // As a reload will show it (agent_runs.finish_run): no "Reviewing the answer…" left.
+    expect(run.metadata.agentReview.status).toBe("failed");
+    expect(run.metadata.agentReview.passage_check.status).toBe("failed");
+    expect(document.getElementById("agentAnswerActivity").textContent).not.toContain("Reviewing the answer…");
+    dom.window.close();
+  });
+
+  // A-S7 (docs/agent-audit-readiness-2026-10-29.md): with the key card open
+  // the field below never sends. Only the card's state decides, never the
+  // words: Enter puts them, as dots, into the card's key field.
+  it("puts the field's words into the open key card instead of sending them", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    window.App.workspaceView = { holder: () => "agent", open: vi.fn(), handBack: vi.fn(), agentWaits: vi.fn() };
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    const field = document.getElementById("questionInput");
+    field.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const sent = [];
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => {
+      if (!/\/(secret|hold|notes)$/.test(String(url))) return catalogFetch(url, options);
+      sent.push([String(url).split("/").pop(), JSON.parse(options.body)]);
+      return { ok: true, json: async () => ({ status: "decided" }) };
+    });
+    handlers.hold.receive({ hold: { kind: "ask", ask: "secret", secret: "OPENAI_API_KEY", id: "a1b2c3d4e5f6",
+      request: "Ich brauche deinen OpenAI-Key.", at: new Date().toISOString(), timeout_seconds: 1800 } });
+    field.value = "sk-proj-0123456789abcdef";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Put it in the key field" });
+    expect(await window.App.agentChat.steer()).toBe(true);
+    // Nothing went anywhere: the key waits in the card's own field for Save.
+    expect(sent).toEqual([]);
+    const key = host.querySelector(".agent-ask-secret-input");
+    expect(key.value).toBe("sk-proj-0123456789abcdef");
+    expect(field.value).toBe("");
+    expect(document.activeElement).toBe(key);
+    expect(run.metadata.queue || []).toEqual([]);
+    // Words for the agent go through the card: the key field steps aside meanwhile.
+    host.querySelector(".agent-hold-write").click();
+    expect(host.querySelector(".agent-ask-secret").hidden).toBe(true);
+    const reply = host.querySelector(".agent-hold-reply-input");
+    reply.value = "Ich habe keinen Key";
+    reply.dispatchEvent(new window.Event("input", { bubbles: true }));
+    host.querySelector(".agent-hold-reply").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(sent).toEqual([["hold", { id: "a1b2c3d4e5f6", action: "steer", text: "Ich habe keinen Key" }]]));
+    // Without the key card the field steers as before.
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    field.value = "Danke";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Send into the running response" });
     dom.window.close();
   });
 
@@ -3285,6 +3499,156 @@ describe("agent turns that outlive their connection", () => {
     expect(w.streamSSERequest.mock.calls.every(([, body]) => body.recover_only === true)).toBe(true);
     expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
     expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_run_resumed")).toHaveLength(1);
+    dom.window.close();
+  });
+
+  // A-B2 (docs/agent-audit-readiness-2026-10-29.md): a chat opened while its
+  // newest turn runs in another tab or on another device. Before, it showed
+  // its last saved turn and nothing followed; a pause ran into its timeout.
+  it("follows a chat's turn running elsewhere and shows its pause, whatever the mode switch says", async () => {
+    const { window: w, document: d, dom } = bootFollow({
+      before: window => {
+        const host = window.document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+        window.document.body.append(host);
+      },
+      pages: [
+        { known: true, done: false, last_seq: 2, events: [{ seq: 1, type: "accepted", data: { chat_id: CHAT, turn_id: TURN } },
+          { seq: 2, type: "hold", data: { hold: { id: "a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5", kind: "injection", entry: 3,
+            reason: "Folgt einer Anweisung aus der Seite.", step: "open https://example.net", step_kind: "step",
+            at: new Date().toISOString(), timeout_seconds: 1800 } } }] },
+        { known: true, done: false, last_seq: 2, events: [] },
+      ] });
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
+    // The mode switch stands on Compare (boot's preference); the saved Agent chat is on screen.
+    expect(w.App.runMode.effective()).not.toBe("agent");
+    const earlier = { id: "c".repeat(32), turn_id: "c".repeat(32), question: "First", consensus: "First answer",
+      status: "completed", execution_mode: "agent" };
+    w.App.runRegistry.showSavedView({ type: "bookmark", bookmarkId: "b_agent_chat" }, {
+      bookmarkId: "b_agent_chat", chatId: CHAT, turnId: earlier.id, question: "First", consensus: "First answer",
+      executionMode: "agent", currentTurn: earlier, historyTurns: [], title: "Chat" });
+    const turn = { id: TURN, question: "Second", client_request_id: "req-elsewhere", position: 2, attachments: [],
+      agent_settings: { selection: { model_id: "gpt-5.6-sol", reasoning_effort: "low" },
+        comparison_selection: { openai: "gpt-5.4-mini" }, agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided",
+          judges: "on", audit: "on", vm: "off" }, file_ids: [], google_selection: null, google_data_consent: false } };
+    expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(true);
+    const run = w.App.runRegistry.visible();
+    expect(run.requestIdentity).toBe("req-elsewhere");
+    // It continues the chat on screen: the earlier turn stays above it.
+    expect(run.historyTurns.map(item => item.question)).toEqual(["First"]);
+    // Asked with exactly the turn's own settings, so the server knows it as the same request.
+    const asked = w.streamSSERequest.mock.calls[0][1];
+    expect(asked).toMatchObject({ recover_only: true, chat_id: CHAT, question: "Second", client_request_id: "req-elsewhere",
+      bookmark_id: "b_agent_chat", model_id: "gpt-5.6-sol", reasoning_effort: "low",
+      comparison_models: { openai: "gpt-5.4-mini" }, agent_preferences: turn.agent_settings.agent_preferences });
+    await vi.waitFor(() => expect(liveCalls(w)[0]).toBe(`/agent/chats/${CHAT}/live?request_id=req-elsewhere&after=0`));
+    const host = d.getElementById("agentHold");
+    await vi.waitFor(() => expect(host.hidden).toBe(false));
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("A reviewer paused the work");
+    // A reload of this tab follows it on, like a run sent here.
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner")).map(item => item.body.client_request_id))
+      .toEqual(["req-elsewhere"]);
+    // Opened again (or by another path): never a second follower.
+    expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(false);
+    dom.window.close();
+  });
+
+  it("follows this tab's running turn after a reload also with the mode switch on Compare", async () => {
+    const record = { at: Date.now(), title: "Paused question", followup: false,
+      body: { chat_id: CHAT, question: "Paused question", client_request_id: "req-compare", bookmark_id: "b_agent_compare",
+        recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
+        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        google_selection: null, google_data_consent: false } };
+    const { window: w, dom } = bootFollow({
+      before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+      pages: [{ known: true, done: false, last_seq: 1, events: [{ seq: 1, type: "hold", data: { hold: {
+        id: "a1b2c3d4e5f6", kind: "ask", ask: "confirm", request: "Darf ich senden?", at: new Date().toISOString(), timeout_seconds: 1800 } } }] }] });
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
+    expect(w.App.runMode.effective()).not.toBe("agent");
+    w.App.agentChat.render();
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-compare")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-compare");
+    await vi.waitFor(() => expect(run.metadata.hold?.id).toBe("a1b2c3d4e5f6"));
+    dom.window.close();
+  });
+
+  it("leaves a chat alone whose running turn is over by the time it is asked, or another chat is open", async () => {
+    const { window: w, dom } = bootFollow({ pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    const basis = { bookmarkId: "b_agent_chat", chatId: CHAT, turnId: "c".repeat(32), question: "First", consensus: "First answer",
+      executionMode: "agent", currentTurn: { id: "c".repeat(32), question: "First", consensus: "First answer", status: "completed" },
+      historyTurns: [], title: "Chat" };
+    const turn = { id: TURN, question: "Second", client_request_id: "req-over", agent_settings: {} };
+    w.App.runRegistry.showSavedView({ type: "bookmark", bookmarkId: "b_agent_chat" }, basis);
+    w.streamSSERequest.mockImplementation(async () => ({ ok: true, status: 200, data: { turn: { id: TURN, status: "completed",
+      completed_at: new Date(Date.now() - 20 * 60000).toISOString() } } }));
+    expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(false);
+    // Still running, but the user opened another chat meanwhile.
+    let answer;
+    w.streamSSERequest.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    const following = w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn: { ...turn, client_request_id: "req-late" } });
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    w.App.runRegistry.showSavedView({ type: "bookmark", bookmarkId: "b_other" }, { ...basis, bookmarkId: "b_other" });
+    answer({ ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } });
+    expect(await following).toBe(false);
+    expect(w.App.runRegistry.list()).toHaveLength(0);
+    expect(liveCalls(w)).toHaveLength(0);
+    dom.window.close();
+  });
+
+  // A-B4 (docs/agent-audit-readiness-2026-10-29.md): the waiting messages
+  // stand in the pending record, so a reload keeps them; what the run did not
+  // read goes out after it as before.
+  it("keeps the waiting messages through a reload and sends the unread ones after the run", async () => {
+    const queued = { at: Date.now(), title: "Question", followup: false,
+      settings: { model_id: CATALOG.default_model_id, reasoning_effort: "default", label: "DeepSeek V4.1 Flash" },
+      body: { chat_id: CHAT, question: "Question", client_request_id: "req-queue", bookmark_id: "b_agent_queue",
+        recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
+        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        google_selection: null, google_data_consent: false },
+      queue: [{ text: "Danach bitte kürzer", state: "queued" }, { text: "Schon gelesen", state: "waiting", noteId: "n1" },
+        { text: "Unterwegs gewesen", state: "sending" }] };
+    const { window: w, document: d, dom } = bootFollow({
+      before: window => {
+        window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([queued]));
+        const host = window.document.createElement("div"); host.id = "agentQueue"; host.hidden = true;
+        window.document.body.append(host);
+        window.sendQuestion = vi.fn();
+      },
+      pages: [
+        { known: true, done: false, last_seq: 3, events: [{ seq: 1, type: "accepted", data: { chat_id: CHAT, turn_id: TURN } },
+          { seq: 2, type: "activity", data: { version: 1, kind: "progress", id: "completion:2/note-n1", from_user: true, text: "Schon gelesen" } },
+          { seq: 3, type: "activity", data: { version: 1, kind: "progress", id: "completion:3/note-n2", from_user: true, text: "Unterwegs gewesen" } }] },
+        { known: true, done: false, last_seq: 3, events: [] },
+      ] });
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-queue")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-queue");
+    // The run read two of them (one by its id, one whose POST had no answer by its words): one waits on.
+    await vi.waitFor(() => expect(run.metadata.queue.map(item => item.text)).toEqual(["Danach bitte kürzer"]));
+    const host = d.getElementById("agentQueue");
+    expect(host.hidden).toBe(false);
+    expect(host.querySelector(".agent-queue-text").textContent).toBe("Danach bitte kürzer");
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"))[0].queue)
+      .toEqual([{ text: "Danach bitte kürzer", state: "queued" }]);
+    // A message typed now joins it, in the record too.
+    const input = d.getElementById("questionInput");
+    input.value = "Und mit Quellen";
+    await w.App.agentChat.steer();
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"))[0].queue.map(item => item.text))
+      .toEqual(["Danach bitte kürzer", "Und mit Quellen"]);
+    // The run ends: what it did not read goes out as the next message.
+    const fetchLive = w.fetch.getMockImplementation();
+    w.fetch.mockImplementation(async (url, init) => String(url).includes("/live?")
+      ? { ok: true, status: 200, json: async () => ({ known: true, done: true, last_seq: 4,
+        events: [{ seq: 4, type: "final", data: finalData("Answer") }] }) }
+      : fetchLive(url, init));
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    await vi.waitFor(() => expect(w.sendQuestion).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe("Danach bitte kürzer\n\nUnd mit Quellen");
+    expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
     dom.window.close();
   });
 

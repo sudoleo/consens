@@ -247,6 +247,32 @@ describe("selected RunContext projection", () => {
     }));
   });
 
+  // A-B2 (docs/agent-audit-readiness-2026-10-29.md): a paused Agent run of a
+  // chat not on screen read "Working" with its pulse while the pause ran
+  // into its timeout.
+  it("says in the row of a chat not on screen that its run waits for the user", () => {
+    const { registry, document, dom, window } = boot();
+    window.App.agentChat = { render: vi.fn(), project: vi.fn() };
+    const agent = registry.create({ question: "Paused", mode: "Agent", bookmarkId: "bookmark-agent",
+      config: { executionMode: "agent", agentMode: true } });
+    registry.setStatus(agent.runId, "running");
+    createRunning(registry, "Visible");
+    expect(registry.visible().runId).not.toBe(agent.runId);
+    const row = document.querySelector(`[data-run-id="${agent.runId}"]`);
+    const status = row.querySelector(".run-entry-status");
+    expect(status.textContent).toBe("Working");
+    registry.update(agent.runId, context => { context.metadata.hold = { id: "a1b2c3d4e5f6", kind: "injection" }; });
+    expect(status.textContent).toBe("Paused");
+    expect(row.classList.contains("is-paused")).toBe(true);
+    expect(row.getAttribute("aria-label")).toBe("Paused. Paused. Open run.");
+    registry.update(agent.runId, context => { context.metadata.hold = { id: "0123456789ab", ask: "browser" }; });
+    expect(status.textContent).toBe("Waiting for you");
+    registry.update(agent.runId, context => { context.metadata.hold = null; });
+    expect(status.textContent).toBe("Working");
+    expect(row.classList.contains("is-paused")).toBe(false);
+    dom.window.close();
+  });
+
   it("keeps late background updates out of the visible DOM and restores either run from its row", () => {
     const { registry, document, dom } = boot();
     const runA = createRunning(registry, "A");

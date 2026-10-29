@@ -462,7 +462,12 @@
       if (chip) chip.hidden = look;
     }
     renderControls(look);
-    if (agent) resumePending();
+    resumePending();
+    if (deferredFollow && canUse()) {
+      const deferred = deferredFollow;
+      deferredFollow = null;
+      setTimeout(() => followRunning(deferred), 0);
+    }
     const modeChanged = document.body.classList.contains("single-agent-active") !== (look || demoView);
     document.body.classList.toggle("single-agent-active", look || demoView);
     document.body.classList.toggle("agent-demo-active", demoView);
@@ -700,6 +705,10 @@
       actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
     }
     if (code === 'agent_tokens_exhausted') return { text: `You’ve used today’s allowance. It resets at ${resetTime()}.` };
+    // A pause nobody decided (A-R4): why it stopped, also under a partial answer.
+    if (code === 'hold_timeout') {
+      return { text: 'Paused for 30 minutes without a decision, so the response stopped.', actions: retry ? [['retry', 'Retry']] : [] };
+    }
     // The answer is complete; only its sidebar entry was not saved. Said even
     // under a checked answer, which failureNote treats as settled: the
     // reader must know to free space and recover it (2026-10-19).
@@ -1268,8 +1277,10 @@
     const uid = context.auth.uid;
     if (!uid) return;
     const list = readPending(uid).filter(item => item.body.client_request_id !== body.client_request_id);
+    const queue = queueOf(context).map(item => ({ text: item.text, state: item.state }));
     list.push({ at: Date.now(), body, title: context.bookmark.title, followup: Boolean(context.basis),
-      settings: context.metadata.agentSettings || null, attachmentMeta: context.attachmentMeta || [] });
+      settings: context.metadata.agentSettings || null, attachmentMeta: context.attachmentMeta || [],
+      ...(queue.length ? { queue } : {}) });
     writePending(uid, list.slice(-4));
   }
   function forgetPending(context) {
@@ -1320,6 +1331,36 @@
   function queueOf(context) {
     return context?.metadata ? (context.metadata.queue ||= []) : [];
   }
+  // The waiting messages live in the run's pending record too, so a reload
+  // keeps them (A-B4; before, they lived only in memory, also everything
+  // typed during the final review): what the run did not read goes out after
+  // it, as without a reload. Called after every change of the queue.
+  function persistQueue(context) {
+    const uid = context?.auth?.uid;
+    if (!uid) return;
+    const list = readPending(uid);
+    const record = list.find(entry => entry.body.client_request_id === context.requestIdentity);
+    if (!record) return;
+    const queue = queueOf(context).map(item => ({ text: item.text, state: item.state,
+      ...(item.noteId ? { noteId: item.noteId } : {}) }));
+    if (JSON.stringify(record.queue || []) === JSON.stringify(queue)) return;
+    if (queue.length) record.queue = queue;
+    else delete record.queue;
+    writePending(uid, list);
+  }
+  // After a reload. A message whose POST was on its way (no id came back)
+  // may have reached the run: it waits like a delivered one and is known by
+  // its words once the run reads it (delivered), else it goes out after.
+  function restoreQueue(saved) {
+    return (Array.isArray(saved) ? saved : [])
+      .filter(item => item && typeof item.text === "string" && item.text.trim()).slice(0, 20)
+      .map(item => {
+        const noteId = typeof item.noteId === "string" && item.noteId ? item.noteId : null;
+        const unsure = item.state === "sending";
+        return { key: ++queueSerial, text: item.text, state: noteId || unsure ? "waiting" : "queued",
+          ...(noteId ? { noteId } : {}), ...(unsure && !noteId ? { unsure: true } : {}) };
+      });
+  }
   // Once the answer is fixed (a version under review) the run takes no more
   // steps: a message then waits for its end like any other (2026-10-27;
   // before, it went to the run as "Read before the next step" and came back
@@ -1333,7 +1374,9 @@
     const context = registry.visible();
     const text = String(document.getElementById("questionInput")?.value || "").trim();
     if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text) return null;
-    return { title: openHold(context) ? "Send to the agent and let it go on"
+    const hold = openHold(context);
+    return { title: hold?.ask === "secret" ? "Put it in the key field"
+      : hold ? "Send to the agent and let it go on"
       : readsMessages(context) ? "Send into the running response" : "Send after this response" };
   }
   async function steer() {
@@ -1341,6 +1384,20 @@
     const input = document.getElementById("questionInput");
     if (!steering() || !input) return false;
     const text = String(input.value).trim();
+    // The agent asked for a key and its card is open (A-S7): the field never
+    // sends a message then. Its words go, as dots, into the card's key field,
+    // and the user saves them there; words for the agent go through "Write to
+    // the agent" on the card. Only the open card decides, nothing guesses at
+    // the words: a key someone writes into a message unasked stays a message.
+    if (openHold(context)?.ask === "secret") {
+      const field = document.querySelector("#agentHold .agent-ask-secret-input");
+      if (!field || field.disabled) return true;
+      field.value = text;
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      field.focus({ preventScroll: true });
+      return true;
+    }
     input.value = "";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     if (openHold(context)) {
@@ -1353,6 +1410,7 @@
     }
     const item = { key: ++queueSerial, text, state: "queued" };
     queueOf(context).push(item);
+    persistQueue(context);
     renderQueue();
     if (readsMessages(context)) await deliver(context, item);
     return true;
@@ -1362,6 +1420,7 @@
     // Before the response has started, the message waits for its end.
     if (!chatId || !context.metadata.requestSent) return;
     item.state = "sending";
+    persistQueue(context);
     renderQueue();
     const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/notes`;
     try {
@@ -1379,6 +1438,7 @@
       // Unreachable now: it goes out with the next message instead.
       item.state = "queued";
     }
+    persistQueue(context);
     renderQueue();
   }
   // The activity showed the message under "You": the run has read it. Its
@@ -1391,14 +1451,17 @@
     const match = typeof event?.id === "string" ? /(?:^|\/)note-([^/]+)$/.exec(event.id) : null;
     if (!event?.from_user || !match) return;
     const queue = queueOf(context);
-    const index = queue.findIndex(item => item.noteId === match[1]);
-    if (index >= 0) { queue.splice(index, 1); renderQueue(); }
+    let index = queue.findIndex(item => item.noteId === match[1]);
+    // A message restored after a reload whose POST had no answer yet: its words.
+    if (index < 0) index = queue.findIndex(item => item.unsure && item.text === String(event.text || "").trim());
+    if (index >= 0) { queue.splice(index, 1); persistQueue(context); renderQueue(); }
     else (context.metadata.readNotes ||= []).push(match[1]);
   }
   // The response is over: what it did not read goes out now, or back into
   // the field when it stopped or failed.
   function flushQueue(context) {
     const queue = queueOf(context).splice(0);
+    persistQueue(context);
     renderQueue();
     // An open pause ends with the response too.
     renderHold();
@@ -1466,6 +1529,7 @@
         remove.addEventListener("click", () => {
           const index = queue.indexOf(item);
           if (index >= 0) queue.splice(index, 1);
+          persistQueue(context);
           renderQueue();
           document.getElementById("questionInput")?.focus({ preventScroll: true });
         });
@@ -1510,22 +1574,33 @@
     return minutes > 1 ? App.t("Stops in {count} minutes without your decision", { count: minutes })
       : "Stops within a minute without your decision";
   }
+  // A decision's POST (…/hold, …/secret) within DECISION_TIMEOUT_MS: on a
+  // half-open connection it hung for minutes, every button of the card
+  // locked and nothing said so (A-B3). The card says "Sending…" meanwhile,
+  // and its Stop stays a Stop.
+  const DECISION_TIMEOUT_MS = 15000;
+  async function postDecision(context, path, body) {
+    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/${path}`;
+    let response = null, data = {};
+    try {
+      await App.withRequestDeadline(async signal => {
+        const token = await window.auth.currentUser.getIdToken();
+        response = await fetch(url, { method: "POST", body: JSON.stringify(body), signal,
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+        if (!response.ok) data = await response.json().catch(() => ({}));
+      }, { timeoutMs: DECISION_TIMEOUT_MS });
+    } catch (_) { response = null; }
+    return { response, data: data && typeof data === "object" ? data : {} };
+  }
   async function decideHold(context, action, text = "") {
     const hold = openHold(context);
     if (!hold || hold.deciding) return false;
     hold.deciding = action;
     renderHold();
-    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/hold`;
-    let response = null;
-    try {
-      const token = await window.auth.currentUser.getIdToken();
-      response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, action, text }),
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
-    } catch (_) { /* below */ }
-    const data = response && !response.ok ? await response.json().catch(() => ({})) : {};
-    // Decided, or the response is over: the card goes, the activity keeps
-    // the record.
-    if (response && (response.ok || data.code === "not_running")) {
+    const { response, data } = await postDecision(context, "hold", { id: hold.id, action, text });
+    // Decided, or the response or the pause is over (decided in another tab,
+    // A-B5): the card goes, the activity keeps the record.
+    if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
       holdDone(context, hold);
       return true;
     }
@@ -1567,17 +1642,12 @@
     }
     hold.deciding = "secret";
     renderHold();
-    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/secret`;
-    let response = null;
-    try {
-      const token = await window.auth.currentUser.getIdToken();
-      response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, value: input.value }),
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
-    } catch (_) { /* below */ }
-    const data = response && !response.ok ? await response.json().catch(() => ({})) : {};
-    if (response && (response.ok || data.code === "not_running")) {
+    const { response, data } = await postDecision(context, "secret", { id: hold.id, value: input.value });
+    if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
       input.value = "";
       holdDone(context, hold);
+      // Over before it was saved: the key did not go anywhere, and the user hears so.
+      if (data.code === "hold_over" && typeof data.error === "string" && data.error) App.showPopup?.(data.error);
       return;
     }
     undecided(context, hold);
@@ -1611,6 +1681,47 @@
       { path: `~/.secrets/${name}` });
     field.append(input, note);
     return field;
+  }
+  // Why the work waits, one line each (data-reason). A reviewer's pause: the
+  // reviewer's own sentence, already in the user's language; with several
+  // halting reviewers each one's, under its name. A domain request: what the
+  // reviewers made of it (no concern, their concern, or that not every one
+  // could look). A second halt on the open pause comes as the same pause
+  // with more `reasons` (A-S2): renderHold swaps these lines in place, so a
+  // decision on its way and words typed in the card stay.
+  function holdReasons(hold) {
+    return Array.isArray(hold.reasons) ? hold.reasons.filter(item => item && typeof item === "object") : [];
+  }
+  function reasonLines(hold) {
+    const listed = holdReasons(hold);
+    const line = (text, data, className = "agent-hold-reason") => {
+      const reason = document.createElement("p");
+      reason.className = className;
+      reason.dataset.reason = "";
+      if (data) reason.dataset.i18nSkip = "";
+      reason.textContent = text;
+      return reason;
+    };
+    const named = item => `${String(item.reviewer || "")}: ${String(item.reason || "")}`;
+    if (hold.domain) {
+      const domain = "agent-hold-reason agent-domain-review";
+      if (hold.review === "halt" || listed.length) {
+        return (listed.length ? listed : [{ reviewer: hold.reviewer, reason: hold.reason }]).map(item => line(named(item), true, domain));
+      }
+      return [line(hold.review === "go" ? "The reviewers see no problem with it."
+        : "Not every reviewer could check this request.", false, domain)];
+    }
+    // "unchecked": no reviewer stopped it, none could answer for it; a
+    // reviewer that halts on it later stands under its name.
+    if (hold.kind === "unchecked") {
+      return listed.length ? listed.map(item => line(named(item), true))
+        : [line("It acts outside the workspace and runs only if you let it.", false)];
+    }
+    if (listed.length > 1) return listed.map(item => line(named(item), true));
+    return [line(String(hold.reason || ""), true)];
+  }
+  function reasonsKey(hold) {
+    return JSON.stringify([hold.reason || "", hold.review || "", holdReasons(hold).map(item => [item.reviewer || "", item.reason || ""])]);
   }
   function holdButton(label, className, onClick) {
     const button = document.createElement("button");
@@ -1681,26 +1792,7 @@
     const what = document.createElement("p");
     what.className = "agent-hold-reason";
     what.textContent = "The workspace reaches only package sources. If you allow it, the agent can reach this address for the rest of this chat.";
-    // What the reviewers made of it: no concern, their concern, or that not
-    // every one could look.
-    const review = [];
-    const reasons = Array.isArray(hold.reasons) && hold.reasons.length > 1 ? hold.reasons : null;
-    if (hold.review === "halt") {
-      for (const item of reasons || [{ reviewer: hold.reviewer, reason: hold.reason }]) {
-        const line = document.createElement("p");
-        line.className = "agent-hold-reason agent-domain-review";
-        line.dataset.i18nSkip = "";
-        line.textContent = `${String(item.reviewer || "")}: ${String(item.reason || "")}`;
-        review.push(line);
-      }
-    } else {
-      const line = document.createElement("p");
-      line.className = "agent-hold-reason agent-domain-review";
-      line.textContent = hold.review === "go" ? "The reviewers see no problem with it."
-        : "Not every reviewer could check this request.";
-      review.push(line);
-    }
-    alert.append(head, what, ...review);
+    alert.append(head, what, ...reasonLines(hold));
     card.append(alert);
     if (hold.domain_reason) {
       const box = document.createElement("figure");
@@ -1741,8 +1833,9 @@
   // One edge, one line of decision: the glyph hangs in its tinted circle left
   // of the words; title, request and buttons share the text's edge. One
   // button and at most one link: writing to the agent is the field below,
-  // stopping is its Stop button. The clock only in the last minutes, since
-  // the agent goes on without an answer.
+  // stopping is its Stop button. A key card also has "Write to the agent",
+  // since the field below fills its key field (A-S7). The clock only in the
+  // last minutes, since the agent goes on without an answer.
   const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
     secret: "The agent needs a key from you", takeover: "You have the browser" };
   // Per question: "offered" (the open view took the browser for the user),
@@ -1789,15 +1882,21 @@
     const actions = document.createElement("div");
     actions.className = "agent-hold-actions";
     const field = kind === "secret" ? secretField(context, hold) : null;
+    // A key card takes no words from the field below (steer, A-S7): "I don't
+    // have one" is written here, and the key field steps aside meanwhile.
+    const reply = field ? holdReply(context) : null;
     if (kind === "confirm") {
       actions.append(
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
         holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
     } else if (field) {
       const input = field.querySelector(".agent-ask-secret-input");
+      const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
       actions.append(
         holdButton("Save", "btn agent-hold-continue", () => saveSecret(context, input)),
-        holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
+        holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
+        write);
+      reply.bind(actions, write, field);
     } else {
       // The server knows a takeover from any window; this one's view only its own.
       const holding = kind === "takeover" || App.workspaceView?.holder?.() === "user";
@@ -1807,7 +1906,7 @@
         ...(kind === "browser" && !holding ? [holdButton("Not now", "agent-hold-link agent-hold-skip",
           () => decideHold(context, "continue"))] : []));
     }
-    body.append(...[alert, field, clock, actions].filter(Boolean));
+    body.append(...[alert, field, clock, reply?.form, actions].filter(Boolean));
     card.append(glyph, body);
     return card;
   }
@@ -1849,22 +1948,7 @@
     meta.append(...[kind, hold.reviewer ? reviewer : null, step].filter(Boolean));
     heading.append(title, meta);
     head.append(icon, heading);
-    // The reviewer's own sentence, already in the user's language; with
-    // several halting reviewers each one's, under its name.
-    const reasons = Array.isArray(hold.reasons) && hold.reasons.length > 1 ? hold.reasons : null;
-    const lines = unchecked ? [null] : reasons || [{ reason: hold.reason }];
-    alert.append(head, ...lines.map(item => {
-      const reason = document.createElement("p");
-      reason.className = "agent-hold-reason";
-      if (!item) {
-        reason.textContent = "It acts outside the workspace and runs only if you let it.";
-        return reason;
-      }
-      reason.dataset.i18nSkip = "";
-      reason.textContent = reasons ? `${String(item.reviewer || "")}: ${String(item.reason || "")}`
-        : String(item.reason || "");
-      return reason;
-    }));
+    alert.append(head, ...reasonLines(hold));
     card.append(alert);
     if (hold.step) card.append(holdEvidence(hold));
     const clock = document.createElement("p");
@@ -1905,10 +1989,11 @@
     buttons.className = "agent-hold-reply-actions";
     buttons.append(send, cancel);
     form.append(input, buttons);
-    let actions = null, write = null;
+    let actions = null, write = null, aside = null;
     const close = () => {
       form.hidden = true;
       if (actions) actions.hidden = false;
+      if (aside) aside.hidden = false;
       write?.focus({ preventScroll: true });
     };
     input.addEventListener("input", () => { send.disabled = !input.value.trim() || Boolean(openHold(context)?.deciding); });
@@ -1929,10 +2014,12 @@
     });
     return {
       form,
-      bind(row, button) { actions = row; write = button; },
+      // `other`: what else steps aside while the user writes (a key card's field).
+      bind(row, button, other = null) { actions = row; write = button; aside = other; },
       open() {
         form.hidden = false;
         if (actions) actions.hidden = true;
+        if (aside) aside.hidden = true;
         input.focus({ preventScroll: true });
       },
     };
@@ -1942,7 +2029,9 @@
     const host = document.getElementById("agentHold");
     if (!host) return;
     const context = registry.visible();
-    const hold = selectedMode() === "agent" ? openHold(context) : null;
+    // The run on screen decides, never the mode switch (A-B2): a pause is
+    // the user's to decide whatever the next message would run with.
+    const hold = openHold(context);
     clearTimeout(holdTimer);
     const workspace = App.workspaceView;
     const holder = workspace?.holder?.() || "";
@@ -1968,16 +2057,31 @@
     }
     // A browser card's button follows who has the browser in this window.
     const key = hold.ask === "browser" ? `${hold.id}:${App.workspaceView?.holder?.() || ""}` : hold.id;
+    const reasons = reasonsKey(hold);
     if (host.dataset.id !== key) {
       host.dataset.id = key;
+      host.dataset.reasons = reasons;
       host.replaceChildren(holdCard(context, hold));
+    } else if (host.dataset.reasons !== reasons) {
+      // The same pause with another reason (a second halt, A-S2): only its
+      // lines change, the card with its decision and typed words stays.
+      host.dataset.reasons = reasons;
+      const old = [...host.querySelectorAll("[data-reason]")];
+      if (old.length) {
+        old[0].before(...reasonLines(hold));
+        for (const line of old) line.remove();
+      }
     }
     host.hidden = false;
     const clock = host.querySelector(".agent-hold-clock");
-    const time = holdClock(hold);
+    // While a decision is on its way the line says so (postDecision).
+    const time = hold.deciding ? "Sending…" : holdClock(hold);
     clock.hidden = !time;
     if (time && clock.textContent !== App.t(time)) clock.textContent = time;
-    for (const button of host.querySelectorAll("button")) button.disabled = Boolean(hold.deciding);
+    // Stop is never locked: it is the way out of a decision that hangs.
+    for (const button of host.querySelectorAll("button")) {
+      button.disabled = Boolean(hold.deciding) && !button.classList.contains("agent-hold-stop");
+    }
     for (const input of host.querySelectorAll(".agent-ask-secret-input")) input.disabled = Boolean(hold.deciding);
     // Send waits for words in the sheet's field.
     const reply = host.querySelector(".agent-hold-reply-input");
@@ -2053,10 +2157,12 @@
     restoreUnsentDraft(context);
     flushQueue(context);
   }
-  // After a reload: follow this tab's turns that were still running.
+  // After a reload: follow this tab's turns that were still running. Also
+  // when the mode switch stands on Compare (A-B2): a turn that may wait for
+  // the user is followed whatever the next message would run with.
   function resumePending() {
     const uid = window.auth?.currentUser?.uid;
-    if (!uid || resumedFor === uid || !canUse() || catalogStatus !== 'ready' || selectedMode() !== 'agent') return;
+    if (!uid || resumedFor === uid || !canUse()) return;
     resumedFor = uid;
     const records = readPending(uid);
     if (!records.length) return;
@@ -2105,14 +2211,63 @@
     const rest = list.filter(item => item.body.client_request_id !== record.body.client_request_id);
     if (rest.length !== list.length) writePending(uid, rest);
   }
-  async function resume(record, uid) {
+  // A chat opened while its newest turn runs, started in another tab or on
+  // another device (A-B2): this tab follows it like its own after a reload,
+  // by the turn's request identity (GET /bookmarks/{id}/conversation names
+  // it as `running`, with the settings its recover_only request repeats), so
+  // its pause card shows here too. Before, the chat showed its last saved
+  // turn, nothing followed it, and a pause ran into its timeout unseen.
+  // Asked quietly first: only a turn still running takes the screen, and
+  // only while its chat is still the one on screen.
+  const followingElsewhere = new Set();
+  // Opened before the account's Agent access was known (a chat restored at
+  // load): tried again once it is (renderShellNow).
+  let deferredFollow = null;
+  async function followRunning({ chatId, bookmarkId, turn } = {}) {
+    const uid = window.auth?.currentUser?.uid;
+    const requestId = typeof turn?.client_request_id === "string" ? turn.client_request_id : "";
+    if (!uid || !chatId || !bookmarkId || !requestId || !turn.question) return false;
+    if (!canUse()) {
+      deferredFollow = accessPending() ? { chatId, bookmarkId, turn } : null;
+      return false;
+    }
+    if (followingElsewhere.has(requestId) || registry.list().some(run => run.requestIdentity === requestId)) return false;
+    const settings = turn.agent_settings && typeof turn.agent_settings === "object" ? turn.agent_settings : {};
+    const selection = settings.selection || {};
+    const record = { at: Date.now(), title: "", followup: false, attachmentMeta: Array.isArray(turn.attachments) ? turn.attachments : [],
+      settings: { model_id: selection.model_id ?? null, reasoning_effort: selection.reasoning_effort || "default" },
+      body: { chat_id: chatId, question: turn.question, client_request_id: requestId, bookmark_id: bookmarkId,
+        recover_only: false, model_id: selection.model_id ?? null, reasoning_effort: selection.reasoning_effort || "default",
+        comparison_models: settings.comparison_selection ?? null,
+        agent_preferences: settings.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
+        file_ids: settings.file_ids || [], google_selection: settings.google_selection || null,
+        google_data_consent: settings.google_data_consent === true } };
+    followingElsewhere.add(requestId);
+    try {
+      if (await resumeState(record) !== "running") return false;
+      const basis = registry.getSelectedConversationBasis();
+      if (registry.visible() || basis?.bookmarkId !== bookmarkId || window.auth?.currentUser?.uid !== uid) return false;
+      if (registry.list().some(run => run.requestIdentity === requestId)) return false;
+      record.title = basis.title || turn.question;
+      // Kept for a reload of this tab, like a run sent here.
+      writePending(uid, [...readPending(uid).filter(item => item.body.client_request_id !== requestId), record].slice(-4));
+      resume(record, uid, { basis: basis.chatId === chatId ? basis : null });
+      return true;
+    } finally {
+      followingElsewhere.delete(requestId);
+    }
+  }
+  // `basis`: the saved chat on screen whose newest turn runs elsewhere
+  // (followRunning): the run continues it, with its history above.
+  async function resume(record, uid, { basis = null } = {}) {
     if (!canUse() || window.auth.currentUser.uid !== uid) return;
     const body = { ...record.body, recover_only: false };
     const settings = record.settings || { model_id: body.model_id, reasoning_effort: body.reasoning_effort };
     let context;
     try {
       context = registry.create({
-        question: body.question, mode: "Agent", basis: null, followup: false,
+        question: body.question, mode: "Agent", basis, followup: Boolean(basis),
+        ...(basis ? { historyTurns: [...(basis.historyTurns || []), ...(basis.currentTurn ? [basis.currentTurn] : [])] } : {}),
         attachments: [], attachmentMeta: record.attachmentMeta || [],
         requestIdentity: body.client_request_id, bookmarkId: body.bookmark_id, bookmarkTitle: record.title || body.question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false, deepSearch: false,
@@ -2126,6 +2281,8 @@
         usage: { status: "simulation", key: null },
       });
     } catch (_) { return; }
+    // What waited for this run before the reload waits again (A-B4).
+    context.metadata.queue = restoreQueue(record.queue);
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
     context.cancelHook = reason => cancelRun(context, reason);
@@ -2133,14 +2290,15 @@
     context.consensus.status = "streaming";
     registry.setStatus(context.runId, "running");
     App.composer?.collapse?.({ force: true });
-    App.trackAppEvent?.("app_run_resumed");
+    // Counted for this tab's own runs after a reload (docs/analytics.md).
+    if (!basis) App.trackAppEvent?.("app_run_resumed");
     try {
       const result = await follow(context, body, signal, { post: false });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       adopt(context, result, { offer: !record.followup });
       // The resumed view shows only this message; a follow-up's chat opens
-      // whole once its answer is saved.
-      if (record.followup && registry.isVisible(context.runId)) window.openBookmark?.(body.bookmark_id);
+      // whole once its answer is saved (with a basis it stands whole already).
+      if (record.followup && !basis && registry.isVisible(context.runId)) window.openBookmark?.(body.bookmark_id);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       failRun(context, error);
@@ -2331,6 +2489,9 @@
     const live = App.agentLive?.watch({
       chatId: body.chat_id, requestId: body.client_request_id, headers: authHeaders, signal, deliver,
       cursor: () => seen?.last || 0, recover,
+      // A pause sends nothing while it waits for the user (up to 30 min):
+      // following never gives up on it (agent-live.js MAX_FOLLOW_MS).
+      paused: () => Boolean(context.metadata.hold),
       onEngage: () => App.trackAppEvent?.("app_stream_buffered"),
       onState: ({ reconnecting, offline }) => {
         if (!registry.isAuthCurrent(context)) return;
@@ -2461,6 +2622,17 @@
       context.metadata.restoreDraft = true;
     }
     context.bookmark.status = "failed";
+    // Nothing reviews any more: the review ends here as it will read after a
+    // reload (agent_runs.finish_run), not "Reviewing the answer…" until the
+    // chat is opened again (A-B5). A finished review keeps its result.
+    const review = context.metadata.agentReview;
+    if (review && !["succeeded", "partial", "off", "failed", "cancelled", "missing"].includes(review.status)) {
+      context.metadata.agentReview = { ...review, status: review.status === "required" ? "missing" : "failed",
+        ...(Array.isArray(review.comparisons) ? { comparisons: review.comparisons.map(comparison => comparison?.status === "running"
+          ? { ...comparison, status: "failed" } : comparison) } : {}),
+        ...(["waiting", "running"].includes(review.passage_check?.status)
+          ? { passage_check: { ...review.passage_check, status: "failed" } } : {}) };
+    }
     if (asked) App.trackAnswer?.(context, "failed");
     registry.setStatus(context.runId, "failed", { message: context.consensus.error.message });
     if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
@@ -2615,6 +2787,8 @@
     // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
     pick: () => selection(), modelLabel, applyPick,
     render: () => renderShell(), renderShell, project, send, steer, steering, revealPendingReview, syncPendingReview,
+    // firebase.js: a chat opened while its newest turn runs elsewhere.
+    followRunning,
     tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget,
     // demo.js: show (true) or release (false) the answer surface for the demo.
     // Returns the activity host for that turn, or null when released.
