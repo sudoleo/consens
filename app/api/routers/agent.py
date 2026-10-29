@@ -22,7 +22,7 @@ from app.services import agent_quota, agent_secrets, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
-from app.services.agent_sessions import NotesFull
+from app.services.agent_sessions import HoldActionRefused, NotesFull
 from app.services.agent_policy import AgentPolicy, supports_delegation
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
@@ -899,7 +899,8 @@ def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text
 class AgentHoldDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[0-9a-f]{12}$")
-    # "deny": not allowed, for a domain the agent asked for (agent_domains.py).
+    # "deny": not allowed, for a domain the agent asked for (agent_domains.py)
+    # or its own question (agent_ask.py); on any other hold 422 (deniable).
     action: Literal["continue", "stop", "steer", "deny"]
     text: str = Field(default="", max_length=4000)
 
@@ -934,6 +935,9 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
         except NotesFull as exc:
             # Nothing decided: the card stays for another answer.
             return JSONResponse({"error": str(exc), "code": "notes_full"}, status_code=409)
+        except HoldActionRefused as exc:
+            # "deny" on a pause it is no answer to (agent_sessions.deniable).
+            return JSONResponse({"error": str(exc), "code": "invalid_action"}, status_code=422)
         except TurnStatusConflict as exc:
             return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
         if payload.action == "stop" and not agent_background.stop(uid, chat_id, request_id=request_id):

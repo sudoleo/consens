@@ -1890,11 +1890,13 @@ class DelegationLoop(AgentLoop):
         """The user's decision on that hold, from the decision endpoint of
         this process (POST .../hold, .../secret): True when taken. A message
         ("steer") is the user's note, as decide_hold would have saved it."""
-        from app.services.agent_sessions import USER_NOTE_CHARS
+        from app.services.agent_sessions import HOLD_NOT_DENIABLE, USER_NOTE_CHARS, HoldActionRefused, deniable
         with self.condition:
             hold = self.unsaved_hold()
             if hold is None or hold["id"] != hold_id:
                 return False
+            if action == "deny" and not deniable(hold):
+                raise HoldActionRefused(HOLD_NOT_DENIABLE)
             if action == "steer":
                 note = {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
                         "at": datetime.now(timezone.utc).isoformat()}
@@ -1957,7 +1959,8 @@ class DelegationLoop(AgentLoop):
                 return gate.decision
             if self.request_hold(details):
                 break
-        gate.decision = "steer" if (yield from self._hold_wait()) == "steer" else "continue"
+        # Only the user's "continue" runs the calls.
+        gate.decision = "continue" if (yield from self._hold_wait()) == "continue" else "steer"
         return gate.decision
 
     def _domain_wait(self, gate, call):
@@ -2145,6 +2148,11 @@ class DelegationLoop(AgentLoop):
                 raise self.watch_error
             self.cancellation.raise_if_cancelled()
             yield from self._events()
+        from app.services.agent_sessions import deniable
+        if decision == "deny" and not deniable(hold):
+            # No answer to this hold (decide_hold refuses it): never a
+            # "continue", as before 2026-10-29, but a stop.
+            decision = "stop"
         try:
             self.store.set_hold(self.uid, self.chat_id, self.turn_id, None, replaces=hold["id"])
         except Exception as exc:

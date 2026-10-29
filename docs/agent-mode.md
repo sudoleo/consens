@@ -487,7 +487,12 @@ andere Prozesse. Eine Pause bleibt entscheidbar, wenn ihr Speichern scheitert
 Endpunkt gibt die Entscheidung dann dem Lauf seines Prozesses
 (`DelegationLoop.unsaved_hold`/`decide_unsaved`, auch für `…/secret`); erst
 wenn auch der sie nicht kennt, 409 `hold_over`. Vorher wurde der Fehler nur
-geloggt, und jede Entscheidung bekam 409. Text im Feld ist während der
+geloggt, und jede Entscheidung bekam 409. `deny` nimmt der Endpunkt seit
+2026-10-29 nur, wo es eine Antwort ist (`agent_sessions.deniable`: eine
+Domain, die Frage des Agenten mit `confirm` oder `secret`), sonst 422
+`invalid_action`; vorher lief ein Prüfer- oder Gate-Halt danach weiter wie
+nach `continue` (auch ein gegatetes `update_memory`). Kommt `deny` doch an
+einen anderen Halt, wirkt es wie Stop. Text im Feld ist während der
 Pause die Steer-Entscheidung.
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,

@@ -1214,6 +1214,52 @@ def test_the_route_takes_the_users_decision_on_an_open_hold(api, monkeypatch):
     assert again.status_code == 409
 
 
+def test_deny_is_taken_only_where_it_answers_the_pause(api):
+    """A-S5: a domain and the agent's own question can be declined; a
+    reviewer's halt or a gate cannot (422), and nothing is decided."""
+    from app.services import agent_ask
+    client, store, _ = api
+    chat_id, turn = pending(store)
+    ref = store.receipt_ref(UID, chat_id, turn["id"])
+    ref.set({**(ref.get().to_dict() or {}), "run_status": "running"}, merge=True)
+    url = f"/agent/chats/{chat_id}/requests/{turn['client_request_id']}/hold"
+    for number, (hold, status) in enumerate([
+            ({"kind": "harm", "reviewer": "Claude Haiku 4.5"}, 422),
+            ({"kind": "unchecked", "gate": True}, 422),
+            (agent_ask.hold("browser", "Bitte anmelden."), 422),
+            ({"kind": "domain", "gate": True, "domain": "api.example.org"}, 200),
+            (agent_ask.hold("confirm", "Soll ich senden?"), 200),
+            (agent_ask.hold("secret", "Key?", "OPENAI_API_KEY"), 200)]):
+        hold = {**hold, "id": f"{number:012x}"}
+        store.set_hold(UID, chat_id, turn["id"], hold)
+        response = client.post(url, json={"id": hold["id"], "action": "deny"}, headers=AUTH)
+        assert response.status_code == status, hold
+        decided = ref.get().to_dict().get("hold_decision") or {}
+        assert (decided.get("id") == hold["id"]) == (status == 200)
+        if status == 422:
+            assert response.json()["code"] == "invalid_action"
+
+
+def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
+    """Internally too: a "deny" past the endpoint is a stop, not a continue."""
+    script = Audit(tool_steps=2, live={"anthropic": halting_live})
+    loop = audit_loop(store, script)
+
+    def deny():
+        hold = held(loop)
+        loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "deny"}})
+    thread = threading.Thread(target=deny, daemon=True)
+    thread.start()
+    events = []
+    with pytest.raises(ProviderCancelled):
+        for event in loop.run():
+            events.append(event)
+    thread.join(5)
+    assert [e.get("decision") for e in events if e.get("type") == "hold" and not e.get("hold")] == ["stop"]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert "The user stopped the work." in said and saved(store, loop)["status"] == "failed"
+
+
 def in_background(loop, request_id="one"):
     """The run as the route starts it: on agent_background's thread, known
     by its request (run_loop). Returns its events and whether it ended."""
