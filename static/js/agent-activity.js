@@ -661,13 +661,19 @@
   const holdStates = { waiting: 'Waiting for your decision', continue: 'You let the work go on',
     steer: 'You wrote to the agent', stop: 'You stopped the response', deny: 'You did not allow it',
     timeout: 'Stopped after 30 minutes without a decision', ended: 'Over when the response ended' };
-  // A request for a domain (agent_domains.py) is the user's to decide, not a reviewer's pause.
-  const domainStates = { ...holdStates, continue: 'You allowed it for this chat' };
+  // A request for a domain (agent_domains.py) is the user's to decide, not a
+  // reviewer's pause. Undecided it stays closed and the work goes on (UX
+  // audit 2026-10-29 C8: this said "Stopped after 30 minutes").
+  const domainStates = { ...holdStates, continue: 'You allowed it for this chat',
+    timeout: 'Not allowed after 30 minutes without a decision' };
   // The agent's own question to the user (ask_user, agent_ask.py; since
   // 2026-10-29): their turn in the browser, their yes to a step, or a call
   // that waited while they had the browser. Its request is data.
   const askHeads = { browser: 'The agent asked you to take over the browser', confirm: 'The agent asked before a step',
     secret: 'The agent asked you for a key', takeover: 'The agent waited while you had the browser' };
+  // While it still waits, in the present (C14: "The agent asked …" stood over "Waiting for you").
+  const askHeadsNow = { browser: 'The agent asks you to take over the browser', confirm: 'The agent asks before a step',
+    secret: 'The agent asks you for a key', takeover: 'You have the browser' };
   const askStates = { ...holdStates, waiting: 'Waiting for you', handed_back: 'You handed the browser back',
     timeout: 'No answer within 30 minutes' };
   const confirmStates = { ...askStates, continue: 'You allowed it' };
@@ -693,7 +699,8 @@
       if (node.dataset.signature === signature) return;
       node.dataset.signature = signature;
       node.dataset.state = state;
-      node._head.textContent = askHeads[item.ask] || askHeads.confirm;
+      const heads = state === 'waiting' ? askHeadsNow : askHeads;
+      node._head.textContent = heads[item.ask] || heads.confirm;
       node._reason.textContent = String(item.request || '').slice(0, 400);
       node._reason.hidden = state === 'waiting' || !item.request;
       node._state.textContent = states[state];
@@ -705,7 +712,8 @@
     node.dataset.signature = signature;
     node.dataset.state = state;
     const domain = item.halt === 'domain' && item.domain;
-    node._head.textContent = domain ? App.t('The agent asked to reach {domain}', { domain: String(item.domain) })
+    node._head.textContent = domain ? App.t(state === 'waiting' ? 'The agent asks to reach {domain}' : 'The agent asked to reach {domain}',
+      { domain: String(item.domain) })
       : item.reviewer ? App.t('Paused by {reviewer}', { reviewer: String(item.reviewer) })
       : item.halt === 'unchecked' ? 'Paused before a step ran' : 'Paused by a reviewer';
     node._reason.textContent = String(item.reason || '').slice(0, 400);

@@ -132,7 +132,7 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # why (HOLD_TIMEOUT_STOPPED, failure code hold_timeout). It never goes on by
 # itself; a domain nobody allowed stays closed.
 HOLD_TIMEOUT_SECONDS = 30 * 60
-HOLD_TIMEOUT_STOPPED = "Paused for 30 minutes without a decision, so the response stopped."
+HOLD_TIMEOUT_STOPPED = "Stopped after 30 minutes without your decision."
 # Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
 HOLDS_KEPT = 20
 # First pause between two attempts to save an open hold (_save_hold), doubled.

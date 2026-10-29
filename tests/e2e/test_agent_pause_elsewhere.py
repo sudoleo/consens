@@ -55,7 +55,7 @@ def test_a_second_tab_follows_a_paused_turn_and_shows_its_card(browser, phase4_s
         card = page.locator("#agentHold .agent-hold-card")
         expect(card).to_be_visible()
         expect(card.locator(".agent-hold-title")).to_have_text("A reviewer paused the work")
-        expect(card.locator(".agent-hold-reason")).to_have_text(hold["reason"])
+        expect(card.locator(".agent-hold-reason-text")).to_have_text(hold["reason"])
         # Followed by its own identity: polled, never sent again.
         assert live and "request_id=req-other-tab" in live[0]
         assert asked and asked[0]["client_request_id"] == "req-other-tab" and not sent

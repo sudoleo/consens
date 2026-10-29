@@ -398,6 +398,12 @@ describe("installing and asking for a domain", () => {
     const step = host.querySelector(".agent-activity-content .agent-hold-step");
     expect(step.querySelector("strong").textContent).toBe("The agent asked to reach api.example.com");
     expect(step.querySelector(".agent-hold-step-state").textContent).toBe("Network access · You did not allow it");
+    // Undecided, it stays closed and the work goes on: never "Stopped" (UX audit 2026-10-29 C8).
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-def", step_id: "hold", halt: "domain",
+      domain: "api.example.org", reviewer: "", reason: "", entry: 6, gate: true, state: "timeout" });
+    activity.render(host, { running: false, status: "completed", events });
+    expect(host.querySelectorAll(".agent-activity-content .agent-hold-step")[1].querySelector(".agent-hold-step-state").textContent)
+      .toBe("Network access · Not allowed after 30 minutes without a decision");
   });
 
   // A step that acts outside the workspace that not every reviewer could
@@ -430,12 +436,14 @@ describe("installing and asking for a domain", () => {
       entry: null, state: "waiting" });
     activity.render(host, { running: true, status: "running", events });
     const live = host.querySelector(".agent-progress .agent-hold-step");
-    expect(live.querySelector("strong").textContent).toBe("The agent asked you to take over the browser");
+    // In the present while it waits (UX audit 2026-10-29 C14), in the past once over.
+    expect(live.querySelector("strong").textContent).toBe("The agent asks you to take over the browser");
     expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Waiting for you");
     expect(host.querySelector(".agent-current-status").textContent).toBe("Waiting for you");
     activity.receive(events, { version: 1, kind: "hold", id: "hold-a1b2c3d4e5f6", step_id: "hold", state: "handed_back" });
     activity.render(host, { running: false, status: "completed", events });
     const saved = host.querySelector(".agent-activity-content .agent-hold-step");
+    expect(saved.querySelector("strong").textContent).toBe("The agent asked you to take over the browser");
     expect(saved.querySelector(".agent-hold-step-reason").textContent).toBe("Bitte melde dich bei der Post an.");
     expect(saved.querySelector(".agent-hold-step-state").textContent).toBe("You handed the browser back");
   });

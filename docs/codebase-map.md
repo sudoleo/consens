@@ -5884,11 +5884,16 @@ an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach
 steht ohne Grund in `agent_holds[]` am Turn (`_end_hold`, höchstens 20,
 `agent_runs.finish_run`). Der Agent sieht nur Nutzer-Stopps und
 -Nachrichten (`HOLD_STEERED`). Browser: `agent-chat.js` (`hold`-Handler,
-`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`; seit
-2026-10-27 in der Sprache der Watch-/Einstellungskarten (ein `.btn`, sonst
-`.agent-hold-link`), Beleg `holdEvidence` aus `step_kind`/`step_source`/`step`
-von `halt_step` (Zitat des Prüfers `halt.quote`, nur wenn der Eintrag es
-enthält), Antwort direkt in der Karte `holdReply`, Protokollnummer
+`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer` mit
+Platzhalter „Or write to the agent…“; seit dem UX-Audit 2026-10-29 (Paket C)
+eine Familie mit den Fragen des Agenten (`cardShell`: Glyphe im Kreis, eine
+Kante, ein `.btn`, höchstens ein `.text-link`, Stop nur am Feld, kein
+`holdReply` mehr; Frist erst in den letzten fünf Minuten `CLOCK_MINUTES`;
+Fehler in der Statuszeile der Karte; `leaveHold` blendet aus und gibt den
+Fokus ans Feld), Beleg `holdEvidence` aus `step_kind`/`step_source`/`step`
+und für Modellschritte `step_calls` von `halt_step` in Worten (`callWords`,
+Elementnamen aus dem letzten `read`, `element_names`; Zitat des Prüfers
+`halt.quote`, nur wenn der Eintrag es enthält), Protokollnummer
 `.admin-only`; `composer-collapse.js` lässt Tipps auf `.agent-hold`/
 `.agent-queue` durch),
 `agent-activity.js` (`holdView`, „Paused for your decision“, wartende Pause
