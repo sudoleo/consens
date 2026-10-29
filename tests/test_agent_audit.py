@@ -1283,18 +1283,62 @@ def test_a_second_reviewers_halt_joins_the_open_card(store):
 
 
 @pytest.mark.parametrize("action", ["continue", "steer"])
+def test_a_halt_breaks_off_the_step_that_streams_and_it_runs_again(store, action):
+    """A-S4: the halt for step N came while step N+1 streamed; before, N+1
+    ran to its end, its searches included. It breaks off under its own
+    cancellation (the turn's stays), is settled with what it used, and runs
+    again after the decision, after "steer" with the user's message."""
+    seen = []
+
+    def halt_mid_stream(step):
+        if step == "completion:1":
+            stop = current_provider_cancellation()
+            assert script.loop.request_hold(HALT) is True
+            deadline = time.monotonic() + 5
+            while not stop.cancelled and time.monotonic() < deadline:
+                time.sleep(.01)
+            seen.append((stop.cancelled, script.loop.cancellation.cancelled))
+            raise ProviderCancelled("halted")
+    script = Audit(tool_steps=1, on_answer=halt_mid_stream)
+    loop = audit_loop(store, script)
+    waiter = decide_when_held(loop, store, action, "Name the source." if action == "steer" else "")
+    events = list(loop.run())
+    waiter.join(5)
+    assert seen == [(True, False)]
+    assert [step for step, _ in script.calls if step.startswith("completion:")] == [
+        "completion:0", "completion:1", "completion:2"]
+    # Settled (paid) like a step that broke off in passing; the log says it broke off.
+    receipt = store.receipt_ref(UID, loop.chat_id, loop.turn_id, "completion:1").get().to_dict()
+    assert receipt["status"] == "succeeded"
+    step = next(content for entry, content in loop.work_log.entries_after(0)
+                if entry["kind"] == "step" and entry.get("step") == "completion:1")
+    assert json.loads(step)["status"] == "cancelled"
+    users = [m["content"] for m in loop.messages if m.get("role") == "user"]
+    assert (f"{agent_delegation.USER_NOTE_OPEN}\nName the source." in users) == (action == "steer")
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == [action]
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert loop.step_halt is None
+
+
+@pytest.mark.parametrize("action", ["continue", "steer"])
 def test_a_halt_during_the_closing_step_holds_its_answer_until_the_user_decides(store, action):
     """A-S3: a turn limit led into the closing step (_merged_wrap_up) and a
-    reviewer halted meanwhile; before, that answer was fixed past the card."""
+    reviewer halted as it ended; before, that answer was fixed past the card.
+    (A halt while it streams breaks it off, as any step: A-S4.)"""
     halted = []
-
-    def halt_once(step):
-        if step != "completion:0" and not halted:
-            halted.append(step)
-            script.loop.request_hold(HALT)
-    script = Audit(tool_steps=1, on_answer=halt_once)
+    script = Audit(tool_steps=1)
     loop = audit_loop(store, script)
     loop._turn_limit = lambda: agent_delegation.TURN_STEP_LIMIT if loop.routing_steps >= 1 else None
+    attempt = loop._answer_attempt
+
+    def halt_as_it_ends(model, messages, index, steps, **kwargs):
+        value = yield from attempt(model, messages, index, steps, **kwargs)
+        if kwargs.get("allow_tools") is False and not halted:
+            halted.append(index)
+            assert loop.request_hold(HALT) is True
+        return value
+    loop._answer_attempt = halt_as_it_ends
     at_decision = []
 
     def decide():

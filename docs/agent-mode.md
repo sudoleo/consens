@@ -481,8 +481,15 @@ zwischen den Aufrufen einer Runde und bevor eine geschriebene Antwort zählt,
 seit 2026-10-29 auch die des Schlussschritts nach einem Turn-Limit,
 `_merged_wrap_up`, wo eine Nachricht einen weiteren Schlussschritt bekommt),
 ein laufender VM-Befehl endet sofort
-(`VMTools.interrupt`, für den Agenten „The user stopped this command“), und
-seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
+(`VMTools.interrupt`, für den Agenten „The user stopped this command“),
+seit 2026-10-29 bricht auch ein Modellschritt des Agenten ab, der gerade
+streamt (vorher lief er zu Ende, bis zu fünf Suchrunden eingeschlossen):
+Jeder Schritt des Agenten streamt unter einer eigenen Cancellation unter der
+des Turns (`_halt_scope`, `step_halt`; nie Worker- oder Prüferrunden), wird
+wie ein unterwegs abgebrochener Schritt mit dem Verbrauchten abgerechnet
+(`value.halted`, im Protokoll `cancelled`), sein sichtbarer Text geht zurück
+(`_retract`), und nach der Entscheidung läuft er auf dem nächsten Index neu,
+nach `steer` mit der Nachricht (`_past_halts`). Seine Uhr steht still (`paused_seconds`, keine Wende-/Zeitgrenze frisst die
 Pause). **Der Agent erfährt nichts davon.** Der Nutzer entscheidet über die
 Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
 `hold`, sticky in `agent_live.py`; ist die Ereignis-Queue voll, wartet er

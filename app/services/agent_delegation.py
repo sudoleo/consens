@@ -373,6 +373,8 @@ class DelegationLoop(AgentLoop):
         self.hold_unsaved = False
         # The answer is fixed (_finish_merged): reviewers halt nothing more.
         self.answer_fixed = False
+        # The cancellation of the agent's step that streams now (_halt_scope).
+        self.step_halt = None
         self.paused_seconds = 0.0
         self.tools_used = 0
         self.invalid_tool_rounds = 0
@@ -1410,6 +1412,10 @@ class DelegationLoop(AgentLoop):
         thinking = (ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)
                     if answer_candidate and not worker else None)
         stream_progress = StreamProgress(worker.stream_chars) if worker else None
+        # The agent's own step streams under a cancellation of its own, under
+        # the turn's: a reviewer's halt breaks off this step (request_hold),
+        # never the turn, a worker's step or a reviewer's round.
+        halt = ProviderCancellation() if worker is None else None
         status = "failed"
         search_limited = False
         try:
@@ -1477,12 +1483,13 @@ class DelegationLoop(AgentLoop):
             else:
                 self._check(cancellation)
                 provider_attempted = True
+                streaming = self._halt_scope(halt)
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
                                       native_searches=searches, allow_tool_calls=allow_tools,
                                       session_id=None if worker else self.provider_session)
                 try:
                     for event in source:
-                        self._check(cancellation)
+                        self._check(halt or cancellation)
                         if worker and event.get("type") == "activity":
                             compact = worker_progress.update(event)
                             if compact:
@@ -1540,7 +1547,10 @@ class DelegationLoop(AgentLoop):
                     value.output_limited = True
                     value.empty_answer = bool(worker)
                 finally:
-                    source.close()
+                    try:
+                        source.close()
+                    finally:
+                        streaming.close()
             self._check(cancellation)
             status = "succeeded"
             if stream_answer and self._answer_check_follows(value):
@@ -1554,7 +1564,15 @@ class DelegationLoop(AgentLoop):
             status = "cancelled"
             # Cancelled before the request was dispatched: free.
             value.record_rejection(exc, model)
-            raise
+            if (isinstance(exc, GeneratorExit) or halt is None or not halt.cancelled or not claimed
+                    or self.cancellation.cancelled):
+                raise
+            # A reviewer's halt broke the step off (request_hold), not the
+            # turn: settled with what it used, as a step that broke off in
+            # passing is, so that it runs again on the next index once the
+            # user decided (_past_halts); the work log keeps it as cancelled.
+            value.halted = exc
+            status, log_status = "succeeded", "cancelled"
         except Exception as exc:
             value.record_rejection(exc, model)
             # A reviewer's 429 (audit mode, alongside the agent) costs its
@@ -1603,7 +1621,9 @@ class DelegationLoop(AgentLoop):
                     # Outward calls of the agent's step wait for the
                     # reviewers (agent_gate): the gate opens before the
                     # entry, so no reviewer reads it in an ordinary round first.
-                    gate = self._open_gate(value) if log_actor == "agent" and status == "succeeded" else None
+                    # Not for a step a halt broke off: its calls never run.
+                    gate = (self._open_gate(value) if log_actor == "agent" and status == "succeeded"
+                            and getattr(value, "halted", None) is None else None)
                     entry = None
                     try:
                         # What the step thought, wrote, called and found, also
@@ -1640,6 +1660,30 @@ class DelegationLoop(AgentLoop):
             if value.sources or (type(count) is int and count > 0):
                 yield self.tool_event(step + ":web_search", "web_search", "succeeded", sources=value.sources, count=count, server_tool=True)
         return value
+
+    def _halt_scope(self, halt):
+        """While the agent's own step streams, ``halt`` is the provider's
+        cancellation (a child of the turn's: Stop still ends it) and what
+        request_hold cancels; a hold already open breaks the step off at
+        once. Returns what ends that (``close``)."""
+        from contextlib import ExitStack
+        scope = ExitStack()
+        if halt is None:
+            return scope
+        scope.callback(self.cancellation.register(halt))
+        scope.enter_context(bind_provider_cancellation(halt))
+        with self.condition:
+            self.step_halt = halt
+            held = self.hold is not None and not self.hold.get("ask")
+        scope.callback(self._step_streamed, halt)
+        if held:
+            halt.cancel()
+        return scope
+
+    def _step_streamed(self, halt):
+        with self.condition:
+            if self.step_halt is halt:
+                self.step_halt = None
 
     def _settle_step(self, step, value, status):
         """Retry only the idempotent receipt write, including ambiguous commits."""
@@ -1880,6 +1924,14 @@ class DelegationLoop(AgentLoop):
             return True
         if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
+        if not details.get("ask"):
+            # The agent's step that streams now breaks off (_step): its
+            # searches and calls wait for the user too. Since 2026-10-29;
+            # before, it ran to its end, up to five search rounds included.
+            with self.condition:
+                streaming = self.step_halt
+            if streaming is not None:
+                streaming.cancel()
         if not self._save_hold(hold):
             # The card comes all the same: the decision endpoint hands its
             # answer to this run (decide_unsaved), never a 409.
@@ -2342,8 +2394,8 @@ class DelegationLoop(AgentLoop):
         ``step_args`` as for _step."""
         step = f"completion:{index}"
         try:
-            value = yield from self._step(model, messages, step, registry, self.cancellation,
-                                          retry_rate_limit=rate_limit, retry_passing=True, **step_args)
+            value, step = yield from self._past_halts(model, messages, step, steps, registry,
+                                                      retry_rate_limit=rate_limit, retry_passing=True, **step_args)
         except AgentProviderCooldown as exc:
             # The process gate refused before any claim: the step index is still free.
             delay = self._rate_limit_delay(exc.retry_after) if rate_limit else None
@@ -2370,8 +2422,27 @@ class DelegationLoop(AgentLoop):
             yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
                                  "text": "The model's provider is busy right now. Trying again in a few seconds."})
         yield from self._pause(delay)
-        return (yield from self._step(model, messages, step, registry, self.cancellation,
-                                      check_cooldown=False, **step_args))
+        return (yield from self._past_halts(model, messages, step, steps, registry, check_cooldown=False,
+                                            **step_args))[0]
+
+    def _past_halts(self, model, messages, step, steps, registry, **step_args):
+        """The agent's step (_step), once more after a reviewer's halt broke
+        it off while it streamed (``value.halted``): what it showed goes
+        back, the run waits for the user, and the step runs again on the next
+        index, after a message ("steer") with that message in view. Returns
+        the value and the step it ran as."""
+        while True:
+            value = yield from self._step(model, messages, step, registry, self.cancellation, **step_args)
+            if getattr(value, "halted", None) is None:
+                return value, step
+            yield from self._retract(value)
+            if (yield from self._hold_wait()) == "steer":
+                self._take_notes(step)
+            index = next(steps, None)
+            if index is None:
+                raise AnalysisBudgetExceeded("Agent orchestration call limit reached")
+            # Past the process gate already (cooldowns.check).
+            step, step_args = f"completion:{index}", {**step_args, "check_cooldown": False}
 
     def _passing_delay(self):
         """Seconds before the one retry of a step that broke off, or None

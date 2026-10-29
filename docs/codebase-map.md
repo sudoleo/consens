@@ -5767,7 +5767,8 @@ injection; `parse_halt`, `halt_step` für die Karte). `AnswerAudit.halt` (je
 Prüfer und Eintrag einmal, gezählt erst, wenn der Lauf ihn nahm; nicht nach
 `final_answer`, `request_hold` schon ab `answer_fixed` nicht mehr) ruft `DelegationLoop.request_hold` (seit 2026-10-29 kommt ein
 Halt bei offener Karte auf diese, `joined_halt`, `revision`): `VMTools.interrupt` beendet den laufenden
-Befehl als Nutzer-Stop, `store.set_hold` schreibt `hold` an den Lauf-Root,
+Befehl als Nutzer-Stop, `step_halt` den streamenden Agentenschritt
+(`_halt_scope`; nach der Entscheidung neu, `_past_halts`), `store.set_hold` schreibt `hold` an den Lauf-Root,
 SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der
 Antwort, auch im Schlussschritt nach einem Limit (`_merged_wrap_up`); `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
