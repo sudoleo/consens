@@ -192,6 +192,95 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         context.close()
 
 
+# A later question stands at the end of the page. The live lines are 20.8px
+# tall and grow in a height motion; with a reserve in whole pixels the end of
+# the page followed their fraction, and whenever it rounded a pixel lower the
+# browser pulled the chat 1px down, and back with the next line (2026-10-29,
+# Max: the chat jiggled as reasoning came in).
+@pytest.mark.parametrize("width,height,scale", [(1280, 900, 1), (1536, 730, 1.25), (390, 800, 3)])
+def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, phase4_server, width, height, scale):
+    class Scaled:
+        def new_context(self, **options):
+            return browser.new_context(device_scale_factor=scale, **options)
+
+    context, page = _real_firebase_page(Scaled(), phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": height})
+        page.emulate_media(reduced_motion="no-preference")
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True, "limit": 500}))
+        page.route("**/usage", lambda r: _json(r, {"tier": "pro", "is_pro": True, "remaining": 500, "total_limit": 500}))
+        page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        # The production SSE parser: a first answer, then a run that stays open.
+        page.evaluate("""() => {
+          const original = window.fetch;
+          let calls = 0;
+          window.fetch = async (url, options) => {
+            if (url !== '/agent') return original(url, options);
+            const body = JSON.parse(options.body || '{}');
+            if (!calls++) {
+              const text = Array.from({length:30}, (_, i) => `Paragraph ${i}. An earlier answer with enough material to read.`).join('\\n\\n');
+              const final = {response:text, chat_id:'a'.repeat(32), turn_id:'b'.repeat(32),
+                turn:{id:'b'.repeat(32), question:body.question, consensus:text, status:'completed', execution_mode:'agent',
+                  sources:[], model_answers:{}, agent_settings:{model_id:body.model_id, label:'DeepSeek V4.1 Flash'}}};
+              return new Response('event: final\\ndata: ' + JSON.stringify(final) + '\\n\\n', {headers:{'Content-Type':'text/event-stream'}});
+            }
+            const encoder = new TextEncoder();
+            return new Response(new ReadableStream({ start(controller) {
+              window.__emitAgent = event => controller.enqueue(encoder.encode('event: activity\\ndata: ' + JSON.stringify(event) + '\\n\\n'));
+              options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
+            }}), {headers:{'Content-Type':'text/event-stream'}});
+          };
+        }""")
+        page.locator("#questionInput").fill("First message")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_timeout(500)
+        page.locator("#questionInput").fill("Is a heat pump worth it in an old building?")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => !!window.__emitAgent")
+        expect(page.locator("#agentAnswerActivity .agent-progress .agent-current-status")).to_have_text("Thinking…")
+        # The question has reached the top: the page ends right below the turn.
+        page.wait_for_function("() => !document.body.classList.contains('chat-scroll-following')")
+        page.wait_for_timeout(400)
+        assert page.evaluate("document.documentElement.scrollHeight - innerHeight - scrollY") < 2
+        page.evaluate("""() => {
+          window.__frames = [];
+          window.__ends = [];
+          const tick = () => {
+            __frames.push([scrollY, document.getElementById('threadAsk').getBoundingClientRect().top]);
+            if (!window.__stop) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }""")
+        chunks = ["**Assessing the question**\n\n", "I need to weigh the running costs of a heat pump in an old building",
+                  " against the upfront price.", " The insulation matters most here.", "\n\n**Checking the numbers**\n\n",
+                  "Typical seasonal performance in older homes is lower,", " around 2.5 to 3.",
+                  " That still beats gas at current prices."]
+        for chunk in chunks:
+            page.evaluate("""chunk => window.__emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r1',
+              format:'summary', text:chunk, append:true})""", chunk)
+            # Past the height motion and the cross-fade of a changed line.
+            page.wait_for_timeout(450)
+            page.evaluate("""() => __ends.push(document.querySelector('.chat-scroll-reserve').getBoundingClientRect().bottom + scrollY)""")
+        frames = page.evaluate("() => { window.__stop = true; return __frames; }")
+        expect(page.locator("#agentAnswerActivity .agent-progress p")).to_contain_text("Checking the numbers")
+        # Not a pixel, in any frame: neither the scroll offset nor the question.
+        assert len({scroll for scroll, _ in frames}) == 1, frames
+        assert max(top for _, top in frames) - min(top for _, top in frames) < .01, frames
+        # The end of the page stays where it was at rest, whatever the lines' fraction.
+        ends = page.evaluate("__ends")
+        assert max(ends) - min(ends) < 1 / 32, ends
+        assert not errors
+    finally:
+        context.close()
+
+
 # Full-HD windows with a bookmarks bar: the question lands at a fractional
 # position (292.625px), where the reserve and the page height used to swap
 # 1px every frame and the scrollbar flickered for the whole run.

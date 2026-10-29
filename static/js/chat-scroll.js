@@ -85,15 +85,25 @@
       const after = Math.max(0, document.body.getBoundingClientRect().bottom - column.getBoundingClientRect().bottom)
         + (parseFloat(window.getComputedStyle(document.body).marginBottom) || 0);
       const below = (parseFloat(style.paddingBottom) || 0) + (inFlow ? composer.offsetHeight : 0) + after;
-      const turn = reserve.getBoundingClientRect().top - question.getBoundingClientRect().top;
-      // Rounded down: a reserve a fraction too tall makes the page scroll by
-      // that fraction. A fraction short is filled by the column's minimum
-      // height on a one-viewport page; on later turns the question lands
-      // under a pixel lower, unseen.
-      height = Math.max(0, Math.floor(window.innerHeight - landing(question) - turn - below));
+      const ask = question.getBoundingClientRect().top;
+      const turn = reserve.getBoundingClientRect().top - ask;
+      const land = landing(question);
+      // The page ends one viewport below the scroll offset that puts the
+      // question at the top (headTop, a whole pixel), whatever the turn's
+      // height: the reserve takes up every fraction of it. Rounded down to
+      // whole pixels until 2026-10-29, it left the end of the page at the
+      // turn's own fraction, so every new line of the live run (20.8px, and
+      // each frame of its growth) moved the end by a fraction. At the end of
+      // the page, where Send leaves every later question, the browser pulled
+      // the page 1px down whenever that end rounded a pixel lower, and back
+      // up with the next line (Max: the chat jiggled as reasoning came in).
+      const head = ask + window.scrollY - land;
+      // Down to the layout's own unit (1/64px): a reserve a fraction too
+      // tall would make the page scroll by that fraction.
+      height = Math.max(0, Math.floor((window.innerHeight - land - turn - below + Math.round(head) - head) * 64) / 64);
     }
     const current = parseFloat(reserve.style.height) || 0;
-    if (Math.abs(current - height) >= 1) reserve.style.height = `${height}px`;
+    if (current !== height) reserve.style.height = `${height}px`;
   }
   function contentEnd() {
     return reserve?.isConnected ? reserve.getBoundingClientRect().bottom + window.scrollY : null;

@@ -119,6 +119,27 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
+  // The live lines are 20.8px tall: a reserve in whole pixels left the end of
+  // the page at the turn's fraction, and at the end of the page every line
+  // that moved it across a pixel pulled the chat 1px down and back.
+  it('ends the page at the same place whatever fraction the turn above the reserve has', () => {
+    const app = boot({ askAt: 100.3 });
+    const reserve = app.document.querySelector('.chat-scroll-reserve');
+    const ends = [];
+    for (const top of [400.6, 421.397, 442.194, 457.563, 478.36]) {
+      reserve.getBoundingClientRect = () => ({ top: top - app.window.scrollY });
+      app.grow(0);
+      ends.push(top + parseFloat(reserve.style.height));
+    }
+    // One viewport below the whole-pixel offset that puts the question at
+    // the top (100), never past it, never more than the layout unit short.
+    for (const end of ends) {
+      expect(end).toBeLessThanOrEqual(900);
+      expect(end).toBeGreaterThan(900 - 1 / 64);
+    }
+    app.dom.window.close();
+  });
+
   it.each(['agent', 'consensus'])('opens a saved %s conversation at its newest question before the first frame, without a ride', mode => {
     const app = boot({ mode });
     app.saved(); app.window.App.chatScroll.opened();

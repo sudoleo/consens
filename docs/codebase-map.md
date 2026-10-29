@@ -2792,9 +2792,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `padding-bottom` beim fixierten Handy-Composer) und wird bei jedem
   ResizeObserver-/Resize-/Projektionsdurchlauf nachgeführt. Was nach der
   Spalte kommt, misst sie am Layout (Body- minus Spaltenunterkante), nie über
-  das gerundete `scrollHeight`, und sie rundet ab: sonst tauschten Reserve und
-  Seitenhöhe bei gebrochener Lage (Frage bei 292,625 px, Full-HD-Fenster) in
-  jedem Frame 1 px, und die Scrollleiste flackerte den ganzen Lauf über.
+  das gerundete `scrollHeight`: sonst tauschten Reserve und Seitenhöhe bei
+  gebrochener Lage (Frage bei 292,625 px, Full-HD-Fenster) in jedem Frame 1 px,
+  und die Scrollleiste flackerte den ganzen Lauf über. Seit 2026-10-29 legt sie
+  das Seitenende fest auf einen Viewport unter `headTop` (ganzer Pixel) und
+  nimmt dafür jeden Bruchteil der Turn-Höhe auf, abgerundet nur auf die
+  Layout-Einheit 1/64 px. Ganzzahlig abgerundet folgte das Seitenende dem
+  Bruchteil der Live-Zeilen (20,8 px, dazu ihre Höhen-Animation); am
+  Seitenende, wo jede spätere Frage nach dem Senden steht, zog der Browser den
+  Chat dann bei neuen Reasoning-Zeilen 1 px herunter und wieder hoch.
   `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` auf, auch
   bei noch lokal vorhandenen Runs: **seit 2026-10-20 ohne Fahrt** (Apple-Audit
   A2/A3) — die neueste Frage wird synchron vor dem ersten Bild an ihre
