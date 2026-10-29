@@ -960,6 +960,14 @@ describe("single-model agent chat", () => {
     expect(step({...shown, status:'failed'})).toBe('Picture · Failed');
     w.App.agentActivity.render(host, {running:true, events:[{...shown, status:'running'}]});
     expect(host.querySelector('.agent-current-status').textContent).toBe('Getting a picture…');
+    // find_pictures (2026-10-29): what the agent looked at before it showed one.
+    const looked = {id:'l', kind:'tool', name:'find_pictures', status:'succeeded', count:4, host:'taz.de'};
+    expect(step(looked)).toBe('Looked at 4 pictures');
+    expect(step({...looked, count:1})).toBe('Looked at a picture · taz.de');
+    expect(step({...looked, count:1, host:'<img src=x>'})).toBe('Looked at a picture');
+    expect(step({...looked, count:0, outcome:'failed'})).toBe('Found no pictures');
+    w.App.agentActivity.render(host, {running:true, events:[{...looked, status:'running'}]});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Looking at pictures…');
     dom.window.close();
   });
 

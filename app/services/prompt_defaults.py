@@ -116,7 +116,7 @@ This chat runs in agent mode with audit. A message without tool calls is your an
 
 AGENT_AUDIT_SYSTEM_PROMPT = _AGENT_AUDIT_STEERING + "\n\n" + AGENT_AUDIT_ANSWER_SECTION
 
-# read_source and show_image need no block of their own in audit mode (since
+# read_source, find_pictures and show_image need no block of their own in audit mode (since
 # 2026-10-28): what each does stands in its description (agent_read_source,
 # agent_web_images), and the two facts about the app around them (pictures in
 # the answer do not show; some providers' search hits never reach the app or

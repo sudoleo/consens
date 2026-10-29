@@ -9,7 +9,9 @@
   const tools = {
     web_search: ['Web search', 'Searching the web…', 'Searched the web'],
     read_source: ['Read source', 'Reading a source…', 'Read source'],
-    // A picture from the web under the answer (agent_web_images.py; pictureSummary).
+    // Pictures from the web: looked at by the agent alone, then one under the
+    // answer (agent_web_images.py; lookSummary, pictureSummary).
+    find_pictures: ['Pictures', 'Looking at pictures…', 'Looked at pictures'],
     show_image: ['Picture', 'Getting a picture…', 'Showed a picture'],
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
     check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
@@ -94,12 +96,25 @@
     if (item.status === 'succeeded' && item.read === 'refused') return 'Read source · Skipped';
     return null;
   }
-  // "Showed a picture · liquipedia.net"; a site that gave none says so.
+  function pictureHost(item) {
+    return typeof item.host === 'string' && /^[\w.-]{1,253}$/.test(item.host) ? item.host : '';
+  }
+  // "Showed a picture · liquipedia.net"; a site that gave none says so (a
+  // turn before 2026-10-29, when show_image fetched the picture itself).
   function pictureSummary(item) {
     if (item.status !== 'succeeded') return null;
-    const host = typeof item.host === 'string' && /^[\w.-]{1,253}$/.test(item.host) ? item.host : '';
+    const host = pictureHost(item);
     if (item.outcome === 'failed') return 'Couldn’t get the picture';
     return host ? `Showed a picture · ${host}` : tools.show_image[2];
+  }
+  // "Looked at 4 pictures": the ones the agent saw before it showed one.
+  function lookSummary(item) {
+    if (item.status !== 'succeeded') return null;
+    const count = Number.isInteger(item.count) ? item.count : 0;
+    if (item.outcome === 'failed' || !count) return 'Found no pictures';
+    if (count > 1) return `Looked at ${count} pictures`;
+    const host = pictureHost(item);
+    return host ? `Looked at a picture · ${host}` : 'Looked at a picture';
   }
   // A turn whose only check was that of a pasted text (saved on 2026-10-09
   // before the answer of such a turn was judged too): the answer judges did
@@ -118,6 +133,7 @@
     }
     if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
     if (item.name === 'show_image' && pictureSummary(item)) return pictureSummary(item);
+    if (item.name === 'find_pictures' && lookSummary(item)) return lookSummary(item);
     if (item.name === 'search_chats' && item.opened && ['running', 'succeeded'].includes(item.status)) {
       return item.status === 'running' ? 'Opening an earlier chat…' : 'Read an earlier chat';
     }

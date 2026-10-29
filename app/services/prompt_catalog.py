@@ -86,7 +86,7 @@ _ENTRIES = (
      "Appended to \"Agent: audit mode instructions\" with their tools, instead of the agent's versions: Watch, "
      "settings, memory (relevance and, when the user lets the agent update memory, the update rules) and files. "
      "Without comparisons and without recipes for when to read, ask or remember. Since 2026-10-28 source reading "
-     "and pictures (read_source, show_image) have no block: their descriptions say what they do.",
+     "and pictures (read_source, find_pictures, show_image) have no block: their descriptions say what they do.",
      "agent_watch.py/agent_settings.py:AUDIT_PROMPT, "
      "agent_memory.py:AUDIT_MEMORY_*, agent_files.py:AUDIT_UNTRUSTED", _audit_blocks),
     ("audit_reviewer", "Agent audit: reviewers",

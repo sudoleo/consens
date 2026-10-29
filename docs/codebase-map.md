@@ -5803,7 +5803,7 @@ Agent-Prompts (seit 2026-10-28 schlank: nur App-Fakten, App-Verträge, Sicherhei
 und Wahrheit; eigene Audit-Blöcke `agent_watch.AUDIT_PROMPT`,
 `agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
 `agent_files.AUDIT_UNTRUSTED`, Admin-Katalog `agent_audit_blocks`; seit dem
-Aufräumen am 2026-10-28 abends jeder Fakt einmal: `read_source`/`show_image`
+Aufräumen am 2026-10-28 abends jeder Fakt einmal: `read_source`/`find_pictures`/`show_image`
 ohne eigenen Block, ihre zwei App-Fakten in `AGENT_AUDIT_ANSWER_SECTION`,
 `AGENT_VM_PROMPT` nur Werkzeug-übergreifendes, ein Name „workspace“,
 `AuditReadSourceArgs` nur `url`),
@@ -6138,7 +6138,8 @@ VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
 `agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn (`vm_file`, seit
-2026-10-28 auch `web_image` von `show_image` mit Bildunterschrift und der
+2026-10-28 auch `web_image` von `show_image`, seit 2026-10-29 nur ein
+Bild, das der Agent vorher mit `find_pictures` angesehen hat, mit Bildunterschrift und der
 Website als Link, `webSource`) als Bild direkt unter dem
 Antworttext (bis es gezeichnet ist, ein Feld im Skelett-Ton mit wanderndem Licht,
 `is-loading`, seit 2026-10-29; vorher eine leere weiße/graue Fläche beim Öffnen
@@ -8745,7 +8746,7 @@ app/services/
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge; im Audit-Modus seit 2026-10-28 jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN, nur mit Prüfern, vorher durch die Vorab-Prüfung), SourceReader.knows für das Gate
-  agent_web_images.py        Tool show_image (seit 2026-10-28, Audit-Modus, wo read_source läuft): Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; Bildmodelle sehen das Bild danach (take_pictures → DelegationLoop._show_pictures); höchstens 6 je Nachricht
+  agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, Audit-Modus, wo read_source läuft): find_pictures holt bis zu 6 Adressen gleichzeitig (18 je Nachricht), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht
   usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
   agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)

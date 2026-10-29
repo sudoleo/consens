@@ -300,7 +300,8 @@ Absatz „workbench“), und `vm_exec` sagte fälschlich, es starte im Home stat
 Ordner des Chats. `read_source` nimmt im Audit-Modus nur noch `url`
 (`AuditReadSourceArgs`: ohne `purpose`/`point`, die einen Lesegrund aus einer
 Liste verlangten, und ohne `status_update`, weil Text neben dem Aufruf als
-Notiz erscheint), `show_image` nur `url` und `caption`. Gemessen (Audit mit VM,
+Notiz erscheint), `show_image` nur `url` und `caption` (seit 2026-10-29
+`picture` und `caption`, davor `find_pictures` mit `urls`). Gemessen (Audit mit VM,
 ohne Memory): Systemprompt 8.488 → 6.579 Zeichen, Werkzeuge 21.868 → 20.459.
 Max' Anlass: Terra schätzte die eigene „kognitive Auslastung“ auf 40 %; das ist
 kein Messwert, die Messung zeigte einen schlanken Harness mit Dopplungen.
@@ -3965,18 +3966,46 @@ Quellenansicht markiert gelesene Quellen mit „Read by the agent“, verglichen
 wie `url_key` und auch über die zitierte Weiterleitung. `MOCK_LLM` liefert eine
 feste Seite ohne Abruf (`mock_llm.mock_fetched_page`).
 
-### Bilder aus dem Web (show_image, seit 2026-10-28)
+### Bilder aus dem Web (find_pictures, show_image, seit 2026-10-28)
 
 Anlass: „zeig mir ein Bild vom besten HS-BG-Spieler“ (Max, 2026-10-28).
 Claude zeigt Bildtreffer direkt, der Agent schrieb „Direkt einblenden kann ich
 es hier leider nicht“. Ein Markdown-Bild in der Antwort lädt der Browser
 absichtlich nie (`markdown-stream.js`: eine injizierte Bildadresse könnte
 Chat-Inhalt beim Rendern ohne Klick hinaustragen). Deshalb holt der Server
-das Bild: Werkzeug `show_image(url, caption)` (`agent_web_images.py`, nur im
-Audit-Modus und dort, wo `read_source` läuft, also nie in Chats mit
-Google-Daten).
+das Bild (`agent_web_images.py`, nur im Audit-Modus und dort, wo
+`read_source` läuft, also nie in Chats mit Google-Daten), in zwei Schritten
+seit 2026-10-29:
 
-- `url` ist ein Bild oder eine Seite. Bei einer Seite nimmt der Server ihr
+- **Erst ansehen:** `find_pictures(urls)` holt bis zu 6 Adressen gleichzeitig
+  (`LOOKS_PER_CALL`, `asyncio.gather`), höchstens 18 je Nachricht
+  (`LOOKS_PER_MESSAGE`). Jede kommt mit einer ID (`p1`, `p2` …), Seite, Bild,
+  Größe, dem Titel der Seite (`og:title`, sonst `<title>`) und dem Alt-Text
+  des Bildes (`og:image:alt`), beide gekürzt und als Seitenwörter markiert
+  (`page_words`, `UNTRUSTED_WORDS`). Ein Bildmodell sieht jedes Bild
+  verkleinert auf 768 px (`LOOK_SIDE`, `smaller`), eines ohne Augen wählt
+  nach Titel und Alt-Text. Der Nutzer sieht davon nichts; die Kandidaten
+  liegen nur im Prozess des Laufs, nie in der Ablage. Dieselbe Adresse oder
+  dasselbe Bild (Hash) behält seine ID und wird nicht neu geholt. Eine Seite,
+  die sperrt, kostet nur ihren eigenen Eintrag.
+- **Dann zeigen:** `show_image(picture, caption)` legt einen angesehenen
+  Kandidaten per ID unter die Antwort; erst jetzt wird gespeichert und
+  `resources` gesendet, und die Bildunterschrift entsteht, nachdem der Agent
+  das Bild gesehen hat. Eine unbekannte ID ist ein Werkzeugfehler.
+- Anlass (Max, 2026-10-29, „wer ist das gesicht von delay sports? zeig her“):
+  Die Antwort stand nach 30 s, dann suchte der Agent fünf Minuten in 45
+  Schritten nach einem Bild. Unter der Antwort hingen danach ein Platzhalter
+  mit der Unterschrift „Porträt“, das App-Icon einer Nachrichtenseite („a
+  random test“), ein Mannschaftsfoto, das als der Gründer beschriftet war, und
+  erst dann das richtige Foto. `show_image(url, caption)` zeigte jedes Bild
+  sofort und endgültig, mit einer Unterschrift, die vor dem Bild geschrieben
+  war, und ohne Bildsuche riet der Agent Seite für Seite. Die Seiten seiner
+  Suchtreffer tragen meist ein passendes Vorschaubild; `find_pictures` sieht
+  sie in einem Schritt an. Die Beschreibung von `show_image` sagt, dass die
+  App ein Bild mit seiner Seite als Quelle zeigt, wie eine Suchmaschine einen
+  Bildtreffer: Vorher suchte der Agent 150 s lang auf Commons und Wikidata
+  nach einem frei lizenzierten Foto, nach dem niemand gefragt hatte.
+- Eine Adresse ist ein Bild oder eine Seite. Bei einer Seite nimmt der Server ihr
   eigenes Vorschaubild (`og:image`, `twitter:image`, sonst das erste `image`
   im JSON-LD, `page_picture`). Abgerufen über `watch_images._fetch` mit
   `source_documents.pinned_target` (nur öffentliche Adressen, gepinnte IP,
@@ -3993,11 +4022,16 @@ Google-Daten).
   `caption`, daneben die Website als Link (`rel="noopener noreferrer
   nofollow"`), beide `data-i18n-skip`. Der Browser lädt das Bild nur von
   consens.io; die Bildseite sieht den Nutzer nie. Aktivität „Showed a picture ·
-  liquipedia.net“ bzw. „Couldn’t get the picture“ (`agent-activity.js`).
-- Höchstens 6 je Nachricht; dieselbe Adresse noch einmal ist dasselbe Bild.
-  Ein Chatmodell, das Bilder nimmt, sieht das Bild nach dem Ergebnis (wie
-  `vm_view_image`, `DelegationLoop._show_pictures`), um zu prüfen, ob es zeigt,
-  was es meinte.
+  liquipedia.net“; das Ansehen „Looked at 4 pictures“, „Looked at a picture ·
+  taz.de“ oder „Found no pictures“ (`agent-activity.js` `lookSummary`).
+  „Couldn’t get the picture“ steht nur noch in Turns vor 2026-10-29.
+- Höchstens 6 gezeigte je Nachricht; dieselbe ID noch einmal ist dasselbe
+  Bild. Ein Chatmodell, das Bilder nimmt, sieht die Kandidaten nach dem
+  Ergebnis (wie `vm_view_image`, `DelegationLoop._show_pictures`, Einleitung
+  `INTRO` mit ID und Seite); ältere verlassen den Blick wie andere Bilder.
+  Im Arbeitsprotokoll stehen beide Werkzeuge und die Bilder mit Herkunft
+  `web`; die Kurzbeschreibung für die Prüfer (`BRIEF_TOOLS`) sagt, dass nur
+  gezeigte Bilder den Nutzer erreichen.
 - Vorab-Prüfung bis 2026-10-29 (seitdem folgen die Prüfer live, siehe
   „Vorab-Prüfung“): eine Adresse, die die Nachricht nicht hielt, wartete auf
   die Prüfer (`WEB_READS`), ein schon gezeigtes Bild nicht mehr.

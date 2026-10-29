@@ -71,8 +71,8 @@ TOOL_DATA = {
     # Pages of the open web, in the user's signed-in browser; ask_user brings
     # the page back with it once the user handed the browser back (agent_ask.py).
     "browser": "web", "ask_user": "web",
-    # A picture of the web the server fetched (agent_web_images.py).
-    "show_image": "web",
+    # Pictures of the web the server fetched (agent_web_images.py).
+    "find_pictures": "web", "show_image": "web",
 }
 
 
@@ -141,7 +141,7 @@ def context_data(actor, index, own_from, message, text):
         return "agent"
     if is_work_record(text) or text.startswith(PICTURE_OPEN):
         # The app's record of VM output, a picture of the VM; a picture of
-        # the browser or one show_image fetched is the web's.
+        # the browser or one find_pictures fetched is the web's.
         from app.services.agent_browser import SCREENSHOT_INTRO
         from app.services.agent_web_images import INTRO
         return "web" if text.startswith((SCREENSHOT_INTRO.split("{")[0], INTRO.split("{")[0])) else "vm"

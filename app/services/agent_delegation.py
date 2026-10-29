@@ -454,7 +454,7 @@ class DelegationLoop(AgentLoop):
         ], argument_limit=24_000)
         self.comparison = None
         self.app_registry = None
-        # Pictures from the web under the answer (show_image, audit mode).
+        # Pictures from the web under the answer (find_pictures, show_image, audit mode).
         self.image_tools = None
         if comparison_models is not None:
             from app.services.agent_comparison import BOUNDED_COMPARISONS, ComparisonTools, preference_prompt
@@ -805,7 +805,7 @@ class DelegationLoop(AgentLoop):
 
     def _show_pictures(self):
         """The pictures vm_view_image read, the browser's screenshots and
-        the pictures show_image put under the answer of this batch follow its
+        the pictures find_pictures fetched in this batch follow its
         results as user messages with the image; older ones leave the view
         (agent_compaction.older_pictures)."""
         pictures = [*(self.vm_tools.take_pictures() if self.vm_tools is not None else ()),
