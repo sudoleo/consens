@@ -5074,7 +5074,14 @@ Lifespan-Ende wartet per `agent_background.drain` (Grace + 8 s). Die Grace muss
 unter der Render-Frist bleiben; wer die Frist erhöht, erhöht beide. Prod (seit
 2026-10-08): `maxShutdownDelaySeconds` 300 am Render-Dienst, Env
 `AGENT_SHUTDOWN_GRACE_SECONDS=280`; zusammen mit Renders 60 s Überlappung hat
-ein laufender Turn beim Deploy gut sechs Minuten.
+ein laufender Turn beim Deploy gut sechs Minuten. **Vor jedem Deploy**
+(Render-API, manuell, nur auf Max' Ansage) nennt
+`scripts/running_agent_turns.py` (nur lesend, seit 2026-10-29, A-R10) die
+laufenden und pausierten Agent-Turns aus ihren Root-Belegen (`run_status`,
+`lease_until`, `hold`), ohne Inhalte; Exit 1, solange einer läuft oder
+pausiert. Ein Turn, der in einer Pause wartet, überlebt den Neustart nicht
+(Läufe sind prozesslokal); einer, der vor der Antwort endet, speichert seinen
+`agent_work_record`.
 
 *Puffer (`agent_live`).* Je Lauf ≤ 10000 Frames/4 MiB (älteste zuerst
 verworfen, das neueste nie, damit auch ein übergroßes `final`/`error` ankommt),
