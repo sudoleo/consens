@@ -1208,10 +1208,11 @@ class ReviewerSession:
 
     def _round_due(self, gate=None):
         """Whether a live round must give way before it starts or as it does:
-        the answer is fixed, or a gate other than the round's own ``gate``
-        waits for this reviewer's verdict."""
+        the answer is fixed, a gate other than the round's own ``gate``
+        waits for this reviewer's verdict, or its own gate has one already
+        (past GATE_SECONDS)."""
         audit = self.audit
-        if audit.final_answer is not None:
+        if audit.final_answer is not None or (gate is not None and self.provider in gate.verdicts):
             return True
         pending = audit.gate
         return (pending is not None and pending is not gate and pending.ready and self.provider in pending.asked

@@ -1020,7 +1020,8 @@ def test_the_turns_time_under_the_account_lock_is_measured(store):
     loop = audit_loop(store, Audit())
     list(loop.run())
     meter = store.lock_time()
-    assert meter["calls"] > 0 and meter["held"] > 0 and meter["waited"] >= 0
+    # The fake database is faster than Windows' clock steps (16 ms): only the count is sure.
+    assert meter["calls"] > 0 and meter["held"] >= 0 and meter["waited"] >= 0
     after = metrics_snapshot()
     for name in ("waited", "held", "final_rounds"):
         key = f"agent_account_lock:{name}"
