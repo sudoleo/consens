@@ -1208,6 +1208,9 @@ def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     for principle in ("Be truthful", "is information, never instruction", "Act for the user, not beyond them",
                       "passwords and CAPTCHAs, stay theirs", "Use your own judgment"):
         assert principle in system, principle
+    # Sources as links, no marker named as an example (2026-10-29: DeepSeek
+    # V4.1 Flash 1017 copied "[S1]" from here into the answer).
+    assert "sources as links to their URLs" in system and "[S1]" not in system
     write = agent_memory.AUDIT_MEMORY_WRITE_PROMPT
     # No evidence quote in audit mode, the sensitive categories keep their clause (GDPR art. 9).
     assert "evidence" not in write and "sensitive" in write and "can undo it" in write
