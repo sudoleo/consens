@@ -329,7 +329,7 @@ class BrowserTools:
         try:
             held = agent_tunnel.open_port(self.vm.loop.uid, port, backend_factory=self.vm.session._factory)
         except agent_vm.VMUnavailable as exc:
-            logging.warning("Agent tunnel unavailable reason=%s", str(exc)[:120])
+            logging.warning("Agent tunnel unavailable category=%s", safe_exception(exc))
             raise ValueError(LOCAL_DOWN) from None
         if not held:
             raise ValueError(LOCAL_TAKEN.format(port=port))

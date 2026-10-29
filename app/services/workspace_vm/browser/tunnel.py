@@ -85,6 +85,12 @@ class Tunnel:
             try:
                 if family == socket.AF_INET6:
                     server.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                if os.name != "nt":
+                    # Linux: the port again while the last tunnel's
+                    # connections still wait out TIME_WAIT (a restart of
+                    # the tunnel found it "taken", CI 2026-10-29). Windows'
+                    # SO_REUSEADDR would also take a port in use.
+                    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 server.bind((host, port))
                 server.listen(64)
             except OSError:
