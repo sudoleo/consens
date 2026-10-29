@@ -86,6 +86,12 @@ AGENT_RUN = TOOLS_DIR + "/agent-run"
 KILL_GRACE_SECONDS = 5
 EXIT_WAIT_SECONDS = 15
 REQUEST_SECONDS = 30
+# What may wake a sleeping VM (its network rules, a file of the provider's
+# user): its first call after a while answers once the VM is up. Measured in
+# Prod 2026-10-28/29: a first browser call of a message took up to 99 s, and
+# a policy request ran into REQUEST_SECONDS (the browser was off for the
+# message, the live view did not open).
+WAKE_SECONDS = 90
 CHECKPOINT_SECONDS = 120
 WS_OPEN_SECONDS = 20
 WS_MAX_FRAME = 10 * 1024 * 1024
@@ -193,9 +199,11 @@ class VMBackend:
         """Whether the VM exists (a deletion never creates one)."""
         raise NotImplementedError
 
-    def ensure(self, name, rules):
+    def ensure(self, name, rules=None):
         """Create the VM if it does not exist yet and apply the network
-        ``rules`` (WORKBENCH_RULES or BROWSER_RULES, agent_domains.rules)."""
+        ``rules`` (WORKBENCH_RULES, agent_domains.rules); None leaves them as
+        they are (the browser VM sets its rules with a new version of its
+        tools, agent_workspace.prepare_browser). True when it was created."""
         raise NotImplementedError
 
     def set_policy(self, name, rules):
@@ -371,18 +379,23 @@ class SpritesBackend(VMBackend):
     def exists(self, name):
         return self._request("get", "GET", self._sprite(name), missing_ok=True).status_code != 404
 
-    def ensure(self, name, rules):
+    def ensure(self, name, rules=None):
+        created = False
         if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
             try:
                 self._request("create", "POST", "/v1/sprites", json={"name": name})
+                created = True
             except VMUnavailable:
                 # Another message of the chat may have created it just now.
                 if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
                     raise
-        self.set_policy(name, rules)
+        if rules is not None:
+            self.set_policy(name, rules)
+        return created
 
     def set_policy(self, name, rules):
-        self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": list(rules)})
+        self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": list(rules)},
+                      timeout=WAKE_SECONDS)
 
     def get_policy(self, name):
         # {"rules": [...]}, [] on a sprite whose policy was never set (measured 2026-10-28).
@@ -420,7 +433,8 @@ class SpritesBackend(VMBackend):
             return data[:limit], len(data) <= limit
         params = {"path": path, "workingDir": SERVER_HOME}
         try:
-            with self._http.stream("GET", self._sprite(name) + "/fs/read", params=params) as response:
+            with self._http.stream("GET", self._sprite(name) + "/fs/read", params=params,
+                                   timeout=WAKE_SECONDS) as response:
                 if response.status_code == 404:
                     raise VMFileMissing(path)
                 if not response.is_success:

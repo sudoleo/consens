@@ -267,6 +267,23 @@ def test_every_call_holds_the_browser_vm_awake_for_ten_minutes(monkeypatch, caps
     fresh.stay_awake()
 
 
+def test_the_browser_vm_sets_its_network_rules_with_a_new_version_only(fake_vm, monkeypatch):
+    """Prod 2026-10-29: every opening set the rules anew, a request that
+    waits while the VM wakes; once it ran into its limit and the browser was
+    off for the message. They only change with a new version, which sets
+    them (the rules are part of BROWSER_VERSION)."""
+    backend = fake_vm.backend()
+    name = agent_workspace.open_browser(backend, UID)
+    assert fake_vm.vms[name]["policy"] == agent_vm.BROWSER_RULES
+    assert [call for call in fake_vm.calls if call[0] == "policy"] == [("policy", name)]
+    # Current: no policy request, so a failing one costs nothing.
+    fake_vm.fail.add("policy")
+    agent_workspace.open_browser(backend, UID)
+    assert len([call for call in fake_vm.calls if call[0] == "policy"]) == 1
+    monkeypatch.setattr(agent_vm, "BROWSER_RULES", [{"domain": "*", "action": "allow"}])
+    assert agent_workspace._version("browser") != agent_workspace.BROWSER_VERSION
+
+
 def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_has_it(tmp_path, monkeypatch, capsys):
     """browser.py on the browser VM: JSON in, JSON out, no shell. While the
     user has the browser it acts on nothing; an upload takes only a file the
@@ -281,7 +298,11 @@ def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_ha
     assert started == []
     assert run_helper(browser, monkeypatch, capsys, {"action": "rm -rf /"}) == {
         "status": "refused", "text": "Unknown action rm -rf /."}
-    assert browser.ACTIONS == set(agent_browser.ACTIONS)
+    # "warm" is the server's own start of the browser (agent_browser._warm):
+    # never one of the agent's actions, and it reads nothing of the pages.
+    assert browser.ACTIONS == set(agent_browser.ACTIONS) | {"warm"} and "warm" not in browser.ACTING
+    assert run_helper(browser, monkeypatch, capsys, {"action": "warm"})["text"] == ""
+    assert started == [True]
     assert set(browser.KEYS) == set(agent_browser.KEYS)
     with pytest.raises(browser.Refused, match="missing"):
         browser.act(None, None, "upload", {"ref": "e1", "file": "/etc/passwd"})

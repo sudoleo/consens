@@ -45,6 +45,9 @@ def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, f
     assert fake_vm.vms[BROWSER]["policy"] == agent_vm.BROWSER_RULES
     assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
     assert fake_vm.vms[BROWSER]["checkpoints"] == [] and fake_vm.calls.count(("ensure", BROWSER)) == 1
+    # The first call woke the browser VM and its Chrome once, on a backend of
+    # its own, while the workbench got ready (since 2026-10-29).
+    assert fake_vm.warmed == [BROWSER]
     # The workspace's lease covers it; the page comes back as text.
     read = results(loop)[0]
     assert read["action"] == "read" and read["page"].startswith('Page: "Example"')
@@ -296,8 +299,9 @@ def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
     list(loop.run())
     first, second, command = results(loop)
     assert first == {"error": BROWSER_UNAVAILABLE} and second == {"error": BROWSER_UNAVAILABLE}
-    assert [call for call in fake_vm.calls if call[0] == "run"] == [("run", BROWSER, call[2]) for call in
-                                                                    fake_vm.calls if call[0] == "run"][:1]
+    # The warm-up and the first call tried it; the second never did.
+    runs = [call for call in fake_vm.calls if call[0] == "run"]
+    assert len(runs) == 2 and all(call[1] == BROWSER for call in runs)
     assert command["exit_code"] == 0
 
 

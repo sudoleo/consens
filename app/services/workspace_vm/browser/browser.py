@@ -86,7 +86,7 @@ API_SOCKET = "/.sprite/api.sock"
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
 ACTIONS = {"open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
-           "tabs", "tab", "screenshot", "upload", "download", "wait"}
+           "tabs", "tab", "screenshot", "upload", "download", "wait", "warm"}
 # What changes the page or sends something: never while the user has the browser.
 ACTING = {"open", "click", "drag", "type", "select", "upload", "download", "key", "scroll", "back", "forward", "tab"}
 # A place on the page and drag's strokes (agent_browser.py checks the same).
@@ -696,6 +696,11 @@ def run(request):
                              "your next call waits until they hand it back, or answer with what you have.")
     query = find_query(request) if action == "find" else ""
     ensure_browser()
+    if action == "warm":
+        # The server's own start of the browser while the workbench gets
+        # ready (agent_browser.BrowserTools._warm, since 2026-10-29): it
+        # reads nothing of the pages, and the agent never asks for it.
+        return {"text": ""}
     # A first setup installed Playwright into the user's site folder, which
     # Python only looks at when it exists at its start.
     import importlib

@@ -132,6 +132,9 @@ def _version(kind):
     digest = hashlib.sha256(kind.encode() + b"\0" + agent_vm.AGENT_USER.encode() + b"\0")
     for name, data in sorted(tool_files(kind).items()):
         digest.update(name.encode() + b"\0" + data + b"\0")
+    if kind == "browser":
+        # Its network rules come with a new version (prepare_browser).
+        digest.update(json.dumps(agent_vm.BROWSER_RULES, sort_keys=True).encode())
     return digest.hexdigest()[:16]
 
 
@@ -374,10 +377,12 @@ def prepare(vm, name, cancellation=None):
 
 
 def prepare_browser(vm, name):
-    """The browser VM's tools at BROWSER_VERSION (browser.py installs and
-    starts the browser itself when called). Returns whether it wrote them."""
+    """The browser VM's tools and network rules at BROWSER_VERSION
+    (browser.py installs and starts the browser itself when called).
+    Returns whether it wrote them."""
     if _current(vm, name, BROWSER_VERSION):
         return False
+    vm.set_policy(name, agent_vm.BROWSER_RULES)
     for file, data in tool_files("browser").items():
         vm.write_file(name, f"{WORKSPACE_DIR}/{file}", data, agent=False)
     vm.write_file(name, VERSION_PATH, BROWSER_VERSION.encode(), agent=False)
@@ -385,10 +390,13 @@ def prepare_browser(vm, name):
 
 
 def open_browser(vm, uid):
-    """The account's browser VM, created if needed with its network rules
-    and tools up to date; its name."""
+    """The account's browser VM, created if needed, with its tools and
+    network rules up to date; its name. Until 2026-10-29 every opening set
+    its rules anew, a request that waits while the VM wakes: in Prod it once
+    ran into its time limit, and the browser was off for the message. The
+    rules only change with a new version, which sets them."""
     name = agent_vm.browser_name(uid)
-    vm.ensure(name, agent_vm.BROWSER_RULES)
+    vm.ensure(name)
     prepare_browser(vm, name)
     return name
 

@@ -50,12 +50,13 @@ class FakeVM:
     ``server`` collects the commands the server ran as the provider's user,
     ``server_files`` the paths it read or wrote that way (every other file
     operation is the agent's, agent_vm.agent_argv). ``browser`` answers the
-    browser VM's helper: request -> answer (agent_browser.py)."""
+    browser VM's helper: request -> answer (agent_browser.py); the server's
+    own start of the browser (action warm) is in ``warmed``, not ``requests``."""
 
     def __init__(self, clock=None):
         self.vms, self.calls, self.commands, self.fail = {}, [], {}, set()
         self.server, self.server_files = [], []
-        self.requests = []
+        self.requests, self.warmed = [], []
         self.browser = lambda request: {"status": "ok", "text": 'Page: "Example"\nURL: https://example.com/\n'
                                                                 '[e1] link "More information"'}
         self.clock = clock or Clock()
@@ -81,10 +82,13 @@ class _FakeBackend(VMBackend):
         self._call("exists", name)
         return name in self.vm.vms
 
-    def ensure(self, name, rules):
+    def ensure(self, name, rules=None):
         self._call("ensure", name)
+        created = name not in self.vm.vms
         self.vm.vms.setdefault(name, {"files": {}, "checkpoints": [], "created": len(self.vm.calls)})
-        self.vm.vms[name]["policy"] = list(rules)
+        if rules is not None:
+            self.vm.vms[name]["policy"] = list(rules)
+        return created
 
     def set_policy(self, name, rules):
         self._call("policy", name)
@@ -108,6 +112,10 @@ class _FakeBackend(VMBackend):
         """Only the browser VM's helper runs this way (agent_browser.py)."""
         self._call("run", name, argv[-1])
         request = json.loads(input or b"{}")
+        if request.get("action") == "warm":
+            self.vm.warmed.append(name)
+            on_output("stdout", b'{"status": "ok", "text": ""}')
+            return ExecOutcome(exit_code=0, timed_out=False, seconds=.5)
         self.vm.requests.append(request)
         answer = self.vm.browser(request)
         self.vm.clock.now += .5
@@ -1165,6 +1173,29 @@ def test_sprites_creates_a_missing_vm_and_applies_its_network_rules():
     # The browser VM reaches the open web, never Fly.io's private network.
     assert agent_vm.BROWSER_RULES[:2] == [{"domain": "*.internal", "action": "deny"},
                                           {"domain": "*.flycast", "action": "deny"}]
+
+
+def test_sprites_ensure_without_rules_leaves_them_and_a_waking_call_gets_time():
+    """Prod 2026-10-29 09:56: every opening of the browser VM set its rules
+    anew; the request waited while the VM woke and ran into REQUEST_SECONDS,
+    and the browser was off for the message. Without rules ensure only looks;
+    what may wake a VM waits WAKE_SECONDS."""
+    seen, timeouts = [], {}
+
+    def handler(request):
+        seen.append((request.method, request.url.path))
+        timeouts[request.url.path] = request.extensions["timeout"]["read"]
+        if request.url.path.endswith("/fs/read"):
+            return httpx.Response(200, content=b"v1")
+        return httpx.Response(200, json={}) if request.method == "GET" else httpx.Response(204)
+    backend = sprites(handler)
+    assert backend.ensure("consens-b-abc") is False
+    assert seen == [("GET", "/v1/sprites/consens-b-abc")]
+    backend.set_policy("consens-b-abc", agent_vm.BROWSER_RULES)
+    backend.read_file("consens-b-abc", "/home/sprite/.consens/VERSION", limit=64, agent=False)
+    assert timeouts["/v1/sprites/consens-b-abc"] == agent_vm.REQUEST_SECONDS
+    assert timeouts["/v1/sprites/consens-b-abc/policy/network"] == agent_vm.WAKE_SECONDS
+    assert timeouts["/v1/sprites/consens-b-abc/fs/read"] == agent_vm.WAKE_SECONDS
 
 
 def test_sprites_failures_are_one_kind_of_error():

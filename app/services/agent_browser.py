@@ -25,6 +25,13 @@ that act outside (open, click, Enter, upload) waited for them first
 ask_user (agent_ask.py). The calls share the workspace's lease
 and VM time with the VM tools (VMTools._start); a failing browser VM costs
 only this tool for the rest of the message.
+
+The first call of a message wakes the browser VM and starts Chrome on a
+backend of its own while the workbench gets ready (_warm, since
+2026-10-29). Before, it prepared the workbench (lease, network rules, the
+chat's folder, a checkpoint, the notes) and only then woke the browser VM
+and started Chrome, one after the other: in Prod a first call took a median
+10 s and up to 99 s, every later one 1.9 s.
 """
 from __future__ import annotations
 
@@ -34,6 +41,7 @@ import json
 import logging
 import posixpath
 import re
+import threading
 from typing import Literal, Optional
 from urllib.parse import urlsplit
 
@@ -183,14 +191,50 @@ class BrowserTools:
 
     def tools(self):
         return [ReadOnlyTool(
-            "browser", "Use the browser, a Chrome on a computer of its own that the user can watch and take over "
-                       "live, signed in where the user signed in. Pages come back as text with refs (e12) for click, "
+            "browser", "Use the browser you share with the user, a Chrome on a computer of its own that they see "
+                       "live and can take over, signed in where the user signed in. Pages come back as text with refs (e12) for click, "
                        "type, select and upload, and find looks up a text on the page with the refs it is in; every "
                        "action returns the page again. A file the page downloads, also one the user downloads there, "
                        "comes into your chat folder's downloads folder.",
             BrowserArgs, self.call, activity=self._activity, reports=True)]
 
-    def _helper(self, request, timeout, cancellation):
+    def _warm(self, cancellation):
+        """Starts waking the browser VM and its Chrome (the helper's action
+        warm, which reads nothing of the pages) on a backend of its own, so it
+        runs while VMTools._start gets the workbench ready. Returns the
+        thread, whose ``ok`` says whether the browser VM is open, or None
+        when the workspace cannot be used now."""
+        from app.services import agent_workspace
+        session = self.vm.session
+        left = session.left()
+        if session.state in {"unavailable", "busy"} or (left is not None and left < 1):
+            return None
+        uid = self.vm.loop.uid
+
+        def run():
+            backend = None
+            try:
+                backend = session._factory()
+                if backend is None:
+                    return
+                agent_workspace.open_browser(backend, uid)
+                thread.ok = True
+                self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend)
+            except Exception as exc:
+                # The call then opens it itself, as before.
+                logging.info("Agent browser warm-up failed category=%s", safe_exception(exc))
+            finally:
+                if backend is not None:
+                    try:
+                        backend.close()
+                    except Exception:
+                        pass
+        thread = threading.Thread(target=run, name="agent-browser-warm", daemon=True)
+        thread.ok = False
+        thread.start()
+        return thread
+
+    def _helper(self, request, timeout, cancellation, backend=None):
         """The helper's answer for ``request`` (a dict) and its seconds."""
         session = self.vm.session
         out = bytearray()
@@ -201,7 +245,7 @@ class BrowserTools:
         from app.services import agent_workspace
         # A fixed command with the login environment (python3 and Playwright
         # in the provider's user's folders); the request goes in on stdin.
-        outcome = session.backend.run(
+        outcome = (backend or session.backend).run(
             self.name, agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_HELPER}", timeout, False),
             cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=keep, cancellation=cancellation,
             input=json.dumps(request).encode())
@@ -222,6 +266,9 @@ class BrowserTools:
             logging.warning("Agent browser failed unexpectedly category=%s", safe_exception(exc))
             from app.services.error_alerts import report_server_exception
             report_server_exception(exc, where="agent_browser.call", phase="tool")
+        else:
+            # Its own words name the operation, never data (agent_vm).
+            logging.warning("Agent browser unavailable reason=%s", str(exc)[:120])
         self.off = True
         return ValueError(BROWSER_UNAVAILABLE)
 
@@ -265,6 +312,7 @@ class BrowserTools:
             request.update(x=args.x, y=args.y)
         if args.action == "drag":
             request["strokes"] = args.strokes
+        warming = self._warm(cancellation) if not self.ready else None
         self.vm._start(cancellation)
         session = self.vm.session
         upload = None
@@ -277,7 +325,10 @@ class BrowserTools:
             timeout = min(timeout, int(left))
         try:
             if not self.ready:
-                agent_workspace.open_browser(session.backend, self.vm.loop.uid)
+                if warming is not None:
+                    warming.join(timeout)
+                if warming is None or not warming.ok:
+                    agent_workspace.open_browser(session.backend, self.vm.loop.uid)
                 self.ready = True
             if args.action == "upload":
                 path = vm_path(args.file, session.dir)

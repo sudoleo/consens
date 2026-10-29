@@ -900,6 +900,25 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `localhost` nennt, `-rfbport 0` allein ließ `[::]:5900`, `-noipv6` wirkt in
   0.9.17 nicht (gemessen an Test-Sprites 2026-10-27). Chrome speichert keine
   Passwörter, Karten und Adressen (Richtlinie).
+- **Öffnen und erster Aufruf** (seit 2026-10-29). Prod 2026-10-29 09:56 UTC:
+  Live-Ansicht und Browser-Aufruf scheiterten beide an `Agent VM request
+  failed operation=policy category=ReadTimeout`. Jedes Öffnen (`open_browser`,
+  je Nachricht und je Ansicht) setzte die Netzregeln neu, und diese Anfrage
+  wartete, während die schlafende VM aufwachte, länger als `REQUEST_SECONDS`
+  (30 s); der Browser war für die Nachricht aus. Jetzt setzt nur eine neue
+  Version die Regeln (`prepare_browser`, `BROWSER_RULES` gehen in
+  `BROWSER_VERSION` ein), `open_browser` schaut sonst nur nach
+  (`ensure(name)` ohne Regeln), und was eine VM wecken kann (Regeln setzen,
+  eine Datei des Anbieter-Nutzers lesen), wartet `WAKE_SECONDS` (90 s). Der
+  erste Aufruf einer Nachricht dauerte in vier Tagen Prod im Median 10,4 s
+  (im langsamsten Zehntel bis 99 s), jeder spätere 1,9 s: Er bereitete erst
+  die Werkbank vor (Sperre, Regeln, Ordner, Checkpoint, Notizen) und weckte
+  danach die Browser-VM und startete Chrome. Jetzt weckt `BrowserTools._warm`
+  die Browser-VM auf einem eigenen Backend und startet Chrome (Helfer-Aktion
+  `warm`, liest nichts von den Seiten, nie eine Aktion des Agenten), während
+  `VMTools._start` die Werkbank vorbereitet; scheitert das, öffnet der Aufruf
+  sie wie zuvor selbst. Fällt der Browser aus, steht der Grund im Log
+  (`Agent browser unavailable reason=…`).
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
   `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
   `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,
