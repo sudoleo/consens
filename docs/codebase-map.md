@@ -3543,7 +3543,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   vorher gezeigte gespeicherte Consensus-Antwort samt Markern und Fuss vom
   Schirm (`clearConsensus`). Registry-Ereignisse dürfen für Hintergrundläufe
   nur deren anklickbare Sidebar-Zeile aktualisieren (Preparing/Models
-  answering/Completed/Failed/Stopped; Agent: Working/Thinking/Writing answer).
+  answering/Completed/Failed/Stopped; Agent seit 2026-10-29 das Wort des
+  Aktivitätskopfs aus `App.agentActivity.phase`/`PHASE_WORDS`: Working,
+  Reviewing/Checking, Paused, Waiting for you; vorher Thinking/Writing answer,
+  UX-Audit E2). Die Zeile hält 96 px für den Zustand frei, der Titel kürzt
+  (E3); auf der gewählten Zeile neigt sich die Ampelfarbe zur Tinte (J4).
   Beim Streaming bleiben unveränderte Modellboxen (inklusive Ladeindikatoren)
   im DOM erhalten. Inhalts-Signaturen beziehen Status, Fehler und Quellen ein;
   ein Sichtwechsel invalidiert die Projektion.
@@ -3575,7 +3579,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `window.App.syncSendButtonRunning()`.
 - **`tab-status.js`** (seit 2026-10-02, nach `query-send.js` gebündelt) —
   solange die Seite verborgen ist (`document.hidden`), nennt der Tab-Titel den
-  sichtbaren Lauf: „Working… · <Titel>“, danach „Answer ready“ bzw. „Run
+  sichtbaren Lauf: „Working… · <Titel>“ (während die Prüfer die Antwort
+  prüfen seit 2026-10-29 „Reviewing…“/„Checking…“), danach „Answer ready“ bzw. „Run
   stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
   schon vor dem Verlassen fertig war, wird nicht gemeldet. Jede Projektion
@@ -11287,7 +11292,12 @@ fokussiert deren erste Bedienung). Alle Integrations-Tools haben Lauf-/Fertig-
 Texte in `agent-activity.js`; unbekannte Tools zeigen neutrale Texte. Die
 Websuche nennt Anzahl und Domains ihrer Quellen (`Searched the web · 3 sources:
 skat.dk, virk.dk, borger.dk`). Die Kopfzeile lautet `Working for 12s` während des
-Laufs und `Thought for 3m 7s` danach (`Stopped after`/`Response failed after`).
+Laufs und `Thought for 3m 7s` danach (`Stopped after`/`Failed after`); seit
+2026-10-29 (UX-Audit E1) `Reviewing · 2m 19s` während die Prüfer prüfen und
+`Paused · …`/`Waiting for you · …` mit stehender Uhr, solange der Lauf auf
+den Nutzer wartet (`titleParts`, `HEAD_VERBS`, `waitedMs`); die Wartezeit
+fehlt auch im Endwert (`savedDuration` zieht `agent_wait_seconds` ab). Ein
+Zustandswechsel gleitet den Kopf einmal auf seine neue Breite.
 `Writing answer…` erscheint nur, wenn nach dem letzten `responding`-Status kein
 Tool-Schritt mehr kam; Text vor einem Tool-Aufruf ist Vorrede, nicht Antwort.
 
@@ -11301,7 +11311,11 @@ App-Sidebar rechts (volle Höhe, `--ground`, eine Haarlinie `--line-soft` zur
 Spalte, keine Karte, kein Schatten; Zeilen ohne Trennlinien mit Ton beim
 Hover, Segmente nur in Tinte, laufender Aufruf als wandernder Abschnitt ohne
 Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.auth-top-actions` rückt
-für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet.
+für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet,
+seit 2026-10-29 von 700 px an als Panel am rechten Rand in der Breite der
+Desktop-Leiste (UX-Audit E6, vorher 1066 px breit bei 1100), darunter von
+unten; Scrim und Sheet liegen über der Kopfleiste des Handys
+(`--z-header` + 1/+ 2, H3).
 `agent-delegation.js` stellt die Leiste ab 1200 px seit 2026-10-28 ohne
 eigene Wahl neben die Spalte (`panelDefaultClosed`; vom 17. bis 28.10. nur auf
 Klick); ein Schließen merkt `localStorage` `agent-panel:{uid}` für die nächsten
@@ -11327,7 +11341,10 @@ Logos sofort aus `agent_review` (`project({models})`, `agent-chat.js`
 während eines laufenden bzw. abschließenden Laufs und endet danach.
 Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
 reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
-andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
+andere unsichtbar per `data-ghost`; seit 2026-10-29 nur, solange die Uhr
+läuft: danach nimmt das Feld seine eigenen Worte, „Fertig nach“ stand sonst
+mit doppelter Lücke vor der Zeit, UX-Audit B14/R19; im Englischen sind beide
+gleich breit), `.agent-activity-time[data-unit]` die des
 größten Werts seiner Einheit. Eine live tickende Uhr hält den Platz ihrer
 eigenen Einheit (bis 59 s nur `seconds`; bis 2026-10-21 von der ersten Sekunde
 an den Minuten-Platz, das ließ eine Minute lang eine breite Lücke vor dem

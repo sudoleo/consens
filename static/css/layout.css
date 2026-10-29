@@ -1264,8 +1264,10 @@ body:has(.sidebar.active) .brand-float {
 }
 /* Registry runs are intentionally openable while they are pending. The
    legacy one-off placeholder above remains inert for old clients. */
+/* Room for the state beside the name: the name gives way with its ellipsis,
+   never the state (UX audit E3: "Wartet auf …" in 78px). */
 .sidebar .bookmark.run-entry {
-  padding-right: 92px;
+  padding-right: calc(96px + var(--space-4));
 }
 .sidebar .bookmark.run-entry.is-pending {
   cursor: pointer;
@@ -1280,12 +1282,13 @@ body:has(.sidebar.active) .brand-float {
   }
 }
 .run-entry-status {
+  --run-status-ink: var(--sidebar-text-muted);
   position: absolute;
-  right: 8px;
+  right: var(--space-2);
   top: 50%;
-  max-width: 78px;
+  max-width: 96px;
   overflow: hidden;
-  color: var(--sidebar-text-muted);
+  color: var(--run-status-ink);
   font-size: var(--font-size-xs);
   /* overflow:hidden clips at the line box: with line-height 1 the
      descenders of "Working" (g, p) were cut off. */
@@ -1297,10 +1300,14 @@ body:has(.sidebar.active) .brand-float {
 /* A run that waits for the user (a pause, the agent's question): it does not
    work, so its name does not pulse; the word takes the pause's tone. */
 .sidebar .bookmark.run-entry.is-paused p { animation: none; }
-.run-entry.is-paused .run-entry-status { color: var(--partial); }
-.run-status-succeeded .run-entry-status { color: var(--agree); }
-.run-status-failed .run-entry-status { color: var(--dispute); }
-.run-status-canceled .run-entry-status { color: var(--sidebar-text-muted); }
+.run-entry.is-paused .run-entry-status { --run-status-ink: var(--partial); }
+.run-status-succeeded .run-entry-status { --run-status-ink: var(--agree); }
+.run-status-failed .run-entry-status { --run-status-ink: var(--dispute); }
+.run-status-canceled .run-entry-status { --run-status-ink: var(--sidebar-text-muted); }
+/* On the chosen row's tone the state's colour leans towards the ink, so the
+   12px word keeps 4.5:1 (UX audit J4: amber, green and red stood at 4.3:1
+   there in light mode; in dark mode the lean brightens it). */
+.sidebar .bookmark.run-entry.is-active .run-entry-status { color: color-mix(in srgb, var(--run-status-ink) 82%, var(--ink)); }
 .bookmark-pending-spinner {
   position: absolute;
   right: 11px;

@@ -587,10 +587,13 @@ Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 mit), `hold`/`hold_decision` am Lauf-Root, seit 2026-10-29 `agent_holds[]` am
 Turn-Dokument (jede beendete Pause, höchstens `HOLDS_KEPT` = 20: `kind`,
 `gate`, `ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
-Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`), Tab-Titel
+Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`; dort nur
+ihre Summe `agent_wait_seconds`, die „Thought for …“ abzieht), Tab-Titel
 „Paused“ (`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2):
-Tab-Titel und Seitenleisten-Zeile sagen „Paused“ bzw. „Waiting for you“
-(`App.words.paused`, `yourTurn`) für den Lauf jedes Chats, auch eines nicht
+Tab-Titel, Seitenleisten-Zeile und Kopf der Aktivität sagen „Paused“ bzw.
+„Waiting for you“ (`App.agentActivity.phase`/`PHASE_WORDS`, UX-Audit E1/E2;
+der Kopf „Paused · 1m 4s“ mit stehender Uhr, während der Schlussprüfung
+„Reviewing · 2m 19s“) für den Lauf jedes Chats, auch eines nicht
 geöffneten (die Zeile pulsiert dann nicht, `.run-entry.is-paused`), die Karte
 hängt am Lauf auf dem Schirm statt am Modus-Schalter, ein Reload folgt dem
 Lauf auch mit dem Schalter auf Compare, und ein zweiter Tab oder ein anderes

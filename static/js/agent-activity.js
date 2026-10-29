@@ -128,39 +128,68 @@
     const state = {failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details';
     return `${App.t(toolName(item.name))} · ${App.t(state)}`;
   }
+  // A turn's working time: from its start to its end without the time it
+  // waited for the user (agent_wait_seconds, chat_store.turn_detail: its
+  // pauses and the agent's questions). The server's turn clock leaves that
+  // out as well (_turn_elapsed), and the head stands still while it waits
+  // (UX audit E1): a pause that ran into its 30 minutes read "Thought for 32m 4s".
   function savedDuration(turn) {
     const start = Date.parse(turn?.created_at);
     const end = Date.parse(turn?.completed_at || turn?.failed_at);
-    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
+    if (!(Number.isFinite(start) && Number.isFinite(end) && end >= start)) return null;
+    const waited = Number.isFinite(turn?.agent_wait_seconds) && turn.agent_wait_seconds > 0 ? turn.agent_wait_seconds * 1000 : 0;
+    return Math.max(0, end - start - waited);
   }
   // "23s", "3m 7s": the one way the app writes a span (App.format).
   function durationText(ms) {
     return App.format.duration(ms);
   }
-  // "Working for 12s" while it runs, "Thought for 3m 7s" once it is done.
-  function durationLabel(ms, running, status) {
-    if (!Number.isFinite(ms)) return running ? 'Working' : statuses[status] || 'Activity';
+  // One word for what a run does now, the same in the activity's head, the
+  // chat list (run-view.js) and the tab title (tab-status.js), UX audit E1/E2:
+  // before, the head said "Working for" while the reviewers checked the
+  // answer and while the run waited for the user, and the chat list
+  // "Thinking" or a cut "Writing ans…" at the same moment.
+  const PHASE_WORDS = Object.freeze({ working: 'Working', reviewing: 'Reviewing', checking: 'Checking',
+    paused: 'Paused', asking: 'Waiting for you' });
+  function phase({ asking = false, held = false, review = null } = {}) {
+    if (asking) return 'asking';
+    if (held) return 'paused';
+    if (review?.status === 'running') return review.mode === 'audit' ? 'reviewing' : 'checking';
+    return 'working';
+  }
+  // Every word the head writes before its clock, each alone in its element
+  // (the page translates it on its own; tests/test_i18n.py reads this list):
+  // until 2026-10-29 "Failed after" and "Stopped after" had no German alone
+  // and stood in English before "0 Sek." (I3).
+  const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing', checking: 'Checking',
+    paused: 'Paused', asking: 'Waiting for you', succeeded: 'Thought for', failed: 'Failed after',
+    cancelled: 'Stopped after' });
+  // "Working for 12s" while it works, "Reviewing · 2m 19s" while the
+  // reviewers check the written answer, "Paused · 1m 4s" (the clock stands
+  // still) while it waits for the user, "Thought for 3m 7s" once it is done.
+  function titleParts(ms, now, status) {
+    if (!Number.isFinite(ms)) return { verb: now ? PHASE_WORDS[now] : statuses[status] || 'Activity', gap: '', time: '' };
     const time = durationText(ms);
-    if (running) return `Working for ${time}`;
-    if (status === 'failed') return `Failed after ${time}`;
-    if (statuses[status] === statuses.cancelled) return `Stopped after ${time}`;
-    return `Thought for ${time}`;
+    if (now) return { verb: HEAD_VERBS[now], gap: now === 'working' ? ' ' : ' · ', time };
+    const settled = status === 'failed' ? 'failed' : statuses[status] === statuses.cancelled ? 'cancelled' : 'succeeded';
+    return { verb: HEAD_VERBS[settled], gap: ' ', time };
   }
   // The clock ticks in a field of fixed width, so the chevron and the model
   // icons after it do not move with every second (Apple audit A7): the time
   // sits in a slot as wide as its largest value in the same unit ("59s",
   // "9m 59s"), and the verb ("Working for" / "Thought for") takes the width
   // of the wider of the two, so the end of the run changes the words, not
-  // the line.
-  const SETTLED_VERBS = { running: "Working for", done: "Thought for" };
+  // the line. A change of state (Reviewing, Paused) or of the slot glides
+  // the head once to its new width.
+  const SETTLED_VERBS = { running: HEAD_VERBS.working, done: HEAD_VERBS.succeeded };
   const SLOTS = ["seconds", "minutes", "long"];
-  function setTitle(view, ms, running, status) {
-    const label = durationLabel(ms, running, status);
+  function setTitle(view, ms, now, status) {
+    const { verb, gap, time } = titleParts(ms, now, status);
+    const label = `${verb}${gap}${time}`;
     if (view.title.dataset.label === window.App.t(label)) return;
     view.title.dataset.label = label;
-    const time = Number.isFinite(ms) ? durationText(ms) : "";
-    const verb = time ? label.slice(0, label.length - time.length).trimEnd() : label;
     const verbEl = view.title.querySelector(".agent-activity-verb-text");
+    const gapEl = view.title.querySelector(".agent-activity-gap");
     const timeEl = view.title.querySelector(".agent-activity-time");
     const seconds = Math.floor(Math.max(0, ms || 0) / 1000);
     const unit = !time ? "" : seconds < 60 ? "seconds" : seconds < 600 ? "minutes" : "long";
@@ -168,45 +197,62 @@
     // the first second left a wide gap before the chevron for a whole
     // minute. The label a run ends with keeps at least the slot it ticked
     // in, so the end of the run does not move the line.
-    if (running && unit) view.liveSlot = unit;
-    const slot = running || !unit || !view.liveSlot ? unit
+    if (now && unit) view.liveSlot = unit;
+    const slot = now || !unit || !view.liveSlot ? unit
       : SLOTS[Math.max(SLOTS.indexOf(view.liveSlot), SLOTS.indexOf(unit))];
-    const resize = Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot && timeEl.isConnected;
-    const from = resize ? timeEl.getBoundingClientRect().width : 0;
+    const resize = view.title.isConnected && Boolean(verbEl.textContent) && (verbEl.textContent !== window.App.t(verb)
+      || gapEl.textContent !== gap || (Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot));
+    const from = resize ? view.title.getBoundingClientRect().width : 0;
     if (resize) cancelMotion(view.slotMotion);
     if (verbEl.textContent !== window.App.t(verb)) verbEl.textContent = verb;
-    // The other verb stands invisibly in the same cell (agent-chat.css), so
-    // the field is as wide as the wider one; it is no text of the title.
-    const paired = verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : verb === SETTLED_VERBS.done ? SETTLED_VERBS.running : "";
+    // While it works, the verb it will end with stands invisibly in the same
+    // cell (agent-chat.css), so the field is as wide as the wider one; it is
+    // no text of the title. Once it is over the clock is still and the field
+    // takes its own words: "Fertig nach" kept the width of "Arbeitet seit",
+    // a double gap before the time (UX audit B14/R19).
+    const paired = now && verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : "";
     const holder = verbEl.parentElement;
     if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
-    view.title.querySelector(".agent-activity-gap").textContent = time ? " " : "";
+    if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
     if (!resize) return;
-    // The first minute widens the slot once: the chevron glides to its new
-    // place while the new time opens up (none with reduced motion, motion()).
-    // min-width moves along: the slot's own min-width would win over width.
-    const to = timeEl.getBoundingClientRect().width;
-    view.slotMotion = from && to && from !== to ? motion(timeEl, [
-      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip' },
-      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip' },
+    // The chevron glides to its new place while the new words open up (none
+    // with reduced motion, motion()); the words keep to one line meanwhile.
+    const to = view.title.getBoundingClientRect().width;
+    view.slotMotion = from && to && from !== to ? motion(view.title, [
+      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip', whiteSpace: 'nowrap' },
+      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip', whiteSpace: 'nowrap' },
     ]) : null;
   }
-  function updateClock(view, elapsedMs, running, status) {
+  // `now`: the phase of a running run, or null once it is over. While it
+  // waits for the user the clock stands still.
+  function updateClock(view, elapsedMs, now, status) {
     clearInterval(view.clockTimer);
     view.clockTimer = null;
-    const now = performance.now();
-    const previous = Number.isFinite(view.elapsedMs) ? view.elapsedMs + (view.clockRunning ? now - view.clockAt : 0) : null;
-    view.elapsedMs = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : previous ?? (running ? 0 : null);
-    view.clockAt = now;
-    view.clockRunning = running;
+    const ticking = Boolean(now) && now !== 'paused' && now !== 'asking';
+    const at = performance.now();
+    const previous = Number.isFinite(view.elapsedMs) ? view.elapsedMs + (view.clockRunning ? at - view.clockAt : 0) : null;
+    view.elapsedMs = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : previous ?? (now ? 0 : null);
+    view.clockAt = at;
+    view.clockRunning = ticking;
     const tick = () => {
       const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
-      setTitle(view, elapsed, running, status);
+      setTitle(view, elapsed, now, status);
     };
     tick();
-    if (running) view.clockTimer = setInterval(tick, 1000);
+    if (ticking) view.clockTimer = setInterval(tick, 1000);
+  }
+  // The time a live run waited for the user on this page, so far, on the
+  // caller's clock: the wall clock since the start (agent-chat.js).
+  function waitedMs(view, waiting) {
+    const at = Date.now();
+    if (waiting && view.waitStart == null) view.waitStart = at;
+    if (!waiting && view.waitStart != null) {
+      view.waited = (view.waited || 0) + at - view.waitStart;
+      view.waitStart = null;
+    }
+    return (view.waited || 0) + (view.waitStart != null ? at - view.waitStart : 0);
   }
   const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const activeMotion = new Set();
@@ -981,7 +1027,12 @@
     // the same rule as failureNote.
     const settled = status === 'failed' && !running && answerText
       && App.agentReview?.failureNote?.({error: 'failed'}, review, answerText) === '';
-    updateClock(view, elapsedMs, running, settled ? 'succeeded' : status);
+    const now = running ? phase({ asking, held, review }) : null;
+    // The clock leaves out the time the run waited for the user here, as the
+    // saved duration does (savedDuration).
+    const waited = waitedMs(view, now === 'paused' || now === 'asking');
+    updateClock(view, running && Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs - waited) : elapsedMs, now,
+      settled ? 'succeeded' : status);
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
@@ -1254,5 +1305,5 @@
       review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings,
       vm: turn?.agent_vm, vmRestore: options.vmRestore || null });
   }
-  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration, toolName };
+  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration, toolName, phase, PHASE_WORDS };
 })();

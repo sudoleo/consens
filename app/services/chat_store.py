@@ -525,6 +525,14 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # loads it through its own endpoint.
         if source.get("work_log_expires_at"):
             result["agent_work_log"] = {"incomplete": bool(source.get("work_log_incomplete"))}
+        # How long it waited for the user (agent_holds stays on the document):
+        # "Thought for …" leaves that out, as the turn's own clock does
+        # (agent-activity.js savedDuration, UX audit 2026-10-29 E1).
+        holds = source.get("agent_holds")
+        waited = sum(hold["seconds"] for hold in holds if isinstance(hold, dict)
+                     and type(hold.get("seconds")) in (int, float) and hold["seconds"] > 0) if isinstance(holds, list) else 0
+        if waited:
+            result["agent_wait_seconds"] = round(waited, 1)
     if "consensus" in source:
         if source.get("execution_mode") != "agent":
             result["consensus"] = _bounded_text(

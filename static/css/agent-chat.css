@@ -309,15 +309,25 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
   }
 }
 /* The one scrim (foundation.css). An --ink tint dimmed in light mode but
-   laid a pale veil over the chat in dark mode. */
-.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: var(--scrim); touch-action: none; }
+   laid a pale veil over the chat in dark mode. Scrim and sheet stand above
+   the phone's header bar: the sheet is a modal dialog, and the bar stayed
+   bright and tappable over the dimmed page (UX audit H3). */
+.agent-sidebar-scrim { position: fixed; inset: 0; z-index: calc(var(--z-header) + 1); background: var(--scrim); touch-action: none; }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   /* A sheet over the chat is a floating layer: the one place it lifts. */
   .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto;
-    right: max(12px, env(safe-area-inset-right, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: min(80dvh, 720px); z-index: 1300;
-    border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
+    right: max(var(--space-3), env(safe-area-inset-right, 0px)); left: max(var(--space-3), env(safe-area-inset-left, 0px));
+    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); width: auto; max-height: min(80dvh, 720px);
+    z-index: calc(var(--z-header) + 2); border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
+}
+/* From a tablet's width up it is a panel at the right edge, the width of
+   the desktop's, not a sheet across the whole screen (UX audit E6: 1066px
+   wide at 1100, a reviewer's name and its time a metre apart). It comes in
+   from the right like the desktop panel. */
+@media (min-width: 700px) and (max-width: 1199px) {
+  .agent-sidebar { --agent-enter-x: var(--space-4); --agent-enter-y: 0px; top: var(--space-3); left: auto;
+    width: min(346px, calc(100vw - 2 * var(--space-3))); max-height: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter var(--dur-state) var(--ease-standard) both; }

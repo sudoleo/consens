@@ -220,16 +220,17 @@
     if (context.status === "failed") return "Failed";
     if (context.config?.executionMode === "agent") {
       if (context.status === "canceled") return "Stopped";
-      // A pause waits for the user (agent-chat.js renderHold): said in the
-      // row of every chat, also one not on screen (A-B2; before it read
-      // "Working" while its pause ran into the timeout unseen).
+      // One word for what the run does, from the same state as the head of
+      // its activity (agent-activity.js phase, UX audit E2): "Working" while
+      // it thinks, runs a step or writes, "Reviewing" while the reviewers
+      // check the answer, and while it waits for the user "Paused" or
+      // "Waiting for you", in the row of every chat, also one not on screen
+      // (A-B2). Before, the row said "Thinking" during commands and a cut
+      // "Writing ans…" while the reviewers worked.
       const hold = context.metadata?.hold;
-      if (hold) return hold.ask ? window.App.words?.yourTurn || "Waiting for you" : window.App.words?.paused || "Paused";
-      const latest = context.metadata?.agentActivity?.filter(event => event.kind === 'status').at(-1);
-      if (latest?.status === 'waiting') return 'Waiting for allowance';
-      if (context.consensus?.streamText) return "Writing answer";
-      if (context.metadata?.agentActivity?.some(event => event.kind === "reasoning")) return "Thinking";
-      return "Working";
+      const activity = window.App.agentActivity;
+      const now = activity?.phase?.({ asking: Boolean(hold?.ask), held: Boolean(hold), review: context.metadata?.agentReview });
+      return activity?.PHASE_WORDS?.[now] || (hold ? (hold.ask ? "Waiting for you" : "Paused") : "Working");
     }
     if (context.status === "canceled") return "Stopped";
     if (context.phase === "prepare") return "Preparing";

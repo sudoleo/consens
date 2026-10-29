@@ -29,7 +29,8 @@ describe("activity clock", () => {
     activity.render(host, { running: false, elapsedMs: 72000, status: "succeeded", events: [] });
     expect(title.textContent).toBe("Thought for 1m 12s");
     expect(time.dataset.unit).toBe("minutes");
-    expect(verb.dataset.ghost).toBe("Working for");
+    // Its clock is still: the field takes its own words, no double gap (B14).
+    expect(verb.dataset.ghost).toBeUndefined();
     activity.render(host, { running: false, elapsedMs: 72000, status: "failed", events: [] });
     expect(title.textContent).toBe("Failed after 1m 12s");
     expect(verb.dataset.ghost).toBeUndefined();
@@ -61,6 +62,59 @@ describe("activity clock", () => {
     activity.dispose(short);
     activity.dispose(edge);
     vi.useRealTimers();
+    app.dom.window.close();
+  });
+});
+
+// One state everywhere (UX audit E1): while the reviewers check the answer
+// the head said "Working for", and while the run waited for the user its
+// clock ran on.
+describe("activity head while the run reviews or waits", () => {
+  it("says Reviewing while the reviewers check, and stands still while it waits for the user", () => {
+    vi.useFakeTimers();
+    const app = loadScripts(["static/js/agent-activity.js"], { body: '<div id="host"></div>' });
+    const host = app.document.getElementById("host");
+    const activity = app.window.App.agentActivity;
+    // The page's wall clock, as the caller's elapsed time counts it.
+    let wall = Date.parse("2026-10-29T10:00:00Z");
+    app.window.Date.now = () => wall;
+    const advance = ms => { wall += ms; vi.advanceTimersByTime(ms); };
+    const title = () => host.querySelector(".agent-activity-title").textContent;
+    activity.render(host, { running: true, elapsedMs: 139000, status: "running", events: [],
+      review: { mode: "audit", status: "running" }, answerText: "The answer." });
+    expect(title()).toBe("Reviewing · 2m 19s");
+    expect(host.querySelector(".agent-activity-verb").dataset.ghost).toBeUndefined();
+    activity.render(host, { running: true, elapsedMs: 139000, status: "running", events: [],
+      review: { status: "running" }, answerText: "The answer." });
+    expect(title()).toBe("Checking · 2m 19s");
+    // A pause: the head says so, and its clock does not move while it lasts.
+    const hold = { version: 1, kind: "hold", id: "hold-a1", step_id: "hold", reviewer: "Claude", halt: "harm",
+      reason: "Deletes files.", state: "waiting" };
+    activity.render(host, { running: true, elapsedMs: 150000, status: "running", events: [hold] });
+    expect(title()).toBe("Paused · 2m 30s");
+    advance(4000);
+    activity.render(host, { running: true, elapsedMs: 154000, status: "running", events: [hold] });
+    expect(title()).toBe("Paused · 2m 30s");
+    // The agent's own question waits for the user too.
+    const ask = { ...hold, id: "hold-a2", ask: "browser", request: "Log in.", reviewer: "", halt: "" };
+    activity.render(host, { running: true, elapsedMs: 154000, status: "running", events: [ask] });
+    expect(title()).toBe("Waiting for you · 2m 30s");
+    // Decided: it works on from where it stood, without the time it waited.
+    advance(6000);
+    activity.render(host, { running: true, elapsedMs: 160000, status: "running", events: [{ ...ask, state: "handed_back" }] });
+    expect(title()).toBe("Working for 2m 30s");
+    activity.dispose(host);
+    vi.useRealTimers();
+    app.dom.window.close();
+  });
+
+  it("leaves the time a saved turn waited for the user out of its duration", () => {
+    const app = loadScripts(["static/js/agent-activity.js"], { body: "" });
+    const { savedDuration } = app.window.App.agentActivity;
+    const turn = { created_at: "2026-10-29T10:00:00Z", completed_at: "2026-10-29T10:32:10Z" };
+    expect(savedDuration(turn)).toBe(1930000);
+    expect(savedDuration({ ...turn, agent_wait_seconds: 1810.5 })).toBe(119500);
+    expect(savedDuration({ ...turn, agent_wait_seconds: "1810" })).toBe(1930000);
     app.dom.window.close();
   });
 });
