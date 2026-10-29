@@ -175,6 +175,26 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       auf. „Nicht jetzt“ → er macht ohne weiter.
       Automatisiert: `test_agent_ask.py`, `workspace-view.test.mjs`,
       `agent-chat.test.mjs`.
+- [ ] Audit produktionsreif (2026-10-29, Pro- oder Admin-Konto, Audit an,
+      echter Provider; Anforderungen in `docs/agent-audit-readiness-2026-10-29.md`):
+      Daily mit drei Prüfern, eine Faktenfrage → Marken stehen wenige Sekunden
+      nach dem letzten Wort, alle drei Prüfer in Notes. Ein Werkbank-Lauf
+      über 10 min („Bau mir eine kleine Web-App mit Tests und lass sie
+      laufen“) → die Prüfer folgen bis zum Ende, Marken kommen, der Turn
+      endet `completed`. Am iPhone: einen Halt auslösen (Testseite mit
+      eingeschleuster Anweisung wie unter „Aussteuern“), in eine andere App
+      wechseln, nach 2 min zurück → die Karte steht noch und lässt sich
+      entscheiden. Browser-Übergabe am iPhone: „Browser öffnen“, in die
+      2FA-App wechseln, nach 2 min zurück → „Du hast den Browser“ gilt weiter,
+      der Agent hat nicht übernommen. Zweites Gerät oder zweiter Tab öffnet
+      den pausierten Chat → dieselbe Karte, eine Entscheidung dort schließt
+      die Karte im ersten Tab. Ein pausierter Lauf in einem anderen Chat:
+      Seitenleiste und Tab-Titel sagen, dass er auf dich wartet. Key-Karte
+      offen, Key ins normale Feld + Enter → er landet verdeckt im Key-Feld der
+      Karte, nicht im Verlauf. Nach dem Lauf `venv/Scripts/python.exe
+      scripts/audit_report.py --days 1` → die Läufe stehen mit Zeiten drin.
+      Automatisiert: `test_agent_audit.py`, `test_agent_audit_tempo.py`,
+      `agent-live.test.mjs`, `agent-chat.test.mjs`.
 - [ ] Agent VM (2026-10-25, Admin-Konto, echter Provider, `SPRITES_TOKEN`
       gesetzt): Settings › Agent · Beta › Agent VM auf On (die Zeile fehlt für
       Nicht-Admins). Mit einer CSV im Anhang: „Rechne den Mittelwert der
