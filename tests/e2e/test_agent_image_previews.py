@@ -70,7 +70,14 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
         page.route('**/chats', lambda r: _json(r, {'chat': {'id': CHAT}}))
         page.route(f'**/agent/chats/{CHAT}/actions', lambda r: _json(r, {'actions': [], 'evidence': []}))
 
+        # While `uploading` is set, the first upload waits: the moment the
+        # message is sent and its files are on their way.
+        uploading, posts = [True], []
+
         def files(route):
+            if route.request.method == 'POST' and uploading[0]:
+                posts.append(route)
+                return
             if route.request.method == 'POST':
                 body = route.request.post_data_json
                 index = len(stored)
@@ -123,7 +130,19 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
         expect(page.locator('#attachmentBar .attachment-chip')).to_have_count(2)
         page.locator('#questionInput').fill('What do these two screenshots show?')
         page.locator('#sendButton').click()
+        # 2026-10-29: the tiles over the message wait in the skeleton while
+        # the files upload, not a row per file under the message.
+        page.wait_for_function("() => document.querySelectorAll('.message-attachments .attachment-chip.is-image-tile.is-uploading').length === 2")
+        for _ in range(100):
+            if posts:
+                break
+            page.wait_for_timeout(50)
+        assert posts, 'the first upload is waiting'
+        assert page.locator('.agent-upload-row').count() == 0
+        uploading[0] = False
+        files(posts.pop())
         expect(page.locator('#agentAnswerBody')).to_contain_text('Two pictures.')
+        assert page.locator('.attachment-chip.is-uploading').count() == 0
         page.wait_for_function("() => document.querySelectorAll('#threadAskAttachments img.attachment-chip-thumb').length === 2"
                                " && [...document.querySelectorAll('#threadAskAttachments img.attachment-chip-thumb')].every(i => i.complete && i.naturalWidth > 0)")
         assert _thumbs(page, '#threadAskAttachments') == ['tile', 'tile']

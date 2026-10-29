@@ -316,6 +316,32 @@ def test_an_action_brings_the_picture_after_it_when_asked(store, fake_vm, monkey
         call(browser, action="click", ref="e4", screenshot_after=True)
 
 
+JPEG = b"\xff\xd8\xff\xe0" + b"1" * 64
+
+
+def test_an_opened_page_brings_its_picture_to_the_card_never_to_the_agent(store, fake_vm):
+    """The card of an open step in the chat shows the page (agent-activity.js,
+    since 2026-10-29): the helper's small JPEG stays in the activity."""
+    script = Agent([[("browser", {"action": "open", "url": "https://kfw.de/"})], [("browser", {"action": "read"})]])
+    fake_vm.browser = lambda request: {"status": "ok", "text": 'Opened https://kfw.de/\nPage: "KfW"',
+                                       "preview": base64.b64encode(JPEG).decode()}
+    loop = vm_loop(store, script)
+    list(loop.run())
+    saved = [e for e in store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_activity"] if e.get("name") == "browser"]
+    assert saved[0]["preview"] == "data:image/jpeg;base64," + base64.b64encode(JPEG).decode()
+    assert saved[0]["status"] == "succeeded" and saved[0]["title"] == "KfW"
+    # Only an open has a card; the agent's results never carry the picture.
+    assert "preview" not in saved[1]
+    assert all("preview" not in json.dumps(result) and "/9j/" not in json.dumps(result) for result in results(loop))
+
+
+@pytest.mark.parametrize("value", [None, "", "not base64!", base64.b64encode(PNG).decode(),
+                                   base64.b64encode(b"\xff\xd8\xff" + b"0" * agent_browser.PREVIEW_BYTES).decode()],
+                         ids=["none", "empty", "not-base64", "png", "too-large"])
+def test_anything_but_a_small_jpeg_is_no_page_picture(value):
+    assert agent_browser.preview_url(value) == ""
+
+
 def test_look_shows_the_browser_as_a_picture_or_as_text(store, fake_vm, monkeypatch):
     """ask_user brings the browser back with the user's hand-back (since
     2026-10-29): a picture for a model that takes them, else the page as text."""

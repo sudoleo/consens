@@ -87,8 +87,9 @@ def activity_budget(turn, patch):
 
 def bounded_activity(activity, limit=None):
     """``activity`` as saved: within ``limit`` bytes of UTF-8 JSON (default
-    ACTIVITY_MAX_BYTES). The oldest events lose their VM output
-    (``output_truncated``) and their thinking's sections first, then their
+    ACTIVITY_MAX_BYTES). Opened pages lose their picture first (``preview``,
+    their card keeps title and address), then the oldest events lose their VM output
+    (``output_truncated``) and their thinking's sections, then their
     long texts and plan steps are shortened; the events and their order
     stay. Only when that is not enough
     do the oldest events go: the answer never does."""
@@ -97,6 +98,13 @@ def bounded_activity(activity, limit=None):
     if size <= limit:
         return activity
     events = [dict(event) for event in activity]
+    for event in events:
+        if size <= limit:
+            return events
+        if event.get("preview"):
+            before = json_bytes(event)
+            del event["preview"]
+            size -= before - json_bytes(event)
     for shorten in (False, True):
         for event in events:
             if size <= limit:

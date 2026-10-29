@@ -292,6 +292,41 @@ def test_the_helper_adds_the_picture_after_an_action_only_when_asked():
     assert pictured["png"] == "cG5nLWJ5dGVz"
 
 
+def test_the_helpers_page_picture_is_chromes_scaled_viewport_or_nothing():
+    """An opened page's card (since 2026-10-29): Chrome scales the visible
+    part of the page to PREVIEW_WIDTH itself; a browser that gives none
+    costs the card its picture, never the step."""
+    browser = load("browser")
+    sent = []
+
+    class Session:
+        def send(self, method, params):
+            sent.append((method, params))
+            return {"data": "/9j/AAA="}
+
+        def detach(self):
+            sent.append("detached")
+
+    class Context:
+        def new_cdp_session(self, page):
+            return Session()
+
+    class Page:
+        context = Context()
+
+        def evaluate(self, script):
+            return [0, 640, 1280, 800]
+    assert browser.preview(Page()) == "/9j/AAA="
+    [(method, params), detached] = sent
+    assert method == "Page.captureScreenshot" and params["format"] == "jpeg" and detached == "detached"
+    assert params["clip"] == {"x": 0, "y": 640, "width": 1280, "height": 800, "scale": browser.PREVIEW_WIDTH / 1280}
+
+    class Broken(Page):
+        def evaluate(self, script):
+            raise RuntimeError("Target closed")
+    assert browser.preview(Broken()) == ""
+
+
 def test_the_browser_vm_sets_its_network_rules_with_a_new_version_only(fake_vm, monkeypatch):
     """Prod 2026-10-29: every opening set the rules anew, a request that
     waits while the VM wakes; once it ran into its limit and the browser was

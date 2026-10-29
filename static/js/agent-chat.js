@@ -2778,6 +2778,9 @@
           usage: { status: "simulation", key: null },
         });
       } catch (error) { refused = error; return; }
+      // Its files wait over the message from the first frame until stored
+      // (agent-workspace.js upload), not shown and then covered again.
+      if (context.attachments.length) App.attachments?.markUploading?.(context.runId, context.attachments);
       if (retry?.runId) {
         // The new run takes over the failed run's sidebar row.
         const failed = registry.get(retry.runId);
@@ -2856,6 +2859,7 @@
       failRun(context, error);
     } finally {
       context.controllers.query = null;
+      App.attachments?.markUploading?.(context.runId, []);
       // Only a known end clears the record for a reload; Stop and logout
       // handle theirs in cancelRun, a transport problem keeps it.
       if (["succeeded", "failed"].includes(context.status)) forgetPending(context);

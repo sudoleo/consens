@@ -640,15 +640,7 @@
     const verb = document.createElement('span'); verb.className = 'agent-vm-verb';
     const target = document.createElement('code'); target.className = 'agent-vm-target'; target.translate = false;
     const meta = document.createElement('span'); meta.className = 'agent-vm-meta';
-    // A step in the workspace's browser: watch it live (workspace-view.js).
-    const watch = document.createElement('button'); watch.type = 'button'; watch.className = 'agent-vm-watch';
-    watch.hidden = true;
-    watch.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      App.workspaceView?.open();
-    });
-    summary.append(verb, target, meta, watch);
+    summary.append(verb, target, meta);
     const output = document.createElement('pre'); output.className = 'agent-vm-output'; output.translate = false;
     output.hidden = true;
     details.append(summary, output);
@@ -660,7 +652,82 @@
     details.addEventListener('toggle', () => { if (details.open) output.scrollTop = output.scrollHeight; });
     return details;
   }
+  // An opened page is a card (since 2026-10-29, Max: "professional, like
+  // the browser card in Claude"): the page as the agent's browser showed it
+  // (agent_browser.preview_url), its title, the site, and Open for the live
+  // view (workspace-view.js). While it opens, the picture's place waits in
+  // the skeleton's light. Before, every browser step ended in "Watch live".
+  const opensPage = item => item?.name === 'browser' && item.action === 'open';
+  const pagePicture = item => typeof item.preview === 'string' && item.preview.startsWith('data:image/jpeg;base64,')
+    ? item.preview : '';
+  function stepView(className, item) {
+    return opensPage(item) ? pageCard(className) : vmView(className);
+  }
+  // Its own surface inside the entry: the timeline draws its dot and rail
+  // on the entry itself (agent-chat.css). Live it is one row with a small
+  // picture, so the live lines barely grow when it comes and folds away.
+  function pageCard(className) {
+    const card = document.createElement('div');
+    card.className = `${className} agent-page-card`;
+    card.dataset.i18nSkip = '';
+    const body = document.createElement('div'); body.className = 'agent-page-body';
+    const shot = document.createElement('div'); shot.className = 'agent-page-shot';
+    const img = document.createElement('img'); img.alt = ''; img.decoding = 'async';
+    img.addEventListener('load', () => card.classList.add('is-shot-ready'));
+    shot.append(img);
+    shot.addEventListener('click', () => { if (card.classList.contains('can-open')) App.workspaceView?.open(); });
+    const info = document.createElement('div'); info.className = 'agent-page-info';
+    const text = document.createElement('div'); text.className = 'agent-page-text';
+    const title = document.createElement('span'); title.className = 'agent-page-title'; title.translate = false;
+    const meta = document.createElement('span'); meta.className = 'agent-page-meta';
+    text.append(title, meta);
+    const open = document.createElement('button'); open.type = 'button'; open.className = 'agent-page-open';
+    open.addEventListener('click', () => App.workspaceView?.open());
+    info.append(text, open);
+    body.append(shot, info);
+    card.append(body);
+    return card;
+  }
+  function updateCard(card, item) {
+    const picture = pagePicture(item);
+    const canOpen = document.body.classList.contains('viewer-has-workspace') && Boolean(App.workspaceView);
+    const signature = JSON.stringify([item.status, item.url, item.title, item.outcome, picture.length,
+      picture.slice(-32), canOpen, App.t('Open')]);
+    if (card.dataset.signature === signature) return;
+    card.dataset.signature = signature;
+    card.dataset.status = item.status;
+    card.dataset.tool = item.name;
+    if (item.status === 'failed') card.dataset.outcome = 'failed'; else delete card.dataset.outcome;
+    const [shot, info] = card.firstElementChild.children;
+    const img = shot.firstElementChild;
+    const [title, meta] = info.firstElementChild.children;
+    const open = info.lastElementChild;
+    const host = hostOf(item.url);
+    const running = item.status === 'running';
+    title.textContent = String(item.title || host || item.url || '');
+    if (item.url) title.title = String(item.url).slice(0, 500); else title.removeAttribute('title');
+    // How it ended when not as planned (Failed, Stopped, no workspace time).
+    const ended = running || (item.status === 'succeeded' && !vmOutcomes[item.outcome]) ? '' : vmMeta(item);
+    meta.textContent = running ? App.t('Opening in the browser…') : ended
+      || (item.title && host ? App.t('{host} · opened in the browser', { host }) : App.t('Opened in the browser'));
+    // The picture when it came, its waiting place while the page opens,
+    // nothing for a step without one (saved before 2026-10-29, or none came).
+    if (picture && img.getAttribute('src') !== picture) {
+      card.classList.remove('is-shot-ready');
+      img.src = picture;
+    } else if (!picture) {
+      card.classList.remove('is-shot-ready');
+      img.removeAttribute('src');
+    }
+    shot.hidden = !picture && !running;
+    card.classList.toggle('has-shot', !shot.hidden);
+    card.classList.toggle('can-open', canOpen);
+    open.hidden = !canOpen;
+    open.textContent = App.t('Open');
+    open.setAttribute('aria-label', App.t('Open the browser'));
+  }
   function updateVm(details, item) {
+    if (details.classList.contains('agent-page-card')) { updateCard(details, item); return; }
     const signature = JSON.stringify([item.status, item.command, item.path, item.output, item.output_truncated,
       item.exit_code, item.duration_ms, item.timed_out, item.outcome, item.action, item.url, item.ref, item.page,
       item.title, item.packages, item.domain, item.query]);
@@ -680,10 +747,6 @@
     if (details.dataset.target === 'text' && item.url) target.title = String(item.url).slice(0, 500);
     else target.removeAttribute('title');
     meta.textContent = vmMeta(item);
-    const watch = details.firstElementChild.children[3];
-    watch.hidden = !(item.name === 'browser' && document.body.classList.contains('viewer-has-workspace')
-      && Boolean(App.workspaceView));
-    watch.textContent = App.t('Watch live');
     const output = details.lastElementChild;
     // A browser step shows the page as it read it; a command its output.
     const text = String((item.name === 'browser' ? item.page : item.output) || '');
@@ -1129,7 +1192,7 @@
       previewIds.add(item.id);
       let p = view.previewNodes.get(item.id);
       if (!p) {
-        p = item.kind === 'vm' ? vmView('agent-vm') : item.kind === 'hold' ? holdView('agent-hold-step')
+        p = item.kind === 'vm' ? stepView('agent-vm', item.item) : item.kind === 'hold' ? holdView('agent-hold-step')
           : item.kind === 'user' ? userNote('agent-user-note', item.text)
           : document.createElement(item.kind === 'progress' ? 'p' : 'div');
         view.previewNodes.set(item.id, p);
@@ -1193,7 +1256,7 @@
       let node = view.nodes.get(item.id);
       if (!node) {
         node = item.kind === 'hold' ? holdView('agent-activity-tool agent-hold-step')
-          : item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
+          : item.kind === 'tool' && vmTools.has(item.name) ? stepView('agent-activity-tool agent-vm', item)
           : hasPlan(item) ? planView('agent-activity-tool agent-plan')
           : item.from_user ? userNote('agent-activity-update agent-user-note', item.text)
           : document.createElement(item.kind === 'progress' && !isThought(item) ? 'p' : 'div');

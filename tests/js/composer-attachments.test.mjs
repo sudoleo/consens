@@ -84,6 +84,38 @@ describe("composer attachment tray", () => {
     expect(window.App.composer.expand).toHaveBeenCalled();
   });
 
+  // Since 2026-10-29: an Agent message's files wait on the message itself
+  // until stored (agent-workspace.js upload), a picture as its tile in the
+  // skeleton, per run; before, a row per file stood under the message.
+  it("holds a sent file's tile as uploading until its run says it is stored", () => {
+    const { window, document } = boot();
+    const PICTURE = { name: "image.png", mime: "image/png", size: 7, data: "iVBORw0K" };
+    window.pendingAttachments = [{ ...FILE }, { ...PICTURE }];
+    const files = window.getAttachmentsPayload();
+    window.App.attachments.markUploading("run-1", files);
+    const row = document.getElementById("threadAskAttachments");
+    row.classList.add("message-attachments");
+    window.App.attachments.renderMessageAttachments(row, window.App.attachments.detachForMessage());
+    const [text, picture] = row.querySelectorAll(".attachment-chip");
+    // Drawn as uploading from the first frame: no picture shown, then covered.
+    expect(picture.classList.contains("is-image-tile")).toBe(true);
+    expect([text, picture].map(chip => chip.classList.contains("is-uploading"))).toEqual([true, true]);
+    expect(picture.getAttribute("aria-busy")).toBe("true");
+    expect(text.querySelector(".attachment-chip-status").textContent).toBe("Uploading…");
+    // Another run ending leaves them; theirs ends file by file.
+    window.App.attachments.markUploading("run-2", []);
+    expect(picture.classList.contains("is-uploading")).toBe(true);
+    window.App.attachments.markUploading("run-1", [files[1]]);
+    expect([text, picture].map(chip => chip.classList.contains("is-uploading"))).toEqual([false, true]);
+    window.App.attachments.markUploading("run-1", []);
+    expect(picture.classList.contains("is-uploading")).toBe(false);
+    expect(picture.hasAttribute("aria-busy")).toBe(false);
+    // A stored file (with its id) is never marked.
+    window.App.attachments.markUploading("run-3", files);
+    window.App.attachments.renderMessageAttachments(row, [{ ...FILE, id: "a".repeat(32) }]);
+    expect(row.querySelector(".attachment-chip").classList.contains("is-uploading")).toBe(false);
+  });
+
   it("ends the (+) menu above the bottom edge of a short phone, where it scrolls", () => {
     const { window, document } = boot();
     const menu = document.getElementById("attachMenu");

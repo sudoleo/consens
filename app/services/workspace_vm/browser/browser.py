@@ -5,7 +5,8 @@ shell command in the agent's VM).
 One action per call, as JSON on stdin, typed by the server: {"action":
 "open", "url": ...}, {"action": "click", "ref": "e12"} and so on (ACTIONS).
 The answer is one JSON object on stdout: {"status", "text"} and, for a
-screenshot, "png" (base64). Status "ok", "refused" (the action cannot be
+screenshot, "png" (base64); open adds "preview", a small JPEG of the page
+for its card in the chat (base64). Status "ok", "refused" (the action cannot be
 done, the text says why), "user" (the user has the browser), "setup" (the
 browser is being installed) or "failed". No code of the agent runs here: it
 only chooses among these actions and their typed arguments.
@@ -102,6 +103,10 @@ DRAG_STEP_PIXELS = 8
 DOWNLOADS = os.path.join(STATE, "downloads")
 CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
 DOWNLOAD_SECONDS = 60
+# The picture of an opened page on its card in the chat (agent-activity.js,
+# since 2026-10-29): the viewport at this width, as a JPEG of this quality.
+PREVIEW_WIDTH = 480
+PREVIEW_QUALITY = 60
 
 # A ref stays with its element, and a new element takes the next number of
 # the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
@@ -818,7 +823,10 @@ def run(request):
         saved = keep_downloads(caught)
         if saved:
             done += "\nDownloaded: " + ", ".join(saved) + "."
-        return with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
+        answer = with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
+        if action == "open" and not hidden(page):
+            answer["preview"] = preview(page)
+        return answer
 
 
 def picture(page):
@@ -828,6 +836,25 @@ def picture(page):
     png = page.screenshot(type="png")
     width, height = page.evaluate("() => [window.innerWidth, window.innerHeight]")
     return f"Picture: {width}x{height} pixels, the x,y that click and drag take.", base64.b64encode(png).decode()
+
+
+def preview(page):
+    """A small JPEG (base64) of the page now, for the card of its open step
+    in the chat; "" when Chrome gives none, which never fails the step.
+    Chrome scales it itself (a scaled clip of the viewport), so nothing here
+    decodes a picture."""
+    try:
+        x, y, width, height = page.evaluate("() => [scrollX, scrollY, innerWidth, innerHeight]")
+        session = page.context.new_cdp_session(page)
+        try:
+            shot = session.send("Page.captureScreenshot", {
+                "format": "jpeg", "quality": PREVIEW_QUALITY,
+                "clip": {"x": x, "y": y, "width": width, "height": height, "scale": min(1, PREVIEW_WIDTH / width)}})
+        finally:
+            session.detach()
+        return str(shot.get("data") or "")
+    except Exception:
+        return ""
 
 
 def with_picture(page, request, answer):

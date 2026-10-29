@@ -1340,9 +1340,10 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   aufgebraucht, 4429 zu oft geöffnet).
 - **Einstiege** wie bisher: im Chat über (+) → „Workspace“
   (`#attachWorkspaceOption`), auf dem Startbildschirm über den Knopf in der
-  Werkzeugleiste (`#composerWorkspaceButton`), an jedem `browser`-Schritt des
-  Agenten über „Live ansehen“ (`agent-activity.js` `.agent-vm-watch`, seit dem
-  Umbau am Werkzeug `browser` statt an einem Shell-Befehl), über das
+  Werkzeugleiste (`#composerWorkspaceButton`), über „Öffnen“ auf der Karte
+  jeder Seite, die der Agent öffnet (`agent-activity.js` `.agent-page-card`,
+  seit 2026-10-29 mit dem Bild der Seite, Titel und Website; vorher „Live
+  ansehen“ an jedem `browser`-Schritt), über das
   Bildschirm-Symbol in der Kopfzeile des Laufs (`agent-delegation.js`
   `.agent-workspace-toggle`) und in Einstellungen → Agent → Workspace.
 - **Neben dem Chat** (ab 1100 px): Das Panel dockt rechts an, der Chat rückt
@@ -3371,7 +3372,8 @@ Die gespeicherte Aktivität eines Turns bekommt den Platz, den der Rest des
 Turn-Dokuments (1 MiB) übrig lässt, abzüglich 64 kB Reserve, höchstens
 `ACTIVITY_MAX_BYTES` = 600.000 Byte UTF-8-JSON (`agent_runs.activity_budget`,
 `bounded_activity`, gesetzt als letztes Feld in `finish_run`): Zuerst verlieren
-die ältesten Events ihre VM-Ausgabe (`output_truncated`), danach werden lange
+geöffnete Seiten ihr Bild (`preview`, älteste zuerst, seit 2026-10-29; Titel und
+Adresse bleiben), dann die ältesten Events ihre VM-Ausgabe (`output_truncated`), danach werden lange
 Texte und Plan-Schritte gekürzt; reicht das nicht, fallen die ältesten Events
 weg, die Antwort nie. Bis 2026-10-28 zählte die Grenze 600.000 Zeichen fest,
 unabhängig von Prüfung und Antwort: Ein langer VM-Lauf mit Audit (Prüfung bis

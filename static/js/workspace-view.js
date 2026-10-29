@@ -48,7 +48,7 @@
 // (the start screen's Workspace button, the (+) menu's row, the row in
 // Settings → Agent), holder(), handBack() (also without an open view, for the
 // card in the chat), agentWaits(request or null); agent-activity.js opens it
-// from a browser step ("Watch live"). A change of holder is the window's
+// from an opened page's card (Open). A change of holder is the window's
 // event "consensio:workspace-holder".
 (function () {
   'use strict';

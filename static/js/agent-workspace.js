@@ -36,7 +36,6 @@
   let chat = '', owner = '', turn = '', data = null, error = '', generation = 0, controller = null;
   let lastStart = -Infinity, timer = null, retryTimer = null, inflight = null, waiting = null, rendered = '';
   let revision = 0, retried = false;
-  const uploads = new Map(); // chatId -> [{name, mime, size, state, message}]
   // Pictures the agent shared from its VM, loaded once per file as a data:
   // URL (the CSP's img-src allows data:, not blob:). fileId -> { url, load }
   const pictures = new Map();
@@ -462,9 +461,23 @@
     const entry = picture(chatId, file);
     if (entry.url) img.src = entry.url;
     else {
+      // Until it is drawn, the skeleton's field with its light passing, then
+      // the picture fades in (an old chat opening; before, a blank white or
+      // grey field stood there). One that cannot come says so in the field.
       figure.classList.add('is-loading');
-      entry.load.then(url => { img.src = url; figure.classList.remove('is-loading'); },
-        () => { figure.classList.remove('is-loading'); figure.classList.add('is-failed'); });
+      entry.load.then(url => {
+        img.addEventListener('load', () => {
+          figure.classList.remove('is-loading');
+          if (img.animate && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            img.animate([{ opacity: 0 }, { opacity: 1 }], { duration: App.motion?.ms?.('state') ?? 200,
+              easing: App.motion?.ease?.('out') ?? 'ease-out' });
+          }
+        }, { once: true });
+        img.src = url;
+      }, () => {
+        figure.classList.remove('is-loading'); figure.classList.add('is-failed');
+        open.append(node('span', 'agent-vm-picture-failed', 'Picture couldn’t load'));
+      });
     }
     open.addEventListener('click', () => App.attachments?.openStored?.({ fileId: file.id, name: file.name, mime: file.mime, size: file.size }));
     const caption = node('figcaption', 'agent-vm-picture-caption');
@@ -490,25 +503,6 @@
     }
     return figure;
   }
-  function uploadRows(list) {
-    const box = node('div', 'agent-uploads');
-    box.setAttribute('aria-live', 'polite');
-    for (const item of list) {
-      const row = node('div', `agent-upload-row is-${item.state}`);
-      const type = node('span', 'agent-file-type', extension(item)); type.setAttribute('aria-hidden', 'true');
-      const main = node('div', 'agent-file-main');
-      main.append(node('span', 'agent-file-name', item.name));
-      const status = node('span', 'agent-file-meta');
-      if (item.state === 'uploading') {
-        status.append(node('span', 'agent-upload-spinner'), node('span', '', extension(item) === 'PDF' ? 'Uploading and reading PDF…' : 'Uploading and reading…'));
-      } else if (item.state === 'waiting') status.textContent = 'Waiting…';
-      else status.textContent = item.warnings?.length ? 'Uploaded · partly read' : 'Uploaded';
-      main.append(status);
-      row.append(type, main);
-      box.append(row);
-    }
-    return box;
-  }
   function partialNotice(files) {
     const box = node('div', 'agent-resource-notice');
     box.append(icon('warning'));
@@ -523,7 +517,7 @@
   function signature(turnInfo) {
     const origins = (data?.files || []).filter(file => file.origin?.message_id).map(mailOrigin);
     return JSON.stringify([chat, revision, turnInfo.id, turnInfo.fileIds, error, confirmKey, origins,
-      (uploads.get(chat) || []).map(item => [item.name, item.state]), historyRows().map(row => row.dataset.agentTurnResources)]);
+      historyRows().map(row => row.dataset.agentTurnResources)]);
   }
   function hideAll() {
     const resources = document.getElementById('agentAnswerResources');
@@ -579,8 +573,6 @@
     const chatId = chat;
     if (resources) {
       resources.replaceChildren();
-      const pending = uploads.get(chatId) || [];
-      if (pending.length) resources.append(uploadRows(pending));
       const selected = new Set(turnInfo.fileIds || []);
       const readable = files.filter(file => selected.has(file.id) && partial(file));
       if (readable.length) resources.append(partialNotice(readable));
@@ -678,18 +670,21 @@
   // ---- upload -----------------------------------------------------------------------
   async function upload(context, headers, signal) {
     const chatId = context.metadata.chatId;
-    const list = (context.attachments || []).map(file => ({ name: file.name, mime: file.mime || '', size: file.size || 0, state: 'waiting' }));
+    const files = context.attachments || [];
+    // Their places over the message wait in the skeleton's light until each
+    // file is stored (attachments.js markUploading, set when the message was
+    // sent); since 2026-10-29 instead of a row per file under the message.
+    const waiting = index => App.attachments?.markUploading?.(context.runId, files.slice(index));
+    const stopped = () => App.attachments?.markUploading?.(context.runId, []);
     const result = [];
-    const update = () => { rendered = ''; if (chat === chatId) project(); };
-    if (list.length) {
-      uploads.set(chatId, list);
-      for (const file of context.attachments) App.attachments?.markError?.(file, '');
-      if (chat !== chatId) refresh(chatId); else update();
+    if (files.length) {
+      for (const file of files) App.attachments?.markError?.(file, '');
+      if (chat !== chatId) refresh(chatId);
     }
-    for (const [index, file] of (context.attachments || []).entries()) {
-      if (!App.runRegistry.isAuthCurrent(context) || signal.aborted) { uploads.delete(chatId); update(); throw new DOMException('Stopped', 'AbortError'); }
+    for (const [index, file] of files.entries()) {
+      if (!App.runRegistry.isAuthCurrent(context) || signal.aborted) { stopped(); throw new DOMException('Stopped', 'AbortError'); }
       context.consensus.error = null;
-      list[index].state = 'uploading'; update();
+      waiting(index);
       let data;
       try {
         const response = await request(`/agent/chats/${chatId}/files`, {
@@ -698,27 +693,25 @@
             ...(file.origin?.source === 'google_drive' && file.origin.file_id ? { drive_file_id: file.origin.file_id } : {}) }) });
         data = await App.readJson(response);
       } catch (failure) {
-        if (failure.name === 'AbortError' || signal.aborted) { uploads.delete(chatId); update(); throw failure; }
-        uploads.delete(chatId);
+        stopped();
+        if (failure.name === 'AbortError' || signal.aborted) throw failure;
         context.metadata.uploadFailed = true;
         // The file stays in the composer with the reason on its chip, so it can
         // be removed or replaced and the message sent again.
         App.attachments?.markError?.(file, fileError(failure, 'upload'));
-        if (result.length) refresh(chatId, true); else update();
+        if (result.length) refresh(chatId, true);
         // Offline or unreachable is the message's problem, not the file's:
         // the run says so and puts the message back (agent-chat.js failRun).
         if (['offline', 'unreachable', 'timeout'].includes(App.userError.kind(failure))) throw failure;
         throw new Error(`Couldn’t upload ${file.name}. ${fileError(failure, 'upload')}`);
       }
-      if (!App.runRegistry.isAuthCurrent(context) || signal.aborted) { uploads.delete(chatId); update(); throw new DOMException('Stopped', 'AbortError'); }
-      list[index].state = 'done'; list[index].warnings = data.file?.warnings || [];
-      result.push(data.file); update();
+      if (!App.runRegistry.isAuthCurrent(context) || signal.aborted) { stopped(); throw new DOMException('Stopped', 'AbortError'); }
+      result.push(data.file); waiting(index + 1);
     }
     context.metadata.fileIds = result.map(file => file.id);
     context.attachmentMeta = result;
     context.attachments = []; // Bytes never belong in saved turns or bookmarks.
     if (result.length) {
-      uploads.delete(chatId);
       window.clearPendingAttachments?.();
       await refresh(chatId, true);
     }
@@ -760,7 +753,7 @@
   }
 
   window.addEventListener('consensio:auth-state', () => {
-    reset(); chat = ''; owner = ''; uploads.clear(); openState.versions.clear(); hideAll();
+    reset(); chat = ''; owner = ''; openState.versions.clear(); hideAll();
   });
   App.agentWorkspace = { refresh, upload, request, button, download, openFile, removeFile, renderTurnResources };
   App.answerTail = answerTail;

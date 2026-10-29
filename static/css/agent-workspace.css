@@ -125,10 +125,8 @@
   .agent-files-ghost:hover { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); }
 }
 
-/* Per-file upload progress, above the answer while the run starts. */
-.agent-uploads { display: grid; gap: 6px; }
-.agent-upload-row, .agent-file-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-.agent-upload-row { padding: 8px 10px; border-radius: var(--radius-sm, 10px); background: var(--raise); }
+/* Uploads wait on the message itself (shell.css .is-uploading). */
+.agent-file-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
 /* The file's type is a document glyph, not an 8-px "PDF" (Apple-Audit
    G10): the name beside it already ends in the extension. The label stays
    in the markup for scripts; it is not drawn. A mail origin keeps its icon. */
@@ -147,9 +145,6 @@
 .agent-file-meta .agent-files-icon { width: 14px; height: 14px; }
 .agent-file-origin { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-file-warning { color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: var(--font-size-xs); line-height: 1.5; }
-/* Look and turn: the one spinner (motion.css). */
-.agent-upload-spinner { width: 12px; height: 12px; flex: none; }
-.agent-upload-row.is-done .agent-file-meta { color: var(--agree); }
 
 .agent-resource-notice {
   display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm, 10px);
@@ -178,9 +173,27 @@
 }
 .agent-vm-picture-open:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
 .agent-vm-picture-open img { display: block; max-width: 100%; max-height: min(520px, 60vh); width: auto; height: auto; }
-/* Until it arrives (or when it cannot), a calm field of a picture's size. */
-.agent-vm-picture:is(.is-loading, .is-failed) .agent-vm-picture-open { width: min(420px, 100vw - 64px); aspect-ratio: 16 / 10; cursor: default; }
+/* Until it arrives, a field of a picture's size in the skeleton's tone with
+   its light passing (attachments' tiles, skeleton.css); one that cannot come
+   says so there. Before 2026-10-29 the field was the page's own --raise: an
+   old chat opened with blank white or grey boxes. */
+.agent-vm-picture:is(.is-loading, .is-failed) .agent-vm-picture-open {
+  display: flex; align-items: center; justify-content: center;
+  width: min(420px, 100vw - 64px); aspect-ratio: 16 / 10; cursor: default;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.agent-vm-picture:is(.is-loading, .is-failed) .agent-vm-picture-open::after { box-shadow: none; }
 .agent-vm-picture:is(.is-loading, .is-failed) img { position: absolute; visibility: hidden; }
+.agent-vm-picture.is-loading .agent-vm-picture-open::after {
+  background: linear-gradient(100deg, transparent 15%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 85%);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer var(--dur-beat) var(--ease-standard) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-vm-picture.is-loading .agent-vm-picture-open::after { animation: none; background: none; }
+}
+.agent-vm-picture-failed { padding: 0 16px; color: var(--ink-3); font-size: var(--font-size-xs); }
 /* Takes no width of its own (width 0, min-width 100%): the picture sets it. */
 .agent-vm-picture-caption { display: flex; align-items: center; gap: 2px; width: 0; min-width: 100%; margin-top: 4px; }
 .agent-vm-picture-caption .agent-file-name {

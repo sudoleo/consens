@@ -2382,7 +2382,7 @@ body:not(.is-hero) .consensus-section::before {
   border-radius: var(--radius-lg);
   background: var(--raise);
   object-fit: cover;
-  transition: filter var(--dur-state) var(--ease-standard);
+  transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
 }
 
 /* Until the stored picture is here (an old chat opening): the tile's place
@@ -2412,6 +2412,53 @@ body:not(.is-hero) .consensus-section::before {
 
 @media (prefers-reduced-motion: reduce) {
   .message-attachments .is-image-tile.is-thumb-loading .attachment-chip-preview::after { display: none; }
+}
+
+/* A sent file still uploading in an Agent chat (attachments.js
+   markUploading): its place over the message waits in the same skeleton,
+   a picture at its own size with the picture held back, then it fades in;
+   another file says "Uploading…" for its size. Before 2026-10-29 a row per
+   file stood under the message instead ("Uploading and reading…"). */
+.message-attachments .attachment-chip.is-uploading {
+  position: relative;
+  overflow: hidden;
+}
+
+.message-attachments .attachment-chip.is-image-tile.is-uploading {
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.message-attachments .is-image-tile.is-uploading .attachment-chip-thumb {
+  opacity: 0;
+}
+
+.message-attachments .attachment-chip.is-uploading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 15%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 85%);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer var(--dur-beat) var(--ease-standard) infinite;
+  pointer-events: none;
+}
+
+.attachment-chip-status,
+.message-attachments .attachment-chip.is-uploading .attachment-chip-size {
+  display: none;
+}
+
+.message-attachments .attachment-chip.is-uploading .attachment-chip-status {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-attachments .attachment-chip.is-uploading::after { display: none; }
 }
 
 @media (hover: hover) and (pointer: fine) {

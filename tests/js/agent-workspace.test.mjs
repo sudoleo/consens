@@ -195,23 +195,58 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  it('keeps the list while uploading and shows a progress row per file', async () => {
+  // Since 2026-10-29 the files wait on the message itself (attachments.js
+  // markUploading), each until it is stored; no row under the message.
+  it('marks the message’s files as uploading until each is stored, with no row under the message', async () => {
     const { window, document, dom } = boot({ files: [UPLOAD] });
     await window.App.agentWorkspace.refresh(CHAT);
-    let release;
+    const marks = [];
+    window.App.attachments = { markError: vi.fn(), markUploading: (run, files) => marks.push([run, files.map(f => f.name)]) };
+    const releases = [];
+    let stored = 0;
     window.fetch = vi.fn((path, options) => options?.method === 'POST'
-      ? new Promise(resolve => { release = () => resolve({ ok: true, json: async () => ({ file: { ...UPLOAD, id: 'f'.repeat(32), name: 'new.pdf', warnings: [] } }) }); })
+      ? new Promise(resolve => { releases.push(() => resolve({ ok: true, json: async () => ({ file: { ...UPLOAD, id: String(++stored).repeat(32), name: JSON.parse(options.body).name, warnings: [] } }) })); })
       : Promise.resolve(reply([UPLOAD])));
-    const context = { metadata: { chatId: CHAT }, consensus: {}, attachments: [{ name: 'new.pdf', mime: 'application/pdf', size: 10, data: 'eA==' }] };
+    const files = ['one.pdf', 'two.png'].map(name => ({ name, mime: 'application/pdf', size: 10, data: 'eA==' }));
+    const context = { runId: 'run-1', metadata: { chatId: CHAT }, consensus: {}, attachments: files };
     const pending = window.App.agentWorkspace.upload(context, {}, new AbortController().signal);
-    await vi.waitFor(() => expect(typeof release).toBe('function'));
-    expect(document.querySelector('#agentAnswerResources .agent-upload-row').textContent).toContain('new.pdf');
-    expect(document.querySelector('#agentAnswerResources .agent-upload-row').textContent).toContain('Uploading');
-    release();
+    await vi.waitFor(() => expect(releases).toHaveLength(1));
+    expect(marks.at(-1)).toEqual(['run-1', ['one.pdf', 'two.png']]);
+    expect(document.querySelector('#agentAnswerResources').textContent).not.toContain('one.pdf');
+    releases[0]();
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    expect(marks.at(-1)).toEqual(['run-1', ['two.png']]);
+    releases[1]();
     await pending;
-    expect(context.metadata.fileIds).toEqual(['f'.repeat(32)]);
+    expect(marks.at(-1)).toEqual(['run-1', []]);
+    expect(context.metadata.fileIds).toEqual(['1'.repeat(32), '2'.repeat(32)]);
     expect(context.attachments).toEqual([]);
-    expect(document.querySelector('.agent-upload-row')).toBeNull();
+    dom.window.close();
+  });
+
+  it('holds a picture’s place in the skeleton until it is drawn, and says so when it cannot come', async () => {
+    const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
+      turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z' };
+    const MISSING = { ...PICTURE, id: '9'.repeat(32), name: 'gone.png' };
+    const files = [PICTURE, MISSING];
+    const { window, document, dom } = boot({ files });
+    let deliver;
+    window.fetch = vi.fn(url => url.endsWith(PICTURE.id)
+      ? new Promise(resolve => { deliver = () => resolve({ ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) }); })
+      : url.endsWith(MISSING.id) ? Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: 'Gone' }) })
+      : Promise.resolve(reply(files)));
+    await window.App.agentWorkspace.refresh(CHAT);
+    const [shown, gone] = document.querySelectorAll('.agent-vm-picture');
+    expect(shown.classList.contains('is-loading')).toBe(true);
+    await vi.waitFor(() => expect(gone.classList.contains('is-failed')).toBe(true));
+    expect(gone.querySelector('.agent-vm-picture-failed').textContent).toBe('Picture couldn’t load');
+    deliver();
+    const img = shown.querySelector('img');
+    await vi.waitFor(() => expect(img.getAttribute('src')).toMatch(/^data:image\/png;base64,/));
+    // Until the picture is decoded the skeleton stays; then it goes.
+    expect(shown.classList.contains('is-loading')).toBe(true);
+    img.dispatchEvent(new window.Event('load'));
+    expect(shown.classList.contains('is-loading')).toBe(false);
     dom.window.close();
   });
 

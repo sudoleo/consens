@@ -266,6 +266,23 @@ def test_the_saved_activity_stays_within_its_size_dropping_old_output_first():
     assert events[0]["output"] == "z" * 2_000
 
 
+def test_opened_pages_lose_their_picture_before_any_step_loses_its_output():
+    """A page's picture on its card (agent_browser.preview_url) is the
+    largest and the least needed field: all go, oldest first, before an
+    output does; title and address stay."""
+    pages = [{"id": f"completion:{n}:open/tool", "kind": "tool", "name": "browser", "status": "succeeded",
+              "action": "open", "url": f"https://example.com/{n}", "title": f"Page {n}",
+              "preview": "data:image/jpeg;base64," + "A" * 30_000} for n in range(12)]
+    commands = [{"id": f"completion:{n}:call/tool", "kind": "tool", "name": "vm_exec", "status": "succeeded",
+                 "command": f"make {n}", "output": "z" * 2_000, "output_truncated": False} for n in range(20)]
+    events = pages + commands
+    bounded = bounded_activity(events, json_bytes(events) - 100_000)
+    assert [("preview" in e) for e in bounded[:12]] == [False] * 4 + [True] * 8
+    assert all(e["output"] == "z" * 2_000 for e in bounded[12:])
+    assert bounded[0]["title"] == "Page 0" and bounded[0]["url"] == "https://example.com/0"
+    assert "preview" in events[0]
+
+
 # Counted in characters, "━" and "✓" (3 bytes each) took three times the
 # room they were given; plan steps were never shortened.
 def test_the_saved_activity_is_measured_in_bytes_and_shortens_plans_too():

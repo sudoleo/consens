@@ -180,8 +180,16 @@ picture's green edge, never the terminal's; an amber reminder after
 request stays its quiet line while the user has the browser) or what the agent
 waits for there (`agentWaits`, set by `agent-chat.js renderHold` for an
 `ask_user` browser card, with "Take over"); the one-line hint above the picture
-gives way to the bar; `agent-activity.js` adds "Watch live"
-(`.agent-vm-watch`) to each step of the `browser` tool and `agent-delegation.js` the run
+gives way to the bar; since 2026-10-29 `agent-activity.js` shows each `open`
+of the `browser` tool as a card (`.agent-page-card`, `pageCard`; before, a
+"Watch live" link on every browser step): the page's picture (`preview`, a
+480-px JPEG from `browser.py preview`, Chrome's scaled viewport via CDP,
+checked by `agent_browser.preview_url` and reported into the activity only,
+never into the agent's result), title, "host · opened in the browser" and
+Open; while it opens the picture's place waits in the skeleton's light; in
+the timeline the picture stands on top, in the live lines it is a small tile
+at the start of one row (they fold, a tall card would make the page jump);
+and `agent-delegation.js` the run
 header's shortcut (`.agent-workspace-toggle`, shown once a VM step stands in
 the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
 `--workspace-width`, a draggable `.workspace-view-resizer` remembered in
@@ -1428,6 +1436,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   erst beim `load` bekommt es den Dateinamen als Alt-Text und blendet ein
   (seit 2026-10-22: vorher malte der Browser beim Öffnen alter Chats eine
   Sekunde lang sein Symbol für ein kaputtes Bild plus Dateinamen).
+  Solange eine Agent-Datei der gerade gesendeten Nachricht hochlädt
+  (`App.attachments.markUploading(runId, files)`, gesetzt von `agent-chat.js`
+  beim Senden, Datei für Datei beendet von `agent-workspace.js` `upload`, je
+  Lauf), steht ihre Kachel im selben Skelett (`.is-uploading`, `aria-busy`):
+  ein Bild in seiner Größe, das Bild selbst zurückgehalten, danach blendet es
+  ein; eine andere Datei sagt „Uploading…“ statt ihrer Größe. Seit
+  2026-10-29; vorher stand unter der Nachricht eine Zeile pro Datei
+  („Uploading and reading…“).
   Die Vorschau (`#attachmentViewerModal`) zentriert ohne `[open]`-Bindung:
   beim Ausblenden behält der Dialog sein `display`, die Zentrierung fiel aber
   mit `[open]` weg und das Bild sprang dafür nach links oben (bis 2026-10-22).
@@ -6115,14 +6131,18 @@ und eingeklappt in der Zeitleiste, seit 2026-10-29 nur einmal an seiner ersten
 Stelle mit dem neuesten Stand (vorher je Änderung, UX-Audit A5). Ein Befehl
 mit Fehler sagt „Failed · code N“ in `--dispute` (`commandFailed`,
 `data-outcome`), eine Seitensuche steht als Zitat, eine geöffnete Seite mit
-Titel und Host (`vmTargetKind`, A8/A9). `vm_share_file` (seit 2026-10-26) kopiert eine
+Titel und Host (`vmTargetKind`, A8/A9; seit 2026-10-29 als Karte mit dem Bild der
+Seite, `pageCard`, und `agent_browser._activity` liest den Titel bei `open` aus der
+zweiten Zeile, vorher hatte eine geöffnete Seite nie einen). `vm_share_file` (seit 2026-10-26) kopiert eine
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
 `agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn (`vm_file`, seit
 2026-10-28 auch `web_image` von `show_image` mit Bildunterschrift und der
 Website als Link, `webSource`) als Bild direkt unter dem
-Antworttext, über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
+Antworttext (bis es gezeichnet ist, ein Feld im Skelett-Ton mit wanderndem Licht,
+`is-loading`, seit 2026-10-29; vorher eine leere weiße/graue Fläche beim Öffnen
+alter Chats; eines, das nicht kommt, sagt „Picture couldn’t load“), über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
 dem Antwort-Body; `App.answerTail(body)` sagt agent-review.js, watch.js,
 share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffnet
 `App.attachments.openStored`), andere als Dateizeile. Ein Markdown-Bild mit
@@ -8711,7 +8731,7 @@ app/services/
   agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
-  agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) auf der Browser-VM über workspace_vm/browser/browser.py mit JSON auf stdin; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port> als Port der Werkbank (local_port, _tunnel startet agent_tunnel, local_ports in jeder Anfrage), Upload einer Werkbank-Datei für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach auf der Browser-VM gelöscht), Screenshot als Bild, Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die Browser-VM und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Werkbank bereit wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); look zeigt ask_user den Browser nach der Rückgabe
+  agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) auf der Browser-VM über workspace_vm/browser/browser.py mit JSON auf stdin; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port> als Port der Werkbank (local_port, _tunnel startet agent_tunnel, local_ports in jeder Anfrage), Upload einer Werkbank-Datei für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach auf der Browser-VM gelöscht), Screenshot als Bild, open bringt seit 2026-10-29 ein kleines JPEG der Seite für ihre Karte im Chat (preview_url, nur in der Aktivität, bounded_activity streicht es zuerst), Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die Browser-VM und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Werkbank bereit wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); look zeigt ask_user den Browser nach der Rückgabe
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (exists/ensure(rules=None: nur anlegen)/set_policy/get_policy/run mit stdin/exec/exec_url/read_file/write_file/delete_path/move_path, die Dateien mit agent=True als Agenten-Nutzer, delete_service/checkpoint/restore/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets, Handshake einmal wiederholt); WORKBENCH_RULES (Paketquellen) und BROWSER_RULES (offenes Web ohne Fly-intern), WAKE_SECONDS (90 s für Aufrufe, die eine schlafende VM wecken können: Regeln setzen, Datei des Anbieter-Nutzers lesen), agent_argv/wrapped_command (Agenten-Befehle über agent-run), workspace_name und browser_name je Konto, chat_dir/chat_folder je Chat (Ordnername aus Titel + ID-Anfang, seit 2026-10-28; vm_name nur noch für alte Chat-VMs), delete_chat_vm (Chat-Ordner unter gemerktem Namen und ID als Agent und am alten Ort, alte VM über vm_name), delete_workspace (beide VMs) und restore_workspace; ein Anbieterwechsel betrifft nur diese Datei
   agent_tunnel.py            localhost-Brücke (seit 2026-10-29): ein Tunnel je Konto im Prozess (Tunnel), trägt Rahmen zwischen tunnel.py listen (Browser-VM) und tunnel.py connect (Werkbank, als Agent über agent-run, /usr/local/lib/consens/tunnel.py), beide über open_stream, zwei Threads, keiner je Verbindung; Rahmen H/L/O/F/Q/D/C/A mit Flusssteuerung (WINDOW je Verbindung und Richtung), MAX_CONNECTIONS, MAX_FRAME, O nur für gehaltene Ports, die Werkbank-Seite kann nur antworten; nie Port 9222 oder unter 1024; open_ports (keine Antwort = VMUnavailable, nur Absage = belegt), Tunnel.listening (Q: lauschende Ports des Agenten), seed/asked/live/touch, resume(find) für Live-Ansicht, Übernahme und Browser-Aufruf; Ports auf dem Datensatz (tunnel_ports); Ende nach IDLE_SECONDS ohne Bytes; 502-Seite bei F
   agent_secrets.py           Keys für den Agenten (seit 2026-10-29): save schreibt als Agenten-Nutzer nach ~/.secrets/<NAME> (umask 077, Wert nur auf stdin) und den Namen auf den Datensatz (secret_names), load liest sie bei jedem VM-Start wieder (VMSession.ready), remember/scrub maskieren sie als „[secret ~/.secrets/NAME, hidden from you]“ in Werkzeug-Ergebnissen und Aktivität; KEYS_NOTE mit dem ersten VM-Ergebnis (workspace_keys)
@@ -11047,7 +11067,9 @@ Dateiliste unter der Antwort mehr:
   (`resources`-Events je nach Payload-Schlüssel `documents`/`files` bzw.
   `actions`/`gmail_evidence`).
 - `#agentAnswerResources` (nach `#agentAnswerBody`, vor `#agentAnswerError`; wird
-  angelegt, falls das Template es nicht enthält): Upload-Fortschritt pro Datei,
+  angelegt, falls das Template es nicht enthält): seit 2026-10-29 kein
+  Upload-Fortschritt mehr (die Dateien warten an der Nachricht, `attachments.js`
+  `markUploading`),
   Hinweis „Parts of <Name> couldn't be read“ (mehrere: „Parts of n files …“) für die mit dieser Nachricht
   gesendeten Dateien, nur bei echten Leselücken: `agent_files.public_file` filtert seit 2026-10-16
   den immer gleichen Word-Hinweis (`WORD_LIMITS_NOTE`, nur noch im Tool-Ergebnis für das Modell,

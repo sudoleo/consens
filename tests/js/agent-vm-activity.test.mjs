@@ -317,75 +317,94 @@ describe("a step in the workspace's browser", () => {
   // Since 2026-10-27 the browser tool (agent_browser.py) with typed actions,
   // no longer a browser command in the shell.
   const step = fields => vm({ name: "browser", ...fields });
-  it("shows the action and what it was on, and offers to watch it live", () => {
+  const PREVIEW = "data:image/jpeg;base64,/9j/4AAQ";
+  // Since 2026-10-29 an opened page is a card (agent_browser.preview_url):
+  // its picture, title and site, and Open for the live view; before, every
+  // browser step ended in a "Watch live" link.
+  it("shows an opened page as a card that waits for its picture and opens the live view", () => {
     const { app, host, activity } = setup();
     const opened = [];
     app.window.App.workspaceView = { open: () => opened.push(true) };
     app.document.body.classList.add("viewer-has-workspace");
     const events = [];
-    activity.receive(events, step({ status: "running", action: "open", url: "https://github.com" }));
-    activity.receive(events, vm({ id: "completion:1:call_2/tool", status: "succeeded", command: "pip install x",
-      exit_code: 0, output: "ok\n" }));
+    activity.receive(events, step({ status: "running", action: "open", url: "https://www.kfw.de/inlandsfoerderung/" }));
     activity.render(host, { running: true, status: "running", events });
-    const [browserStep, otherStep] = host.querySelectorAll(".agent-activity-content .agent-vm");
-    expect(browserStep.querySelector(".agent-vm-verb").textContent).toBe("Opening");
-    // A page by its name in the text's type, its address on hover (UX audit A9).
-    expect(browserStep.querySelector(".agent-vm-target").textContent).toBe("github.com");
-    expect(browserStep.querySelector(".agent-vm-target").title).toBe("https://github.com");
-    expect(browserStep.dataset.target).toBe("text");
-    const watch = browserStep.querySelector(".agent-vm-watch");
-    expect(watch.hidden).toBe(false);
-    expect(watch.textContent).toBe("Watch live");
-    expect(otherStep.querySelector(".agent-vm-watch").hidden).toBe(true);
-    // Opens the view without folding the step open or shut.
-    const wasOpen = browserStep.open;
-    watch.click();
+    const live = host.querySelector(".agent-progress .agent-page-card");
+    expect(live.classList.contains("agent-vm")).toBe(true);
+    expect(live.dataset.status).toBe("running");
+    // While it opens: the site as its name, the picture's place waiting.
+    expect(live.querySelector(".agent-page-title").textContent).toBe("kfw.de");
+    expect(live.querySelector(".agent-page-title").title).toBe("https://www.kfw.de/inlandsfoerderung/");
+    expect(live.querySelector(".agent-page-meta").textContent).toBe("Opening in the browser…");
+    expect(live.querySelector(".agent-page-shot").hidden).toBe(false);
+    expect(live.querySelector(".agent-page-shot img").hasAttribute("src")).toBe(false);
+    expect(live.hasAttribute("data-i18n-skip")).toBe(true);
+    // The picture and the title arrive; the card shows them.
+    activity.receive(events, step({ status: "running", preview: PREVIEW }));
+    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://www.kfw.de/inlandsfoerderung/",
+      title: "Heizungsförderung für Privatpersonen | KfW" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(live.querySelector(".agent-page-shot img").getAttribute("src")).toBe(PREVIEW);
+    expect(live.querySelector(".agent-page-title").textContent).toBe("Heizungsförderung für Privatpersonen | KfW");
+    expect(live.querySelector(".agent-page-meta").textContent).toBe("kfw.de · opened in the browser");
+    const open = live.querySelector(".agent-page-open");
+    expect(open.hidden).toBe(false);
+    expect(open.textContent).toBe("Open");
+    open.click();
     expect(opened).toEqual([true]);
-    expect(browserStep.open).toBe(wasOpen);
-    // A step that only reads, with the page as its output; a click by its ref.
+    // The timeline holds the same card.
+    const saved = host.querySelector(".agent-activity-content .agent-page-card");
+    expect(saved.classList.contains("agent-activity-tool")).toBe(true);
+    expect(saved.querySelector(".agent-page-shot img").getAttribute("src")).toBe(PREVIEW);
+    // No step ends in a "Watch live" link any more.
+    expect(host.querySelector(".agent-vm-watch")).toBeNull();
+  });
+
+  it("shows a card without a picture for a page saved without one, and only valid pictures", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://github.com" }));
+    activity.receive(events, step({ id: "completion:1:call_2/tool", status: "succeeded", action: "open",
+      url: "https://evil.example", title: "Evil", preview: "javascript:alert(1)" }));
+    activity.receive(events, step({ id: "completion:1:call_3/tool", status: "failed", action: "open",
+      url: "https://down.example" }));
+    activity.render(host, { running: false, status: "completed", events });
+    const [plain, evil, failed] = host.querySelectorAll(".agent-activity-content .agent-page-card");
+    expect(plain.querySelector(".agent-page-shot").hidden).toBe(true);
+    expect(plain.querySelector(".agent-page-title").textContent).toBe("github.com");
+    expect(plain.querySelector(".agent-page-meta").textContent).toBe("Opened in the browser");
+    expect(evil.querySelector(".agent-page-shot img").hasAttribute("src")).toBe(false);
+    expect(failed.querySelector(".agent-page-meta").textContent).toBe("Failed");
+    expect(failed.dataset.outcome).toBe("failed");
+    // Without a workspace on the account there is nothing to open.
+    expect(plain.querySelector(".agent-page-open").hidden).toBe(true);
+  });
+
+  it("shows any other browser step as its line, the page it read as the output", () => {
+    const { app, host, activity } = setup();
+    app.window.App.workspaceView = { open() {} };
+    app.document.body.classList.add("viewer-has-workspace");
+    const events = [];
     activity.receive(events, step({ id: "completion:1:call_3/tool", status: "succeeded", action: "read",
       title: "Example", page: 'Page: "Example"\n[e1] link "More"' }));
     activity.receive(events, step({ id: "completion:1:call_4/tool", status: "succeeded", action: "click", ref: "e1" }));
     activity.render(host, { running: true, status: "running", events });
-    const [, , read, click] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    const [read, click] = host.querySelectorAll(".agent-activity-content .agent-vm");
     expect(read.querySelector(".agent-vm-verb").textContent).toBe("Read the page");
     expect(read.querySelector(".agent-vm-target").textContent).toBe("Example");
     expect(read.querySelector(".agent-vm-output").textContent).toContain("[e1] link");
-    expect(read.querySelector(".agent-vm-watch").hidden).toBe(false);
     expect(click.querySelector(".agent-vm-verb").textContent).toBe("Clicked");
     expect(click.querySelector(".agent-vm-target").textContent).toBe("e1");
     // A search on the page by what it looked for, its places as the output.
     activity.receive(events, step({ id: "completion:1:call_6/tool", status: "succeeded", action: "find",
       query: "price", title: "Shop", page: 'Page: "Shop"\n1 match for "price":\n[e4] "Sort by price"' }));
     activity.render(host, { running: true, status: "running", events });
-    const find = host.querySelectorAll(".agent-activity-content .agent-vm")[4];
+    const find = host.querySelectorAll(".agent-activity-content .agent-vm")[2];
     expect(find.querySelector(".agent-vm-verb").textContent).toBe("Searched the page for");
     // A search term is a quote in the text's type (agent-chat.css adds the marks, A8).
     expect(find.querySelector(".agent-vm-target").textContent).toBe("price");
     expect(find.dataset.target).toBe("quote");
-    // Opened, the page says its title, its host after it at the edge.
-    activity.receive(events, step({ id: "completion:1:call_7/tool", status: "succeeded", action: "open",
-      url: "https://www.kfw.de/inlandsfoerderung/", title: "Heizungsförderung für Privatpersonen | KfW" }));
-    activity.render(host, { running: true, status: "running", events });
-    const page = host.querySelectorAll(".agent-activity-content .agent-vm")[5];
-    expect(page.querySelector(".agent-vm-verb").textContent).toBe("Opened");
-    expect(page.querySelector(".agent-vm-target").textContent).toBe("Heizungsförderung für Privatpersonen | KfW");
-    expect(page.querySelector(".agent-vm-meta").textContent).toBe("kfw.de");
     expect(find.querySelector(".agent-vm-output").textContent).toContain('[e4] "Sort by price"');
-  });
-
-  it("offers nothing without a workspace on the account, and never for a shell command", () => {
-    const { app, host, activity } = setup();
-    const events = [];
-    activity.receive(events, step({ status: "running", action: "open", url: "https://github.com" }));
-    activity.render(host, { running: true, status: "running", events });
-    expect(host.querySelector(".agent-vm .agent-vm-watch").hidden).toBe(true);
-    app.window.App.workspaceView = { open() {} };
-    app.document.body.classList.add("viewer-has-workspace");
-    activity.receive(events, vm({ id: "completion:1:call_5/tool", status: "running", command: "browser open x" }));
-    activity.render(host, { running: true, status: "running", events });
-    expect(host.querySelectorAll(".agent-activity-content .agent-vm")[1].querySelector(".agent-vm-watch").hidden)
-      .toBe(true);
   });
 });
 

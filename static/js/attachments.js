@@ -565,6 +565,28 @@
     function imageKey(att) {
       return [att.name, att.size || 0, att.mime].join("|");
     }
+    // Files of a sent Agent message still on their way to the chat, per run
+    // (agent-workspace.js upload): their place over the message waits in the
+    // skeleton's light until the file is stored. Before 2026-10-29 a row per
+    // file stood under the message ("Uploading and reading…").
+    const uploadingRuns = new Map();
+    function isUploading(key) {
+      for (const keys of uploadingRuns.values()) if (keys.has(key)) return true;
+      return false;
+    }
+    function markChipUploading(chip, on) {
+      chip.classList.toggle("is-uploading", on);
+      if (on) chip.setAttribute("aria-busy", "true"); else chip.removeAttribute("aria-busy");
+    }
+    function markUploading(owner, files) {
+      const keys = new Set((files || []).map(function (file) {
+        return imageKey({ name: file.name, size: file.size || 0, mime: file.mime || "" });
+      }));
+      if (keys.size) uploadingRuns.set(owner, keys); else uploadingRuns.delete(owner);
+      document.querySelectorAll(".message-attachments .attachment-chip[data-attachment-key]").forEach(function (chip) {
+        markChipUploading(chip, isUploading(chip.dataset.attachmentKey));
+      });
+    }
     function storedImage(fileId) {
       if (!storedImages.has(fileId)) {
         const load = window.App?.agentWorkspace?.openFile
@@ -679,6 +701,15 @@
       meta.appendChild(nameEl);
       meta.appendChild(sizeEl);
       chip.appendChild(meta);
+      // A sent file without its stored id may still be uploading (markUploading).
+      if (readonly && !att.fileId) {
+        chip.dataset.attachmentKey = imageKey(att);
+        const status = document.createElement("span");
+        status.className = "attachment-chip-status";
+        status.textContent = "Uploading…";
+        meta.appendChild(status);
+        markChipUploading(chip, isUploading(chip.dataset.attachmentKey));
+      }
 
       // Older image uploads carry a capability note, not a reading limit.
       const warnings = Array.isArray(att.warnings)
@@ -865,6 +896,9 @@
       },
       messageMeta: messageMeta,
       messageText: messageText,
+      // markUploading(runId, files): those files of the run's message are
+      // still uploading ({name, size, mime}); an empty list ends it.
+      markUploading: markUploading,
       // A stored Agent file in the viewer: picture, PDF or text, with
       // download and removal ({ fileId, name, mime, size }).
       openStored: openAttachmentViewer,
