@@ -708,7 +708,7 @@
     if (code === 'agent_tokens_exhausted') return { text: `You’ve used today’s allowance. It resets at ${resetTime()}.` };
     // A pause nobody decided (A-R4): why it stopped, also under a partial answer.
     if (code === 'hold_timeout') {
-      return { text: 'Paused for 30 minutes without a decision, so the response stopped.', actions: retry ? [['retry', 'Retry']] : [] };
+      return { text: 'Stopped after 30 minutes without your decision.', actions: retry ? [['retry', 'Retry']] : [] };
     }
     // The answer is complete; only its sidebar entry was not saved. Said even
     // under a checked answer, which failureNote treats as settled: the
@@ -1216,10 +1216,18 @@
     // (seeded before the first paint in app-bootstrap.js), as the greeting does.
     if (!looksAgent() || window.userCanAskQuestions?.() === false) return;
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
-    // A new chat names the one thing nobody would guess: a pasted AI answer
-    // gets checked (the Agent decides; there is no extra mode or button).
-    input.placeholder = running ? 'Write your next message…' : basis?.chatId && !basis.continuationUnavailable
+    // While a card waits above it, the field says what it does now (UX audit
+    // 2026-10-29 C3, C11): words go to the agent with the card's answer
+    // (steer), or, for a key, into the card's key field. Short enough for
+    // a phone beside the reviewers (H2: "Write your next message…" ended
+    // mid-word). A new chat names the one thing nobody would guess: a pasted
+    // AI answer gets checked (the Agent decides; there is no extra mode or
+    // button).
+    input.placeholder = running ? runningPlaceholder(openHold(registry.visible())) : basis?.chatId && !basis.continuationUnavailable
       ? 'Ask a follow-up' : App.askPlaceholder?.() ?? input.placeholder;
+  }
+  function runningPlaceholder(hold) {
+    return hold?.ask === 'secret' ? 'Paste the key above' : hold ? 'Or write to the agent…' : 'Message the agent…';
   }
   // Attachments still in the composer are this run's own when an upload
   // failed (agent-workspace keeps the chips and marks the run).
@@ -1380,7 +1388,7 @@
     const text = String(document.getElementById("questionInput")?.value || "").trim();
     if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId) || !text) return null;
     const hold = openHold(context);
-    return { title: hold?.ask === "secret" ? "Put it in the key field"
+    return { title: hold?.ask === "secret" ? "Into the key field"
       : hold ? "Send to the agent and let it go on"
       : readsMessages(context) ? "Send into the running response" : "Send after this response" };
   }
@@ -1390,16 +1398,21 @@
     if (!steering() || !input) return false;
     const text = String(input.value).trim();
     // The agent asked for a key and its card is open (A-S7): the field never
-    // sends a message then. Its words go, as dots, into the card's key field,
-    // and the user saves them there; words for the agent go through "Write to
-    // the agent" on the card. Only the open card decides, nothing guesses at
-    // the words: a key someone writes into a message unasked stays a message.
-    if (openHold(context)?.ask === "secret") {
+    // sends a message then (its placeholder says so, C11). Its words go, as
+    // dots, into the card's key field, the card says so for a moment, and
+    // the user saves them there or answers "Not now". Only the open card
+    // decides, nothing guesses at the words: a key someone writes into a
+    // message unasked stays a message.
+    const open = openHold(context);
+    if (open?.ask === "secret") {
       const field = document.querySelector("#agentHold .agent-ask-secret-input");
       if (!field || field.disabled) return true;
       field.value = text;
       input.value = "";
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      open.failed = "";
+      open.movedUntil = Date.now() + MOVED_NOTE_MS;
+      renderHold();
       field.focus({ preventScroll: true });
       return true;
     }
@@ -1527,7 +1540,7 @@
       if (item.state === "queued") {
         const remove = document.createElement("button");
         remove.type = "button";
-        remove.className = "agent-queue-remove";
+        remove.className = "close-button agent-queue-remove";
         remove.setAttribute("aria-label", "Remove waiting message");
         remove.title = "Remove waiting message";
         remove.innerHTML = window.App?.closeIcon?.() || "";
@@ -1557,8 +1570,13 @@
   const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
     injection: "Prompt injection", unchecked: "Not checked" };
   let holdTimer = null;
-  // The agent's own question shows its clock from here on (askCard).
-  const ASK_CLOCK_MINUTES = 5;
+  // Every card names its deadline only in its last minutes, as the agent's
+  // own questions did (UX audit 2026-10-29 C7): a reviewer's pause said
+  // "Stops in 30 minutes" from its first second, a threat that did not count
+  // for 25 minutes.
+  const CLOCK_MINUTES = 5;
+  // A move of the main field's words into the key field says so this long (C11).
+  const MOVED_NOTE_MS = 6000;
   function openHold(context) {
     const hold = context?.metadata?.hold;
     return hold && registry.isExecuting(context.runId) && registry.isAuthCurrent(context) ? hold : null;
@@ -1569,20 +1587,25 @@
     const since = Number.isFinite(at) ? Math.min(at, hold.receivedAt) : hold.receivedAt;
     const left = since + (Number(hold.timeout_seconds) || 1800) * 1000 - Date.now();
     const minutes = Math.ceil(left / 60000);
-    // The agent's own question goes on without an answer, so it says so only
-    // in its last minutes; a reviewer's pause stops, so it always says so.
+    if (minutes > CLOCK_MINUTES) return "";
+    // What happens then: the agent's own question goes on without an
+    // answer, a domain stays closed and the work goes on (C8; the card said
+    // "Stops"), a reviewer's pause stops the response.
     if (hold.ask) {
-      if (minutes > ASK_CLOCK_MINUTES) return "";
       return minutes > 1 ? App.t("The agent waits {count} more minutes", { count: minutes })
         : "The agent waits less than a minute more";
+    }
+    if (hold.domain) {
+      return minutes > 1 ? App.t("Not allowed in {count} minutes without your decision", { count: minutes })
+        : "Not allowed within a minute without your decision";
     }
     return minutes > 1 ? App.t("Stops in {count} minutes without your decision", { count: minutes })
       : "Stops within a minute without your decision";
   }
   // A decision's POST (…/hold, …/secret) within DECISION_TIMEOUT_MS: on a
   // half-open connection it hung for minutes, every button of the card
-  // locked and nothing said so (A-B3). The card says "Sending…" meanwhile,
-  // and its Stop stays a Stop.
+  // locked and nothing said so (A-B3). The pressed button says it is on its
+  // way meanwhile (C13), and the Stop button beside the field stays a Stop.
   const DECISION_TIMEOUT_MS = 15000;
   async function postDecision(context, path, body) {
     const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/${path}`;
@@ -1597,10 +1620,19 @@
     } catch (_) { response = null; }
     return { response, data: data && typeof data === "object" ? data : {} };
   }
+  // A refusal the user can act on says the server's own sentence (in their
+  // language); anything else, a lost connection or an internal error, the
+  // card's. In the card, where the user acted, not in a toast (C12: a
+  // toast said "Internal error" and the card looked as before).
+  const DECISION_REFUSALS = new Set(["notes_full", "invalid_action", "vm_unavailable"]);
+  function refusal(data, fallback) {
+    return DECISION_REFUSALS.has(data.code) && typeof data.error === "string" && data.error ? data.error : fallback;
+  }
   async function decideHold(context, action, text = "") {
     const hold = openHold(context);
     if (!hold || hold.deciding) return false;
     hold.deciding = action;
+    hold.failed = "";
     renderHold();
     const { response, data } = await postDecision(context, "hold", { id: hold.id, action, text });
     // Decided, or the response or the pause is over (decided in another tab,
@@ -1609,13 +1641,11 @@
       holdDone(context, hold);
       return true;
     }
-    // Refused (no room for another message, decided in another tab): the
-    // card stays until the run says the pause is over, so a decision stays
-    // possible; Stop always is.
-    undecided(context, hold);
+    // Refused (no room for another message) or lost: the card stays until
+    // the run says the pause is over, so a decision stays possible; the
+    // Stop button beside the field always is.
+    undecided(context, hold, refusal(data, "Your decision did not reach the server. Try again."));
     renderHold();
-    App.showPopup?.(typeof data.error === "string" && data.error ? data.error
-      : "Your decision did not reach the server. Try again.");
     return false;
   }
   // By the pause's id: the stream may have sent the same pause again
@@ -1626,9 +1656,10 @@
     renderHold();
     registry.update(context.runId, () => {});
   }
-  function undecided(context, hold) {
+  function undecided(context, hold, failed = "") {
     hold.deciding = null;
-    if (context.metadata.hold?.id === hold.id) context.metadata.hold.deciding = null;
+    hold.failed = failed;
+    if (context.metadata.hold?.id === hold.id) Object.assign(context.metadata.hold, { deciding: null, failed });
   }
   // The key the agent asked for (ask_user with secret, agent_secrets.py;
   // since 2026-10-29): it goes from this field to the workspace alone (POST
@@ -1646,19 +1677,19 @@
       return;
     }
     hold.deciding = "secret";
+    hold.failed = "";
     renderHold();
     const { response, data } = await postDecision(context, "secret", { id: hold.id, value: input.value });
     if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
       input.value = "";
       holdDone(context, hold);
-      // Over before it was saved: the key did not go anywhere, and the user hears so.
+      // Over before it was saved: the key did not go anywhere, and the user
+      // hears so (the card is gone, so a toast says it).
       if (data.code === "hold_over" && typeof data.error === "string" && data.error) App.showPopup?.(data.error);
       return;
     }
-    undecided(context, hold);
+    undecided(context, hold, refusal(data, "The key did not reach your workspace. Try again."));
     renderHold();
-    App.showPopup?.(typeof data.error === "string" && data.error ? data.error
-      : "The key did not reach your workspace. Try again.");
   }
   function secretField(context, hold) {
     const name = String(hold.secret || "");
@@ -1688,165 +1719,199 @@
     return field;
   }
   // Why the work waits, one line each (data-reason). A reviewer's pause: the
-  // reviewer's own sentence, already in the user's language; with several
-  // halting reviewers each one's, under its name. A domain request: what the
-  // reviewers made of it (no concern, their concern, or that not every one
-  // could look). A second halt on the open pause comes as the same pause
-  // with more `reasons` (A-S2): renderHold swaps these lines in place, so a
-  // decision on its way and words typed in the card stay.
+  // kind first, then the reviewer's own sentence (already in the user's
+  // language) and, quietly after it, who said it (UX audit C10: the kind
+  // stood once in a line of its own for all reasons, every name twice). A
+  // domain request: what the reviewers made of it (no concern, their
+  // concern, or that not every one could look). A second halt on the open
+  // pause comes as the same pause with more `reasons` (A-S2): renderHold
+  // swaps these lines and the title in place, so a decision on its way and
+  // the words in the field stay.
   function holdReasons(hold) {
     return Array.isArray(hold.reasons) ? hold.reasons.filter(item => item && typeof item === "object") : [];
   }
+  function holdCalls(hold) {
+    return Array.isArray(hold.step_calls) ? hold.step_calls.filter(item => item && typeof item === "object") : [];
+  }
   function reasonLines(hold) {
     const listed = holdReasons(hold);
-    const line = (text, data, className = "agent-hold-reason") => {
-      const reason = document.createElement("p");
-      reason.className = className;
-      reason.dataset.reason = "";
-      if (data) reason.dataset.i18nSkip = "";
-      reason.textContent = text;
-      return reason;
-    };
-    const named = item => `${String(item.reviewer || "")}: ${String(item.reason || "")}`;
-    if (hold.domain) {
-      const domain = "agent-hold-reason agent-domain-review";
-      if (hold.review === "halt" || listed.length) {
-        return (listed.length ? listed : [{ reviewer: hold.reviewer, reason: hold.reason }]).map(item => line(named(item), true, domain));
+    const said = item => {
+      const line = document.createElement("p");
+      line.className = "agent-hold-reason";
+      line.dataset.reason = "";
+      const kind = holdKinds[item.kind];
+      if (kind && item.kind !== "unchecked") {
+        const label = document.createElement("strong");
+        label.className = "agent-hold-kind";
+        label.textContent = kind;
+        line.append(label, " ");
       }
-      return [line(hold.review === "go" ? "The reviewers see no problem with it."
-        : "Not every reviewer could check this request.", false, domain)];
+      const text = document.createElement("span");
+      text.className = "agent-hold-reason-text";
+      text.dataset.i18nSkip = "";
+      text.textContent = String(item.reason || "");
+      line.append(text);
+      if (item.reviewer) {
+        const by = document.createElement("span");
+        by.className = "agent-hold-by";
+        by.dataset.i18nSkip = "";
+        by.textContent = String(item.reviewer);
+        line.append(" ", by);
+      }
+      return line;
+    };
+    const plain = text => {
+      const line = document.createElement("p");
+      line.className = "agent-hold-reason";
+      line.dataset.reason = "";
+      line.textContent = text;
+      return line;
+    };
+    const own = { kind: hold.kind, reason: hold.reason, reviewer: hold.reviewer };
+    if (hold.domain) {
+      if (hold.review === "halt" || listed.length) return (listed.length ? listed : [own]).map(said);
+      return [plain(hold.review === "go" ? "The reviewers see no problem with it." : "Not every reviewer could check this request.")];
     }
-    // "unchecked": no reviewer stopped it, none could answer for it; a
-    // reviewer that halts on it later stands under its name.
-    if (hold.kind === "unchecked") {
-      return listed.length ? listed.map(item => line(named(item), true))
-        : [line("It acts outside the workspace and runs only if you let it.", false)];
+    // "unchecked": no reviewer paused it, none could answer for it; what the
+    // step would do, in a sentence (C1: before, "It acts outside the
+    // workspace", which a memory change does not). A reviewer that pauses on
+    // it later stands under its name.
+    if (hold.kind === "unchecked" && !listed.length) {
+      return [plain(holdCalls(hold).some(call => call.tool === "update_memory")
+        ? "The agent wants to remember something about you. That happens only with your OK."
+        : "This step runs only with your OK.")];
     }
-    if (listed.length > 1) return listed.map(item => line(named(item), true));
-    return [line(String(hold.reason || ""), true)];
+    return (listed.length ? listed : [own]).map(said);
   }
   function reasonsKey(hold) {
     return JSON.stringify([hold.reason || "", hold.review || "", holdReasons(hold).map(item => [item.reviewer || "", item.reason || ""])]);
   }
+  // The title counts who paused (C10: two reviewers read "A reviewer paused
+  // the work"). Whole sentences, so every language says them its way.
+  function holdTitle(hold) {
+    if (hold.kind === "unchecked") return "Not every reviewer could check this step";
+    const count = Math.max(1, holdReasons(hold).length);
+    if (hold.gate) {
+      return count === 1 ? "A reviewer paused before a step" : count === 2 ? "Two reviewers paused before a step"
+        : App.t("{count} reviewers paused before a step", { count });
+    }
+    return count === 1 ? "A reviewer paused the work" : count === 2 ? "Two reviewers paused the work"
+      : App.t("{count} reviewers paused the work", { count });
+  }
+  // The button last pressed on a card: it says the decision is on its way.
+  let pressedButton = null;
   function holdButton(label, className, onClick) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = className;
     button.textContent = label;
-    if (onClick) button.addEventListener("click", onClick);
+    if (onClick) button.addEventListener("click", event => { pressedButton = button; onClick(event); });
     return button;
   }
-  // Where the reviewer saw it, in the activity's words, and the words
-  // themselves (agent_audit.halt_step: the reviewer's quote where the entry
-  // holds it). A pause saved before 2026-10-27 has no step_kind: "name: text".
+  // What a model step was about to do, in a sentence (agent_audit.halt_step
+  // step_calls, C1): before, 'browser: {"action": "click", "ref": "e14"}'
+  // and a memory change's whole JSON. The element as the browser's read
+  // named it; the words are data. Any other call stays code ("").
+  function callWords(call) {
+    const text = String(call.text || ""), target = String(call.target || "");
+    if (call.tool === "update_memory") {
+      if (call.action === "delete") return App.t("Forget a memory");
+      if (!text) return App.t("Change your memory");
+      return call.action === "update" ? App.t("Change a memory: “{text}”", { text }) : App.t("Remember: “{text}”", { text });
+    }
+    if (call.tool !== "browser") return "";
+    switch (call.action) {
+      case "open": return text ? App.t("Opens {text}", { text }) : App.t("Uses the browser");
+      case "click": return target ? App.t("Clicks “{target}”", { target }) : App.t("Clicks on the page");
+      case "type":
+        if (target) {
+          return call.enter ? App.t("Types “{text}” into “{target}” and sends it", { text, target })
+            : App.t("Types “{text}” into “{target}”", { text, target });
+        }
+        return call.enter ? App.t("Types “{text}” and sends it", { text }) : App.t("Types “{text}”", { text });
+      case "select": return App.t("Chooses “{text}”", { text });
+      case "key": return App.t("Presses {text}", { text });
+      case "upload": return App.t("Uploads {text}", { text });
+      case "download": return text ? App.t("Downloads {text}", { text }) : App.t("Downloads the file on the page");
+      default: return App.t("Uses the browser");
+    }
+  }
+  // Where the reviewer saw it, in the activity's words ("Browser",
+  // "Memory", "In the file tabelle.csv"), and the words themselves
+  // (agent_audit.halt_step: the reviewer's quote where the entry holds it).
+  // A command or a file's rows stand in the code field and scroll inside it;
+  // a cut line fades out (C17). A pause saved before 2026-10-27 has no
+  // step_kind: "name: text".
   function holdEvidence(hold) {
     const box = document.createElement("figure");
     box.className = "agent-hold-evidence";
     const label = document.createElement("figcaption");
     label.className = "agent-hold-evidence-label";
     const kind = hold.step_kind;
+    const calls = kind === "call" ? holdCalls(hold) : [];
+    const tools = [...new Set(calls.map(call => String(call.tool || "")))];
     if (kind === "file" && hold.step_source) {
       label.dataset.i18nSkip = "";
       label.textContent = App.t("In the file {name}", { name: String(hold.step_source) });
     } else {
       label.textContent = kind === "result" ? App.agentActivity?.toolName?.(hold.step_name) || "Tool result"
+        : tools.length === 1 && tools[0] ? App.agentActivity?.toolName?.(tools[0]) || "The agent’s step"
         : kind === "context" || kind === "file" ? "What the agent received"
         : hold.gate ? "The step that has not run yet" : "The agent’s step";
     }
-    const text = document.createElement("pre");
-    text.className = "agent-hold-evidence-text";
-    text.dataset.i18nSkip = "";
-    text.textContent = kind ? String(hold.step) : `${hold.step_name ? `${hold.step_name}: ` : ""}${hold.step}`;
-    box.append(label, text);
-    return box;
-  }
-  // The agent asks for a domain its workspace may reach (since 2026-10-27,
-  // agent_domains.py, DelegationLoop._domain_wait): the user decides every
-  // one, after the reviewers judged it. The domain and the agent's reason
-  // are data (untranslated); "Allow for this chat" is the decision
-  // "continue", "Don't allow" is "deny".
-  function domainCard(context, hold) {
-    const card = document.createElement("section");
-    card.className = "agent-hold-card agent-domain-card";
-    card.setAttribute("aria-labelledby", "agentHoldTitle");
-    const alert = document.createElement("div");
-    alert.className = "agent-hold-alert";
-    alert.setAttribute("role", "alert");
-    const head = document.createElement("div");
-    head.className = "agent-hold-head";
-    const icon = document.createElement("span");
-    icon.className = "agent-hold-icon";
-    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.6 5.4 3.6 8.5s-1 6.1-3.6 8.5c-2.6-2.4-3.6-5.4-3.6-8.5s1-6.1 3.6-8.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>';
-    const heading = document.createElement("div");
-    heading.className = "agent-hold-heading";
-    const title = document.createElement("h2");
-    title.id = "agentHoldTitle";
-    title.className = "agent-hold-title";
-    title.dataset.i18nSkip = "";
-    title.textContent = App.t("The agent asks to reach {domain}", { domain: String(hold.domain || "") });
-    const meta = document.createElement("p");
-    meta.className = "agent-hold-meta";
-    const kind = document.createElement("span");
-    kind.textContent = "Network access";
-    const step = document.createElement("span");
-    step.className = "admin-only";
-    step.textContent = App.t("Step {entry}", { entry: hold.entry });
-    meta.append(...[kind, hold.entry ? step : null].filter(Boolean));
-    heading.append(title, meta);
-    head.append(icon, heading);
-    const what = document.createElement("p");
-    what.className = "agent-hold-reason";
-    what.textContent = "The workspace reaches only package sources. If you allow it, the agent can reach this address for the rest of this chat.";
-    alert.append(head, what, ...reasonLines(hold));
-    card.append(alert);
-    if (hold.domain_reason) {
-      const box = document.createElement("figure");
-      box.className = "agent-hold-evidence";
-      const label = document.createElement("figcaption");
-      label.className = "agent-hold-evidence-label";
-      label.textContent = "The agent’s reason";
+    // The work log's number only for those who can open the log (admins).
+    if (hold.entry) {
+      const step = document.createElement("span");
+      step.className = "admin-only";
+      step.dataset.i18nSkip = "";
+      step.textContent = ` · ${App.t("Step {entry}", { entry: hold.entry })}`;
+      label.append(step);
+    }
+    box.append(label);
+    const code = value => {
       const text = document.createElement("pre");
       text.className = "agent-hold-evidence-text";
       text.dataset.i18nSkip = "";
-      text.textContent = String(hold.domain_reason);
-      box.append(label, text);
-      card.append(box);
+      text.textContent = value;
+      return text;
+    };
+    if (!calls.length) {
+      box.append(code(kind ? String(hold.step) : `${hold.step_name ? `${hold.step_name}: ` : ""}${hold.step}`));
+      return box;
     }
-    const clock = document.createElement("p");
-    clock.className = "agent-hold-clock";
-    const reply = holdReply(context);
-    const actions = document.createElement("div");
-    actions.className = "agent-hold-actions";
-    const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
-    actions.append(
-      holdButton("Allow for this chat", "btn agent-hold-continue", () => decideHold(context, "continue")),
-      holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
-      write,
-      holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user")));
-    reply.bind(actions, write);
-    card.append(clock, reply.form, actions);
-    return card;
+    for (const call of calls) {
+      const words = callWords(call);
+      if (!words) { box.append(code(String(call.text || ""))); continue; }
+      const line = document.createElement("p");
+      line.className = "agent-hold-evidence-words";
+      line.dataset.i18nSkip = "";
+      line.textContent = words;
+      box.append(line);
+    }
+    return box;
   }
-  // The agent hands a step to the user (ask_user, agent_ask.py; since
-  // 2026-10-29): "browser", their turn in the workspace's browser, which
-  // handing it back answers (the run sees it on the server); "confirm", their
-  // yes or no to a step in their name; "takeover", the user took the browser
-  // over on their own and the agent's next call waits for it. The agent's
-  // request is data (untranslated). The one button follows who has the
-  // browser in this window (App.workspaceView.holder, the event
-  // consensio:workspace-holder re-draws the card).
-  // One edge, one line of decision: the glyph hangs in its tinted circle left
-  // of the words; title, request and buttons share the text's edge. One
-  // button and at most one link: writing to the agent is the field below,
-  // stopping is its Stop button. A key card also has "Write to the agent",
-  // since the field below fills its key field (A-S7). The clock only in the
-  // last minutes, since the agent goes on without an answer.
-  const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
-    secret: "The agent needs a key from you", takeover: "You have the browser" };
-  // Per question: "offered" (the open view took the browser for the user),
-  // "user" (the user had it in this window, so a hand-back here answers it).
-  const askSeen = new Map();
-  const askGlyphs = {
+  // A code field longer than it shows fades out at its cut instead of
+  // ending in half a line, until it is scrolled to its end (C17).
+  function fadeCut(field) {
+    const cut = () => field.classList.toggle("is-cut", field.scrollTop + field.clientHeight < field.scrollHeight - 1);
+    field.addEventListener("scroll", cut, { passive: true });
+    cut();
+  }
+  // One family (UX audit 2026-10-29 C2): every card above the field is
+  // built like the agent's own questions from the design pass of 2026-10-29
+  // (438aacdc). Its glyph hangs in a tinted circle left of the words;
+  // title, words, evidence and the decision share one edge. One filled
+  // button and at most one link (C3): the field below takes a message to the
+  // agent (steer: its placeholder says so while a card is open), and Stop is
+  // the Stop button there. Before, the reviewers' and the domain's cards
+  // were an older family with a meta line, up to three links beside the
+  // button ("Write to the agent" opened a second field over the first, and
+  // "Stop" stood above Stop) and a deadline from the first second.
+  const holdGlyphs = {
+    // Two bars: the work pauses.
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>',
+    // A globe: an address on the web.
+    domain: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.6 5.4 3.6 8.5s-1 6.1-3.6 8.5c-2.6-2.4-3.6-5.4-3.6-8.5s1-6.1 3.6-8.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
     // A pointer: the user's hand in the browser.
     browser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5l11 6.6-4.8 1.3 2.8 5.3-2.2 1.2-2.8-5.4-4 3.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
     // A question.
@@ -1854,23 +1919,87 @@
     // A key.
     secret: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15.5" r="3.6" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M10.6 12.9l7.4-7.4M15.2 8.3l2.3 2.3M17.4 6.1l1.9 1.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>',
   };
-  function askCard(context, hold) {
-    const kind = askTitles[hold.ask] ? hold.ask : "confirm";
+  function cardShell(className, glyph) {
     const card = document.createElement("section");
-    card.className = `agent-hold-card agent-ask-card is-${kind}`;
+    card.className = `agent-hold-card ${className}`;
     card.setAttribute("aria-labelledby", "agentHoldTitle");
-    const glyph = document.createElement("span");
-    glyph.className = "agent-ask-glyph";
-    glyph.innerHTML = askGlyphs[kind] || askGlyphs.browser;
+    const mark = document.createElement("span");
+    mark.className = "agent-hold-glyph";
+    mark.innerHTML = glyph;
     const body = document.createElement("div");
-    body.className = "agent-ask-body";
-    // Said once when it appears: the title and what the agent asks.
+    body.className = "agent-hold-body";
+    // Said once when it appears: the title and why (role=alert).
     const alert = document.createElement("div");
     alert.className = "agent-hold-alert";
     alert.setAttribute("role", "alert");
     const title = document.createElement("h2");
     title.id = "agentHoldTitle";
     title.className = "agent-hold-title";
+    alert.append(title);
+    body.append(alert);
+    card.append(mark, body);
+    return { card, body, alert, title };
+  }
+  // The card's one quiet line under its words: the deadline in its last
+  // minutes, a decision that did not go through (C12), or what just
+  // happened to the main field's words (C11). Said when it changes.
+  function cardStatus() {
+    const status = document.createElement("p");
+    status.className = "agent-hold-clock";
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    return status;
+  }
+  function cardActions(...buttons) {
+    const actions = document.createElement("div");
+    actions.className = "agent-hold-actions";
+    actions.append(...buttons.filter(Boolean));
+    return actions;
+  }
+  // The agent asks for a domain its workspace may reach (since 2026-10-27,
+  // agent_domains.py, DelegationLoop._domain_wait): the user decides every
+  // one, after the reviewers judged it. The domain and the agent's reason
+  // are data (untranslated): the reason as the quiet line under the title,
+  // like an ask card's request (C16; it stood in the code field). "Allow
+  // for this chat" is the decision "continue", "Don't allow" is "deny".
+  function domainCard(context, hold) {
+    const { card, body, alert, title } = cardShell("agent-domain-card", holdGlyphs.domain);
+    title.dataset.i18nSkip = "";
+    title.textContent = App.t("The agent asks to reach {domain}", { domain: String(hold.domain || "") });
+    if (hold.domain_reason) {
+      const why = document.createElement("p");
+      why.className = "agent-ask-request";
+      why.dataset.i18nSkip = "";
+      why.textContent = String(hold.domain_reason);
+      alert.append(why);
+    }
+    alert.append(...reasonLines(hold));
+    const what = document.createElement("p");
+    what.className = "agent-hold-note";
+    what.textContent = "The workspace reaches only package sources. If you allow it, the agent can reach this address for the rest of this chat.";
+    body.append(what, cardStatus(), cardActions(
+      holdButton("Allow for this chat", "btn agent-hold-continue", () => decideHold(context, "continue")),
+      holdButton("Don’t allow", "text-link agent-hold-deny", () => decideHold(context, "deny"))));
+    return card;
+  }
+  // The agent hands a step to the user (ask_user, agent_ask.py; since
+  // 2026-10-29): "browser", their turn in the workspace's browser, which
+  // handing it back answers (the run sees it on the server); "confirm", their
+  // yes or no to a step in their name; "secret", a key for its commands;
+  // "takeover", the user took the browser over on their own and the agent's
+  // next call waits for it. The agent's request is data (untranslated). The
+  // one button follows who has the browser in this window
+  // (App.workspaceView.holder, the event consensio:workspace-holder
+  // re-draws the card). The colour only on the glyph: the house green for
+  // the user's turn, the pause tone before a step in their name.
+  const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
+    secret: "The agent needs a key from you", takeover: "You have the browser" };
+  // Per question: "offered" (the open view took the browser for the user),
+  // "user" (the user had it in this window, so a hand-back here answers it).
+  const askSeen = new Map();
+  function askCard(context, hold) {
+    const kind = askTitles[hold.ask] ? hold.ask : "confirm";
+    const { card, body, alert, title } = cardShell(`agent-ask-card is-${kind}`, holdGlyphs[kind] || holdGlyphs.browser);
     title.textContent = askTitles[kind];
     const what = document.createElement("p");
     what.className = "agent-ask-request";
@@ -1880,154 +2009,88 @@
       what.dataset.i18nSkip = "";
       what.textContent = String(hold.request || "");
     }
-    alert.append(title, what);
-    const clock = document.createElement("p");
-    clock.className = "agent-hold-clock";
-    clock.hidden = true;
-    const actions = document.createElement("div");
-    actions.className = "agent-hold-actions";
-    const field = kind === "secret" ? secretField(context, hold) : null;
-    // A key card takes no words from the field below (steer, A-S7): "I don't
-    // have one" is written here, and the key field steps aside meanwhile.
-    const reply = field ? holdReply(context) : null;
+    alert.append(what);
+    let actions;
     if (kind === "confirm") {
-      actions.append(
+      actions = cardActions(
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
-        holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
-    } else if (field) {
+        holdButton("Don’t allow", "text-link agent-hold-deny", () => decideHold(context, "deny")));
+    } else if (kind === "secret") {
+      // The field below takes no words for the agent while this card is
+      // open (steer, A-S7): what it holds moves into the key field. "Not
+      // now" is the answer without a key.
+      const field = secretField(context, hold);
       const input = field.querySelector(".agent-ask-secret-input");
-      const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
-      actions.append(
+      body.append(field);
+      actions = cardActions(
         holdButton("Save", "btn agent-hold-continue", () => saveSecret(context, input)),
-        holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
-        write);
-      reply.bind(actions, write, field);
+        holdButton("Not now", "text-link agent-hold-deny", () => decideHold(context, "deny")));
     } else {
       // The server knows a takeover from any window; this one's view only its own.
       const holding = kind === "takeover" || App.workspaceView?.holder?.() === "user";
-      actions.append(
+      actions = cardActions(
         holding ? holdButton("Hand back", "btn agent-hold-hand-back", () => App.workspaceView?.handBack?.())
           : holdButton("Open the browser", "btn agent-hold-open", () => App.workspaceView?.open?.({ takeOver: true })),
-        ...(kind === "browser" && !holding ? [holdButton("Not now", "agent-hold-link agent-hold-skip",
-          () => decideHold(context, "continue"))] : []));
+        kind === "browser" && !holding ? holdButton("Not now", "text-link agent-hold-skip",
+          () => decideHold(context, "continue")) : null);
     }
-    body.append(...[alert, field, clock, reply?.form, actions].filter(Boolean));
-    card.append(glyph, body);
+    body.append(cardStatus(), actions);
     return card;
   }
   function holdCard(context, hold) {
     if (hold.ask) return askCard(context, hold);
     if (hold.domain) return domainCard(context, hold);
-    const card = document.createElement("section");
-    card.className = "agent-hold-card";
-    card.setAttribute("aria-labelledby", "agentHoldTitle");
-    // Said once when it appears: the title and the reviewer's reason.
-    const alert = document.createElement("div");
-    alert.className = "agent-hold-alert";
-    alert.setAttribute("role", "alert");
-    const head = document.createElement("div");
-    head.className = "agent-hold-head";
-    const icon = document.createElement("span");
-    icon.className = "agent-hold-icon";
-    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>';
-    const heading = document.createElement("div");
-    heading.className = "agent-hold-heading";
-    const title = document.createElement("h2");
-    title.id = "agentHoldTitle";
-    title.className = "agent-hold-title";
-    const unchecked = hold.kind === "unchecked";
-    title.textContent = unchecked ? "Not every reviewer could check this step"
-      : hold.gate ? "A reviewer stopped a step before it ran" : "A reviewer paused the work";
-    const meta = document.createElement("p");
-    meta.className = "agent-hold-meta";
-    const kind = document.createElement("span");
-    kind.textContent = holdKinds[hold.kind] || "Needs your decision";
-    const reviewer = document.createElement("span");
-    reviewer.dataset.i18nSkip = "";
-    reviewer.textContent = String(hold.reviewer || "");
-    // The work log's number names the step only for those who can open the
-    // log (admins); the evidence below says what it was (2026-10-27).
-    const step = document.createElement("span");
-    step.className = "admin-only";
-    step.textContent = App.t("Step {entry}", { entry: hold.entry });
-    meta.append(...[kind, hold.reviewer ? reviewer : null, step].filter(Boolean));
-    heading.append(title, meta);
-    head.append(icon, heading);
-    alert.append(head, ...reasonLines(hold));
-    card.append(alert);
-    if (hold.step) card.append(holdEvidence(hold));
-    const clock = document.createElement("p");
-    clock.className = "agent-hold-clock";
-    // As on the app's other decision cards: one filled button, the other ways as links.
-    const reply = holdReply(context);
-    const actions = document.createElement("div");
-    actions.className = "agent-hold-actions";
-    const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
-    actions.append(
-      holdButton(hold.gate ? "Let it run" : "Let it continue", "btn agent-hold-continue",
-        () => decideHold(context, "continue")),
-      write,
-      holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user")));
-    reply.bind(actions, write);
-    card.append(clock, reply.form, actions);
+    const kind = hold.kind === "unchecked" ? "is-unchecked" : hold.gate ? "is-gate" : "is-halt";
+    const { card, body, alert, title } = cardShell(kind, holdGlyphs.pause);
+    title.textContent = holdTitle(hold);
+    alert.append(...reasonLines(hold));
+    if (hold.step) body.append(holdEvidence(hold));
+    body.append(cardStatus(), cardActions(holdButton(hold.gate ? "Let it run" : "Let it continue",
+      "btn agent-hold-continue", () => decideHold(context, "continue"))));
     return card;
   }
-  // "Write to the agent": the answer in the sheet itself. Send goes on with
-  // the user's words as their message to the agent (decideHold "steer");
-  // Cancel, or Escape, brings the three buttons back. Enter sends where it
-  // sends in the field (a keyboard; on a phone it starts a new line).
-  function holdReply(context) {
-    const form = document.createElement("form");
-    form.className = "agent-hold-reply";
-    form.hidden = true;
-    const input = document.createElement("textarea");
-    input.className = "agent-hold-reply-input";
-    input.rows = 2;
-    input.maxLength = 4000;
-    input.placeholder = "Tell the agent how to go on…";
-    input.setAttribute("aria-label", "Your message to the agent");
-    const send = holdButton("Send and continue", "btn agent-hold-send");
-    send.type = "submit";
-    send.disabled = true;
-    const cancel = holdButton("Cancel", "agent-hold-link agent-hold-cancel");
-    const buttons = document.createElement("div");
-    buttons.className = "agent-hold-reply-actions";
-    buttons.append(send, cancel);
-    form.append(input, buttons);
-    let actions = null, write = null, aside = null;
-    const close = () => {
-      form.hidden = true;
-      if (actions) actions.hidden = false;
-      if (aside) aside.hidden = false;
-      write?.focus({ preventScroll: true });
-    };
-    input.addEventListener("input", () => { send.disabled = !input.value.trim() || Boolean(openHold(context)?.deciding); });
-    input.addEventListener("keydown", event => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
-      const phone = window.matchMedia?.("(max-width: 768px)")?.matches;
-      if (event.key === "Enter" && !event.shiftKey && !event.isComposing && !phone) {
-        event.preventDefault();
-        form.requestSubmit?.(send);
+  // The card goes the way it came (C18): it fades and sinks 3px, then makes
+  // room. Focus that was on it moves to the field below, for a keyboard and
+  // a mouse; never under a finger, where the field would raise the keyboard.
+  function leaveHold(host) {
+    const card = host.querySelector(".agent-hold-card");
+    delete host.dataset.id;
+    if (!card) { host.hidden = true; return; }
+    const focus = document.activeElement;
+    if (focus && host.contains(focus)) {
+      let keys = false;
+      try { keys = focus.matches(":focus-visible"); } catch (_) { keys = false; }
+      if (keys || window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) {
+        document.getElementById("questionInput")?.focus({ preventScroll: true });
       }
-    });
-    cancel.addEventListener("click", close);
-    form.addEventListener("submit", async event => {
-      event.preventDefault();
-      const text = input.value.trim();
-      if (!text) return;
-      if (!(await decideHold(context, "steer", text))) input.focus({ preventScroll: true });
-    });
-    return {
-      form,
-      // `other`: what else steps aside while the user writes (a key card's field).
-      bind(row, button, other = null) { actions = row; write = button; aside = other; },
-      open() {
-        form.hidden = false;
-        if (actions) actions.hidden = true;
-        if (aside) aside.hidden = true;
-        input.focus({ preventScroll: true });
-      },
+    }
+    if (App.motion?.isLeaving?.(card)) return;
+    const gone = () => {
+      if (host.dataset.id) return;
+      host.replaceChildren();
+      host.hidden = true;
     };
+    if (App.motion?.leave) App.motion.leave(card, gone);
+    else gone();
+  }
+  // The room the card may take on a phone (C4): the screen between the
+  // header and the rest of the fixed composer, measured, since the field
+  // grows when it opens and the keyboard takes its share of the screen
+  // (agent-chat.css --hold-room). The card scrolls in itself beyond it.
+  const PHONE_QUERY = "(max-width: 1099px)";
+  function fitHold() {
+    const host = document.getElementById("agentHold");
+    const section = host?.closest(".input-section");
+    if (!host || !section || host.hidden || !window.matchMedia?.(PHONE_QUERY)?.matches) {
+      host?.style.removeProperty("--hold-room");
+      return;
+    }
+    const screen = window.visualViewport?.height || window.innerHeight;
+    // The header's height even while it slides away: its marks stay on top.
+    const header = Math.max(56, document.querySelector(".app-mobile-header")?.getBoundingClientRect().bottom || 0);
+    const rest = section.getBoundingClientRect().height - host.getBoundingClientRect().height;
+    const room = `${Math.max(160, Math.floor(screen - header - rest - 16))}px`;
+    if (host.style.getPropertyValue("--hold-room") !== room) host.style.setProperty("--hold-room", room);
   }
   function renderHold() {
     if (!window.document?.body) return;
@@ -2053,49 +2116,61 @@
     }
     // The workspace's bar says what the agent waits for there (workspace-view.js).
     workspace?.agentWaits?.(hold?.ask === "browser" && !handedBack ? String(hold.request || "") : null);
+    // The field under the card says what it does while the card waits (syncComposer).
+    const input = document.getElementById("questionInput");
+    if (input && looksAgent() && registry.isExecuting(context?.runId)) {
+      const placeholder = runningPlaceholder(hold);
+      if (input.placeholder !== App.t(placeholder)) input.placeholder = placeholder;
+    }
     // With the view open the bar above the picture carries the turn; the card
     // would say the same a second time beside it.
     if (!hold || handedBack || (browserTurn && workspace?.isOpen?.())) {
-      if (host.dataset.id) { host.replaceChildren(); delete host.dataset.id; }
-      host.hidden = true;
+      if (host.dataset.id || !host.hidden) leaveHold(host);
       return;
     }
     // A browser card's button follows who has the browser in this window.
     const key = hold.ask === "browser" ? `${hold.id}:${App.workspaceView?.holder?.() || ""}` : hold.id;
     const reasons = reasonsKey(hold);
-    if (host.dataset.id !== key) {
+    const fresh = host.dataset.id !== key;
+    if (fresh) {
       host.dataset.id = key;
       host.dataset.reasons = reasons;
       host.replaceChildren(holdCard(context, hold));
     } else if (host.dataset.reasons !== reasons) {
       // The same pause with another reason (a second halt, A-S2): only its
-      // lines change, the card with its decision and typed words stays.
+      // lines and its count change, the card with its decision stays.
       host.dataset.reasons = reasons;
       const old = [...host.querySelectorAll("[data-reason]")];
       if (old.length) {
         old[0].before(...reasonLines(hold));
         for (const line of old) line.remove();
       }
+      const title = host.querySelector(".agent-hold-title");
+      if (title && !hold.ask && !hold.domain) title.textContent = holdTitle(hold);
     }
     host.hidden = false;
-    const clock = host.querySelector(".agent-hold-clock");
-    // While a decision is on its way the line says so (postDecision).
-    const time = hold.deciding ? "Sending…" : holdClock(hold);
-    clock.hidden = !time;
-    if (time && clock.textContent !== App.t(time)) clock.textContent = time;
-    // Stop is never locked: it is the way out of a decision that hangs.
+    fitHold();
+    if (fresh) for (const field of host.querySelectorAll(".agent-hold-evidence-text")) fadeCut(field);
+    // The one quiet line: a failed decision first, then the words just moved
+    // into the key field, then the deadline in its last minutes. While a
+    // decision is on its way it keeps what it said: the pressed button says
+    // it (C13; "Sending…" here grew the card by a line).
+    const status = host.querySelector(".agent-hold-clock");
+    const moved = hold.movedUntil > Date.now() ? "Moved into the key field. Save stores it." : "";
+    const said = hold.failed || moved || (hold.deciding ? null : holdClock(hold));
+    if (status && said !== null) {
+      status.hidden = !said;
+      status.dataset.state = hold.failed ? "error" : moved ? "note" : "clock";
+      if (said && status.textContent !== App.t(said)) status.textContent = said;
+    }
     for (const button of host.querySelectorAll("button")) {
-      button.disabled = Boolean(hold.deciding) && !button.classList.contains("agent-hold-stop");
+      button.disabled = Boolean(hold.deciding);
+      const pressed = Boolean(hold.deciding) && hold.deciding !== "steer" && button === pressedButton;
+      button.classList.toggle("is-busy", pressed);
+      if (pressed) button.setAttribute("aria-busy", "true"); else button.removeAttribute("aria-busy");
     }
     for (const input of host.querySelectorAll(".agent-ask-secret-input")) input.disabled = Boolean(hold.deciding);
-    // Send waits for words in the sheet's field.
-    const reply = host.querySelector(".agent-hold-reply-input");
-    if (reply) {
-      reply.disabled = Boolean(hold.deciding);
-      const send = host.querySelector(".agent-hold-send");
-      if (send) send.disabled = Boolean(hold.deciding) || !reply.value.trim();
-    }
-    holdTimer = setTimeout(renderHold, 15000);
+    holdTimer = setTimeout(renderHold, moved ? Math.max(100, hold.movedUntil - Date.now()) : 15000);
   }
   // Stop is explicit: closing the connection no longer ends a turn. The
   // request identity reaches the turn before its id is known, and a Stop
@@ -2625,6 +2700,10 @@
       // An admission refusal produced no answer: offer the question again.
       context.metadata.recoverable = false;
       context.metadata.restoreDraft = true;
+    } else if (code === 'hold_timeout' && !context.consensus.streamText) {
+      // A pause nobody decided ends the run with nothing saved to check
+      // (UX audit C15): Retry stays, "Check saved answer" would find nothing.
+      context.metadata.recoverable = false;
     }
     context.bookmark.status = "failed";
     // Nothing reviews any more: the review ends here as it will read after a
@@ -2822,6 +2901,13 @@
   // The user took the workspace's browser over or handed it back (workspace-view.js):
   // the agent's browser card offers the other way.
   window.addEventListener("consensio:workspace-holder", () => renderHold());
+  window.addEventListener("resize", fitHold);
+  window.visualViewport?.addEventListener?.("resize", fitHold);
+  // The field opens and closes under the card (composer-collapse.js), the
+  // line under it comes and goes: the whole composer is watched. The card's
+  // own height changes it too, but leaves the room the same.
+  const holdComposer = document.querySelector(".input-section");
+  if (holdComposer && typeof ResizeObserver === "function") new ResizeObserver(() => fitHold()).observe(holdComposer);
   // No login can load (auth-bootstrap.js): nobody is a guest who could send,
   // so the signed-out page it shows has no Agent.
   window.addEventListener("consensio:auth-unavailable", () => renderShell());

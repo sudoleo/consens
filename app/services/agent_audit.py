@@ -682,6 +682,68 @@ def _call_line(name, arguments):
     return f"{name}: {line}" if name else line
 
 
+# The calls of a halted model step as the card says them (agent-chat.js
+# holdEvidence, UX audit 2026-10-29 C1): the tool, what it does and the words
+# it acts on, never the arguments' JSON. Before, a click read as 'browser:
+# {"action": "click", "ref": "e14"}' and a memory change as its whole JSON.
+# A browser element is named as the browser's last read listed it
+# (element_names): the user decides on "Jetzt kaufen", not on "e14". The
+# app writes the sentence in the user's language; a command stays code.
+HALT_CALLS = 3
+# What each browser action acts on: the address, the words or the key.
+_BROWSER_TEXT = {"open": "url", "download": "url", "type": "text", "find": "text", "select": "option", "key": "key",
+                 "upload": "file"}
+# An element's line in the browser's read (workspace_vm/browser/browser.py
+# ELEMENT_NAME): '[e12] button "Name" …'.
+_ELEMENT_NAME = re.compile(r'\[(e\d+)\] [^"\n]*"(.*?)"(?= |$)', re.M)
+# How many entries before the halted one are searched for those names.
+NAMES_BACK = 40
+
+
+def _clip(value, limit=HALT_QUOTE_CHARS):
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
+def element_names(entries):
+    """{ref: name} of the elements the browser's reads in ``entries``
+    ([(entry, content)], oldest first) listed; a later read wins."""
+    names = {}
+    for entry, content in entries:
+        if entry.get("kind") != "tool" or entry.get("name") != "browser":
+            continue
+        text = str(content or "")
+        try:
+            texts = _strings(json.loads(text))
+        except ValueError:
+            texts = [text]
+        for value in texts:
+            names.update(_ELEMENT_NAME.findall(value))
+    return names
+
+
+def _calls_shown(name, arguments, names):
+    """[{tool, action, text, target?, enter?}] of one call; several for a
+    memory change with several changes."""
+    try:
+        args = json.loads(arguments) if isinstance(arguments, str) else arguments
+    except ValueError:
+        args = arguments
+    if name == "browser" and isinstance(args, dict):
+        action = str(args.get("action") or "")
+        shown = {"tool": name, "action": action, "text": _clip(args.get(_BROWSER_TEXT.get(action, ""), ""))}
+        ref = args.get("ref")
+        if isinstance(ref, str) and names.get(ref):
+            shown["target"] = _clip(names[ref], 120)
+        if action == "type" and args.get("enter") is True:
+            shown["enter"] = True
+        return [shown]
+    if name == "update_memory" and isinstance(args, dict) and isinstance(args.get("changes"), list):
+        return [{"tool": name, "action": str(change.get("op") or ""), "text": _clip(change.get("text"))}
+                for change in args["changes"] if isinstance(change, dict)] or [{"tool": name, "action": "", "text": ""}]
+    return [{"tool": name, "action": "", "text": _lines(_call_line("", arguments), HALT_STEP_CHARS)}]
+
+
 _FILE_EVIDENCE = "File evidence (untrusted): "
 
 
@@ -732,9 +794,11 @@ def _found(quote, text):
     return bool(quote) and words(quote) in words(text)
 
 
-def halt_step(entry, content, quote=""):
+def halt_step(entry, content, quote="", names=None):
     """What the halted entry shows the user (the card above the field), not
-    the log's JSON: {step, step_name, step_kind, step_source}.
+    the log's JSON: {step, step_name, step_kind, step_source}, and for a
+    model step's calls ``step_calls`` (_calls_shown; ``names``: the
+    browser's element names, element_names).
 
     ``step_kind``: "call" (a model step: its calls with their command,
     address or search, or its text), "file" (a file the agent received,
@@ -751,9 +815,13 @@ def halt_step(entry, content, quote=""):
             data = {}
         calls = data.get("tool_calls") if isinstance(data, dict) else None
         if calls:
-            text = "; ".join(_call_line(call.get("name") or "", call.get("arguments")) for call in calls
-                             if isinstance(call, dict))
-        elif isinstance(data, dict):
+            shown = [item for call in calls if isinstance(call, dict)
+                     for item in _calls_shown(call.get("name") or "", call.get("arguments"), names or {})][:HALT_CALLS]
+            text = "; ".join(" ".join(filter(None, (f"{item['tool']}:", item["action"], item.get("target"),
+                                                    item["text"]))) for item in shown)
+            return {"step": _lines(text, HALT_STEP_CHARS), "step_name": "", "step_kind": "call", "step_source": "",
+                    "step_calls": shown}
+        if isinstance(data, dict):
             text = str(data.get("text") or "")
         return {"step": _lines(text, HALT_STEP_CHARS), "step_name": "", "step_kind": "call", "step_source": ""}
     source, evidence = "", _file_evidence(text) if kind == "context" else None
@@ -1693,6 +1761,21 @@ class AnswerAudit:
             data["issues"] = list(self.issues)
         return data
 
+    def _shown_step(self, seq, quote, what):
+        """halt_step of entry ``seq``, with the names of the browser's
+        elements its reads listed in the NAMES_BACK entries before it."""
+        shown = {"step": "", "step_name": "", "step_kind": "", "step_source": ""}
+        if not seq:
+            return shown
+        try:
+            entries = self.work_log.entries_after(max(0, seq - 1 - NAMES_BACK))
+            for index, (entry, content) in enumerate(entries):
+                if entry["seq"] == seq:
+                    return halt_step(entry, content, quote, element_names(entries[:index]))
+        except Exception as exc:
+            logging.info("Agent %s step unavailable category=%s", what, safe_exception(exc))
+        return shown
+
     def halt(self, session, halt):
         """A reviewer stops the work for the user: the run pauses before its
         next step and asks the user (DelegationLoop.request_hold). The agent
@@ -1703,14 +1786,7 @@ class AnswerAudit:
         with self.tools.lock:
             if key in self.halts or self.final_answer is not None:
                 return
-        shown = {"step": "", "step_name": "", "step_kind": "", "step_source": ""}
-        try:
-            for entry, content in self.work_log.entries_after(halt["entry"] - 1):
-                if entry["seq"] == halt["entry"]:
-                    shown = halt_step(entry, content, halt.get("quote", ""))
-                    break
-        except Exception as exc:
-            logging.info("Agent halt step unavailable category=%s", safe_exception(exc))
+        shown = self._shown_step(halt["entry"], halt.get("quote", ""), "halt")
         if self.tools.loop.request_hold({"reviewer": session.model.label, "provider": session.provider,
                                          "kind": halt["kind"], "reason": halt["reason"], "entry": halt["entry"],
                                          **shown}):
@@ -1827,14 +1903,7 @@ class AnswerAudit:
         halt (not every reviewer could answer) the step itself and no reason."""
         entry = halts[0][1]["entry"] if halts else gate.entry
         quote = halts[0][1].get("quote", "") if halts else ""
-        shown = {"step": "", "step_name": "", "step_kind": "", "step_source": ""}
-        try:
-            for item, content in (self.work_log.entries_after(entry - 1) if entry else []):
-                if item["seq"] == entry:
-                    shown = halt_step(item, content, quote)
-                    break
-        except Exception as exc:
-            logging.info("Agent gate step unavailable category=%s", safe_exception(exc))
+        shown = self._shown_step(entry, quote, "gate")
         details = {"entry": entry, "gate": True, **shown, **self.gate_trace(gate)}
         if not halts:
             return {"reviewer": "", "provider": "", "kind": GATE_UNCHECKED, "reason": "", **details}

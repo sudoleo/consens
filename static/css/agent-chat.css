@@ -421,135 +421,140 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
   .stream-table-pending { margin-block: 1.2em; }
 }
 /* Messages typed while a response runs (agent-chat.js steer): one quiet,
-   tinted line each above the field, what happens to it on the right. */
-.agent-queue { display: grid; gap: 6px; margin: 0 0 8px; min-width: 0; text-align: left; }
+   tinted line each above the field, what happens to it on the right. One
+   column that never grows past the field (UX audit 2026-10-29 C5: the
+   unwrapped text set the track to 501px on a 358px phone). */
+.agent-queue { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0 0 var(--space-2); min-width: 0; text-align: left; }
 .agent-queue[hidden] { display: none; }
 .agent-queue-item {
-  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 6px 4px 14px; box-sizing: border-box;
-  border-radius: var(--radius-md, 14px); background: var(--raise); color: var(--ink); font-size: var(--font-size-sm);
+  display: flex; align-items: center; gap: var(--space-3); min-height: 40px; padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4); box-sizing: border-box;
+  border-radius: var(--radius-md); background: var(--raise); color: var(--ink); font-size: var(--font-size-sm);
 }
 .agent-queue-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-queue-state { flex: none; padding-right: 8px; color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-queue-state { flex: none; padding-right: var(--space-2); color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-queue-item[data-state="sending"] .agent-queue-state { animation: agent-queue-pulse var(--dur-beat) var(--ease-standard) infinite alternate; }
 @keyframes agent-queue-pulse { to { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .agent-queue-item[data-state="sending"] .agent-queue-state { animation: none; } }
-.agent-queue-remove {
-  display: grid; place-items: center; flex: none; width: 32px; height: 32px; margin-left: -8px; padding: 0;
-  border: 0; border-radius: 9px; background: transparent; color: var(--ink-3); cursor: pointer;
+/* The app's one close cross (.close-button, J1); 44px under a finger (C19). */
+.agent-queue-remove { margin-left: calc(-1 * var(--space-2)); }
+/* A phone: what happens to it goes under the words, the cross beside both. */
+@media (max-width: 480px) {
+  .agent-queue-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-2); padding-block: var(--space-2); }
+  .agent-queue-state { grid-row: 2; padding-right: 0; }
+  .agent-queue-remove { grid-column: 2; grid-row: 1 / span 2; margin-left: 0; }
 }
-.agent-queue-remove svg { width: 14px; height: 14px; }
-/* A reviewer paused the work (agent-chat.js renderHold): the decision card
-   above the field, in the language of the app's other decision cards (the
-   prepared Watch, the settings change): a frameless raised block, the words
-   in two tones, ONE filled button for the decision (.btn) and the other
-   ways as underlined links beside it. Colour only as the signal: the pause
-   mark in --partial (a question, not a refusal, never --dispute). Since
-   2026-10-27; before, a beige box with framed buttons of three kinds that
-   the app used nowhere else. */
-.agent-hold { margin: 0 0 8px; min-width: 0; text-align: left; }
+/* Every card above the field (agent-chat.js holdCard: a reviewer's pause, a
+   domain the agent asks for, the agent's own questions) is one family, the
+   one of the design pass of 2026-10-29 (438aacdc) since the UX audit of the
+   same day (C2): a frameless raised block; the glyph hangs in a tinted
+   circle left of the words, and title, words, evidence and the decision
+   share one edge. ONE filled button (.btn), at most one text link
+   (.text-link) beside it. Colour only on the glyph: the pause tone for a
+   question to the user (never --dispute), the house green for their turn
+   in the browser. Before, the reviewers' and the domain's cards were an
+   older family: a bare 16px icon, the title on a second edge, a meta line. */
+.agent-hold { margin: 0 0 var(--space-2); min-width: 0; text-align: left; }
 .agent-hold[hidden] { display: none; }
 .agent-hold-card {
-  display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--radius-md);
-  background: var(--raise); color: var(--ink-2); font-size: var(--font-size-sm); line-height: 1.45;
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 0 var(--space-3); align-items: start;
+  padding: var(--space-4); border-radius: var(--radius-lg);
+  background: var(--raise); color: var(--ink-2); font-size: var(--font-size-sm); line-height: var(--line-height-ui);
+  transition: opacity var(--dur-state) var(--ease-in), transform var(--dur-state) var(--ease-in);
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-hold-card { animation: agent-hold-in var(--dur-state) var(--ease-out) both; }
 }
 @keyframes agent-hold-in { from { opacity: 0; transform: translateY(3px); } }
-.agent-hold-alert { display: grid; gap: 6px; }
-.agent-hold-head { display: flex; align-items: flex-start; gap: 8px; }
-.agent-hold-icon { display: inline-flex; flex: none; margin-top: 1px; color: var(--partial); }
-.agent-hold-icon svg { width: 16px; height: 16px; }
-.agent-hold-heading { display: grid; min-width: 0; }
-.agent-hold-title {
-  margin: 0; text-align: left; color: var(--ink);
-  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); letter-spacing: var(--tracking-tight);
+/* It leaves the way it came (agent-chat.js leaveHold, C18). */
+.agent-hold-card.is-leaving { opacity: 0; transform: translateY(3px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .agent-hold-card { transition: none; } }
+.agent-hold-glyph {
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--partial-bg); color: var(--partial);
 }
-.agent-hold-meta { display: flex; flex-wrap: wrap; gap: 0 6px; margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-hold-meta > span + span::before { content: "·"; margin-right: 6px; }
-.agent-hold-reason { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
-/* The evidence: where the reviewer saw it, then its words in the field a
-   VM command's output wears (.agent-vm-output). Lines stay; a long one
-   scrolls inside instead of growing the card. */
-.agent-hold-evidence { display: grid; gap: 4px; margin: 0; }
+.agent-ask-card:is(.is-browser, .is-secret, .is-takeover) .agent-hold-glyph { background: color-mix(in srgb, var(--agree) 14%, transparent); color: var(--agree); }
+.agent-hold-glyph svg { width: 16px; height: 16px; }
+.agent-hold-body { display: grid; min-width: 0; }
+.agent-hold-alert { display: grid; gap: var(--space-1); }
+/* The title sits on the glyph's middle line. No word alone on a last line. */
+.agent-hold-title {
+  margin: 0; padding-top: 5px; text-align: left; color: var(--ink);
+  font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: 20px;
+  letter-spacing: var(--tracking-tight); text-wrap: balance;
+}
+.agent-ask-request { margin: 0; color: var(--ink-3); overflow-wrap: anywhere; text-wrap: pretty; }
+/* A reason: its kind, the reviewer's sentence, quietly who said it. */
+.agent-hold-reason { margin: 0; color: var(--ink); overflow-wrap: anywhere; text-wrap: pretty; }
+.agent-hold-kind { font-weight: var(--font-weight-semibold); }
+.agent-hold-kind::after { content: ":"; }
+.agent-hold-by { color: var(--ink-3); white-space: nowrap; }
+.agent-hold-note { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--font-size-xs); text-wrap: pretty; }
+/* The evidence: where the reviewer saw it, in the activity's words, then a
+   sentence for a browser step or a memory change, or the code field a VM
+   command's output wears (.agent-vm-output). Lines stay; a long one scrolls
+   inside, and its cut fades out until its end (C17). */
+.agent-hold-evidence { display: grid; gap: var(--space-1); margin: var(--space-3) 0 0; }
 .agent-hold-evidence-label { color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-hold-evidence-words { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 .agent-hold-evidence-text {
-  box-sizing: border-box; max-height: calc(6 * 1.55em + 16px); overflow: auto; margin: 0; padding: 8px 10px;
-  border: 0; border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent);
+  box-sizing: border-box; max-height: calc(6 * 1.55em + 2 * var(--space-2)); overflow: auto; margin: 0; padding: var(--space-2) var(--space-3);
+  border: 0; border-radius: var(--radius-xs); background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink-2); font: var(--font-size-xs)/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.agent-hold-clock { margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
-/* The decision and the other ways, as on the Watch and settings cards. */
-.agent-hold-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 2px; }
-.agent-hold-actions[hidden] { display: none; }
-.agent-hold-link {
-  min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2);
-  font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) {
-  .agent-hold-link:hover:not(:disabled) { color: var(--ink); }
-}
-@media (pointer: coarse) { .agent-hold-link { min-height: 44px; } }
+.agent-hold-evidence-text.is-cut { -webkit-mask-image: linear-gradient(#000 calc(100% - 2.5em), transparent); mask-image: linear-gradient(#000 calc(100% - 2.5em), transparent); }
+/* The one quiet line: the deadline in its last minutes, or why a decision
+   did not go through (C12, in the dispute tone), or a note. */
+.agent-hold-clock { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+.agent-hold-clock[hidden] { display: none; }
+.agent-hold-clock[data-state="error"] { color: var(--dispute); }
+/* The decision: one row; a link that does not fit goes to the next one
+   whole, never word by word (C6). */
+.agent-hold-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin-top: var(--space-3); }
+.agent-hold-actions > * { white-space: nowrap; }
 .agent-hold-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-hold-card button:disabled { opacity: .5; cursor: default; }
-/* The agent's own question (askCard, since 2026-10-29): one edge. The glyph
-   hangs in its tinted circle left of the words, and title, request and the
-   decision (one button, at most one link, one line) share the text's edge.
-   Colour only on the glyph: the house green for the user's turn in the
-   browser, the pause tone before a step in their name. */
-.agent-hold-card.agent-ask-card {
-  grid-template-columns: 30px minmax(0, 1fr); gap: 0 12px; align-items: start; padding: 16px 18px 16px 16px;
-  border-radius: var(--radius-lg);
+/* The pressed button says the decision is on its way, in its place (C13:
+   a line "Sending…" grew the card by 25px). */
+.agent-hold-card button.is-busy:disabled { opacity: .7; cursor: progress; }
+@media (prefers-reduced-motion: no-preference) {
+  .agent-hold-card button.is-busy { animation: agent-hold-busy var(--dur-beat) var(--ease-standard) infinite alternate; }
 }
-.agent-ask-glyph {
-  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
-  background: color-mix(in srgb, var(--agree) 14%, transparent); color: var(--agree);
-}
-.agent-ask-card.is-confirm .agent-ask-glyph { background: var(--partial-bg); color: var(--partial); }
-.agent-ask-glyph svg { width: 16px; height: 16px; }
-.agent-ask-body { display: grid; gap: 2px; min-width: 0; }
-.agent-ask-card .agent-hold-alert { gap: 2px; }
-/* The title sits on the glyph's middle line. */
-.agent-ask-card .agent-hold-title {
-  padding-top: 5px; font-size: var(--font-size-sm); line-height: 20px; text-wrap: balance;
-}
-/* No word alone on its last line. */
-.agent-ask-request { margin: 0; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; text-wrap: pretty; }
-.agent-ask-card .agent-hold-clock { margin-top: 6px; }
-.agent-ask-card .agent-hold-clock[hidden] { display: none; }
-.agent-ask-card .agent-hold-actions { flex-wrap: nowrap; gap: 0 18px; margin-top: 12px; }
-/* The key's field (secret): the reply field's tint, one line, the key's
-   name as its placeholder; the line under it says where it goes. */
-.agent-ask-secret { display: grid; gap: 6px; margin-top: 10px; }
+@keyframes agent-hold-busy { to { opacity: .45; } }
+/* The key's field (secret): a tinted field, one line, the key's name as its
+   placeholder; the line under it says where it goes. */
+.agent-ask-secret { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 .agent-ask-secret-input {
-  box-sizing: border-box; width: 100%; min-height: 36px; max-height: 30vh; margin: 0; padding: 7px 10px; border: 0;
-  border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); font: inherit;
+  box-sizing: border-box; width: 100%; min-height: 36px; max-height: 30vh; margin: 0; padding: var(--space-2) var(--space-3); border: 0;
+  border-radius: var(--radius-xs); background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); font: inherit;
   font-family: var(--font-mono); font-size: var(--font-size-sm); line-height: 1.5; resize: vertical;
   -webkit-text-security: disc;
 }
 .agent-ask-secret-input::placeholder { color: var(--ink-3); font-family: var(--font-mono); }
 .agent-ask-secret-input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 .agent-ask-secret-input:disabled { opacity: .6; }
-.agent-ask-secret-note { margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
+.agent-ask-secret-note { margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
 @media (pointer: coarse) { .agent-ask-secret-input { min-height: 44px; font-size: 16px; } }
-/* "Write to the agent" opens the answer in the card itself: the field, then
-   Send and Cancel in the same pair (before, the button only focused the
-   composer, and a click seemed to do nothing). */
-.agent-hold-reply { display: grid; gap: 10px; }
-.agent-hold-reply[hidden] { display: none; }
-.agent-hold-reply-input {
-  box-sizing: border-box; width: 100%; min-height: 64px; max-height: 40vh; resize: vertical; margin: 0;
-  padding: 8px 10px; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink); font: inherit; line-height: var(--line-height-ui);
+/* A phone: the card is never taller than the room between the header and
+   the field (agent-chat.js fitHold measures it as --hold-room, also with
+   the field open and the keyboard up), and scrolls in itself, its decision
+   always in view (C4: on a 320 x 568 phone it covered 440px and slid its
+   title under the header). The code field shows three lines there. */
+@media (max-width: 1099px) {
+  .agent-hold-card {
+    max-height: var(--hold-room, calc(100dvh - var(--app-mobile-header-height, 56px) - 96px - env(safe-area-inset-bottom, 0px)));
+    overflow-y: auto; overscroll-behavior: contain; padding-bottom: 0;
+  }
+  .agent-hold-actions { position: sticky; bottom: 0; margin-top: 0; padding: var(--space-3) 0 var(--space-4); background: var(--raise); }
+  .agent-hold-evidence-text { max-height: calc(3 * 1.55em + 2 * var(--space-2)); }
+  /* Tab scrolls its target out from under the fixed header too, not only
+     from under the field (app-init.js syncFocusReserve keeps the bottom);
+     with the card's budget a band stays free for it (H4). The header's
+     own height lives on <body> (shell.css), so it is spelled out here. */
+  html { scroll-padding-top: calc(56px + env(safe-area-inset-top, 0px)); }
 }
-.agent-hold-reply-input::placeholder { color: var(--ink-3); }
-.agent-hold-reply-input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-.agent-hold-reply-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
-.agent-queue-remove:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-@media (hover: hover) and (pointer: fine) { .agent-queue-remove:hover { background: var(--hover); color: var(--ink); } }
 .agent-composer-notice { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px 0; color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-composer-notice[hidden], .agent-composer-notice [hidden] { display: none; }
-.agent-composer-notice button { border: 0; padding: 4px 0; background: transparent; color: var(--ink); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.agent-composer-notice button { font: inherit; cursor: pointer; }
 .agent-evidence-links .agent-evidence-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-xs); font-weight: 500; text-decoration: none; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard); }
 .agent-evidence-links .consensus-tab-count { color: var(--ink-3); font-weight: 400; }
 @media (hover: hover) and (pointer: fine) {
@@ -1301,26 +1306,17 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-memory-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
 .agent-memory-head svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .agent-memory-title { color: var(--ink-2); font-weight: 500; }
-.agent-memory-head button { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-memory-head button:hover { color: var(--ink); }
-}
-.agent-memory-head button:disabled { cursor: default; opacity: .6; }
-.agent-memory-head button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-memory-status { color: var(--ink-3); }
 .agent-memory-list { margin: 2px 0 0; padding: 0 0 0 25px; list-style: none; }
 .agent-memory-list li { overflow-wrap: anywhere; }
 .agent-memory-list li.is-undone { color: var(--ink-3); }
 .agent-memory-verb { color: var(--ink-2); }
-@media (pointer: coarse) {
-  .agent-memory-head button { min-height: 44px; }
-}
 
 /* ---- A Watch the Agent prepared (agent-watch.js) ----------------------------
    One raised block under the answer: what would be watched, for what, on
-   which schedule, and the one button that starts it. Frameless like the
-   shell; the state lives in the words ("Watching", "Watch paused"), not in
-   a colour. */
+   which schedule, and the one button that starts it, the other ways as
+   text links (.text-link). Frameless like the shell; the state lives in
+   the words ("Watching", "Watch paused"), not in a colour. */
 .agent-watch-card {
   max-width: 66ch;
   margin: 14px 0 6px;
@@ -1342,14 +1338,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-watch-card :is(.agent-watch-settings, .agent-watch-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-watch-start { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.agent-watch-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-watch-link:hover { color: var(--ink); }
-}
 .agent-watch-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-@media (pointer: coarse) {
-  .agent-watch-link { min-height: 44px; }
-}
 
 /* ---- A pull request the Agent prepared (agent-github.js) ------------------
    The Watch card's block: where it goes (repository, new branch -> base),
@@ -1386,32 +1375,15 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-pr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-pr-actions:not(:has(> :not([hidden]))) { display: none; }
 .agent-pr-create { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
-.agent-pr-link, .agent-pr-open { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  :is(.agent-pr-link, .agent-pr-open):hover { color: var(--ink); }
-}
 .agent-pr-card :is(button, a):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-@media (pointer: coarse) {
-  .agent-pr-link { min-height: 44px; }
-}
-/* GitHub in Settings (agent-github.js): the connection in words, the actions as quiet links. */
+/* GitHub in Settings (agent-github.js): the connection in words, the actions as quiet links (.text-link). */
 .agent-github-settings > strong { display: block; }
 .agent-github-settings > small { display: block; margin-top: 2px; }
 .agent-github-status, .agent-github-repos { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
 .agent-github-repos { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
 .agent-github-repos[hidden], .agent-github-actions [hidden] { display: none; }
 .agent-github-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
-.agent-github-actions .agent-github-link {
-  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 0; border: 0; background: transparent;
-  color: var(--ink-2); font: inherit; font-size: var(--font-size-sm); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
-}
-@media (hover: hover) and (pointer: fine) {
-  .agent-github-link:hover { color: var(--ink); }
-}
-.agent-github-link:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* Links look like the button links beside them (base.css takes every
-   underline away with !important, as components-modals.css also undoes). */
-a.agent-github-link, a.agent-pr-open { text-decoration: underline !important; text-underline-offset: 3px; }
+.agent-github-actions .agent-github-link { font-size: var(--font-size-sm); }
 
 /* ---- A settings change the Agent prepared (agent-settings.js) -------------
    The Watch card's block: each change as "now → new", the new value in the
@@ -1435,18 +1407,11 @@ a.agent-github-link, a.agent-pr-open { text-decoration: underline !important; te
 .agent-settings-to { color: var(--ink); font-weight: var(--font-weight-semibold); }
 .agent-settings-card :is(.agent-settings-note, .agent-settings-status) { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
-.agent-settings-link { min-height: 32px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-2); font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-settings-link:hover { color: var(--ink); }
-}
 .agent-settings-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-settings-card[data-state="applied"] .agent-settings-actions { display: none; }
 @media (max-width: 480px) {
   .agent-settings-list { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .agent-settings-list dd { margin-bottom: 6px; }
-}
-@media (pointer: coarse) {
-  .agent-settings-link { min-height: 44px; }
 }
 
 /* ---- A pasted text the Agent checked (passage-check.js) --------------------

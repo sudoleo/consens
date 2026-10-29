@@ -66,8 +66,11 @@
   // Google's step failed: its sentence, or ours, never the engine's.
   const failed = error => App.userError(error, { fallback: 'The Google request failed. Try again.' });
   const post = (path, body) => api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  // "is-link": the app's one text link (foundation.css .text-link, UX audit
+  // 2026-10-29 J2), not a button drawn as one.
   function button(label, action, cls = '') {
-    const el = node('button', label, `settings-inline-btn agent-google-btn${cls ? ' ' + cls : ''}`);
+    const link = /(^| )is-link( |$)/.test(cls);
+    const el = node('button', label, link ? `text-link ${cls}` : `settings-inline-btn agent-google-btn${cls ? ' ' + cls : ''}`);
     el.type = 'button';
     if (action) el.addEventListener('click', async event => {
       if (el.getAttribute('aria-busy') === 'true') return;
@@ -561,7 +564,7 @@
         : 'Read-only: Consens never sends, changes or deletes anything in Google.']]) {
       const item = node('li'); item.append(svg(icon), node('span', text)); points.append(item);
     }
-    const details = node('a', 'Privacy details', 'agent-google-link'); details.href = '/privacy'; details.target = '_blank'; details.rel = 'noopener';
+    const details = node('a', 'Privacy details', 'text-link agent-google-link'); details.href = '/privacy'; details.target = '_blank'; details.rel = 'noopener';
     children.push(points, details);
     const status = connections.status;
     if (status === 'idle' || status === 'loading') children.push(node('p', 'Loading Google accounts…', 'agent-google-muted'));
@@ -602,7 +605,7 @@
       const add = node('div', '', 'agent-google-row');
       add.append(node('span', 'Add another account:', 'agent-google-muted'), button('Gmail', () => connect(['gmail_read']), 'is-link'), button('Google Calendar', () => connect(['calendar_read']), 'is-link'));
       inner.append(add);
-      const manage = node('a', 'Manage Google access', 'agent-google-link');
+      const manage = node('a', 'Manage Google access', 'text-link agent-google-link');
       manage.href = 'https://myaccount.google.com/permissions'; manage.target = '_blank'; manage.rel = 'noopener noreferrer';
       inner.append(manage);
       if (item) {
@@ -966,7 +969,7 @@
       body.append(ok);
       const link = action.result?.link;
       if (typeof link === 'string' && /^https:\/\/(calendar|www)\.google\.com\//.test(link)) {
-        const a = node('a', 'Open in Google Calendar', 'agent-google-link'); a.href = link; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        const a = node('a', 'Open in Google Calendar', 'text-link agent-google-link'); a.href = link; a.target = '_blank'; a.rel = 'noopener noreferrer';
         body.append(a);
       }
     }

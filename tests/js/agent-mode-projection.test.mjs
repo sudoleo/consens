@@ -268,7 +268,7 @@ describe("agent mode panel projection", () => {
     expect(label.hidden).toBe(false);
     expect(label.textContent).toBe("1 AI cross-checks");
     expect(picker.getAttribute("aria-label")).toBe("1 AI cross-checks");
-    expect(picker.title).toBe("Choose the models that review the agent’s work");
+    expect(picker.title).toBe("Choose the reviewers of the agent’s work");
     // The start screen has the bar: no second control in the field.
     expect(reviewers.hidden).toBe(true);
 
@@ -279,7 +279,7 @@ describe("agent mode panel projection", () => {
     expect(reviewers.getAttribute("aria-label")).toBe("1 AI cross-checks");
     // In words beside the marks, and what they do in the tooltip (2026-10-28).
     expect(document.getElementById("composerReviewersLabel").textContent).toBe("1 AI cross-checks");
-    expect(reviewers.title).toBe("Independent AIs follow the agent’s work and stop it when in doubt. Choose them here.");
+    expect(reviewers.title).toBe("Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.");
     const [mark] = reviewers.querySelectorAll(".composer-model-icon");
     expect(mark.dataset.provider).toBe("openai");
     // Named once, by the button.

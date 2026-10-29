@@ -142,7 +142,7 @@
     status.setAttribute('role', 'status');
     const view = { key, card, title, list, note, status, proposal: null, message: '' };
     view.apply = button('btn agent-settings-apply', 'Apply', () => apply(view));
-    view.dismiss = button('agent-settings-link', 'Dismiss', () => dismiss(view));
+    view.dismiss = button('text-link agent-settings-link', 'Dismiss', () => dismiss(view));
     const actions = node('div', 'agent-settings-actions');
     actions.append(view.apply, view.dismiss);
     card.append(title, list, note, status, actions);

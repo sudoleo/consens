@@ -174,16 +174,20 @@ tab's first use, and wires `#composerWorkspaceButton`
 (start screen), the (+) menu's `#attachWorkspaceOption` (in a chat) and
 `#agentWorkspaceSettings`. Since 2026-10-29 the bar `.workspace-view-turn` above
 the picture says whose turn it is, without a surface (a state dot, a title over
-a quiet line, the one `.btn`): the user's (green dot, "Hand back", the picture's
-green edge `.is-user .workspace-view-screen::after`; an amber reminder after
-`IDLE_MS` = 60 s without input, never an automatic hand-back) or what the agent
+a quiet line, the one `.btn`): the user's (green dot, "Hand back", the browser
+picture's green edge, never the terminal's; an amber reminder after
+`IDLE_MS` = 60 s without input, never an automatic hand-back; the agent's
+request stays its quiet line while the user has the browser) or what the agent
 waits for there (`agentWaits`, set by `agent-chat.js renderHold` for an
-`ask_user` browser card, with "Take over"); `agent-activity.js` adds "Watch live"
+`ask_user` browser card, with "Take over"); the one-line hint above the picture
+gives way to the bar; `agent-activity.js` adds "Watch live"
 (`.agent-vm-watch`) to each step of the `browser` tool and `agent-delegation.js` the run
 header's shortcut (`.agent-workspace-toggle`, shown once a VM step stands in
 the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
 `--workspace-width`, a draggable `.workspace-view-resizer` remembered in
-`localStorage`). All `.workspace-only` (body class
+`localStorage`); where the open activity panel would leave it under
+`MIN_WIDTH` it lies over that panel (`workspace-view-covers`, UX audit
+2026-10-29 G1), and its head wraps by its own width (container query). All `.workspace-only` (body class
 `viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
 ("Arbeitsplatz").
 
@@ -5925,11 +5929,16 @@ an, `stop` stoppt wie `/stop`; 409 `hold_over`/`not_running`), nach
 steht ohne Grund in `agent_holds[]` am Turn (`_end_hold`, höchstens 20,
 `agent_runs.finish_run`). Der Agent sieht nur Nutzer-Stopps und
 -Nachrichten (`HOLD_STEERED`). Browser: `agent-chat.js` (`hold`-Handler,
-`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer`; seit
-2026-10-27 in der Sprache der Watch-/Einstellungskarten (ein `.btn`, sonst
-`.agent-hold-link`), Beleg `holdEvidence` aus `step_kind`/`step_source`/`step`
-von `halt_step` (Zitat des Prüfers `halt.quote`, nur wenn der Eintrag es
-enthält), Antwort direkt in der Karte `holdReply`, Protokollnummer
+`renderHold` in `#agentHold`, `decideHold`, Text im Feld = `steer` mit
+Platzhalter „Or write to the agent…“; seit dem UX-Audit 2026-10-29 (Paket C)
+eine Familie mit den Fragen des Agenten (`cardShell`: Glyphe im Kreis, eine
+Kante, ein `.btn`, höchstens ein `.text-link`, Stop nur am Feld, kein
+`holdReply` mehr; Frist erst in den letzten fünf Minuten `CLOCK_MINUTES`;
+Fehler in der Statuszeile der Karte; `leaveHold` blendet aus und gibt den
+Fokus ans Feld), Beleg `holdEvidence` aus `step_kind`/`step_source`/`step`
+und für Modellschritte `step_calls` von `halt_step` in Worten (`callWords`,
+Elementnamen aus dem letzten `read`, `element_names`; Zitat des Prüfers
+`halt.quote`, nur wenn der Eintrag es enthält), Protokollnummer
 `.admin-only`; `composer-collapse.js` lässt Tipps auf `.agent-hold`/
 `.agent-queue` durch),
 `agent-activity.js` (`holdView`, „Paused for your decision“, wartende Pause

@@ -19,9 +19,12 @@
 // Wide screens (DOCK_QUERY) dock the panel at the right edge beside the
 // chat, which narrows and re-centres in the space left of it (the body's
 // workspace-view-docked, --workspace-width; workspace-view.css), next to the
-// Agent activity panel when that is open. The edge between them drags (or
-// moves with the arrow keys) and remembers its width per browser; the chat
-// never gets narrower than MIN_CHAT. Narrower screens show it full width.
+// Agent activity panel when that is open and leaves it MIN_WIDTH; else it
+// lies over the activity (workspace-view-covers), which waits beneath it
+// (UX audit 2026-10-29 G1: at 1280px the panel was 155px wide, its buttons
+// over the activity's text). The edge between them drags (or moves with the
+// arrow keys) and remembers its width per browser; the chat never gets
+// narrower than MIN_CHAT. Narrower screens show it full width.
 //
 // Two tabs (since 2026-10-28): Browser, the live view above, and Terminal, the
 // user's own shell on the workbench (routers/agent_workspace.py, xterm.js from
@@ -35,8 +38,11 @@
 // while the user has the browser, with the one strong button to hand it
 // back, and reminds them after IDLE_MS without a key or click there; while
 // the agent waits for them (ask_user, agent-chat.js askCard) it says what
-// for, with the button to take over. Before, only a small toggle in the head
-// said so, and Max waited for the agent while it waited for him.
+// for, with the button to take over, and keeps saying it once they have the
+// browser (G2: the request vanished just when it was needed). In the
+// Terminal tab the bar stays while they have the browser, and the green
+// edge stays on the browser's picture (G4). Before, only a small toggle in
+// the head said so, and Max waited for the agent while it waited for him.
 //
 // window.App.workspaceView: open({ takeOver }), close(), isOpen(), init()
 // (the start screen's Workspace button, the (+) menu's row, the row in
@@ -77,16 +83,17 @@
   // messages once it is ready, so these come as codes, not states.
   const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many' };
   const TERMINAL = {
-    connecting: 'Opening a terminal on the workbench…',
-    ready: 'Your terminal on the workbench, with the agent’s rights.',
+    connecting: 'Opening a terminal in the workspace…',
+    ready: 'Your terminal in the workspace, with the agent’s rights.',
     ended: 'The terminal ended. Start a new one to go on.',
     lost: 'The connection to the terminal ended. Start a new one to go on.',
     error: 'The terminal is not reachable right now. Try again in a moment.',
     replaced: 'The terminal opened in another window, so this one closed.',
     unavailable: 'The terminal could not load. Reload the page and try again.',
   };
+  // One line above the picture, gone while the bar says whose turn it is (G5).
   const HINTS = {
-    browser: 'Log in to sites here yourself, typing or pasting your password: the agent pauses meanwhile, then works there as you, and never types a password.',
+    browser: 'Log in here yourself: the agent never types a password.',
     terminal: 'The computer the agent works on, with the same files and rights: no administrator rights, and only package sources online.',
   };
   // Docked beside the chat from the width where the app's sidebar pushes the column (layout.css).
@@ -117,9 +124,18 @@
   // The window without its scrollbar: where a fixed panel's right edge is.
   const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth;
   function docked() { return matches(DOCK_QUERY); }
-  // What the panel may not cover on the right: the activity panel, when it docks too.
-  function rightOffset() {
+  // The activity panel's width, when it docks too.
+  function activityWidth() {
     return document.body.classList.contains('agent-sidebar-open') && matches(WIDE_QUERY) ? ACTIVITY_WIDTH : 0;
+  }
+  // Beside the activity the panel would get less than MIN_WIDTH: it lies over it.
+  function covers() {
+    const activity = activityWidth();
+    return activity > 0 && viewportWidth() - sidebarOffset() - activity - MIN_CHAT < MIN_WIDTH;
+  }
+  // What the panel may not cover on the right: the activity panel beside it.
+  function rightOffset() {
+    return covers() ? 0 : activityWidth();
   }
   function sidebarOffset() {
     const value = getComputedStyle(document.body).getPropertyValue('--app-sidebar-offset');
@@ -145,6 +161,7 @@
     const { min, max } = bounds();
     view.width = Math.round(Math.min(max, Math.max(min, width || preferredWidth())));
     document.body.classList.toggle('workspace-view-docked', isDocked);
+    document.body.classList.toggle('workspace-view-covers', isDocked && covers());
     document.body.style.setProperty('--workspace-width', `${isDocked ? view.width : 0}px`);
     view.panel.style.setProperty('--workspace-right', `${isDocked ? rightOffset() : 0}px`);
     view.resizer.hidden = !isDocked;
@@ -250,10 +267,11 @@
     status.setAttribute('role', 'status');
     const toggle = button('workspace-view-toggle', 'Take over', () => (view?.holder === 'user' ? handBack() : takeOver()));
     toggle.hidden = true;
-    const closer = button('workspace-view-close', '', close);
+    // The app's one close cross (foundation.css .close-button, J1).
+    const closer = button('close-button workspace-view-close', '', close);
     closer.setAttribute('aria-label', 'Close workspace');
     closer.title = 'Close workspace';
-    closer.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+    closer.innerHTML = App.closeIcon?.() || '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
     const paster = button('workspace-view-paste', 'Paste', pasteClipboard);
     paster.title = 'Type your clipboard into the page';
     paster.hidden = true;
@@ -344,7 +362,7 @@
     }
     view.screen.hidden = key !== 'browser';
     view.terminal.hidden = key !== 'terminal';
-    view.hint.textContent = HINTS[key];
+    if (view.hint.textContent !== App.t(HINTS[key])) view.hint.textContent = HINTS[key];
     view.panel.dataset.tab = key;
     say(view.said[key], key);
     showHolder();
@@ -463,23 +481,28 @@
   }
 
   // The bar: the user's turn (and after IDLE_MS a reminder), or what the
-  // agent waits for them to do, or nothing while the agent works.
+  // agent waits for them to do, or nothing while the agent works. What the
+  // agent asked for stays its quiet line while the user has the browser;
+  // "The agent waits." only for a takeover nobody asked for (G2).
   function showTurn() {
     if (!view) return;
     const user = view.holder === 'user';
-    const waiting = waitingFor !== null && !user;
+    const asked = waitingFor !== null;
     const idle = user && view.isIdle;
-    view.turn.hidden = !view.rfb || view.tab !== 'browser' || !(user || waiting);
+    const browser = view.tab === 'browser';
+    view.turn.hidden = !view.rfb || !(user || (asked && browser));
     // One way to take over or hand back at a time: the bar's, when it shows.
     if (!view.turn.hidden) view.toggle.hidden = true;
+    // The hint gives way to the bar: two blocks of words over the picture were one too many (G5).
+    view.hint.hidden = !view.turn.hidden;
     view.turn.classList.toggle('is-user', user);
     view.turn.classList.toggle('is-idle', Boolean(idle));
     const says = idle ? 'Done?' : user ? 'You have the browser' : 'The agent is waiting for you';
-    const note = idle ? 'Hand the browser back so the agent can go on.' : user ? 'The agent waits.' : '';
+    const request = asked && !idle ? String(waitingFor || '') : '';
+    const note = idle ? 'Hand the browser back so the agent can go on.' : user && !request ? 'The agent waits.' : '';
     if (view.turnSays.textContent !== App.t(says)) view.turnSays.textContent = says;
     if (view.turnNote.textContent !== (note && App.t(note))) view.turnNote.textContent = note;
     view.turnNote.hidden = !note;
-    const request = waiting ? String(waitingFor || '') : '';
     if (view.turnRequest.textContent !== request) view.turnRequest.textContent = request;
     view.turnRequest.hidden = !request;
     view.turnButton.textContent = user ? 'Hand back' : 'Take over';
@@ -779,11 +802,12 @@
     watchSlow();
     layout();
     window.addEventListener('resize', onWindowResize);
-    // The Agent activity panel opening or closing beside it moves its right edge.
-    view.right = rightOffset();
+    // The Agent activity panel opening or closing beside it moves its right
+    // edge, or lets it lie over the activity.
+    view.right = activityWidth();
     view.observer = new MutationObserver(() => {
-      if (!view || view.right === rightOffset()) return;
-      view.right = rightOffset();
+      if (!view || view.right === activityWidth()) return;
+      view.right = activityWidth();
       layout();
     });
     view.observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
@@ -819,7 +843,7 @@
     closing.panel.remove();
     window.removeEventListener('resize', onWindowResize);
     closing.observer?.disconnect();
-    document.body.classList.remove('workspace-view-open', 'workspace-view-docked', 'workspace-view-resizing');
+    document.body.classList.remove('workspace-view-open', 'workspace-view-docked', 'workspace-view-covers', 'workspace-view-resizing');
     document.body.style.removeProperty('--workspace-width');
   }
 
@@ -853,8 +877,8 @@
     const status = node('p', 'agent-workspace-status');
     status.setAttribute('role', 'status');
     const actions = node('div', 'agent-github-actions');
-    actions.append(button('agent-github-link', 'Open workspace', open),
-      button('agent-github-link', 'Log out everywhere', () => resetBrowser(status)));
+    actions.append(button('text-link agent-github-link', 'Open workspace', open),
+      button('text-link agent-github-link', 'Log out everywhere', () => resetBrowser(status)));
     host.append(status, actions);
     host._workspace = true;
   }

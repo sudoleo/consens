@@ -521,8 +521,10 @@ notes by then.“ (`failureNote`, B8). Im Verlauf stehen die Prüfer-Logos
 neben „Thought for …“ wie live und öffnen die Notes (B6).
 Eigene Gründe für `review_tool_calls` („it called a tool instead of writing
 its review“) und `review_empty` (A-M6); ein Turn mit `hold_timeout` sagt
-„Paused for 30 minutes without a decision, so the response stopped.“
-(`failureNotice`, mit Retry).
+„Stopped after 30 minutes without your decision.“ (`failureNotice`, mit
+Retry; „Check saved answer“ seit dem UX-Audit 2026-10-29, C15, nur mit einer
+Antwort, die es zu prüfen gibt). Rot und „Failed“ in Kopf und Seitenleiste
+bleiben bis zum Paket E des Audits.
 Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
@@ -602,9 +604,10 @@ Steer-Entscheidung (außer bei einer offenen Key-Karte, siehe „Ein Key vom
 Nutzer“).
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop, seit 2026-10-29 mit eigenem Grund (`failure.code = hold_timeout`,
-„Paused for 30 minutes without a decision, so the response stopped.“, auch im
-SSE-Fehler; vorher nur „Response stopped“); eine Domain-Karte wirkt dann wie
-„Don’t allow“, und der Lauf geht weiter (vorher stoppte auch sie). Spuren:
+„Stopped after 30 minutes without your decision.“, auch im SSE-Fehler; vorher
+nur „Response stopped“); eine Domain-Karte wirkt dann wie „Don’t allow“, und
+der Lauf geht weiter (vorher stoppte auch sie; Karte und Aktivität sagen seit
+dem UX-Audit C8 „Not allowed …“ statt „Stops“/„Stopped“). Spuren:
 Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag, `state` =
 `waiting` → Entscheidung, `timeout` oder `ended`; in der Live-Aktivität seit
 2026-10-29 mit eigenem Platz für 20 Pausen neben den 63 übrigen
@@ -627,51 +630,83 @@ Gerät, das den Chat öffnet, folgt dem laufenden Turn über `/live` mit dessen
 `request_id` (`running` aus `GET /bookmarks/{id}/conversation`,
 `agent-chat.js` `followRunning`) und zeigt die Karte. Kommt ein zweiter Halt
 in die offene Pause (`reasons`, neue `revision`), tauscht die Karte nur ihre
-Gründe (`reasonsKey`/`reasonLines`); Entscheidung und getippte Worte bleiben.
+Gründe und den Titel, der sie zählt (`reasonsKey`/`reasonLines`/`holdTitle`);
+eine Entscheidung unterwegs und getippte Worte bleiben.
 Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
 (`halt_step`, seit 2026-10-27 als `step_kind`/`step_source`/`step`): den
-Aufruf eines Modellschritts (Befehl, Adresse oder Suche), eine Datei mit ihrem
-Namen („In the file tabelle.csv“), das Ergebnis eines Werkzeugs mit dessen
-Namen, sonst „What the agent received“. Text ist das wörtliche Zitat des
+Aufruf eines Modellschritts, eine Datei mit ihrem Namen („In the file
+tabelle.csv“), das Ergebnis eines Tools mit dessen Namen, sonst „What the agent
+received“. Die Aufrufe eines Modellschritts kommen seit dem UX-Audit
+2026-10-29 (C1) als `step_calls` (`_calls_shown`, höchstens `HALT_CALLS` = 3:
+`{tool, action, text, target?, enter?}`), und die App sagt sie in einem Satz
+der Oberfläche unter dem Aktivitätswort des Tools (`callWords`): „Clicks
+„Jetzt kaufen – 129 €““ mit dem Namen, den der letzte `read` des Browsers dem
+Element gab (`element_names` über die `NAMES_BACK` = 40 Einträge davor, statt
+„e14“), „Types „…“ and sends it“, „Remember: „…““ unter „Memory“; ein Befehl
+bleibt Code. Vorher stand dort `browser: {"action": "click", "ref": "e14"}`
+und eine Memory-Änderung als ganzes JSON. `step` bleibt eine Zeile ohne JSON
+für ältere Seiten. Text ist das wörtliche Zitat des
 Prüfers (`halt.quote`, im Prompt verlangt), wenn der Eintrag es enthält
 (Groß/klein und Leerraum zählen nicht; ein erfundenes Zitat zeigt sie nie),
 sonst der Anfang des Eintrags; Zeilen bleiben, ein langer Beleg scrollt im
 Feld. Anlass: Am 2026-10-27 stand dort zu einer CSV mit eingeschleustem
-Upload-Befehl deren ID und Hash. Die Protokollnummer („Step 12“) sehen nur
-Admins (`.admin-only`), die das Protokoll öffnen können.
-**Gestaltung (seit 2026-10-27, vorher beiger Kasten mit gerahmten Knöpfen in
-drei Arten, die es sonst nirgends in consens gab; Max: „clunky“):** die
-Sprache der anderen Entscheidungskarten (vorbereitete Watch, Einstellung):
-rahmenloser `--raise`-Block, Worte in zwei Tönen, **ein** gefüllter Knopf für
-die Entscheidung (`.btn` „Let it continue“), die anderen Wege als
-unterstrichene Links daneben (`.agent-hold-link` „Write to the agent“,
-„Stop“, 44 px per Touch); Farbe nur am Pause-Zeichen (`--partial`); der Beleg
-im Feld einer VM-Ausgabe; die Frist als kleine Zeile darüber. **„Write to the
-agent“ öffnet die Antwort in der Karte** (`holdReply`: Feld, „Send and
-continue“ erst mit Text, „Cancel“ und Escape bringen die Wege zurück, Enter
-sendet mit Tastatur, auf dem Handy neue Zeile); vorher fokussierte der Knopf
-nur das Eingabefeld, und ein Klick schien nichts zu tun. Auf dem Handy
-verschluckte zudem das eingeklappte Eingabefeld jeden Tipp in der Karte
-(`composer-collapse.js` nimmt `.agent-hold` und `.agent-queue` seitdem aus,
-wie die Agent-Hinweise). Text im Eingabefeld bleibt ebenfalls die
-Steer-Entscheidung. Solange die Pause wartet, nennt die Aktivität ihren Grund
-nicht ein zweites Mal (er steht in der Karte); nach der Entscheidung steht er
-dort mit ihr.
+Upload-Befehl deren ID und Hash. Die Protokollnummer („ · Step 12“ hinter dem
+Wort des Belegs) sehen nur Admins (`.admin-only`), die das Protokoll öffnen
+können.
+**Gestaltung: eine Familie** (seit dem UX-Audit 2026-10-29, Paket C; vorher
+seit 2026-10-27 eine ältere Familie mit nacktem 16-px-Symbol, Titel auf einer
+zweiten Kante, Meta-Zeile, bis zu drei Links neben dem Knopf und Frist ab der
+ersten Sekunde, davor ein beiger Kasten mit gerahmten Knöpfen): Jede Karte über
+dem Feld, Prüfer-Pause, Gate, Domain und die Fragen des Agenten, hat das
+Raster des Design-Passes 438aacdc (`cardShell`, `.agent-hold-card`): die
+Glyphe hängt links in einem getönten Kreis (`.agent-hold-glyph`, Pausenton,
+Globus für die Domain, Hausgrün für den Browser und den Key), Titel, Worte,
+Beleg und Entscheidung stehen bündig an einer Kante, Radius `--radius-lg`,
+Abstände aus `--space-*`. **Ein** gefüllter Knopf (`.btn` „Let it continue“,
+„Let it run“, „Allow for this chat“, „Allow“, „Save“) und höchstens ein
+Textlink (`.text-link` „Don’t allow“, „Not now“). **Schreiben geht über das
+Eingabefeld** (die Nachricht ist die Steer-Entscheidung, `steer`; sein
+Platzhalter sagt solange „Or write to the agent…“, `runningPlaceholder`),
+**Stoppen über dessen Stop-Knopf**; „Write to the agent“ (mit eigenem
+Antwortfeld über dem Eingabefeld, `holdReply`) und „Stop“ auf der Karte sind
+weg. Der Grund steht je Zeile als Art, Satz des Prüfers und leise sein Name
+(`.agent-hold-kind`, `-reason-text`, `-by`), der Titel zählt die Prüfer („Two
+reviewers paused the work“). Die eine leise Zeile unter den Worten
+(`.agent-hold-clock`, `role=status`) sagt die Frist erst in den letzten fünf
+Minuten (`CLOCK_MINUTES`, für alle Karten), eine Entscheidung, die nicht
+ankam (`data-state="error"`, `--dispute`, statt eines Toasts), oder kurz
+„Moved into the key field. Save stores it.“. Am Handy (unter 1100 px) ist
+die Karte nie höher als der Platz zwischen Kopfleiste und Feld und scrollt in
+sich, die Entscheidung klebt unten (`position: sticky`), ein Code-Beleg
+zeigt drei Zeilen; ein Beleg, der länger ist als sein Feld, läuft unten weich
+aus (`fadeCut`, `.is-cut`), bis er zu Ende gescrollt ist. Nach der
+Entscheidung geht die Karte, wie sie kam (`leaveHold`, `App.motion.leave`),
+und der Fokus einer Tastatur oder Maus springt ins Eingabefeld (nie unter dem
+Finger, sonst ginge die Tastatur auf). Auf dem Handy verschluckte das
+eingeklappte Eingabefeld früher jeden Tipp in der Karte (`composer-collapse.js`
+nimmt `.agent-hold` und `.agent-queue` aus, wie die Agent-Hinweise). Solange
+die Pause wartet, nennt die Aktivität ihren Grund nicht ein zweites Mal (er
+steht in der Karte); nach der Entscheidung steht er dort mit ihr.
 
 **Die Entscheidung unterwegs** (seit 2026-10-29, A-B3/A-B5): Der POST einer
 Entscheidung (`…/hold`, `…/secret`; `agent-chat.js` `postDecision`) läuft unter
-`App.withRequestDeadline` mit 15 s; die Zeile über den Knöpfen sagt solange
-„Sending…“, alle Knöpfe außer Stop sind gesperrt. Läuft die Frist ab, bleibt
-die Karte entscheidbar („Your decision did not reach the server.“). Vorher
-hing der POST bei einer halboffenen Verbindung minutenlang, Stop eingeschlossen.
-Antwortet der Server `409 hold_over` (anderswo entschieden, der Stream tot),
-geht die Karte (`holdDone`); bei der Key-Karte sagt ein Hinweis den Grund.
+`App.withRequestDeadline` mit 15 s; solange sind die Knöpfe gesperrt, und der
+gedrückte sagt mit seinen Worten, dass er unterwegs ist (`.is-busy`,
+`aria-busy`; bis zum UX-Audit C13 schob sich eine Zeile „Sending…“ über die
+Knöpfe und ließ die Karte springen); der Stop-Knopf am Feld bleibt frei. Läuft
+die Frist ab, bleibt die Karte entscheidbar und sagt in ihrer Zeile „Your
+decision did not reach the server. Try again.“; eine Absage, die der Nutzer
+lösen kann (`notes_full`, `invalid_action`, `vm_unavailable`), mit dem Satz
+des Servers. Vorher hing der POST bei einer halboffenen Verbindung
+minutenlang, Stop eingeschlossen. Antwortet der Server `409 hold_over`
+(anderswo entschieden, der Stream tot), geht die Karte (`holdDone`); bei der
+Key-Karte sagt ein Hinweis den Grund.
 Endet der Lauf mit einem Fehler (`failRun`), endet eine laufende Prüfung wie
 nach einem Reload (`failed`, `missing` vor dem Start), statt bis zum Neuöffnen
 „Reviewing the answer…“ zu zeigen. Kommt ein zweiter Halt auf die offene Pause
 (derselbe `hold`-Frame mit weiteren `reasons`, Gegenstück zu A-S2), tauscht
-die Karte nur ihre Gründe (`reasonLines`, Zeilen mit `data-reason`): eine
-Entscheidung unterwegs und Worte in der Karte bleiben.
+die Karte nur ihre Gründe (`reasonLines`, Zeilen mit `data-reason`) und den
+Titel: eine Entscheidung unterwegs bleibt.
 
 **Vorab-Prüfung** (seit 2026-10-27, Max' Entscheidung nach der
 Harness-Kritik; seit 2026-10-29 nur noch zwei Arten): Ein Halt kommt erst nach
@@ -1048,7 +1083,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (`DelegationLoop._domain_wait`, Karte `agent-domain-card`: Domain, Begründung
   des Agenten als Daten, das Urteil der Prüfer oder dass nicht jeder prüfen
   konnte; „Allow for this chat“ = `continue`, „Don’t allow“ = neue Antwort
-  `deny`, „Write to the agent“, Stop). **Keine automatische Freigabe**, auch
+  `deny`, eine Nachricht im Eingabefeld = `steer`, Stop am Feld; die
+  Begründung des Agenten seit dem UX-Audit C16 als leise Zeile unter dem
+  Titel statt im Code-Feld). **Keine automatische Freigabe**, auch
   nicht, wenn der Nutzer die Domain im Chat genannt hat: Das wäre wieder ein
   Textfilter (Max, 2026-10-27). Eine schon erlaubte Domain braucht keine
   Karte. Abgelehnt bekommt der Agent `DOMAIN_DENIED`.
@@ -1310,7 +1347,11 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
 - **Neben dem Chat** (ab 1100 px): Das Panel dockt rechts an, der Chat rückt
   in die verbleibende Spur und zentriert sich dort (`body.workspace-view-docked`,
   `--workspace-width`: Body-Innenabstand rechts, die Agent-Spalte rechnet die
-  Breite mit; neben der offenen Aktivitäts-Leiste steht es links von ihr). Die
+  Breite mit; neben der offenen Aktivitäts-Leiste steht es links von ihr,
+  solange ihm dort `MIN_WIDTH` = 380 px bleiben, sonst legt es sich über sie,
+  `body.workspace-view-covers`, seit dem UX-Audit 2026-10-29 G1: bei 1280 px
+  war es daneben 155 px breit, seine Knöpfe lagen über der Aktivität). Sein
+  Kopf bricht nach der eigenen Breite um (Container `workspace-view`). Die
   Grenze zieht sich mit der Maus, mit den Pfeiltasten (40 px) und Pos1/Ende;
   Doppelklick setzt auf halb/halb zurück; die Breite merkt sich der Browser
   (`localStorage` `consens.workspaceWidth`). Der Chat behält immer mindestens
@@ -1347,8 +1388,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `.btn`. Solange der Nutzer steuert: grüner Punkt (`--agree`, atmet im Takt
   `--dur-beat`, ruhig bei reduzierter Bewegung), „You have the browser“ /
   „The agent waits.“, „Hand back“, und das Bild trägt einen 2-px-Rand im
-  Hausgrün (`.workspace-view.is-user .workspace-view-screen::after`); Kopf-
-  Umschalter und Statuszeile schweigen dann. Nach `IDLE_MS` (60 s) ohne Taste,
+  Hausgrün (nur das Browserbild, nie das Terminal, UX-Audit G4); Kopf-
+  Umschalter und Statuszeile schweigen dann, und der Hinweis über dem Bild
+  („Log in here yourself: the agent never types a password.“, eine Zeile
+  seit G5) weicht der Leiste. Hat der Nutzer den Browser, weil der Agent
+  darum bat, bleibt dessen Bitte die leise Zeile statt „The agent waits.“
+  (G2: sie verschwand genau dann, wenn man sie brauchte); im Terminal-Tab
+  bleibt die Leiste mit „Hand back“ stehen. Nach `IDLE_MS` (60 s) ohne Taste,
   Klick oder Scrollen im Bild wird der Punkt bernstein: „Done?“ / „Hand the
   browser back so the agent can go on.“; zurückgegeben wird nie von selbst,
   denn der Nutzer holt vielleicht gerade sein Passwort oder einen 2FA-Code.
@@ -1370,7 +1416,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Pausenton vor einem Schritt), Titel, Bitte (`--ink-3`) und Entscheidung
   stehen bündig daneben; ein Knopf und höchstens ein Link in einer Zeile
   (Schreiben geht über das Eingabefeld, Stopp über dessen Stop-Knopf); die
-  Frist erst in den letzten fünf Minuten (`ASK_CLOCK_MINUTES`).
+  Frist erst in den letzten fünf Minuten (`CLOCK_MINUTES`). Seit dem
+  UX-Audit 2026-10-29 haben alle Karten über dem Feld dieses Raster (siehe
+  „Gestaltung: eine Familie“).
   **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
   liest alle `HANDBACK_POLL_SECONDS` `control_state`; liegt ein
   `returned_at` nach dem Öffnen der Karte („Hand back“ oder Schließen der
@@ -1419,12 +1467,15 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   die Umbrüche eines PEM-Keys; Platzhalter = Name, kein `<form>`, also nie ein
   GET), der Zeile „Saved in your workspace as ~/.secrets/NAME … Only for keys
   like this one: a password you type in the browser yourself.“, „Save“ und „Not
-  now“ (`deny`) und „Write to the agent“ (Antwort in der Karte, `steer`).
+  now“ (`deny`); „Write to the agent“ ist seit dem UX-Audit C3 weg.
   **Solange die Key-Karte offen ist, sendet das Eingabefeld nie** (A-S7, seit
   2026-10-29): Enter oder Senden legt seinen Text verdeckt ins Key-Feld der
   Karte (`agent-chat.js` `steer`), der Nutzer bestätigt dort mit „Save“; es
   zählt nur der Zustand der Karte, keine Erkennung am Text. Vorher ging ein
   dort eingefügter Key als `steer` an Agent, Prüfer und Arbeitsprotokoll.
+  Seit dem UX-Audit C11 sagt das Feld es selbst (Platzhalter „Paste the key
+  above“, Senden-Titel „Into the key field“), und die Karte
+  sagt nach dem Verschieben kurz „Moved into the key field. Save stores it.“.
   „Save“ (oder Enter, Umschalt+Enter ist ein Zeilenumbruch)
   schickt den Wert per
   `POST /agent/chats/{chat}/requests/{request}/secret` (`{id, value}`,

@@ -148,7 +148,7 @@ describe("the workspace's loading and terminal (2026-10-28)", () => {
     socket.deliver(JSON.stringify({ state: "ready" }));
     expect(pane.classList.contains("is-loading")).toBe(false);
     expect(env.document.querySelector(".workspace-view-status").textContent)
-      .toBe("Your terminal on the workbench, with the agent’s rights.");
+      .toBe("Your terminal in the workspace, with the agent’s rights.");
     socket.deliver(new TextEncoder().encode("agent@workbench:~$ ").buffer);
     expect(term.written).toEqual(["agent@workbench:~$ "]);
     term.type("ls\r");
@@ -290,6 +290,17 @@ describe("the workspace view", () => {
     expect(env.workspace.holder()).toBe("user");
     // Opening says so too: the chat's card steps aside while the view is open.
     expect(holders).toEqual(["agent", "user"]);
+    // The user has the browser, and what the agent asked for stays in view
+    // (UX audit 2026-10-29 G2); the hint gives way to the bar (G5).
+    const bar = env.document.querySelector(".workspace-view-turn");
+    expect(bar.querySelector(".workspace-view-turn-says").textContent).toBe("You have the browser");
+    expect(bar.querySelector(".workspace-view-turn-request").textContent).toBe("Bitte melde dich bei der Post an.");
+    expect(bar.querySelector(".workspace-view-turn-note:not(.workspace-view-turn-request)").hidden).toBe(true);
+    expect(env.document.querySelector(".workspace-view-hint").hidden).toBe(true);
+    // In the terminal the bar stays while the user has the browser (G4).
+    env.workspace.showTab("terminal");
+    expect(bar.hidden).toBe(false);
+    env.workspace.showTab("browser");
     env.document.querySelector(".workspace-view-turn-button").click();
     await vi.waitFor(() => expect(env.workspace.holder()).toBe("agent"));
     expect(holders).toEqual(["agent", "user", "agent"]);
@@ -601,6 +612,23 @@ describe("the workspace beside the chat", () => {
     wide(env, 1400);
     env.window.dispatchEvent(new env.window.Event("resize"));
     expect(env.workspace.width()).toBe(1400 - 346 - 520);
+  });
+
+  it("lies over the Agent activity panel where beside it would leave it too narrow", async () => {
+    // UX audit 2026-10-29 G1: at 1280px beside the activity it was 155px wide.
+    const env = setup();
+    wide(env, 1200);
+    env.document.body.classList.add("agent-sidebar-open");
+    await env.workspace.open();
+    const panel = env.document.querySelector(".workspace-view");
+    expect(env.document.body.classList.contains("workspace-view-covers")).toBe(true);
+    expect(panel.style.getPropertyValue("--workspace-right")).toBe("0px");
+    expect(env.workspace.width()).toBe(600);
+    // The activity closes: still docked at the edge, no longer over anything.
+    env.document.body.classList.remove("agent-sidebar-open");
+    await vi.waitFor(() => expect(env.document.body.classList.contains("workspace-view-covers")).toBe(false));
+    env.workspace.close();
+    expect(env.document.body.classList.contains("workspace-view-covers")).toBe(false);
   });
 
   it("covers the screen on narrow windows, without an edge to drag", async () => {

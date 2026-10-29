@@ -110,6 +110,12 @@
 .composer-reviewers-label { margin-left: 6px; color: var(--ink); font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
 .composer-reviewers-label:empty { display: none; }
 @media (max-width: 560px) { .composer-reviewers-label { display: none; } }
+/* Beside the open activity panel the column is ~626px at 1280: with the
+   words and the model chip the field kept 172px, too little for its hint
+   (UX audit 2026-10-29 H2). There the marks speak alone, as on a phone. */
+@media (min-width: 1200px) and (max-width: 1365px) {
+  body.agent-sidebar-open:not(.is-hero) .composer-reviewers-label { display: none; }
+}
 .composer-reviewers[aria-expanded="true"] { background: var(--hover); }
 @media (hover: hover) and (pointer: fine) {
   .composer-reviewers:hover { background: var(--hover); }
@@ -346,7 +352,13 @@
   }
   /* One line means one line for the hint too: a long one ("Sign in to start
      asking questions for free" at 320px) wrapped and showed half of its
-     second line under the first. */
+     second line under the first. A hint wider than the field ends in an
+     ellipsis, not cut mid-letter by Send (UX audit 2026-10-29 H2): as on
+     the desktop, Chromium draws it only with text-overflow on the field. */
+  body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-field:placeholder-shown {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-field::placeholder {
     white-space: nowrap;
     overflow: hidden;

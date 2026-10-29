@@ -105,9 +105,11 @@
       title.className = 'agent-memory-title';
       const undoButton = document.createElement('button');
       undoButton.type = 'button';
+      undoButton.className = 'text-link';
       undoButton.textContent = 'Undo';
       const manage = document.createElement('button');
       manage.type = 'button';
+      manage.className = 'text-link';
       manage.textContent = 'Manage memory';
       const status = document.createElement('span');
       status.className = 'agent-memory-status';
@@ -199,9 +201,11 @@
     text.textContent = 'Agent can remember details you share, like your diet or your job, and use them in later chats.';
     const on = document.createElement('button');
     on.type = 'button';
+    on.className = 'text-link';
     on.textContent = 'Turn on';
     const later = document.createElement('button');
     later.type = 'button';
+    later.className = 'text-link';
     later.textContent = 'Not now';
     const status = document.createElement('span');
     status.className = 'agent-memory-status';
@@ -228,6 +232,7 @@
       text.textContent = 'Memory is on. Agent saves what you share; review or undo any change in Settings › Memory.';
       const manage = document.createElement('button');
       manage.type = 'button';
+      manage.className = 'text-link';
       manage.textContent = 'Manage memory';
       manage.addEventListener('click', openSettings);
       status.textContent = '';

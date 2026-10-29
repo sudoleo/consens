@@ -55,9 +55,9 @@
       status.setAttribute('role', 'status');
       const repos = data('p', 'agent-github-repos');
       const actions = node('div', 'agent-github-actions');
-      const connectButton = button('agent-github-link', 'Connect GitHub', connect);
-      const disconnectButton = button('agent-github-link', 'Disconnect', disconnect);
-      const manage = node('a', 'agent-github-link', 'Manage on GitHub');
+      const connectButton = button('text-link agent-github-link', 'Connect GitHub', connect);
+      const disconnectButton = button('text-link agent-github-link', 'Disconnect', disconnect);
+      const manage = node('a', 'text-link agent-github-link', 'Manage on GitHub');
       manage.target = '_blank'; manage.rel = 'noopener noreferrer';
       actions.append(connectButton, disconnectButton, manage);
       host.append(status, repos, actions);
@@ -160,11 +160,11 @@
     details.append(summary, diff);
     const status = node('p', 'agent-pr-status');
     status.setAttribute('role', 'status');
-    const link = node('a', 'agent-pr-open');
+    const link = node('a', 'text-link agent-pr-open');
     link.target = '_blank'; link.rel = 'noopener noreferrer';
     const view = { key, card, title, target, name, description, files, more, details, diff, status, link, busy: false };
     view.create = button('wd-button is-primary agent-pr-create', 'Create pull request', () => decide(view, 'create'));
-    view.discard = button('agent-pr-link', 'Discard', () => decide(view, 'discard'));
+    view.discard = button('text-link agent-pr-link', 'Discard', () => decide(view, 'discard'));
     const actions = node('div', 'agent-pr-actions');
     actions.append(view.create, view.discard, link);
     card.append(title, target, name, description, files, more, details, status, actions);

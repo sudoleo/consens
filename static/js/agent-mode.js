@@ -465,7 +465,7 @@
     if (picker) {
       // The name holds the words on screen (WCAG 2.5.3).
       write(picker, "aria-label", auditing ? words : "Configure models for your next question");
-      write(picker, "title", auditing ? "Choose the models that review the agent’s work" : "Configure models");
+      write(picker, "title", auditing ? "Choose the reviewers of the agent’s work" : "Configure models");
     }
     const reviewers = document.getElementById("composerReviewers");
     if (!reviewers) return;
@@ -474,7 +474,7 @@
     write(reviewers, "aria-label", words);
     // What the icons are, said beside them and in the tooltip (2026-10-28,
     // Max: new users did not know why a logo stood there).
-    write(reviewers, "title", "Independent AIs follow the agent’s work and stop it when in doubt. Choose them here.");
+    write(reviewers, "title", "Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.");
     const caption = document.getElementById("composerReviewersLabel");
     if (caption) write(caption, "text", words);
     // The bar's marks, the same nodes: they are drawn there in every mode.

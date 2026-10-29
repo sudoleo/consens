@@ -16,6 +16,8 @@
   flex-direction: column;
   background: var(--side);
   color: var(--ink);
+  /* Its head wraps by its own width, not the window's (G1). */
+  container: workspace-view / inline-size;
 }
 
 @media (min-width: 1100px) {
@@ -65,6 +67,26 @@
 
   body.agent-sidebar-open.workspace-view-docked .view-switch {
     left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--workspace-width) / 2 - 173px);
+  }
+
+  /* No room for MIN_WIDTH beside the activity (workspace-view.js covers,
+     G1): the panel lies over it, and the chat's lane is the one without it. */
+  body.workspace-view-covers.workspace-view-docked .workspace-view {
+    z-index: 121;
+  }
+
+  body.single-agent-active.agent-sidebar-open.workspace-view-covers:not(.answer-reader-docked) .container {
+    --agent-chat-width: min(var(--app-container-width),
+      calc(100vw - var(--app-sidebar-offset) - var(--workspace-width) - 48px));
+    margin-left: calc((var(--app-sidebar-offset) + 100% - var(--agent-chat-width)) / 2);
+  }
+
+  body.agent-sidebar-open.workspace-view-covers .auth-top-actions {
+    right: calc(var(--workspace-width) + 16px);
+  }
+
+  body.agent-sidebar-open.workspace-view-covers .view-switch {
+    left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--workspace-width) / 2);
   }
 }
 
@@ -120,7 +142,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-resizer:focus-visible {
   outline: var(--focus-ring);
   outline-offset: -3px;
-  border-radius: 6px;
+  border-radius: var(--radius-2xs);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -136,13 +158,14 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px 8px 18px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
 }
 
+/* As loud as the Agent activity's title beside it. */
 .workspace-view-title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* Browser | Terminal: a quiet segmented switch, the open tab raised. */
@@ -156,14 +179,15 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 .workspace-view-tab {
-  padding: 4px 12px;
+  position: relative;
+  padding: var(--space-1) var(--space-3);
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--ink-3);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
 
@@ -186,7 +210,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-status {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--font-size-ui);
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -195,53 +219,42 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 
 .workspace-view-toggle,
 .workspace-view-paste {
+  position: relative;
   flex: none;
-  padding: 6px 14px;
+  padding: 6px var(--space-3);
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--raise);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-
-.workspace-view-close {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--ink-3);
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .workspace-view-close:hover,
   .workspace-view-toggle:hover,
   .workspace-view-paste:hover {
     background: var(--hover, var(--raise));
   }
 }
 
-.workspace-view-close svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
+/* 44px to the finger, the drawing stays (G3; the close cross is the app's
+   .close-button, which brings its own). */
+@media (pointer: coarse) {
+  .workspace-view-tab::after,
+  .workspace-view-toggle::after,
+  .workspace-view-paste::after {
+    content: "";
+    position: absolute;
+    inset: var(--hit-slop);
+  }
 }
 
 .workspace-view-hint {
   margin: 0;
-  padding: 0 18px 10px;
-  font-size: 12px;
+  padding: 0 var(--space-4) var(--space-3);
+  font-size: var(--font-size-xs);
   color: var(--ink-3);
 }
 
@@ -256,8 +269,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 10px;
-  margin: 0 14px 12px 18px;
+  column-gap: var(--space-3);
+  margin: 0 var(--space-3) var(--space-3) var(--space-4);
 }
 
 .workspace-view-turn[hidden] {
@@ -274,7 +287,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
     from { opacity: 0; transform: translateY(-3px); }
   }
 
-  .workspace-view.is-user .workspace-view-screen::after {
+  .workspace-view.is-user .workspace-view-screen:not(.workspace-view-terminal)::after {
     animation: workspace-edge-in var(--dur-state) var(--ease-out) both;
   }
 
@@ -313,15 +326,15 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 .workspace-view-turn-says {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
   line-height: 18px;
   color: var(--ink);
   text-wrap: balance;
 }
 
 .workspace-view-turn-note {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   line-height: 16px;
   color: var(--ink-3);
   overflow-wrap: anywhere;
@@ -332,12 +345,9 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   display: none;
 }
 
-.workspace-view-turn-button {
-  min-height: 32px;
-  padding: 0 14px;
-}
-
-.workspace-view.is-user .workspace-view-screen::after {
+/* The edge says "you steer this": the browser's picture only, never the
+   terminal (G4). */
+.workspace-view.is-user .workspace-view-screen:not(.workspace-view-terminal)::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -352,7 +362,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
     background: CanvasText;
   }
 
-  .workspace-view.is-user .workspace-view-screen::after {
+  .workspace-view.is-user .workspace-view-screen:not(.workspace-view-terminal)::after {
     box-shadow: inset 0 0 0 2px Highlight;
   }
 }
@@ -361,7 +371,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   position: relative;
   flex: 1;
   min-height: 0;
-  margin: 0 10px 10px;
+  margin: 0 var(--space-3) var(--space-3);
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--raise);
@@ -416,7 +426,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-skeleton-line {
   display: block;
   height: 10px;
-  border-radius: var(--radius-2xs, 3px);
+  border-radius: var(--radius-2xs);
   background: var(--line);
 }
 
@@ -461,14 +471,14 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   bottom: 18px;
   z-index: 3;
   transform: translateX(-50%);
-  padding: 7px 16px;
+  padding: var(--space-2) var(--space-4);
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--ink);
   color: var(--ground);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-size-ui);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
 
@@ -504,18 +514,21 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   opacity: 0;
   resize: none;
   pointer-events: none;
-  font-size: 16px;
+  font-size: var(--font-size-base);
 }
 
 @media (max-width: 760px) {
   .workspace-view-hint {
     display: none;
   }
+}
 
-  /* Narrow: the switch keeps its room, the status line gives way. */
+/* Narrow, also docked beside the chat: the switch keeps its room, the
+   status line gives way (by the panel's width since G1). */
+@container workspace-view (max-width: 760px) {
   .workspace-view-head {
     flex-wrap: wrap;
-    row-gap: 6px;
+    row-gap: var(--space-2);
   }
 
   .workspace-view-status {
