@@ -5105,7 +5105,10 @@ Dann Polling bis zum Turn-Ende: Netzfehler nur mit Backoff (bis 10 s),
 solange der Stream lebt (20 s). `known:false` fragt `recover_only`:
 gespeicherter Turn beendet, `running` (z. B. alter Server im Deploy) prüft nach
 5 s, dann doppelt so lange bis 60 s; erst dreimal nichts über mindestens 20 s
-(ein Turn kann noch in Vorbereitung sein) oder 30 min Folgen geben auf, mit
+(ein Turn kann noch in Vorbereitung sein) oder 40 min ohne neues Frame und
+ohne Stream-Byte (`MAX_FOLLOW_MS`; seit 2026-10-29 erst nach einem leeren
+Poll geprüft und nie, solange eine Pause auf den Nutzer wartet, Option
+`paused`; vorher ab Beginn des Folgens gezählt, A-B1) geben auf, mit
 dem ursprünglichen Fehler. `app_stream_resumed` zählt nur einen wirklich
 toten Stream (Fehler, 45 s oder 20 s Stille). Alle Frames laufen durch
 `deliver(type, data, seq)`; `App.agentLive.sequence()` verwirft schon

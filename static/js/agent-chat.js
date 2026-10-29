@@ -2357,6 +2357,9 @@
     const live = App.agentLive?.watch({
       chatId: body.chat_id, requestId: body.client_request_id, headers: authHeaders, signal, deliver,
       cursor: () => seen?.last || 0, recover,
+      // A pause sends nothing while it waits for the user (up to 30 min):
+      // following never gives up on it (agent-live.js MAX_FOLLOW_MS).
+      paused: () => Boolean(context.metadata.hold),
       onEngage: () => App.trackAppEvent?.("app_stream_buffered"),
       onState: ({ reconnecting, offline }) => {
         if (!registry.isAuthCurrent(context)) return;
