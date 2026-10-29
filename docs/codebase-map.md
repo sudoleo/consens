@@ -1064,7 +1064,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     die Prüfung heißt „Answer check“ (laufend „Checking the answer…“, fertig
     „Checked“, teilweise „Partly checked“, sonst „Answer check pending|failed|
     stopped|off“, „Not checked“), ein Lauf „Working“/„Failed“/„Stopped“
-    (auch Tab-Titel, Chatzeile, Stepper „Answer check“), Verbrauch heißt
+    (auch Tab-Titel, Chatzeile, Stepper „Answer check“), ein Lauf, der auf
+    den Nutzer wartet, „Paused“ (`paused`) bzw. „Waiting for you“
+    (`yourTurn`, Tab-Titel und Chatzeile, seit 2026-10-29), Verbrauch heißt
     „allowance“.
 - **`app-core.js`** — MUSS zuerst laden. Definiert `window.App`-Bus, `modelPrefs`
   (zentrales Mapping Provider→DOM-IDs), `modelAcceptsAttachments(pref, modelId)`
