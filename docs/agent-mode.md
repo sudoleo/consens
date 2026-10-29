@@ -1174,8 +1174,14 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   erneuert alle 30 s), „Zurückgeben“ oder Schließen setzt `agent` und notiert
   `returned_at` (seit 2026-10-29: eine wartende Antwort sieht die Rückgabe auch
   zwischen zwei Blicken, `agent_workspace.control_state`). Ein geschlossener
-  Tab lässt die Übernahme einfach ablaufen. Die Prüfer folgen dem Agenten,
-  nicht dem Nutzer.
+  Tab lässt die Übernahme einfach ablaufen. Kommt die Seite wieder nach vorn
+  (Handy aus der 2FA-App zurück, dort lief kein Intervall), frischt
+  `workspace-view.js` die Übernahme sofort auf und startet das Intervall neu;
+  nach einem Reload dieses Tabs öffnet sich die Ansicht wieder in der Hand des
+  Nutzers (`sessionStorage["workspace_view_holder"]`, höchstens 30 min alt,
+  nur für dasselbe Konto, Schließen oder „Hand back“ löscht es; seit
+  2026-10-29, A-S6, der Server-Teil „Ablauf ist keine Rückgabe“ in Strang 1).
+  Die Prüfer folgen dem Agenten, nicht dem Nutzer.
 - **Wer dran ist, steht über dem Bild** (seit 2026-10-29, Max hatte am Vortag
   auf den Agenten gewartet, während der auf ihn wartete; nur ein kleiner
   Umschalter im Kopf sagte, dass er den Browser noch hatte). Die Leiste

@@ -67,7 +67,7 @@ class FakeFit {
   fit() { if (this.size) Object.assign(this.term, this.size); }
 }
 
-function setup({ clipboard } = {}) {
+function setup({ clipboard, prepare } = {}) {
   FakeSocket.last = null;
   FakeRFB.made = [];
   FakeTerminal.made = [];
@@ -82,6 +82,7 @@ function setup({ clipboard } = {}) {
       window.App = { t: (text, values) => text.replace(/\{(\w+)\}/g, (_, key) => values?.[key] ?? "") };
       window.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) }));
       if (clipboard) Object.defineProperty(window.navigator, "clipboard", { value: clipboard, configurable: true });
+      prepare?.(window);
     },
   });
   const { window } = app;
@@ -315,6 +316,64 @@ describe("the workspace view", () => {
     await env.workspace.handBack();
     expect(controls(env.window)).toEqual(["agent"]);
     expect(holders).toEqual(["agent"]);
+  });
+
+  // A-S6 (docs/agent-audit-readiness-2026-10-29.md): a phone in the 2FA app
+  // ran no interval, the takeover lapsed after 90 s and the agent went on
+  // mid-login. Back in front, the page refreshes it at once.
+  it("refreshes the takeover the moment the page is in front again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      env.document.querySelector(".workspace-view-cover").click();
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
+      await vi.advanceTimersByTimeAsync(20_000);
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user", "user"]));
+      // The interval starts over from there: the next refresh 30 s later, not 10 s.
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(controls(env.window)).toEqual(["user", "user"]);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user", "user", "user"]));
+      // Watching only: nothing to refresh.
+      env.document.querySelector(".workspace-view-turn-button").click();
+      await vi.waitFor(() => expect(controls(env.window).at(-1)).toBe("agent"));
+      const count = controls(env.window).length;
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controls(env.window)).toHaveLength(count);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens the view again in the user's hands after a reload, never for an old or foreign takeover", async () => {
+    const env = setup({ prepare: window => window.sessionStorage.setItem("workspace_view_holder",
+      JSON.stringify({ uid: "u1", at: Date.now() - 60_000 })) });
+    // Nothing before the account is known (auth-session-state.js says so).
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(FakeSocket.last).toBeNull();
+    env.window.dispatchEvent(new env.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u1" } }));
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    const socket = FakeSocket.last;
+    await socket.onopen();
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
+    expect(env.workspace.holder()).toBe("user");
+    // Closed: the next reload leaves it closed.
+    env.document.querySelector(".workspace-view-close").click();
+    expect(env.window.sessionStorage.getItem("workspace_view_holder")).toBe(null);
+    for (const saved of [{ uid: "u1", at: Date.now() - 31 * 60_000 }, { uid: "someone-else", at: Date.now() }]) {
+      FakeSocket.last = null;
+      const other = setup({ prepare: window => window.sessionStorage.setItem("workspace_view_holder", JSON.stringify(saved)) });
+      other.window.dispatchEvent(new other.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u1" } }));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(FakeSocket.last).toBeNull();
+      expect(other.workspace.isOpen()).toBe(false);
+      expect(other.window.sessionStorage.getItem("workspace_view_holder")).toBe(null);
+    }
   });
 
   it("gives the browser back when it closes while the user has it", async () => {
