@@ -490,7 +490,9 @@ ist der Stop-Knopf. Text im Feld ist während der Pause die Steer-Entscheidung
 (außer bei einer offenen Key-Karte, siehe „Ein Key vom Nutzer“).
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
 mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
-`state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
+`state` = `waiting` → Entscheidung, `timeout` oder `ended`; in der
+Live-Aktivität seit 2026-10-29 mit eigenem Platz für 20 Pausen neben den 63
+übrigen Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
 (`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2): Tab-Titel und

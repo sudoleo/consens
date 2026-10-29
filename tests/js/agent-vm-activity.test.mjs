@@ -203,6 +203,35 @@ describe("VM calls in the activity", () => {
     expect(saved.textContent).toBe("Done");
   });
 
+  // A-B7 (docs/agent-audit-readiness-2026-10-29.md): the 63 entries beside
+  // the steps counted the pauses too, so a long run's status and reasoning
+  // pushed earlier pauses out of the live activity.
+  it("keeps the earlier pauses of a long run in the live activity", () => {
+    const { host, activity } = setup();
+    const events = [];
+    for (let index = 1; index <= 3; index += 1) {
+      activity.receive(events, { version: 1, kind: "hold", step_id: "hold", id: `hold-${index}`, reviewer: "Claude Sonnet 5.5",
+        halt: "safety", reason: `Grund ${index}`, entry: index, state: "continue" });
+    }
+    for (let index = 0; index < 120; index += 1) {
+      activity.receive(events, { version: 1, kind: index % 2 ? "status" : "reasoning", id: `aux-${index}`, text: `Line ${index}` });
+    }
+    expect(events.filter(item => item.kind === "hold").map(item => item.id)).toEqual(["hold-1", "hold-2", "hold-3"]);
+    // The other entries keep their window as before.
+    expect(events.filter(item => !["hold", "tool", "progress"].includes(item.kind))).toHaveLength(64);
+    activity.render(host, { running: true, status: "running", events });
+    expect([...host.querySelectorAll(".agent-activity-content .agent-hold-step .agent-hold-step-reason")]
+      .map(node => node.textContent)).toEqual(["Grund 1", "Grund 2", "Grund 3"]);
+    // Pauses have a window of their own: the oldest go only beyond it.
+    for (let index = 4; index <= 30; index += 1) {
+      activity.receive(events, { version: 1, kind: "hold", step_id: "hold", id: `hold-${index}`, reviewer: "Qwen",
+        halt: "harm", reason: `Grund ${index}`, entry: index, state: "continue" });
+    }
+    const holds = events.filter(item => item.kind === "hold");
+    expect(holds).toHaveLength(21);
+    expect(holds.at(-1).id).toBe("hold-30");
+  });
+
   // A reviewer's halt (agent_audit.py, 2026-10-26): who paused, why, and the
   // user's decision, live and in the saved timeline.
   it("shows a reviewer's pause with its reason, then the user's decision", () => {

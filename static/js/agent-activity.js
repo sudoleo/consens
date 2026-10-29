@@ -402,6 +402,10 @@
     }, wait + 20);
   }
 
+  // Room in a live run's activity besides its steps: status and reasoning
+  // entries, and apart from them the pauses (as many as a turn saves in
+  // agent_holds, A-M5).
+  const AUXILIARY_ENTRIES = 63, HOLD_ENTRIES = 20;
   function receive(events, event) {
     if (event?.version !== 1 || !["status", "progress", "reasoning", "usage", "tool", "hold"].includes(event.kind) || typeof event.id !== "string") return;
     const existing = events.find(item => item.id === event.id);
@@ -412,9 +416,14 @@
       if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
     } else {
       // Keep commentary and confirmed steps together for the full timeline.
+      // Pauses have room of their own (A-B7): in a long run the many status
+      // and reasoning entries pushed earlier pauses out of the live activity.
+      const own = event.kind === 'hold' ? item => item.kind === 'hold'
+        : item => !['progress', 'tool', 'hold'].includes(item.kind);
       if (!['progress', 'tool'].includes(event.kind)) {
-        const auxiliary = events.filter(item => !['progress', 'tool'].includes(item.kind));
-        for (const item of auxiliary.slice(0, Math.max(0, auxiliary.length - 63))) events.splice(events.indexOf(item), 1);
+        const limit = event.kind === 'hold' ? HOLD_ENTRIES : AUXILIARY_ENTRIES;
+        const auxiliary = events.filter(own);
+        for (const item of auxiliary.slice(0, Math.max(0, auxiliary.length - limit))) events.splice(events.indexOf(item), 1);
       }
       // A progress note keeps the agent's whole text beside a tool call
       // (agent_answer_mode.NOTE_CHARS); status lines are short anyway.
