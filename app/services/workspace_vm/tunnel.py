@@ -1,37 +1,55 @@
-"""consens.io browser VM: localhost in the shared browser reaches the
-agent's workbench (agent_tunnel.py, since 2026-10-29).
+"""consens.io: localhost in the shared browser reaches the agent's
+workbench (agent_tunnel.py, since 2026-10-29). Runs on both VMs.
 
 The browser has a VM of its own so that nothing of the agent runs next to
 its sign-ins (security audit 2026-10-27, finding 2). A page the agent serves
 on its workbench (a dev server, an app it builds for the user) still belongs
-in the browser the user sees: http://localhost:3000 here is port 3000 there.
-The way goes one direction only. This program listens on 127.0.0.1 and ::1
-of the browser VM for the ports the server names and hands every connection
-Chrome opens to the server, which carries it to that port of the workbench
-over the provider's proxy API. Nothing on the workbench ever reaches this VM.
+in the browser the user sees: http://localhost:3000 there is port 3000 of
+the workbench. The way goes one direction only:
 
-The server runs this over the provider's exec API like relay.py, and both
-talk in frames on stdin and stdout: kind (1 byte), connection (4 bytes),
-length (4 bytes), payload.
-  server -> here: L (conn 0, payload the port, 2 bytes): listen on it, the
-     answer is L with the port and 1 (listening) or 0 (taken, or refused);
-     D: bytes for that connection; C: close it (after what waits for it).
-  here -> server: O (payload the port): Chrome opened a connection; D, C.
-  both ways: A (payload 4 bytes): that many bytes of the connection were
-     taken (written to Chrome, or sent on to the workbench). Neither side
-     sends more than WINDOW bytes of a connection ahead of its A frames, so
-     a connection whose reader stops holds only its own bytes, never the
+  listen (browser VM, as the provider's user): listens on 127.0.0.1 and ::1
+     for the ports the server names and hands every connection Chrome opens
+     to the server;
+  connect (workbench, as the agent's user through agent-run, installed
+     where that user reads it by setup.sh): opens each such connection to
+     that port of its own localhost, 127.0.0.1 or else ::1, and tells the
+     server which ports the agent's servers listen on.
+
+The server carries frames between the two (agent_tunnel.Tunnel): nothing on
+the workbench reaches the browser VM, and the server opens connections only
+for the browser's side. Until the first live probe (2026-10-29) the
+workbench's side was the provider's proxy API: it never passed on that a
+server closed a connection, reached no server on ::1 alone, and took
+220 ms for each new connection.
+
+The server runs this over the provider's exec API, and both talk in frames
+on stdin and stdout: kind (1 byte), connection (4 bytes), length (4 bytes),
+payload.
+  L (listen; conn 0, payload the port, 2 bytes): listen on it; the answer is
+     L with the port and 1 (listening) or 0 (taken, or refused).
+  O (payload the port): a connection; from listen when Chrome opened one,
+     to connect to open it.
+  F (connect): the connection could not be opened (nothing listens there).
+  Q (connect; conn 0): which ports the agent's user listens on; the answer
+     is Q with them, 2 bytes each (/proc/net/tcp and tcp6, LISTEN, its uid).
+  D: bytes of the connection; C: it closed (the other side finishes what
+     waits for it, sends its FIN, and closes once its peer closes too).
+  H (conn 0, payload the mode): sent once at the start, when it runs.
+  A (payload 4 bytes): that many bytes of the connection were taken (sent
+     on to Chrome or to the server). Neither side sends more than WINDOW
+     bytes of a connection ahead of its A frames, so a connection whose
+     reader stops (a paused video) holds only its own bytes, never the
      others'.
-A port this VM already uses itself (Chrome's debugging port, a service of
-the provider) is taken, never listened on: the browser opens localhost only
-where this program holds the port (agent_browser.check_url). It ends with
-stdin (the server closed the tunnel).
+A port the browser VM already uses itself (Chrome's debugging port, a
+service of the provider) is taken, never listened on: the browser opens
+localhost only where this program holds the port (agent_browser.check_url).
+It ends with stdin (the server closed the tunnel).
 
-One tunnel per browser VM: at its start it ends any other one still
-running (end_others). During a deploy the old server's tunnel held the
-ports, and the new server's found them taken. At most MAX_CONNECTIONS of
-Chrome's connections at once; one more is closed at once, so a page that
-opens connections in a loop never piles up threads on the server.
+One tunnel per VM and mode: at its start it ends any other one (end_others;
+during a deploy the old server's tunnel held the ports). At most
+MAX_CONNECTIONS connections at once. Nothing here ever blocks: sockets and
+stdout are written as far as they take, the rest waits in buffers that the
+credit keeps small.
 
 Standard library only, so it runs before setup.sh installed anything.
 """
@@ -56,12 +74,17 @@ MAX_CONNECTIONS = 64
 WINDOW = 512 * 1024
 MAX_FRAME = CHUNK + 64
 END_SECONDS = 3
+CONNECT_SECONDS = 3
+MODES = ("listen", "connect")
 
 
-def end_others(proc="/proc", me=None, kill=os.kill, wait=time.sleep):
-    """Ends the other tunnels of this VM: processes that run this file (its
-    path is one of their arguments, never inside a shell's command line),
-    SIGTERM first, SIGKILL after END_SECONDS."""
+def end_others(mode, proc="/proc", me=None, kill=os.kill, wait=time.sleep):
+    """Ends the other tunnels of this VM in ``mode``: Python processes that
+    run this file with it (python3 <this file> <mode>), SIGTERM first,
+    SIGKILL after END_SECONDS. Never the programs that started this one:
+    ``timeout python3 tunnel.py connect`` (agent-run) has the same
+    arguments after its own, and the first live probe's connector ended
+    its own timeout, and with it itself (2026-10-29)."""
     me = os.getpid() if me is None else me
     path = os.fsencode(os.path.abspath(__file__))
     try:
@@ -77,7 +100,8 @@ def end_others(proc="/proc", me=None, kill=os.kill, wait=time.sleep):
                 argv = handle.read().split(b"\0")
         except OSError:
             continue
-        if path in argv:
+        if (len(argv) >= 3 and os.path.basename(argv[0]).startswith(b"python") and argv[1] == path
+                and argv[2] == mode.encode()):
             others.append(int(name))
     for pid in others:
         try:
@@ -97,14 +121,49 @@ def end_others(proc="/proc", me=None, kill=os.kill, wait=time.sleep):
     return others
 
 
+def listening_ports(text, uid):
+    """The ports ``uid`` listens on, from /proc/net/tcp and tcp6 (state 0A),
+    that the tunnel takes; never another user's (the provider's services)."""
+    ports = set()
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 8 or parts[3] != "0A" or ":" not in parts[1]:
+            continue
+        try:
+            port, owner = int(parts[1].rsplit(":", 1)[1], 16), int(parts[7])
+        except ValueError:
+            continue
+        if owner == uid and port >= LOWEST_PORT and port not in RESERVED:
+            ports.add(port)
+    return sorted(ports)
+
+
+def own_ports():
+    text = ""
+    for name in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            with open(name, encoding="ascii", errors="replace") as handle:
+                text += handle.read()
+        except OSError:
+            pass
+    return listening_ports(text, os.getuid())
+
+
+def local_addresses(port):
+    """Where connect opens ``port``: 127.0.0.1, else ::1 (a dev server on
+    "localhost" may listen on either)."""
+    return [(socket.AF_INET, ("127.0.0.1", port)), (socket.AF_INET6, ("::1", port))]
+
+
 def frame(kind, conn, payload=b""):
     return HEADER.pack(kind, conn, len(payload)) + payload
 
 
 class _Client:
-    """One of Chrome's connections: ``out`` waits to be written to it,
-    ``unacked`` bytes of it the server has not taken yet; ``finishing`` once
-    the server closed it (FIN after ``out``), ``shut`` once the FIN went."""
+    """One connection, to Chrome or to the agent's server: ``out`` waits to
+    be written to it, ``unacked`` bytes of it the other side has not taken
+    yet; ``finishing`` once the other side closed it (FIN after ``out``),
+    ``shut`` once the FIN went."""
 
     def __init__(self, sock, port):
         self.sock = sock
@@ -120,15 +179,19 @@ class Tunnel:
     """``source`` is what the server's frames arrive on (stdin) and ``sink``
     where this program's go (stdout), read with ``read`` and written with
     ``write`` (a socket for both in the tests, where Windows selects sockets
-    only). Nothing here ever blocks: Chrome's sockets and the sink are
-    written as far as they take, the rest waits in buffers, and each
-    connection's credit (WINDOW) keeps those buffers small. A page that
-    stops reading (a paused video) stops only its own connection."""
+    only). ``addresses`` and ``ports`` are connect's way to a port and its
+    answer to Q (the tests give their own)."""
 
-    def __init__(self, source, read, write, sink=None, hosts=("127.0.0.1", "::1")):
+    def __init__(self, source, read, write, sink=None, hosts=("127.0.0.1", "::1"), mode="listen",
+                 addresses=local_addresses, ports=own_ports):
+        if mode not in MODES:
+            raise ValueError(mode)
+        self.mode = mode
         self.read = read
         self.write = write
         self.hosts = hosts
+        self.addresses = addresses
+        self.ports = ports
         self.source = source
         self.sink = source if sink is None else sink
         self.selector = selectors.DefaultSelector()
@@ -197,16 +260,22 @@ class Tunnel:
         return True
 
     def handle(self, kind, conn, payload):
-        if kind == b"L" and len(payload) == 2:
+        if self.mode == "listen" and kind == b"L" and len(payload) == 2:
             port = struct.unpack(">H", payload)[0]
             self.send(b"L", 0, payload + (b"\x01" if self.listen(port) else b"\x00"))
+            return
+        if self.mode == "connect" and kind == b"Q":
+            self.send(b"Q", 0, b"".join(struct.pack(">H", port) for port in self.ports()[:64]))
+            return
+        if self.mode == "connect" and kind == b"O" and len(payload) == 2:
+            self.open(conn, struct.unpack(">H", payload)[0])
             return
         client = self.conns.get(conn)
         if client is None:
             return
         if kind == b"D":
             if len(client.out) + len(payload) > WINDOW + CHUNK:
-                # More than its credit: the server is wrong, the connection goes.
+                # More than its credit: the other side is wrong, the connection goes.
                 self.close(conn, tell=True)
                 return
             client.out += payload
@@ -218,7 +287,7 @@ class Tunnel:
             client.finishing = True
             self._write(conn)
 
-    # --- Chrome's side ----------------------------------------------------------
+    # --- Chrome's side (listen) ---------------------------------------------------
 
     def listen(self, port):
         """Listens on ``port`` of loopback, IPv4 and IPv6 where the VM has
@@ -273,21 +342,49 @@ class Tunnel:
         if len(self.conns) >= MAX_CONNECTIONS:
             sock.close()
             return
+        conn = self.next_conn
+        self.next_conn += 1
+        self._adopt(conn, sock, port)
+        self.send(b"O", conn, struct.pack(">H", port))
+
+    # --- The agent's server's side (connect) --------------------------------------
+
+    def open(self, conn, port):
+        """Opens ``port`` of this VM's localhost for connection ``conn``, or
+        says F: a connect to loopback answers at once, refused or taken."""
+        if conn in self.conns or len(self.conns) >= MAX_CONNECTIONS or port < LOWEST_PORT or port in RESERVED:
+            self.send(b"F", conn)
+            return
+        for family, address in self.addresses(port):
+            try:
+                sock = socket.socket(family, socket.SOCK_STREAM)
+            except OSError:
+                continue
+            sock.settimeout(CONNECT_SECONDS)
+            try:
+                sock.connect(address)
+            except OSError:
+                sock.close()
+                continue
+            self._adopt(conn, sock, port)
+            return
+        self.send(b"F", conn)
+
+    # --- Both -------------------------------------------------------------------
+
+    def _adopt(self, conn, sock, port):
         sock.setblocking(False)
         try:
             # Small writes (a request line, a key press over a WebSocket) go at once.
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         except OSError:
             pass
-        conn = self.next_conn
-        self.next_conn += 1
         self.conns[conn] = _Client(sock, port)
         self._interest(conn)
-        self.send(b"O", conn, struct.pack(">H", port))
 
     def _interest(self, conn):
         """Read while the connection has credit (and after the FIN, to see
-        Chrome close it), write while something waits for it."""
+        its peer close it), write while something waits for it."""
         client = self.conns.get(conn)
         if client is None:
             return
@@ -341,7 +438,7 @@ class Tunnel:
             del client.out[:sent]
             written += sent
         if written:
-            # Taken by Chrome: the server may send that much more.
+            # Taken: the other side may send that much more.
             self.send(b"A", conn, struct.pack(">I", written))
         if client.finishing and not client.out and not client.shut:
             try:
@@ -366,6 +463,7 @@ class Tunnel:
             self.send(b"C", conn)
 
     def run(self):
+        self.send(b"H", 0, self.mode.encode())
         try:
             self.serve()
         finally:
@@ -400,9 +498,13 @@ class Tunnel:
 
 
 if __name__ == "__main__":
-    end_others()
+    MODE = sys.argv[1] if len(sys.argv) > 1 else ""
+    if MODE not in MODES:
+        sys.exit("usage: tunnel.py listen|connect")
+    end_others(MODE)
     os.set_blocking(1, False)
     try:
-        Tunnel(sys.stdin, lambda size: os.read(0, size), lambda data: os.write(1, data), sink=sys.stdout).run()
+        Tunnel(sys.stdin, lambda size: os.read(0, size), lambda data: os.write(1, data), sink=sys.stdout,
+               mode=MODE).run()
     except (BrokenPipeError, KeyboardInterrupt):
         pass

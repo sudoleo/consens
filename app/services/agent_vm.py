@@ -111,10 +111,6 @@ class VMUnavailable(Exception):
     for logs only; the agent and the user get agent_vm_tools' own words."""
 
 
-class PortClosed(VMUnavailable):
-    """The provider reached the VM, but nothing answers on the port (open_port)."""
-
-
 class VMFileMissing(FileNotFoundError):
     """No file at the path the agent named."""
 
@@ -241,15 +237,10 @@ class VMBackend:
         raise NotImplementedError
 
     def open_stream(self, name, argv, *, cwd):
-        """A command that keeps running with its stdin open (the browser VM's
-        tunnel.py, agent_tunnel): an object with ``send(bytes)`` for stdin,
+        """A command that keeps running with its stdin open (tunnel.py on
+        both VMs, agent_tunnel): an object with ``send(bytes)`` for stdin,
         ``recv(timeout)`` for stdout's next bytes (b"" when nothing came, None
         once it ended) and ``close()``."""
-        raise NotImplementedError
-
-    def open_port(self, name, port):
-        """A connection to ``port`` on the VM's localhost (the provider's
-        proxy, agent_tunnel), with the same ``send``/``recv``/``close``."""
         raise NotImplementedError
 
     def read_file(self, name, path, *, limit, agent=True):
@@ -693,30 +684,6 @@ class SpritesBackend(VMBackend):
     def open_stream(self, name, argv, *, cwd):
         return _ExecStream(self._connect_exec(self.exec_url(name, argv, cwd=cwd, stdin=True)))
 
-    def open_port(self, name, port):
-        """The proxy WebSocket (Sprites' own SDKs, proxy.go): a JSON line
-        names the port, the answer says connected, then binary frames carry
-        the connection's bytes both ways."""
-        from websockets.exceptions import ConnectionClosed
-        ws = self._connect_exec("wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/proxy",
-                                operation="proxy")
-        answered = False
-        try:
-            ws.send(json.dumps({"host": "localhost", "port": int(port)}))
-            reply = ws.recv(timeout=WS_OPEN_SECONDS)
-            answered = True
-            status = json.loads(reply).get("status") if isinstance(reply, str) else None
-        except (ConnectionClosed, OSError, TimeoutError, ValueError, AttributeError):
-            status = None
-        if status != "connected":
-            try:
-                ws.close()
-            except Exception:
-                pass
-            # An answer that is not "connected": the VM is there, the port is not.
-            raise (PortClosed if answered else VMUnavailable)("proxy: port not reached")
-        return _PortStream(ws)
-
     def _kill(self, name, session):
         try:
             with self._http.stream("POST", f"{self._sprite(name)}/exec/{quote(session, safe='')}/kill",
@@ -782,38 +749,6 @@ def _shutdown(ws):
         ws.socket.shutdown(socket.SHUT_RDWR)
     except (AttributeError, OSError):
         pass
-
-
-class _PortStream:
-    """One connection over the proxy WebSocket (open_port): its bytes as binary frames."""
-
-    def __init__(self, ws):
-        self.ws = ws
-        self._send_lock = threading.Lock()
-
-    def send(self, data):
-        with self._send_lock:
-            self.ws.send(data)
-
-    def recv(self, timeout):
-        from websockets.exceptions import ConnectionClosed
-        try:
-            message = self.ws.recv(timeout=timeout)
-        except TimeoutError:
-            return b""
-        except ConnectionClosed:
-            return None
-        return b"" if isinstance(message, str) else bytes(message)
-
-    def close(self):
-        if self._send_lock.acquire(blocking=False):
-            self._send_lock.release()
-        else:
-            _shutdown(self.ws)
-        try:
-            self.ws.close()
-        except Exception:
-            pass
 
 
 def configured():

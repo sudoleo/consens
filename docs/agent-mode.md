@@ -1280,55 +1280,76 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   und löscht `pause.py` und `control.json`; `agent-run` tritt keiner cgroup
   mehr bei.
 - **localhost-Brücke** (seit 2026-10-29, `agent_tunnel.py`,
-  `workspace_vm/browser/tunnel.py`; Max' Tic-Tac-Toe-Läufe: Modelle bauten
-  dem Nutzer ein Spiel, starteten den Dev-Server und öffneten localhost im
+  `workspace_vm/tunnel.py`; Max' Tic-Tac-Toe-Läufe: Modelle bauten dem
+  Nutzer ein Spiel, starteten den Dev-Server und öffneten localhost im
   Browser, der ihn nicht erreichte): `http://localhost:<port>` (auch
-  `127.0.0.1`, `[::1]`; ab 1024, nie 9222) im Browser des Nutzers ist derselbe
-  Port der Werkbank, in einer Richtung. `tunnel.py` (Standardbibliothek, als
-  Nutzer des Anbieters über die Exec-API wie `relay.py`) lauscht auf
-  127.0.0.1 und ::1 der Browser-VM nur auf den Ports, die der Server nennt
-  (ist einer auf ::1 belegt, gilt er als belegt: Chromes localhost erreicht
-  beide), und reicht jede Verbindung von Chrome als Rahmen auf stdout an den
-  Server (`Art (1) | Verbindung (4) | Länge (4) | Daten`: `L` Port lauschen
-  mit Antwort, `O` geöffnet, `D` Daten, `C` geschlossen, `A` so viele Bytes
-  abgenommen; schließt der Server, erst FIN, dann zu, sonst kappte ein Reset
-  das Ende der Antwort). Flusssteuerung je Verbindung (`WINDOW` 512 KB je
-  Richtung): Keine Seite schickt mehr voraus, als die andere mit `A`
-  bestätigt hat. `tunnel.py` blockiert nie (Chromes Sockets und stdout
-  nicht blockierend, Rest in Puffern): Eine Seite, die nicht mehr liest (ein
-  pausiertes Video), hält nur ihre eigene Verbindung an, nicht den Tunnel
-  (Fund der Durchsicht vom 2026-10-29: vorher blockierte ein `sendall` die
-  ganze Schleife). Höchstens `MAX_CONNECTIONS` (64) Verbindungen. Der Server
-  öffnet für jede Verbindung die Proxy-API des Anbieters zum Port der
-  Werkbank (`agent_vm.open_port`, `wss://api.sprites.dev/v1/sprites/<name>/proxy`:
-  JSON `{"host": "localhost", "port"}`, Antwort `connected`, dann Binärrahmen;
-  wie `proxy.go` der Sprites-SDKs; `TCP_NODELAY` auf allen WebSockets des
-  Servers, damit kleine Rahmen nicht auf die Bestätigung des letzten warten).
-  Nichts auf der Werkbank erreicht die Browser-VM, der Token bleibt in den
-  Anfragen des Servers. Die Browser-VM gilt dem Server als die weniger
-  vertrauenswürdige Seite: Ein Rahmen über `MAX_FRAME` beendet den Tunnel,
-  eine Verbindung zu einem Port, den der Tunnel nicht hält, lehnt er ab, und
-  mehr als die Gutschrift kostet die Verbindung. Ein Port, den die Browser-VM
-  selbst belegt (Chromes Debug-Port, ein Dienst des Anbieters), wird nie
-  genommen: `open` lehnt ihn ab (`LOCAL_TAKEN`), und `browser.py` liest
-  localhost nur auf gehaltenen Ports. Nur eine Absage der Browser-VM heißt
-  „belegt“; kam keine Antwort (Tunnel weg, Zeit um), hört der Agent
-  `LOCAL_DOWN` und versucht es noch einmal, statt seinen Server auf einen
-  anderen Port zu legen. Antwortet auf der Werkbank nichts, sieht Chrome eine
-  502-Seite „Nothing answers on port N of the agent's workspace“ (der Anbieter
-  antwortete, aber nicht `connected`: `agent_vm.PortClosed`); scheiterte der
-  Weg selbst, „The way to port N … failed. Reload in a moment.“, damit der
-  Agent keinen gesunden Server neu startet. **Welche Ports:** der geöffnete
-  und mit ihm im Hintergrund jeder Port, auf dem der Nutzer des Agenten
-  gerade lauscht (`agent_tunnel.discover`: `cat /proc/net/tcp /proc/net/tcp6`
-  als Agent, Zustand LISTEN, uid 1500, nie Ports des Anbieters), damit eine
-  Seite auf 5173, die ihre API auf 8000 ruft, funktioniert; das Ergebnis des
-  ersten `open` sagt es dem Agenten (`LOCAL_OPENED`, einmal je Port). Die
+  `127.0.0.1`, `[::1]` und Kurzformen wie `127.1`, `canonical_host`; ab 1024,
+  nie 9222) im Browser des Nutzers ist derselbe Port der Werkbank, in einer
+  Richtung. **Aufbau:** Ein Programm, `tunnel.py`, läuft auf beiden VMs
+  (Standardbibliothek; `tool_files` nimmt es aus dem gemeinsamen Ordner, beide
+  Versionen enthalten es):
+  - `listen` auf der Browser-VM (Nutzer des Anbieters, Exec-API wie
+    `relay.py`): lauscht auf 127.0.0.1 und ::1 nur auf den Ports, die der
+    Server nennt (ist einer auf ::1 belegt, gilt er als belegt: Chromes
+    localhost erreicht beide), und reicht jede Verbindung von Chrome an den
+    Server;
+  - `connect` auf der Werkbank (als Agenten-Nutzer über `agent-run`, aus
+    `/usr/local/lib/consens/tunnel.py`, das `setup.sh` als root mit 0644
+    hinlegt, weil der Agent den Ordner des Servers nicht öffnet): öffnet jede
+    Verbindung zum selben Port seines localhost, 127.0.0.1, sonst ::1 (ein
+    Dev-Server auf „localhost“ lauscht auf einem von beiden), und nennt auf
+    Nachfrage die Ports, auf denen sein Nutzer lauscht (`/proc/net/tcp` und
+    `tcp6`, LISTEN, eigene uid).
+  Der Server (`agent_tunnel.Tunnel`) trägt nur Rahmen zwischen beiden: zwei
+  Threads je Tunnel, keiner je Verbindung, nichts gepuffert. Rahmen
+  `Art (1) | Verbindung (4) | Länge (4) | Daten`: `H` gestartet (der Server
+  wartet auf beide, sonst `VMUnavailable`), `L` Port lauschen mit Antwort, `O`
+  Verbindung (vom Browser; zur Werkbank nur für gehaltene Ports, höchstens
+  `MAX_CONNECTIONS` = 64), `F` dort nichts erreichbar (der Server schickt
+  Chrome dann eine 502-Seite „Nothing answers on port N of the agent's
+  workspace“), `Q` Ports der Agenten-Server, `D` Daten, `C` geschlossen (die
+  andere Seite schreibt, was noch wartet, schickt ihr FIN und schließt, wenn
+  auch ihr Gegenüber schließt), `A` so viele Bytes abgenommen. Flusssteuerung
+  je Verbindung (`WINDOW` 512 KB je Richtung): Keine Seite schickt mehr
+  voraus, als die andere mit `A` bestätigt hat; `tunnel.py` blockiert nie
+  (Sockets und stdout nicht blockierend, Rest in Puffern), eine Seite, die
+  nicht mehr liest (ein pausiertes Video), hält nur ihre Verbindung an.
+  **Vertrauen:** Die Browser-VM ist die Seite, der der Server am wenigsten
+  traut: Ein Rahmen über `MAX_FRAME` beendet den Tunnel, eine Verbindung zu
+  einem Port, den er nicht hält, lehnt er ab, mehr als die Gutschrift kostet
+  die Verbindung. Die Werkbank-Seite kann nur antworten (`D`, `A`, `C`, `F`,
+  `Q`): Was dort läuft, auch etwas des Agenten im selben Prozess, beantwortet
+  die localhost-Anfragen des Browsers, wie es der Server des Agenten ohnehin
+  tut, und erreicht sonst nichts der Browser-VM. Der Token bleibt in den
+  Anfragen des Servers an die Exec-API.
+  **Live geprüft (2026-10-29, zwei Test-Sprites, Max' OK):** Erst lief die
+  Werkbank-Seite über die Proxy-API von Sprites (`/v1/sprites/<name>/proxy`,
+  wie `proxy.go` der SDKs). Die Probe zeigte, dass sie nicht taugt: Sie gab
+  nie weiter, dass der Server eine Verbindung schloss (eine Antwort, die mit
+  dem Schließen endet, endete in Chrome nie; auch nach 20 s kein
+  Close-Frame), erreichte keinen Server, der nur auf ::1 lauscht, meldete
+  „nichts da“ erst nach 2 s als Close 1011, und jede neue Verbindung kostete
+  220 ms Handshake. Mit `tunnel.py` auf beiden Seiten: neue Verbindung 34 ms
+  (vorher 250), eine Seite mit 100 Modulen über 6 Verbindungen 1,3 s (direkt
+  0,7, vorher 1,8), 5 MB in 0,47 s (11 MB/s, vorher 5,8), 2 MB hoch in
+  0,24 s, die Antwort bis zum Schließen in 33 ms, ein Server nur auf ::1
+  erreicht, „nichts da“ als 502-Seite in 33 ms, Port-Suche 20 ms, Start
+  beider Seiten 0,7 s. Dieselbe Probe fand, dass `end_others` den eigenen
+  `timeout` des Connectors für einen zweiten Tunnel hielt und ihn beendete
+  (gleiche Argumente nach seinen eigenen): Es zählt nur Python-Prozesse, die
+  die Datei selbst ausführen.
+  **Welche Ports:** der geöffnete und mit ihm im Hintergrund jeder Port, auf
+  dem der Nutzer des Agenten gerade lauscht (`Tunnel.listening`, `Q`), damit
+  eine Seite auf 5173, die ihre API auf 8000 ruft, funktioniert; das Ergebnis
+  des ersten `open` sagt es dem Agenten (`LOCAL_OPENED`, einmal je Port). Die
   Ports stehen auf dem Datensatz des Kontos (`tunnel_ports`, höchstens 8,
   `agent_workspace.remember_values`) und kommen über `Claim.tunnel_ports` und
-  `record_for_view` nach einem Neustart zurück (`agent_tunnel.seed`). **Wie
-  lange:** Ein Tunnel je Konto in diesem Prozess (Render: ein uvicorn, eine
-  Instanz), gestartet vom ersten `open` auf localhost
+  `record_for_view` nach einem Neustart zurück (`agent_tunnel.seed`). Nur
+  eine Absage der Browser-VM heißt „belegt“ (`LOCAL_TAKEN`); kam keine
+  Antwort (Tunnel weg, Zeit um), hört der Agent `LOCAL_DOWN` und versucht es
+  noch einmal, statt seinen Server auf einen anderen Port zu legen.
+  **Wie lange:** Ein Tunnel je Konto in diesem Prozess (Render: ein uvicorn,
+  eine Instanz), gestartet vom ersten `open` auf localhost
   (`BrowserTools._tunnel`), beendet `IDLE_SECONDS` (10 min) nach den letzten
   Bytes, auch bei offenen Verbindungen (ein Live-Reload-Socket hielte sonst
   beide VMs wach). Die Live-Ansicht (`routers/agent_workspace._open`, mit
@@ -1338,22 +1359,23 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (`resume`); eine Aktion, die von einer localhost-Seite laden kann
   (`NETWORK_ACTIONS`), wartet darauf, damit ihr erster Klick nach einer Pause
   nicht vor verschlossener Tür steht. Ein neuer `tunnel.py` beendet einen
-  alten auf seiner VM (`end_others`: Prozesse mit seinem Pfad als eigenem
-  Argument): Beim Deploy hielt sonst der Tunnel des alten Servers die Ports.
-  Solange beide laufen, nimmt der jeweils neueste die Ports; das ist in
-  Kauf genommen. `SO_REUSEADDR` (nicht auf Windows) gibt einen Port nach dem
-  Neustart sofort wieder frei (TIME_WAIT, CI 2026-10-29). Die Löschung des
-  Kontos beendet den Tunnel (`delete_for_account`). Ein Tunnel, der nicht
-  startet, kostet diese Adresse (`LOCAL_DOWN`), nie den Browser. Der Prompt
-  und die Beschreibung des Werkzeugs `browser` sagen es als Fakt: Was der
-  Agent dem Nutzer zum Ansehen oder Benutzen baut, läuft auf seinem Server
-  (`vm_start_process`) und öffnet sich in diesem Browser; das headless Chrome
-  der Werkbank bleibt für Prüfungen, die der Nutzer nicht sehen muss.
-  `check_url` liest Kurzformen einer IPv4-Adresse wie Chrome (`127.1`,
-  `2130706433`, `0x7f.0.0.1` sind 127.0.0.1, `canonical_host`), und
-  `browser.py` liest seit 2026-10-29 auch keine `file://`-, `chrome://`- oder
-  `view-source:`-Seite (etwa nach einer Übernahme oder mit „back“); die leere
-  neue Seite, `about:` und Chromes Fehlerseiten liest es.
+  alten seines Modus auf seiner VM (`end_others`): Beim Deploy hielt sonst
+  der Tunnel des alten Servers die Ports; solange beide laufen, nimmt der
+  jeweils neueste sie, das ist in Kauf genommen. Auf einer Werkbank, deren
+  `setup.sh` die neue Version noch nicht lief (erste Nachricht nach dem
+  Deploy), fehlt `connect`, bis die Nachricht sie vorbereitet (`prepare`);
+  der Tunnel sagt dann `VMUnavailable`. `SO_REUSEADDR` (nicht auf Windows)
+  gibt einen Port nach dem Neustart sofort frei (TIME_WAIT, CI 2026-10-29),
+  `TCP_NODELAY` auf allen Sockets und WebSockets lässt kleine Rahmen sofort
+  gehen. Die Löschung des Kontos beendet den Tunnel (`delete_for_account`).
+  Ein Tunnel, der nicht startet, kostet diese Adresse (`LOCAL_DOWN`), nie den
+  Browser. Der Prompt und die Beschreibung des Werkzeugs `browser` sagen es
+  als Fakt: Was der Agent dem Nutzer zum Ansehen oder Benutzen baut, läuft
+  auf seinem Server (`vm_start_process`) und öffnet sich in diesem Browser;
+  das headless Chrome der Werkbank bleibt für Prüfungen, die der Nutzer
+  nicht sehen muss. `browser.py` liest seit 2026-10-29 auch keine `file://`-,
+  `chrome://`- oder `view-source:`-Seite (etwa nach einer Übernahme oder mit
+  „back“); die leere neue Seite, `about:` und Chromes Fehlerseiten liest es.
 - **Einfügen** (seit 2026-10-27, `workspace-view.js`): Solange der Nutzer
   übernommen hat, tippen Strg+V, Cmd+V, Umschalt+Einfg oder der Knopf
   „Paste“ den Text als Tastendrücke ein (`rfb.sendKey`), höchstens
