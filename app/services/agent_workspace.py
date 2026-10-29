@@ -7,7 +7,8 @@ steers live (routers/agent_workspace.py, workspace-view.js) and the agent
 uses through the ``browser`` tool (agent_browser.py). No code of the agent
 runs on the browser, and the workbench reaches only package registries and
 what the user allowed for the chat (agent_domains.py): security audit
-2026-10-27, Max's option A.
+2026-10-27, Max's option A. localhost in the browser is the workbench's
+(agent_tunnel.py, since 2026-10-29), one direction only.
 
 Record and lease: ``users/{uid}/chat_state/agent_workspace`` names both VMs
 before the provider creates either, so the account's deletion always finds
@@ -17,10 +18,10 @@ LEASE_SECONDS after its last VM call, so a run that died never blocks the
 workspace. The user's live view takes no lease: it is their computer.
 
 Tools in the VMs (workspace_vm/): on the workbench ``agent-run``, which every
-command and file operation of the agent goes through, its setup (the
-agent's user, the move from the layout before) and the pause; on the browser
+command and file operation of the agent goes through, and its setup (the
+agent's user, the move from the layout before); on the browser
 ``browser.py``, the one program the browser tool calls, the browser's setup
-and start, and the live view's relay. They are written again whenever their
+and start, the live view's relay and the tunnel to the workbench. They are written again whenever their
 VERSION changed (prepare, prepare_browser), at a message's first call of
 either or when the view opens.
 
@@ -32,12 +33,16 @@ the first VM result of every message (read_notes), as data; the user's memory
 (agent_memory.py) stays what the user said about themselves.
 
 Takeover: the account's record says the user has the browser until a time
-the open view keeps moving on (CONTROL_SECONDS, ``control``), and so do
-``control.json`` on the browser and on the workbench. While it holds, the
-agent pauses completely: the server holds its calls (user_has_browser,
-VMSession.wait_for_user), browser.py refuses to act, and the workbench's
-pause.py freezes whatever of the agent already runs there, by its user. The
-reviewers follow what the agent does, never what the user does.
+the open view keeps moving on (CONTROL_SECONDS, ``control``), and so does
+``control.json`` on the browser. While it holds, the agent waits: the server
+holds its calls (user_has_browser, VMSession.wait_for_user) and browser.py
+refuses to act. What already runs on the workbench goes on: from 2026-10-27
+to 2026-10-29 pause.py froze it, from the time the browser lived on the
+workbench, where the agent's processes could have watched the user type.
+On a VM of its own nothing of the workbench sees the browser, and the
+agent's server must answer it while the user tries the agent's app
+(agent_tunnel.py). The reviewers follow what the agent does, never what the
+user does.
 """
 from __future__ import annotations
 
@@ -63,7 +68,6 @@ LEASE_RENEW_SECONDS = LEASE_SECONDS - 120
 # workbench the agent's user cannot open it.
 WORKSPACE_DIR = agent_vm.TOOLS_DIR
 VERSION_PATH = WORKSPACE_DIR + "/version"
-CONTROL_PATH = WORKSPACE_DIR + "/control.json"
 BROWSER_STATE = agent_vm.SERVER_HOME + "/.consens/browser"
 BROWSER_CONTROL = BROWSER_STATE + "/control.json"
 BROWSER_PROFILE = BROWSER_STATE + "/profile"
@@ -73,6 +77,7 @@ BROWSER_UPLOADS = BROWSER_STATE + "/uploads"
 BROWSER_DOWNLOADS = BROWSER_STATE + "/downloads"
 BROWSER_HELPER = WORKSPACE_DIR + "/browser.py"
 BROWSER_RELAY = WORKSPACE_DIR + "/relay.py"
+BROWSER_TUNNEL = WORKSPACE_DIR + "/tunnel.py"
 NOTES_PATH = HOME + "/NOTES.md"
 # What of the notes comes with a message's first VM result; the rest the agent
 # reads itself.
@@ -83,18 +88,14 @@ OLD_GATEWAY_SERVICE = "view"
 # CONTROL_REFRESH_SECONDS while the user has the browser).
 CONTROL_SECONDS = 90
 CONTROL_REFRESH_SECONDS = 30
-WORKBENCH_FILES = ("agent-run", "pause.py", "setup.sh")
-BROWSER_FILES = ("browser.py", "display.sh", "relay.py", "setup.sh")
+WORKBENCH_FILES = ("agent-run", "setup.sh")
+BROWSER_FILES = ("browser.py", "display.sh", "relay.py", "setup.sh", "tunnel.py")
 SETUP_SECONDS = 180
 # setup.sh installs headless Chrome from Google's own server, which the
 # workbench's policy closes (agent_vm.WORKBENCH_RULES): prepare opens it
 # around the setup alone (_open_for_setup).
 CHROME_DOMAIN = "dl.google.com"
 CHROME_RULE = {"domain": CHROME_DOMAIN, "action": "allow"}
-# Started as root at every takeover (a second one ends at once).
-PAUSE_COMMAND = (f"sudo -n setsid nohup \"$(command -v python3)\" {WORKSPACE_DIR}/pause.py "
-                 ">/dev/null 2>&1 </dev/null &")
-PAUSE_START_SECONDS = 30
 _FILES = Path(__file__).with_name("workspace_vm")
 
 # What the agent reads when another chat has the workspace; the activity
@@ -471,29 +472,21 @@ def control_payload(holder, *, now=None):
     return json.dumps({"holder": holder, "until": until}).encode()
 
 
-def set_control(db, uid, vm, holder, cancellation):
+def set_control(db, uid, vm, holder):
     """The user takes the browser over (again at every refresh of the view)
     or hands it back. Taking over closes the server's way first (the record),
-    then the browser's (control.json there), then freezes what of the agent
-    already runs on the workbench (pause.py, by its user); handing back opens
-    them in the other order. A workbench that no chat made yet has nothing
-    to freeze. Handing back notes when (``returned_at``): a run waiting for
+    then the browser's (control.json there); handing back opens them in the
+    other order. Handing back notes when (``returned_at``): a run waiting for
     it sees a hand-back even between two of its looks (control_state)."""
     now = time.time()
     control = {"holder": holder, "until": now + CONTROL_SECONDS if holder == "user" else 0,
                **({"returned_at": now} if holder == "agent" else {})}
     payload = control_payload(holder, now=now)
-    browser, workbench = agent_vm.browser_name(uid), agent_vm.workspace_name(uid)
+    browser = agent_vm.browser_name(uid)
     if holder == "user":
         ref(db, uid).update({"control": control})
         vm.write_file(browser, BROWSER_CONTROL, payload, agent=False)
-        if vm.exists(workbench):
-            vm.write_file(workbench, CONTROL_PATH, payload, agent=False)
-            vm.exec(workbench, PAUSE_COMMAND, cwd=agent_vm.SERVER_HOME, timeout=PAUSE_START_SECONDS,
-                    on_output=_quiet, cancellation=cancellation, agent=False)
         return
-    if vm.exists(workbench):
-        vm.write_file(workbench, CONTROL_PATH, payload, agent=False)
     vm.write_file(browser, BROWSER_CONTROL, payload, agent=False)
     ref(db, uid).update({"control": control})
 

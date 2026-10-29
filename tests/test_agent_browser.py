@@ -64,7 +64,8 @@ def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, f
 
 @pytest.mark.parametrize("url", ["file:///home/sprite/.consens/browser/profile/Default/Cookies",
                                  "chrome://settings", "javascript:alert(1)", "view-source:https://example.com",
-                                 "http://localhost:9222/json", "http://127.0.0.1:5900", "http://[::1]/",
+                                 "http://localhost:9222/json", "http://127.0.0.1:80/", "http://[::1]/",
+                                 "localhost", "http://app.localhost:3000/",
                                  "http://10.0.0.8/", "http://169.254.169.254/latest", "https://consens-x.internal/",
                                  "data:text/html,hi"])
 def test_the_browser_never_opens_its_own_computer(url):
@@ -74,17 +75,30 @@ def test_the_browser_never_opens_its_own_computer(url):
         check_url(url)
 
 
-@pytest.mark.parametrize("url", ["http://localhost:8765/", "file:///tmp/t.html", "http://127.0.0.1:3000"])
-def test_a_page_of_the_workspace_names_its_headless_chrome(url):
-    """DeepSeek, 2026-10-28: it opened its dev server in the browser first.
-    The refusal says where such a page is seen: the browser reaches the web,
-    the workbench's own Chrome its dev servers and files."""
-    with pytest.raises(ValueError, match="headless Chrome"):
-        check_url(url)
+def test_localhost_with_a_port_is_the_workspaces():
+    """DeepSeek, 2026-10-28, and Max's tic-tac-toe runs, 2026-10-29: models
+    opened their dev server in the browser first, and got a refusal. Since
+    2026-10-29 localhost:<port> is that port of the workbench (agent_tunnel.py),
+    a bare one over http; a refusal names the way."""
+    assert check_url("http://localhost:8765/") == "http://localhost:8765/"
+    assert check_url("localhost:3000") == "http://localhost:3000"
+    assert check_url("127.0.0.1:5173/app") == "http://127.0.0.1:5173/app"
+    assert [agent_browser.local_port(url) for url in ("http://localhost:8765/", "http://[::1]:3000",
+                                                      "https://example.com:3000", "http://localhost")] == [
+        8765, 3000, None, None]
+    with pytest.raises(ValueError, match="name the port"):
+        check_url("http://localhost/")
+    with pytest.raises(ValueError, match="Port 9222 is the browser's own computer"):
+        check_url("http://127.0.0.1:9222/json")
+    with pytest.raises(ValueError, match="localhost:<port> is that port of your workspace"):
+        check_url("file:///tmp/t.html")
+    with pytest.raises(ValueError, match="in your workspace already"):
+        check_url("http://localhost:3000/a.pdf", local=False)
     # The prompt says it as a fact too, and the workbench's clock.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
-    assert "It reaches the web but not your workspace" in AGENT_VM_PROMPT and "clock runs on UTC" in AGENT_VM_PROMPT
-    # Clicks on its own dev servers: Playwright with the workbench's Chrome (test Sprite 2026-10-28).
+    assert "http://localhost:<port> there is that port of your workspace" in AGENT_VM_PROMPT
+    assert "clock runs on UTC" in AGENT_VM_PROMPT
+    # Checks the user need not see: Playwright with the workbench's Chrome (test Sprite 2026-10-28).
     assert 'launch(channel="chrome")' in AGENT_VM_PROMPT
 
 
@@ -224,8 +238,10 @@ def test_download_takes_a_public_address_or_the_current_page(store, fake_vm):
     call(browser, action="download", url="shop.example/invoice.pdf")
     assert fake_vm.requests[-2:] == [{"action": "download"},
                                      {"action": "download", "url": "https://shop.example/invoice.pdf"}]
-    with pytest.raises(ValueError, match="headless Chrome"):
+    with pytest.raises(ValueError, match="in your workspace already"):
         call(browser, action="download", url="http://localhost:9222/json")
+    with pytest.raises(ValueError, match="private network"):
+        call(browser, action="download", url="http://10.0.0.8/x.pdf")
 
 
 def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):
@@ -377,3 +393,40 @@ def test_a_long_runs_older_pages_shrink_and_the_work_record_names_each_step():
     assert describe("request_domain", json.dumps({"domain": "api.example.com", "reason": "x"}),
                     json.dumps({"error": "The user did not allow api.example.com"})).startswith(
         "request_domain api.example.com -> error:")
+
+
+def test_localhost_opens_through_the_tunnel_to_the_workbench(store, fake_vm, monkeypatch):
+    """Since 2026-10-29 (agent_tunnel.py): an address on localhost opens the
+    tunnel for its port first, and every request names the ports it holds,
+    the only localhost pages browser.py reads. A port the browser VM uses
+    itself is refused; a tunnel that does not start costs that address,
+    never the browser."""
+    from app.services import agent_tunnel
+    loop, browser = tools(store)
+    opened = []
+
+    def open_port(uid, port, backend_factory=None):
+        opened.append((uid, port))
+        if port == 3001:
+            return False
+        agent_tunnel._asked.setdefault(uid, set()).add(port)
+        return True
+    monkeypatch.setattr(agent_tunnel, "open_port", open_port)
+    monkeypatch.setattr(agent_tunnel, "resume", lambda uid, backend_factory=None: None)
+    monkeypatch.setattr(agent_tunnel, "_asked", {})
+    call(browser, action="read")
+    assert "local_ports" not in fake_vm.requests[-1]
+    call(browser, action="open", url="localhost:3000")
+    assert opened == [(UID, 3000)]
+    assert fake_vm.requests[-1]["url"] == "http://localhost:3000" and fake_vm.requests[-1]["local_ports"] == [3000]
+    call(browser, action="read")
+    assert fake_vm.requests[-1] == {"action": "read", "local_ports": [3000]}
+    with pytest.raises(ValueError, match="Port 3001 is the browser's own computer"):
+        call(browser, action="open", url="http://localhost:3001/")
+
+    def down(uid, port, backend_factory=None):
+        raise agent_vm.VMUnavailable("exec: HTTP 502")
+    monkeypatch.setattr(agent_tunnel, "open_port", down)
+    with pytest.raises(ValueError, match="did not open"):
+        call(browser, action="open", url="http://127.0.0.1:3002/")
+    assert not browser.off and call(browser, action="read")["action"] == "read"

@@ -99,6 +99,19 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
     assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
 
 
+def test_the_view_starts_the_tunnel_again_for_the_agents_app(view_api, monkeypatch):
+    """localhost in the view keeps reaching the agent's server after its run
+    (agent_tunnel.resume, since 2026-10-29)."""
+    client, *_ = view_api
+    resumed = []
+    monkeypatch.setattr(workspace_router.agent_tunnel, "resume",
+                        lambda uid, backend_factory=None: resumed.append((uid, backend_factory)))
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        assert [json.loads(ws.receive_text())["state"] for _ in range(3)] == ["connecting", "starting", "ready"]
+    assert resumed == [(UID, workspace_router._backend)]
+
+
 # --- The user's terminal on the workbench (since 2026-10-28) --------------------------
 
 def terminal_api(view_api, monkeypatch, frames):
@@ -259,31 +272,23 @@ def test_taking_over_and_handing_back_write_the_vms_control_files(view_api, fake
     assert taken.status_code == 200 and taken.json() == {"holder": "user", "seconds": agent_workspace.CONTROL_SECONDS}
     control = json.loads(fake_vm.vms[BROWSER]["files"][agent_workspace.BROWSER_CONTROL])
     assert control == {"holder": "user", "until": 5000.0 + agent_workspace.CONTROL_SECONDS}
-    assert json.loads(fake_vm.vms[NAME]["files"][agent_workspace.CONTROL_PATH]) == control
-    # The agent pauses completely: the server holds its calls (the record),
-    # the browser refuses (control.json there), then the workbench freezes
-    # what of the agent runs there, by its user (pause.py, as root).
+    # The agent waits: the server holds its calls (the record) and the
+    # browser refuses (control.json there). What runs on the workbench goes
+    # on (since 2026-10-29: the agent's server answers the browser,
+    # agent_tunnel.py), so the workbench is not touched.
     assert agent_workspace.record(store.db, UID)["control"] == control
     assert agent_workspace.user_has_browser(store.db, UID, now=5000.0)
     assert [call for call in fake_vm.calls if call[0] in {"write", "exec"}] == [
-        ("write", BROWSER, agent_workspace.BROWSER_CONTROL), ("write", NAME, agent_workspace.CONTROL_PATH),
-        ("exec", NAME, agent_workspace.PAUSE_COMMAND, agent_vm.SERVER_HOME, agent_workspace.PAUSE_START_SECONDS)]
-    assert fake_vm.server == [agent_workspace.PAUSE_COMMAND]
+        ("write", BROWSER, agent_workspace.BROWSER_CONTROL)]
+    assert fake_vm.server == [] and not [call for call in fake_vm.calls if NAME in call]
     assert all(path.startswith("/home/sprite/.consens/") for _, path in fake_vm.server_files)
     assert client.post("/agent/workspace/control", json={"holder": "agent"}, headers=AUTH).status_code == 200
     assert json.loads(fake_vm.vms[BROWSER]["files"][agent_workspace.BROWSER_CONTROL])["holder"] == "agent"
-    assert json.loads(fake_vm.vms[NAME]["files"][agent_workspace.CONTROL_PATH])["holder"] == "agent"
     # Handing back is noted, so a waiting run sees it between two looks too.
     assert agent_workspace.record(store.db, UID)["control"] == {"holder": "agent", "until": 0, "returned_at": 5000.0}
     assert agent_workspace.control_state(store.db, UID, now=5000.0) == (False, 5000.0)
     assert not agent_workspace.user_has_browser(store.db, UID, now=5000.0)
-    # Handing back starts nothing: pause.py sees control.json and lets go.
-    assert fake_vm.server == [agent_workspace.PAUSE_COMMAND]
-    # A workbench no chat made has nothing to freeze.
-    del fake_vm.vms[NAME]
-    fake_vm.server.clear()
-    assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 200
-    assert fake_vm.server == [] and NAME not in fake_vm.vms
+    assert fake_vm.server == [] and not [call for call in fake_vm.calls if NAME in call]
     assert client.post("/agent/workspace/control", json={"holder": "root"}, headers=AUTH).status_code == 422
     allowed.clear()
     assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 403

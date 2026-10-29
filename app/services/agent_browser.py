@@ -14,9 +14,12 @@ which), never shows a password field's value, never types into
 one, and does not act while the user has the browser.
 
 Addresses are http(s) only and never the VM itself (file://, the browser's
-debugging port, localhost): a page of the VM would show its profile. An
-upload copies one file of the workbench, read as the agent's user, to the
-browser VM for that call only. A screenshot comes to the agent as a picture
+debugging port): a page of the VM would show its profile, and since
+2026-10-29 browser.py reads no such page, also one a link or a redirect
+led to. ``http://localhost:<port>`` (1024 and up) is that port of the
+workbench since then (agent_tunnel.py): the agent's app in the browser the
+user sees. An upload copies one file of the workbench, read as the agent's
+user, to the browser VM for that call only. A screenshot comes to the agent as a picture
 (like vm_view_image), only for a chat model that takes images.
 
 The reviewers follow every action live; from 2026-10-27 to 2026-10-29 those
@@ -126,40 +129,79 @@ class BrowserArgs(BaseModel):
         "With an action that changes the page, or wait: also a picture of the page afterwards, in the same call."))
 
 
-def check_url(url):
+# localhost on the browser is the workbench's, port by port (agent_tunnel.py).
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def check_url(url, *, local=True):
     """The address to open, or ValueError: http(s) to a host name or a
-    public address, never the browser VM itself."""
+    public address, never the browser VM itself; with ``local``,
+    ``http://localhost:<port>`` too, that port of the workbench."""
     text = url.strip()
     if text == "about:blank":
         return text
     # A scheme without slashes (javascript:, data:, about:) is no address
-    # to open; a bare host (example.com, example.com:8080) gets https.
+    # to open; a bare host (example.com, example.com:8080) gets https, a
+    # bare localhost:3000 http (a dev server).
     if "://" not in text and re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:(?![0-9])", text):
         raise ValueError("open takes an http or https address.")
     if "://" not in text:
-        text = "https://" + text
+        bare = urlsplit("//" + text).hostname or ""
+        text = ("http://" if bare.lower() in LOCAL_HOSTS else "https://") + text
     parts = urlsplit(text)
     if parts.scheme == "file":
         raise ValueError(BROWSER_PRIVATE)
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         raise ValueError("open takes an http or https address.")
     host = parts.hostname.lower().rstrip(".")
+    if host in LOCAL_HOSTS:
+        if not local:
+            raise ValueError(LOCAL_DOWNLOAD)
+        from app.services.agent_tunnel import RESERVED_PORTS
+        try:
+            port = parts.port
+        except ValueError:
+            port = None
+        if port in RESERVED_PORTS:
+            raise ValueError(LOCAL_TAKEN.format(port=port))
+        if local_port(text) is None:
+            raise ValueError(LOCAL_PORT)
+        return text
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
         address = None
-    if (host == "localhost" or host.endswith((".localhost", ".internal", ".flycast"))
+    if (host.endswith((".localhost", ".internal", ".flycast"))
             or (address is not None and not address.is_global)):
         raise ValueError(BROWSER_PRIVATE)
     return text
 
 
-# The browser runs on a computer of its own and reaches the web, never the
-# workbench: the way to a page there (a dev server, a file) is said with the
-# refusal (DeepSeek's feedback 2026-10-28: it tried its dev server here first).
+def local_port(url):
+    """The workbench's port that ``url`` names (http(s)://localhost:3000,
+    127.0.0.1, [::1]), or None: not localhost, no port, or one the tunnel
+    never takes (below 1024, the browser's debugging port)."""
+    from app.services import agent_tunnel
+    parts = urlsplit(url)
+    if (parts.hostname or "").lower().rstrip(".") not in LOCAL_HOSTS:
+        return None
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    return port if agent_tunnel.allowed_port(port) else None
+
+
+# The browser runs on a computer of its own and reaches the web; the
+# workbench only as localhost (since 2026-10-29). DeepSeek's feedback
+# 2026-10-28: it tried its dev server here first, and got this refusal.
 BROWSER_PRIVATE = ("That address is the browser's own computer or a private network: the browser reaches public "
-                   "pages only. A dev server or a file of your workspace is seen there with its headless Chrome "
-                   "(google-chrome --headless=new --screenshot or --print-to-pdf).")
+                   "pages, and http://localhost:<port> is that port of your workspace (your dev server).")
+LOCAL_PORT = ("localhost in the browser is your workspace, port by port: name the port your server listens on, "
+              "1024 and up (http://localhost:3000).")
+LOCAL_TAKEN = "Port {port} is the browser's own computer. Let your server listen on another port and open that."
+LOCAL_DOWN = "The way from the browser to your workspace did not open. Try again in a moment."
+LOCAL_DOWNLOAD = "download takes a file on the web: what your workspace serves is in your workspace already."
 
 
 def required(args):
@@ -279,6 +321,29 @@ class BrowserTools:
             raise agent_vm.VMUnavailable(f"browser: exit {outcome.exit_code}")
         return answer
 
+    def _tunnel(self, port):
+        """localhost:``port`` in the browser reaches the workbench's port
+        (agent_tunnel.py), or ValueError saying why not; a tunnel that does
+        not start costs this address, never the browser."""
+        from app.services import agent_tunnel
+        try:
+            held = agent_tunnel.open_port(self.vm.loop.uid, port, backend_factory=self.vm.session._factory)
+        except agent_vm.VMUnavailable as exc:
+            logging.warning("Agent tunnel unavailable reason=%s", str(exc)[:120])
+            raise ValueError(LOCAL_DOWN) from None
+        if not held:
+            raise ValueError(LOCAL_TAKEN.format(port=port))
+
+    def _local_ports(self):
+        """The ports the account's tunnel took, for browser.py, which reads
+        localhost on those alone; a tunnel that ended (idle, the VM's sleep)
+        starts again for them meanwhile."""
+        from app.services import agent_tunnel
+        ports = agent_tunnel.asked(self.vm.loop.uid)
+        if ports:
+            agent_tunnel.resume(self.vm.loop.uid, backend_factory=self.vm.session._factory)
+        return sorted(ports)
+
     def _unavailable(self, exc):
         if not isinstance(exc, agent_vm.VMUnavailable):
             logging.warning("Agent browser failed unexpectedly category=%s", safe_exception(exc))
@@ -314,10 +379,12 @@ class BrowserTools:
             raise ValueError(BROWSER_UNAVAILABLE)
         required(args)
         request = {"action": args.action}
+        port = None
         if args.action == "open":
             request.update(url=check_url(args.url), new_tab=args.new_tab)
+            port = local_port(request["url"])
         if args.action == "download" and args.url.strip():
-            request["url"] = check_url(args.url)
+            request["url"] = check_url(args.url, local=False)
         if args.action == "screenshot" or args.screenshot_after:
             from app.services.agent_vm_tools import sees_pictures
             if not sees_pictures(self.vm.loop.model):
@@ -352,6 +419,11 @@ class BrowserTools:
                 if warming is None or not warming.ok:
                     agent_workspace.open_browser(session.backend, self.vm.loop.uid)
                 self.ready = True
+            if port is not None:
+                self._tunnel(port)
+            ports = self._local_ports()
+            if ports:
+                request["local_ports"] = ports
             if args.action == "upload":
                 path = vm_path(args.file, session.dir)
                 target, size = self._upload(path, cancellation)

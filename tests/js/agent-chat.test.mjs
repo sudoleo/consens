@@ -1865,6 +1865,70 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A key the agent needs (ask_user with secret, agent_secrets.py,
+  // 2026-10-29): pasted into the card's field, it goes to the workspace
+  // alone, by POST, and the field is no form; "Not now" declines.
+  it("takes a key in the card's own field and sends it to the workspace alone", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    window.App.workspaceView = { holder: () => "agent", open: vi.fn(), handBack: vi.fn(), agentWaits: vi.fn() };
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const base = { kind: "ask", reviewer: "", provider: "", reason: "", entry: null,
+      at: new Date().toISOString(), timeout_seconds: 1800 };
+    const sent = [];
+    let answer = { ok: false, json: async () => ({ error: "Your workspace is not reachable right now. Try again.", code: "vm_unavailable" }) };
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => {
+      if (!/\/(secret|hold)$/.test(String(url))) return catalogFetch(url, options);
+      sent.push([String(url).split("/").pop(), options.method, JSON.parse(options.body)]);
+      return answer;
+    });
+    window.App.showPopup = vi.fn();
+    handlers.hold.receive({ hold: { ...base, id: "a1b2c3d4e5f6", ask: "secret", secret: "OPENAI_API_KEY",
+      request: "Ich brauche deinen OpenAI-Key für die App." } });
+    expect(host.querySelector(".agent-ask-card.is-secret")).not.toBeNull();
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent needs a key from you");
+    const input = host.querySelector(".agent-ask-secret-input");
+    expect(input.type).toBe("password");
+    expect(input.closest("form")).toBeNull();
+    expect(input.placeholder).toBe("OPENAI_API_KEY");
+    expect(host.querySelector(".agent-ask-secret-note").textContent).toContain("~/.secrets/OPENAI_API_KEY");
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
+      ["Save", "btn agent-hold-continue"], ["Not now", "agent-hold-link agent-hold-deny"]]);
+    // Empty: nothing goes out.
+    host.querySelector(".agent-hold-continue").click();
+    expect(sent).toEqual([]);
+    // Refused by the server: the card and the typed key stay, the user hears why.
+    input.value = "sk-test-0123456789abcdef";
+    input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(window.App.showPopup).toHaveBeenCalledWith("Your workspace is not reachable right now. Try again."));
+    expect(sent).toEqual([["secret", "POST", { id: "a1b2c3d4e5f6", value: "sk-test-0123456789abcdef" }]]);
+    expect(host.querySelector(".agent-ask-secret-input").value).toBe("sk-test-0123456789abcdef");
+    expect(host.querySelector(".agent-ask-secret-input").disabled).toBe(false);
+    // Saved: the field empties and the card goes.
+    answer = { ok: true, json: async () => ({ status: "saved" }) };
+    host.querySelector(".agent-hold-continue").click();
+    await vi.waitFor(() => expect(host.hidden).toBe(true));
+    expect(input.value).toBe("");
+    expect(sent.at(-1)[0]).toBe("secret");
+    // Not now: the card's ordinary decision.
+    handlers.hold.receive({ hold: { ...base, id: "0123456789ab", ask: "secret", secret: "GITHUB_TOKEN", request: "Token?" } });
+    host.querySelector(".agent-hold-deny").click();
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual(["hold", "POST", { id: "0123456789ab", action: "deny", text: "" }]));
+    dom.window.close();
+  });
+
   // Until 2026-10-26 a run locked model and reasoning, and the Reasoning
   // button below the composer followed only now and then.
   it("takes a new reasoning level while a response runs, for the next message", async () => {

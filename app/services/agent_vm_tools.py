@@ -416,14 +416,12 @@ class VMSession:
                 raise _VMOff(VM_UNAVAILABLE) from None
 
     def wait_for_user(self, cancellation):
-        """While the user has the workspace's browser, nothing of the agent's
-        reaches the VM, so nothing sees what they type there: the call waits
-        until they hand it back, at most USER_WAIT_SECONDS and never into the
-        time the answer needs, then says so. A reviewer's halt ends the wait
-        (the command then stops, VMTools.exec). A failed read counts as the
-        user's: the workbench freezes only what already runs
-        (workspace_vm/workbench/pause.py), and a short new command finishes
-        before it looks (measured on a Sprite 2026-10-27: 0.2 s)."""
+        """While the user has the workspace's browser, the agent waits: the
+        call waits until they hand it back, at most USER_WAIT_SECONDS and
+        never into the time the answer needs, then says so. A reviewer's halt
+        ends the wait (the command then stops, VMTools.exec). A failed read
+        counts as the user's. What already runs on the workbench goes on
+        (agent_workspace.py "Takeover")."""
         from app.services import agent_workspace
         deadline = self.clock() + USER_WAIT_SECONDS
         left = getattr(self.loop, "answer_time_left", lambda: None)()

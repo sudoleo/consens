@@ -4,20 +4,19 @@
 # (sudo -n), never by the agent, whose user cannot open this folder:
 #   agent-run [--terminal] <seconds> <folder> <program> [args...]
 # --terminal: the user's own terminal (routers/agent_workspace.py, since
-# 2026-10-28) with the same rights, in a cgroup of its own that a takeover
-# leaves running, and a terminal type for its programs.
-# 1. joins the agent's cgroup, which a takeover freezes whole (pause.py);
-# 2. enters a mount namespace of its own without the provider's management
+# 2026-10-28) with the same rights and a terminal type for its programs.
+# 1. enters a mount namespace of its own without the provider's management
 #    socket (/.sprite/api.sock: checkpoints, services, the VM's lifetime),
 #    its checkpoints and its logs; the runtimes in /.sprite/bin stay;
-# 3. becomes the agent's user with no way back to root (setpriv
+# 2. becomes the agent's user with no way back to root (setpriv
 #    --no-new-privs: no sudo, no setuid program) in a clean environment;
-# 4. goes to the folder and runs the program under coreutils timeout.
+# 3. goes to the folder and runs the program under coreutils timeout.
+# Until 2026-10-29 it also joined a cgroup that a takeover of the browser
+# froze (pause.py; agent_workspace.py "Takeover" says why no more).
 # Exit 125: the namespace could not be made, so nothing ran.
 set -u
 user=agent
 home=/home/agent
-group=/sys/fs/cgroup/consens-agent
 term=dumb
 
 if [ "${1:-}" = "--inside" ]; then
@@ -49,16 +48,10 @@ fi
 
 if [ "${1:-}" = "--terminal" ]; then
   shift
-  group=/sys/fs/cgroup/consens-user
   term=xterm-256color
 fi
 if [ "$#" -lt 3 ] || [ "$(id -u)" != 0 ] || ! id -u "$user" >/dev/null 2>&1; then
   echo "agent-run: usage: sudo agent-run [--terminal] <seconds> <folder> <program> [args...]" >&2
   exit 125
-fi
-# The cgroup v2 freezer where the VM has one; pause.py stops the user's
-# processes one by one where it has not.
-if mkdir -p "$group" 2>/dev/null && [ -e "$group/cgroup.freeze" ]; then
-  echo $$ > "$group/cgroup.procs" 2>/dev/null || true
 fi
 exec unshare --mount --propagation private -- /bin/bash "$0" --inside "$term" "$@"

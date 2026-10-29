@@ -472,6 +472,8 @@ def paged(lines, offset, limit_chars):
 
 
 def read_text(page, offset=0, limit=READ_CHARS):
+    if hidden(page):
+        return hidden_text(page)
     lines = page_lines(page)
     shown, rest = paged(lines, offset, limit)
     out = [header(page), "\n".join(shown) if shown else
@@ -492,6 +494,8 @@ TEXT_JS = r"""
 
 
 def page_text(page, offset):
+    if hidden(page):
+        return hidden_text(page)
     texts = page.evaluate(TEXT_JS)
     split = lambda text: [line.strip() for line in str(text or "").splitlines() if line.strip()]
     main, lines = split(texts.get("main")), split(texts.get("all"))
@@ -630,6 +634,43 @@ def keep_downloads(caught):
     return names
 
 
+# localhost is the workbench's where the tunnel holds the port (tunnel.py,
+# agent_tunnel.py), named by the server with every request (local_ports).
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+OWN_COMPUTER = ("This page is on the browser's own computer, which you do not read. Open a page of the web, or "
+                "http://localhost:<port> for a port of your workspace.")
+# The ports the tunnel holds for this request (run).
+LOCAL_PORTS = set()
+
+
+def hidden(page):
+    return own_computer(str(getattr(page, "url", "") or ""), LOCAL_PORTS)
+
+
+def hidden_text(page):
+    """What the agent learns of such a page: its address, never its title or text."""
+    return f"URL: {page.url}\n{OWN_COMPUTER}"
+
+
+def own_computer(url, local_ports=()):
+    """Whether the page at ``url`` is the browser's own computer or a
+    private network (its debugging port, a link or a redirect there): never
+    read nor shown to the agent. Since 2026-10-29 for every page, not only
+    for an address the agent opens; localhost on a port the tunnel holds is
+    the workbench's."""
+    from urllib.parse import urlsplit
+    parts = urlsplit(url)
+    if parts.scheme not in {"http", "https"}:
+        return False
+    host = (parts.hostname or "").lower().rstrip(".")
+    if host in LOCAL_HOSTS:
+        try:
+            return parts.port not in local_ports
+        except ValueError:
+            return True
+    return not public_address(url)
+
+
 def public_address(url):
     """Only an http(s) address of the open web: never the browser's own
     computer (its debugging port) nor a private network."""
@@ -695,6 +736,8 @@ def run(request):
         raise UserHasControl("The user has taken over the browser in the workspace view. Do not act in it now: "
                              "your next call waits until they hand it back, or answer with what you have.")
     query = find_query(request) if action == "find" else ""
+    LOCAL_PORTS.clear()
+    LOCAL_PORTS.update(port for port in request.get("local_ports") or () if type(port) is int)
     ensure_browser()
     if action == "warm":
         # The server's own start of the browser while the workbench gets
@@ -733,18 +776,22 @@ def run(request):
         if action == "text":
             return {"text": page_text(page, offset)}
         if action == "find":
+            if hidden(page):
+                return {"text": hidden_text(page)}
             return {"text": find_text(page, query)}
         if action == "tabs":
             lines = []
             for number, tab in enumerate(context.pages, 1):
                 try:
-                    title = tab.title()
+                    title = "" if hidden(tab) else tab.title()
                 except Exception:
                     title = ""
                 lines.append(f"{'*' if tab == page else ' '}{number}. \"{title[:80]}\" {tab.url[:160]}")
             lines.append("(* = the tab in front; switch with the action tab)")
             return {"text": "\n".join(lines)}
         if action == "screenshot":
+            if hidden(page):
+                raise Refused(OWN_COMPUTER)
             line, png = picture(page)
             return {"text": header(page) + "\n" + line, "png": png}
         if action == "wait":
@@ -781,7 +828,7 @@ def with_picture(page, request, answer):
     """An action's answer, with the picture of the page after it when the
     agent asked for it (screenshot_after, since 2026-10-29): before, every
     move on a page drawn on a canvas took a call of its own to look."""
-    if not request.get("screenshot_after"):
+    if not request.get("screenshot_after") or hidden(page):
         return answer
     line, png = picture(page)
     return {**answer, "text": answer["text"] + "\n" + line, "png": png}

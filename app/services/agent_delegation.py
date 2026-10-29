@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.core import config as cfg
 from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
+from app.services import agent_secrets
 from app.services.agent_ask import TOOL as ASK_TOOL
 from app.services.agent_costs import aggregate_usage, fetch_bounds
 from app.services.agent_quota import AgentTokenBudgetExceeded
@@ -1144,6 +1145,8 @@ class DelegationLoop(AgentLoop):
                 reason = getattr(exc, "code", None) or "invalid_arguments"
         finally:
             publish(status)
+        # A key the user saved for the agent (agent_secrets.py) never reaches a model or the record.
+        result = agent_secrets.scrub(self.uid, result)
         message = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
         # The app's own calls (the review of the fixed answer) are not the agent's work.
         log_actor = self._log_actor(value.step_id) if registry is not self.app_registry else None
@@ -1981,11 +1984,11 @@ class DelegationLoop(AgentLoop):
         asked = agent_ask.requested(call)
         if asked is None:
             return "run"
-        request, browser = asked
-        kind = "browser" if browser else "confirm"
-        decision = yield from self._user_hold(agent_ask.hold(kind, request),
+        request, browser, secret = asked
+        kind = "browser" if browser else "secret" if secret else "confirm"
+        decision = yield from self._user_hold(agent_ask.hold(kind, request, secret),
                                               self._handed_back(had=False) if browser else None)
-        self.ask_answer = agent_ask.answer(kind, decision)
+        self.ask_answer = agent_ask.answer(kind, decision, secret)
         return decision
 
     def _takeover_wait(self):
@@ -2091,7 +2094,9 @@ class DelegationLoop(AgentLoop):
                     "handed_back": "The user handed the browser back."}
             if asked:
                 said.update(timeout="No answer in 30 minutes: the agent goes on without one.",
-                            **({"continue": "The user allowed it."} if asked == "confirm" else {}))
+                            **({"continue": "The user allowed it."} if asked == "confirm" else
+                               {"continue": "The user saved the key in the workspace.",
+                                "deny": "The user did not give the key."} if asked == "secret" else {}))
             self.work_log.app("decision", said[decision])
         yield from self._events()
         with self.condition:

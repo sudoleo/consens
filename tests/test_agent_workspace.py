@@ -88,8 +88,8 @@ def test_a_deleted_chat_takes_no_lease(store):
 
 def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():
     workbench, browser = agent_workspace.tool_files("workbench"), agent_workspace.tool_files("browser")
-    assert set(workbench) == {"agent-run", "pause.py", "setup.sh"}
-    assert set(browser) == {"browser.py", "display.sh", "relay.py", "setup.sh"}
+    assert set(workbench) == {"agent-run", "setup.sh"}
+    assert set(browser) == {"browser.py", "display.sh", "relay.py", "setup.sh", "tunnel.py"}
     assert all(b"\r\n" not in data for data in [*workbench.values(), *browser.values()])
     assert agent_workspace.VERSION == agent_workspace._version("workbench") and len(agent_workspace.VERSION) == 16
     assert agent_workspace.BROWSER_VERSION == agent_workspace._version("browser")
@@ -328,61 +328,18 @@ def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_ha
         browser.element(None, "e1; drop")
 
 
-def test_a_takeover_freezes_the_agents_user_until_the_user_hands_back(tmp_path, monkeypatch):
-    """pause.py: the agent's cgroup where the VM has the freezer (measured on
-    a Sprite 2026-10-27), else every process of its user stops while the
-    user has the browser, also what appears meanwhile, and goes on when
-    they hand back or the takeover expires, also after a failure. Since
-    2026-10-27 by its user, not by a mark in its environment it could drop."""
-    import os
-    pause = load("pause", "workbench")
-    proc = tmp_path / "proc"
-    statuses = {"101": "Uid:\t1500\t1500\t1500\t1500\n", "102": "Uid:\t1001\t1001\t1001\t1001\n",
-                "103": "Uid:\t0\t0\t0\t0\n", str(os.getpid()): "Uid:\t1500\t1500\t1500\t1500\n",
-                "self": "Uid:\t1500\n"}
-    for pid, status in statuses.items():
-        (proc / pid).mkdir(parents=True)
-        (proc / pid / "status").write_text("Name:\tx\n" + status)
-    # A process that ended between the listing and the read.
-    (proc / "104").mkdir()
-    assert pause.agent_pids(str(proc)) == [101] and pause.AGENT_UID == agent_vm.AGENT_UID
-    sent, turns = [], iter([True, True, False])
-
-    def appears():
-        # Started in the moment of the takeover: stopped at the next look.
-        if len(sent) == 1:
-            (proc / "105").mkdir()
-            (proc / "105" / "status").write_text("Uid:\t1500\t1500\t1500\t1500\n")
-        return pause.agent_pids(str(proc))
-    pause.pause(held=lambda: next(turns), find=appears, kill=lambda pid, sig: sent.append((pid, sig)),
-                sleep=lambda seconds: None, group=str(tmp_path / "no-cgroup"))
-    assert sent == [(101, pause.STOP), (101, pause.STOP), (105, pause.STOP), (101, pause.CONT), (105, pause.CONT)]
-    # With a cgroup: frozen whole while held, thawed after, also after a failure.
-    group = tmp_path / "cgroup"
-    group.mkdir()
-    (group / "cgroup.freeze").write_text("0")
-    seen = []
-
-    def held():
-        seen.append((group / "cgroup.freeze").read_text())
-        if len(seen) == 2:
-            raise RuntimeError("lost")
-        return True
-    sent.clear()
-    with pytest.raises(RuntimeError):
-        pause.pause(held=held, find=lambda: [101], kill=lambda pid, sig: sent.append((pid, sig)),
-                    sleep=lambda seconds: None, group=str(group))
-    assert seen == ["1", "1"] and (group / "cgroup.freeze").read_text() == "0" and sent == []
-    # It reads the takeover from the server's own folder.
-    control = tmp_path / "control.json"
-    monkeypatch.setattr(pause, "CONTROL", str(control))
-    assert pause.user_control() is False
-    control.write_bytes(agent_workspace.control_payload("user"))
-    assert pause.user_control() is True
-    control.write_bytes(agent_workspace.control_payload("agent"))
-    assert pause.user_control() is False
-    assert agent_workspace.PAUSE_COMMAND.startswith("sudo -n setsid nohup ")
-    assert f"{agent_workspace.WORKSPACE_DIR}/pause.py" in agent_workspace.PAUSE_COMMAND
+def test_the_workbench_no_longer_freezes_at_a_takeover():
+    """From 2026-10-27 to 2026-10-29 pause.py froze the agent's processes
+    while the user had the browser. Since the browser has a VM of its own,
+    nothing of the workbench sees it, and the agent's dev server must answer
+    the browser meanwhile (agent_tunnel.py): setup.sh ends a pause still
+    running and thaws what it froze; agent-run joins no cgroup any more."""
+    setup = (agent_workspace._FILES / "workbench" / "setup.sh").read_text()
+    assert 'pkill -KILL -f "$legacy/.consens/workspace/pause.py"' in setup
+    assert 'echo 0 > "$group/cgroup.freeze"' in setup and 'pkill -CONT -u "$user"' in setup
+    run = (agent_workspace._FILES / "workbench" / "agent-run").read_text()
+    assert "cgroup.procs" not in run
+    assert not hasattr(agent_workspace, "PAUSE_COMMAND") and not hasattr(agent_workspace, "CONTROL_PATH")
 
 
 def test_the_record_says_whether_the_user_has_the_browser(store):

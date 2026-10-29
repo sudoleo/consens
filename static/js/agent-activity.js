@@ -658,10 +658,11 @@
   // 2026-10-29): their turn in the browser, their yes to a step, or a call
   // that waited while they had the browser. Its request is data.
   const askHeads = { browser: 'The agent asked you to take over the browser', confirm: 'The agent asked before a step',
-    takeover: 'The agent waited while you had the browser' };
+    secret: 'The agent asked you for a key', takeover: 'The agent waited while you had the browser' };
   const askStates = { ...holdStates, waiting: 'Waiting for you', handed_back: 'You handed the browser back',
     timeout: 'No answer within 30 minutes' };
   const confirmStates = { ...askStates, continue: 'You allowed it' };
+  const secretStates = { ...askStates, continue: 'You saved it in the workspace', deny: 'You did not give it' };
   function holdView(className) {
     const node = document.createElement('div');
     node.className = className;
@@ -677,7 +678,7 @@
   }
   function updateHold(node, item) {
     if (item.ask) {
-      const states = item.ask === 'confirm' ? confirmStates : askStates;
+      const states = item.ask === 'confirm' ? confirmStates : item.ask === 'secret' ? secretStates : askStates;
       const state = states[item.state] ? item.state : 'waiting';
       const signature = JSON.stringify([item.ask, item.request, state]);
       if (node.dataset.signature === signature) return;

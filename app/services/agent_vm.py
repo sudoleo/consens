@@ -46,6 +46,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from typing import Callable, Optional
 import unicodedata
@@ -235,6 +236,18 @@ class VMBackend:
         the user's terminal with ``tty`` = (cols, rows))."""
         raise NotImplementedError
 
+    def open_stream(self, name, argv, *, cwd):
+        """A command that keeps running with its stdin open (the browser VM's
+        tunnel.py, agent_tunnel): an object with ``send(bytes)`` for stdin,
+        ``recv(timeout)`` for stdout's next bytes (b"" when nothing came, None
+        once it ended) and ``close()``."""
+        raise NotImplementedError
+
+    def open_port(self, name, port):
+        """A connection to ``port`` on the VM's localhost (the provider's
+        proxy, agent_tunnel), with the same ``send``/``recv``/``close``."""
+        raise NotImplementedError
+
     def read_file(self, name, path, *, limit, agent=True):
         """``(bytes, complete)``: at most ``limit`` bytes of the file;
         ``complete`` is False when it is longer. VMFileMissing if absent,
@@ -299,8 +312,7 @@ def agent_argv(argv, timeout, cwd=HOME):
 def terminal_argv(timeout):
     """The user's own terminal on the workbench (routers/agent_workspace.py,
     since 2026-10-28): a login shell through AGENT_RUN --terminal, with the
-    agent's rights and nothing more, in the agent's home, under ``timeout``.
-    Its cgroup is its own, so a takeover of the browser leaves it running."""
+    agent's rights and nothing more, in the agent's home, under ``timeout``."""
     return ["sudo", "-n", "/bin/bash", AGENT_RUN, "--terminal", str(int(timeout)), HOME, "bash", "-l"]
 
 
@@ -579,7 +591,7 @@ class SpritesBackend(VMBackend):
                        ("max_run_after_disconnect", TERMINAL_AFTER_DISCONNECT)]
         return "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + urlencode(params)
 
-    def _connect_exec(self, url):
+    def _connect_exec(self, url, operation="exec"):
         """The exec socket; a handshake that broke off (a sprite waking from
         its sleep, seen 2026-10-27) is tried once more: no command started."""
         from websockets.exceptions import InvalidHandshake, InvalidStatus
@@ -588,13 +600,13 @@ class SpritesBackend(VMBackend):
                 return self._open(url)
             except InvalidStatus as exc:
                 status = exc.response.status_code
-                logging.warning("Agent VM request refused operation=exec status=%s", status)
-                raise VMUnavailable(f"exec: HTTP {status}") from None
+                logging.warning("Agent VM request refused operation=%s status=%s", operation, status)
+                raise VMUnavailable(f"{operation}: HTTP {status}") from None
             except (OSError, TimeoutError, InvalidHandshake) as exc:
-                logging.warning("Agent VM request failed operation=exec attempt=%s category=%s", attempt,
+                logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
                                 safe_exception(exc))
                 if attempt == 2:
-                    raise VMUnavailable("exec: no connection") from None
+                    raise VMUnavailable(f"{operation}: no connection") from None
                 time.sleep(HANDSHAKE_RETRY_SECONDS)
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
@@ -666,6 +678,30 @@ class SpritesBackend(VMBackend):
         timed_out = killed or (exit_code in TIMEOUT_EXIT_CODES and seconds >= timeout)
         return ExecOutcome(exit_code=None if killed else exit_code, timed_out=timed_out, seconds=seconds)
 
+    def open_stream(self, name, argv, *, cwd):
+        return _ExecStream(self._connect_exec(self.exec_url(name, argv, cwd=cwd, stdin=True)))
+
+    def open_port(self, name, port):
+        """The proxy WebSocket (Sprites' own SDKs, proxy.go): a JSON line
+        names the port, the answer says connected, then binary frames carry
+        the connection's bytes both ways."""
+        from websockets.exceptions import ConnectionClosed
+        ws = self._connect_exec("wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/proxy",
+                                operation="proxy")
+        try:
+            ws.send(json.dumps({"host": "localhost", "port": int(port)}))
+            reply = ws.recv(timeout=WS_OPEN_SECONDS)
+            status = json.loads(reply).get("status") if isinstance(reply, str) else None
+        except (ConnectionClosed, OSError, TimeoutError, ValueError, AttributeError):
+            status = None
+        if status != "connected":
+            try:
+                ws.close()
+            except Exception:
+                pass
+            raise VMUnavailable("proxy: port not reached")
+        return _PortStream(ws)
+
     def _kill(self, name, session):
         try:
             with self._http.stream("POST", f"{self._sprite(name)}/exec/{quote(session, safe='')}/kill",
@@ -674,6 +710,71 @@ class SpritesBackend(VMBackend):
                     pass
         except httpx.HTTPError as exc:
             logging.info("Agent VM session kill failed category=%s", safe_exception(exc))
+
+
+class _ExecStream:
+    """A running command's stdin and stdout over the exec WebSocket
+    (open_stream): frames 0x00 in, 0x01 out; the exit ends it."""
+
+    def __init__(self, ws):
+        self.ws = ws
+        self._send_lock = threading.Lock()
+
+    def send(self, data):
+        with self._send_lock:
+            for start in range(0, len(data), STDIN_CHUNK):
+                self.ws.send(b"\x00" + data[start:start + STDIN_CHUNK])
+
+    def recv(self, timeout):
+        from websockets.exceptions import ConnectionClosed
+        try:
+            message = self.ws.recv(timeout=timeout)
+        except TimeoutError:
+            return b""
+        except ConnectionClosed:
+            return None
+        if isinstance(message, str):
+            try:
+                ended = json.loads(message).get("type") == "exit"
+            except (ValueError, AttributeError):
+                ended = False
+            return None if ended else b""
+        if not message or message[0] == 2:
+            return b""
+        return bytes(message[1:]) if message[0] == 1 else None
+
+    def close(self):
+        try:
+            with self._send_lock:
+                self.ws.send(b"\x04")
+        except Exception:
+            pass
+        self.ws.close()
+
+
+class _PortStream:
+    """One connection over the proxy WebSocket (open_port): its bytes as binary frames."""
+
+    def __init__(self, ws):
+        self.ws = ws
+        self._send_lock = threading.Lock()
+
+    def send(self, data):
+        with self._send_lock:
+            self.ws.send(data)
+
+    def recv(self, timeout):
+        from websockets.exceptions import ConnectionClosed
+        try:
+            message = self.ws.recv(timeout=timeout)
+        except TimeoutError:
+            return b""
+        except ConnectionClosed:
+            return None
+        return b"" if isinstance(message, str) else bytes(message)
+
+    def close(self):
+        self.ws.close()
 
 
 def configured():

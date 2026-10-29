@@ -18,7 +18,7 @@ from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
-from app.services import agent_quota, agent_vm
+from app.services import agent_quota, agent_secrets, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
@@ -918,6 +918,62 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
         raise
     except Exception as exc:
         _raise_store_error(exc, operation="decide agent hold", uid=uid)
+
+
+class AgentSecret(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(pattern=r"^[0-9a-f]{12}$")
+    value: str = Field(min_length=1, max_length=agent_secrets.VALUE_CHARS)
+
+
+@router.post("/agent/chats/{chat_id}/requests/{request_id}/secret")
+@limiter.limit("10/minute")
+def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: AgentSecret):
+    """The key the agent asked for (ask_user with secret, agent_secrets.py;
+    since 2026-10-29): written to the account's workbench as the agent's
+    user, then the card is answered. The key goes into no turn, log or
+    model's context: the agent hears the file's path."""
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
+        raise HTTPException(status_code=404, detail="Request not found")
+    if not payload.value.strip():
+        raise HTTPException(status_code=422, detail="Paste the key first.")
+    try:
+        store = AgentRunStore(db_firestore)
+        turn_id = _idempotent_turn_id(chat_id, request_id)
+        try:
+            turn = store.get_turn(uid, chat_id, turn_id)
+        except ChatNotFound:
+            turn = None
+        if not turn or turn.get("status") != "pending":
+            return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
+        hold = store.open_hold(uid, chat_id, turn_id)
+        name = str((hold or {}).get("secret") or "")
+        if not hold or hold.get("id") != payload.id or hold.get("ask") != "secret" or not agent_secrets.NAME.fullmatch(name):
+            return JSONResponse({"error": "This question is already over.", "code": "hold_over"}, status_code=409)
+        vm = agent_vm.backend()
+        if vm is None:
+            return JSONResponse({"error": "Your workspace is not reachable right now. Try again.",
+                                 "code": "vm_unavailable"}, status_code=503)
+        try:
+            agent_secrets.save(vm, uid, name, payload.value, ProviderCancellation())
+        except agent_vm.VMUnavailable as exc:
+            logging.warning("Agent secret not saved category=%s", safe_exception(exc))
+            return JSONResponse({"error": "Your workspace is not reachable right now. Try again.",
+                                 "code": "vm_unavailable"}, status_code=503)
+        finally:
+            vm.close()
+        try:
+            store.decide_hold(uid, chat_id, turn_id, payload.id, "continue")
+        except TurnStatusConflict as exc:
+            return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
+        return JSONResponse({"status": "saved", "path": agent_secrets.path(name)},
+                            headers={"Cache-Control": "private, no-store"})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_store_error(exc, operation="save agent secret", uid=uid)
 
 
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/stop")

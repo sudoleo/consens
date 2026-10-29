@@ -159,6 +159,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Ungefragt übernehmen, während er im Browser arbeitet → sein nächster
       Schritt wartet auf der Karte „Du hast den Browser“, „Zurückgeben“ dort
       (auch bei geschlossenem Panel) lässt ihn weitermachen.
+      Key (seit 2026-10-29): „Bau mir eine kleine App, die mit meinem
+      OpenAI-Key einen Witz erzählt“ → Karte „Der Agent braucht einen Key von
+      dir“ mit Passwortfeld (Platzhalter `OPENAI_API_KEY`) und der Zeile
+      „~/.secrets/OPENAI_API_KEY“; leer „Speichern“ → nichts passiert, ein
+      Testwert + Enter → die Karte geht, der Agent nennt den Pfad, nicht den
+      Wert. Im Terminal `ls -l ~/.secrets` → `-rw-------`. Den Agenten bitten,
+      den Key mit `cat` zu zeigen → in Antwort und Aktivität steht `[secret]`.
+      Im Chat-Verlauf, im Netzwerk-Tab außer dem einen POST `/secret` und in
+      den Render-Logs taucht der Wert nicht auf. „Nicht jetzt“ → er macht
+      ohne weiter.
       Automatisiert: `test_agent_ask.py`, `workspace-view.test.mjs`,
       `agent-chat.test.mjs`.
 - [ ] Agent VM (2026-10-25, Admin-Konto, echter Provider, `SPRITES_TOKEN`
@@ -187,10 +197,18 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Klicken kommen an; bei einer Website anmelden. Agent-Frage im Audit:
       „Öffne <die Website> in deinem Browser und sag mir, was auf der
       Startseite steht.“ Der Agent nutzt `browser`, die Ansicht zeigt es live,
-      er ist eingeloggt. Während du übernommen hast, pausiert er ganz: Sein
-      nächster Schritt läuft erst nach „Zurückgeben“, ein laufender
+      er ist eingeloggt. Während du übernommen hast, wartet er: Sein
+      nächster Schritt läuft erst nach „Zurückgeben“; ein laufender
       Hintergrundprozess (z. B. `vm_start_process` mit `while true; do date;
-      sleep 1; done`) schreibt in der Zeit keine Zeile. Passwort aus dem
+      sleep 1; done`) schreibt seit 2026-10-29 weiter (nichts friert mehr
+      ein). localhost-Brücke (seit 2026-10-29): „Bau mir ein Tic-Tac-Toe und
+      öffne es in meinem Browser“ → der Agent startet einen Server auf der
+      Werkbank und öffnet `http://localhost:<port>` im Browser, die Ansicht
+      zeigt das Spiel. Übernehmen und spielen: die Züge kommen an, während der
+      Agent wartet. Nach dem Lauf das Panel schließen und neu öffnen: das Spiel
+      lädt weiter. Den Server stoppen und neu laden → Seite „Nothing answers on
+      port …“. `http://localhost:9222` im Auftrag → Absage, die Seite wird nie
+      gelesen. Passwort aus dem
       eigenen Passwortmanager kopieren und im Bild mit Strg+V (Cmd+V) oder
       „Einfügen“ einfügen: Es landet im Feld, auch mit Umlauten und Sonderzeichen,
       und schickt das Formular nicht ab.

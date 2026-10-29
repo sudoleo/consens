@@ -1526,10 +1526,7 @@
     // Decided, or the response is over: the card goes, the activity keeps
     // the record.
     if (response && (response.ok || data.code === "not_running")) {
-      context.metadata.holdDecided = hold.id;
-      if (context.metadata.hold === hold) context.metadata.hold = null;
-      renderHold();
-      registry.update(context.runId, () => {});
+      holdDone(context, hold);
       return true;
     }
     // Refused (no room for another message, decided in another tab): the
@@ -1540,6 +1537,69 @@
     App.showPopup?.(typeof data.error === "string" && data.error ? data.error
       : "Your decision did not reach the server. Try again.");
     return false;
+  }
+  function holdDone(context, hold) {
+    context.metadata.holdDecided = hold.id;
+    if (context.metadata.hold === hold) context.metadata.hold = null;
+    renderHold();
+    registry.update(context.runId, () => {});
+  }
+  // The key the agent asked for (ask_user with secret, agent_secrets.py;
+  // since 2026-10-29): it goes from this field to the workspace alone (POST
+  // .../secret), never into the chat, and the field is no form, so nothing
+  // ever sends it by GET. Saved, the server answers the card.
+  async function saveSecret(context, input) {
+    const hold = openHold(context);
+    if (!hold || hold.deciding) return;
+    if (!input.value.trim()) {
+      input.focus();
+      return;
+    }
+    hold.deciding = "secret";
+    renderHold();
+    const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/secret`;
+    let response = null;
+    try {
+      const token = await window.auth.currentUser.getIdToken();
+      response = await fetch(url, { method: "POST", body: JSON.stringify({ id: hold.id, value: input.value }),
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+    } catch (_) { /* below */ }
+    const data = response && !response.ok ? await response.json().catch(() => ({})) : {};
+    if (response && (response.ok || data.code === "not_running")) {
+      input.value = "";
+      holdDone(context, hold);
+      return;
+    }
+    hold.deciding = null;
+    renderHold();
+    App.showPopup?.(typeof data.error === "string" && data.error ? data.error
+      : "The key did not reach your workspace. Try again.");
+  }
+  function secretField(context, hold) {
+    const name = String(hold.secret || "");
+    const field = document.createElement("div");
+    field.className = "agent-ask-secret";
+    const input = document.createElement("input");
+    input.type = "password";
+    input.className = "agent-ask-secret-input";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("autocapitalize", "off");
+    input.dataset.i18nSkip = "";
+    input.placeholder = name;
+    input.setAttribute("aria-label", App.t("Paste {name}", { name }));
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      saveSecret(context, input);
+    });
+    const note = document.createElement("p");
+    note.className = "agent-ask-secret-note";
+    note.dataset.i18nSkip = "";
+    note.textContent = App.t("Saved in your workspace as {path} for the agent’s commands, never in the chat.",
+      { path: `~/.secrets/${name}` });
+    field.append(input, note);
+    return field;
   }
   function holdButton(label, className, onClick) {
     const button = document.createElement("button");
@@ -1673,7 +1733,7 @@
   // stopping is its Stop button. The clock only in the last minutes, since
   // the agent goes on without an answer.
   const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
-    takeover: "You have the browser" };
+    secret: "The agent needs a key from you", takeover: "You have the browser" };
   // Per question: "offered" (the open view took the browser for the user),
   // "user" (the user had it in this window, so a hand-back here answers it).
   const askSeen = new Map();
@@ -1682,6 +1742,8 @@
     browser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5l11 6.6-4.8 1.3 2.8 5.3-2.2 1.2-2.8-5.4-4 3.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
     // A question.
     confirm: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9.2a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.1-1.4 2v.6M12 17.6v.1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path></svg>',
+    // A key.
+    secret: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15.5" r="3.6" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M10.6 12.9l7.4-7.4M15.2 8.3l2.3 2.3M17.4 6.1l1.9 1.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>',
   };
   function askCard(context, hold) {
     const kind = askTitles[hold.ask] ? hold.ask : "confirm";
@@ -1690,7 +1752,7 @@
     card.setAttribute("aria-labelledby", "agentHoldTitle");
     const glyph = document.createElement("span");
     glyph.className = "agent-ask-glyph";
-    glyph.innerHTML = askGlyphs[kind === "confirm" ? "confirm" : "browser"];
+    glyph.innerHTML = askGlyphs[kind] || askGlyphs.browser;
     const body = document.createElement("div");
     body.className = "agent-ask-body";
     // Said once when it appears: the title and what the agent asks.
@@ -1715,10 +1777,16 @@
     clock.hidden = true;
     const actions = document.createElement("div");
     actions.className = "agent-hold-actions";
+    const field = kind === "secret" ? secretField(context, hold) : null;
     if (kind === "confirm") {
       actions.append(
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
         holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
+    } else if (field) {
+      const input = field.querySelector("input");
+      actions.append(
+        holdButton("Save", "btn agent-hold-continue", () => saveSecret(context, input)),
+        holdButton("Not now", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")));
     } else {
       // The server knows a takeover from any window; this one's view only its own.
       const holding = kind === "takeover" || App.workspaceView?.holder?.() === "user";
@@ -1728,7 +1796,7 @@
         ...(kind === "browser" && !holding ? [holdButton("Not now", "agent-hold-link agent-hold-skip",
           () => decideHold(context, "continue"))] : []));
     }
-    body.append(alert, clock, actions);
+    body.append(...[alert, field, clock, actions].filter(Boolean));
     card.append(glyph, body);
     return card;
   }
@@ -1899,6 +1967,7 @@
     clock.hidden = !time;
     if (time && clock.textContent !== App.t(time)) clock.textContent = time;
     for (const button of host.querySelectorAll("button")) button.disabled = Boolean(hold.deciding);
+    for (const input of host.querySelectorAll(".agent-ask-secret-input")) input.disabled = Boolean(hold.deciding);
     // Send waits for words in the sheet's field.
     const reply = host.querySelector(".agent-hold-reply-input");
     if (reply) {

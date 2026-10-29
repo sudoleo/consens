@@ -483,6 +483,15 @@ class AgentSessionStore:
             tx.update(ref, {"hold": hold})
         return self._agent_transaction(uid, operation)
 
+    def open_hold(self, uid, chat_id, turn_id):
+        """The run's open hold (set_hold), or None once it is over or decided."""
+        data = self.receipt_ref(uid, chat_id, turn_id).get().to_dict() or {}
+        hold = data.get("hold") or None
+        if (data.get("run_status") != "running" or data.get("cancel_requested") or not hold
+                or (data.get("hold_decision") or {}).get("id") == hold.get("id")):
+            return None
+        return hold
+
     def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text=""):
         """The user's decision on an open hold: "continue", "stop" or "steer"
         (continue with ``text`` as their message into the run, like a note).

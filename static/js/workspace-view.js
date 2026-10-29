@@ -2,8 +2,8 @@
 // docs/agent-mode.md "Arbeitsplatz"): its Chrome in a panel beside the chat,
 // through noVNC (static/vendor/novnc, loaded when the panel first opens).
 // The user watches; a click on the screen takes the browser over, and the
-// agent pauses completely (agent_workspace.py, workspace_vm/pause.py) until
-// "Hand back". While the user has it, the panel refreshes the takeover every
+// agent waits (agent_workspace.py "Takeover") until "Hand back"; its server
+// on the workbench keeps answering localhost here (agent_tunnel.py). While the user has it, the panel refreshes the takeover every
 // REFRESH_MS; a closed tab lets it expire by itself. Sign-ins happen here, by
 // the user: the agent never types a password.
 //

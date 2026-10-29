@@ -43,6 +43,14 @@ find /tmp -maxdepth 1 -user sprite \( -name 'playwright*' -o -name '.com.google.
 for old in browser.py display.sh gateway.py ref-count setup-done-2 setup.lock pause.lock; do
   rm -f "$legacy/.consens/workspace/$old"
 done
+# Until 2026-10-29 a takeover of the browser froze the agent's processes
+# (pause.py); one frozen at the change goes on, and the pause goes.
+pkill -KILL -f "$legacy/.consens/workspace/pause.py" 2>/dev/null || true
+for group in /sys/fs/cgroup/consens-agent /sys/fs/cgroup/consens-user; do
+  [ -e "$group/cgroup.freeze" ] && echo 0 > "$group/cgroup.freeze" 2>/dev/null || true
+done
+pkill -CONT -u "$user" 2>/dev/null || true
+rm -f "$legacy/.consens/workspace/pause.py" "$legacy/.consens/workspace/control.json"
 # Background processes of the old layout ran as the provider's user.
 if [ -d "$legacy/.consens/processes" ] && [ ! -e "$legacy/.consens/processes/.v2" ]; then
   pkill -KILL -u sprite -f "$legacy/.consens/processes/" 2>/dev/null || true

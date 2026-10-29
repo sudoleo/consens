@@ -278,7 +278,10 @@ BRIEF_TOOLS = (
             "(request_domain); the user's own systems are not in it."),
     ("browser", "browser acts in the user's Chrome on a computer of its own, signed in where the user signed in. "
                 "Sign-ins, passwords and payments are the user's: ask_user hands the browser to them, and a step "
-                "in their name (sending, posting, buying, deleting) waits for their yes through ask_user."),
+                "in their name (sending, posting, buying, deleting) waits for their yes through ask_user. "
+                "localhost there is the agent's own workbench, where it serves what it builds for the user."),
+    ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets on the workbench: the agent "
+                 "reads it there for the command that needs it, which is its purpose."),
     ("update_memory", "update_memory saves lasting facts the user states about themselves, each with a quote of "
                       "the user's words, as the user allowed in their settings."),
     ("update_plan", "update_plan keeps the plan of a long task, as the app asks the agent to."),

@@ -42,7 +42,7 @@ from app.api.routers.chat_history import _chat_uid
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import db_firestore, verify_user_token
-from app.services import agent_vm, agent_vm_time, agent_workspace
+from app.services import agent_tunnel, agent_vm, agent_vm_time, agent_workspace
 from app.services.agent_documents import Strict
 
 router = APIRouter()
@@ -109,15 +109,14 @@ def workspace_status(request: Request):
 def workspace_control(request: Request, payload: Control):
     """The user takes the browser over (refreshed by the open view every
     CONTROL_REFRESH_SECONDS, else it expires) or hands it back. Meanwhile
-    the agent pauses completely (agent_workspace.set_control)."""
-    from app.services.llm.provider_runtime import ProviderCancellation
+    the agent waits (agent_workspace.set_control)."""
     uid = owner(request)
     if not agent_workspace.record(db_firestore, uid).get("name"):
         raise HTTPException(status_code=404, detail="Open the workspace first.")
     try:
         vm = _backend()
         try:
-            agent_workspace.set_control(db_firestore, uid, vm, payload.holder, ProviderCancellation())
+            agent_workspace.set_control(db_firestore, uid, vm, payload.holder)
         finally:
             vm.close()
     except agent_vm.VMUnavailable as exc:
@@ -174,6 +173,9 @@ def _open(uid, seconds):
     vm = _backend()
     try:
         name = agent_workspace.open_browser(vm, uid)
+        # The agent's app on localhost goes on working in the view after
+        # its run (agent_tunnel.py).
+        agent_tunnel.resume(uid, backend_factory=_backend)
         argv = agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_RELAY}", seconds + RELAY_GRACE_SECONDS,
                                         False)
         return vm.exec_url(name, argv, cwd=agent_vm.SERVER_HOME, stdin=True)

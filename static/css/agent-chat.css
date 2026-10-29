@@ -500,6 +500,19 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
 .agent-ask-card .agent-hold-clock { margin-top: 6px; }
 .agent-ask-card .agent-hold-clock[hidden] { display: none; }
 .agent-ask-card .agent-hold-actions { flex-wrap: nowrap; gap: 0 18px; margin-top: 12px; }
+/* The key's field (secret): the reply field's tint, one line, the key's
+   name as its placeholder; the line under it says where it goes. */
+.agent-ask-secret { display: grid; gap: 6px; margin-top: 10px; }
+.agent-ask-secret-input {
+  box-sizing: border-box; width: 100%; min-height: 36px; margin: 0; padding: 7px 10px; border: 0; border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); font: inherit;
+  font-family: var(--font-mono); font-size: var(--font-size-sm);
+}
+.agent-ask-secret-input::placeholder { color: var(--ink-3); font-family: var(--font-mono); }
+.agent-ask-secret-input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.agent-ask-secret-input:disabled { opacity: .6; }
+.agent-ask-secret-note { margin: 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.45; }
+@media (pointer: coarse) { .agent-ask-secret-input { min-height: 44px; font-size: 16px; } }
 /* "Write to the agent" opens the answer in the card itself: the field, then
    Send and Cancel in the same pair (before, the button only focused the
    composer, and a click seemed to do nothing). */

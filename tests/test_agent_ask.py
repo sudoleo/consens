@@ -15,7 +15,7 @@ import pytest
 from app.services import agent_ask, agent_delegation, agent_workspace
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from test_agent_audit import ANSWER, Audit, LookupArgs, audit_loop, decide_when_held, saved
-from test_agent_runs import UID, store  # noqa: F401  (fixture)
+from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtures)
 
 REQUEST = "Bitte melde dich bei der Post an, dann mache ich weiter."
 
@@ -291,3 +291,109 @@ def test_the_tool_is_offered_with_the_workspace_and_returns_only_the_answer():
         tool.execute(agent_ask.AskUserArgs(request="Darf ich?"), cancellation=None)
     assert tool.activity(agent_ask.AskUserArgs(request="Darf ich?", browser=True), {"status": "handed_back"}) == {
         "request": "Darf ich?", "ask": "browser", "ask_status": "handed_back"}
+
+
+# --- A key the agent needs (secret, agent_secrets.py, since 2026-10-29) ---------------
+
+KEY = "sk-test-0123456789abcdef"
+
+
+@pytest.fixture
+def no_keys(monkeypatch):
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    return agent_secrets
+
+
+@pytest.mark.parametrize("decision,status", [("continue", "saved"), ("deny", "declined")])
+def test_a_key_is_asked_for_by_name_and_never_comes_through_the_chat(store, monkeypatch, no_keys, decision, status):
+    Browser(monkeypatch)
+    script, loop, ran = asking(store, args={"request": "Ich brauche deinen OpenAI-Key für die App.",
+                                            "secret": "OPENAI_API_KEY"})
+    waiter = decide_when_held(loop, store, decision)
+    events = list(loop.run())
+    waiter.join(5)
+    card = holds(events)
+    assert len(card) == 1 and card[0]["ask"] == "secret" and card[0]["secret"] == "OPENAI_API_KEY"
+    result = results(loop)[0]
+    assert result["status"] == status
+    if decision == "continue":
+        # The route saved it (below); the agent hears where it lies.
+        assert result["path"] == "/home/agent/.secrets/OPENAI_API_KEY"
+        assert 'OPENAI_API_KEY="$(cat /home/agent/.secrets/OPENAI_API_KEY)"' in result["note"]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert ("The user saved the key in the workspace." if decision == "continue"
+            else "The user did not give the key.") in said
+
+
+@pytest.mark.parametrize("args", [{"request": "Key please.", "secret": "openai key"},
+                                  {"request": "Key please.", "secret": "OPENAI_API_KEY", "browser": True}])
+def test_a_key_needs_a_plain_name_and_no_browser(store, monkeypatch, args):
+    Browser(monkeypatch)
+    script, loop, ran = asking(store, args=args)
+    events = list(loop.run())
+    assert not holds(events) and "error" in results(loop)[0]
+
+
+def test_a_saved_key_is_masked_in_what_the_run_keeps(store, monkeypatch, no_keys):
+    """An `echo $KEY` by mistake, or a page that shows it: what the models
+    read, the activity and the work record hold [secret] instead."""
+    Browser(monkeypatch)
+    no_keys.remember(UID, KEY)
+    no_keys.remember(UID, "short")
+    assert no_keys.scrub(UID, {"page": f"key={KEY}; short", "list": [KEY]}) == {
+        "page": "key=[secret]; short", "list": ["[secret]"]}
+    assert no_keys.scrub("someone-else", KEY) == KEY
+    assert no_keys.scrub(UID, KEY, now=time.time() + no_keys.SCRUB_SECONDS + 1) == KEY
+    no_keys.remember(UID, KEY)
+    script = Audit(tool_steps=1, step_tools={0: "browser"}, step_args={0: {"action": "read"}}, live={})
+    loop = audit_loop(store, script)
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool(
+        "browser", "Use the browser.", BrowserArgs,
+        lambda arguments, *, cancellation: {"action": "read", "page": f"Your key: {KEY}"})],
+        argument_limit=loop.registry.argument_limit)
+    events = list(loop.run())
+    assert results(loop)[0]["page"] == "Your key: [secret]"
+    assert KEY not in json.dumps(loop.messages) and KEY not in json.dumps(events, default=str)
+    assert KEY not in json.dumps([content for _, content in loop.work_log.entries_after(0)], default=str)
+
+
+def test_the_route_saves_the_key_on_the_workbench_and_answers_the_card(api, monkeypatch, no_keys):
+    from test_agent_vm import FakeVM
+    from app.services import agent_vm
+    client, store, _ = api
+    vm = FakeVM()
+    monkeypatch.setattr(agent_vm, "backend", vm.backend)
+    saved_runs = []
+
+    def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+        saved_runs.append((name, argv, cwd, input))
+        return agent_vm.ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
+    monkeypatch.setattr(type(vm.backend()), "run", run)
+    chat_id, turn = pending(store)
+    url = f"/agent/chats/{chat_id}/requests/{turn['client_request_id']}/secret"
+    ref = store.receipt_ref(UID, chat_id, turn["id"])
+    ref.set({**(ref.get().to_dict() or {}), "run_status": "running"}, merge=True)
+    store.set_hold(UID, chat_id, turn["id"], {"id": "a1b2c3d4e5f6", "kind": "harm"})
+    # Only on the agent's own question for a key.
+    over = client.post(url, json={"id": "a1b2c3d4e5f6", "value": KEY}, headers=AUTH)
+    assert over.status_code == 409 and over.json()["code"] == "hold_over" and saved_runs == []
+    store.set_hold(UID, chat_id, turn["id"], {**agent_ask.hold("secret", "Key?", "OPENAI_API_KEY"),
+                                               "id": "a1b2c3d4e5f6"})
+    assert client.post(url, json={"id": "a1b2c3d4e5f6", "value": "  "}, headers=AUTH).status_code == 422
+    answer = client.post(url, json={"id": "a1b2c3d4e5f6", "value": f"  {KEY}\n"}, headers=AUTH)
+    assert answer.status_code == 200 and answer.json() == {"status": "saved",
+                                                           "path": "/home/agent/.secrets/OPENAI_API_KEY"}
+    # As the agent's user, the name as an argument, the key on stdin alone.
+    [(name, argv, cwd, data)] = saved_runs
+    assert name == agent_vm.workspace_name(UID) and data == KEY.encode() and cwd == "/"
+    assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN] and argv[-1] == "OPENAI_API_KEY"
+    assert KEY not in json.dumps(argv) and "umask 077" in argv[-3]
+    # The card is answered, and the key is nowhere in the turn's records.
+    root = ref.get().to_dict()
+    assert root["hold_decision"] == {"id": "a1b2c3d4e5f6", "action": "continue"}
+    assert KEY not in json.dumps(root, default=str) and KEY not in json.dumps(store.get_turn(UID, chat_id, turn["id"]),
+                                                                              default=str)
+    assert no_keys.scrub(UID, KEY) == "[secret]"
+    again = client.post(url, json={"id": "a1b2c3d4e5f6", "value": KEY}, headers=AUTH)
+    assert again.status_code == 409 and len(saved_runs) == 1

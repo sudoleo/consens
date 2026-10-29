@@ -956,11 +956,12 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Die Refs zählen weiter in Seitenfolge, `find` und Blättern mit `offset`
   bleiben gleich. `type` mit `enter` drückt Enter über die Tastatur
   (`page.keyboard`), nicht auf dem Feld: dort wartete es bis 30 s, wenn eine
-  Vorschlagsliste das Feld verdeckte. Ein `open` auf localhost, eine private
-  Adresse oder `file://` sagt in der Absage, dass der Browser nur das Web
-  erreicht und Seiten der Werkbank deren headless Chrome zeigt
-  (`agent_browser.BROWSER_PRIVATE`); der VM-Prompt sagt dasselbe als Fakt,
-  dazu, dass die Werkbank auf UTC läuft. Nach dem zweiten Live-Test am selben
+  Vorschlagsliste das Feld verdeckte. Ein `open` auf eine private Adresse
+  oder `file://` sagt in der Absage, dass der Browser das Web erreicht und
+  `http://localhost:<port>` den Port der Werkbank (`agent_browser.BROWSER_PRIVATE`;
+  bis 2026-10-29: dass Seiten der Werkbank deren headless Chrome zeigt, siehe
+  „localhost-Brücke“); der VM-Prompt sagt dasselbe als Fakt, dazu, dass die
+  Werkbank auf UTC läuft. Nach dem zweiten Live-Test am selben
   Tag: `text` bringt ebenso zuerst den Text des Hauptbereichs, dann den Rest der
   Seite ohne dessen Zeilen (`TEXT_JS`); `find` nennt außer Fundstellen im
   Seitentext auch Elemente, deren Name den Text enthält (aus den Zeilen von
@@ -1028,8 +1029,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   die Zeile. Sie sagt Cookies, nicht Anmeldung: Auch Einwilligungs- oder
   Bot-Schutz-Cookies ergeben „yes“ (bis zum Merge hieß sie „Saved sign-in data“). `open` nimmt nur http(s) zu
   öffentlichen Adressen (nie `file://`,
-  `chrome://`, `javascript:`, `data:`, localhost, private Netze): Eine Seite
-  der VM selbst zeigte ihr Profil. `upload` liest eine Datei der Werkbank als
+  `chrome://`, `javascript:`, `data:`, private Netze) und seit 2026-10-29
+  `http://localhost:<port>` (ab 1024) als Port der Werkbank (siehe
+  „localhost-Brücke“): Eine Seite der VM selbst zeigte ihr Profil. Seit
+  2026-10-29 liest `browser.py` auch keine solche Seite, zu der ein Link oder
+  eine Weiterleitung führte (`own_computer`: nur die Adresse und
+  `OWN_COMPUTER`, nie Titel, Text oder Bild); localhost liest es nur auf den
+  Ports, die der Tunnel hält (`local_ports` in jeder Anfrage). `upload` liest eine Datei der Werkbank als
   Agent (bis 15 MB), legt sie für diesen einen Aufruf in
   `~/.consens/browser/uploads` der Browser-VM und löscht sie danach; der Helfer
   nimmt nur Dateien aus diesem Ordner. `screenshot` kommt als Bild zum Agenten
@@ -1205,9 +1211,30 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   und der Nutzer entscheidet. Sein Ergebnis sperrt Memory (seit 2026-10-29
   kann es die Seite des Browsers enthalten). Aktivität „Your turn“, Tab-Titel „Waiting for
   you“ (`tab-status.js`), Kopf der Agent-Aktivität „Waiting for you“.
-- **Der Agent pausiert ganz, solange der Nutzer übernommen hat** (Fund 3),
-  damit nichts von ihm sieht, was der Nutzer dort tippt. Drei Schichten aus
-  `agent_workspace.set_control`:
+- **Ein Key vom Nutzer** (`ask_user` mit `secret`, `agent_secrets.py`, seit
+  2026-10-29, Max: Geheimnis-Dialog wie in T3 Code): Braucht die Arbeit einen
+  API-Key oder ein Token des Nutzers, fragt der Agent mit dem Namen
+  (`OPENAI_API_KEY`, Großbuchstaben, Ziffern, `_`; nicht zusammen mit
+  `browser`). Karte „The agent needs a key from you“ mit Schlüssel-Glyphe, der
+  Bitte als Daten, einem Passwortfeld (Platzhalter = Name, kein `<form>`, also
+  nie ein GET), der Zeile „Saved in your workspace as ~/.secrets/NAME …“,
+  „Save“ und „Not now“ (`deny`). „Save“ (oder Enter) schickt den Wert per
+  `POST /agent/chats/{chat}/requests/{request}/secret` (`{id, value}`,
+  10/min): Der Server prüft, dass der offene Halt dieser Frage gilt
+  (`AgentSessionStore.open_hold`, `ask: "secret"`), schreibt den Wert als
+  Agenten-Nutzer nach `~/.secrets/NAME` (`SAVE_SCRIPT`: `umask 077`, Ordner
+  700, erst `.NAME.part`, dann `mv`; Name als Argument, Wert nur auf stdin)
+  und beantwortet erst danach die Karte (`continue`). Der Wert steht nie in
+  Firestore, einem Log oder einem Modellkontext; der Agent hört nur den Pfad
+  (`ANSWERS[("secret", "continue")]`: im Befehl `NAME="$(cat …)"`, nie
+  ausgeben, nie ins Projekt oder in die Antwort). Was ein Befehl oder eine
+  Seite danach vom Wert zeigt, maskiert `agent_secrets.scrub` 24 h lang in
+  diesem Prozess als `[secret]` (Werkzeug-Ergebnisse vor dem Modell und dem
+  Protokoll in `DelegationLoop`, jede Aktivität in `AgentLoop.activity`; ab 8
+  Zeichen). Die Datei bleibt auf der Werkbank, bis der Nutzer sie löscht
+  (Terminal), wie eine `.env` seines Rechners.
+- **Der Agent wartet, solange der Nutzer übernommen hat** (Fund 3). Zwei
+  Schichten aus `agent_workspace.set_control`:
   1. *Server:* Der Datensatz des Kontos trägt `control {holder, until}` (nur
      der Server schreibt ihn). Jeder Aufruf des Agenten an Werkbank und
      Browser wartet vorher (`VMSession.wait_for_user`, alle 2 s, höchstens
@@ -1222,15 +1249,49 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
      für eine Übernahme mitten im Aufruf.
   2. *Browser-VM:* `control.json` in `~/.consens/browser`; `browser.py`
      handelt dann nicht (`status: user`).
-  3. *Werkbank:* `control.json` im Home des Servers (für den Agenten nicht
-     lesbar) und `pause.py` als root (`PAUSE_COMMAND`, eine Sperrdatei hält es
-     einmalig): Es friert die cgroup `consens-agent` ein, der jeder Befehl über
-     `agent-run` beitritt (cgroup v2, `cgroup.freeze`, an der Sprite gemessen);
-     ohne cgroup stoppt es jeden Prozess der uid 1500 (SIGSTOP, alle 0,2 s auch
-     neue) und setzt sie danach fort. Seit dem Umbau nach Nutzer statt nach
-     der Marke `CONSENS_AGENT=1` in der Umgebung, die ein Prozess ablegen
-     konnte (`env -i`, gemessen: frei laufend vorher, jetzt eingefroren). Hat
-     keine Nachricht die Werkbank je angelegt, gibt es dort nichts einzufrieren.
+  Was auf der Werkbank schon läuft, läuft weiter. Vom 2026-10-27 bis
+  2026-10-29 fror `pause.py` es ein (cgroup `consens-agent`, der jeder Befehl
+  über `agent-run` beitrat, sonst SIGSTOP je Prozess der uid 1500): aus der
+  Zeit, als der Browser auf der Werkbank lief und Prozesse des Agenten den
+  Nutzer beim Tippen hätten beobachten können. Auf seiner eigenen VM sieht
+  nichts der Werkbank den Browser, und seit der localhost-Brücke muss der
+  Server des Agenten dem Browser gerade dann antworten, wenn der Nutzer die
+  App des Agenten ausprobiert. `setup.sh` der Werkbank beendet ein noch
+  laufendes `pause.py`, taut beide cgroups auf (`cgroup.freeze` 0, SIGCONT)
+  und löscht `pause.py` und `control.json`; `agent-run` tritt keiner cgroup
+  mehr bei.
+- **localhost-Brücke** (seit 2026-10-29, `agent_tunnel.py`,
+  `workspace_vm/browser/tunnel.py`; Max' Tic-Tac-Toe-Läufe: Modelle bauten
+  dem Nutzer ein Spiel, starteten den Dev-Server und öffneten localhost im
+  Browser, der ihn nicht erreichte): `http://localhost:<port>` (auch
+  `127.0.0.1`, `[::1]`; ab 1024, nie 9222) im Browser des Nutzers ist derselbe
+  Port der Werkbank, in einer Richtung. `tunnel.py` (Standardbibliothek, als
+  Nutzer des Anbieters über die Exec-API wie `relay.py`) lauscht auf
+  127.0.0.1 und ::1 der Browser-VM nur auf den Ports, die der Server nennt,
+  und reicht jede Verbindung von Chrome als Rahmen auf stdout an den Server
+  (`Art (1) | Verbindung (4) | Länge (4) | Daten`: `L` Port lauschen mit
+  Antwort, `O` geöffnet, `D` Daten, `C` geschlossen; schließt der Server, erst
+  FIN, dann zu, sonst kappte ein Reset das Ende der Antwort). Der Server
+  öffnet für jede Verbindung die Proxy-API des Anbieters zum Port der
+  Werkbank (`agent_vm.open_port`, `wss://api.sprites.dev/v1/sprites/<name>/proxy`:
+  JSON `{"host": "localhost", "port"}`, Antwort `connected`, dann Binärrahmen;
+  wie `proxy.go` der Sprites-SDKs). Nichts auf der Werkbank erreicht die
+  Browser-VM, der Token bleibt in den Anfragen des Servers. Ein Port, den die
+  Browser-VM selbst belegt (Chromes Debug-Port, ein Dienst des Anbieters),
+  wird nie genommen: `open` lehnt ihn ab (`LOCAL_TAKEN`), und `browser.py`
+  liest localhost nur auf gehaltenen Ports. Antwortet auf der Werkbank
+  nichts, sieht Chrome eine 502-Seite „Nothing answers on port N of the
+  agent's workspace“. Ein Tunnel je Konto in diesem Prozess, gestartet vom
+  ersten `open` auf localhost (`BrowserTools._tunnel`), beendet
+  `IDLE_SECONDS` (10 min) nach den letzten Bytes, auch bei offenen
+  Verbindungen (ein Live-Reload-Socket hielte sonst beide VMs wach); die Live-Ansicht
+  (`routers/agent_workspace._open`) und jeder Browser-Aufruf starten ihn für
+  die vorher genommenen Ports neu (`resume`), damit der Nutzer nach dem Lauf
+  in der App weiterklicken kann. Ein Tunnel, der nicht startet, kostet diese
+  Adresse (`LOCAL_DOWN`), nie den Browser. Der Prompt sagt es als Fakt: Was
+  der Agent dem Nutzer zum Ansehen oder Benutzen baut, läuft auf seinem Server
+  (`vm_start_process`) und öffnet sich in diesem Browser; das headless Chrome
+  der Werkbank bleibt für Prüfungen, die der Nutzer nicht sehen muss.
 - **Einfügen** (seit 2026-10-27, `workspace-view.js`): Solange der Nutzer
   übernommen hat, tippen Strg+V, Cmd+V, Umschalt+Einfg oder der Knopf
   „Paste“ den Text als Tastendrücke ein (`rfb.sendKey`), höchstens
@@ -1249,8 +1310,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `bash -l` über `agent-run --terminal` (`agent_vm.terminal_argv`): dieselben
   Rechte wie der Agent (Nutzer `agent`, ohne sudo, ohne `/.sprite`-Socket,
   Netz nur Paketquellen und die Freigaben einer laufenden Nachricht), aber in
-  der eigenen cgroup `consens-user`, die eine Browser-Übernahme nicht
-  einfriert, und mit `TERM=xterm-256color`. Tasten gehen als rohe Bytes zur
+  mit `TERM=xterm-256color` (bis 2026-10-29 in einer eigenen cgroup
+  `consens-user`, die eine Browser-Übernahme nicht einfror). Tasten gehen als rohe Bytes zur
   TTY, `{"type": "resize"}` nur aus zwei geprüften Zahlen (2–500 × 2–200), die
   Ausgabe kommt roh zurück; `{"type": "exit"}` beendet es (Close 1000, Knopf
   „Neues Terminal starten“). Eine Sitzung pro Konto (`claim_view(kind=
@@ -1299,9 +1360,11 @@ der Session), dazu drei kleine Sonden (Laufzeit-Shims, Ports, x11vnc):
   `screenshot` (100 KB PNG) und Tippen in einen veralteten Ref (verweigert);
   ein Passwortfeld zeigt `(empty)` und nimmt keinen Text; ein Upload-Pfad
   außerhalb des Upload-Ordners wird verweigert; bei Übernahme `status: user`.
-- **Fund 3 (Pause):** Agenten-Prozesse, auch einer mit leerer Umgebung,
-  stehen während der Übernahme (cgroup `frozen 1`, der Zähler steht) und
-  laufen nach dem Zurückgeben weiter.
+- **Fund 3 (Pause, bis 2026-10-29):** Agenten-Prozesse, auch einer mit leerer
+  Umgebung, standen während der Übernahme (cgroup `frozen 1`, der Zähler
+  stand) und liefen nach dem Zurückgeben weiter. Seit der localhost-Brücke
+  friert nichts mehr ein (siehe „Der Agent wartet, solange der Nutzer
+  übernommen hat“).
 - **Fund 4 (Netz):** Als Agent `pypi.org` 200, `example.com`, `github.com`,
   `api.sprites.dev` DNS-gesperrt, `1.1.1.1` gesperrt. Nach `set_policy` mit
   `example.com` sofort 200, nach dem Zurücksetzen wieder gesperrt.

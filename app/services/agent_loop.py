@@ -2,6 +2,7 @@
 from uuid import uuid4
 
 from app.core.openrouter_contract import provider_session_id
+from app.services import agent_secrets
 from app.services.agent_costs import RunCosts
 from app.services.agent_progress import ReasoningProgress
 from app.services.agent_policy import AgentPolicy, supports_client_tools, tools_for_model
@@ -45,10 +46,11 @@ class AgentLoop:
         budget.check()
 
     def activity(self, event):
-        """One bounded trace, with identities stable across all model steps."""
+        """One bounded trace, with identities stable across all model steps.
+        A key the user saved for the agent is masked (agent_secrets.scrub)."""
         if not event:
             return None
-        event = dict(event)
+        event = dict(agent_secrets.scrub(self.uid, event))
         step = event.pop("step_id", "run")
         event_id, kind = event.pop("id"), event.pop("kind")
         for key in ("version", "type"):
