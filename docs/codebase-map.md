@@ -174,16 +174,20 @@ tab's first use, and wires `#composerWorkspaceButton`
 (start screen), the (+) menu's `#attachWorkspaceOption` (in a chat) and
 `#agentWorkspaceSettings`. Since 2026-10-29 the bar `.workspace-view-turn` above
 the picture says whose turn it is, without a surface (a state dot, a title over
-a quiet line, the one `.btn`): the user's (green dot, "Hand back", the picture's
-green edge `.is-user .workspace-view-screen::after`; an amber reminder after
-`IDLE_MS` = 60 s without input, never an automatic hand-back) or what the agent
+a quiet line, the one `.btn`): the user's (green dot, "Hand back", the browser
+picture's green edge, never the terminal's; an amber reminder after
+`IDLE_MS` = 60 s without input, never an automatic hand-back; the agent's
+request stays its quiet line while the user has the browser) or what the agent
 waits for there (`agentWaits`, set by `agent-chat.js renderHold` for an
-`ask_user` browser card, with "Take over"); `agent-activity.js` adds "Watch live"
+`ask_user` browser card, with "Take over"); the one-line hint above the picture
+gives way to the bar; `agent-activity.js` adds "Watch live"
 (`.agent-vm-watch`) to each step of the `browser` tool and `agent-delegation.js` the run
 header's shortcut (`.agent-workspace-toggle`, shown once a VM step stands in
 the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
 `--workspace-width`, a draggable `.workspace-view-resizer` remembered in
-`localStorage`). All `.workspace-only` (body class
+`localStorage`); where the open activity panel would leave it under
+`MIN_WIDTH` it lies over that panel (`workspace-view-covers`, UX audit
+2026-10-29 G1), and its head wraps by its own width (container query). All `.workspace-only` (body class
 `viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
 ("Arbeitsplatz").
 

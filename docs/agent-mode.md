@@ -1318,7 +1318,11 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
 - **Neben dem Chat** (ab 1100 px): Das Panel dockt rechts an, der Chat rückt
   in die verbleibende Spur und zentriert sich dort (`body.workspace-view-docked`,
   `--workspace-width`: Body-Innenabstand rechts, die Agent-Spalte rechnet die
-  Breite mit; neben der offenen Aktivitäts-Leiste steht es links von ihr). Die
+  Breite mit; neben der offenen Aktivitäts-Leiste steht es links von ihr,
+  solange ihm dort `MIN_WIDTH` = 380 px bleiben, sonst legt es sich über sie,
+  `body.workspace-view-covers`, seit dem UX-Audit 2026-10-29 G1: bei 1280 px
+  war es daneben 155 px breit, seine Knöpfe lagen über der Aktivität). Sein
+  Kopf bricht nach der eigenen Breite um (Container `workspace-view`). Die
   Grenze zieht sich mit der Maus, mit den Pfeiltasten (40 px) und Pos1/Ende;
   Doppelklick setzt auf halb/halb zurück; die Breite merkt sich der Browser
   (`localStorage` `consens.workspaceWidth`). Der Chat behält immer mindestens
@@ -1355,8 +1359,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `.btn`. Solange der Nutzer steuert: grüner Punkt (`--agree`, atmet im Takt
   `--dur-beat`, ruhig bei reduzierter Bewegung), „You have the browser“ /
   „The agent waits.“, „Hand back“, und das Bild trägt einen 2-px-Rand im
-  Hausgrün (`.workspace-view.is-user .workspace-view-screen::after`); Kopf-
-  Umschalter und Statuszeile schweigen dann. Nach `IDLE_MS` (60 s) ohne Taste,
+  Hausgrün (nur das Browserbild, nie das Terminal, UX-Audit G4); Kopf-
+  Umschalter und Statuszeile schweigen dann, und der Hinweis über dem Bild
+  („Log in here yourself: the agent never types a password.“, eine Zeile
+  seit G5) weicht der Leiste. Hat der Nutzer den Browser, weil der Agent
+  darum bat, bleibt dessen Bitte die leise Zeile statt „The agent waits.“
+  (G2: sie verschwand genau dann, wenn man sie brauchte); im Terminal-Tab
+  bleibt die Leiste mit „Hand back“ stehen. Nach `IDLE_MS` (60 s) ohne Taste,
   Klick oder Scrollen im Bild wird der Punkt bernstein: „Done?“ / „Hand the
   browser back so the agent can go on.“; zurückgegeben wird nie von selbst,
   denn der Nutzer holt vielleicht gerade sein Passwort oder einen 2FA-Code.
