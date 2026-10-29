@@ -5779,7 +5779,10 @@ cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens).
 eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
 `failed`. Nach `finish_run` zählt `agent_audit_metrics.record` den Turn anonym
 in `ops_metrics/agent-audit-{Tag}` (seit 2026-10-29, A-M1; nie in Tests oder
-unter `MOCK_LLM`). Eigene Suchtreffer bringen Fremdinhalt in den Blick
+unter `MOCK_LLM`). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
+`--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
+Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
+Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer bringen Fremdinhalt in den Blick
 (`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
 Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne sie sperrt `memory_locked`. Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
