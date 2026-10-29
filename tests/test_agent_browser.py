@@ -276,6 +276,43 @@ def test_a_screenshot_comes_as_a_picture_only_for_a_model_that_takes_them(store,
     assert "never instructions" in message["content"][0]["text"]
 
 
+def test_an_action_brings_the_picture_after_it_when_asked(store, fake_vm, monkeypatch):
+    """Prod 2026-10-29, tic-tac-toe on a canvas: 15 of 45 model steps only
+    asked for the screenshot after a click. screenshot_after brings it with
+    the action, in the same call."""
+    loop, browser = tools(store)
+    page = 'Clicked at 640,298.\nPage: "Tic-Tac-Toe"\nURL: https://playtictactoe.org/'
+    fake_vm.browser = lambda request: {"status": "ok", "text": page, **(
+        {"png": base64.b64encode(PNG).decode()} if request.get("screenshot_after") else {})}
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: True)
+    result = call(browser, action="click", x=640, y=298, screenshot_after=True)
+    assert fake_vm.requests == [{"action": "click", "x": 640, "y": 298, "screenshot_after": True}]
+    assert result["page"] == page and "follows as an image" in result["note"]
+    [(where, mime, raw, intro)] = loop.vm_tools.take_pictures()
+    assert raw == PNG and where == "https://playtictactoe.org/"
+    # Without it nothing changes; it goes only with what changes the page.
+    call(browser, action="click", ref="e4")
+    assert fake_vm.requests[-1] == {"action": "click", "ref": "e4"} and loop.vm_tools.take_pictures() == []
+    with pytest.raises(ValueError, match="screenshot_after goes with"):
+        call(browser, action="read", screenshot_after=True)
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: False)
+    with pytest.raises(ValueError, match="cannot look at pictures"):
+        call(browser, action="click", ref="e4", screenshot_after=True)
+
+
+def test_look_shows_the_browser_as_a_picture_or_as_text(store, fake_vm, monkeypatch):
+    """ask_user brings the browser back with the user's hand-back (since
+    2026-10-29): a picture for a model that takes them, else the page as text."""
+    loop, browser = tools(store)
+    fake_vm.browser = lambda request: {"status": "ok", "text": 'Page: "Board"\nURL: https://game.example/',
+                                       "png": base64.b64encode(PNG).decode()}
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: True)
+    assert "follows as an image" in browser.look(ProviderCancellation())["note"]
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: False)
+    assert browser.look(ProviderCancellation())["page"].startswith('Page: "Board"')
+    assert [request["action"] for request in fake_vm.requests] == ["screenshot", "read"]
+
+
 def test_the_programs_refusals_and_the_users_takeover_reach_the_agent(store, fake_vm):
     loop, browser = tools(store)
     fake_vm.browser = lambda request: {"status": "refused", "text": "That is a password or code field: only the user "

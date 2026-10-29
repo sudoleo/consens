@@ -99,9 +99,10 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # command printed), except a call the app refused before it ran and the
 # results of the tools below, which return only the user's or the app's own
 # content: memory, settings, the agent's own plan and documents, a prepared
-# card's status, the user's answer to ask_user. A new tool locks until shown otherwise.
+# card's status. A new tool locks until shown otherwise; ask_user too, since
+# it brings the browser's page back with the user's hand-back.
 MEMORY_KEEPING_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
-                                  "update_plan", "create_document", "revise_document", ASK_TOOL})
+                                  "update_plan", "create_document", "revise_document"})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800

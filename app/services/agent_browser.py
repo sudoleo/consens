@@ -83,6 +83,12 @@ SCREENSHOT_INTRO = ("[consens.io: the picture of the workspace's browser at {url
 BROWSER_UNAVAILABLE = ("The workspace's browser is not available right now. Continue without it for this message "
                        "and say so if the answer needed it.")
 NO_PICTURES = "Your model cannot look at pictures: read the page with the actions read or text."
+# What can bring the picture of the page after it (screenshot_after, since
+# 2026-10-29): the actions that change the page, and wait. Prod the same
+# day: in a game of tic-tac-toe on a canvas, 15 of 45 model steps only asked
+# for the screenshot after a click.
+PICTURE_AFTER = frozenset({"open", "click", "drag", "type", "select", "key", "scroll", "back", "forward", "tab",
+                           "wait"})
 
 
 class BrowserArgs(BaseModel):
@@ -116,6 +122,8 @@ class BrowserArgs(BaseModel):
     y: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description="click: y of the screenshot, without ref.")
     strokes: list[list[list[int]]] = Field(default_factory=list, max_length=MAX_STROKES, description=(
         "drag: strokes, each a list of [x, y] points of the screenshot (2 to 500 per stroke, 2000 in all)."))
+    screenshot_after: bool = Field(default=False, description=(
+        "With an action that changes the page, or wait: also a picture of the page afterwards, in the same call."))
 
 
 def check_url(url):
@@ -178,6 +186,9 @@ def required(args):
             raise ValueError(f"At most {MAX_POINTS} points in one drag.")
     if args.action == "upload" and not args.file.strip():
         raise ValueError("upload needs file, a file in your workspace.")
+    if args.screenshot_after and args.action not in PICTURE_AFTER:
+        raise ValueError(f"screenshot_after goes with {', '.join(sorted(PICTURE_AFTER))}; for a picture now use "
+                         "the action screenshot.")
 
 
 class BrowserTools:
@@ -307,10 +318,12 @@ class BrowserTools:
             request.update(url=check_url(args.url), new_tab=args.new_tab)
         if args.action == "download" and args.url.strip():
             request["url"] = check_url(args.url)
-        if args.action == "screenshot":
+        if args.action == "screenshot" or args.screenshot_after:
             from app.services.agent_vm_tools import sees_pictures
             if not sees_pictures(self.vm.loop.model):
                 raise ValueError(NO_PICTURES)
+        if args.screenshot_after:
+            request["screenshot_after"] = True
         for field in ("ref", "text", "enter", "option", "key", "direction", "tab", "offset", "seconds"):
             value = getattr(args, field)
             if value not in ("", 0, False):
@@ -372,7 +385,7 @@ class BrowserTools:
                 result["note"] = "Downloaded into your workspace: " + ", ".join(item["path"] for item in kept) + "."
             if skipped:
                 result["downloads_skipped"] = skipped
-        if args.action == "screenshot":
+        if args.action == "screenshot" or (args.screenshot_after and answer.get("png")):
             try:
                 raw = base64.b64decode(answer.get("png") or "", validate=True)
             except ValueError:
@@ -386,6 +399,15 @@ class BrowserTools:
             result["note"] = " ".join(filter(None, (result.get("note"),
                                                     "The screenshot follows as an image after these results.")))
         return session.announce(result)
+
+    def look(self, cancellation):
+        """The browser as it is now, for ask_user once the user handed it back
+        (agent_ask.AskTools, since 2026-10-29): a screenshot for a model that
+        takes pictures (it follows as an image), else the page read as text.
+        Before, the agent's next step always asked for it, one more round."""
+        from app.services.agent_vm_tools import sees_pictures
+        action = "screenshot" if sees_pictures(self.vm.loop.model) else "read"
+        return self.call(BrowserArgs(action=action), cancellation=cancellation)
 
     def _keep_downloads(self, files):
         """The browser's finished downloads into the chat's folder

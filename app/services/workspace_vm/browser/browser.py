@@ -745,12 +745,8 @@ def run(request):
             lines.append("(* = the tab in front; switch with the action tab)")
             return {"text": "\n".join(lines)}
         if action == "screenshot":
-            png = page.screenshot(type="png")
-            # The picture is the viewport, one pixel per CSS pixel: its x,y are
-            # what click and drag take.
-            width, height = page.evaluate("() => [window.innerWidth, window.innerHeight]")
-            return {"text": header(page) + f"\nPicture: {width}x{height} pixels, the x,y that click and drag take.",
-                    "png": base64.b64encode(png).decode()}
+            line, png = picture(page)
+            return {"text": header(page) + "\n" + line, "png": png}
         if action == "wait":
             seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
             deadline, held = time.time() + seconds, user_control()
@@ -762,14 +758,33 @@ def run(request):
                     "The user handed the browser back.\n" if held else "")
             page = current_page(context)
             settle(page)
-            return {"text": said + read_text(page, 0, AFTER_ACTION_CHARS)}
+            return with_picture(page, request, {"text": said + read_text(page, 0, AFTER_ACTION_CHARS)})
         done = act(context, page, action, request)
         page = current_page(context)
         settle(page)
         saved = keep_downloads(caught)
         if saved:
             done += "\nDownloaded: " + ", ".join(saved) + "."
-        return {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)}
+        return with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
+
+
+def picture(page):
+    """(the line that says its size, the PNG as base64) of the page now. It
+    is the viewport, one pixel per CSS pixel: its x,y are what click and drag
+    take."""
+    png = page.screenshot(type="png")
+    width, height = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+    return f"Picture: {width}x{height} pixels, the x,y that click and drag take.", base64.b64encode(png).decode()
+
+
+def with_picture(page, request, answer):
+    """An action's answer, with the picture of the page after it when the
+    agent asked for it (screenshot_after, since 2026-10-29): before, every
+    move on a page drawn on a canvas took a call of its own to look."""
+    if not request.get("screenshot_after"):
+        return answer
+    line, png = picture(page)
+    return {**answer, "text": answer["text"] + "\n" + line, "png": png}
 
 
 def act(context, page, action, request):

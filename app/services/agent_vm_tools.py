@@ -629,12 +629,18 @@ class VMTools:
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",
                             VmViewImageArgs, self.view, activity=self._path_activity, reports=True)]
               if sees_pictures(self.loop.model) else []),
-            *BrowserTools(self).tools(),
+            # Kept: ask_user shows the browser again after the user handed it back.
+            *self._browser_tools(BrowserTools).tools(),
             # The user's part: their turn in the browser, their yes to a step (agent_ask.py).
             *AskTools(self).tools(),
             *DomainTools(self).tools(),
             *github,
         ]
+
+    def _browser_tools(self, cls):
+        if getattr(self, "browser_tools", None) is None:
+            self.browser_tools = cls(self)
+        return self.browser_tools
 
     @property
     def files(self):

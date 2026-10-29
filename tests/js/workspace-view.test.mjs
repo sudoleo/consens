@@ -287,10 +287,11 @@ describe("the workspace view", () => {
     socket.deliver(JSON.stringify({ state: "ready" }));
     await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
     expect(env.workspace.holder()).toBe("user");
-    expect(holders).toEqual(["user"]);
+    // Opening says so too: the chat's card steps aside while the view is open.
+    expect(holders).toEqual(["agent", "user"]);
     env.document.querySelector(".workspace-view-turn-button").click();
     await vi.waitFor(() => expect(env.workspace.holder()).toBe("agent"));
-    expect(holders).toEqual(["user", "agent"]);
+    expect(holders).toEqual(["agent", "user", "agent"]);
     // Watching again while the agent still waits: the bar says what for, the request as data.
     const turn = env.document.querySelector(".workspace-view-turn");
     expect(turn.hidden).toBe(false);

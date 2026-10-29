@@ -264,6 +264,25 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   display: none;
 }
 
+/* Turns change softly: the bar comes in, the green edge fades in and out. */
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-view-turn:not([hidden]) {
+    animation: workspace-turn-in var(--dur-state) var(--ease-out) both;
+  }
+
+  @keyframes workspace-turn-in {
+    from { opacity: 0; transform: translateY(-3px); }
+  }
+
+  .workspace-view.is-user .workspace-view-screen::after {
+    animation: workspace-edge-in var(--dur-state) var(--ease-out) both;
+  }
+
+  @keyframes workspace-edge-in {
+    from { opacity: 0; }
+  }
+}
+
 .workspace-view-turn-dot {
   align-self: start;
   width: 8px;

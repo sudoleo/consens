@@ -68,8 +68,9 @@ TOOL_DATA = {
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
     "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm",
     "vm_install_packages": "vm", "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
-    # Pages of the open web, in the user's signed-in browser.
-    "browser": "web",
+    # Pages of the open web, in the user's signed-in browser; ask_user brings
+    # the page back with it once the user handed the browser back (agent_ask.py).
+    "browser": "web", "ask_user": "web",
     # A picture of the web the server fetched (agent_web_images.py).
     "show_image": "web",
 }

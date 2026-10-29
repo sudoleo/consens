@@ -922,6 +922,12 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   sofort (Prod 2026-10-29 10:30: eine VM, die nicht startete, antwortete nach
   40 s mit 502, und der zweite Versuch kostete noch einmal 40 s). Fällt der
   Browser aus, steht der Grund im Log (`Agent browser unavailable reason=…`).
+- **Bild mit der Aktion** (seit 2026-10-29). Prod, Tic-Tac-Toe auf einer
+  Canvas-Seite mit DeepSeek V4.1 Flash: 309 s bis zur Antwort, 45 Modellschritte,
+  davon 15 nur, um nach einem Klick den Screenshot anzufordern; 20 Screenshots,
+  16 Klicks. `screenshot_after` an Aktionen, die die Seite ändern, und an `wait`
+  (`PICTURE_AFTER`) bringt das Bild danach im selben Aufruf (Helfer
+  `with_picture`, nur für Bildmodelle; sonst `NO_PICTURES`).
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
   `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
   `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,
@@ -1172,7 +1178,18 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
   liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; hatte der Nutzer
   den Browser und hat ihn nicht mehr, oder liegt ein `returned_at` nach dem
-  Öffnen der Karte, endet sie mit `handed_back`. Ohne `browser` fragt er vor
+  Öffnen der Karte, endet sie mit `handed_back`. Seit 2026-10-29 bringt das Ergebnis den
+  Browser gleich mit, wie der Nutzer ihn hinterließ (`BrowserTools.look`:
+  Screenshot für Bildmodelle, sonst die Seite als Text), statt dass der nächste
+  Schritt danach fragt; `ask_user` trägt im Protokoll deshalb die Herkunft `web`
+  und sperrt Memory wie jedes Fremdergebnis. Die Rückgabe sieht der Lauf binnen
+  etwa einer Sekunde (`HANDBACK_POLL_SECONDS` = 1). Ist die Ansicht in diesem
+  Fenster offen, gehört der Browser dem Nutzer, sobald der Agent fragt, ohne
+  Klick (einmal je Frage), und die Karte im Chat tritt zurück: Die Leiste über
+  dem Bild trägt Bitte und „Hand back“; nach einer Rückgabe in diesem Fenster
+  fragt nichts erneut, bis der Server sie sieht (`askSeen` in `agent-chat.js`;
+  die Ansicht meldet auch Öffnen und Schließen per
+  `consensio:workspace-holder`). Ohne `browser` fragt er vor
   einem Schritt in seinem Namen (Senden, Posten, Buchen, Löschen, AGB): Karte
   „The agent asks before it goes on“ mit „Allow“ / „Don’t allow“. Der Agent
   bekommt nur das Ergebnis (`agent_ask.ANSWERS`: `handed_back`, `continued`,
@@ -1185,8 +1202,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (`queued_hold`) und hält dann vor dem nächsten Aufruf. Das Werkzeug
   ersetzt die Vorab-Prüfung jedes Browser-Klicks (siehe „Vorab-Prüfung“):
   Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers bewirkt,
-  und der Nutzer entscheidet. Sein Ergebnis sperrt Memory nicht
-  (`MEMORY_KEEPING_TOOLS`). Aktivität „Your turn“, Tab-Titel „Waiting for
+  und der Nutzer entscheidet. Sein Ergebnis sperrt Memory (seit 2026-10-29
+  kann es die Seite des Browsers enthalten). Aktivität „Your turn“, Tab-Titel „Waiting for
   you“ (`tab-status.js`), Kopf der Agent-Aktivität „Waiting for you“.
 - **Der Agent pausiert ganz, solange der Nutzer übernommen hat** (Fund 3),
   damit nichts von ihm sieht, was der Nutzer dort tippt. Drei Schichten aus

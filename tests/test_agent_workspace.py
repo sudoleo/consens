@@ -267,6 +267,24 @@ def test_every_call_holds_the_browser_vm_awake_for_ten_minutes(monkeypatch, caps
     fresh.stay_awake()
 
 
+def test_the_helper_adds_the_picture_after_an_action_only_when_asked():
+    """screenshot_after (since 2026-10-29): the action's answer and then the
+    picture of the page, with its size for click and drag."""
+    browser = load("browser")
+
+    class Page:
+        def screenshot(self, type):
+            return b"png-bytes"
+
+        def evaluate(self, script):
+            return [1280, 720]
+    answer = {"text": "Clicked e4."}
+    assert browser.with_picture(Page(), {"action": "click"}, answer) is answer
+    pictured = browser.with_picture(Page(), {"action": "click", "screenshot_after": True}, answer)
+    assert pictured["text"] == "Clicked e4.\nPicture: 1280x720 pixels, the x,y that click and drag take."
+    assert pictured["png"] == "cG5nLWJ5dGVz"
+
+
 def test_the_browser_vm_sets_its_network_rules_with_a_new_version_only(fake_vm, monkeypatch):
     """Prod 2026-10-29: every opening set the rules anew, a request that
     waits while the VM wakes; once it ran into its limit and the browser was

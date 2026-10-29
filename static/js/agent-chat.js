@@ -1674,6 +1674,9 @@
   // the agent goes on without an answer.
   const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
     takeover: "You have the browser" };
+  // Per question: "offered" (the open view took the browser for the user),
+  // "user" (the user had it in this window, so a hand-back here answers it).
+  const askSeen = new Map();
   const askGlyphs = {
     // A pointer: the user's hand in the browser.
     browser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5l11 6.6-4.8 1.3 2.8 5.3-2.2 1.2-2.8-5.4-4 3.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
@@ -1862,9 +1865,24 @@
     const context = registry.visible();
     const hold = selectedMode() === "agent" ? openHold(context) : null;
     clearTimeout(holdTimer);
+    const workspace = App.workspaceView;
+    const holder = workspace?.holder?.() || "";
+    const browserTurn = hold && (hold.ask === "browser" || hold.ask === "takeover");
+    // Handed back in this window: the server sees it within a second or so
+    // (agent_ask.HANDBACK_POLL_SECONDS); until then nothing asks again.
+    if (browserTurn && holder === "user") askSeen.set(hold.id, "user");
+    const handedBack = browserTurn && holder === "agent" && askSeen.get(hold.id) === "user";
+    // The agent asked for the browser and the view is open here: it is the
+    // user's at once, without a click (once per question).
+    if (hold?.ask === "browser" && workspace?.isOpen?.() && holder === "agent" && !askSeen.has(hold.id)) {
+      askSeen.set(hold.id, "offered");
+      workspace.open({ takeOver: true });
+    }
     // The workspace's bar says what the agent waits for there (workspace-view.js).
-    App.workspaceView?.agentWaits?.(hold?.ask === "browser" ? String(hold.request || "") : null);
-    if (!hold) {
+    workspace?.agentWaits?.(hold?.ask === "browser" && !handedBack ? String(hold.request || "") : null);
+    // With the view open the bar above the picture carries the turn; the card
+    // would say the same a second time beside it.
+    if (!hold || handedBack || (browserTurn && workspace?.isOpen?.())) {
       if (host.dataset.id) { host.replaceChildren(); delete host.dataset.id; }
       host.hidden = true;
       return;

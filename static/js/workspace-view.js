@@ -729,6 +729,8 @@
     }
     view = build();
     view.wantControl = Boolean(take);
+    // The chat's card for the agent's question steps aside while the view is open (agent-chat.js renderHold).
+    announceHolder(view.holder);
     document.body.append(view.panel);
     document.body.classList.add('workspace-view-open');
     showTab('browser');
@@ -763,10 +765,8 @@
     clearTimeout(closing.slow);
     clearTimeout(closing.idle);
     // The agent may go on at once; an unsent hand-back expires by itself.
-    if (closing.holder === 'user') {
-      post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
-      announceHolder('agent');
-    }
+    if (closing.holder === 'user') post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
+    announceHolder('agent');
     try { closing.rfb?.disconnect(); } catch (error) { /* already gone */ }
     try { closing.socket?.close(); } catch (error) { /* already gone */ }
     // The shell ends shortly after its socket (TERMINAL_AFTER_DISCONNECT).

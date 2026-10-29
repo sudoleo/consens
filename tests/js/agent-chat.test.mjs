@@ -1836,6 +1836,26 @@ describe("single-model agent chat", () => {
     expect(host.querySelector(".agent-hold-title").textContent).toBe("You have the browser");
     expect(host.querySelector(".agent-ask-request").textContent).toBe("The agent waits until you hand it back.");
     expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => b.textContent)).toEqual(["Hand back"]);
+    // With the view open the bar above the picture carries the turn: the
+    // agent's question hands the browser over at once, without a click, and
+    // a hand-back in this window ends it here before the server says so.
+    handlers.hold.receive({ hold: null, id: "fedcba987654", decision: "handed_back" });
+    workspace.isOpen = () => true;
+    workspace.open = vi.fn();
+    handlers.hold.receive({ hold: { ...base, id: "112233445566", ask: "browser", request } });
+    expect(workspace.open).toHaveBeenCalledTimes(1);
+    expect(workspace.open).toHaveBeenCalledWith({ takeOver: true });
+    expect(host.hidden).toBe(true);
+    expect(workspace.agentWaits).toHaveBeenLastCalledWith(request);
+    holder = "user";
+    window.dispatchEvent(new window.CustomEvent("consensio:workspace-holder", { detail: { holder: "user" } }));
+    holder = "agent";
+    window.dispatchEvent(new window.CustomEvent("consensio:workspace-holder", { detail: { holder: "agent" } }));
+    expect(workspace.agentWaits).toHaveBeenLastCalledWith(null);
+    expect(workspace.open).toHaveBeenCalledTimes(1);
+    expect(host.hidden).toBe(true);
+    handlers.hold.receive({ hold: null, id: "112233445566", decision: "handed_back" });
+    workspace.isOpen = () => false;
     // In its last minutes the clock says how long the agent still waits, not that it stops.
     handlers.hold.receive({ hold: { ...base, id: "aabbccddeeff", ask: "confirm", request: "Darf ich?",
       at: new Date(Date.now() - 27 * 60000).toISOString() } });

@@ -38,8 +38,9 @@ from app.services.agent_tools import ReadOnlyTool
 TOOL = "ask_user"
 REQUEST_CHARS = 600
 # How often a waiting run looks whether the user handed the browser back
-# (the account's record, agent_workspace.user_has_browser).
-HANDBACK_POLL_SECONDS = 2
+# (the account's record, agent_workspace.control_state): the agent goes on
+# within about a second (2 s until the first games were played, 2026-10-29).
+HANDBACK_POLL_SECONDS = 1
 
 # What the agent reads, by the card's kind and the user's answer.
 ANSWERS = {
@@ -119,6 +120,17 @@ class AskTools:
         if not result:
             raise ValueError("The user could not be asked right now. Go on without it, or say in your answer what "
                              "you need from them.")
+        browser = getattr(self.vm, "browser_tools", None)
+        if result.get("status") == "handed_back" and browser is not None:
+            # The browser as the user left it, in this result (agent_browser.look).
+            try:
+                seen = browser.look(cancellation)
+            except ValueError:
+                return result
+            result["page"] = str(seen.get("page") or "")
+            result["note"] = ("The user handed the browser back. The page as they left it is below"
+                              + ("; its screenshot follows as an image after these results." if "screenshot follows"
+                                 in str(seen.get("note") or "") else "."))
         return result
 
     def _activity(self, args, result):

@@ -261,6 +261,26 @@ def test_a_reviewers_halt_during_the_users_card_comes_before_the_next_call(store
     assert ran == ["read"]
 
 
+def test_a_hand_back_brings_the_browser_as_the_user_left_it():
+    """Prod 2026-10-29: after every hand-back the agent's next step only asked
+    for a screenshot. Now the answer brings the page, and the picture follows."""
+    looked = []
+
+    class Browser:
+        def look(self, cancellation):
+            looked.append(True)
+            return {"page": 'Page: "Board"', "note": "The screenshot follows as an image after these results."}
+    loop = SimpleNamespace(ask_answer=agent_ask.answer("browser", "handed_back"))
+    tool = agent_ask.AskTools(SimpleNamespace(loop=loop, browser_tools=Browser())).tools()[0]
+    result = tool.execute(agent_ask.AskUserArgs(request="Dein Zug.", browser=True), cancellation=None)
+    assert looked == [True] and result["page"] == 'Page: "Board"'
+    assert result["status"] == "handed_back" and "screenshot follows as an image" in result["note"]
+    # An answer without a hand-back does not look.
+    loop.ask_answer = agent_ask.answer("confirm", "continue")
+    tool.execute(agent_ask.AskUserArgs(request="Darf ich?"), cancellation=None)
+    assert looked == [True]
+
+
 def test_the_tool_is_offered_with_the_workspace_and_returns_only_the_answer():
     loop = SimpleNamespace(ask_answer={"status": "allowed", "note": "The user allowed it."})
     tool = agent_ask.AskTools(SimpleNamespace(loop=loop)).tools()[0]
