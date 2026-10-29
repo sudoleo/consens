@@ -367,6 +367,17 @@ window.App.retryAccountStatus = () => statusRetry?.run();
 window.addEventListener("online", () => statusRetry?.run());
 document.addEventListener("visibilitychange", () => { if (!document.hidden) statusRetry?.run(); });
 
+// This module runs before the deferred app bundle, whose start (app-init.js)
+// sets the tier to Free; user-tier.js, the account mark and the agent modules
+// do not exist before it. A status that answered first was overwritten there
+// and a Pro account stayed Free in that tab (nightly run 2026-10-28). The
+// requests leave at once; their answers apply after DOMContentLoaded, which
+// follows every deferred script.
+const appStarted = new Promise(resolve => {
+  if (document.readyState === "complete") resolve();
+  else document.addEventListener("DOMContentLoaded", () => resolve(), { once: true });
+});
+
 async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
   if (!user || !token) return false;
   let loaded = false;
@@ -386,6 +397,7 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
     refused = response.status >= 400 && response.status < 500;
     if (response.ok) {
       const data = await response.json();
+      await appStarted;
       if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
       loaded = true;
@@ -920,6 +932,7 @@ async function fetchUsageData(token, uid, generation) {
     });
     if (!isCurrentAuthenticatedUser(uid, generation)) return false;
     const data = await response.json();
+    await appStarted;
     if (!response.ok || !isCurrentAuthenticatedUser(uid, generation)) return false;
 
     // /usage is an authoritative tier snapshot too. This lets a Pro account

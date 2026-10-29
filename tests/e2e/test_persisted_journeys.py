@@ -201,13 +201,15 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     j.control('release', {})
     state = j.settled()
     Path(f'test-results/{j.uid}-state.json').write_text(json.dumps(state, indent=2), encoding='utf-8')
-    assert len(state['calls']) == 8  # comparison call + six comparison providers + the agent's partial answer
+    # Comparison call + the three providers of Daily (since 2026-10-28) +
+    # the agent's partial answer.
+    assert len(state['calls']) == 5
     chat_id, chat = next(iter(state['collections']['chats'].items()))
     turn_id, turn = next(iter(chat['children']['turns'].items()))
     assert turn['data']['status'] == 'failed'
     assert turn['data']['agent_failure']['code'] == 'cancelled'
     budget = j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']
-    assert budget['used'] == 8 * 150 and budget['reserved'] == 0
+    assert budget['used'] == 5 * 150 and budget['reserved'] == 0
     j.page.reload()
     j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
     bookmark_id = next(iter(state['collections']['bookmarks']))
@@ -220,7 +222,7 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     assert 'Saved partial answer' in recover.text()
     after = j.control('state')
     assert after['calls'] == state['calls']
-    assert j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']['used'] == 8 * 150
+    assert j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']['used'] == 5 * 150
 
 
 def test_j02c_answer_check_off_in_settings_ends_the_turn_without_any_judge(journey):
@@ -256,8 +258,9 @@ def test_j02c_answer_check_off_in_settings_ends_the_turn_without_any_judge(journ
     assert data['status'] == 'completed' and data['agent_settings']['agent_preferences']['judges'] == 'off'
     review = data['agent_review']
     assert review['status'] == 'off' and [c['status'] for c in review['checks']] == ['off']
-    # The compare step, six comparison answers and the answer: no judge call.
-    assert len(state['calls']) == 8, state['calls']
+    # The compare step, the three comparison answers of Daily and the
+    # answer: no judge call.
+    assert len(state['calls']) == 5, state['calls']
     # No line under the answer: the reader switched the check off.
     status = j.page.locator('#agentAnswer .agent-review-status')
     expect(status).to_have_attribute('data-state', 'off')

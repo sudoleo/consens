@@ -154,13 +154,14 @@ def _hold_back(page, first):
     first; this holds the other back. Call the result once the page loads."""
     held = []
     if first == "status":
-        # firebase.js asks for the chats once the status is applied.
-        def chats(route):
-            while held:
-                held.pop().continue_()
-            route.fallback()
+        # The status has answered while the bundle is still on its way;
+        # firebase.js applies it once the app has started.
+        def status_answered(request):
+            if request.url.endswith("/user_status"):
+                while held:
+                    held.pop().continue_()
         page.route("**/static/dist/app.*.js", lambda route: held.append(route), times=1)
-        page.route("**/bookmarks?*", chats, times=1)
+        page.on("requestfinished", status_answered)
         return lambda: None
     started = []
 

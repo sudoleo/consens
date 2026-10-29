@@ -307,6 +307,36 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
         context.close()
 
 
+def test_a_status_that_answers_before_the_app_starts_keeps_the_pro_tier(browser, phase4_server):
+    """firebase.js runs before the deferred app bundle, whose start sets the
+    tier to Free. A /user_status that answered first was overwritten there:
+    the Pro account stayed Free in that tab (nightly run 2026-10-28)."""
+    held = []
+    released = []
+
+    def status_answered(request):
+        if request.url.endswith("/user_status"):
+            while held:
+                released.append(True)
+                held.pop().continue_()
+
+    def before_goto(page):
+        page.route("**/user_status", lambda route: _json(route, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        # The bundle follows only once the status has reached the page.
+        page.route("**/static/dist/app.*.js", lambda route: held.append(route), times=1)
+        page.on("requestfinished", status_answered)
+
+    context, page = _real_firebase_page(browser, phase4_server, before_goto=before_goto)
+    try:
+        assert released
+        page.wait_for_function("() => window.App.state.get('accountTier') === 'pro'")
+        assert page.evaluate(
+            "() => [App.state.get('userTier'), App.state.get('isUserPro'), App.state.get('isUserPlus')]"
+        ) == ["pro", True, True]
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [1280, 1000])
 def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, phase4_server, width):
     """Regression fuer den ersten Watch-Hinweis am fertigen Consensus-Fuss.
@@ -828,7 +858,7 @@ def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
         context.close()
 
 
-def test_compare_is_six_answers_only(browser, phase4_server):
+def test_compare_is_direct_answers_only(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     model_bookmark_bodies = []
     bookmark_responses = {}
@@ -879,13 +909,11 @@ def test_compare_is_six_answers_only(browser, phase4_server):
         page.locator('#runModeControl [data-value="compare"]').click()
         expect(mode).to_have_value("compare")
         expect(page.locator("#runModeSetting")).to_have_value("compare")
-        page.fill("#questionInput", "Give me six direct answers only.")
+        page.fill("#questionInput", "Give me direct answers only.")
         page.evaluate("() => window.sendQuestion()")
 
-        for response_id in (
-            "openaiResponse", "mistralResponse", "claudeResponse",
-            "geminiResponse", "deepseekResponse", "grokResponse",
-        ):
+        # The families of the default preset Daily (three since 2026-10-28).
+        for response_id in ("openaiResponse", "claudeResponse", "deepseekResponse"):
             expect(page.locator(f"#{response_id}")).to_contain_text(
                 "Direct answer from", timeout=10000
             )
@@ -903,10 +931,10 @@ def test_compare_is_six_answers_only(browser, phase4_server):
         )
         assert consensus_requests == []
         assert {body["modelName"] for body in model_bookmark_bodies} == {
-            "OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok",
+            "OpenAI", "Anthropic", "DeepSeek",
         }
         assert all(
-            body["question"] == "Give me six direct answers only."
+            body["question"] == "Give me direct answers only."
             for body in model_bookmark_bodies
         )
         assert page.locator("body").evaluate(
@@ -918,7 +946,7 @@ def test_compare_is_six_answers_only(browser, phase4_server):
         # 2026-08-31 thread contract it keeps the submitted question visible.
         expect(page.locator("#threadAsk")).to_be_visible()
         expect(page.locator("#threadAskText")).to_contain_text(
-            "Give me six direct answers only."
+            "Give me direct answers only."
         )
         expect(page.locator("#consensusRun")).to_have_count(0)
         expect(page.locator("#consensusOutput")).to_be_hidden()

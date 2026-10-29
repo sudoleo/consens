@@ -3657,7 +3657,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   aus `firebase.js::continueSignedIn`, der Wunsch wird beim ersten Versuch
   gelöscht). Vertrag in `app-init.js`: der erste Aufruf von
   `updateQuestionInputAccess` kommt erst nach `App.restoreQuestionDraft()` —
-  `/user_status` kann nach dem Login-Reload schon vor dem App-Start da sein,
+  `/user_status` kann nach dem Login-Reload schon vor dem App-Start
+  geantwortet haben (angewendet wird es seit 2026-10-29 erst danach),
   und ein leeres Feld verbrauchte sonst den einen Versuch
   (`tests/e2e/test_composer_invite.py`, beide Reihenfolgen); `takeAskContext()` für
   `App.trackAsk` (`source` typed/example/pasted, `after_login`). Dazu die
@@ -3810,7 +3811,12 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   einmal ein; der stündliche Token-Refresh erneuert nur noch das
   Session-Cookie (`/confirm-registration`) statt Status, Usage, Watches und
   Account-Menü neu zu laden. `/usage` läuft beim Start nur noch, wenn
-  `/user_status` scheiterte (gleiche Nutzlast).
+  `/user_status` scheiterte (gleiche Nutzlast). Beide Anfragen gehen sofort
+  los, ihre Antworten wendet `firebase.js` aber erst nach
+  `DOMContentLoaded` an (`appStarted`, seit 2026-10-29): Das Modul läuft vor
+  dem deferred App-Bundle, dessen Start (`app-init.js`) die Stufe auf Free
+  setzt — ein früher angekommener Status ging dort verloren, ein Pro-Konto
+  blieb im Tab Free (`tests/e2e/test_phase4_frontend.py::test_a_status_that_answers_before_the_app_starts_keeps_the_pro_tier`).
   Die paginierte Liste hält nur kompakte Metadaten in `window.bookmarksData`;
   `GET /bookmarks` sortiert nach `timestamp` und Dokument-ID (absteigend, kein
   eigener Index) und gibt als `next_cursor` die Sortierwerte der letzten Zeile
