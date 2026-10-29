@@ -128,39 +128,68 @@
     const state = {failed:'Failed', cancelled:'Stopped', blocked:'Skipped', unknown:'Usage unavailable'}[item.status] || 'Details';
     return `${App.t(toolName(item.name))} · ${App.t(state)}`;
   }
+  // A turn's working time: from its start to its end without the time it
+  // waited for the user (agent_wait_seconds, chat_store.turn_detail: its
+  // pauses and the agent's questions). The server's turn clock leaves that
+  // out as well (_turn_elapsed), and the head stands still while it waits
+  // (UX audit E1): a pause that ran into its 30 minutes read "Thought for 32m 4s".
   function savedDuration(turn) {
     const start = Date.parse(turn?.created_at);
     const end = Date.parse(turn?.completed_at || turn?.failed_at);
-    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
+    if (!(Number.isFinite(start) && Number.isFinite(end) && end >= start)) return null;
+    const waited = Number.isFinite(turn?.agent_wait_seconds) && turn.agent_wait_seconds > 0 ? turn.agent_wait_seconds * 1000 : 0;
+    return Math.max(0, end - start - waited);
   }
   // "23s", "3m 7s": the one way the app writes a span (App.format).
   function durationText(ms) {
     return App.format.duration(ms);
   }
-  // "Working for 12s" while it runs, "Thought for 3m 7s" once it is done.
-  function durationLabel(ms, running, status) {
-    if (!Number.isFinite(ms)) return running ? 'Working' : statuses[status] || 'Activity';
+  // One word for what a run does now, the same in the activity's head, the
+  // chat list (run-view.js) and the tab title (tab-status.js), UX audit E1/E2:
+  // before, the head said "Working for" while the reviewers checked the
+  // answer and while the run waited for the user, and the chat list
+  // "Thinking" or a cut "Writing ans…" at the same moment.
+  const PHASE_WORDS = Object.freeze({ working: 'Working', reviewing: 'Reviewing', checking: 'Checking',
+    paused: 'Paused', asking: 'Waiting for you' });
+  function phase({ asking = false, held = false, review = null } = {}) {
+    if (asking) return 'asking';
+    if (held) return 'paused';
+    if (review?.status === 'running') return review.mode === 'audit' ? 'reviewing' : 'checking';
+    return 'working';
+  }
+  // Every word the head writes before its clock, each alone in its element
+  // (the page translates it on its own; tests/test_i18n.py reads this list):
+  // until 2026-10-29 "Failed after" and "Stopped after" had no German alone
+  // and stood in English before "0 Sek." (I3).
+  const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing', checking: 'Checking',
+    paused: 'Paused', asking: 'Waiting for you', succeeded: 'Thought for', failed: 'Failed after',
+    cancelled: 'Stopped after' });
+  // "Working for 12s" while it works, "Reviewing · 2m 19s" while the
+  // reviewers check the written answer, "Paused · 1m 4s" (the clock stands
+  // still) while it waits for the user, "Thought for 3m 7s" once it is done.
+  function titleParts(ms, now, status) {
+    if (!Number.isFinite(ms)) return { verb: now ? PHASE_WORDS[now] : statuses[status] || 'Activity', gap: '', time: '' };
     const time = durationText(ms);
-    if (running) return `Working for ${time}`;
-    if (status === 'failed') return `Failed after ${time}`;
-    if (statuses[status] === statuses.cancelled) return `Stopped after ${time}`;
-    return `Thought for ${time}`;
+    if (now) return { verb: HEAD_VERBS[now], gap: now === 'working' ? ' ' : ' · ', time };
+    const settled = status === 'failed' ? 'failed' : statuses[status] === statuses.cancelled ? 'cancelled' : 'succeeded';
+    return { verb: HEAD_VERBS[settled], gap: ' ', time };
   }
   // The clock ticks in a field of fixed width, so the chevron and the model
   // icons after it do not move with every second (Apple audit A7): the time
   // sits in a slot as wide as its largest value in the same unit ("59s",
   // "9m 59s"), and the verb ("Working for" / "Thought for") takes the width
   // of the wider of the two, so the end of the run changes the words, not
-  // the line.
-  const SETTLED_VERBS = { running: "Working for", done: "Thought for" };
+  // the line. A change of state (Reviewing, Paused) or of the slot glides
+  // the head once to its new width.
+  const SETTLED_VERBS = { running: HEAD_VERBS.working, done: HEAD_VERBS.succeeded };
   const SLOTS = ["seconds", "minutes", "long"];
-  function setTitle(view, ms, running, status) {
-    const label = durationLabel(ms, running, status);
+  function setTitle(view, ms, now, status) {
+    const { verb, gap, time } = titleParts(ms, now, status);
+    const label = `${verb}${gap}${time}`;
     if (view.title.dataset.label === window.App.t(label)) return;
     view.title.dataset.label = label;
-    const time = Number.isFinite(ms) ? durationText(ms) : "";
-    const verb = time ? label.slice(0, label.length - time.length).trimEnd() : label;
     const verbEl = view.title.querySelector(".agent-activity-verb-text");
+    const gapEl = view.title.querySelector(".agent-activity-gap");
     const timeEl = view.title.querySelector(".agent-activity-time");
     const seconds = Math.floor(Math.max(0, ms || 0) / 1000);
     const unit = !time ? "" : seconds < 60 ? "seconds" : seconds < 600 ? "minutes" : "long";
@@ -168,45 +197,62 @@
     // the first second left a wide gap before the chevron for a whole
     // minute. The label a run ends with keeps at least the slot it ticked
     // in, so the end of the run does not move the line.
-    if (running && unit) view.liveSlot = unit;
-    const slot = running || !unit || !view.liveSlot ? unit
+    if (now && unit) view.liveSlot = unit;
+    const slot = now || !unit || !view.liveSlot ? unit
       : SLOTS[Math.max(SLOTS.indexOf(view.liveSlot), SLOTS.indexOf(unit))];
-    const resize = Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot && timeEl.isConnected;
-    const from = resize ? timeEl.getBoundingClientRect().width : 0;
+    const resize = view.title.isConnected && Boolean(verbEl.textContent) && (verbEl.textContent !== window.App.t(verb)
+      || gapEl.textContent !== gap || (Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot));
+    const from = resize ? view.title.getBoundingClientRect().width : 0;
     if (resize) cancelMotion(view.slotMotion);
     if (verbEl.textContent !== window.App.t(verb)) verbEl.textContent = verb;
-    // The other verb stands invisibly in the same cell (agent-chat.css), so
-    // the field is as wide as the wider one; it is no text of the title.
-    const paired = verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : verb === SETTLED_VERBS.done ? SETTLED_VERBS.running : "";
+    // While it works, the verb it will end with stands invisibly in the same
+    // cell (agent-chat.css), so the field is as wide as the wider one; it is
+    // no text of the title. Once it is over the clock is still and the field
+    // takes its own words: "Fertig nach" kept the width of "Arbeitet seit",
+    // a double gap before the time (UX audit B14/R19).
+    const paired = now && verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : "";
     const holder = verbEl.parentElement;
     if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
-    view.title.querySelector(".agent-activity-gap").textContent = time ? " " : "";
+    if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
     if (!resize) return;
-    // The first minute widens the slot once: the chevron glides to its new
-    // place while the new time opens up (none with reduced motion, motion()).
-    // min-width moves along: the slot's own min-width would win over width.
-    const to = timeEl.getBoundingClientRect().width;
-    view.slotMotion = from && to && from !== to ? motion(timeEl, [
-      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip' },
-      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip' },
+    // The chevron glides to its new place while the new words open up (none
+    // with reduced motion, motion()); the words keep to one line meanwhile.
+    const to = view.title.getBoundingClientRect().width;
+    view.slotMotion = from && to && from !== to ? motion(view.title, [
+      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip', whiteSpace: 'nowrap' },
+      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip', whiteSpace: 'nowrap' },
     ]) : null;
   }
-  function updateClock(view, elapsedMs, running, status) {
+  // `now`: the phase of a running run, or null once it is over. While it
+  // waits for the user the clock stands still.
+  function updateClock(view, elapsedMs, now, status) {
     clearInterval(view.clockTimer);
     view.clockTimer = null;
-    const now = performance.now();
-    const previous = Number.isFinite(view.elapsedMs) ? view.elapsedMs + (view.clockRunning ? now - view.clockAt : 0) : null;
-    view.elapsedMs = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : previous ?? (running ? 0 : null);
-    view.clockAt = now;
-    view.clockRunning = running;
+    const ticking = Boolean(now) && now !== 'paused' && now !== 'asking';
+    const at = performance.now();
+    const previous = Number.isFinite(view.elapsedMs) ? view.elapsedMs + (view.clockRunning ? at - view.clockAt : 0) : null;
+    view.elapsedMs = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : previous ?? (now ? 0 : null);
+    view.clockAt = at;
+    view.clockRunning = ticking;
     const tick = () => {
       const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
-      setTitle(view, elapsed, running, status);
+      setTitle(view, elapsed, now, status);
     };
     tick();
-    if (running) view.clockTimer = setInterval(tick, 1000);
+    if (ticking) view.clockTimer = setInterval(tick, 1000);
+  }
+  // The time a live run waited for the user on this page, so far, on the
+  // caller's clock: the wall clock since the start (agent-chat.js).
+  function waitedMs(view, waiting) {
+    const at = Date.now();
+    if (waiting && view.waitStart == null) view.waitStart = at;
+    if (!waiting && view.waitStart != null) {
+      view.waited = (view.waited || 0) + at - view.waitStart;
+      view.waitStart = null;
+    }
+    return (view.waited || 0) + (view.waitStart != null ? at - view.waitStart : 0);
   }
   const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const activeMotion = new Set();
@@ -517,12 +563,31 @@
     tabs: ['Listing the tabs', 'Listed the tabs'], tab: ['Switching the tab', 'Switched the tab'],
     screenshot: ['Taking a screenshot', 'Took a screenshot'], upload: ['Uploading', 'Uploaded'],
     download: ['Downloading', 'Downloaded'], wait: ['Waiting for the page', 'Waited for the page'] };
+  // A page by its name: the host of its address, without "www.".
+  function hostOf(address) {
+    try {
+      const url = new URL(String(address || ''));
+      return ['http:', 'https:'].includes(url.protocol) ? url.hostname.replace(/^www\./, '') : '';
+    } catch (_) { return ''; }
+  }
+  // What a step names, in its own type (UX audit A8/A9): a command, a path
+  // or code in mono; a search term on a page as a quote in the text's type
+  // („Förderfähige Kosten“); an opened page by its title (its host after it,
+  // the address on hover). Before, all three stood in mono, the page as its
+  // raw address.
+  function vmTargetKind(item) {
+    if (item.name !== 'browser') return 'code';
+    if (item.action === 'find' && item.query) return 'quote';
+    if (item.action === 'open' && (item.title || hostOf(item.url))) return 'text';
+    return 'code';
+  }
   function vmTarget(item) {
     if (['vm_exec', 'vm_start_process'].includes(item.name)) return item.command;
     if (item.name === 'vm_install_packages') return Array.isArray(item.packages) ? item.packages.join(' ') : '';
     if (item.name === 'request_domain') return item.domain;
     if (item.name === 'browser') {
-      return item.action === 'open' || item.action === 'download' ? item.url || item.downloads?.[0] || item.title
+      if (item.action === 'open') return item.title || hostOf(item.url) || item.url;
+      return item.action === 'download' ? item.url || item.downloads?.[0] || item.title
         : item.action === 'upload' ? item.file
         : item.action === 'key' ? item.key : item.action === 'find' ? item.query
         // A place of the screenshot, or how many strokes (agent_browser._activity).
@@ -532,7 +597,8 @@
     }
     return item.path || item.process;
   }
-  const vmOutcomes = { unavailable: 'VM not available', no_time: 'Skipped · no time left',
+  // The glossary's word: the workspace, never "VM" on the page (docs/i18n.md).
+  const vmOutcomes = { unavailable: 'Workspace not available', no_time: 'Skipped · no time left',
     day_limit: 'Skipped · VM time for today used up', busy: 'Skipped · workspace in use by another chat' };
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
@@ -544,10 +610,26 @@
     if (item.status === 'failed') return App.t('Failed');
     const parts = [];
     if (item.timed_out) parts.push(App.t('Timed out'));
-    else if (Number.isInteger(item.exit_code) && item.exit_code !== 0) parts.push(App.t('Exit {code}', { code: item.exit_code }));
+    else if (Number.isInteger(item.exit_code) && item.exit_code !== 0) {
+      // A command's exit code is its verdict, in words (UX audit F1); a
+      // stopped process's code (143) is only how it ended.
+      parts.push(commandFailed(item) ? App.t('Failed · code {code}', { code: item.exit_code })
+        : App.t('Exit {code}', { code: item.exit_code }));
+    }
+    // The opened page's host after its title (vmTarget).
+    if (vmTargetKind(item) === 'text' && item.title && hostOf(item.url)) parts.push(hostOf(item.url));
     // A quick command needs no clock ("0s" says nothing).
     if (Number.isFinite(item.duration_ms) && item.duration_ms >= 1000) parts.push(App.format.duration(item.duration_ms));
     return parts.join(' · ');
+  }
+  // A command that ended with an error (or ran out of time), or a step that
+  // failed: its line says so in the disagreement's tone (agent-chat.css).
+  // Before, "Exit 1" stood as grey as "3s" beside a command that worked,
+  // and data-status said "succeeded".
+  const commandTools = new Set(['vm_exec', 'vm_install_packages']);
+  function commandFailed(item) {
+    return item.status === 'succeeded' && commandTools.has(item.name)
+      && (item.timed_out === true || (Number.isInteger(item.exit_code) && item.exit_code !== 0));
   }
   function vmView(className) {
     const details = document.createElement('details');
@@ -586,11 +668,17 @@
     details.dataset.signature = signature;
     details.dataset.status = item.status;
     details.dataset.tool = item.name;
+    if (item.status === 'failed' || commandFailed(item)) details.dataset.outcome = 'failed';
+    else delete details.dataset.outcome;
     const [verb, target, meta] = details.firstElementChild.children;
     const verbs = item.name === 'browser' ? browserVerbs[item.action] : vmVerbs[item.name];
     verb.hidden = !verbs;
     verb.textContent = verbs ? App.t(verbs[item.status === 'running' ? 0 : 1]) : '';
+    details.dataset.target = vmTargetKind(item);
     target.textContent = String(vmTarget(item) || '');
+    // An opened page's address, on hover.
+    if (details.dataset.target === 'text' && item.url) target.title = String(item.url).slice(0, 500);
+    else target.removeAttribute('title');
     meta.textContent = vmMeta(item);
     const watch = details.firstElementChild.children[3];
     watch.hidden = !(item.name === 'browser' && document.body.classList.contains('viewer-has-workspace')
@@ -713,6 +801,33 @@
     // the reason once the user decided (on a phone both stood one above the other).
     node._reason.hidden = state === 'waiting';
     node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t((domain ? domainStates : holdStates)[state])}`;
+  }
+
+  // A step's thinking line (agent_delegation `completion:N/thinking`).
+  const isThought = item => item.kind === 'progress' && /\/thinking$/.test(String(item.id || ''));
+  // What a step thought, in its opened history (ReasoningProgress.sections,
+  // UX audit A2): each heading over its paragraphs, as ChatGPT and Claude
+  // open "Thought for …". Before, a step kept only its newest line, and a
+  // provider summary only its headings. The words are the model's: never
+  // translated; a step still thinking (no sections yet) shows its line.
+  function updateThought(node, item) {
+    const sections = (Array.isArray(item.sections) ? item.sections : [])
+      .filter(section => section && (section.title || section.text)).slice(0, 40);
+    const signature = JSON.stringify([item.text, sections]);
+    if (node.dataset.signature === signature) return;
+    node.dataset.signature = signature;
+    const paragraph = (text, className) => {
+      const p = document.createElement('p');
+      if (className) p.className = className;
+      p.dataset.i18nSkip = '';
+      p.translate = false;
+      p.textContent = String(text).slice(0, 4000);
+      return p;
+    };
+    node.replaceChildren(...(sections.length ? sections.flatMap(section => [
+      ...(section.title ? [paragraph(section.title, 'agent-thought-title')] : []),
+      ...String(section.text || '').split(/\n{2,}/).filter(text => text.trim()).map(text => paragraph(text)),
+    ]) : [paragraph(item.text)]));
   }
 
   function userNote(className, text) {
@@ -864,8 +979,14 @@
     }
     const view = host._agentActivity;
     const progress = events.filter(item => item.kind === 'progress' && item.text);
-    const reasoning = progress.length ? [] : events.filter(item => item.kind === "reasoning"
-      && ["text", "summary"].includes(item.format) && item.text);
+    // Reasoning stays beside the agent's notes (UX audit A1): until
+    // 2026-10-29 any progress line, a note as much as a gate or retry line,
+    // hid every thought of the run, live and saved (a rule from the time
+    // progress lines were summaries standing in for it). Only a step's
+    // reasoning that its own note repeats word for word stands back.
+    const said = step => progress.filter(item => item.step_id === step).map(item => item.text).join('\n');
+    const reasoning = events.filter(item => item.kind === "reasoning" && ["text", "summary"].includes(item.format)
+      && item.text && !(item.step_id && compactReasoning(item.text).split('\n').every(line => said(item.step_id).includes(line))));
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
     // `answer` only ends the steering; the answer itself is what follows.
@@ -907,7 +1028,12 @@
     // the same rule as failureNote.
     const settled = status === 'failed' && !running && answerText
       && App.agentReview?.failureNote?.({error: 'failed'}, review, answerText) === '';
-    updateClock(view, elapsedMs, running, settled ? 'succeeded' : status);
+    const now = running ? phase({ asking, held, review }) : null;
+    // The clock leaves out the time the run waited for the user here, as the
+    // saved duration does (savedDuration).
+    const waited = waitedMs(view, now === 'paused' || now === 'asking');
+    updateClock(view, running && Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs - waited) : elapsedMs, now,
+      settled ? 'succeeded' : status);
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
     view.details.dataset.status = status;
@@ -1047,8 +1173,13 @@
       }
     } else hidePreview(view, answering);
     const ids = new Set();
-    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || tools.includes(item)
-      || holds.includes(item))) {
+    // The plan stands once in the history, where it was first made, with its
+    // latest state (UX audit A5): every change of the checklist was an entry
+    // of its own ("Plan · 1 of 4 done", "2 of 4", "3 of 4"). An update that
+    // failed keeps its own line ("Plan not updated").
+    const firstPlan = tools.find(item => hasPlan(item) && item.status !== 'failed');
+    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || (tools.includes(item)
+      && !(hasPlan(item) && item.status !== 'failed' && item !== firstPlan)) || holds.includes(item))) {
       ids.add(item.id);
       let node = view.nodes.get(item.id);
       if (!node) {
@@ -1056,8 +1187,10 @@
           : item.kind === 'tool' && vmTools.has(item.name) ? vmView('agent-activity-tool agent-vm')
           : hasPlan(item) ? planView('agent-activity-tool agent-plan')
           : item.from_user ? userNote('agent-activity-update agent-user-note', item.text)
-          : document.createElement(item.kind === 'progress' ? 'p' : 'div');
-        if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool" : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
+          : document.createElement(item.kind === 'progress' && !isThought(item) ? 'p' : 'div');
+        if (!node.className) node.className = item.kind === "tool" ? "agent-activity-tool"
+          : isThought(item) ? 'agent-activity-update agent-activity-thought'
+          : item.kind === 'progress' ? 'agent-activity-update' : "agent-activity-reasoning";
         view.nodes.set(item.id, node);
         view.content.appendChild(node);
         if (item.kind === 'progress' && view.details.open && running) reveal(node);
@@ -1069,7 +1202,10 @@
       } else if (node.classList.contains('agent-user-note')) {
         // The user's words, written once at creation.
       } else if (node.classList.contains('agent-plan')) {
-        if (hasPlan(item)) updatePlan(node, item, false);
+        if (hasPlan(item)) updatePlan(node, item === firstPlan ? plan || item : item, false);
+      } else if (node.classList.contains('agent-activity-thought')) {
+        updateThought(node, item);
+        node.setAttribute('aria-label', item.summary_source === 'provider_summary' ? 'Reasoning summary' : 'Reasoning highlights');
       } else if (item.kind === "tool") {
         const signature = JSON.stringify([item, textOnly]);
         if (node.dataset.signature !== signature) {
@@ -1170,5 +1306,5 @@
       review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings,
       vm: turn?.agent_vm, vmRestore: options.vmRestore || null });
   }
-  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration, toolName };
+  App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration, toolName, phase, PHASE_WORDS };
 })();

@@ -316,6 +316,30 @@ def test_every_visible_english_text_has_german():
         f"{len(lines)} texts without German (python scripts/i18n.py missing; docs/i18n.md):\n" + "\n".join(lines[:60]))
 
 
+def test_every_word_of_the_activity_head_has_german_alone():
+    """The head writes its words alone in an element, the time after them
+    ("Failed after" · "0 Sek."): each needs an entry of its own, not only the
+    sentence with {time}. scripts/i18n.py finds the sentences, not the words
+    (UX audit 2026-10-29, I3: "Failed after 0 Sek." on the German page)."""
+    script = (ROOT / "static/js/agent-activity.js").read_text(encoding="utf-8")
+    words = set()
+    for name in ("HEAD_VERBS", "PHASE_WORDS"):
+        block = re.search(rf"const {name} = Object\.freeze\(\{{(.*?)\}}\);", script, re.S).group(1)
+        words |= set(re.findall(r"'([^']+)'", block))
+    current = i18n.Catalog(i18n._read_entries(_dictionary_files()))
+    assert {"Failed after", "Stopped after", "Reviewing", "Paused"} <= words
+    assert not [word for word in sorted(words) if not i18n_tool.covered(current, word)]
+
+
+def test_german_ellipses_follow_their_word():
+    """docs/i18n.md: "Wird geprüft…", never "Wird geprüft …" (UX audit
+    2026-10-29, I9: one run showed both)."""
+    spaced = [f"{path.name}: {key}" for path in _dictionary_files()
+              for key, value in json.loads(path.read_text(encoding="utf-8")).items()
+              if not key.startswith("_") and re.search(r"\s…", value)]
+    assert not spaced, "\n".join(spaced)
+
+
 def test_a_service_sentence_that_reaches_a_card_is_found():
     """The hold, secret and notes endpoints answer with the sentence of the
     exception agent_sessions.py raised ("This pause is already over.", B7 in

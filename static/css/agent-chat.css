@@ -141,13 +141,12 @@
 .agent-detail-skeleton span:nth-child(3) { width: 64%; }
 @keyframes agent-detail-pulse { 50% { opacity: .4; } }
 .agent-message + .agent-message { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
-/* A reviewer's work (agent-delegation.js reviewTimeline): three numbers, then
-   its rounds on one quiet line with dots, like the reasoning timeline. A
-   hollow dot is a round without objection, a filled one a round with notes.
-   The kinds wear the colours of their marks in the answer. */
-.agent-review-stats { display: flex; flex-wrap: wrap; gap: 8px 18px; overflow-wrap: normal; margin: 6px 0 14px; padding: 10px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
-.agent-review-stats dt { color: var(--ink-3); font-size: var(--font-size-xs); white-space: nowrap; }
-.agent-review-stats dd { margin: 3px 0 0; color: var(--ink); font-size: var(--font-size-xs); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A reviewer's work (agent-delegation.js reviewTimeline): one quiet line of
+   figures, then its rounds on a rail with dots, like the reasoning
+   timeline. A hollow dot is a round without objection, a filled one a round
+   with notes. The kinds wear the colours of their marks in the answer. The
+   figures stood as a table between two rules until 2026-10-29 (UX audit F7). */
+.agent-session-detail .agent-review-stats { margin: var(--space-1) 0 var(--space-3); color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-review-rounds { margin: 0; padding: 0; list-style: none; }
 .agent-review-round { position: relative; padding: 0 0 12px 18px; }
 .agent-review-round::before {
@@ -165,7 +164,7 @@
 .agent-review-round-state { flex: 1 1 auto; min-width: 0; color: var(--ink-3); }
 .agent-review-round-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .agent-session-detail .agent-review-round-reason { margin: 2px 0 0; color: var(--ink-3); line-height: 1.6; }
-.agent-review-notes { display: grid; gap: 10px; margin: 6px 0 2px; padding: 0; list-style: none; }
+.agent-review-notes { display: grid; gap: var(--space-2); margin: 6px 0 2px; padding: 0; list-style: none; }
 .agent-review-note { font-size: var(--font-size-xs); line-height: 1.6; }
 .agent-review-note-where { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; color: var(--ink-3); }
 .agent-review-note-where > * + *::before { content: "·"; margin-right: 6px; color: var(--ink-3); }
@@ -309,15 +308,25 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
   }
 }
 /* The one scrim (foundation.css). An --ink tint dimmed in light mode but
-   laid a pale veil over the chat in dark mode. */
-.agent-sidebar-scrim { position: fixed; inset: 0; z-index: 1290; background: var(--scrim); touch-action: none; }
+   laid a pale veil over the chat in dark mode. Scrim and sheet stand above
+   the phone's header bar: the sheet is a modal dialog, and the bar stayed
+   bright and tappable over the dimmed page (UX audit H3). */
+.agent-sidebar-scrim { position: fixed; inset: 0; z-index: calc(var(--z-header) + 1); background: var(--scrim); touch-action: none; }
 .agent-sidebar-scrim[hidden] { display: none; }
 @media (max-width: 1199px) {
   /* A sheet over the chat is a floating layer: the one place it lifts. */
   .agent-sidebar { --agent-enter-x: 0px; --agent-enter-y: 16px; --agent-panel-bg: var(--well); top: auto;
-    right: max(12px, env(safe-area-inset-right, 0px)); left: max(12px, env(safe-area-inset-left, 0px));
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: min(80dvh, 720px); z-index: 1300;
-    border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
+    right: max(var(--space-3), env(safe-area-inset-right, 0px)); left: max(var(--space-3), env(safe-area-inset-left, 0px));
+    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); width: auto; max-height: min(80dvh, 720px);
+    z-index: calc(var(--z-header) + 2); border: 0; border-radius: var(--radius-lg); box-shadow: var(--lift); }
+}
+/* From a tablet's width up it is a panel at the right edge, the width of
+   the desktop's, not a sheet across the whole screen (UX audit E6: 1066px
+   wide at 1100, a reviewer's name and its time a metre apart). It comes in
+   from the right like the desktop panel. */
+@media (min-width: 700px) and (max-width: 1199px) {
+  .agent-sidebar { --agent-enter-x: var(--space-4); --agent-enter-y: 0px; top: var(--space-3); left: auto;
+    width: min(346px, calc(100vw - 2 * var(--space-3))); max-height: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .agent-sidebar-scrim:not([hidden]) { animation: agent-scrim-enter var(--dur-state) var(--ease-standard) both; }
@@ -679,7 +688,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    links underneath) is --ink-2 and turns --ink on hover; counts and small
    meta text are --ink-3. Hierarchy inside comes from weight and size, never
    from a second black. Tokens carry light and dark mode. */
-.agent-activity, .agent-progress { --agent-ink: var(--ink-2); --agent-trace-ink: var(--ink-2); }
+/* The trace speaks in two sizes (UX audit A3/A4): thoughts, notes and steps
+   in --font-size-ui, commands and output in 12px mono; its entries stand
+   --trace-gap apart, their parts --space-2. Before: 14/13/12/11.7px and
+   seven distances between 6 and 16px. */
+.agent-activity, .agent-progress { --agent-ink: var(--ink-2); --agent-trace-ink: var(--ink-2); --trace-gap: var(--space-4); --trace-lh: 1.6; }
 /* The host keeps the activity's margins inside (flow-root), so its height is
    the same at rest and while agent-activity.js animates it. Collapsing
    through it, the 18px under "Thought for …" vanished once the motion fixed
@@ -723,7 +736,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    the last stops at its dot. A ring in the page colour around every dot
    cuts the rail there. */
 .agent-activity-history { display: flow-root; margin-top: 8px; }
-.agent-activity-timeline { --activity-gap: 14px; --activity-dot: 5px; }
+.agent-activity-timeline { --activity-gap: var(--trace-gap); --activity-dot: 5px; }
 .agent-activity-content { margin: 0; overflow-wrap: anywhere; }
 .agent-activity-content[hidden] { display: none; }
 .agent-activity-content:focus-visible { outline: 1px solid var(--ink-3); outline-offset: 4px; border-radius: 3px; }
@@ -762,19 +775,27 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   }
 }
 @keyframes activity-dot-breathe { 50% { opacity: .35; } }
-.agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; font-size: var(--font-size-sm); }
-.agent-activity-tool, .agent-activity-current { color: var(--agent-ink); overflow-wrap: anywhere; font-size: var(--font-size-ui); line-height: 1.65; }
+.agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--trace-lh); font-size: var(--font-size-ui); }
+.agent-activity-tool, .agent-activity-current { color: var(--agent-ink); overflow-wrap: anywhere; font-size: var(--font-size-ui); line-height: var(--trace-lh); }
 .agent-activity-current > strong { display: block; font-weight: 500; }
-.agent-progress { display: flow-root; margin: -8px 0 24px; color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; }
+/* -8px: the head's 36px row already holds air under its words. */
+.agent-progress { display: flow-root; margin: calc(-1 * var(--space-2)) 0 var(--space-5); color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); }
 /* pre-line: the agent's note beside a tool call keeps its lines. */
-.agent-progress p { margin: 0 0 14px; overflow-wrap: anywhere; white-space: pre-line; }
+.agent-progress p { margin: 0 0 var(--trace-gap); overflow-wrap: anywhere; white-space: pre-line; }
 /* In the live lines a note stays three lines tall (the timeline has it
    whole): a long one pushed the page down and back (2026-10-28). */
 .agent-progress .agent-progress-note {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
 }
-.agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-sm); line-height: 1.75; overflow-wrap: anywhere; white-space: pre-line; }
-.agent-progress-step { margin: 0 0 16px; color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
+.agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); overflow-wrap: anywhere; white-space: pre-line; }
+/* A step's thinking, opened (agent-activity.js updateThought): a heading in
+   the trace's ink over its paragraphs in the quiet one, no weight, no rule. */
+.agent-activity-thought > p { margin: 0; }
+.agent-activity-thought > p + p { margin-top: var(--space-2); }
+.agent-activity-thought > p + .agent-thought-title { margin-top: var(--space-3); }
+.agent-activity-thought > .agent-thought-title + p { margin-top: var(--space-1); }
+.agent-activity-thought:has(> .agent-thought-title) > p:not(.agent-thought-title) { color: var(--ink-3); }
+.agent-progress-step { margin: 0 0 var(--trace-gap); color: var(--agent-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); }
 .agent-current-status { font-weight: 500; }
 /* The live status row starts with the consens mark, drawn as a mask in the
    row's ink. One sheen crosses mark and label in a single stroke: it is an
@@ -820,33 +841,50 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-tool p { white-space: pre-wrap; margin: 2px 0 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--ink-3); }
 /* The sources of a step: the answer's own pills (source-pill.css), set in a
    row instead of on a line of prose. */
-.agent-activity-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.agent-activity-sources { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .agent-activity-sources .src-ref { top: 0; margin: 0; }
 /* A call in the agent's VM (agent-activity.js vmView): one line with the
    command or file and how it ended, its output below in a tinted field,
    open while it runs. Monochrome like the rest of the trace. */
-.agent-vm { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
-.agent-progress > .agent-vm { margin: 0 0 16px; }
+.agent-vm { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); }
+.agent-progress > .agent-vm { margin: 0 0 var(--trace-gap); }
 .agent-progress > .agent-vm:last-child { margin-bottom: 0; }
-/* One line box of the trace (1.65em), as tall as the status line it takes
-   the place of: the mono command and the small time made it 20.3px against
-   21.45px, and every command start pulled the page up by a pixel. */
-.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; min-width: 0; min-height: 1.65em; list-style: none; cursor: default; }
+/* One line box of the trace, as tall as the status line it takes the place
+   of: the mono command and the small time made it 20.3px against 21.45px,
+   and every command start pulled the page up by a pixel. */
+.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; min-width: 0; min-height: calc(var(--trace-lh) * 1em); list-style: none; cursor: default; }
 .agent-vm > summary::-webkit-details-marker { display: none; }
 .agent-vm.has-output > summary { cursor: pointer; }
 .agent-vm-verb { flex: none; }
 .agent-vm-verb[hidden] { display: none; }
 /* Plain mono text, not the inline-code pill: the output field below is the
-   only tinted surface. */
+   only tinted surface. Its margin keeps how it ended and the chevron at the
+   right edge, on every line alike (UX audit F4: they stood after a short
+   command and at the edge after a long one). */
 .agent-vm .agent-vm-target {
-  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 0 1 auto; min-width: 0; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 0; border-radius: 0; background: none; color: inherit;
-  font-family: var(--font-mono); font-size: .9em;
+  font-family: var(--font-mono); font-size: var(--font-size-xs);
 }
+/* A search term is a quote, a page its title: the text's own type (A8/A9). */
+.agent-vm:is([data-target="quote"], [data-target="text"]) .agent-vm-target { font-family: inherit; font-size: inherit; }
+.agent-vm[data-target="quote"] .agent-vm-target { quotes: "“" "”"; }
+:lang(de) .agent-vm[data-target="quote"] .agent-vm-target { quotes: "„" "“"; }
+.agent-vm[data-target="quote"] .agent-vm-target::before { content: open-quote; }
+.agent-vm[data-target="quote"] .agent-vm-target::after { content: close-quote; }
 .agent-vm:is([data-tool="vm_exec"], [data-tool="vm_start_process"]) .agent-vm-target::before { content: "$ "; color: var(--ink-3); }
 .agent-vm[open] > summary .agent-vm-target { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Live, a long command keeps to two lines; the history has it whole (F3:
+   a script filled the live lines, ten of them on a phone). */
+.agent-progress .agent-vm[open] > summary .agent-vm-target {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
 .agent-vm-meta { flex: none; padding-left: .25em; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
 .agent-vm-meta:empty { display: none; }
+/* A command that ended with an error says so in the disagreement's tone:
+   the word, and the dot of its entry in the timeline (UX audit F1). */
+.agent-vm[data-outcome="failed"] .agent-vm-meta { color: var(--dispute); }
+.agent-activity-content > .agent-vm[data-outcome="failed"]::before { background: var(--dispute); }
 /* Watch a browser step live (workspace-view.js): a quiet text action at the
    end of its line, like the restore action, no frame. */
 .agent-vm-watch {
@@ -864,27 +902,33 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    like the time beside it: centred on the summary, it slid to the middle of
    a command that unfolds over several lines (2026-10-27). */
 .agent-vm.has-output > summary::after {
-  content: ""; flex: none; align-self: flex-start; margin-top: .325em;
+  content: ""; flex: none; align-self: flex-start; margin-top: calc((var(--trace-lh) - 1) * .5em);
   width: 1em; height: 1em; color: var(--ink-3); background: currentColor;
   -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
   transform: rotate(-90deg);
 }
 .agent-vm.has-output[open] > summary::after { transform: none; }
 .agent-vm-output {
-  box-sizing: border-box; max-height: 15em; margin: 6px 0 0; padding: 8px 10px; overflow: auto;
-  border-radius: 8px; background: color-mix(in srgb, var(--agent-ink) 5%, transparent);
+  box-sizing: border-box; max-height: 15em; margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); overflow: auto;
+  border-radius: var(--radius-xs); background: color-mix(in srgb, var(--agent-ink) 5%, transparent);
   color: var(--ink-2); font: var(--font-size-xs)/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 /* Live, a running command shows the last five lines of its output: whole
    lines plus the padding, so a sixth line scrolls instead of adding the
-   remainder of a line (0.6px) to the page. */
-.agent-progress .agent-vm-output { max-height: calc(5 * 1.55em + 16px); max-height: calc(5lh + 16px); }
+   remainder of a line (0.6px) to the page. The space above them is a
+   border in the field's own tint, outside the scrolled area: as padding,
+   the line scrolled past showed its lower half there (UX audit F2). */
+.agent-progress .agent-vm-output {
+  max-height: calc(5 * 1.55em + 16px); max-height: calc(5lh + 16px);
+  padding-top: 0; border-top: var(--space-2) solid color-mix(in srgb, var(--agent-ink) 5%, transparent);
+  background-clip: padding-box;
+}
 /* The earlier steps of a VM run in one line ("Ran 4 commands", agent-activity.js
    foldPast); open, they stand in order below it as before. */
-.agent-progress > .agent-vm-fold { margin: 0 0 16px; }
+.agent-progress > .agent-vm-fold { margin: 0 0 var(--trace-gap); }
 .agent-vm-fold > summary {
   display: flex; align-items: baseline; gap: .5em; width: fit-content; list-style: none; cursor: pointer;
-  color: var(--ink-3); font-size: var(--font-size-ui); line-height: 1.65;
+  color: var(--ink-3); font-size: var(--font-size-ui); line-height: var(--trace-lh);
 }
 .agent-vm-fold > summary::-webkit-details-marker { display: none; }
 .agent-vm-fold > summary::after {
@@ -897,8 +941,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-vm-fold > summary:hover { color: var(--ink-2); }
 }
 .agent-vm-fold > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
-.agent-vm-fold-list { margin-top: 10px; }
-.agent-vm-fold-list > .agent-vm { margin: 0 0 16px; }
+.agent-vm-fold-list { margin-top: var(--space-2); }
+.agent-vm-fold-list > .agent-vm { margin: 0 0 var(--trace-gap); }
 .agent-vm-fold-list > :last-child { margin-bottom: 0; }
 .agent-vm-output[hidden] { display: none; }
 /* Restore the VM to before this message (agent-activity.js, admins): a quiet
@@ -915,8 +959,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-vm-restore:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
 /* A message the user sent into the running response (agent-activity.js
    userNote): their words in full ink after a quiet "You". */
-.agent-user-note { color: var(--ink); font-size: var(--font-size-ui); line-height: 1.65; overflow-wrap: anywhere; white-space: pre-wrap; }
-.agent-progress > .agent-user-note { margin: 0 0 16px; }
+.agent-user-note { color: var(--ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); overflow-wrap: anywhere; white-space: pre-wrap; }
+.agent-progress > .agent-user-note { margin: 0 0 var(--trace-gap); }
 /* A reviewer's halt in the activity (agent-activity.js holdView): who, why,
    what the user decided. The partial tone marks it while it waits. */
 .agent-hold-step { display: grid; gap: 2px; color: var(--ink); font-size: var(--font-size-ui); line-height: 1.55; }
@@ -931,8 +975,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    folded in the timeline. A ring for a step to do, a filled dot for the one
    under way, the answer checklists' tick (shell.css) for a done one, in the
    quiet ink; monochrome like the trace. */
-.agent-plan { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: 1.65; }
-.agent-progress > .agent-plan { margin: 0 0 16px; }
+.agent-plan { color: var(--agent-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); }
+.agent-progress > .agent-plan { margin: 0 0 var(--trace-gap); }
 .agent-progress > .agent-plan:last-child { margin-bottom: 0; }
 .agent-plan > summary {
   display: flex; align-items: baseline; gap: .5em; width: fit-content; list-style: none; cursor: pointer;
@@ -949,6 +993,25 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-plan > summary:hover { color: var(--ink-2); }
 }
 .agent-plan > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+/* 44px to the finger in the activity (UX audit H1, Apple-Audit F5): the
+   lines that open (a command, the plan, the earlier steps), the sources of a
+   step, the reviewers' marks and the toggles beside them measured 19-28px.
+   What is drawn keeps its size; the area reaches out (foundation.css
+   --hit-slop). On a touch screen the marks stand side by side instead of
+   overlapping, so each keeps its own width to the finger. */
+@media (pointer: coarse) {
+  :is(.agent-vm, .agent-vm-fold, .agent-plan) > summary { position: relative; }
+  :is(.agent-vm.has-output, .agent-vm-fold, .agent-plan) > summary::before {
+    content: ""; position: absolute; inset: var(--hit-slop) 0;
+  }
+  .agent-activity .agent-activity-sources { --src-ref-line: 44px; }
+  .agent-answer-activity .agent-model-stack .agent-inline-model { margin-left: 0; }
+  .agent-answer-activity .agent-inline-models :is(.agent-sidebar-toggle, .agent-workspace-toggle) { position: relative; }
+  .agent-answer-activity .agent-model-stack .agent-inline-model::after,
+  .agent-answer-activity .agent-inline-models :is(.agent-sidebar-toggle, .agent-workspace-toggle)::after {
+    content: ""; position: absolute; inset: var(--hit-slop);
+  }
+}
 .agent-plan-list { margin: 4px 0 0; padding: 0; list-style: none; }
 .agent-plan-list > li { position: relative; padding-left: 1.4em; color: var(--ink-2); overflow-wrap: anywhere; }
 .agent-plan-list > li::before {

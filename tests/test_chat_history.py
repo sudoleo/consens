@@ -1905,6 +1905,17 @@ def test_turn_detail_drops_malformed_stored_task_checks():
     assert chat_store.turn_detail("a" * 32, {"task_checks": [2, 1]}, {})["task_checks"] == [1, 2]
 
 
+def test_turn_detail_names_how_long_an_agent_turn_waited_for_the_user():
+    """Its pauses stay on the document (agent_holds); the browser gets their
+    sum, which "Thought for …" leaves out (UX audit 2026-10-29 E1)."""
+    turn = {"execution_mode": "agent", "assistant_response": "A", "status": "completed",
+            "agent_holds": [{"kind": "harm", "decision": "continue", "seconds": 61.25},
+                            {"kind": "injection", "decision": "timeout", "seconds": 1800}, {"seconds": "x"}, "y"]}
+    detail = chat_store.turn_detail("a" * 32, turn, {})
+    assert detail["agent_wait_seconds"] == 1861.2 and "agent_holds" not in detail
+    assert "agent_wait_seconds" not in chat_store.turn_detail("a" * 32, {**turn, "agent_holds": []}, {})
+
+
 def test_a_transaction_aborted_while_reading_starts_again(monkeypatch):
     # The SDK repeats a transaction only when its commit is aborted; under
     # contention Firestore may already abort a read (CI 2026-10-24).

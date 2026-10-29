@@ -587,10 +587,13 @@ Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 mit), `hold`/`hold_decision` am Lauf-Root, seit 2026-10-29 `agent_holds[]` am
 Turn-Dokument (jede beendete Pause, höchstens `HOLDS_KEPT` = 20: `kind`,
 `gate`, `ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
-Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`), Tab-Titel
+Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`; dort nur
+ihre Summe `agent_wait_seconds`, die „Thought for …“ abzieht), Tab-Titel
 „Paused“ (`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2):
-Tab-Titel und Seitenleisten-Zeile sagen „Paused“ bzw. „Waiting for you“
-(`App.words.paused`, `yourTurn`) für den Lauf jedes Chats, auch eines nicht
+Tab-Titel, Seitenleisten-Zeile und Kopf der Aktivität sagen „Paused“ bzw.
+„Waiting for you“ (`App.agentActivity.phase`/`PHASE_WORDS`, UX-Audit E1/E2;
+der Kopf „Paused · 1m 4s“ mit stehender Uhr, während der Schlussprüfung
+„Reviewing · 2m 19s“) für den Lauf jedes Chats, auch eines nicht
 geöffneten (die Zeile pulsiert dann nicht, `.run-entry.is-paused`), die Karte
 hängt am Lauf auf dem Schirm statt am Modus-Schalter, ein Reload folgt dem
 Lauf auch mit dem Schalter auf Compare, und ein zweiter Tab oder ein anderes
@@ -2039,6 +2042,12 @@ mit, ihr Prompt nennt `vm` und Befehlsergebnisse, und der `end`-Eintrag
 trägt die Summe. `agent-activity.js` zeigt jeden Aufruf kompakt wie ein
 Terminal (`vmView`): `$ Befehl` bzw. „Read the file“/„Wrote the file“/„Edited the file“ mit
 Pfad, rechts Exit-Code (nur ≠ 0), „Timed out“ und Dauer (ab 1 s), darunter
+(seit 2026-10-29, UX-Audit F1–F4/A8/A9: Ausgang und Pfeil immer an der
+rechten Kante; ein Befehl mit Fehler heißt „Failed · code 1“ und trägt
+Wort und Zeitleisten-Punkt in `--dispute`, `data-outcome="failed"`; live
+höchstens zwei Zeilen Befehl, die Ausgabe ohne angeschnittene Zeile oben;
+eine Seitensuche als Zitat in Textschrift, eine geöffnete Seite mit Titel,
+Host rechts, Adresse beim Darüberfahren; darunter
 die Ausgabe in einem getönten Feld, offen, solange der Befehl läuft, danach
 eingeklappt (eine Wahl des Lesers bleibt); der Pfeil bleibt seit 2026-10-27
 auf der ersten Zeile, auch wenn ein mehrzeiliger Befehl aufklappt (vorher
@@ -2051,7 +2060,8 @@ Lese-/Schreibschritten „4 earlier steps“, `foldPast`, seit 2026-10-26;
 seit 2026-10-28 jede Schrittart, auch ohne VM); sichtbar bleiben der Satz vor
 dem letzten Schritt, der Schritt und was folgt. Notizen des Agenten kürzt die
 Live-Ansicht auf drei Zeilen.
-Die Zeitleiste zeigt weiter jeden Schritt. Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
+Die Zeitleiste zeigt weiter jeden Schritt, den Plan seit 2026-10-29 aber nur
+einmal, an seiner ersten Stelle mit dem neuesten Stand (UX-Audit A5). Der Browser spricht nie mit der Sprite, alles läuft über das Backend.
 
 **Löschung.** `chat_store._purge_chat` löscht vor dem Rest des Chats seinen
 Ordner im Arbeitsplatz und immer auch seine alte eigene VM, deren Name aus dem
@@ -2469,7 +2479,18 @@ Die Denkphase zeigt kurze Fortschrittsauszüge: vorhandene Provider-
 Zusammenfassungen haben Vorrang, sonst werden vollständige Sätze aus sichtbarem
 Reasoning ausgewählt und ausdrücklich als Auszüge bezeichnet. `agent_progress.py`
 begrenzt sie auf drei Zeilen mit je 180 Zeichen und acht Updates pro Modellschritt;
-es entstehen keine zusätzlichen Modellaufrufe. Der Turn speichert pro Schritt
+es entstehen keine zusätzlichen Modellaufrufe. **Seit 2026-10-29 bleibt das
+Denken sichtbar** (UX-Audit Paket A): Unter einer Überschrift steht ihr erster
+Satz mit in der Zeile („Checking the numbers – The search found …“, vorher
+blieb von einer Terra-Zusammenfassung nur die Überschrift); eine nach Zeit
+getaktete Zeile wartet nicht zusätzlich auf 400 neue Zeichen; am Ende jedes
+Schritts schickt `DelegationLoop._closing_thoughts` die Denkzeile
+`completion:N/thinking` einmal mit ihrem letzten Wort und `sections`
+(`ReasoningProgress.closing`: Überschriften mit ihren Absätzen, sonst die
+vollständigen Sätze je Absatz, zusammen höchstens 4.000 Zeichen). Der Turn
+speichert sie mit; aufgeklappt zeigt die Zeitleiste sie als Absätze unter der
+Überschrift (`agent-activity.js` `updateThought`), und eine Notiz des Agenten
+blendet das Denken nicht mehr aus. Sonst speichert der Turn pro Schritt
 nur den letzten Kurztext, Worker-Sitzungen nur den aktuellen Fortschritt;
 das bestehende Event-Journal enthält die begrenzten Kurztext-Updates. Der
 Antwortbereich zeigt während des Laufs kurze Reasoning-Absätze unterhalb

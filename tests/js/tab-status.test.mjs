@@ -42,6 +42,9 @@ describe("tab status", () => {
     expect(app.title()).toBe("Paused · consens.io");
     app.run("running", { hold: null });
     expect(app.title()).toBe("Working… · consens.io");
+    // The reviewers' check of the answer, in the word of the activity's head (E2).
+    app.run("running", { agentReview: { mode: "audit", status: "running" } });
+    expect(app.title()).toBe("Reviewing… · consens.io");
   });
 
   it("says that the agent waits for the user when it asked them something (ask_user)", () => {

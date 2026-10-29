@@ -531,7 +531,9 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator('#agentAnswerActivity .agent-progress')).to_contain_text('release their unused allowance')
         expect(page.locator('#agentAnswerActivity details')).not_to_have_attribute('open', '')
         if width == 1280:
-            expect(page.locator('.run-entry-status')).to_have_text('Waiting for allowance')
+            # The chat list says what the head says (UX audit E2): the run
+            # works on by itself; the line above names the wait.
+            expect(page.locator('.run-entry-status')).to_have_text('Working')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         _snapshot(page, f"agent-allowance-wait-{width}-{'dark' if dark else 'light'}")
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'status', id:'resumed', status:'working'})")
@@ -546,7 +548,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         page.locator('#agentAnswerActivity summary').click()
         expect(page.locator('#agentAnswerActivity .agent-activity-reasoning')).to_be_visible()
         if width == 1280:
-            expect(page.locator(".run-entry-status")).to_have_text("Thinking")
+            expect(page.locator(".run-entry-status")).to_have_text("Working")
             expect(page.locator("#newRunButton")).to_have_text("New chat")
         page.locator('#agentAnswerActivity summary').click()
         page.evaluate("() => window.__emitAgent({version:1, step_id:'completion:0', kind:'tool', id:'tool1', name:'compare_models', status:'running'})")

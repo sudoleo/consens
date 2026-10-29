@@ -38,7 +38,9 @@ describe("VM calls in the activity", () => {
     activity.receive(events, vm({ status: "succeeded", command: "pip install pandas", cwd: "/home/sprite" }));
     activity.render(host, { running: true, status: "running", events, elapsedMs: 16000 });
     expect(live.open).toBe(false);
-    expect(live.querySelector(".agent-vm-meta").textContent).toBe("Exit 1 · 12s");
+    // A command that failed says so in words and in the dispute tone (UX audit F1).
+    expect(live.querySelector(".agent-vm-meta").textContent).toBe("Failed · code 1 · 12s");
+    expect(live.dataset.outcome).toBe("failed");
     // A cut output says so before its end.
     expect(live.querySelector(".agent-vm-output").textContent).toBe("…\nSuccessfully installed pandas\n");
     // The history holds the same block, folded.
@@ -86,7 +88,7 @@ describe("VM calls in the activity", () => {
     expect(edit.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/calc.py");
     // Nothing to open without output.
     expect(write.classList.contains("has-output")).toBe(false);
-    expect(failed.querySelector(".agent-vm-meta").textContent).toBe("VM not available");
+    expect(failed.querySelector(".agent-vm-meta").textContent).toBe("Workspace not available");
     expect(failed.textContent).not.toMatch(/error|exception|HTTP/i);
   });
 
@@ -128,7 +130,7 @@ describe("VM calls in the activity", () => {
   });
 
   // update_plan (2026-10-26), like Claude Code's todo list.
-  it("pins the latest plan above the live progress and keeps each change in the timeline", () => {
+  it("pins the latest plan above the live progress and keeps it once in the timeline", () => {
     const { host, activity } = setup();
     const events = [];
     const plan = (n, statuses, fields = {}) => activity.receive(events, { version: 1, kind: "tool", id: `p:${n}/tool`,
@@ -156,12 +158,14 @@ describe("VM calls in the activity", () => {
     plan(3, ["completed", "completed", "completed"], { status: "failed" });
     activity.render(host, { running: true, status: "running", events });
     expect(preview.querySelector(".agent-plan summary").textContent).toBe("Plan · 1 of 3 done");
-    // The timeline keeps each change, folded.
+    // The timeline keeps the plan once, folded, where it was first made, with
+    // its latest state (UX audit A5); a failed update keeps its own line.
     const saved = host.querySelectorAll(".agent-activity-content .agent-plan");
-    expect(saved).toHaveLength(3);
-    expect([...saved].map(node => node.open)).toEqual([false, false, false]);
-    expect(saved[0].querySelector("summary").textContent).toBe("Plan · 0 of 3 done");
-    expect(saved[2].querySelector("summary").textContent).toBe("Plan not updated");
+    expect(saved).toHaveLength(2);
+    expect([...saved].map(node => node.open)).toEqual([false, false]);
+    expect(host.querySelector(".agent-activity-content").firstElementChild).toBe(saved[0]);
+    expect(saved[0].querySelector("summary").textContent).toBe("Plan · 1 of 3 done");
+    expect(saved[1].querySelector("summary").textContent).toBe("Plan not updated");
   });
 
   // vm_start_process & co. (2026-10-26): a dev server or a long test run.
@@ -324,7 +328,10 @@ describe("a step in the workspace's browser", () => {
     activity.render(host, { running: true, status: "running", events });
     const [browserStep, otherStep] = host.querySelectorAll(".agent-activity-content .agent-vm");
     expect(browserStep.querySelector(".agent-vm-verb").textContent).toBe("Opening");
-    expect(browserStep.querySelector(".agent-vm-target").textContent).toBe("https://github.com");
+    // A page by its name in the text's type, its address on hover (UX audit A9).
+    expect(browserStep.querySelector(".agent-vm-target").textContent).toBe("github.com");
+    expect(browserStep.querySelector(".agent-vm-target").title).toBe("https://github.com");
+    expect(browserStep.dataset.target).toBe("text");
     const watch = browserStep.querySelector(".agent-vm-watch");
     expect(watch.hidden).toBe(false);
     expect(watch.textContent).toBe("Watch live");
@@ -352,7 +359,17 @@ describe("a step in the workspace's browser", () => {
     activity.render(host, { running: true, status: "running", events });
     const find = host.querySelectorAll(".agent-activity-content .agent-vm")[4];
     expect(find.querySelector(".agent-vm-verb").textContent).toBe("Searched the page for");
+    // A search term is a quote in the text's type (agent-chat.css adds the marks, A8).
     expect(find.querySelector(".agent-vm-target").textContent).toBe("price");
+    expect(find.dataset.target).toBe("quote");
+    // Opened, the page says its title, its host after it at the edge.
+    activity.receive(events, step({ id: "completion:1:call_7/tool", status: "succeeded", action: "open",
+      url: "https://www.kfw.de/inlandsfoerderung/", title: "Heizungsförderung für Privatpersonen | KfW" }));
+    activity.render(host, { running: true, status: "running", events });
+    const page = host.querySelectorAll(".agent-activity-content .agent-vm")[5];
+    expect(page.querySelector(".agent-vm-verb").textContent).toBe("Opened");
+    expect(page.querySelector(".agent-vm-target").textContent).toBe("Heizungsförderung für Privatpersonen | KfW");
+    expect(page.querySelector(".agent-vm-meta").textContent).toBe("kfw.de");
     expect(find.querySelector(".agent-vm-output").textContent).toContain('[e4] "Sort by price"');
   });
 
@@ -475,5 +492,54 @@ describe("Live lines of a long run", () => {
     const note = preview.querySelector(".agent-progress-note");
     expect(note.closest(".agent-vm-fold")).toBeNull();
     expect(note.textContent.length).toBeGreaterThan(400);
+  });
+});
+
+// The thinking stays visible (UX audit 2026-10-29, package A).
+describe("the agent's thinking in the activity", () => {
+  it("keeps the reasoning beside a note, live and in the history (A1)", () => {
+    const { host, activity } = setup();
+    const events = [];
+    const thought = (step, text) => activity.receive(events, { version: 1, kind: "reasoning", step_id: step,
+      id: `${step}/reasoning-summary`, format: "summary", summary_source: "provider_summary", text });
+    thought("completion:0", "Clarifying the question");
+    thought("completion:1", "Checking the numbers");
+    activity.receive(events, { version: 1, kind: "progress", step_id: "completion:1", id: "completion:1/note",
+      text: "The calculation is done: gas costs more than the heat pump." });
+    activity.render(host, { running: false, status: "completed", events });
+    // Before, one note hid every thought of the run.
+    expect([...host.querySelectorAll(".agent-activity-reasoning")].map(node => node.textContent))
+      .toEqual(["Clarifying the question", "Checking the numbers"]);
+    // A step's thought its own note repeats word for word stands back.
+    thought("completion:2", "The calculation is done: gas costs more than the heat pump.");
+    activity.receive(events, { version: 1, kind: "progress", step_id: "completion:2", id: "completion:2/note",
+      text: "The calculation is done: gas costs more than the heat pump.\nNext the subsidy." });
+    activity.render(host, { running: false, status: "completed", events });
+    expect(host.querySelectorAll(".agent-activity-reasoning")).toHaveLength(2);
+  });
+
+  it("opens a step's thinking as its headings over their paragraphs, never translated (A2)", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, { version: 1, kind: "progress", step_id: "completion:1", id: "completion:1/thinking",
+      text: "Checking the numbers – The search found 11.8 ct/kWh.", summary_source: "provider_summary" });
+    activity.render(host, { running: true, status: "running", events });
+    // Still thinking: its line, live and in the history.
+    expect(host.querySelector(".agent-progress p").textContent).toBe("Checking the numbers – The search found 11.8 ct/kWh.");
+    const entry = host.querySelector(".agent-activity-content .agent-activity-thought");
+    expect(entry.textContent).toBe("Checking the numbers – The search found 11.8 ct/kWh.");
+    // Its step is over: the sections arrive with the last line.
+    activity.receive(events, { version: 1, kind: "progress", step_id: "completion:1", id: "completion:1/thinking",
+      text: "Choosing the efficiency – A SCOP of 3.4 is cautious.", summary_source: "provider_summary",
+      sections: [{ title: "Checking the numbers", text: "The search found 11.8 ct/kWh. I will compute the costs." },
+                 { title: "Choosing the efficiency", text: "A SCOP of 3.4 is cautious.\n\nI will also run 3.0 and 3.8." }] });
+    activity.render(host, { running: false, status: "completed", events });
+    const saved = host.querySelector(".agent-activity-content .agent-activity-thought");
+    expect(saved).toBe(entry);
+    expect([...saved.children].map(p => [p.className, p.textContent])).toEqual([
+      ["agent-thought-title", "Checking the numbers"], ["", "The search found 11.8 ct/kWh. I will compute the costs."],
+      ["agent-thought-title", "Choosing the efficiency"], ["", "A SCOP of 3.4 is cautious."], ["", "I will also run 3.0 and 3.8."]]);
+    expect([...saved.children].every(p => p.hasAttribute("data-i18n-skip"))).toBe(true);
+    expect(saved.getAttribute("aria-label")).toBe("Reasoning summary");
   });
 });

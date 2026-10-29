@@ -87,9 +87,10 @@ def activity_budget(turn, patch):
 
 def bounded_activity(activity, limit=None):
     """``activity`` as saved: within ``limit`` bytes of UTF-8 JSON (default
-    ACTIVITY_MAX_BYTES). The oldest events lose their VM output first
-    (``output_truncated``), then their long texts and plan steps are
-    shortened; the events and their order stay. Only when that is not enough
+    ACTIVITY_MAX_BYTES). The oldest events lose their VM output
+    (``output_truncated``) and their thinking's sections first, then their
+    long texts and plan steps are shortened; the events and their order
+    stay. Only when that is not enough
     do the oldest events go: the answer never does."""
     limit = ACTIVITY_MAX_BYTES if limit is None else limit
     size = json_bytes(activity)
@@ -103,6 +104,9 @@ def bounded_activity(activity, limit=None):
             before = json_bytes(event)
             if not shorten and event.get("output"):
                 event["output"], event["output_truncated"] = "", True
+            elif not shorten and event.get("sections"):
+                # A step's thinking (ReasoningProgress.sections) keeps its line.
+                del event["sections"]
             elif shorten:
                 for key in ("text", "command"):
                     value = event.get(key)

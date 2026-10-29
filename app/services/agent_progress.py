@@ -134,6 +134,14 @@ def _fits(text):
     return _EXCERPT_MIN_CHARS <= len(text) <= _EXCERPT_MAX_CHARS and not _plan_only(text)
 
 
+# What a step thought, to read once its history is open (sections(), UX audit
+# 2026-10-29 A2): until then a step kept only its newest line, and under a
+# provider summary only its headings ("Checking the numbers"). Its first
+# characters are kept for this, its paragraphs whole up to _DETAIL_CHARS.
+_DETAIL_CHARS = 4000
+_DETAIL_SOURCE_CHARS = 16_000
+
+
 class ReasoningProgress:
     def __init__(self, *, unlimited=False, min_seconds=0.0, clock=time.monotonic):
         # unlimited: a long step that writes the answer keeps showing signs of life for its
@@ -148,6 +156,10 @@ class ReasoningProgress:
         self.source = "excerpt"
         self.block = None
         self.truncated = False
+        # The step's reasoning from its start (sections()); self.text is a
+        # window over its end.
+        self.opening = ""
+        self.closed = None
 
     def update(self, event):
         if event.get("kind") != "reasoning" or event.get("format") not in {"text", "summary"}:
@@ -158,6 +170,7 @@ class ReasoningProgress:
         if source != self.source:
             self.text, self.summary, self.received_chars, self.published_chars = "", "", 0, 0
             self.truncated = False
+            self.opening = ""
         self.source = source
         chunk = str(event.get("text", ""))
         # Each summary part is its own block ("reasoning.summary:1"); its
@@ -165,7 +178,11 @@ class ReasoningProgress:
         block = event.get("id")
         if block != self.block and self.text and not self.text.endswith("\n"):
             self.text += "\n\n"
+            if len(self.opening) < _DETAIL_SOURCE_CHARS:
+                self.opening += "\n\n"
         self.block = block
+        if len(self.opening) < _DETAIL_SOURCE_CHARS:
+            self.opening = (self.opening + chunk)[:_DETAIL_SOURCE_CHARS]
         text = self.text + chunk
         self.truncated |= len(text) > _WINDOW_CHARS
         self.text = text[-_WINDOW_CHARS:]
@@ -174,8 +191,11 @@ class ReasoningProgress:
         self.received_chars += len(chunk)
         # Reserve the final update for a native summary that may arrive late.
         limit = None if self.unlimited else 8 if source == "provider_summary" else 7
+        # A line paced by time (min_seconds) needs no pace by size as well:
+        # 400 characters held a section's first sentence back until the next
+        # heading had taken the line (UX audit 2026-10-29, A2).
         if ((limit is not None and self.updates >= limit)
-                or (self.summary and self.received_chars - self.published_chars < 400)
+                or (self.summary and not self.min_seconds and self.received_chars - self.published_chars < 400)
                 or (self.published_at is not None and self.clock() - self.published_at < self.min_seconds)):
             return None
         summary = "\n".join(self._excerpts()[-3:])
@@ -185,19 +205,24 @@ class ReasoningProgress:
         self.updates += 1
         return {"text": summary, "format": "summary", "summary_source": self.source, "append": False}
 
-    def _excerpts(self):
+    def _excerpts(self, final=False):
         """One highlight per finished line, newest last: a heading stands
-        for its section; otherwise the last fitting sentence of raw reasoning
-        (where a paragraph arrives at its point) or the first of a provider
-        summary (its topic sentence). The open line counts only while no
-        line has finished, so a single long paragraph still shows progress."""
+        for its section, with the first sentence under it once that has
+        arrived ("Checking the numbers – The search found …"); otherwise the
+        last fitting sentence of raw reasoning (where a paragraph arrives at
+        its point) or the first of a provider summary (its topic sentence).
+        The open line counts only while no line has finished, so a single
+        long paragraph still shows progress, and for the first sentence of a
+        section. ``final``: the step is over, its last line is finished too."""
         text = self.text
         if self.truncated:
             # The window starts inside a sentence: skip to its end.
             cut = re.search(r"\n|[.!?][\"'”’)\]]*\s", text)
             text = text[cut.end():] if cut else ""
         *finished, current = text.split("\n")
-        excerpts, sectioned = [], False
+        if final:
+            finished, current = [*finished, current], ""
+        excerpts, sectioned, section = [], False, None
         def add(candidates, last):
             fitting = [sentence for sentence in candidates if _fits(sentence)]
             if fitting:
@@ -205,6 +230,13 @@ class ReasoningProgress:
                 if excerpt in excerpts:
                     excerpts.remove(excerpt)
                 excerpts.append(excerpt)
+        def lead(sentences):
+            # The section's first sentence joins its heading; until 2026-10-29
+            # a heading alone stood for all the sentences under it.
+            fitting = [sentence for sentence in sentences if _fits(sentence)]
+            if fitting and excerpts and excerpts[-1] == section:
+                excerpts[-1] = f"{section} – {fitting[0]}"
+            return None
         for line in finished:
             if not line.strip():
                 continue
@@ -214,14 +246,67 @@ class ReasoningProgress:
                 # section to the sentences under it.
                 sectioned = _fits(heading)
                 add([heading], True)
+                section = heading if sectioned else None
                 continue
             if sectioned:
+                section = lead(_sentences(line, True)) if section else None
                 continue
             sentences = _sentences(line, True)
             if not sentences and self.source == "provider_summary" and not re.search(r"[.!?:;,]$", line.strip()):
                 # A summary title without markup or punctuation.
                 sentences = [_clean(line)]
             add(sentences, self.source == "excerpt")
-        if not excerpts and current.strip() and not _heading(current):
+        if section and current.strip() and not _heading(current):
+            lead(_sentences(current, False))
+        elif not excerpts and current.strip() and not _heading(current):
             add(_sentences(current, False), self.source == "excerpt")
         return excerpts
+
+    def sections(self, final=False):
+        """The step's reasoning to read in its opened history, as
+        ``[{"title", "text"}]``: a provider summary by its headings with the
+        paragraphs under them, other reasoning as its complete sentences per
+        paragraph (still excerpts: fragments and what is past the bound stay
+        out). Whole paragraphs only, together at most _DETAIL_CHARS; the open
+        last line only once the step is over (``final``)."""
+        lines = self.opening.split("\n")
+        if not final or len(self.opening) >= _DETAIL_SOURCE_CHARS:
+            lines = lines[:-1]
+        sections, used, current = [], 0, None
+        for line in lines:
+            if not line.strip():
+                continue
+            title = _heading(line)
+            if not title and self.source == "provider_summary" and not re.search(r"[.!?:;,]$", line.strip()):
+                # A summary title without markup or punctuation.
+                title = _clean(line)
+            if title and len(title) <= _EXCERPT_MAX_CHARS:
+                if used + len(title) > _DETAIL_CHARS:
+                    break
+                current = {"title": title, "text": ""}
+                sections.append(current)
+                used += len(title)
+                continue
+            text = _clean(line) if self.source == "provider_summary" else " ".join(_sentences(line, True))
+            if not text:
+                continue
+            if used + len(text) > _DETAIL_CHARS:
+                break
+            if current is None:
+                current = {"title": "", "text": ""}
+                sections.append(current)
+            current["text"] = f"{current['text']}\n\n{text}" if current["text"] else text
+            used += len(text)
+        return [section for section in sections if section["title"] or section["text"]]
+
+    def closing(self):
+        """The step's last word once its reasoning is over: the newest line
+        (past the pacing and update limits) and its sections(), or None when
+        there is nothing new to say."""
+        excerpts = self._excerpts(final=True)
+        text = excerpts[-1] if excerpts else self.summary.rsplit("\n", 1)[-1]
+        sections = self.sections(final=True)
+        if not text or (text, sections) == self.closed:
+            return None
+        self.closed = (text, sections)
+        return {"text": text, "sections": sections, "summary_source": self.source}

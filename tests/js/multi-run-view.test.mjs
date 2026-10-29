@@ -32,7 +32,8 @@ function boot({ realHistory = false } = {}) {
   const user = { uid: "view-user", getIdToken: vi.fn(async () => "token") };
   const state = new Map();
   const harness = loadScripts(
-    ["static/js/run-registry.js", ...(realHistory ? ["static/js/thread-history.js"] : []), "static/js/run-view.js"],
+    ["static/js/run-registry.js", ...(realHistory ? ["static/js/thread-history.js"] : []), "static/js/agent-activity.js",
+      "static/js/run-view.js"],
     {
       body: BODY,
       before(window) {
@@ -270,6 +271,17 @@ describe("selected RunContext projection", () => {
     registry.update(agent.runId, context => { context.metadata.hold = null; });
     expect(status.textContent).toBe("Working");
     expect(row.classList.contains("is-paused")).toBe(false);
+    // The word of the activity's head (UX audit E2): thinking, a command or
+    // the answer being written is "Working", the reviewers' check "Reviewing".
+    registry.update(agent.runId, context => {
+      context.metadata.agentActivity = [{ version: 1, kind: "reasoning", id: "r", format: "summary", text: "Weighing it." }];
+      context.consensus.streamText = "The answer begins";
+    });
+    expect(status.textContent).toBe("Working");
+    registry.update(agent.runId, context => { context.metadata.agentReview = { mode: "audit", status: "running" }; });
+    expect(status.textContent).toBe("Reviewing");
+    registry.update(agent.runId, context => { context.metadata.agentReview = { status: "running" }; });
+    expect(status.textContent).toBe("Checking");
     dom.window.close();
   });
 

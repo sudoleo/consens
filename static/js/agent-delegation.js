@@ -95,6 +95,8 @@
       .map(agent => reviewers.has(agent.id) ? reviewers.get(agent.id) : agent).filter(Boolean);
     return [...rows, ...(check ? [check] : [])];
   }
+  // The work log keeps a turn's panel open only for those who see it (admins, F5).
+  const shownLog = view => Boolean(view.workLog) && document.body.classList.contains("viewer-is-admin");
   function findRow(view, id) {
     if (id === CHECK_ID) return checkRow(view);
     const agent = view.agents.get(id);
@@ -400,9 +402,12 @@
     const status = node("p", "agent-sidebar-status"); status.setAttribute("role", "status");
     const list = node("div", "agent-session-list");
     sidebar._list = list;
-    // The work log (agent-work-log.js, admins): the list's last child, so it
-    // scrolls with the rows; rows are inserted before it.
-    sidebar._workLog = node("div", "agent-work-log-host audit-only");
+    // The work log (agent-work-log.js): the list's last child, so it
+    // scrolls with the rows; rows are inserted before it. Admins only (UX
+    // audit F5): from 2026-10-26 every Pro account with audit saw the raw
+    // log, with entry numbers, internal names and JSON; the activity tells
+    // the same run in words.
+    sidebar._workLog = node("div", "agent-work-log-host admin-only");
     sidebar._workLog.hidden = true;
     list.append(sidebar._workLog);
     sidebar.append(header, overview, status, list);
@@ -528,22 +533,39 @@
       return match ? { kind: match[1], entry: match[2], quote: match[3], note: match[4], source: match[5] } : { note: line.replace(/^- /, "") };
     });
   const notesLabel = count => !count ? "No objections" : count === 1 ? "1 note" : App.t("{count} notes", { count });
-  function reviewTimeline(body, messages, agent) {
+  // How long after the reviewers' start a message came, "0:17" (UX audit
+  // F6): a run takes one to three minutes, and every round read "10:00",
+  // its clock time to the minute. The clock time stays on hover.
+  function sinceStart(message, start) {
+    const at = Date.parse(message.created_at);
+    if (!Number.isFinite(at) || !Number.isFinite(start)) return App.format.time(message.created_at);
+    const seconds = Math.max(0, Math.round((at - start) / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  }
+  // The reviewer at a glance, one quiet line instead of three figures
+  // between rules (UX audit F7): "4 rounds · 1 note · Final review: 2 notes".
+  function reviewSummary(rounds, final, agent) {
+    if (!rounds.length && !final) return "";
+    const notes = rounds.reduce((n, message) => n + reviewNotes(message.text).length, 0);
+    const closing = final ? reviewNotes(final.text).length : null;
+    return [rounds.length === 1 ? App.t("1 round") : App.t("{count} rounds", { count: App.format.number(rounds.length) }),
+      App.t(notesLabel(notes)),
+      closing === null ? App.t(activeStates.has(agent.status) ? "Final review pending" : "No final review")
+        : !closing ? App.t("Final review: no objections") : closing === 1 ? App.t("Final review: 1 note")
+          : App.t("Final review: {count} notes", { count: App.format.number(closing) })].join(" · ");
+  }
+  function reviewTimeline(body, messages, agent, start) {
     const rounds = messages.filter(message => message.kind === "round");
     const final = messages.findLast(message => message.kind === "result");
-    const stats = node("dl", "agent-review-stats");
-    const stat = (label, value) => { const item = node("div"); item.append(node("dt", "", label), node("dd", "", value)); stats.append(item); };
-    stat("Rounds", App.format.number(rounds.length));
-    stat("Notes", App.format.number(rounds.reduce((n, message) => n + reviewNotes(message.text).length, 0)));
-    stat("Final review", final ? App.format.number(reviewNotes(final.text).length) : activeStates.has(agent.status) ? "Pending" : "None");
-    body.append(stats);
+    const summary = reviewSummary(rounds, final, agent);
+    if (summary) body.append(node("p", "agent-review-stats", summary));
     const list = node("ol", "agent-review-rounds");
     const entry = (label, state, message, notes) => {
       const item = node("li", "agent-review-round");
       item.classList.toggle("is-quiet", !notes?.length);
       const head = node("div", "agent-review-round-head");
-      const time = node("time", "agent-review-round-time", App.format.time(message.created_at));
-      if (message.created_at) time.dateTime = message.created_at;
+      const time = node("time", "agent-review-round-time", sinceStart(message, start));
+      if (message.created_at) { time.dateTime = message.created_at; time.title = App.format.time(message.created_at); }
       head.append(node("span", "agent-review-round-label", label), node("span", "agent-review-round-state", state), time);
       item.append(head);
       if (notes?.length) item.append(noteList(notes, agent));
@@ -668,7 +690,9 @@
     }
     // A reviewer's sessions follow one another: their messages in time order.
     if (agent.kind === "audit") reviewTimeline(row.body, [...detail.messages.values()].sort((a, b) =>
-      ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)) || a.seq - b.seq), agent);
+      ((Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0)) || a.seq - b.seq), agent,
+      Math.min(...[...view.agents.values()].filter(item => item.kind === "audit").map(item => Date.parse(item.created_at))
+        .filter(Number.isFinite)));
     else for (const message of [...detail.messages.values()].sort((a, b) => a.seq - b.seq)) {
       if (agent.kind === "judge" && message.kind === "result") continue;
       const from = message.sender === "orchestrator" ? "Orchestrator" : agent.title;
@@ -751,7 +775,7 @@
       inline?.remove(); inline = node("span", "agent-inline-models"); inlineHost.append(inline);
       inline.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
     }
-    const inlineSignature = JSON.stringify([view.key, view.closed, (view.seed || []).length, Boolean(view.workLog),
+    const inlineSignature = JSON.stringify([view.key, view.closed, (view.seed || []).length, shownLog(view),
       [...view.agents.values()].map(a => [a.id, a.title, a.status, a.model?.model, a.model?.label])]);
     if (inline && inline.dataset.signature !== inlineSignature) {
       inline.dataset.signature = inlineSignature;
@@ -842,8 +866,9 @@
       for (const [key, button] of inline._buttons) {
         if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
-      inline._toggle.hidden = !view.agents.size && !(view.seed || []).length && !view.workLog;
-      const activityLabel = `Activity · ${rowsFor(view).length}`;
+      inline._toggle.hidden = !view.agents.size && !(view.seed || []).length && !shownLog(view);
+      // In the page's language, also for a screen reader (UX audit I4).
+      const activityLabel = App.t("Activity · {n}", { n: App.format.number(rowsFor(view).length) });
       inline._toggle.setAttribute("aria-label", activityLabel);
       inline._toggle.title = activityLabel;
       inline._toggle.setAttribute("aria-expanded", String(!view.closed));
@@ -852,7 +877,7 @@
     // call arrives ("Starting…"), so a follow-up never closes it in between.
     // A turn with a work log keeps its panel also without any model call
     // (audit mode with the answer check off).
-    const panelVisible = !view.closed && (view.agents.size > 0 || view.running || Boolean(view.workLog));
+    const panelVisible = !view.closed && (view.agents.size > 0 || view.running || shownLog(view));
     setPanelVisible(panelVisible);
     const sheet = panelVisible && !wide();
     if (sheet) scrim.hidden = false;

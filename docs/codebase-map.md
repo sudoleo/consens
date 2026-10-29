@@ -3543,7 +3543,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   vorher gezeigte gespeicherte Consensus-Antwort samt Markern und Fuss vom
   Schirm (`clearConsensus`). Registry-Ereignisse dürfen für Hintergrundläufe
   nur deren anklickbare Sidebar-Zeile aktualisieren (Preparing/Models
-  answering/Completed/Failed/Stopped; Agent: Working/Thinking/Writing answer).
+  answering/Completed/Failed/Stopped; Agent seit 2026-10-29 das Wort des
+  Aktivitätskopfs aus `App.agentActivity.phase`/`PHASE_WORDS`: Working,
+  Reviewing/Checking, Paused, Waiting for you; vorher Thinking/Writing answer,
+  UX-Audit E2). Die Zeile hält 96 px für den Zustand frei, der Titel kürzt
+  (E3); auf der gewählten Zeile neigt sich die Ampelfarbe zur Tinte (J4).
   Beim Streaming bleiben unveränderte Modellboxen (inklusive Ladeindikatoren)
   im DOM erhalten. Inhalts-Signaturen beziehen Status, Fehler und Quellen ein;
   ein Sichtwechsel invalidiert die Projektion.
@@ -3575,7 +3579,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `window.App.syncSendButtonRunning()`.
 - **`tab-status.js`** (seit 2026-10-02, nach `query-send.js` gebündelt) —
   solange die Seite verborgen ist (`document.hidden`), nennt der Tab-Titel den
-  sichtbaren Lauf: „Working… · <Titel>“, danach „Answer ready“ bzw. „Run
+  sichtbaren Lauf: „Working… · <Titel>“ (während die Prüfer die Antwort
+  prüfen seit 2026-10-29 „Reviewing…“/„Checking…“), danach „Answer ready“ bzw. „Run
   stopped“. Hört auf `consensio:run-registry-change` und `visibilitychange`;
   sobald die Seite wieder vorne ist, steht der normale Titel da. Ein Lauf, der
   schon vor dem Verlassen fertig war, wird nicht gemeldet. Jede Projektion
@@ -4724,7 +4729,13 @@ wie ein hängender Lauf. `_step` verdichtet es mit
 `ReasoningProgress(unlimited=True, min_seconds=THINKING_UPDATE_SECONDS)` zu
 kurzen wörtlichen Auszügen in EINER Fortschrittszeile `completion:N/thinking`
 (kind `progress`, höchstens alle 3 s ersetzt, seit 2026-10-21 nur der neueste
-vollständige Auszug; im Browser blendet die Zeile weich über). Seit 2026-10-08 auch über
+vollständige Auszug; im Browser blendet die Zeile weich über). Seit 2026-10-29
+trägt sie `summary_source`, und am Ende des Schritts schickt
+`_closing_thoughts` sie einmal mit dem letzten Wort und `sections`
+(`ReasoningProgress.closing`/`sections`: Überschrift + Absätze bzw. ganze
+Sätze je Absatz, ≤ 4.000 Zeichen aus den ersten 16.000 empfangenen); die
+Zeitleiste zeigt sie aufgeklappt (`agent-activity.js` `updateThought`),
+`bounded_activity` lässt sie vor dem Kürzen der Texte fallen. Seit 2026-10-08 auch über
 `REASONING_STORAGE_CHARS` (32.000) hinaus: `reasoning_events` speichert nur bis
 dahin und liefert den Rest als `transient`-Ereignis nur an die Fortschritts-
 anzeigen (nie in `AgentCompletion.activity`). In die Antwort gelangt es nie;
@@ -5369,8 +5380,11 @@ oder deutschen Ordinalzahlen („am 3. Oktober“, `_ends_sentence`); rohes Denk
 zeigt den letzten passenden Satz der neuesten fertigen Zeile (die offene Zeile
 nur, solange keine fertig ist), eine Überschrift („**Comparing options**“,
 OpenAI-/Gemini-Summaries; jeder Summary-Teil mit eigener `id` beginnt einen
-neuen Block) steht für ihren Abschnitt, Summaries ohne Überschrift sprechen mit
-ihrem ersten Satz. Gekürzt wird nichts mehr (vorher 177 Zeichen + „…“): ein Satz
+neuen Block) steht für ihren Abschnitt, seit 2026-10-29 mit dem ersten Satz
+darunter („Heading – Satz“, sobald er da ist; eine nach Zeit getaktete Zeile
+wartet nicht mehr zusätzlich auf 400 Zeichen), Summaries ohne Überschrift sprechen mit
+ihrem ersten Satz. Notizen blenden Reasoning seit 2026-10-29 nicht mehr aus,
+nur das eines Schritts, das seine Notiz wörtlich wiederholt (A1). Gekürzt wird nichts mehr (vorher 177 Zeichen + „…“): ein Satz
 über 160 Zeichen weicht einem kürzeren, sonst bleibt der alte Auszug stehen.
 `compactReasoning` (agent-activity.js) wendet dieselben Satzgrenzen auf
 gespeicherte Zeilen an (≤ 180 Zeichen, abgeschnittene „…“-Zeilen fallen weg).
@@ -5383,12 +5397,16 @@ Die Sitzungen eines Prüfers (neue nach gescheiterter Runde oder vollem
 Gespräch) bilden eine Zeile unter der ID seiner ersten (`reviewerRows`;
 Zustand der arbeitenden bzw. letzten Sitzung, Tokens und `span` über alle,
 `rowDetail` legt ihre Nachrichten zusammen). Aufgeklappt zeigt ein Prüfer
-seit 2026-10-26 drei Zahlen (Runden, Anmerkungen, Schlussprüfung) und eine
+seit 2026-10-26 drei Zahlen (Runden, Anmerkungen, Schlussprüfung; seit
+2026-10-29 eine leise Satzzeile „4 rounds · 1 note · Final review: 2 notes“
+ohne Linien, `reviewSummary`, UX-Audit F7) und eine
 Zeitleiste (`reviewTimeline`, nach `created_at`): Runden ohne Einwand falten
 zu „Rounds 1–5 · No objections“, Runden mit Anmerkungen und die
 Schlussprüfung listen sie (`reviewNotes` liest `agent_audit.review_text`:
 Art in der Farbe ihrer Marke, Schritt, Zitat, Notiz, Quelle), Ausfälle
-stehen als „No result“ an ihrer Stelle.
+stehen als „No result“ an ihrer Stelle. Ihre Zeit zählt seit 2026-10-29 ab
+dem Start der Prüfer („0:17“, `sinceStart`; die Uhrzeit beim Darüberfahren),
+vorher trug jede Runde dieselbe Minute (F6).
 Der Kopf mit Titel, Stop/Schließen und die Übersicht bleiben außerhalb des
 Scrollbereichs sichtbar. Die Übersicht (`.agent-sidebar-overview`) nennt
 `n of m done` (plus `· k without result` für `failed`/`stopped`) und rechts den
@@ -5960,10 +5978,13 @@ Turn (`pending`) und Chat (aktiv), nie den Root-Beleg), lange Inhalte als
 `turn_detail` daraus `agent_work_log`. Löschen: `_delete_chat_tree` ruft je
 Turn `delete_turn_log` (nur genannte Inhalte, ohne Protokoll kein Aufruf des
 Objektspeichers); Aufräumen stündlich (`cleanup_expired_work_logs`). Lesen:
-`read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (nur
-Admins, Turn eines aktiven Chats). Anzeige: `agent-work-log.js`
+`read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (Pro
+und Admins mit Audit, `audit_allowed`; Turn eines aktiven Chats). Anzeige: `agent-work-log.js`
 (`App.agentWorkLog.render`, `reset` beim Kontowechsel) als letzter Abschnitt
-der Sitzungsliste in der Seitenleiste, `.admin-only`, lädt erst beim Öffnen,
+der Sitzungsliste in der Seitenleiste, `.admin-only` (vom 26. bis 29.10.
+`.audit-only`, also jedem Pro-Konto mit Rohnamen und JSON; UX-Audit F5: die
+Aktivität erzählt Pro denselben Lauf in Worten; ein Turn nur mit Protokoll
+öffnet für Nicht-Admins kein leeres Panel, `shownLog`), lädt erst beim Öffnen,
 folgt laufenden Turns nur, solange der Abschnitt sichtbar ist.
 
 ### Agent VM (Agent, mit Audit, seit 2026-10-25)
@@ -6057,7 +6078,11 @@ VM-Befehle, und lange Notizen des Agenten kürzt die Live-Ansicht auf drei
 Zeilen (`.agent-progress-note`): Die Live-Zeilen wachsen in langen Läufen
 nicht mehr endlos. Der Plan (`update_plan`, seit 2026-10-26) steht
 als `planView` angeheftet über den Live-Zeilen (neuester gültiger Plan, offen)
-und je Änderung eingeklappt in der Zeitleiste. `vm_share_file` (seit 2026-10-26) kopiert eine
+und eingeklappt in der Zeitleiste, seit 2026-10-29 nur einmal an seiner ersten
+Stelle mit dem neuesten Stand (vorher je Änderung, UX-Audit A5). Ein Befehl
+mit Fehler sagt „Failed · code N“ in `--dispute` (`commandFailed`,
+`data-outcome`), eine Seitensuche steht als Zitat, eine geöffnete Seite mit
+Titel und Host (`vmTargetKind`, A8/A9). `vm_share_file` (seit 2026-10-26) kopiert eine
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
@@ -11274,7 +11299,12 @@ fokussiert deren erste Bedienung). Alle Integrations-Tools haben Lauf-/Fertig-
 Texte in `agent-activity.js`; unbekannte Tools zeigen neutrale Texte. Die
 Websuche nennt Anzahl und Domains ihrer Quellen (`Searched the web · 3 sources:
 skat.dk, virk.dk, borger.dk`). Die Kopfzeile lautet `Working for 12s` während des
-Laufs und `Thought for 3m 7s` danach (`Stopped after`/`Response failed after`).
+Laufs und `Thought for 3m 7s` danach (`Stopped after`/`Failed after`); seit
+2026-10-29 (UX-Audit E1) `Reviewing · 2m 19s` während die Prüfer prüfen und
+`Paused · …`/`Waiting for you · …` mit stehender Uhr, solange der Lauf auf
+den Nutzer wartet (`titleParts`, `HEAD_VERBS`, `waitedMs`); die Wartezeit
+fehlt auch im Endwert (`savedDuration` zieht `agent_wait_seconds` ab). Ein
+Zustandswechsel gleitet den Kopf einmal auf seine neue Breite.
 `Writing answer…` erscheint nur, wenn nach dem letzten `responding`-Status kein
 Tool-Schritt mehr kam; Text vor einem Tool-Aufruf ist Vorrede, nicht Antwort.
 
@@ -11288,7 +11318,11 @@ App-Sidebar rechts (volle Höhe, `--ground`, eine Haarlinie `--line-soft` zur
 Spalte, keine Karte, kein Schatten; Zeilen ohne Trennlinien mit Ton beim
 Hover, Segmente nur in Tinte, laufender Aufruf als wandernder Abschnitt ohne
 Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.auth-top-actions` rückt
-für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet.
+für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet,
+seit 2026-10-29 von 700 px an als Panel am rechten Rand in der Breite der
+Desktop-Leiste (UX-Audit E6, vorher 1066 px breit bei 1100), darunter von
+unten; Scrim und Sheet liegen über der Kopfleiste des Handys
+(`--z-header` + 1/+ 2, H3).
 `agent-delegation.js` stellt die Leiste ab 1200 px seit 2026-10-28 ohne
 eigene Wahl neben die Spalte (`panelDefaultClosed`; vom 17. bis 28.10. nur auf
 Klick); ein Schließen merkt `localStorage` `agent-panel:{uid}` für die nächsten
@@ -11314,7 +11348,10 @@ Logos sofort aus `agent_review` (`project({models})`, `agent-chat.js`
 während eines laufenden bzw. abschließenden Laufs und endet danach.
 Die Kopfzeile tickt in einem Feld fester Breite (A7): `.agent-activity-verb`
 reserviert die Breite des breiteren Verbs („Working for“/„Thought for“, das
-andere unsichtbar per `data-ghost`), `.agent-activity-time[data-unit]` die des
+andere unsichtbar per `data-ghost`; seit 2026-10-29 nur, solange die Uhr
+läuft: danach nimmt das Feld seine eigenen Worte, „Fertig nach“ stand sonst
+mit doppelter Lücke vor der Zeit, UX-Audit B14/R19; im Englischen sind beide
+gleich breit), `.agent-activity-time[data-unit]` die des
 größten Werts seiner Einheit. Eine live tickende Uhr hält den Platz ihrer
 eigenen Einheit (bis 59 s nur `seconds`; bis 2026-10-21 von der ersten Sekunde
 an den Minuten-Platz, das ließ eine Minute lang eine breite Lücke vor dem
