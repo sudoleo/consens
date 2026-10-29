@@ -326,6 +326,16 @@ def test_a_service_sentence_that_reaches_a_card_is_found():
     assert "app/services/agent_sessions.py" in i18n_tool.server_files()
 
 
+def test_a_progress_line_of_the_run_is_found():
+    """The run's own progress lines reach the activity as they are (UX audit
+    2026-10-29 I6: the domain review's line stood in English in a German
+    run); the work log's notes beside them are no text for the page."""
+    keys = {item.key for item in i18n_tool.server_keys("app/services/agent_delegation.py")}
+    assert {"The reviewers check this request before you decide.", "The reviewers check this step before it runs."} <= keys
+    assert not any(key.startswith("The reviewers let the calls") for key in keys)
+    assert "app/services/agent_delegation.py" in i18n_tool.server_files()
+
+
 def test_a_sentence_composed_from_chosen_words_is_found():
     """"Difference: ${text}" with the word picked inside ${…} has no entry of
     its own; whole sentences or App.t for each part do (docs/i18n.md)."""

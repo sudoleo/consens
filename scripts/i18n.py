@@ -789,6 +789,10 @@ SERVER_MARKED = {"app/services/mailer.py": {"_t", "_h", "_N"}}
 # ``error`` (routers/agent.py: the hold, secret and notes endpoints answer
 # with ``str(exc)``), e.g. "This pause is already over." (B7).
 SERVER_RAISED = {"app/services/agent_sessions.py": {"TurnStatusConflict", "NotesFull"}}
+# Services whose progress lines reach the activity as they are: the "text"
+# of a dict with "kind": "progress" (UX audit 2026-10-29 I6: "The reviewers
+# check this request before you decide." stood in English in a German run).
+SERVER_ACTIVITY = {"app/services/agent_delegation.py"}
 
 
 def server_keys(relative: str) -> list[Found]:
@@ -828,6 +832,13 @@ def server_keys(relative: str) -> list[Found]:
                 for argument in node.args[1:2]:
                     add(argument)
         if isinstance(node, ast.Dict):
+            fields = {key.value: value for key, value in zip(node.keys, node.values) if isinstance(key, ast.Constant)}
+            if relative in SERVER_ACTIVITY and _string_of(fields.get("kind")) == "progress" and "text" in fields:
+                text = _string_of(fields["text"])
+                if text and looks_like_text(text):
+                    found.append(Found(i18n.normalize(text), relative, getattr(fields["text"], "lineno", 0)))
+            if relative in SERVER_ACTIVITY:
+                continue
             for key, value in zip(node.keys, node.values):
                 if isinstance(key, ast.Constant) and key.value in _SERVER_KEYS | SERVER_TEXT_KEYS.get(relative, set()) and value is not None:
                     add(value)
@@ -852,7 +863,7 @@ def script_files() -> list[str]:
 
 def server_files() -> list[str]:
     files = sorted((ROOT / "app" / "api" / "routers").glob("*.py")) + [ROOT / "main.py"]
-    files += [ROOT / name for name in (*SERVER_TEXT_KEYS, *SERVER_MARKED, *SERVER_RAISED)]
+    files += [ROOT / name for name in (*SERVER_TEXT_KEYS, *SERVER_MARKED, *SERVER_RAISED, *SERVER_ACTIVITY)]
     return [path.relative_to(ROOT).as_posix() for path in files if path.name != "admin.py"]
 
 
