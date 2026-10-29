@@ -16,6 +16,22 @@ def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def test_no_form_of_the_app_puts_its_fields_into_the_address():
+    """2026-10-29: the login form had no method; sent before its script took
+    it over, it went out as a GET and put an address and a password into the
+    address bar, the history and Render's access log. Every form of the app
+    shell posts to /app, which only loads the app again."""
+    import main
+    from fastapi.testclient import TestClient
+    html = read("templates/index.html")
+    forms = re.findall(r"<form\b[^>]*>", html)
+    assert forms and all('method="post"' in form and 'action="/app"' in form for form in forms), forms
+    response = TestClient(main.app).post("/app", data={"email": "a@example.com", "password": "secret"},
+                                         follow_redirects=False)
+    assert response.status_code == 303 and response.headers["location"] == "/app"
+    assert "secret" not in response.text
+
+
 def test_the_composer_decides_demo_and_send_in_the_template():
     html = read("templates/index.html")
     actions = html[html.index('<div class="input-actions-container">'):html.index('id="composerModeBar"')]

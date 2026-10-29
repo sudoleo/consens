@@ -514,6 +514,16 @@ def public_model_leaderboard(request: Request):
     response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     return response
 
+@router.post("/app", include_in_schema=False)
+def unscripted_form():
+    """A form of the app shell sent before its script took it over (the
+    login, the feedback, a memory item; index.html posts them here). As POST
+    its fields stay out of the address bar, the history and the access log:
+    on 2026-10-29 the login went out as a GET and put an address and a
+    password into Render's log. The body is never read; the app loads again."""
+    return RedirectResponse(url="/app", status_code=303)
+
+
 @router.get("/app", response_class=HTMLResponse)
 # Deep-Link auf das Watch-Dashboard: gleiche App-Shell, das Frontend öffnet
 # die Watch-Seite anhand des Pfads (watch.js).

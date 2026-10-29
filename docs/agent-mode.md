@@ -917,8 +917,11 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   die Browser-VM auf einem eigenen Backend und startet Chrome (Helfer-Aktion
   `warm`, liest nichts von den Seiten, nie eine Aktion des Agenten), während
   `VMTools._start` die Werkbank vorbereitet; scheitert das, öffnet der Aufruf
-  sie wie zuvor selbst. Fällt der Browser aus, steht der Grund im Log
-  (`Agent browser unavailable reason=…`).
+  sie wie zuvor selbst, außer der Anbieter verweigerte die VM
+  (`VMUnavailable`, `thread.refused`): Dann meldet der Aufruf den Ausfall
+  sofort (Prod 2026-10-29 10:30: eine VM, die nicht startete, antwortete nach
+  40 s mit 502, und der zweite Versuch kostete noch einmal 40 s). Fällt der
+  Browser aus, steht der Grund im Log (`Agent browser unavailable reason=…`).
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
   `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
   `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,

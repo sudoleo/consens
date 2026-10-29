@@ -305,6 +305,23 @@ def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
     assert command["exit_code"] == 0
 
 
+def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypatch):
+    """Prod 2026-10-29 10:30: the browser VM did not start, the provider
+    answered 502 after 40 s to the warm-up, and the call asked the same VM
+    again for another 40 s before it said so. Now it says so at once."""
+    opened = []
+
+    def refuse(vm, uid):
+        opened.append(uid)
+        raise agent_vm.VMUnavailable("read: HTTP 502")
+    monkeypatch.setattr(agent_workspace, "open_browser", refuse)
+    loop, browser = tools(store)
+    with pytest.raises(ValueError, match="not available"):
+        call(browser, action="read")
+    assert len(opened) == 1 and browser.off is True
+    assert fake_vm.requests == [] and fake_vm.warmed == []
+
+
 def test_the_helpers_actions_are_the_tools():
     assert set(BrowserArgs.model_json_schema()["properties"]["action"]["enum"]) == set(agent_browser.ACTIONS)
 

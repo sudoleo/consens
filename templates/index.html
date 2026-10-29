@@ -853,7 +853,7 @@
           <button type="button" id="registrationLoginButton" class="auth-secondary-action">Password set? Log in</button>
         </section>
 
-        <form id="loginForm" class="auth-form" autocomplete="on" data-mode="login" novalidate>
+        <form id="loginForm" class="auth-form" method="post" action="/app" autocomplete="on" data-mode="login" novalidate>
           <button type="button" id="googleLoginButton" class="oauth-button">
             <img src="{{ asset_url('/static/icons/google.png') }}" alt="" width="20" height="20" />
             <span id="googleLoginLabel">Continue with Google</span>
@@ -923,7 +923,7 @@
           <a href="mailto:contact@consens.io">contact@consens.io</a>.</p>
         <button type="button" id="feedbackLoginButton" class="feedback-login-button">Log in</button>
       </div>
-      <form id="feedbackForm">
+      <form id="feedbackForm" method="post" action="/app">
         <textarea name="message" placeholder="Your feedback" aria-label="Your feedback" maxlength="4000" required autofocus></textarea>
         <input type="email" name="email" placeholder="Your email (optional)" aria-label="Your email (optional)" autocomplete="email">
         <button type="submit" class="feedback-submit">Submit</button>
@@ -1094,7 +1094,7 @@
                 </div>
                 <ul id="memoryItemsList" class="settings-memory-items-list" aria-label="Saved memories"></ul>
                 <p id="memoryItemsEmpty" class="settings-memory-items-empty">Nothing saved yet.</p>
-                <form id="memoryItemAddForm" class="settings-memory-item-add" novalidate>
+                <form id="memoryItemAddForm" class="settings-memory-item-add" method="post" action="/app" novalidate>
                   <label class="visually-hidden" for="memoryItemInput">Add a memory</label>
                   <input type="text" id="memoryItemInput" maxlength="300" autocomplete="off"
                     placeholder="Add a memory, e.g. Prefers metric units.">

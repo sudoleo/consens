@@ -202,8 +202,11 @@ class BrowserTools:
         """Starts waking the browser VM and its Chrome (the helper's action
         warm, which reads nothing of the pages) on a backend of its own, so it
         runs while VMTools._start gets the workbench ready. Returns the
-        thread, whose ``ok`` says whether the browser VM is open, or None
-        when the workspace cannot be used now."""
+        thread, whose ``ok`` says whether the browser VM is open and
+        ``refused`` holds the provider's VMUnavailable when it would not open
+        (the call then does not ask the same VM again: Prod 2026-10-29, a VM
+        that did not start answered 502 after 40 s, twice), or None when the
+        workspace cannot be used now."""
         from app.services import agent_workspace
         session = self.vm.session
         left = session.left()
@@ -217,11 +220,15 @@ class BrowserTools:
                 backend = session._factory()
                 if backend is None:
                     return
-                agent_workspace.open_browser(backend, uid)
+                try:
+                    agent_workspace.open_browser(backend, uid)
+                except agent_vm.VMUnavailable as exc:
+                    thread.refused = exc
+                    raise
                 thread.ok = True
                 self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend)
             except Exception as exc:
-                # The call then opens it itself, as before.
+                # Anything else: the call then opens it itself, as before.
                 logging.info("Agent browser warm-up failed category=%s", safe_exception(exc))
             finally:
                 if backend is not None:
@@ -230,7 +237,7 @@ class BrowserTools:
                     except Exception:
                         pass
         thread = threading.Thread(target=run, name="agent-browser-warm", daemon=True)
-        thread.ok = False
+        thread.ok, thread.refused = False, None
         thread.start()
         return thread
 
@@ -327,6 +334,8 @@ class BrowserTools:
             if not self.ready:
                 if warming is not None:
                     warming.join(timeout)
+                    if warming.refused is not None:
+                        raise warming.refused
                 if warming is None or not warming.ok:
                     agent_workspace.open_browser(session.backend, self.vm.loop.uid)
                 self.ready = True
