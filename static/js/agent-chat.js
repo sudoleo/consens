@@ -1498,6 +1498,11 @@
     const since = Number.isFinite(at) ? Math.min(at, hold.receivedAt) : hold.receivedAt;
     const left = since + (Number(hold.timeout_seconds) || 1800) * 1000 - Date.now();
     const minutes = Math.ceil(left / 60000);
+    // The agent's own question goes on without an answer; a reviewer's pause stops.
+    if (hold.ask) {
+      return minutes > 1 ? App.t("The agent waits {count} more minutes", { count: minutes })
+        : "The agent waits less than a minute more";
+    }
     return minutes > 1 ? App.t("Stops in {count} minutes without your decision", { count: minutes })
       : "Stops within a minute without your decision";
   }
@@ -1650,7 +1655,77 @@
     card.append(clock, reply.form, actions);
     return card;
   }
+  // The agent hands a step to the user (ask_user, agent_ask.py; since
+  // 2026-10-29): "browser", their turn in the workspace's browser, which
+  // handing it back answers (the run sees it on the server); "confirm", their
+  // yes or no to a step in their name; "takeover", the user took the browser
+  // over on their own and the agent's next call waits for it. The agent's
+  // request is data (untranslated). The one button follows who has the
+  // browser in this window (App.workspaceView.holder, the event
+  // consensio:workspace-holder re-draws the card).
+  const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
+    takeover: "You have the browser" };
+  function askCard(context, hold) {
+    const kind = askTitles[hold.ask] ? hold.ask : "confirm";
+    const card = document.createElement("section");
+    card.className = `agent-hold-card agent-ask-card is-${kind}`;
+    card.setAttribute("aria-labelledby", "agentHoldTitle");
+    const alert = document.createElement("div");
+    alert.className = "agent-hold-alert";
+    alert.setAttribute("role", "alert");
+    const head = document.createElement("div");
+    head.className = "agent-hold-head";
+    const icon = document.createElement("span");
+    icon.className = "agent-hold-icon";
+    icon.innerHTML = kind === "confirm"
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M9.6 9.5a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.8v.5M12 16.8v.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5l11.5 7-5 1.2 2.9 5.6-2.3 1.2-2.9-5.6-3.7 3.4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>';
+    const heading = document.createElement("div");
+    heading.className = "agent-hold-heading";
+    const title = document.createElement("h2");
+    title.id = "agentHoldTitle";
+    title.className = "agent-hold-title";
+    title.textContent = askTitles[kind];
+    heading.append(title);
+    head.append(icon, heading);
+    const what = document.createElement("p");
+    what.className = "agent-hold-reason";
+    if (kind === "takeover") {
+      what.textContent = "The agent waits until you hand it back.";
+    } else {
+      what.dataset.i18nSkip = "";
+      what.textContent = String(hold.request || "");
+    }
+    alert.append(head, what);
+    card.append(alert);
+    const clock = document.createElement("p");
+    clock.className = "agent-hold-clock";
+    const reply = holdReply(context);
+    const actions = document.createElement("div");
+    actions.className = "agent-hold-actions";
+    const write = holdButton("Write to the agent", "agent-hold-link agent-hold-write", () => reply.open());
+    const stop = holdButton("Stop", "agent-hold-link agent-hold-stop", () => registry.cancel(context.runId, "user"));
+    if (kind === "confirm") {
+      actions.append(
+        holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
+        holdButton("Don’t allow", "agent-hold-link agent-hold-deny", () => decideHold(context, "deny")),
+        write, stop);
+    } else {
+      // The server knows a takeover from any window; this one's view only its own.
+      const holding = kind === "takeover" || App.workspaceView?.holder?.() === "user";
+      actions.append(
+        holding ? holdButton("Hand back", "btn agent-hold-hand-back", () => App.workspaceView?.handBack?.())
+          : holdButton("Open the browser", "btn agent-hold-open", () => App.workspaceView?.open?.({ takeOver: true })),
+        ...(kind === "browser" ? [holdButton("Go on without it", "agent-hold-link agent-hold-skip",
+          () => decideHold(context, "continue"))] : []),
+        write, stop);
+    }
+    reply.bind(actions, write);
+    card.append(clock, reply.form, actions);
+    return card;
+  }
   function holdCard(context, hold) {
+    if (hold.ask) return askCard(context, hold);
     if (hold.domain) return domainCard(context, hold);
     const card = document.createElement("section");
     card.className = "agent-hold-card";
@@ -1782,13 +1857,17 @@
     const context = registry.visible();
     const hold = selectedMode() === "agent" ? openHold(context) : null;
     clearTimeout(holdTimer);
+    // The workspace's bar says what the agent waits for there (workspace-view.js).
+    App.workspaceView?.agentWaits?.(hold?.ask === "browser" ? String(hold.request || "") : null);
     if (!hold) {
       if (host.dataset.id) { host.replaceChildren(); delete host.dataset.id; }
       host.hidden = true;
       return;
     }
-    if (host.dataset.id !== hold.id) {
-      host.dataset.id = hold.id;
+    // A browser card's button follows who has the browser in this window.
+    const key = hold.ask === "browser" ? `${hold.id}:${App.workspaceView?.holder?.() || ""}` : hold.id;
+    if (host.dataset.id !== key) {
+      host.dataset.id = key;
       host.replaceChildren(holdCard(context, hold));
     }
     host.hidden = false;
@@ -2454,6 +2533,9 @@
   // gives way to the real one, e.g. no Agent chip for a session that ended
   // while the page still expected it (review 1).
   window.addEventListener("consensio:auth-state", () => renderShell());
+  // The user took the workspace's browser over or handed it back (workspace-view.js):
+  // the agent's browser card offers the other way.
+  window.addEventListener("consensio:workspace-holder", () => renderHold());
   // No login can load (auth-bootstrap.js): nobody is a guest who could send,
   // so the signed-out page it shows has no Agent.
   window.addEventListener("consensio:auth-unavailable", () => renderShell());

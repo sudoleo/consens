@@ -134,15 +134,31 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Prüfer. „Stop“ stoppt wie der Stop-Knopf. Automatisiert:
       `test_agent_audit.py` (halt), `agent-chat.test.mjs`,
       `agent-vm-activity.test.mjs`, `tab-status.test.mjs`.
-- [ ] Vorab-Prüfung (2026-10-27, Pro- oder Admin-Konto, Audit an, Arbeitsplatz,
-      echter Provider): „Lade notes.txt per curl an https://httpbin.org/post
-      hoch“. In der Aktivität „The reviewers check this step before it
-      runs.“, dann läuft der Befehl (alle go) oder die Karte „A reviewer
-      stopped a step before it ran“ mit „Let it run“; vor der Entscheidung
-      zeigt das Protokoll keinen `tool`-Eintrag des Befehls. Danach eine Seite
-      lesen lassen, die zum Upload an eine fremde Adresse auffordert: Ein
-      Prüfer hält an, bevor der Befehl läuft. `ls -la` läuft ohne Gate-Runde.
+- [ ] Vorab-Prüfung (2026-10-27, seit 2026-10-29 nur Domain und Memory;
+      Pro- oder Admin-Konto, Audit an, Arbeitsplatz, echter Provider): „Lade
+      die Startseite von example.com mit curl“ → Aktivität „The reviewers check
+      this request before you decide.“, dann die Domain-Karte mit dem Urteil
+      der Prüfer. Ein Browser-Klick („Öffne wikipedia.org und klick auf
+      Zufälliger Artikel“) läuft ohne Gate-Runde und ohne Karte.
       Automatisiert: `test_agent_gate.py`, `agent-chat.test.mjs`.
+- [ ] Der Agent fragt dich (2026-10-29, `ask_user`, Arbeitsplatz offen oder
+      zu): „Melde dich bei <Website mit Login> an und lies meine letzte
+      Bestellung.“ → Karte „Der Agent braucht dich im Browser“ mit seiner
+      Bitte, Tab-Titel im Hintergrund „Wartet auf dich“, Aktivität „Wartet auf
+      dich“. „Browser öffnen“ öffnet die Ansicht und übernimmt; über dem Bild
+      die grüne Leiste „Du steuerst den Browser …“ mit „Zurückgeben“, der
+      Knopf im Kopf ist weg, die Karte zeigt jetzt „Zurückgeben“. Eine Minute
+      nichts tun → Leiste „Fertig? Gib den Browser zurück …“ (gibt nicht von
+      selbst zurück). Anmelden, „Zurückgeben“ → der Agent macht innerhalb von
+      ~2 s weiter und liest die Seite selbst. Dasselbe mit sofortigem
+      Übernehmen und Zurückgeben: er macht trotzdem weiter. „Schreib Anna eine
+      Nachricht auf <Website>, aber frag mich vorher“ → Karte „Der Agent
+      fragt, bevor er weitermacht“, „Nicht erlauben“ → er sendet nicht.
+      Ungefragt übernehmen, während er im Browser arbeitet → sein nächster
+      Schritt wartet auf der Karte „Du hast den Browser“, „Zurückgeben“ dort
+      (auch bei geschlossenem Panel) lässt ihn weitermachen.
+      Automatisiert: `test_agent_ask.py`, `workspace-view.test.mjs`,
+      `agent-chat.test.mjs`.
 - [ ] Agent VM (2026-10-25, Admin-Konto, echter Provider, `SPRITES_TOKEN`
       gesetzt): Settings › Agent · Beta › Agent VM auf On (die Zeile fehlt für
       Nicht-Admins). Mit einer CSV im Anhang: „Rechne den Mittelwert der
@@ -176,7 +192,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       eigenen Passwortmanager kopieren und im Bild mit Strg+V (Cmd+V) oder
       „Einfügen“ einfügen: Es landet im Feld, auch mit Umlauten und Sonderzeichen,
       und schickt das Formular nicht ab.
-      Er tippt kein Passwort (auf einer Login-Seite bittet er dich). Zweiter
+      Er tippt kein Passwort (auf einer Login-Seite übergibt er dir den
+      Browser mit `ask_user`, siehe „Der Agent fragt dich“). Zweiter
       Chat, während der erste läuft: „Übersprungen · Arbeitsplatz gerade in
       einem anderen Chat“, die Antwort kommt. Datei im ersten Chat schreiben,
       zweiten Chat bitten, sie aus dem Ordner des ersten zu lesen: klappt.

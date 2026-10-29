@@ -54,6 +54,8 @@
     // The workspace's browser, a computer of its own (agent_browser.py).
     browser: ['Browser', 'Using the browser…', 'Used the browser'],
     request_domain: ['Network', 'Asking for access…', 'Got access'],
+    // The user's turn (agent_ask.py): the card above the field says what for.
+    ask_user: ['Your turn', 'Waiting for you…', 'Asked you'],
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
@@ -652,6 +654,14 @@
     timeout: 'Stopped after 30 minutes without a decision', ended: 'Over when the response ended' };
   // A request for a domain (agent_domains.py) is the user's to decide, not a reviewer's pause.
   const domainStates = { ...holdStates, continue: 'You allowed it for this chat' };
+  // The agent's own question to the user (ask_user, agent_ask.py; since
+  // 2026-10-29): their turn in the browser, their yes to a step, or a call
+  // that waited while they had the browser. Its request is data.
+  const askHeads = { browser: 'The agent asked you to take over the browser', confirm: 'The agent asked before a step',
+    takeover: 'The agent waited while you had the browser' };
+  const askStates = { ...holdStates, waiting: 'Waiting for you', handed_back: 'You handed the browser back',
+    timeout: 'No answer within 30 minutes' };
+  const confirmStates = { ...askStates, continue: 'You allowed it' };
   function holdView(className) {
     const node = document.createElement('div');
     node.className = className;
@@ -666,6 +676,19 @@
     return node;
   }
   function updateHold(node, item) {
+    if (item.ask) {
+      const states = item.ask === 'confirm' ? confirmStates : askStates;
+      const state = states[item.state] ? item.state : 'waiting';
+      const signature = JSON.stringify([item.ask, item.request, state]);
+      if (node.dataset.signature === signature) return;
+      node.dataset.signature = signature;
+      node.dataset.state = state;
+      node._head.textContent = askHeads[item.ask] || askHeads.confirm;
+      node._reason.textContent = String(item.request || '').slice(0, 400);
+      node._reason.hidden = state === 'waiting' || !item.request;
+      node._state.textContent = states[state];
+      return;
+    }
     const state = holdStates[item.state] ? item.state : 'waiting';
     const signature = JSON.stringify([item.reviewer, item.halt, item.reason, state, item.domain]);
     if (node.dataset.signature === signature) return;
@@ -860,13 +883,15 @@
     // asleep; say that instead of a step that may be long over.
     // A reviewer's halt: the work waits for the user's decision (the card above the field).
     const held = running && holds.some(item => (item.state || 'waiting') === 'waiting');
+    // The agent's own question waits for the user, not for a decision on a pause.
+    const asking = held && holds.some(item => item.ask && (item.state || 'waiting') === 'waiting');
     // The answer stands and its check is over: the run only saves now. Its
     // status line ("Writing answer…") came back for that moment and left with
     // the end, a row in and out of the open history just as the marks arrived.
     const saving = running && !activeTool && !waiting && !reconnecting && !held && Boolean(review)
       && !['running', 'required', 'pending'].includes(review.status) && Boolean(String(answerText || '').trim());
     const heading = running && reconnecting ? 'Reconnecting…'
-      : held ? 'Paused for your decision' : waiting ? 'Waiting for available tokens…' : reviewStage
+      : asking ? 'Waiting for you' : held ? 'Paused for your decision' : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.

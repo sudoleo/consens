@@ -11,6 +11,8 @@
   const FAILED = "Failed";
   // A reviewer paused the work and the user decides (agent-chat.js renderHold).
   const PAUSED = "Paused";
+  // The agent handed a step to the user (ask_user, agent-chat.js askCard).
+  const YOUR_TURN = "Waiting for you";
   let baseTitle = document.title;
   let shown = null; // the label currently in the title, or null for the base
   let watched = { runId: null, status: null };
@@ -42,7 +44,9 @@
 
   function label(run) {
     const status = run?.status || null;
-    if ((status === "starting" || status === "running") && run?.metadata?.hold) return PAUSED;
+    if ((status === "starting" || status === "running") && run?.metadata?.hold) {
+      return run.metadata.hold.ask ? YOUR_TURN : PAUSED;
+    }
     if (status === "starting" || status === "running") return WORKING;
     if (status === "succeeded") return READY;
     if (status === "failed") return FAILED;
@@ -71,7 +75,7 @@
     const next = label(visibleRun());
     // A run that finished before the page was hidden is not news; one that
     // waits for the user still is.
-    if (next && next !== WORKING && next !== PAUSED && shown === null) return;
+    if (next && next !== WORKING && next !== PAUSED && next !== YOUR_TURN && shown === null) return;
     apply(next);
   }
 

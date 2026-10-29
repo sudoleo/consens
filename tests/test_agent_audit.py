@@ -781,8 +781,8 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     page, so the agent could open nothing it found itself in this message,
     although the same results become readable as an earlier message's sources
     with the next one. Its own search results count now. Another page needs
-    reviewers, who let it through first (since 2026-10-28,
-    test_agent_gate): without them it stays unread."""
+    reviewers, who follow the read live (since 2026-10-28, test_agent_gate):
+    without them it stays unread."""
     from test_agent_web_fetch import PAGE, fake_fetch
     from app.services.agent_read_source import LABEL_SEARCH
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
@@ -795,8 +795,9 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     loop = audit_loop(store, script, judges="off")
     list(loop.run())
     tool = loop.registry.tools["read_source"]
-    assert "this message's web search" in tool.description and "comparison answer" not in json.dumps(tool.schema())
-    assert "waits for the reviewers" in tool.description
+    # What it opens, not when to; since 2026-10-29 without a gate round first.
+    assert "public web page" in tool.description and "comparison answer" not in json.dumps(tool.schema())
+    assert "reviewers" not in tool.description
     assert [s["url"] for s in loop.search_sources] == [found] * 3
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert results[0]["status"] == "completed" and results[0]["cited_by"] == [LABEL_SEARCH]

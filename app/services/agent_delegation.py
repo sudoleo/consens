@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.core import config as cfg
 from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
+from app.services.agent_ask import TOOL as ASK_TOOL
 from app.services.agent_costs import aggregate_usage, fetch_bounds
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
@@ -98,9 +99,9 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # command printed), except a call the app refused before it ran and the
 # results of the tools below, which return only the user's or the app's own
 # content: memory, settings, the agent's own plan and documents, a prepared
-# card's status. A new tool locks until shown otherwise.
+# card's status, the user's answer to ask_user. A new tool locks until shown otherwise.
 MEMORY_KEEPING_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
-                                  "update_plan", "create_document", "revise_document"})
+                                  "update_plan", "create_document", "revise_document", ASK_TOOL})
 # A text reply up to this long stands even after the agent's own research
 # (_tool_reminder): a greeting or clarification question is short.
 DIRECT_REPLY_CHARS = 800
@@ -337,6 +338,9 @@ class DelegationLoop(AgentLoop):
         # its next step or call, and its time stands still meanwhile. Nothing
         # of it enters the agent's conversation.
         self.hold = self.hold_decision = None
+        # A reviewer's halt that came while the user's own card was open
+        # (agent_ask.py): it opens once that card is answered.
+        self.queued_hold = None
         self.hold_started = 0.0
         self.paused_seconds = 0.0
         self.tools_used = 0
@@ -531,6 +535,9 @@ class DelegationLoop(AgentLoop):
         # allowed providers). A setting, so the prompt stays cacheable.
         self.vm_tools = None
         self.plan_tools = None
+        self.workspace_tools = frozenset()
+        # The user's answer on an ask_user card, for the tool to return (_ask_wait, agent_ask.py).
+        self.ask_answer = None
         # Domains the user allowed on a card in this message: request_domain
         # runs only for these (_domain_wait, agent_domains.py).
         self.allowed_domains = set()
@@ -552,8 +559,11 @@ class DelegationLoop(AgentLoop):
             from app.services.prompt_defaults import AGENT_PLAN_PROMPT
             self.plan_tools = PlanTools()
             self.messages[0]["content"] += "\n\n" + AGENT_PLAN_PROMPT
-            self.registry = ToolRegistry([*self.registry.tools.values(), *self.vm_tools.tools(),
-                                          *self.plan_tools.tools()],
+            vm_tools = self.vm_tools.tools()
+            # Calls into the workspace wait while the user has its browser
+            # (_takeover_wait); asking the user and a domain request do not.
+            self.workspace_tools = frozenset(tool.name for tool in vm_tools) - {ASK_TOOL, "request_domain"}
+            self.registry = ToolRegistry([*self.registry.tools.values(), *vm_tools, *self.plan_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
@@ -1784,16 +1794,23 @@ class DelegationLoop(AgentLoop):
         VM command ends as if the user had stopped it, and the run waits
         before its next step or call (_hold_wait) until the user decides
         (POST .../hold) or HOLD_TIMEOUT_SECONDS pass. The agent never learns
-        of it. One hold at a time; True when this one opened."""
+        of it. One hold at a time; True when this one opened.
+        The agent's own question to the user (``ask``, agent_ask.py) opens
+        one too, between calls, so no VM command runs then; a reviewer's halt
+        that comes while it is open waits until it is answered."""
         from uuid import uuid4
         with self.condition:
-            if self.hold is not None or self.closed.is_set() or self.cancellation.cancelled:
+            if self.closed.is_set() or self.cancellation.cancelled:
+                return False
+            if self.hold is not None:
+                if self.hold.get("ask") and not details.get("ask") and self.queued_hold is None:
+                    self.queued_hold = details
                 return False
             hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
                     "timeout_seconds": HOLD_TIMEOUT_SECONDS}
             self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
             self.condition.notify_all()
-        if self.vm_tools is not None:
+        if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
         try:
             self.store.set_hold(self.uid, self.chat_id, self.turn_id, hold)
@@ -1804,10 +1821,16 @@ class DelegationLoop(AgentLoop):
                                                 **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
                                                 **({"gate": True} if hold.get("gate") else {}),
                                                 **({"domain": hold["domain"]} if hold.get("domain") else {}),
+                                                **({"ask": hold["ask"], "request": hold.get("request", "")}
+                                                   if hold.get("ask") else {}),
                                                 "halt": hold["kind"], "state": "waiting"}))
         if self.work_log is not None:
             before = " before its calls ran" if details.get("gate") else ""
+            asked = details.get("ask")
             self.work_log.app("paused", (
+                "The user has the browser: the agent waits until they hand it back." if asked == "takeover" else
+                f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
+                else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
                 f"The agent asks to reach {details['domain']} (entry {details['entry']}): the user decides."
                 if details.get("domain") else
                 f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
@@ -1825,25 +1848,8 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_gate import outward
         # The step's own search counts already: it came back with the step.
         exposed = self.outside_in_view or _searched(value)
-        # The step's own search hits count as held: they join search_sources
-        # only after the gate opened, and read_source reads them as such.
-        from app.services.agent_read_source import url_key
-        hits = {url_key(source.get("url")) for source in getattr(value, "sources", None) or ()
-                if isinstance(source, dict) and isinstance(source.get("url"), str)}
-        hits.discard("")
-
-        def known(url):
-            return url_key(url) in hits or self._known_url(url)
-        calls = [call for call in value.tool_calls if outward(call, memory_exposed=exposed, known=known)]
+        calls = [call for call in value.tool_calls if outward(call, memory_exposed=exposed)]
         return auditor.open_gate(calls) if calls else None
-
-    def _known_url(self, url):
-        """Whether the message already holds ``url``: such an address is
-        fetched without a gate round (read_source and show_image,
-        agent_gate.WEB_READS); a picture shown once is fetched again freely."""
-        reader = getattr(self.comparison, "reader", None)
-        return bool((reader is not None and reader.knows(url))
-                    or (self.image_tools is not None and self.image_tools.knows(url)))
 
     def _gate_wait(self, gate):
         """An outward call waits for the reviewers' verdicts on its step. All
@@ -1961,17 +1967,98 @@ class DelegationLoop(AgentLoop):
                 self.hold_decision = decision.get("action")
                 self.condition.notify_all()
 
-    def _hold_wait(self):
+    def _ask_wait(self, call):
+        """ask_user (agent_ask.py): the run pauses on the user's card until
+        they answer. With ``browser`` handing the browser back answers it
+        (after they had it); the card's own buttons answer too. Puts what the
+        tool returns in ``ask_answer`` and returns the decision, or "run" for
+        a call whose arguments are not valid (the tool then says why)."""
+        from app.services import agent_ask
+        asked = agent_ask.requested(call)
+        if asked is None:
+            return "run"
+        request, browser = asked
+        kind = "browser" if browser else "confirm"
+        decision = yield from self._user_hold(agent_ask.hold(kind, request),
+                                              self._handed_back(had=False) if browser else None)
+        self.ask_answer = agent_ask.answer(kind, decision)
+        return decision
+
+    def _takeover_wait(self):
+        """The user took over the workspace's browser on their own: a call
+        into the workspace waits on a card until they hand it back, instead
+        of failing after VMSession.wait_for_user's 120 s. Returns None when
+        the user does not have the browser, else the decision
+        ("handed_back", "steer", "timeout"). A failed read leaves it to
+        wait_for_user, which counts it as the user's."""
+        from app.services import agent_ask, agent_workspace
+        try:
+            if not agent_workspace.user_has_browser(self.store.db, self.uid):
+                return None
+        except Exception as exc:
+            logging.info("Agent workspace control unreadable category=%s", safe_exception(exc))
+            return None
+        return (yield from self._user_hold(agent_ask.hold("takeover"), self._handed_back(had=True)))
+
+    def _user_hold(self, details, poll=None):
+        """Opens the user's own card (agent_ask.hold) once no reviewer's halt
+        is open and waits for its answer, then for a reviewer's halt that came
+        meanwhile (request_hold queues it): the agent's next call never runs
+        past it. A message to the agent on either card is "steer"."""
+        while True:
+            # A reviewer's halt may be open: it comes first.
+            decision = yield from self._hold_wait()
+            self.cancellation.raise_if_cancelled()
+            if decision == "steer" or self.closed.is_set():
+                return "steer"
+            if self.request_hold(details):
+                break
+        decision = yield from self._hold_wait(poll)
+        if decision != "steer" and self.hold is not None and (yield from self._hold_wait()) == "steer":
+            return "steer"
+        return decision
+
+    def _handed_back(self, *, had):
+        """``_hold_wait``'s poll for a browser card: "handed_back" once the
+        user had the browser and gave it back (agent_workspace.control_state,
+        every agent_ask.HANDBACK_POLL_SECONDS): seen to have it and then not,
+        or a hand-back noted since the card opened, also one between two
+        looks. ``had``: they have it already."""
+        from app.services import agent_ask, agent_workspace
+        state = {"had": had, "next": 0.0, "since": time.time()}
+
+        def poll():
+            now = self.clock()
+            if now < state["next"]:
+                return None
+            state["next"] = now + agent_ask.HANDBACK_POLL_SECONDS
+            try:
+                holding, returned = agent_workspace.control_state(self.store.db, self.uid)
+            except Exception as exc:
+                logging.info("Agent workspace control unreadable category=%s", safe_exception(exc))
+                return None
+            state["had"] = state["had"] or holding
+            if holding:
+                return None
+            return "handed_back" if state["had"] or returned >= state["since"] else None
+        return poll
+
+    def _hold_wait(self, poll=None):
         """Wait while a reviewer's halt is open; events keep flowing and Stop
         works. Returns the decision ("continue", "steer") or None without a
-        hold; "stop" and the timeout end the response like the Stop button."""
+        hold; "stop" and the timeout end the response like the Stop button.
+        On the user's own card (``ask``, _user_hold) ``poll()`` may answer
+        too ("handed_back"), and the timeout lets the agent finish instead."""
         if self.hold is None:
             return None
         while True:
+            handed = poll() if poll is not None else None
             with self.condition:
                 hold, decision = self.hold, self.hold_decision
                 if hold is None:
                     return None
+                if decision is None and handed:
+                    decision = handed
                 if decision is None and self.clock() - self.hold_started >= HOLD_TIMEOUT_SECONDS:
                     decision = "timeout"
                 if decision is not None:
@@ -1990,14 +2077,25 @@ class DelegationLoop(AgentLoop):
         self.outgoing.put_nowait({"type": "hold", "hold": None, "id": hold["id"], "decision": decision})
         self.outgoing.put_nowait(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                                 "state": decision}))
+        asked = hold.get("ask")
         if self.work_log is not None:
-            self.work_log.app("decision", {"continue": "The user let the work go on.",
-                                           "deny": "The user did not allow it.",
-                                           "steer": "The user let the work go on with a message.",
-                                           "stop": "The user stopped the work.",
-                                           "timeout": "No decision in 30 minutes: the response stopped."}[decision])
+            said = {"continue": "The user let the work go on.",
+                    "deny": "The user did not allow it.",
+                    "steer": "The user let the work go on with a message.",
+                    "stop": "The user stopped the work.",
+                    "timeout": "No decision in 30 minutes: the response stopped.",
+                    "handed_back": "The user handed the browser back."}
+            if asked:
+                said.update(timeout="No answer in 30 minutes: the agent goes on without one.",
+                            **({"continue": "The user allowed it."} if asked == "confirm" else {}))
+            self.work_log.app("decision", said[decision])
         yield from self._events()
-        if decision in {"stop", "timeout"}:
+        with self.condition:
+            queued, self.queued_hold = self.queued_hold, None
+        if queued is not None and decision != "stop":
+            # The reviewer's halt that came meanwhile: before the next call.
+            self.request_hold(queued)
+        if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":
                 # As the Stop button does (routers/agent.py stop_agent_request).
                 try:
@@ -2690,6 +2788,22 @@ class DelegationLoop(AgentLoop):
                                                                          reason="untrusted_context"))
                                 last_accepted = False
                                 continue
+                            if name == ASK_TOOL:
+                                # The user's card (agent_ask.py); the tool then
+                                # returns their answer. A message on it is that
+                                # answer: the rest of the batch waits.
+                                steered = (yield from self._ask_wait(call)) == "steer"
+                            elif name in self.workspace_tools:
+                                taken = yield from self._takeover_wait()
+                                if taken in {"steer", "timeout"}:
+                                    # Not run: nothing of the agent's reached the
+                                    # workspace while the user had the browser.
+                                    from app.services.agent_ask import TAKEOVER_TIMEOUT
+                                    steered = steered or taken == "steer"
+                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
+                                        {"error": HOLD_STEERED if taken == "steer" else TAKEOVER_TIMEOUT})}
+                                    last_accepted = False
+                                    continue
                             result = yield from self._execute_stream(value, call)
                             results[call["id"]] = result
                             content = json.loads(result["content"])

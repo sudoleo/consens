@@ -596,6 +596,7 @@ class VMTools:
 
     def tools(self):
         from app.services import agent_github
+        from app.services.agent_ask import AskTools
         from app.services.agent_browser import BrowserTools
         from app.services.agent_domains import DomainTools
         from app.services.agent_vm_processes import ProcessTools
@@ -629,6 +630,8 @@ class VMTools:
                             VmViewImageArgs, self.view, activity=self._path_activity, reports=True)]
               if sees_pictures(self.loop.model) else []),
             *BrowserTools(self).tools(),
+            # The user's part: their turn in the browser, their yes to a step (agent_ask.py).
+            *AskTools(self).tools(),
             *DomainTools(self).tools(),
             *github,
         ]

@@ -273,7 +273,9 @@ def test_taking_over_and_handing_back_write_the_vms_control_files(view_api, fake
     assert client.post("/agent/workspace/control", json={"holder": "agent"}, headers=AUTH).status_code == 200
     assert json.loads(fake_vm.vms[BROWSER]["files"][agent_workspace.BROWSER_CONTROL])["holder"] == "agent"
     assert json.loads(fake_vm.vms[NAME]["files"][agent_workspace.CONTROL_PATH])["holder"] == "agent"
-    assert agent_workspace.record(store.db, UID)["control"] == {"holder": "agent", "until": 0}
+    # Handing back is noted, so a waiting run sees it between two looks too.
+    assert agent_workspace.record(store.db, UID)["control"] == {"holder": "agent", "until": 0, "returned_at": 5000.0}
+    assert agent_workspace.control_state(store.db, UID, now=5000.0) == (False, 5000.0)
     assert not agent_workspace.user_has_browser(store.db, UID, now=5000.0)
     # Handing back starts nothing: pause.py sees control.json and lets go.
     assert fake_vm.server == [agent_workspace.PAUSE_COMMAND]

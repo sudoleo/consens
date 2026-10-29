@@ -390,6 +390,26 @@ describe("installing and asking for a domain", () => {
     const saved = host.querySelector(".agent-activity-content .agent-hold-step");
     expect(saved.querySelector(".agent-hold-step-state").textContent).toBe("Not checked · You let the work go on");
   });
+
+  // The agent's own question (ask_user, 2026-10-29): it waits for the user,
+  // not for a decision on a pause, and the history keeps what it asked.
+  it("waits for the user on the agent's question and keeps how it ended", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-a1b2c3d4e5f6", step_id: "hold", halt: "ask",
+      ask: "browser", request: "Bitte melde dich bei der Post an.", reviewer: "", provider: "", reason: "",
+      entry: null, state: "waiting" });
+    activity.render(host, { running: true, status: "running", events });
+    const live = host.querySelector(".agent-progress .agent-hold-step");
+    expect(live.querySelector("strong").textContent).toBe("The agent asked you to take over the browser");
+    expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Waiting for you");
+    expect(host.querySelector(".agent-current-status").textContent).toBe("Waiting for you");
+    activity.receive(events, { version: 1, kind: "hold", id: "hold-a1b2c3d4e5f6", step_id: "hold", state: "handed_back" });
+    activity.render(host, { running: false, status: "completed", events });
+    const saved = host.querySelector(".agent-activity-content .agent-hold-step");
+    expect(saved.querySelector(".agent-hold-step-reason").textContent).toBe("Bitte melde dich bei der Post an.");
+    expect(saved.querySelector(".agent-hold-step-state").textContent).toBe("You handed the browser back");
+  });
 });
 
 // Since 2026-10-28 the agent's text beside a tool call stands whole in the

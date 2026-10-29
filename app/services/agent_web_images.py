@@ -16,10 +16,10 @@ only: the picture's host never sees the user, and the answer itself still
 renders no remote image (markdown-stream.js), which could carry chat content
 out on its own.
 
-The fetch reaches out like a browser's open: an address that is not among
-the message's search hits, the user's links or the chat's earlier sources
-waits for the reviewers first (agent_gate.WEB_READS). Audit mode only, never
-in chats with Google data (like read_source). A chat model that takes images
+The fetch reaches out like a browser's open, which the reviewers follow live
+(from 2026-10-28 to 2026-10-29 an address the message did not hold waited
+for them first, agent_gate.py). Audit mode only, never in chats with Google
+data (like read_source). A chat model that takes images
 sees the picture after the result, so it can tell whether it shows what it
 meant (vm_view_image's way, DelegationLoop._show_pictures).
 """
@@ -176,9 +176,7 @@ class WebImageTools:
     def tools(self):
         return [ReadOnlyTool(
             "show_image", "Show the user a picture from the web under your answer, with its source: a picture's "
-                          "address, or a page's, whose own preview picture is taken. The server fetches it; an "
-                          "address outside this message's search results, the user's links and earlier sources "
-                          "waits for the reviewers first.",
+                          "address, or a page's, whose own preview picture is taken. The server fetches it.",
             ShowImageArgs, self.show, activity=self._activity)]
 
     @property
@@ -191,11 +189,6 @@ class WebImageTools:
                 from app.services.agent_files import AgentFiles
                 self._files = AgentFiles(self.loop.store.db)
         return self._files
-
-    def knows(self, url):
-        """Whether this message showed the picture at ``url`` already."""
-        with self.lock:
-            return isinstance(url, str) and url.strip() in self.shown
 
     def take_pictures(self):
         """The pictures shown since the last call, for a chat model that takes

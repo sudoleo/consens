@@ -3,7 +3,8 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 // The account's workspace live (workspace-view.js): the panel signs in over
 // its WebSocket's first message, hands the socket to noVNC on "ready", and a
-// click on the screen takes the browser over until "Hand back".
+// click on the screen takes the browser over until "Hand back" in the bar
+// above the picture.
 class FakeSocket {
   static last = null;
   constructor(url) {
@@ -218,15 +219,20 @@ describe("the workspace view", () => {
       const [rfb] = FakeRFB.made;
       env.document.querySelector(".workspace-view-cover").click();
       await vi.waitFor(() => expect(rfb.viewOnly).toBe(false));
+      // The way back is the bar's one button right above the picture, not the head's toggle.
       const toggle = env.document.querySelector(".workspace-view-toggle");
-      expect(toggle.textContent).toBe("Hand back");
+      const back = env.document.querySelector(".workspace-view-turn-button");
+      expect(toggle.hidden).toBe(true);
+      expect(back.textContent).toBe("Hand back");
       expect(rfb.focused).toBe(1);
       expect(env.document.querySelector(".workspace-view-cover").hidden).toBe(true);
       await vi.advanceTimersByTimeAsync(30_000);
       expect(controls(env.window)).toEqual(["user", "user"]);
-      toggle.click();
+      back.click();
       await vi.waitFor(() => expect(rfb.viewOnly).toBe(true));
+      expect(toggle.hidden).toBe(false);
       expect(toggle.textContent).toBe("Take over");
+      expect(env.document.querySelector(".workspace-view-turn").hidden).toBe(true);
       await vi.advanceTimersByTimeAsync(60_000);
       expect(controls(env.window)).toEqual(["user", "user", "agent"]);
     } finally {
@@ -234,14 +240,74 @@ describe("the workspace view", () => {
     }
   });
 
-  it("says the agent is paused while the user has the browser", async () => {
+  it("says above the picture that the agent waits while the user has the browser, and reminds them after a minute", async () => {
+    // Max, 2026-10-29: he waited for the agent while it waited for him; only
+    // a small toggle in the head said he still had the browser.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      const turn = env.document.querySelector(".workspace-view-turn");
+      expect(turn.hidden).toBe(true);
+      env.document.querySelector(".workspace-view-cover").click();
+      await vi.waitFor(() => expect(FakeRFB.made[0].viewOnly).toBe(false));
+      expect(env.document.querySelector(".workspace-view-status").textContent).toBe("You have the browser.");
+      expect(turn.hidden).toBe(false);
+      expect(turn.classList.contains("is-user")).toBe(true);
+      expect(turn.querySelector(".workspace-view-turn-says").textContent)
+        .toBe("You’re steering the browser. The agent waits until you hand it back.");
+      // Working there keeps it calm; a minute without a key or click reminds.
+      await vi.advanceTimersByTimeAsync(40_000);
+      env.document.querySelector("#workspacePane-browser").dispatchEvent(new env.window.Event("pointerdown"));
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(turn.classList.contains("is-idle")).toBe(false);
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(turn.classList.contains("is-idle")).toBe(true);
+      expect(turn.querySelector(".workspace-view-turn-says").textContent)
+        .toBe("Done? Hand the browser back so the agent can go on.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says what the agent waits for, takes over from the agent's card and tells the chat who has the browser", async () => {
     const env = setup();
-    const socket = await opened(env);
+    const holders = [];
+    env.window.addEventListener("consensio:workspace-holder", (event) => holders.push(event.detail.holder));
+    // The card asks before the view is open: it opens to take over as soon as there is a picture.
+    env.workspace.agentWaits("Bitte melde dich bei der Post an.");
+    env.workspace.open({ takeOver: true });
+    await vi.waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    const socket = FakeSocket.last;
+    await socket.onopen();
     socket.deliver(JSON.stringify({ state: "ready" }));
-    env.document.querySelector(".workspace-view-cover").click();
-    await vi.waitFor(() => expect(FakeRFB.made[0].viewOnly).toBe(false));
-    expect(env.document.querySelector(".workspace-view-status").textContent)
-      .toBe("You have the browser. The agent is paused until you hand it back.");
+    await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
+    expect(env.workspace.holder()).toBe("user");
+    expect(holders).toEqual(["user"]);
+    env.document.querySelector(".workspace-view-turn-button").click();
+    await vi.waitFor(() => expect(env.workspace.holder()).toBe("agent"));
+    expect(holders).toEqual(["user", "agent"]);
+    // Watching again while the agent still waits: the bar says what for, the request as data.
+    const turn = env.document.querySelector(".workspace-view-turn");
+    expect(turn.hidden).toBe(false);
+    expect(turn.querySelector(".workspace-view-turn-says").textContent).toBe("The agent is waiting for you:");
+    const request = turn.querySelector(".workspace-view-turn-request");
+    expect(request.textContent).toBe("Bitte melde dich bei der Post an.");
+    expect(request.hasAttribute("data-i18n-skip")).toBe(true);
+    expect(turn.querySelector(".workspace-view-turn-button").textContent).toBe("Take over");
+    env.workspace.agentWaits(null);
+    expect(turn.hidden).toBe(true);
+  });
+
+  it("hands back from the chat's card without an open view", async () => {
+    const env = setup();
+    const holders = [];
+    env.window.addEventListener("consensio:workspace-holder", (event) => holders.push(event.detail.holder));
+    expect(env.workspace.holder()).toBeNull();
+    await env.workspace.handBack();
+    expect(controls(env.window)).toEqual(["agent"]);
+    expect(holders).toEqual(["agent"]);
   });
 
   it("gives the browser back when it closes while the user has it", async () => {
@@ -401,7 +467,7 @@ describe("pasting into the workspace", () => {
     await vi.waitFor(() => expect(env.document.querySelector(".workspace-view-status").textContent)
       .toBe("Your browser did not share the clipboard. Press Ctrl+V (Cmd+V on a Mac) on the screen instead."));
     expect(rfb.keys).toEqual([]);
-    env.document.querySelector(".workspace-view-toggle").click();
+    env.document.querySelector(".workspace-view-turn-button").click();
     await vi.waitFor(() => expect(button.hidden).toBe(true));
   });
 });

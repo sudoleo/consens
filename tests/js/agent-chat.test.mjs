@@ -1671,8 +1671,9 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  // A pause before a step that acts outside the workspace runs (agent_gate.py,
-  // 2026-10-27): the step has not run, "Let it run" runs it; several halting
+  // A pause before a step on agent_gate.py's list runs (since 2026-10-27;
+  // since 2026-10-29 a domain request or a memory change after outside
+  // content): the step has not run, "Let it run" runs it; several halting
   // reviewers stand each with its reason, and without any answer the card
   // says the step could not be checked.
   it("asks before a step runs when reviewers stopped it or none could check it", async () => {
@@ -1760,6 +1761,83 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(decisions.at(-1)).toEqual({ id: "0123456789ab", action: "continue", text: "" }));
     handlers.hold.receive({ hold: { ...base, id: "fedcba987654", review: "unchecked" } });
     expect(host.querySelector(".agent-domain-review").textContent).toBe("Not every reviewer could check this request.");
+    dom.window.close();
+  });
+
+  // The agent hands a step to the user (ask_user, agent_ask.py, 2026-10-29):
+  // their turn in the browser, which handing it back answers on the server;
+  // their yes or no to a step in their name; a call that waits while they
+  // took the browser over on their own. The agent's words are data.
+  it("hands the user the browser, asks before a step and waits while they have the browser", async () => {
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    let holder = "agent";
+    const workspace = { holder: () => holder, open: vi.fn(), handBack: vi.fn(), agentWaits: vi.fn() };
+    window.App.workspaceView = workspace;
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const base = { kind: "ask", reviewer: "", provider: "", reason: "", entry: null,
+      at: new Date().toISOString(), timeout_seconds: 1800 };
+    const request = "Bitte melde dich bei der Post an, dann mache ich weiter.";
+    handlers.hold.receive({ hold: { ...base, id: "a1b2c3d4e5f6", ask: "browser", request } });
+    expect(host.querySelector(".agent-ask-card.is-browser")).not.toBeNull();
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent needs you in the browser");
+    const words = host.querySelector(".agent-hold-reason");
+    expect(words.textContent).toBe(request);
+    expect(words.hasAttribute("data-i18n-skip")).toBe(true);
+    // It goes on without an answer: the clock says how long it waits, not that it stops.
+    expect(host.querySelector(".agent-hold-clock").textContent).toBe("The agent waits 30 more minutes");
+    expect(workspace.agentWaits).toHaveBeenLastCalledWith(request);
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
+      ["Open the browser", "btn agent-hold-open"], ["Go on without it", "agent-hold-link agent-hold-skip"],
+      ["Write to the agent", "agent-hold-link agent-hold-write"], ["Stop", "agent-hold-link agent-hold-stop"]]);
+    host.querySelector(".agent-hold-open").click();
+    expect(workspace.open).toHaveBeenCalledWith({ takeOver: true });
+    // Taken over in this window: the one button hands it back, which answers the card on the server.
+    holder = "user";
+    window.dispatchEvent(new window.CustomEvent("consensio:workspace-holder", { detail: { holder: "user" } }));
+    expect(host.querySelector(".agent-hold-actions .btn").textContent).toBe("Hand back");
+    host.querySelector(".agent-hold-hand-back").click();
+    expect(workspace.handBack).toHaveBeenCalledTimes(1);
+    // The run says the card is over; the workspace's bar stops waiting.
+    handlers.hold.receive({ hold: null, id: "a1b2c3d4e5f6", decision: "handed_back" });
+    expect(host.hidden).toBe(true);
+    expect(workspace.agentWaits).toHaveBeenLastCalledWith(null);
+    // A step in the user's name: allow or not.
+    holder = "agent";
+    const decisions = [];
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => {
+      if (!String(url).endsWith("/hold")) return catalogFetch(url, options);
+      decisions.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ status: "decided" }) };
+    });
+    handlers.hold.receive({ hold: { ...base, id: "0123456789ab", ask: "confirm",
+      request: "Soll ich die Nachricht an Anna senden?" } });
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent asks before it goes on");
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => [b.textContent, b.className])).toEqual([
+      ["Allow", "btn agent-hold-continue"], ["Don’t allow", "agent-hold-link agent-hold-deny"],
+      ["Write to the agent", "agent-hold-link agent-hold-write"], ["Stop", "agent-hold-link agent-hold-stop"]]);
+    expect(workspace.agentWaits).toHaveBeenLastCalledWith(null);
+    host.querySelector(".agent-hold-deny").click();
+    await vi.waitFor(() => expect(decisions).toEqual([{ id: "0123456789ab", action: "deny", text: "" }]));
+    expect(host.hidden).toBe(true);
+    // Taken over on their own (maybe in another window): handing back is the way, also from here.
+    handlers.hold.receive({ hold: { ...base, id: "fedcba987654", ask: "takeover", request: "" } });
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("You have the browser");
+    expect(host.querySelector(".agent-hold-reason").textContent).toBe("The agent waits until you hand it back.");
+    expect([...host.querySelectorAll(".agent-hold-actions > button")].map(b => b.textContent)).toEqual([
+      "Hand back", "Write to the agent", "Stop"]);
     dom.window.close();
   });
 

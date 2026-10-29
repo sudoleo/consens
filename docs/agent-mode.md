@@ -513,27 +513,37 @@ Steer-Entscheidung. Solange die Pause wartet, nennt die Aktivität ihren Grund
 nicht ein zweites Mal (er steht in der Karte); nach der Entscheidung steht er
 dort mit ihr.
 
-**Vorab-Prüfung vor Außenwirkung** (seit 2026-10-27, Max' Entscheidung nach
-der Harness-Kritik): Ein Halt kam bisher erst nach dem Aufruf, denn die App
-schreibt einen Schritt ins Protokoll und führt ihn sofort aus, die Runde
-eines Prüfers dauert Sekunden. Jetzt warten Aufrufe, die den Arbeitsplatz
-verlassen, auf die Prüfer. Welche, entscheidet die App nach dem Werkzeug und
-seinen typisierten Argumenten (`agent_gate.outward`, nie ein Modell, nie ein
-Textmuster): beim Werkzeug `browser` die Aktionen `open`, `click`, `upload`,
-`key` mit `Enter` oder `Space` (drückt den fokussierten Knopf wie ein Klick, seit
-2026-10-28) und `type` mit `enter` (Lesen, Tippen allein, Scrollen und
-Tabs senden nichts), und jede Domain-Anfrage (`request_domain`, die danach
-immer der Nutzer entscheidet, siehe „Netz der Werkbank“). Seit 2026-10-28
-außerdem `read_source` und `show_image` mit einer Adresse, die die Nachricht
-noch nicht hält (`agent_gate.WEB_READS`, „web“): Der Server holt sie, also
-geht eine Anfrage hinaus wie beim `open` des Browsers. Was sie hält
-(`DelegationLoop._known_url`: Suchtreffer dieser Nachricht samt denen des
-Schritts selbst, Links des Nutzers, Quellen früherer Nachrichten, schon
-gelesene Seiten, schon gezeigte Bilder), läuft ohne Runde. Bis zum Umbau nach
-dem Sicherheitsaudit (2026-10-27) suchte eine Liste von Mustern in
-Shell-Befehlen nach `curl`, `git push` u. Ä.; seit die Werkbank nur noch
-Paketquellen erreicht, kann ein Befehl nichts hinausschicken, was auch
-immer er sagt, und die Muster sind weg.
+**Vorab-Prüfung** (seit 2026-10-27, Max' Entscheidung nach der
+Harness-Kritik; seit 2026-10-29 nur noch zwei Arten): Ein Halt kommt erst nach
+dem Aufruf, denn die App schreibt einen Schritt ins Protokoll und führt ihn
+sofort aus, die Runde eines Prüfers dauert Sekunden. Deshalb warten manche
+Aufrufe vorher auf die Prüfer. Welche, entscheidet die App nach dem Werkzeug
+und seinen typisierten Argumenten (`agent_gate.outward`, nie ein Modell, nie
+ein Textmuster): jede Domain-Anfrage (`request_domain`, die danach immer der
+Nutzer entscheidet, siehe „Netz der Werkbank“) und eine Memory-Änderung,
+sobald Fremdinhalt im Blick ist (`memory_exposed`, seit 2026-10-28).
+
+**Browser-Aktionen und Seitenabrufe warten nicht mehr** (seit 2026-10-29,
+Max: „nicht SOTA, wirkt gehandicapt“; kritische Handlungen sind kein einzelner
+Klick, sondern werden hergeleitet). Vom 27./28. bis 29.10. warteten auch
+`browser` `open`, `click`, `drag`, `upload`, `download`, `key` mit `Enter` oder
+`Space` und `type` mit `enter` sowie `read_source`/`show_image` mit einer
+Adresse, die die Nachricht noch nicht hielt (`WEB_READS`, `GATE_WEB_NOTE`,
+`DelegationLoop._known_url`, alles entfernt). Prod-Messung über drei Tage
+davor: 30 Gate-Runden in 6 Läufen, Median 3,9 s je Klick (p90 10,5 s, ein Lauf
+fast eine Minute reines Warten), 4 Halts, alle vier vom Nutzer
+weitergelassen (ein Link aus einem Suchtreffer, ein Bild, zwei Spielzüge,
+einmal „kein Prüfer konnte prüfen“). Der einzige echte Injection-Halt bis
+dahin (CSV, 27.10.) kam in einer gewöhnlichen Live-Runde beim Lesen. Die
+Prüfer folgen diesen Schritten jetzt live wie jedem anderen; einen Schritt im
+Namen des Nutzers (Senden, Posten, Kaufen, Löschen) legt der Agent dem Nutzer
+selbst vor (`ask_user`, siehe „Der Agent fragt den Nutzer“). Bewusste Lücke:
+Liest der Agent eine präparierte Seite und klickt Sekunden später, kann die
+Live-Runde zu spät kommen; zu messen, wie oft ein Klick eine laufende Runde
+überholt. Bis zum Umbau nach dem Sicherheitsaudit (2026-10-27) suchte eine
+Liste von Mustern in Shell-Befehlen nach `curl`, `git push` u. Ä.; seit die
+Werkbank nur noch Paketquellen erreicht, kann ein Befehl nichts
+hinausschicken, was auch immer er sagt, und die Muster sind weg.
 
 Ablauf: `DelegationLoop._step` öffnet das Gate (`AnswerAudit.open_gate`) vor
 dem Protokolleintrag des Schritts, damit kein Prüfer ihn zuerst in einer
@@ -935,8 +945,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Aktion `drag` drückt die Maus entlang von `strokes` (Listen von `[x, y]`,
   höchstens 50 Striche, je 2–500 Punkte, 2.000 zusammen; zwischen zwei Punkten
   in Schritten von 8 px, damit eine Leinwand Linien bekommt): Zeichnen,
-  Schieberegler, Drag-and-drop, viele Striche in einem Aufruf und damit einer
-  Prüfrunde. Beide warten wie ein Klick auf die Prüfer (`BROWSER_OUTWARD`).
+  Schieberegler, Drag-and-drop, viele Striche in einem Aufruf. Bis 2026-10-29
+  warteten beide wie ein Klick auf die Prüfer (Vorab-Prüfung, seitdem live).
   Der VM-Prompt sagt dazu als Sicherheitsregel, dass der Agent nie ein CAPTCHA
   oder eine andere Prüfung auf einen Menschen löst. Chrome startet mit
   Software-WebGL (`--use-gl=angle --use-angle=swiftshader
@@ -967,9 +977,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `<Chat-Ordner>/downloads/` (nie über eine bestehende Datei: `name (2).pdf`)
   und löscht sie auf der Browser-VM, auch wenn sie mit über `DOWNLOAD_BYTES`
   (25 MB) übersprungen wird (`downloads_skipped`); höchstens
-  `DOWNLOADS_PER_CALL` (10) je Aufruf. `download` wartet wie `open` auf die
-  Prüfer (`agent_gate.BROWSER_OUTWARD`: es schickt eine Anfrage mit den
-  Anmeldungen des Nutzers) und nimmt nur öffentliche Adressen, auch nach
+  `DOWNLOADS_PER_CALL` (10) je Aufruf. `download` schickt eine Anfrage mit den
+  Anmeldungen des Nutzers (bis 2026-10-29 wartete es deshalb wie `open` auf die
+  Prüfer) und nimmt nur öffentliche Adressen, auch nach
   Weiterleitungen (`browser.public_address`: nie der Debug-Port des
   Browsers). Das Ergebnis nennt die Pfade (`downloads`, Hinweis), die
   Aktivität sie als `downloads`, der Arbeitsbericht („-> downloaded …“).
@@ -995,8 +1005,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Agent (bis 15 MB), legt sie für diesen einen Aufruf in
   `~/.consens/browser/uploads` der Browser-VM und löscht sie danach; der Helfer
   nimmt nur Dateien aus diesem Ordner. `screenshot` kommt als Bild zum Agenten
-  (wie `vm_view_image`, nur für Bildmodelle). `open`, `click`, `upload`,
-  `key Enter`, `key Space` und `type` mit `enter` warten auf die Prüfer (Vorab-Prüfung).
+  (wie `vm_view_image`, nur für Bildmodelle). Die Prüfer folgen jeder Aktion
+  live; bis 2026-10-29 warteten `open`, `click`, `upload`, `key Enter`,
+  `key Space` und `type` mit `enter` vorher auf sie (Vorab-Prüfung).
   Die Einrichtung läuft synchron im ersten Aufruf (bis 100 s): Im Hintergrund
   fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
   Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit zählt als
@@ -1098,9 +1109,53 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
 - **Übernehmen und Zurückgeben.** Zuerst schaut der Nutzer nur zu
   (`viewOnly`); ein Klick ins Bild übernimmt (`POST /agent/workspace/control`
   `{"holder": "user"}`, Ablauf `CONTROL_SECONDS` = 90 s, die offene Ansicht
-  erneuert alle 30 s), „Zurückgeben“ oder Schließen setzt `agent`. Ein
-  geschlossener Tab lässt die Übernahme einfach ablaufen. Die Prüfer folgen
-  dem Agenten, nicht dem Nutzer.
+  erneuert alle 30 s), „Zurückgeben“ oder Schließen setzt `agent` und notiert
+  `returned_at` (seit 2026-10-29: eine wartende Antwort sieht die Rückgabe auch
+  zwischen zwei Blicken, `agent_workspace.control_state`). Ein geschlossener
+  Tab lässt die Übernahme einfach ablaufen. Die Prüfer folgen dem Agenten,
+  nicht dem Nutzer.
+- **Wer dran ist, steht über dem Bild** (seit 2026-10-29, Max hatte am Vortag
+  auf den Agenten gewartet, während der auf ihn wartete; nur ein kleiner
+  Umschalter im Kopf sagte, dass er den Browser noch hatte). Solange der
+  Nutzer steuert, zeigt die Leiste `.workspace-view-turn` direkt über dem Bild
+  „You’re steering the browser. The agent waits until you hand it back.“ im
+  Hausgrün getönt (`--agree-bg`) mit dem einen `.btn` „Hand back“; der
+  Umschalter im Kopf verschwindet dann. Nach `IDLE_MS` (60 s) ohne Taste,
+  Klick oder Scrollen im Bild erinnert sie im Pausenton („Done? Hand the
+  browser back so the agent can go on.“); zurückgegeben wird nie von selbst,
+  denn der Nutzer holt vielleicht gerade sein Passwort oder einen 2FA-Code.
+  Wartet der Agent auf ihn (`ask_user` mit `browser`), sagt die Leiste beim
+  Zuschauen „The agent is waiting for you:“ und die Bitte des Agenten (Daten,
+  unübersetzt) mit „Take over“ (`App.workspaceView.agentWaits`, gesetzt von
+  `agent-chat.js renderHold`). Ein Wechsel des Halters ist das Fenster-Event
+  `consensio:workspace-holder`.
+- **Der Agent fragt den Nutzer** (`ask_user`, `agent_ask.py`, seit
+  2026-10-29, nur mit dem Arbeitsplatz): Der Lauf hält auf einer Karte über
+  dem Feld (ein Halt mit `ask`, `DelegationLoop._ask_wait` → `_user_hold`),
+  die Zeit der Antwort steht still (`paused_seconds`). Mit `browser` übergibt
+  er dem Nutzer den Browser (Anmelden, Passwort, Bezahlen, Prüfung auf einen
+  Menschen, ein letzter Klick): Karte „The agent needs you in the browser“ mit
+  der Bitte als Daten, „Open the browser“ (öffnet die Ansicht und übernimmt,
+  sobald ein Bild da ist) bzw. „Hand back“, „Go on without it“, „Write to the
+  agent“, „Stop“. **Die Rückgabe löst die Fortsetzung aus:** `_handed_back`
+  liest alle `HANDBACK_POLL_SECONDS` (2 s) `control_state`; hatte der Nutzer
+  den Browser und hat ihn nicht mehr, oder liegt ein `returned_at` nach dem
+  Öffnen der Karte, endet sie mit `handed_back`. Ohne `browser` fragt er vor
+  einem Schritt in seinem Namen (Senden, Posten, Buchen, Löschen, AGB): Karte
+  „The agent asks before it goes on“ mit „Allow“ / „Don’t allow“. Der Agent
+  bekommt nur das Ergebnis (`agent_ask.ANSWERS`: `handed_back`, `continued`,
+  `allowed`, `declined`, `message`, `no_answer`), nie, was der Nutzer im
+  Browser tat; eine Nachricht auf der Karte ist die Antwort (Rest des Stapels
+  wartet wie nach `steer`). Ohne Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min)
+  hört er `no_answer` und schreibt seine Antwort, statt dass die Antwort wie
+  nach einem Prüfer-Halt stoppt; die Karte zeigt deshalb „The agent waits N
+  more minutes“. Ein Prüfer-Halt, der währenddessen kommt, wartet
+  (`queued_hold`) und hält dann vor dem nächsten Aufruf. Das Werkzeug
+  ersetzt die Vorab-Prüfung jedes Browser-Klicks (siehe „Vorab-Prüfung“):
+  Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers bewirkt,
+  und der Nutzer entscheidet. Sein Ergebnis sperrt Memory nicht
+  (`MEMORY_KEEPING_TOOLS`). Aktivität „Your turn“, Tab-Titel „Waiting for
+  you“ (`tab-status.js`), Kopf der Agent-Aktivität „Waiting for you“.
 - **Der Agent pausiert ganz, solange der Nutzer übernommen hat** (Fund 3),
   damit nichts von ihm sieht, was der Nutzer dort tippt. Drei Schichten aus
   `agent_workspace.set_control`:
@@ -1108,7 +1163,14 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
      der Server schreibt ihn). Jeder Aufruf des Agenten an Werkbank und
      Browser wartet vorher (`VMSession.wait_for_user`, alle 2 s, höchstens
      120 s, nie in die Zeit der Antwort); dauert die Übernahme länger, hört der
-     Agent `VM_USER_HAS_BROWSER`, und es lief nichts.
+     Agent `VM_USER_HAS_BROWSER`, und es lief nichts. Seit 2026-10-29 sieht
+     schon die Schleife vor jedem Aufruf an den Arbeitsplatz nach
+     (`DelegationLoop._takeover_wait`, `workspace_tools`): Hat der Nutzer
+     übernommen, wartet der Aufruf auf einer Karte „You have the browser“ mit
+     „Hand back“ (auch ohne offene Ansicht in diesem Fenster), bis er
+     zurückgibt; erst nach 30 min ohne Rückgabe hört der Agent
+     `TAKEOVER_TIMEOUT`, und es lief nichts. `wait_for_user` bleibt das Netz
+     für eine Übernahme mitten im Aufruf.
   2. *Browser-VM:* `control.json` in `~/.consens/browser`; `browser.py`
      handelt dann nicht (`status: user`).
   3. *Werkbank:* `control.json` im Home des Servers (für den Agenten nicht
@@ -3247,8 +3309,8 @@ gesucht“, und der Agent wich auf den Browser aus, wo jedes `open` auf die
 Prüfer wartet und ein Prüfer die unerklärte Adresse prompt als Injection anhielt
 (Chat „Bester HSG-Spieler“: linktr.ee). Jetzt liest `read_source` im
 Audit-Modus jede öffentliche http(s)-Adresse; eine, die die Nachricht nicht
-hält, geht vorher durch die Vorab-Prüfung (`agent_gate.WEB_READS`), wie ein
-`open` im Browser. `SourceReader.chosen` nimmt sie nur, wenn Prüfer dem Lauf
+hielt, ging bis 2026-10-29 vorher durch die Vorab-Prüfung (`WEB_READS`), wie
+ein `open` im Browser, seitdem folgen die Prüfer live. `SourceReader.chosen` nimmt sie nur, wenn Prüfer dem Lauf
 folgen (`auditor.sessions`), sonst gilt die alte Absage; gelesen steht sie
 mit dem Label `LABEL_CHOSEN` („a page you chose“). Die Sicherheit bleibt die
 des Browsers: Eine Adresse mit Chat-Inhalt erreicht ihren Server erst nach
@@ -3450,14 +3512,15 @@ Google-Daten).
   Ein Chatmodell, das Bilder nimmt, sieht das Bild nach dem Ergebnis (wie
   `vm_view_image`, `DelegationLoop._show_pictures`), um zu prüfen, ob es zeigt,
   was es meinte.
-- Vorab-Prüfung: eine Adresse, die die Nachricht nicht hält, wartet auf die
-  Prüfer (`agent_gate.WEB_READS`), ein schon gezeigtes Bild nicht mehr.
+- Vorab-Prüfung bis 2026-10-29 (seitdem folgen die Prüfer live, siehe
+  „Vorab-Prüfung“): eine Adresse, die die Nachricht nicht hielt, wartete auf
+  die Prüfer (`WEB_READS`), ein schon gezeigtes Bild nicht mehr.
   Gleich nach dem Deploy (2026-10-28, 21:40 UTC) hielt MiMo V2.6 Pro so ein
   Bild als „injection“ an: Terra hatte fünfmal gesucht, kein Treffer stand im
   Protokoll (die eingebaute Suche meldet Treffer laut OpenRouter nur als
   Zitate im Antworttext, ein Schritt mit bloßem Werkzeugaufruf hat keine),
   und der Prüfer begründete mit einer nicht belegten Aussage über die Person.
-  Seitdem bekommt die Gate-Runde für `read_source` und `show_image`
+  Danach bekam die Gate-Runde für `read_source` und `show_image`
   `GATE_WEB_NOTE`: was so ein Abruf kann (vom Server, ohne Anmeldungen, ändert
   nichts; hinaus geht nur die Adresse), dass Suchtreffer im Protokoll fehlen
   können, und dass die Frage, ob Seite oder Bild die Aussage stützt, in die

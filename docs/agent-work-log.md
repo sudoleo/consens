@@ -278,23 +278,27 @@ Agent-Panel.
    App-Einträge `paused` und `decision`, so lesen die Prüfer die Entscheidung
    mit. Ablauf: [agent-mode.md](agent-mode.md), „Aussteuern“.
 5. **Vor dem Aufruf** (umgesetzt 2026-10-27, Max: Veto eines Prüfers reicht,
-   der Agent erfährt nur die Entscheidung des Nutzers): Aufrufe, die den
-   Arbeitsplatz verlassen (`agent_gate.py`, nach Werkzeug und typisierten
-   Argumenten: `browser` mit `open`, `click`, `upload`, Enter, Leertaste; seit
-   2026-10-28 `read_source` und `show_image` mit einer Adresse, die die
-   Nachricht nicht hält; seit dem Netz-Umbau desselben Tages keine
-   Befehlsmuster mehr, die Werkbank erreicht nur Paketquellen), laufen erst,
-   wenn jeder Prüfer des Laufs in einer
+   der Agent erfährt nur die Entscheidung des Nutzers): Aufrufe auf der Liste
+   von `agent_gate.py` (nach Werkzeug und typisierten Argumenten; seit
+   2026-10-29 nur noch `request_domain` und `update_memory`, sobald
+   Fremdinhalt im Blick ist) laufen erst, wenn jeder Prüfer des Laufs in einer
    Gate-Runde ohne Websuche „go“ sagt. Ein Halt oder ein Prüfer ohne
    verwertbare Antwort (ausgefallen, pausiert) fragt den Nutzer; Ausfall zählt
    nie als Zustimmung (Sicherheitsaudit 2026-10-27). Eine Domain für die
-   Werkbank (`request_domain`) geht nach der Gate-Runde immer an den Nutzer,
-   das Urteil der Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im
-   Protokoll: App-Eintrag `checked` bei Freigabe, sonst `paused`/`decision`
-   wie beim Aussteuern („The agent asks to reach …“, „The user did not allow
-   it.“). Ergebnisse von `browser` tragen die Herkunft `web`,
-   `vm_install_packages` die Herkunft `vm`.
-   Ablauf: [agent-mode.md](agent-mode.md), „Vorab-Prüfung vor Außenwirkung“.
+   Werkbank geht nach der Gate-Runde immer an den Nutzer, das Urteil der
+   Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im Protokoll:
+   App-Eintrag `checked` bei Freigabe, sonst `paused`/`decision` wie beim
+   Aussteuern („The agent asks to reach …“, „The user did not allow it.“).
+   Browser-Aktionen (`open`, `click`, `upload`, Enter, Leertaste) und
+   `read_source`/`show_image` mit unbekannter Adresse standen vom 27./28. bis
+   29.10. auf der Liste; seitdem folgen die Prüfer ihnen live (drei Tage Prod:
+   Median 3,9 s je Klick, vier Halts, alle Fehlalarm), und einen Schritt im
+   Namen des Nutzers legt der Agent ihm selbst vor (`ask_user`, App-Einträge
+   `paused` „The agent asks the user …“ / „The user has the browser …“ und
+   `decision`, z. B. „The user handed the browser back.“). Ergebnisse von
+   `browser` tragen die Herkunft `web`, `vm_install_packages` die Herkunft
+   `vm`. Ablauf: [agent-mode.md](agent-mode.md), „Vorab-Prüfung“ und „Der
+   Agent fragt den Nutzer“.
 
 ## Entscheidungen (Max, 2026-10-25)
 

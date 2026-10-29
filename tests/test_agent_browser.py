@@ -215,8 +215,7 @@ def test_only_the_browsers_download_folder_is_copied(store, fake_vm):
     assert not [path for path in fake_vm.vms[NAME]["files"] if "Cookies" in path]
 
 
-def test_download_takes_a_public_address_or_the_current_page_and_waits_for_the_reviewers(store, fake_vm):
-    from app.services.agent_gate import outward
+def test_download_takes_a_public_address_or_the_current_page(store, fake_vm):
     loop, browser = tools(store)
     call(browser, action="download")
     call(browser, action="download", url="shop.example/invoice.pdf")
@@ -224,8 +223,6 @@ def test_download_takes_a_public_address_or_the_current_page_and_waits_for_the_r
                                      {"action": "download", "url": "https://shop.example/invoice.pdf"}]
     with pytest.raises(ValueError, match="headless Chrome"):
         call(browser, action="download", url="http://localhost:9222/json")
-    # It sends a request with the user's sign-ins: outward, like open.
-    assert outward({"function": {"name": "browser", "arguments": json.dumps({"action": "download"})}}) == "browser"
 
 
 def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):

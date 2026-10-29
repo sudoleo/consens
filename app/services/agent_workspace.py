@@ -469,9 +469,11 @@ def set_control(db, uid, vm, holder, cancellation):
     then the browser's (control.json there), then freezes what of the agent
     already runs on the workbench (pause.py, by its user); handing back opens
     them in the other order. A workbench that no chat made yet has nothing
-    to freeze."""
+    to freeze. Handing back notes when (``returned_at``): a run waiting for
+    it sees a hand-back even between two of its looks (control_state)."""
     now = time.time()
-    control = {"holder": holder, "until": now + CONTROL_SECONDS if holder == "user" else 0}
+    control = {"holder": holder, "until": now + CONTROL_SECONDS if holder == "user" else 0,
+               **({"returned_at": now} if holder == "agent" else {})}
     payload = control_payload(holder, now=now)
     browser, workbench = agent_vm.browser_name(uid), agent_vm.workspace_name(uid)
     if holder == "user":
@@ -488,16 +490,26 @@ def set_control(db, uid, vm, holder, cancellation):
     ref(db, uid).update({"control": control})
 
 
-def user_has_browser(db, uid, now=None):
-    """Whether the user has the workspace's browser now (the record's
-    ``control``, which only the server writes)."""
+def control_state(db, uid, now=None):
+    """(whether the user has the workspace's browser now, when they last
+    handed it back as a time.time() or 0): the record's ``control``, which
+    only the server writes. A takeover the open view stopped refreshing has
+    simply run out, without a hand-back."""
     control = record(db, uid).get("control")
-    if not isinstance(control, dict) or control.get("holder") != "user":
-        return False
-    try:
-        return float(control.get("until") or 0) > (now or time.time())
-    except (TypeError, ValueError):
-        return False
+    if not isinstance(control, dict):
+        return False, 0.0
+
+    def number(key):
+        try:
+            return float(control.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    return control.get("holder") == "user" and number("until") > (now or time.time()), number("returned_at")
+
+
+def user_has_browser(db, uid, now=None):
+    """Whether the user has the workspace's browser now (control_state)."""
+    return control_state(db, uid, now)[0]
 
 
 def reset_browser(vm, uid, cancellation):

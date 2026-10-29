@@ -44,6 +44,13 @@ describe("tab status", () => {
     expect(app.title()).toBe("Working… · consens.io");
   });
 
+  it("says that the agent waits for the user when it asked them something (ask_user)", () => {
+    const app = boot();
+    app.run("running", { hold: { id: "a1b2c3d4e5f6", ask: "browser" } });
+    app.hide();
+    expect(app.title()).toBe("Waiting for you · consens.io");
+  });
+
   // Each projection of the visible run sets the page title again
   // (App.setAppTitle from run-view.js and agent-chat.js), right after the
   // registry event: a Compare run did it with every streamed chunk and wiped

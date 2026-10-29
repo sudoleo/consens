@@ -129,10 +129,10 @@ LABEL_EARLIER = "an earlier message's sources"
 # the agent does not call it, so "your search" read as a search it never made
 # (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
-# Audit mode since 2026-10-28: any public page, which the reviewers let
-# through first when the message did not hold it (agent_gate.WEB_READS). The
-# provider's search of GPT-6 Luna and GPT-6.1 Terra sends no hits to the app,
-# so they could read nothing they found.
+# Audit mode since 2026-10-28: any public page, which the reviewers follow
+# live (until 2026-10-29 one the message did not hold waited for them first,
+# agent_gate.py). The provider's search of GPT-6 Luna and GPT-6.1 Terra sends
+# no hits to the app, so they could read nothing they found.
 LABEL_CHOSEN = "a page you chose"
 
 
@@ -380,9 +380,7 @@ class SourceReader:
         # Audit mode since 2026-10-28: what it opens, not when to.
         description = (
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
-            "or clicks; a read takes about 10 to 30 seconds. A page that is not a result of this message's web "
-            "search, a source of an earlier message of this chat or a page the user linked waits for the "
-            f"reviewers first. At most {READS_PER_MESSAGE} per message."
+            f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message."
             if audit else
             "Open one page: a source that a comparison answer of this message cited, a source of an earlier "
             "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
@@ -430,21 +428,9 @@ class SourceReader:
                 {"comparison_id": None, "provider": "chat", "label": LABEL_USER}]})
         return cited
 
-    def knows(self, url):
-        """Whether the message already holds ``url`` (cited, a search hit, an
-        earlier source, the user's, read before): such a page is read, and a
-        picture of it shown, without the reviewers' gate (agent_gate.outward)."""
-        key = url_key(url) if _safe_url(url) else ""
-        if not key:
-            return False
-        if key in self.cited():
-            return True
-        with self.lock:
-            return any(key in {url_key(r.get("url")), url_key(r.get("cited_url"))} for r in self.reads)
-
     def chosen(self, url):
         """A page the agent named itself, in audit mode with reviewers (who
-        let it through first, agent_gate.WEB_READS); else None."""
+        follow the read live); else None."""
         auditor = getattr(self.comparison, "auditor", None)
         url = url.strip()
         if not getattr(self.comparison, "audit_mode", False) or not getattr(auditor, "sessions", None) \

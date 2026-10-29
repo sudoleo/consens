@@ -29,9 +29,19 @@
 // tab loads it shows a skeleton of what comes (no spinner), and after
 // SLOW_MS a calm word that the first start takes a minute.
 //
-// window.App.workspaceView: open(), close(), isOpen(), init() (the start
-// screen's Workspace button, the (+) menu's row, the row in Settings → Agent);
-// agent-activity.js opens it from a browser step ("Watch live").
+// Whose turn it is (since 2026-10-29): a bar right above the picture says it
+// while the user has the browser, with the one strong button to hand it
+// back, and reminds them after IDLE_MS without a key or click there; while
+// the agent waits for them (ask_user, agent-chat.js askCard) it says what
+// for, with the button to take over. Before, only a small toggle in the head
+// said so, and Max waited for the agent while it waited for him.
+//
+// window.App.workspaceView: open({ takeOver }), close(), isOpen(), init()
+// (the start screen's Workspace button, the (+) menu's row, the row in
+// Settings → Agent), holder(), handBack() (also without an open view, for the
+// card in the chat), agentWaits(request or null); agent-activity.js opens it
+// from a browser step ("Watch live"). A change of holder is the window's
+// event "consensio:workspace-holder".
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -40,6 +50,8 @@
   const XTERM_FIT = '/static/vendor/xterm/6.0.0/addon-fit.js';
   const XTERM_CSS = '/static/vendor/xterm/6.0.0/xterm.css';
   const REFRESH_MS = 30_000;
+  // The user has the browser and did nothing there for this long: the bar reminds them to hand it back.
+  const IDLE_MS = 60_000;
   // A start that takes longer than this (the workspace's first start, outside
   // a chat) says so calmly.
   const SLOW_MS = 6_000;
@@ -89,6 +101,8 @@
   // from the shortcut, they would turn the text into shortcuts.
   const MODIFIERS = [0xffe1, 0xffe2, 0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffe9, 0xffea, 0xffeb, 0xffec];
   let view = null;
+  // What the agent waits for the user to do in the browser (agentWaits), also before the view opens.
+  let waitingFor = null;
   let loadRFB = () => import(NOVNC).then(module => module.default);
   let loadTerminal = () => Promise.all([import(XTERM), import(XTERM_FIT)])
     .then(([xterm, fit]) => ({ Terminal: xterm.Terminal, FitAddon: fit.FitAddon }));
@@ -239,6 +253,18 @@
     paster.hidden = true;
     head.append(title, tabs, status, paster, toggle, closer);
     const hint = node('p', 'workspace-view-hint', HINTS.browser);
+    // Whose turn it is (showTurn): the words, the agent's request as data, the one button.
+    const turn = node('div', 'workspace-view-turn');
+    turn.setAttribute('role', 'status');
+    turn.hidden = true;
+    const turnText = node('p', 'workspace-view-turn-text');
+    const turnSays = node('span', 'workspace-view-turn-says');
+    const turnRequest = node('span', 'workspace-view-turn-request');
+    turnRequest.dataset.i18nSkip = '';
+    turnText.append(turnSays, turnRequest);
+    const turnButton = button('btn workspace-view-turn-button', 'Hand back',
+      () => (view?.holder === 'user' ? handBack() : takeOver()));
+    turn.append(turnText, turnButton);
     const screen = node('div', 'workspace-view-screen is-loading');
     screen.id = 'workspacePane-browser';
     screen.setAttribute('role', 'tabpanel');
@@ -253,6 +279,15 @@
     pasteTarget.setAttribute('aria-hidden', 'true');
     screen.append(skeleton('browser'), cover, pasteTarget);
     screen.addEventListener('keydown', onPasteKey, true);
+    // What counts as doing something there: the idle reminder starts over.
+    for (const type of ['pointerdown', 'keydown', 'wheel']) {
+      screen.addEventListener(type, () => {
+        if (view?.holder !== 'user') return;
+        const reminded = view.isIdle;
+        restartIdle();
+        if (reminded) showTurn();
+      }, true);
+    }
     // The terminal's pane: its output is the shell's, never translated.
     const terminal = node('div', 'workspace-view-screen workspace-view-terminal is-loading');
     terminal.id = 'workspacePane-terminal';
@@ -279,8 +314,9 @@
       try { localStorage.removeItem(STORAGE_KEY); } catch (error) { /* per browser only */ }
       resizeTo(preferredWidth(), { save: false });
     });
-    panel.append(resizer, head, hint, screen, terminal);
+    panel.append(resizer, head, hint, turn, screen, terminal);
     return { panel, status, hint, tabButtons, toggle, paster, cover, pasteTarget, screen, terminal, terminalHost,
+      turn, turnSays, turnRequest, turnButton, isIdle: false, idle: null, wantControl: false,
       restart, resizer, socket: null, rfb: null, holder: 'agent', refresh: null, width: 0, tab: 'browser',
       said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, slow: null,
       term: null, fit: null, termSocket: null, termReady: false, termResize: null };
@@ -402,31 +438,70 @@
     if (!view) return;
     const user = view.holder === 'user';
     const browser = view.tab === 'browser';
-    view.toggle.hidden = !view.rfb || !browser;
-    view.toggle.textContent = user ? 'Hand back' : 'Take over';
-    view.toggle.classList.toggle('is-user', user);
+    // While the user has it, the bar above the picture holds the way back.
+    view.toggle.hidden = !view.rfb || !browser || user;
+    view.toggle.textContent = 'Take over';
     view.paster.hidden = !view.rfb || !user || !browser || !navigator.clipboard?.readText;
     view.cover.hidden = !view.rfb || user;
     view.panel.classList.toggle('is-user', user);
     if (view.rfb) {
       view.rfb.viewOnly = !user;
-      say(user ? 'You have the browser. The agent is paused until you hand it back.'
-        : 'Watching. Click the screen to take over.');
+      say(user ? 'You have the browser.' : 'Watching. Click the screen to take over.');
     }
+    showTurn();
+  }
+
+  // The bar: the user's turn (and after IDLE_MS a reminder), or what the
+  // agent waits for them to do, or nothing while the agent works.
+  function showTurn() {
+    if (!view) return;
+    const user = view.holder === 'user';
+    const waiting = waitingFor !== null && !user;
+    const idle = user && view.isIdle;
+    view.turn.hidden = !view.rfb || view.tab !== 'browser' || !(user || waiting);
+    view.turn.classList.toggle('is-user', user);
+    view.turn.classList.toggle('is-idle', Boolean(idle));
+    const says = idle ? 'Done? Hand the browser back so the agent can go on.'
+      : user ? 'You’re steering the browser. The agent waits until you hand it back.'
+        : waitingFor ? 'The agent is waiting for you:' : 'The agent is waiting for you.';
+    if (view.turnSays.textContent !== App.t(says)) view.turnSays.textContent = says;
+    const request = waiting ? String(waitingFor || '') : '';
+    if (view.turnRequest.textContent !== request) view.turnRequest.textContent = request;
+    view.turnRequest.hidden = !request;
+    view.turnButton.textContent = user ? 'Hand back' : 'Take over';
+  }
+
+  // IDLE_MS after taking over or the last key or click there, the bar reminds.
+  function restartIdle() {
+    if (!view) return;
+    clearTimeout(view.idle);
+    view.isIdle = false;
+    view.idle = view.holder === 'user' ? setTimeout(() => {
+      if (!view) return;
+      view.isIdle = true;
+      showTurn();
+    }, IDLE_MS) : null;
+  }
+
+  function announceHolder(holder) {
+    window.dispatchEvent(new CustomEvent('consensio:workspace-holder', { detail: { holder } }));
   }
 
   async function setHolder(holder) {
     await post('/agent/workspace/control', { holder });
     if (!view) return;
     view.holder = holder;
+    restartIdle();
     clearInterval(view.refresh);
     view.refresh = holder === 'user'
       ? setInterval(() => post('/agent/workspace/control', { holder: 'user' }).catch(() => {}), REFRESH_MS) : null;
     showHolder();
+    announceHolder(holder);
   }
 
   async function takeOver() {
     if (!view?.rfb || view.holder === 'user') return;
+    view.wantControl = false;
     try {
       await setHolder('user');
       view?.rfb?.focus();
@@ -435,13 +510,32 @@
     }
   }
 
+  // Also without an open view (the card in the chat after a takeover in
+  // another window): the server's record is what the waiting run reads.
   async function handBack() {
-    if (!view || view.holder !== 'user') return;
+    if (!view) {
+      try {
+        await post('/agent/workspace/control', { holder: 'agent' });
+        announceHolder('agent');
+      } catch (error) {
+        App.showPopup?.(App.t('Could not hand back: {reason}', { reason: error.message || 'Try again.' }));
+      }
+      return;
+    }
+    if (view.holder !== 'user') return;
     try {
       await setHolder('agent');
     } catch (error) {
       say(App.t('Could not hand back: {reason}', { reason: error.message || 'Try again.' }));
     }
+  }
+
+  // The agent waits for the user in the browser (ask_user), or no longer (null).
+  function agentWaits(request) {
+    const next = request === null || request === undefined ? null : String(request);
+    if (next === waitingFor) return;
+    waitingFor = next;
+    showTurn();
   }
 
   function connect(RFB) {
@@ -485,6 +579,8 @@
       });
       view.rfb = rfb;
       showHolder();
+      // Opened to take over (the agent's card asked for it): as soon as there is a picture.
+      if (view.wantControl) takeOver();
     };
     socket.onclose = (event) => {
       if (!view || view.socket !== socket || view.rfb) return;
@@ -615,12 +711,16 @@
     };
   }
 
-  async function open() {
+  async function open({ takeOver: take = false } = {}) {
     if (view) {
       view.panel.hidden = false;
+      if (take && view.tab !== 'browser') showTab('browser');
+      if (take && view.rfb) takeOver();
+      else if (take) view.wantControl = true;
       return;
     }
     view = build();
+    view.wantControl = Boolean(take);
     document.body.append(view.panel);
     document.body.classList.add('workspace-view-open');
     showTab('browser');
@@ -653,8 +753,12 @@
     view = null;
     clearInterval(closing.refresh);
     clearTimeout(closing.slow);
+    clearTimeout(closing.idle);
     // The agent may go on at once; an unsent hand-back expires by itself.
-    if (closing.holder === 'user') post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
+    if (closing.holder === 'user') {
+      post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
+      announceHolder('agent');
+    }
     try { closing.rfb?.disconnect(); } catch (error) { /* already gone */ }
     try { closing.socket?.close(); } catch (error) { /* already gone */ }
     // The shell ends shortly after its socket (TERMINAL_AFTER_DISCONNECT).
@@ -705,8 +809,10 @@
   }
 
   App.workspaceView = {
-    open, close, init,
+    open, close, init, handBack, agentWaits,
     isOpen: () => Boolean(view),
+    // 'user' or 'agent' in the open view, else null.
+    holder: () => view?.holder || null,
     width: () => view?.width || 0,
     showTab,
     // Tests replace the noVNC and xterm.js imports.

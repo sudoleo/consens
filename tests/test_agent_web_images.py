@@ -132,9 +132,8 @@ def test_the_picture_lands_under_the_answer_with_its_source(store, monkeypatch, 
     assert failed == {"status": "failed", "url": blocked, "reason": "No picture: the site answered HTTP 403.",
                       "note": "Do not claim the user sees it."}
     assert fetched == [PAGE, FOUND, blocked]
-    # Only the addresses the message did not hold waited for the reviewers:
-    # not the search hit, not the picture shown before.
-    assert {family: len(rounds) for family, rounds in script.gate_searches.items()} == {"anthropic": 2, "openai": 2}
+    # No gate round since 2026-10-29: the reviewers follow the fetch live.
+    assert not getattr(script, "gate_searches", {})
     saved = AgentFiles(store.db).list(UID, loop.chat_id)
     assert [(file["kind"], file["turn_id"], file["mime"]) for file in saved] == [
         ("web_image", loop.turn_id, "image/webp")] * 2

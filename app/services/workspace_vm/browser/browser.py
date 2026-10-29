@@ -809,8 +809,8 @@ def act(context, page, action, request):
         ref, text = request.get("ref"), str(request.get("text") or "")
         target = element(page, ref)
         if target.evaluate(IS_SECRET_JS):
-            raise Refused("That is a password or code field: only the user types those. Ask the user to sign in "
-                          "themselves in the workspace view, then go on.")
+            raise Refused("That is a password or code field: only the user types those. Hand the browser to them "
+                          "with ask_user (browser) to sign in, then go on.")
         if target.evaluate("el => el.isContentEditable"):
             target.click(timeout=10_000)
             page.keyboard.insert_text(text)

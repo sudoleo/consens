@@ -305,8 +305,8 @@ def describe(name, arguments, result):
         line = f"vm_install_packages {' '.join(str(n) for n in packages[:30])}"
         if "exit_code" in data:
             line += f" -> exit {data['exit_code']}"
-    elif name == "request_domain":
-        line = f"request_domain {_short(args.get('domain'), 120)}"
+    elif name in {"request_domain", "ask_user"}:
+        line = f"{name} {_short(args.get('domain') or args.get('request'), 120)}"
         if data.get("status"):
             line += f" -> {data['status']}"
     else:

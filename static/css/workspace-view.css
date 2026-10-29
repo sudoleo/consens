@@ -207,11 +207,6 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   cursor: pointer;
 }
 
-/* The user has the browser: the one strong button says how to give it back. */
-.workspace-view-toggle.is-user {
-  background: var(--ink);
-  color: var(--ground);
-}
 
 .workspace-view-close {
   flex: none;
@@ -232,10 +227,6 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   .workspace-view-paste:hover {
     background: var(--hover, var(--raise));
   }
-
-  .workspace-view-toggle.is-user:hover {
-    background: var(--ink);
-  }
 }
 
 .workspace-view-close svg {
@@ -252,6 +243,56 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   padding: 0 18px 10px;
   font-size: 12px;
   color: var(--ink-3);
+}
+
+/* Whose turn it is (since 2026-10-29, workspace-view.js showTurn): right
+   above the picture, in view while the user works there, with the one
+   strong button. Tinted and frameless: the user's turn in the house green;
+   the agent waiting for them, and the reminder after a minute without
+   input, in the pause tone. */
+.workspace-view-turn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 14px 10px;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--radius-md);
+  background: var(--partial-bg);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.workspace-view-turn[hidden] {
+  display: none;
+}
+
+.workspace-view-turn.is-user {
+  background: var(--agree-bg);
+}
+
+.workspace-view-turn.is-idle {
+  background: var(--partial-bg);
+}
+
+.workspace-view-turn-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-view-turn-request {
+  margin-left: 4px;
+  color: var(--ink-2);
+}
+
+.workspace-view-turn-request[hidden] {
+  display: none;
+}
+
+.workspace-view-turn-button {
+  flex: none;
 }
 
 .workspace-view-screen {
