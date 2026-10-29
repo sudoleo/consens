@@ -462,7 +462,12 @@
       if (chip) chip.hidden = look;
     }
     renderControls(look);
-    if (agent) resumePending();
+    resumePending();
+    if (deferredFollow && canUse()) {
+      const deferred = deferredFollow;
+      deferredFollow = null;
+      setTimeout(() => followRunning(deferred), 0);
+    }
     const modeChanged = document.body.classList.contains("single-agent-active") !== (look || demoView);
     document.body.classList.toggle("single-agent-active", look || demoView);
     document.body.classList.toggle("agent-demo-active", demoView);
@@ -2020,7 +2025,9 @@
     const host = document.getElementById("agentHold");
     if (!host) return;
     const context = registry.visible();
-    const hold = selectedMode() === "agent" ? openHold(context) : null;
+    // The run on screen decides, never the mode switch (A-B2): a pause is
+    // the user's to decide whatever the next message would run with.
+    const hold = openHold(context);
     clearTimeout(holdTimer);
     const workspace = App.workspaceView;
     const holder = workspace?.holder?.() || "";
@@ -2146,10 +2153,12 @@
     restoreUnsentDraft(context);
     flushQueue(context);
   }
-  // After a reload: follow this tab's turns that were still running.
+  // After a reload: follow this tab's turns that were still running. Also
+  // when the mode switch stands on Compare (A-B2): a turn that may wait for
+  // the user is followed whatever the next message would run with.
   function resumePending() {
     const uid = window.auth?.currentUser?.uid;
-    if (!uid || resumedFor === uid || !canUse() || catalogStatus !== 'ready' || selectedMode() !== 'agent') return;
+    if (!uid || resumedFor === uid || !canUse()) return;
     resumedFor = uid;
     const records = readPending(uid);
     if (!records.length) return;
@@ -2198,14 +2207,63 @@
     const rest = list.filter(item => item.body.client_request_id !== record.body.client_request_id);
     if (rest.length !== list.length) writePending(uid, rest);
   }
-  async function resume(record, uid) {
+  // A chat opened while its newest turn runs, started in another tab or on
+  // another device (A-B2): this tab follows it like its own after a reload,
+  // by the turn's request identity (GET /bookmarks/{id}/conversation names
+  // it as `running`, with the settings its recover_only request repeats), so
+  // its pause card shows here too. Before, the chat showed its last saved
+  // turn, nothing followed it, and a pause ran into its timeout unseen.
+  // Asked quietly first: only a turn still running takes the screen, and
+  // only while its chat is still the one on screen.
+  const followingElsewhere = new Set();
+  // Opened before the account's Agent access was known (a chat restored at
+  // load): tried again once it is (renderShellNow).
+  let deferredFollow = null;
+  async function followRunning({ chatId, bookmarkId, turn } = {}) {
+    const uid = window.auth?.currentUser?.uid;
+    const requestId = typeof turn?.client_request_id === "string" ? turn.client_request_id : "";
+    if (!uid || !chatId || !bookmarkId || !requestId || !turn.question) return false;
+    if (!canUse()) {
+      deferredFollow = accessPending() ? { chatId, bookmarkId, turn } : null;
+      return false;
+    }
+    if (followingElsewhere.has(requestId) || registry.list().some(run => run.requestIdentity === requestId)) return false;
+    const settings = turn.agent_settings && typeof turn.agent_settings === "object" ? turn.agent_settings : {};
+    const selection = settings.selection || {};
+    const record = { at: Date.now(), title: "", followup: false, attachmentMeta: Array.isArray(turn.attachments) ? turn.attachments : [],
+      settings: { model_id: selection.model_id ?? null, reasoning_effort: selection.reasoning_effort || "default" },
+      body: { chat_id: chatId, question: turn.question, client_request_id: requestId, bookmark_id: bookmarkId,
+        recover_only: false, model_id: selection.model_id ?? null, reasoning_effort: selection.reasoning_effort || "default",
+        comparison_models: settings.comparison_selection ?? null,
+        agent_preferences: settings.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
+        file_ids: settings.file_ids || [], google_selection: settings.google_selection || null,
+        google_data_consent: settings.google_data_consent === true } };
+    followingElsewhere.add(requestId);
+    try {
+      if (await resumeState(record) !== "running") return false;
+      const basis = registry.getSelectedConversationBasis();
+      if (registry.visible() || basis?.bookmarkId !== bookmarkId || window.auth?.currentUser?.uid !== uid) return false;
+      if (registry.list().some(run => run.requestIdentity === requestId)) return false;
+      record.title = basis.title || turn.question;
+      // Kept for a reload of this tab, like a run sent here.
+      writePending(uid, [...readPending(uid).filter(item => item.body.client_request_id !== requestId), record].slice(-4));
+      resume(record, uid, { basis: basis.chatId === chatId ? basis : null });
+      return true;
+    } finally {
+      followingElsewhere.delete(requestId);
+    }
+  }
+  // `basis`: the saved chat on screen whose newest turn runs elsewhere
+  // (followRunning): the run continues it, with its history above.
+  async function resume(record, uid, { basis = null } = {}) {
     if (!canUse() || window.auth.currentUser.uid !== uid) return;
     const body = { ...record.body, recover_only: false };
     const settings = record.settings || { model_id: body.model_id, reasoning_effort: body.reasoning_effort };
     let context;
     try {
       context = registry.create({
-        question: body.question, mode: "Agent", basis: null, followup: false,
+        question: body.question, mode: "Agent", basis, followup: Boolean(basis),
+        ...(basis ? { historyTurns: [...(basis.historyTurns || []), ...(basis.currentTurn ? [basis.currentTurn] : [])] } : {}),
         attachments: [], attachmentMeta: record.attachmentMeta || [],
         requestIdentity: body.client_request_id, bookmarkId: body.bookmark_id, bookmarkTitle: record.title || body.question,
         config: { executionMode: "agent", agentMode: true, autoConsensus: false, deepSearch: false,
@@ -2228,14 +2286,15 @@
     context.consensus.status = "streaming";
     registry.setStatus(context.runId, "running");
     App.composer?.collapse?.({ force: true });
-    App.trackAppEvent?.("app_run_resumed");
+    // Counted for this tab's own runs after a reload (docs/analytics.md).
+    if (!basis) App.trackAppEvent?.("app_run_resumed");
     try {
       const result = await follow(context, body, signal, { post: false });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       adopt(context, result, { offer: !record.followup });
       // The resumed view shows only this message; a follow-up's chat opens
-      // whole once its answer is saved.
-      if (record.followup && registry.isVisible(context.runId)) window.openBookmark?.(body.bookmark_id);
+      // whole once its answer is saved (with a basis it stands whole already).
+      if (record.followup && !basis && registry.isVisible(context.runId)) window.openBookmark?.(body.bookmark_id);
     } catch (error) {
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       failRun(context, error);
@@ -2724,6 +2783,8 @@
     // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
     pick: () => selection(), modelLabel, applyPick,
     render: () => renderShell(), renderShell, project, send, steer, steering, revealPendingReview, syncPendingReview,
+    // firebase.js: a chat opened while its newest turn runs elsewhere.
+    followRunning,
     tokenBudget: () => App.tokenBudget?.current?.() || null, receiveBudget,
     // demo.js: show (true) or release (false) the answer surface for the demo.
     // Returns the activity host for that turn, or null when released.

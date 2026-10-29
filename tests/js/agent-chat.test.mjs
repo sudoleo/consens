@@ -3482,6 +3482,100 @@ describe("agent turns that outlive their connection", () => {
     dom.window.close();
   });
 
+  // A-B2 (docs/agent-audit-readiness-2026-10-29.md): a chat opened while its
+  // newest turn runs in another tab or on another device. Before, it showed
+  // its last saved turn and nothing followed; a pause ran into its timeout.
+  it("follows a chat's turn running elsewhere and shows its pause, whatever the mode switch says", async () => {
+    const { window: w, document: d, dom } = bootFollow({
+      before: window => {
+        const host = window.document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+        window.document.body.append(host);
+      },
+      pages: [
+        { known: true, done: false, last_seq: 2, events: [{ seq: 1, type: "accepted", data: { chat_id: CHAT, turn_id: TURN } },
+          { seq: 2, type: "hold", data: { hold: { id: "a1b2c3d4e5f6", reviewer: "Claude Sonnet 5.5", kind: "injection", entry: 3,
+            reason: "Folgt einer Anweisung aus der Seite.", step: "open https://example.net", step_kind: "step",
+            at: new Date().toISOString(), timeout_seconds: 1800 } } }] },
+        { known: true, done: false, last_seq: 2, events: [] },
+      ] });
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
+    // The mode switch stands on Compare (boot's preference); the saved Agent chat is on screen.
+    expect(w.App.runMode.effective()).not.toBe("agent");
+    const earlier = { id: "c".repeat(32), turn_id: "c".repeat(32), question: "First", consensus: "First answer",
+      status: "completed", execution_mode: "agent" };
+    w.App.runRegistry.showSavedView({ type: "bookmark", bookmarkId: "b_agent_chat" }, {
+      bookmarkId: "b_agent_chat", chatId: CHAT, turnId: earlier.id, question: "First", consensus: "First answer",
+      executionMode: "agent", currentTurn: earlier, historyTurns: [], title: "Chat" });
+    const turn = { id: TURN, question: "Second", client_request_id: "req-elsewhere", position: 2, attachments: [],
+      agent_settings: { selection: { model_id: "gpt-5.6-sol", reasoning_effort: "low" },
+        comparison_selection: { openai: "gpt-5.4-mini" }, agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided",
+          judges: "on", audit: "on", vm: "off" }, file_ids: [], google_selection: null, google_data_consent: false } };
+    expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(true);
+    const run = w.App.runRegistry.visible();
+    expect(run.requestIdentity).toBe("req-elsewhere");
+    // It continues the chat on screen: the earlier turn stays above it.
+    expect(run.historyTurns.map(item => item.question)).toEqual(["First"]);
+    // Asked with exactly the turn's own settings, so the server knows it as the same request.
+    const asked = w.streamSSERequest.mock.calls[0][1];
+    expect(asked).toMatchObject({ recover_only: true, chat_id: CHAT, question: "Second", client_request_id: "req-elsewhere",
+      bookmark_id: "b_agent_chat", model_id: "gpt-5.6-sol", reasoning_effort: "low",
+      comparison_models: { openai: "gpt-5.4-mini" }, agent_preferences: turn.agent_settings.agent_preferences });
+    await vi.waitFor(() => expect(liveCalls(w)[0]).toBe(`/agent/chats/${CHAT}/live?request_id=req-elsewhere&after=0`));
+    const host = d.getElementById("agentHold");
+    await vi.waitFor(() => expect(host.hidden).toBe(false));
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("A reviewer paused the work");
+    // A reload of this tab follows it on, like a run sent here.
+    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner")).map(item => item.body.client_request_id))
+      .toEqual(["req-elsewhere"]);
+    // Opened again (or by another path): never a second follower.
+    expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(false);
+    dom.window.close();
+  });
+
+  it("follows this tab's running turn after a reload also with the mode switch on Compare", async () => {
+    const record = { at: Date.now(), title: "Paused question", followup: false,
+      body: { chat_id: CHAT, question: "Paused question", client_request_id: "req-compare", bookmark_id: "b_agent_compare",
+        recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
+        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        google_selection: null, google_data_consent: false } };
+    const { window: w, dom } = bootFollow({
+      before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+      pages: [{ known: true, done: false, last_seq: 1, events: [{ seq: 1, type: "hold", data: { hold: {
+        id: "a1b2c3d4e5f6", kind: "ask", ask: "confirm", request: "Darf ich senden?", at: new Date().toISOString(), timeout_seconds: 1800 } } }] }] });
+    w.streamSSERequest.mockImplementation(async (_url, body) => body.recover_only
+      ? { ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } } : new Promise(() => {}));
+    expect(w.App.runMode.effective()).not.toBe("agent");
+    w.App.agentChat.render();
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-compare")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-compare");
+    await vi.waitFor(() => expect(run.metadata.hold?.id).toBe("a1b2c3d4e5f6"));
+    dom.window.close();
+  });
+
+  it("leaves a chat alone whose running turn is over by the time it is asked, or another chat is open", async () => {
+    const { window: w, dom } = bootFollow({ pages: [{ known: true, done: false, last_seq: 0, events: [] }] });
+    const basis = { bookmarkId: "b_agent_chat", chatId: CHAT, turnId: "c".repeat(32), question: "First", consensus: "First answer",
+      executionMode: "agent", currentTurn: { id: "c".repeat(32), question: "First", consensus: "First answer", status: "completed" },
+      historyTurns: [], title: "Chat" };
+    const turn = { id: TURN, question: "Second", client_request_id: "req-over", agent_settings: {} };
+    w.App.runRegistry.showSavedView({ type: "bookmark", bookmarkId: "b_agent_chat" }, basis);
+    w.streamSSERequest.mockImplementation(async () => ({ ok: true, status: 200, data: { turn: { id: TURN, status: "completed",
+      completed_at: new Date(Date.now() - 20 * 60000).toISOString() } } }));
+    expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(false);
+    // Still running, but the user opened another chat meanwhile.
+    let answer;
+    w.streamSSERequest.mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    const following = w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn: { ...turn, client_request_id: "req-late" } });
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    w.App.runRegistry.showSavedView({ type: "bookmark", bookmarkId: "b_other" }, { ...basis, bookmarkId: "b_other" });
+    answer({ ok: false, status: 409, data: { code: "request_running", recovery_state: "running" } });
+    expect(await following).toBe(false);
+    expect(w.App.runRegistry.list()).toHaveLength(0);
+    expect(liveCalls(w)).toHaveLength(0);
+    dom.window.close();
+  });
+
   // A-B4 (docs/agent-audit-readiness-2026-10-29.md): the waiting messages
   // stand in the pending record, so a reload keeps them; what the run did not
   // read goes out after it as before.

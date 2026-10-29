@@ -484,7 +484,15 @@ mit Stop. Spuren: Aktivitätseintrag `kind: "hold"` (Prüfer, Grund, Eintrag,
 `state` = `waiting` → Entscheidung, `timeout` oder `ended`), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, Tab-Titel „Paused“
-(`tab-status.js`). Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
+(`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2): Tab-Titel und
+Seitenleisten-Zeile sagen „Paused“ bzw. „Waiting for you“ (`App.words.paused`,
+`yourTurn`) für den Lauf jedes Chats, auch eines nicht geöffneten (die Zeile
+pulsiert dann nicht, `.run-entry.is-paused`), die Karte hängt am Lauf auf dem
+Schirm statt am Modus-Schalter, ein Reload folgt dem Lauf auch mit dem
+Schalter auf Compare, und ein zweiter Tab oder ein anderes Gerät, das den
+Chat öffnet, folgt dem laufenden Turn über `/live` mit dessen `request_id`
+(`running` aus `GET /bookmarks/{id}/conversation`, `agent-chat.js`
+`followRunning`) und zeigt die Karte. Die Karte zeigt den Beleg lesbar, nie Protokoll-JSON
 (`halt_step`, seit 2026-10-27 als `step_kind`/`step_source`/`step`): den
 Aufruf eines Modellschritts (Befehl, Adresse oder Suche), eine Datei mit ihrem
 Namen („In the file tabelle.csv“), das Ergebnis eines Werkzeugs mit dessen

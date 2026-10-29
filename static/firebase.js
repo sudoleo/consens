@@ -2585,7 +2585,7 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
 // `chatId` against the detail's chat. A bookmark without a chat answers with
 // no chat and no turns.
 async function loadBookmarkConversationOnce(bookmarkId) {
-  if (!auth.currentUser) return { chatId: "", turns: [] };
+  if (!auth.currentUser) return { chatId: "", turns: [], running: null };
   const bookmark = { id: bookmarkId };
   let chatId = null;
   const requestUser = auth.currentUser;
@@ -2598,6 +2598,9 @@ async function loadBookmarkConversationOnce(bookmarkId) {
   const turns = [];
   const seenTurnIds = new Set();
   const seenCursors = new Set();
+  // An Agent turn still running (another tab, another device): agent-chat.js
+  // follows it (followRunning). The newest page names it.
+  let running = null;
   let cursor = "";
   do {
     const path = "/bookmarks/" + encodeURIComponent(bookmark.id)
@@ -2623,6 +2626,7 @@ async function loadBookmarkConversationOnce(bookmarkId) {
       throw new Error("This chat didn’t match its saved conversation.");
     }
     chatId = pageChat;
+    if (data.running && typeof data.running === "object") running = data.running;
     (Array.isArray(data.turns) ? data.turns : []).forEach(turn => {
       const turnId = String(turn?.id || turn?.turn_id || "");
       if (turnId && seenTurnIds.has(turnId)) return;
@@ -2639,7 +2643,7 @@ async function loadBookmarkConversationOnce(bookmarkId) {
     if (nextCursor) seenCursors.add(nextCursor);
     cursor = nextCursor;
   } while (cursor);
-  return { chatId: chatId || "", turns };
+  return { chatId: chatId || "", turns, running };
 }
 
 async function loadBookmarkConversation(bookmarkId) {
@@ -2701,6 +2705,11 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
       }
     );
     window.App?.setAppTitle?.(displayQuestion);
+    // Its newest turn still runs, started in another tab or on another
+    // device: this tab follows it and shows its pause card (agent-chat.js).
+    if (options.running && SERVER_ID.test(String(bookmark.chat_id || ""))) {
+      window.App?.agentChat?.followRunning?.({ chatId: bookmark.chat_id, bookmarkId: sourceBookmark?.id || "", turn: options.running });
+    }
     // Never let Share/Watch target a run that was displayed previously.
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
     prepareBookmarkShareResult(bookmark);
@@ -3124,6 +3133,7 @@ async function loadBookmarkView(bookmarkId) {
   const bookmark = await loadBookmarkDetail(bookmarkId);
   const result = await conversation;
   let turns = [];
+  let running = null;
   let conversationLoadFailed = false;
   if (bookmark?.chat_id) {
     if (result.error || String(result.chatId || "") !== String(bookmark.chat_id)) {
@@ -3132,9 +3142,10 @@ async function loadBookmarkView(bookmarkId) {
         result.error || new Error("This chat didn’t match its saved conversation."));
     } else {
       turns = result.turns;
+      running = result.running || null;
     }
   }
-  return { bookmark, turns, conversationLoadFailed };
+  return { bookmark, turns, conversationLoadFailed, running };
 }
 function rememberBookmarkView(bookmarkId, view) {
   bookmarkViewCache.delete(bookmarkId);
@@ -3148,7 +3159,8 @@ function rememberBookmarkView(bookmarkId, view) {
 // anything new.
 function bookmarkViewSignature(view) {
   return JSON.stringify([view.bookmark?.timestamp || null, view.bookmark?.title || "", view.bookmark?.responses?.consensus?.length || 0,
-    (view.turns || []).map(turn => [turn.id || turn.turn_id, turn.status, turn.agent_review?.status, String(turn.consensus || "").length])]);
+    (view.turns || []).map(turn => [turn.id || turn.turn_id, turn.status, turn.agent_review?.status, String(turn.consensus || "").length]),
+    view.running?.id || null]);
 }
 
 window.openBookmark = async function (bookmarkId) {
@@ -3174,7 +3186,7 @@ window.openBookmark = async function (bookmarkId) {
   const show = view => {
     hideChatOpening();
     openedBookmarkId = bookmarkId;
-    loadSingleBookmarkUI(view.bookmark, view.turns, { conversationLoadFailed: view.conversationLoadFailed });
+    loadSingleBookmarkUI(view.bookmark, view.turns, { conversationLoadFailed: view.conversationLoadFailed, running: view.running });
     window.App.chatScroll?.opened?.();
   };
   // A chat seen a moment ago is there at once and checked in the background;
@@ -3193,7 +3205,7 @@ window.openBookmark = async function (bookmarkId) {
         && bookmarkWriteAllowed(requestUid, bookmarkId);
       if (!stillShown) return;
       if (bookmarkViewSignature(fresh) !== bookmarkViewSignature(cached)) {
-        loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed });
+        loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed, running: fresh.running });
       }
       rememberBookmarkView(bookmarkId, fresh);
     } catch (error) {

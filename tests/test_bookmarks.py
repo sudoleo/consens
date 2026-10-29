@@ -390,6 +390,46 @@ def test_agent_bookmark_returns_failed_turn_without_synthesis():
     assert response.status_code == 200 and response.json()['turns'] == [turn]
 
 
+def test_agent_bookmark_names_its_running_turn_for_another_tab_to_follow():
+    # A-B2 (docs/agent-audit-readiness-2026-10-29.md): a chat opened in a
+    # second tab or on another device follows its running turn by the
+    # request identity; the turn itself stays out of the transcript.
+    bookmark_id, chat_id = "running_agent", "c" * 32
+    fake_db = FakeBookmarkDatabase({"uid-1": {bookmark_id: {
+        "query": "Question", "chat_id": chat_id, "execution_mode": "agent"}}})
+    done = {"id": "1" * 32, "status": "completed", "execution_mode": "agent", "question": "First",
+            "consensus": "Answer", "position": 1}
+    running = {"id": "2" * 32, "status": "pending", "execution_mode": "agent", "question": "Second",
+               "position": 2, "client_request_id": "req-running",
+               "attachments": [{"name": "a.csv", "mime": "text/csv", "size": 3}],
+               "agent_settings": {"selection": {"model_id": "m", "reasoning_effort": "default"},
+                                  "comparison_selection": {"openai": "gpt"}, "agent_preferences": {"audit": "on"},
+                                  "file_ids": [], "google_selection": None, "google_data_consent": False,
+                                  "policy": {"delegation": True}},
+               "agent_activity": [{"id": "x"}]}
+
+    class Store:
+        def list_turn_details(self, uid, requested_chat_id, **kwargs):
+            return {"turns": [done, running], "has_more": False}
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+    with (patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+          patch.object(bookmarks_router, "db_firestore", fake_db),
+          patch.object(bookmarks_router, "_chat_store", return_value=Store())):
+        response = TestClient(app).get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"})
+    body = response.json()
+    assert response.status_code == 200 and body["turns"] == [done]
+    assert body["running"] == {
+        "id": "2" * 32, "question": "Second", "client_request_id": "req-running", "position": 2,
+        "attachments": [{"name": "a.csv", "mime": "text/csv", "size": 3}],
+        "agent_settings": {"selection": {"model_id": "m", "reasoning_effort": "default"},
+                           "comparison_selection": {"openai": "gpt"}, "agent_preferences": {"audit": "on"},
+                           "file_ids": [], "google_selection": None, "google_data_consent": False}}
+
+
 def test_chat_bookmark_conversation_falls_back_without_losing_middle_turns():
     bookmark_id = "stable_chat_bookmark"
     chat_id = "c" * 32

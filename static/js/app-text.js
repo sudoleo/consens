@@ -214,6 +214,10 @@
     working: "Working",
     failed: "Failed",
     stopped: "Stopped",
+    // A run that waits for the user: a reviewer paused it, or the agent
+    // asked them (tab title, sidebar row).
+    paused: "Paused",
+    yourTurn: "Waiting for you",
     // What is used up by a message.
     allowance: "allowance",
     // The Agent chip says what the comparison models do, not their names:
