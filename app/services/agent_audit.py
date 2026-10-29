@@ -145,10 +145,14 @@ REVIEW_MIN_SECONDS = 30
 # FINAL_ROUND_SECONDS bounds the final round, both requests and a repair
 # included; then the reviewer's live marks stand (no_time) and the turn
 # completes. Thinking and search stay as they are (Max: no cuts, hangs are
-# caught by hedging).
-FINAL_HEDGE_SECONDS = 20
+# caught by hedging). The p90, not the p75: a hedge pays only against a long
+# tail (Luna 13/40/72 s, MiMo Pro 9/14/67 s median/p90/max in Prod,
+# 25.–29.10.), and at the p75 a model without one (Qwen 20/25/29 s) paid a
+# second request in every fourth final round that could not come sooner;
+# 20 s without samples sat on Qwen's median (tempo test, 2026-10-29).
+FINAL_HEDGE_SECONDS = 30
 FINAL_HEDGE_MIN_SECONDS = 12
-FINAL_HEDGE_QUANTILE = .75
+FINAL_HEDGE_QUANTILE = .9
 FINAL_HEDGE_SAMPLES = 50
 FINAL_HEDGE_MIN_SAMPLES = 8
 FINAL_ROUND_SECONDS = 90

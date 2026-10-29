@@ -417,8 +417,8 @@ nur seine Marken. Die Prüfer starten nur mit mindestens `REVIEW_MIN_SECONDS`
 bis zum harten Stopp und enden `REVIEW_TIME_MARGIN` davor (`no_time`); der
 Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`).
 Seit 2026-10-29 hat die Schlussrunde eine eigene Frist und Hedging (A-T2):
-ohne brauchbare Antwort nach `final_hedge_seconds` (p75 der letzten
-Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 20 s) dieselbe
+ohne brauchbare Antwort nach `final_hedge_seconds` (p90 der letzten
+Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 30 s) dieselbe
 Anfrage auf neuer Sitzung, die erste brauchbare gewinnt; nach
 `FINAL_ROUND_SECONDS` (90 s) `no_time` mit den Live-Befunden (Einzelheiten
 in [agent-work-log.md](agent-work-log.md), „Fehler“).

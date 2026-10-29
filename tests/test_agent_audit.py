@@ -460,16 +460,17 @@ def audit_sessions(store, loop, family):
 
 def test_the_hedge_time_follows_the_models_final_rounds(monkeypatch):
     monkeypatch.setattr(agent_audit, "_final_seconds", {})
-    assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_SECONDS == 20
+    assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_SECONDS == 30
     for seconds in (1, 2, 3, 4, 5, 6, 7):
         agent_audit.record_final_seconds("m", seconds)
-    assert agent_audit.final_hedge_seconds("m") == 20
+    assert agent_audit.final_hedge_seconds("m") == 30
     agent_audit.record_final_seconds("m", 8)
     # Fast rounds: never earlier than FINAL_HEDGE_MIN_SECONDS.
     assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_MIN_SECONDS == 12
     for seconds in (30, 30, 35, 40, 45, 50, 55, 60):
         agent_audit.record_final_seconds("slow", seconds)
-    assert agent_audit.final_hedge_seconds("slow") == 50
+    # The p90: a hedge for the long tail only.
+    assert agent_audit.final_hedge_seconds("slow") == 60
     # The last FINAL_HEDGE_SAMPLES count.
     for _ in range(agent_audit.FINAL_HEDGE_SAMPLES):
         agent_audit.record_final_seconds("slow", 14)

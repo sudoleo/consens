@@ -267,14 +267,14 @@ Agent-Panel.
   dasselbe auf einer neuen Sitzung (eigene OpenRouter-Sitzung, eigener Slot,
   Beleg `round: hedge`). Die erste brauchbare Antwort gewinnt, die andere
   Anfrage stoppt (Sitzung „stopped“, `superseded`, ohne Nachricht; das Panel
-  zeigt weiter eine Zeile je Prüfer). Die Hedge-Zeit ist das p75
-  (`FINAL_HEDGE_QUANTILE`) der letzten `FINAL_HEDGE_SAMPLES` (50)
+  zeigt weiter eine Zeile je Prüfer). Die Hedge-Zeit ist das p90
+  (`FINAL_HEDGE_QUANTILE`; bis zum Tempo-Test vom 2026-10-29 das p75) der letzten `FINAL_HEDGE_SAMPLES` (50)
   Schlussrunden des Modells in diesem Prozess, ab `FINAL_HEDGE_MIN_SAMPLES`
   (8), mindestens `FINAL_HEDGE_MIN_SECONDS` (12 s), sonst
-  `FINAL_HEDGE_SECONDS` (20 s). Bewusst nicht aus den Belegen gelesen: Das
+  `FINAL_HEDGE_SECONDS` (30 s). Bewusst nicht aus den Belegen gelesen: Das
   wäre eine Abfrage vor jeder Schlussrunde; ein Deploy beginnt die Zählung
   neu. Eine vom Hedge überholte Anfrage zählt mit der Zeit, die sie lief
-  (eine untere Grenze über der Hedge-Zeit), damit das p75 nicht nach unten
+  (eine untere Grenze über der Hedge-Zeit), damit das p90 nicht nach unten
   driftet. `FINAL_ROUND_SECONDS` (90 s) begrenzt die Schlussrunde samt
   Hedge und zweitem Versuch: danach `no_time` („Its final review reached its
   time limit …“), die Live-Befunde gelten, der Turn endet `completed`.

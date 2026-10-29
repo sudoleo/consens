@@ -36,6 +36,10 @@ Reihenfolge der Umsetzung: erst die Sicherheits- und Verlustfehler (Paket 1),
 dann Messbarkeit (Paket 2), dann Tempo, Abbrüche, Langlauf (Pakete 3–5). Eine
 Entscheidung liegt bei Max (Abschnitt 7).
 
+**Stand am Abend des 2026-10-29:** Alle sechs Pakete sind auf `main`, aber
+noch nicht live. Abweichungen und was nach dem Deploy noch zu messen ist,
+stehen in Abschnitt 10.
+
 ## 1. Ziel und Maßstab
 
 „Produktionsreif“ heißt hier: Der Audit-Modus hält seine Versprechen auch
@@ -384,8 +388,9 @@ oder Fake) alle Kennzahlen aus; Unit-Tests für A-M1 bis A-M7.
 - **A-T2 Hedging und Frist für die Schlussrunde.** Hat ein Prüfer nach
   `FINAL_HEDGE_SECONDS` keine Antwort, startet eine zweite Anfrage auf neuer
   Sitzung mit denselben Nachrichten. Die erste brauchbare gewinnt, die andere
-  wird abgebrochen. Der Wert ist je Modell das p75 seiner Schlussrunden aus
-  den Belegen, mindestens 12 s, ohne Daten 20 s. Hart begrenzt wird die
+  wird abgebrochen. Der Wert ist je Modell das p90 seiner Schlussrunden
+  (umgesetzt: im Prozess gezählt, nicht aus den Belegen; zuerst p75, nach
+  dem Tempo-Test p90), mindestens 12 s, ohne Daten 30 s. Hart begrenzt wird die
   Schlussrunde durch `FINAL_ROUND_SECONDS` (90 s, inklusive zweitem
   Versuch), danach `no_time`: Es gelten die Live-Befunde, die Antwort steht.
   Denkstufe und Suchrunden bleiben unverändert (keine Abstriche). Vorher den
@@ -521,7 +526,9 @@ Browser:
     Bis acht Schlussrunden eines Modells im Prozess liefen, bekommt etwa
     jede zweite Qwen-Schlussrunde einen Hedge (hier in jedem Lauf), also
     eine zweite bezahlte Anfrage. Bei rund zehn Audit-Turns am Tag und einem
-    Neustart je Deploy wird die Schwelle selten erreicht.
+    Neustart je Deploy wird die Schwelle selten erreicht. Behoben: ohne
+    Daten 30 s, danach das p90 statt des p75 (ein Hedge lohnt nur gegen einen
+    langen Schwanz wie bei Luna und MiMo Pro).
   - A-L2 (199 Befehle mit voller Ausgabe, dann die Antwort): Jeder Prüfer
     ging 26–28-mal in ein neues Gespräch, machte eine Fehlerpause, folgte ab
     Schritt 190 nicht mehr, und seine Schlussrunde kam in einem neuen
@@ -531,7 +538,10 @@ Browser:
     echten Tokenizer dauerte derselbe Lauf 17 statt 4 s: `input_estimate`
     (tiktoken über das ganze Gespräch, bei jeder Reservierung) kostete 20 s
     CPU in 1.528 Aufrufen. Auf Render Starter (0,5 CPU) hält das unter dem
-    GIL jeden Thread des Prozesses auf.
+    GIL jeden Thread des Prozesses auf. Bewertung: In Prod-Zeit verteilen
+    sich diese 20 s auf einen Lauf von bis zu zwei Stunden (≈ 13 ms je
+    Aufruf, unter 1 % CPU); kein Umbau, solange `audit_report.py` keine
+    langsameren Schritte langer Läufe zeigt.
   - A-L3 (drei Turns zugleich mit Daily, zwei in einem Konto, einer in
     einem anderen; Tokens aus den Zeichen gezählt, weil der Tokenizer im
     Maßstab 1:40 den GIL sättigt): kein Deadlock, keine Threads danach. Der
@@ -633,3 +643,62 @@ A-M1 läuft. Ab Paket 2 ersetzt `scripts/audit_report.py` diese Handarbeit.
 - Mehr-Instanz-Betrieb. Läufe bleiben prozesslokal
   ([codebase-map.md](codebase-map.md), „Agent-Turns laufen ohne Verbindung
   weiter“). A-R10 macht Deploys nur sichtbar.
+
+## 10. Umsetzungsstand (2026-10-29 abends)
+
+Alle sechs Pakete sind auf `main` umgesetzt (vier parallele Stränge, dann
+Paket 5; letzter Stand nach diesem Abschnitt), **nicht deployt**. Geprüft:
+volle Backend-Suite (4.579 Tests), Vitest (1.431), `build:check`, gezielt
+`tests/e2e/test_agent_pause_elsewhere.py` und
+`tests/e2e/test_agent_audit_frontend.py`, `tests/test_agent_audit_tempo.py`
+dreimal hintereinander. Die volle Browser-Suite läuft nachts in der CI.
+
+Abweichungen von Abschnitt 5:
+- **A-S5:** `deny` gilt auch für die Key-Karte (`ask: secret`), denn ihr
+  „Not now“ sendet `deny`.
+- **A-S7:** Die Key-Karte hat neben ihrem Knopf zwei Links („Not now“,
+  „Write to the agent“), sonst gäbe es keinen Weg für Text.
+- **A-T2:** Die Hedge-Zeit wird im Prozess gezählt statt aus den Belegen
+  gelesen, und sie ist das p90 statt des p75. Ohne Daten gilt 30 s.
+- **A-T5:** nur gemessen (`agent_account_lock:waited`/`:held`/`:final_rounds`,
+  Logzeile „Agent account lock …“ je Turn). Im Tempo-Test war der Lock mit
+  drei Prüfern zu rund 60 % der Turn-Zeit belegt, mit sechs zu rund 85 %.
+  Gebündelt wird, sobald Prod mehr als 1 s Wartezeit je Turn zeigt.
+- **A-B8:** nur gemessen (jsdom, 200 VM-Schritte: 8–9 ms je Render, 18–20 ms
+  bei 400 Schritten), nicht umgebaut. Vor einem Umbau zuerst einen Trace auf
+  dem Handy machen.
+- **A-K1:** Die Cache-Trefferquote der Prüfer liegt bei 44–85 % je Modell.
+  Der Grund ist die kalte erste Runde jeder Sitzung, nicht der Code.
+  Folgerunden lesen ihr Präfix zu 96–100 %. Kein Fix nötig.
+- **A-K2:** Prüfer-Tokens zählen zur Hälfte
+  (`AUDIT_REVIEWER_QUOTA_WEIGHT = 0.5`, Max: „setz alle Pakete um“ nach der
+  Empfehlung in Abschnitt 7). Die Konstante lässt sich jederzeit
+  zurückdrehen.
+- **A-L3 teilweise:** Zwei Turns im selben Konto verschlechtern die Marken um
+  7 bis 54 %, Ursache ist derselbe Konto-Lock (A-T5). Ein Turn in einem
+  anderen Konto liegt im Ziel.
+- **G7:** geschlossen. Ein Stopp vor der Antwort speichert die Live-Befunde
+  als Review `cancelled` ohne Version.
+
+Nach dem Deploy:
+1. Smoke „Audit produktionsreif“ in `docs/smoke-checklist.md` (A-L4).
+2. `ops_metrics/agent-audit-*` beginnt zu zählen. Ab dann zeigt
+   `scripts/audit_report.py` auch gelöschte Chats in den Tageszahlen.
+3. Konto-Lock (A-T5) und den Anteil der Terra-Suchschritte ohne Treffer
+   (A-M9; vorläufig 9 von 14 aus Arbeitsprotokollen) an echten Läufen
+   messen. Danach über das Bündeln der Claims und die Suchmaschine `exa`
+   entscheiden.
+4. Freigabe nach Abschnitt 1, sobald 100 Audit-Turns mit 30 Drei-Prüfer-
+   und 10 langen Werkbank-Läufen vorliegen.
+
+Restrisiken:
+- **A-S4:** Der Abbruch des streamenden Schritts hängt über ein Thread-Local
+  an der Cancellation des Schritts. Das ist nur mit Fakes getestet; der echte
+  Anbieterpfad (`cancellable_sse_lines`) ist nur im Code nachgelesen.
+- **Unterbrechung vor der Antwort:** Endet ein Lauf vor der Antwort durch
+  eine Unterbrechung (Deploy), setzt `finish_run` die G7-Review auf
+  `failed`, und der Browser zeigt sie nicht.
+- **Reload:** Ein fortgesetzter Lauf nimmt nach einem Reload den Bildschirm
+  ein, auch wenn der Modus-Schalter auf Compare steht (A-B2). Hatte der
+  Nutzer den Browser in den letzten 30 min, öffnet sich die Ansicht danach
+  wieder in seiner Hand.
