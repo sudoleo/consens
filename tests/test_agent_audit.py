@@ -978,6 +978,42 @@ def test_a_stop_before_the_review_starts_still_completes_the_answer(store, monke
     assert turn["agent_review"]["status"] == "cancelled" and not script.prompts
 
 
+@pytest.mark.parametrize("found", [True, False])
+def test_a_stop_before_the_answer_keeps_what_the_reviewers_found_meanwhile(store, found):
+    """G7 (2026-10-29): a run stopped before its answer was fixed lost its
+    reviewers' live marks; they stood only in their sessions. Now its review
+    ends "cancelled" with them, without claims (there is no answer), and a
+    stop without any marks keeps no review, as before."""
+    def stop(_):
+        auditor = script.loop.comparison.auditor
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not all(
+                s.live_rounds and s.worker and s.worker.state == "waiting" for s in auditor.sessions.values()):
+            time.sleep(.01)
+        script.loop.cancellation.cancel()
+    script = Audit(tool_steps=2, on_lookup=stop, live={"openai": step_mark("Unchecked lookup.")} if found else {})
+    loop = audit_loop(store, script)
+    with pytest.raises(ProviderCancelled):
+        list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "failed" and turn["error_code"] == "cancelled" and not turn.get("consensus")
+    assert [r for rounds in script.rounds.values() for r in rounds] == ["live", "live"]
+    if not found:
+        assert not turn.get("agent_review")
+        return
+    review = turn["agent_review"]
+    assert review["mode"] == "audit" and review["status"] == "cancelled"
+    assert review["versions"] == [] and review["answer_version"] == 0
+    audit = review["audit"]
+    assert audit["claims"] == [] and audit["unplaced"] == []
+    step = entry_of(script.prompts["openai"][:2], "step")
+    assert [(p["model"], p["entry"], p["entry_kind"], p["note"], p["live"]) for p in audit["process"]] == [
+        ("OpenAI", step, "step", "Unchecked lookup.", True)]
+    # The reviewers' rows as after any stop, with their counters (A-M4).
+    assert [(r["provider"], r["status"], r["rounds"], r["fresh"], r["pauses"]) for r in audit["reviewers"]] == [
+        ("anthropic", "stopped", 1, 0, 0), ("openai", "stopped", 1, 0, 0)]
+
+
 def test_a_failed_save_of_the_marks_is_saved_again_at_the_end(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)

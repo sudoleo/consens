@@ -270,7 +270,10 @@ Agent-Panel.
   solche fehlen nur seine Befunde.
 - Stop beendet die Prüfer, die fixierte Antwort bleibt; seit 2026-10-29 auch
   jede andere Unterbrechung nach der fixierten Antwort (`watch_error`). Die
-  Review endet dann `cancelled` und behält die Live-Befunde (`live`).
+  Review endet dann `cancelled` und behält die Live-Befunde (`live`). Ein
+  Stopp vor der fixierten Antwort behält sie seit 2026-10-29 ebenso, sofern
+  es welche gibt: Review `cancelled` ohne Version, die Befunde in `process`
+  (`AnswerAudit._stopped_early`).
 
 ## Anzeige
 

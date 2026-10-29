@@ -2076,15 +2076,19 @@ class AnswerAudit:
     def close(self):
         """Run end: reviewers still at work stop. Returns whether the review
         needs saving: it was still waiting or running (also one that never
-        started: the run ended before it), or its last save failed."""
+        started: the run ended before it), it was stopped before the answer
+        was fixed with live marks to keep (_stopped_early), or its last save
+        failed."""
         if self._timer is not None:
             self._timer.cancel()
         self._stop()
         tools = self.tools
         status = (tools.review or {}).get("status", "required" if tools.versions else None)
+        stopped = tools.loop.cancellation.cancelled
+        if status is None and stopped:
+            return self._stopped_early() or self._unsaved
         if status not in {"required", "running"}:
             return self._unsaved
-        stopped = tools.loop.cancellation.cancelled
         with tools.lock:
             for state in self.reviewers.values():
                 if state["status"] in {"waiting", "running"}:
@@ -2093,4 +2097,27 @@ class AnswerAudit:
             self._live_findings()
         issues = self.issues or ([] if stopped else [{"code": "audit_unavailable"}])
         self._settle("cancelled" if stopped else "failed", issues)
+        return True
+
+    def _stopped_early(self):
+        """A stop before the answer was fixed (the user's Stop, a pause
+        stopped or timed out): there is no answer to review, but what the
+        reviewers found while the agent worked is kept, as after a stop in
+        the final round: a review "cancelled" with their live marks in
+        ``process`` (no claims without an answer) and their rows "stopped"
+        (G7, since 2026-10-29; until then only their sessions held them).
+        Only with live marks: a stop without any keeps no review. Returns
+        whether there is one to save."""
+        tools = self.tools
+        with tools.lock:
+            if not any(session.live_marks for session in self.sessions.values()):
+                return False
+            for state in self.reviewers.values():
+                if state["status"] in {"waiting", "running"}:
+                    state["status"] = "stopped"
+        self._live_findings()
+        if self.process is None:
+            # Their marks could not be placed (logged there): nothing to keep.
+            return False
+        self._settle("cancelled", self.issues)
         return True

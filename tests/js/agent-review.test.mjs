@@ -1066,3 +1066,39 @@ it('offers the notes of a stopped review that kept findings from the run', () =>
   expect(d.querySelector('.agent-review:not([hidden])')).toBeNull();
   dom.window.close();
 });
+// G7 (2026-10-29): a run stopped before it wrote a word keeps its reviewers'
+// live marks, in the shape the server saves (AnswerAudit._stopped_early):
+// no version, no answer, rows "stopped", the marks on the work only.
+it('offers the notes of a run stopped before it wrote any answer', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = '';
+  const stopped = { version: 1, mode: 'audit', status: 'cancelled', answer_hash: 'e3b0c442', answer_version: 0,
+    comparisons: [], versions: [], checks: [],
+    audit: { reviewers: [
+      { provider: 'openai', provider_label: 'OpenAI', model: { label: 'GPT' }, status: 'stopped', rounds: 2, fresh: 0, pauses: 0 },
+      { provider: 'anthropic', provider_label: 'Anthropic', model: { label: 'Claude' }, status: 'stopped', rounds: 2, fresh: 0, pauses: 0 }],
+      claims: [], unplaced: [],
+      process: [{ model: 'OpenAI', kind: 'doubtful', note: 'The lookup names no source.', entry: 7,
+        entry_kind: 'step', entry_name: 'openai/gpt', mark: 1, live: true }] } };
+  w.App.agentReview.render(body, stopped, { key: 't1', question: 'Q' });
+  expect(body.textContent).toBe('');
+  expect(d.querySelector('.agent-review').hidden).toBe(false);
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Review stopped');
+  const buttons = [...d.querySelectorAll('.agent-evidence-link')];
+  expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 1']);
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  buttons[0].click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const [gpt, claude] = panel.querySelectorAll('.agent-audit-reviewer');
+  expect(gpt.textContent).toContain('No final review: the review was stopped.');
+  expect(gpt.textContent).toContain('The lookup names no source.');
+  expect(gpt.querySelector('.agent-audit-live').textContent).toBe('During the run');
+  expect(claude.textContent).toContain('No review: the review was stopped.');
+  // Without an answer the turn's own stop notice stands, not "may be incomplete".
+  expect(w.App.agentReview.failureNote({ error: 'Response stopped.' }, stopped, '')).toBe('Response stopped.');
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, stopped, '');
+  expect(details.textContent).toContain('Review stopped');
+  expect(details.querySelector('.agent-activity-insight-actions button').disabled).toBe(false);
+  dom.window.close();
+});

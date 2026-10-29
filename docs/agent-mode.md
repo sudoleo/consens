@@ -439,7 +439,13 @@ auch `watch_error` (Deploy nach der Grace-Zeit, Firestore weg, Stopp des
 Wächters), die den Turn vorher als Fehler beendete. Eine Review, die so
 `cancelled` endet, behält die Live-Befunde wie eine gescheiterte
 Schlussrunde (A-M7, `AnswerAudit._live_findings`: `claims`/`unplaced`/`process`,
-jede Marke `live: true`); vorher fehlten sie. Die
+jede Marke `live: true`); vorher fehlten sie. Seit 2026-10-29 (G7) gilt das
+auch für einen Stopp vor der fixierten Antwort (Stop, eine Pause mit Stop oder
+ohne Entscheidung): Haben die Prüfer Live-Befunde, speichert `close`
+(`_stopped_early`) eine Review `cancelled` ohne Version, die Befunde in
+`process` (ohne Antwort keine `claims`), die Zeilen der Prüfer `stopped` mit
+ihren Zählern; ohne Befunde gibt es wie bisher keine Review. Vorher standen
+sie nur in den Sitzungen der Prüfer. Die
 Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
 keine `differences_stats`, kein Model-Pulse-Pick.
 
