@@ -147,9 +147,9 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     )
     assert abs(metrics["brandCenter"] - metrics["toggleCenter"]) <= 1
     assert metrics["newRunTop"] >= metrics["headerBottom"]
-    # New chat, Models and the chats are one row part (Apple-Audit G2): the
-    # row sits 4px in on both sides like the chat rows, not a full-width box.
-    assert abs(metrics["newRunWidth"] - (metrics["sidebarInnerWidth"] - 8)) <= 1
+    # One grid since 2026-10-29: New chat's tint spans the sidebar's inner
+    # width, like the chat rows and the head (shell.css, "Desktop head on one grid").
+    assert abs(metrics["newRunWidth"] - metrics["sidebarInnerWidth"]) <= 1
 
     search = app_page.locator(".sidebar-search-box")
     search_trigger = app_page.locator("#bookmarkSearchTrigger")
@@ -170,8 +170,8 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
         }"""
     )
     assert trigger_metrics == {
-        "width": 28,
-        "height": 28,
+        "width": 32,
+        "height": 32,
         "paddingLeft": "0px",
         "paddingRight": "0px",
     }

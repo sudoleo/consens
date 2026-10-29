@@ -4409,6 +4409,70 @@ body .theme-toggle:focus-visible {
   .sidebar-footer-meta { padding-left: 10px; }
 }
 
+/* ---- Desktop head on one grid (2026-10-29) --------------------------------
+   Max: the head "sieht unpassig aus", its spacing unlike everything else.
+   Measured on consens.io: the mark at 18px, the row glyphs at 25, the
+   wordmark at 47, the row words at 51; on the right the panel glyph at 22,
+   New chat's tint at 17, the Chats row at 27 (the list's scrollbar room),
+   its arrow at 35, the search glyph at 63; rows in 500 where the chats are
+   400, and "Chats" a second navigation row with a bookmark glyph. Now the
+   drawer's language (above) on the desktop too, on one grid:
+   - a glyph column at 22px: the mark, the row glyphs (18px), the section
+     word, the group words and the chat titles start there;
+   - a word column at 50px: the wordmark and the row words;
+   - one right edge at 22px: the panel glyph, the search glyph, the arrow
+     and every tint (the list reaches into the scrollbar room it keeps,
+     --sidebar-gutter from sidebar-resize.js);
+   - steps of 4 and 8: head 40, 8, rows of 36, 16, the section word in 32. */
+@media (min-width: 1100px) {
+  .sidebar { gap: 0; }
+
+  /* Head: the mark in the glyph column, the wordmark in the word column. */
+  .sidebar-brand-row { min-height: 40px; padding: 0 3px 0 10px; margin-bottom: 8px; }
+  #logoLink.sidebar-brand-link { gap: 0; }
+  .sidebar-brand-link .app-favicon { width: 28px; height: 16px; object-fit: contain; object-position: left center; }
+  .sidebar-brand-link .sidebar-brand-title { letter-spacing: -0.01em; }
+
+  /* Rows: glyph and word, regular like the chats, one inset. */
+  .sidebar-new-run,
+  .sidebar-model-entry {
+    margin: 0; column-gap: 10px; min-height: 36px; padding: 0 10px;
+    font-weight: var(--font-weight-regular);
+  }
+  .sidebar-new-run svg,
+  .sidebar-model-entry > svg { width: 18px; height: 18px; }
+  .sidebar-model-copy strong { font-weight: var(--font-weight-regular); }
+  .sidebar-pinned { margin: 0; padding: 0; }
+  .models-section { margin: 0; }
+  .sidebar .sidebar-section { padding-inline: 0; }
+  .sidebar-pinned .sidebar-separator { display: none; }
+
+  /* Section word: quiet, not a control; the arrow only while folded away. */
+  .sidebar > .sidebar-content {
+    margin: 16px calc(-1 * var(--sidebar-gutter, 0px)) 0 0; padding: 0;
+  }
+  .sidebar-bookmarks-head { min-height: 32px; margin: 0 0 2px; }
+  .sidebar-bookmarks-head .sidebar-toggle-btn {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 32px; padding: 0 10px; background: transparent;
+    color: var(--ink-3); font-size: var(--font-size-ui); font-weight: var(--font-weight-medium);
+  }
+  .sidebar-bookmarks-head .sidebar-toggle-btn:focus-visible { background: transparent; color: var(--ink); }
+  @media (hover: hover) and (pointer: fine) {
+    .sidebar-bookmarks-head .sidebar-toggle-btn:hover { background: transparent; color: var(--ink); }
+  }
+  .sidebar-bookmarks-head .sidebar-heading-label span { color: inherit; }
+  .sidebar-bookmarks-head .sidebar-heading-label svg { display: none; }
+  .bookmarks-section:not(.is-collapsed) .sidebar-bookmarks-head .sidebar-toggle-arrow { visibility: hidden; }
+  .sidebar-search-trigger { right: 2px; width: 32px; height: 32px; border-radius: var(--radius-xs); }
+  .sidebar-search-trigger svg { width: 16px; height: 16px; }
+  .sidebar-search-box { inset: 0; }
+
+  /* The list: titles and group words on the glyph column. */
+  .sidebar .bookmark { padding-left: 10px; }
+  .chat-list-heading { padding: 4px 10px; }
+}
+
 /* 44px to the finger (Apple-Audit F5) for what is smaller in the sidebar,
    in the drawer and beside the page (a tablet on its side): the brand, the
    Chats heading, the search glyph, the initial and the address under it.

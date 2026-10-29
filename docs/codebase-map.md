@@ -1451,7 +1451,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Pos1/Ende = Grenzen. Grenzen 200px bis min(480px, 40 % des Fensters); ein
   schmaleres Fenster deckelt nur die Anzeige, die gewählte Breite bleibt
   gespeichert. Neue Stellen, die neben der Sidebar Platz rechnen, nutzen
-  `var(--sidebar-width)` statt 260px.
+  `var(--sidebar-width)` statt 260px. Seit 2026-10-29 misst dasselbe Skript vor
+  dem ersten Paint den Platz, den die Chatliste für ihre dünne Scrollleiste
+  freihält (Sonde wie die Liste: `overflow-y: auto`, `scrollbar-gutter:
+  stable`, `scrollbar-width: thin`; Windows ~10px, macOS 0), als
+  `--sidebar-gutter` auf `<html>` (erneut bei `resize`, Zoom ändert ihn). Ab
+  1100px greift die Liste damit in den Innenabstand der Sidebar, sodass alle
+  Zeilen auf einem Raster stehen (`shell.css` „Desktop head on one grid“:
+  Glyphen-Spalte 22px, Wortspalte 50px, eine rechte Kante; „Chats“ als leises
+  Abschnittswort wie im Menü unter 1100px).
 - **Ein einziger Sidebar-Toggle** — `.app-nav-float .sidebar-toggle` erscheint
   nur bei geschlossener Sidebar, `#sidebarToggleInner` sitzt rechts neben der
   Wortmarke in `.sidebar-brand-row`. Beide zeichnen dasselbe Panel-Icon (`.sidebar-panel-icon`,

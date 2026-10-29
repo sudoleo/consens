@@ -468,16 +468,45 @@ def test_switches_show_the_choice_without_a_bolder_label():
 
 
 def test_sidebar_rows_are_one_component():
+    """New chat and Models are one row part (Apple-Audit G2). Chats was one
+    too until 2026-10-29; since then it is the section word over the list
+    (test_sidebar_head_stands_on_one_grid)."""
     shell = strip_comments(read("shell.css"))
-    for selector in (".sidebar-new-run", ".sidebar-model-entry", ".sidebar-bookmarks-head .sidebar-toggle-btn"):
+    for selector in (".sidebar-new-run", ".sidebar-model-entry"):
         body = rule_body(shell, selector)
         assert "grid-template-columns: 18px minmax(0, 1fr)" in body, selector
-        assert "min-height: 36px" in body and "padding: 6px 8px" in body, selector
-        assert "column-gap: 9px" in body, selector
-    for selector in (".sidebar-new-run", ".sidebar-model-copy strong", ".sidebar-bookmarks-head .sidebar-toggle-btn"):
-        body = rule_body(shell, selector)
-        assert "font-size: var(--font-size-sm)" in body and "font-weight: var(--font-weight-medium)" in body, selector
+        assert "min-height: 36px" in body, selector
+    for selector in (".sidebar-new-run", ".sidebar-model-copy strong"):
+        assert "font-size: var(--font-size-sm)" in rule_body(shell, selector), selector
     assert "color: var(--ink-3)" in rule_body(shell, ".sidebar-model-copy span")
+
+
+def test_sidebar_head_stands_on_one_grid():
+    """Max, 2026-10-29: the desktop head looked out of place, its spacing
+    unlike everything else (the mark at 18px, the row glyphs at 25, the
+    wordmark at 47, the words at 51; four right edges). Now one glyph column
+    at 22px, one word column at 50px, one right edge, steps of 4 and 8, and
+    "Chats" a quiet section word as in the drawer."""
+    raw = read("shell.css")
+    desktop = raw.split("Desktop head on one grid", 1)[1].split("44px to the finger", 1)[0]
+    desktop = strip_comments(desktop.split("@media (min-width: 1100px) {", 1)[1])
+    assert "padding: 0 3px 0 10px" in rule_body(desktop, ".sidebar-brand-row")
+    assert "width: 28px" in rule_body(desktop, ".sidebar-brand-link .app-favicon")
+    rows = rule_body(desktop, ".sidebar-new-run, .sidebar-model-entry")
+    for part in ("margin: 0", "column-gap: 10px", "min-height: 36px", "padding: 0 10px",
+                 "font-weight: var(--font-weight-regular)"):
+        assert part in rows, part
+    assert "width: 18px; height: 18px" in rule_body(desktop, ".sidebar-new-run svg, .sidebar-model-entry > svg")
+    heading = rule_body(desktop, ".sidebar-bookmarks-head .sidebar-toggle-btn")
+    assert "padding: 0 10px" in heading and "color: var(--ink-3)" in heading
+    assert "display: none" in rule_body(desktop, ".sidebar-bookmarks-head .sidebar-heading-label svg")
+    assert "right: 2px" in rule_body(desktop, ".sidebar-search-trigger")
+    assert "var(--sidebar-gutter, 0px)" in rule_body(desktop, ".sidebar > .sidebar-content")
+    assert "padding-left: 10px" in rule_body(desktop, ".sidebar .bookmark")
+    assert "padding: 4px 10px" in rule_body(desktop, ".chat-list-heading")
+    # The list's scrollbar room, measured like the list before the first paint.
+    resize = (ROOT / "static" / "js" / "sidebar-resize.js").read_text(encoding="utf-8")
+    assert "--sidebar-gutter" in resize and "scrollbar-gutter:stable;scrollbar-width:thin" in resize
 
 
 def test_logo_toggle_and_switch_move_with_the_sidebar():

@@ -36,6 +36,22 @@
       return Number.isFinite(value) && value > 0 ? value : null;
     } catch (_) { return null; }
   }
+  // The room the chat list keeps for its thin scrollbar (scrollbar-gutter:
+  // stable, shell.css): measured before the first paint, so the list can
+  // reach into the sidebar's padding and its rows end on the head's right
+  // edge (shell.css, "Desktop head on one grid"). 0 where scrollbars float
+  // over the content (macOS); again on resize, since zoom changes it. The
+  // probe is made like the list: Chromium gives overflow:scroll no room here.
+  function measureGutter() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;top:-9999px;left:0;width:100px;height:100px;overflow-y:auto;scrollbar-gutter:stable;scrollbar-width:thin';
+    root.appendChild(probe);
+    const gutter = Math.max(0, probe.offsetWidth - probe.clientWidth);
+    probe.remove();
+    root.style.setProperty('--sidebar-gutter', `${gutter}px`);
+  }
+  measureGutter();
+  window.addEventListener('resize', measureGutter);
   let preferred = stored() ?? DEFAULT_WIDTH;
   function clamp(px) {
     const { min, max } = bounds();
