@@ -2292,15 +2292,20 @@ class DelegationLoop(AgentLoop):
             # Audit mode: the comparison models review the fixed answer. A
             # failed review costs marks, never the answer (AnswerAudit.run).
             # The user's Stop stops the reviewers, not the complete answer:
-            # the turn ends with it. A review that never started (a Stop or
+            # the turn ends with it. So does any other interruption once the
+            # answer is fixed (watch_error: a deploy past its grace time,
+            # saved state gone, the watcher's stop; A-R1, since 2026-10-29,
+            # until then it failed the turn): the review ends "cancelled"
+            # with the live marks. A review that never started (a Stop or
             # an error just before) ends at the run's end (AnswerAudit.close).
             if not self.comparison.finalized:
                 call = {"id": "server_audit_answer", "type": "function",
                         "function": {"name": "audit_answer", "arguments": "{}"}}
                 try:
                     yield from self._execute_stream(value, call, self.app_registry)
-                except ProviderCancelled:
-                    if self.watch_error:
+                except Exception as exc:
+                    if not (isinstance(exc, ProviderCancelled)
+                            or (self.watch_error is not None and exc is self.watch_error)):
                         raise
             return
         if not self.comparison.finalized and self.comparison.preferences.judges == "off":

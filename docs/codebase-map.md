@@ -5760,7 +5760,8 @@ Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 `REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
 trotzdem `completed`, auch nach einem Stop während der Prüfung
-(`_finish_review` fängt ihn ab, außer bei `watch_error`). Gescheiterte
+(`_finish_review` fängt ihn ab, seit 2026-10-29 auch `watch_error`; die
+Review endet `cancelled` mit den Live-Befunden, `_live_findings`). Gescheiterte
 Speicherungen holt `AnswerAudit.close` nach. Eine Prüferantwort, die kam, aber
 nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 („Agent reviewer reply unusable“: `reply_shape` mit `shape` empty/cut/no_json/

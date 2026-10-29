@@ -263,7 +263,9 @@ Agent-Panel.
   Denkstufe und Suchrunden bleiben (Max: keine Abstriche).
 - Fällt ein Prüfer in der Schlussrunde aus, gelten seine Live-Befunde; ohne
   solche fehlen nur seine Befunde.
-- Stop beendet die Prüfer, die fixierte Antwort bleibt.
+- Stop beendet die Prüfer, die fixierte Antwort bleibt; seit 2026-10-29 auch
+  jede andere Unterbrechung nach der fixierten Antwort (`watch_error`). Die
+  Review endet dann `cancelled` und behält die Live-Befunde (`live`).
 
 ## Anzeige
 

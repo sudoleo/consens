@@ -1883,13 +1883,15 @@ class AnswerAudit:
 
         Ends with the review "succeeded" (every reviewer), "partial" (some)
         or "failed" (none), and the answer final in each case. Only a stop
-        ends it with "cancelled" and raises; the user's Stop then ends the
+        ends it with "cancelled", the live marks kept (_live_findings), and
+        raises; the user's Stop or any other interruption then ends the
         review, not the turn (DelegationLoop._finish_review)."""
         tools = self.tools
         try:
             self._run(cancellation)
         except ProviderCancelled:
             self._stop()
+            self._live_findings()
             self._settle("cancelled", self.issues)
             self._save()
             tools.finalized = True
@@ -1904,6 +1906,28 @@ class AnswerAudit:
                 self._timer.cancel()
         # A finished review stands, also when a stop arrives just after it.
         tools.finalized = True
+
+    def _live_findings(self):
+        """A stopped review keeps what the reviewers found while the agent
+        worked, as one whose final round failed does: in claims, unplaced and
+        process, each mark ``live`` (A-M7, since 2026-10-29; until then a
+        stop lost them, B8). Never fails the stop."""
+        try:
+            with self.tools.lock:
+                reviews = [(self.reviewers[provider]["provider_label"], list(session.live_marks), True)
+                           for provider, session in self.sessions.items() if session.live_marks]
+            if reviews:
+                self._place(self.tools.text, reviews)
+        except Exception as exc:
+            logging.warning("Agent audit live marks not kept category=%s", safe_exception(exc))
+
+    def _place(self, answer, reviews):
+        """The reviews' marks on the answer's sentences and on the work (place_marks)."""
+        entries = {entry["seq"]: (entry["kind"], entry.get("name", ""))
+                   for entry, _ in (self.work_log.entries_after(0) if self.work_log is not None else [])}
+        claims, unplaced, process = place_marks(answer, reviews, entries)
+        with self.tools.lock:
+            self.claims, self.unplaced, self.process = claims, unplaced, process
 
     def _fail(self, issues):
         """The review ends without marks; the saved review says so."""
@@ -1992,12 +2016,8 @@ class AnswerAudit:
                     reviews.append((self.reviewers[provider]["provider_label"], session.final_marks, False))
                 elif session.live_marks:
                     reviews.append((self.reviewers[provider]["provider_label"], list(session.live_marks), True))
-        entries = {entry["seq"]: (entry["kind"], entry.get("name", ""))
-                   for entry, _ in (self.work_log.entries_after(0) if self.work_log is not None else [])}
-        claims, unplaced, process = place_marks(answer, reviews, entries)
+        self._place(answer, reviews)
         status = "succeeded" if done == len(self.reviewers) and done else "partial" if done else "failed"
-        with tools.lock:
-            self.claims, self.unplaced, self.process = claims, unplaced, process
         self._settle(status, issues)
         try:
             tools.checkpoint()
@@ -2031,6 +2051,8 @@ class AnswerAudit:
             for state in self.reviewers.values():
                 if state["status"] in {"waiting", "running"}:
                     state["status"] = "stopped" if stopped else "failed"
+        if stopped:
+            self._live_findings()
         issues = self.issues or ([] if stopped else [{"code": "audit_unavailable"}])
         self._settle("cancelled" if stopped else "failed", issues)
         return True

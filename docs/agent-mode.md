@@ -431,8 +431,13 @@ erfolgreichen Ende noch `required`/`running` sagt, setzt
 `agent_runs.finish_run` auf `failed`. Der Stop des Nutzers während der
 Prüfung stoppt die Prüfer, nicht die fertige Antwort: die Review endet
 `cancelled`, der Turn `completed` (`_finish_review`), auch wenn der Stop kurz
-vor dem Start der Prüfer kommt (dann setzt `close` die Review). Nur ein
-verlorener Laufzustand (`watch_error`) beendet den Turn dort als Fehler. Die
+vor dem Start der Prüfer kommt (dann setzt `close` die Review). Seit
+2026-10-29 (A-R1) gilt das für jede Unterbrechung nach der fixierten Antwort,
+auch `watch_error` (Deploy nach der Grace-Zeit, Firestore weg, Stopp des
+Wächters), die den Turn vorher als Fehler beendete. Eine Review, die so
+`cancelled` endet, behält die Live-Befunde wie eine gescheiterte
+Schlussrunde (A-M7, `AnswerAudit._live_findings`: `claims`/`unplaced`/`process`,
+jede Marke `live: true`); vorher fehlten sie. Die
 Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
 keine `differences_stats`, kein Model-Pulse-Pick.
 

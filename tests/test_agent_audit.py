@@ -891,6 +891,60 @@ def test_a_stop_during_the_review_stops_the_reviewers_not_the_answer(store):
     assert {r["status"] for r in turn["agent_review"]["audit"]["reviewers"]} == {"stopped"}
 
 
+def step_mark(note):
+    """A live round that marks the newest step it read."""
+    return lambda messages: json.dumps({"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful",
+                                                   "note": note}]})
+
+
+@pytest.mark.parametrize("cause", ["stop", "interrupted"])
+def test_an_interruption_in_the_final_round_stops_the_review_with_its_live_marks(store, cause):
+    """A-R1 (2026-10-29): after the fixed answer an interruption of the run
+    (watch_error: a deploy past its grace time, saved state gone, the
+    watcher's stop) failed the turn, while the user's Stop completed it. A-M7:
+    either way the review keeps the live marks, as a failed final round does."""
+    from app.services.agent_background import SHUTDOWN_REASON
+    from app.services.agent_provider_limits import AgentRunInterrupted
+    script = Audit({"anthropic": "wait", "openai": "wait"}, tool_steps=1, live={"openai": step_mark("Unchecked.")})
+    loop = audit_loop(store, script)
+
+    def interrupt_in_the_final_round():
+        while sum(rounds.count("final") for rounds in script.rounds.values()) < 2:
+            time.sleep(.01)
+        if cause == "interrupted":
+            # As a shutdown does (routers/agent.py interrupt).
+            loop.watch_error = AgentRunInterrupted(SHUTDOWN_REASON)
+        loop.cancellation.cancel()
+    threading.Thread(target=interrupt_in_the_final_round, daemon=True).start()
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER and not turn.get("agent_failure")
+    review = turn["agent_review"]
+    assert review["status"] == "cancelled"
+    assert {r["status"] for r in review["audit"]["reviewers"]} == {"stopped"}
+    # The same fields and form as a partial review with live marks.
+    step = entry_of(script.prompts["openai"][:2], "step")
+    assert review["audit"]["claims"] == [] and review["audit"]["unplaced"] == []
+    assert [(p["model"], p["entry"], p["entry_kind"], p["note"], p["live"]) for p in review["audit"]["process"]] == [
+        ("OpenAI", step, "step", "Unchecked.", True)]
+
+
+def test_a_stop_before_the_review_starts_keeps_the_live_marks(store, monkeypatch):
+    script = Audit(tool_steps=1, live={"anthropic": step_mark("Too early.")})
+    loop = audit_loop(store, script)
+    capture = loop.comparison.capture
+
+    def stop_once_fixed(text):
+        capture(text)
+        loop.cancellation.cancel()
+    monkeypatch.setattr(loop.comparison, "capture", stop_once_fixed)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "cancelled"
+    assert [(p["model"], p["note"], p["live"]) for p in review["audit"]["process"]] == [
+        ("Anthropic", "Too early.", True)]
+
+
 def test_a_stop_before_the_review_starts_still_completes_the_answer(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)
