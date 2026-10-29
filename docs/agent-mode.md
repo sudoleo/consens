@@ -619,7 +619,9 @@ in `agent-chat.test.mjs`, `agent-vm-activity.test.mjs` und
 `model-answer-reader.test.mjs` und `agent-preferences.test.mjs`; die gebaute
 Ansicht (Marken, Notes, Aktivität, Prüfer-Zeitleiste, Prüfung läuft,
 Pause-Karte auf Desktop und Handy) ohne Modellkosten in
-`tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`).
+`tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`); ein
+zweiter Tab, der einem pausierten Turn folgt, in
+`tests/e2e/test_agent_pause_elsewhere.py`.
 
 Produktionsreife (Prod-Messung 25.–29.10., Befunde zu Tempo, Abbrüchen und
 Randfällen, Anforderungen in Paketen):
