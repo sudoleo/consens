@@ -45,7 +45,9 @@ MAX_TOTAL_BYTES = 48 * 1024 * 1024
 FRAME_OVERHEAD_BYTES = 256
 ENDED_TTL_SECONDS = 600.0
 # A run that never reported its end (a bug, a killed thread) must not keep
-# its events forever.
+# its events forever: counted from its newest frame, so a long workspace run
+# with pauses (up to 7,500 s plus 30 min per pause) keeps its buffer while it
+# still sends.
 ACTIVE_TTL_SECONDS = 3 * 3600.0
 MAX_EVENTS_PER_READ = 500
 TAIL_INTERVAL_SECONDS = 0.1
@@ -97,6 +99,8 @@ def _encode(data) -> str:
 class LiveRun:
     key: tuple
     created_at: float
+    # When its newest frame came (ACTIVE_TTL_SECONDS counts from here).
+    last_frame_at: float | None = None
     seq: int = 0
     bytes: int = 0
     done: bool = False
@@ -170,6 +174,7 @@ class AgentLiveBuffers:
         with self._lock:
             run.seq += 1
             seq = run.seq
+            run.last_frame_at = self._clock()
             if self._runs.get(run.key) is run:
                 run.events.append((seq, event_type, text, size, effect))
                 run.bytes += size
@@ -288,7 +293,7 @@ class AgentLiveBuffers:
     def _expire(self):
         now = self._clock()
         for key, run in list(self._runs.items()):
-            age = now - (run.ended_at if run.done else run.created_at)
+            age = now - (run.ended_at if run.done else run.last_frame_at or run.created_at)
             if age >= (self.ended_ttl if run.done else self.active_ttl):
                 self._drop(key)
 

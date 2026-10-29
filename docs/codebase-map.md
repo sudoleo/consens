@@ -5064,8 +5064,8 @@ ein laufender Turn beim Deploy gut sechs Minuten.
 
 *Puffer (`agent_live`).* Je Lauf ≤ 10000 Frames/4 MiB (älteste zuerst
 verworfen, das neueste nie, damit auch ein übergroßes `final`/`error` ankommt),
-≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende, 3 h für nie
-beendete; Schlüssel uid + chat_id + client_request_id. Gezählt wird echter
+≤ 64 Läufe/48 MiB gesamt (beendete zuerst), 10 min TTL nach Ende, 3 h nach dem
+letzten Frame für nie beendete (`LiveRun.last_frame_at`); Schlüssel uid + chat_id + client_request_id. Gezählt wird echter
 Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
 aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
 einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,

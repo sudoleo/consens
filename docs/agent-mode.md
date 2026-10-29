@@ -3043,7 +3043,8 @@ ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
 have, without tool calls.“), statt abzubrechen; sie bleibt wie jede Antwort
 ohne Vergleich ungeprüft. Ein Render-Deploy beendet laufende Läufe weiterhin
 nach `AGENT_SHUTDOWN_GRACE_SECONDS`; der Live-Puffer hält einen Lauf bis 3 h
-(`ACTIVE_TTL_SECONDS`).
+nach seinem letzten Frame (`ACTIVE_TTL_SECONDS`, seit 2026-10-29 nicht mehr ab
+dem Start: ein Werkbank-Lauf mit Pausen überschreitet 3 h Wanduhr).
 
 **Kompaktierung** (`agent_compaction.py`, nur in langen Läufen, vor jedem
 Schritt in `_compact`): Übersteigt der eigene Teil des Gesprächs (ab der Frage
