@@ -846,10 +846,10 @@
     document.body.classList.remove('workspace-view-open', 'workspace-view-docked', 'workspace-view-covers', 'workspace-view-resizing');
     document.body.style.removeProperty('--workspace-width');
   }
-  // It leaves the way it came (Apple audit C5, like the activity panel):
-  // slides and fades out where it stood while the chat takes its lane back.
-  // Until 2026-10-29 it was gone at once. Its place is held inline, since the
-  // body's classes that dock it go at once.
+  // It leaves the way it came (Apple audit C5): folds back into the right
+  // edge from where it stood while the chat takes its lane back
+  // (workspace-view.css). Until 2026-10-29 it was gone at once. Its place is
+  // held inline, since the body's classes that dock it go at once.
   function leave(panel) {
     if (App.motion?.reduced?.() || !panel.isConnected) { panel.remove(); return; }
     const box = panel.getBoundingClientRect();
@@ -862,7 +862,7 @@
     // 2026-10-29). The timer only covers a way out that never runs.
     const gone = () => panel.remove();
     panel.addEventListener('animationend', event => { if (event.target === panel) gone(); });
-    setTimeout(gone, (App.motion?.ms?.('state') ?? 200) * 3);
+    setTimeout(gone, (App.motion?.ms?.('layer') ?? 320) * 2);
   }
 
   // ---- Settings → Agent: open the workspace, log its browser out -----------

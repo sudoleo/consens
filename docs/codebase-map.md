@@ -200,10 +200,12 @@ the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
 `--workspace-width`, a draggable `.workspace-view-resizer` remembered in
 `localStorage`); where the open activity panel would leave it under
 `MIN_WIDTH` it lies over that panel (`workspace-view-covers`, UX audit
-2026-10-29 G1), and its head wraps by its own width (container query). It
-comes in and, since 2026-10-29, leaves the way the activity panel does (Apple
-audit C5: 12 px and a fade; `close` holds its place inline, `.is-leaving`,
-removed on `animationend`), before that it was gone at once. All `.workspace-only` (body class
+2026-10-29 G1), and its head wraps by its own width (container query). Since
+2026-10-29 it unfolds from the right edge and folds back into it (whole,
+`translateX(100%)`, no fade, in the chat lane's `--dur-layer`/`--ease-standard`
+so its edge and the chat move together; `close` holds its place inline,
+`.is-leaving`, removed on `animationend`); before, 12 px and a fade in and
+gone at once on closing (Max: a fade makes no sense for a docked panel). All `.workspace-only` (body class
 `viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
 ("Arbeitsplatz").
 

@@ -145,23 +145,27 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   border-radius: var(--radius-2xs);
 }
 
+/* It unfolds from the right edge and folds back into it, whole and without
+   a fade, in the chat lane's own time and curve (agent-chat.css .container):
+   its edge and the chat move together. On closing it keeps its place while it
+   folds (workspace-view.js leave). Max 2026-10-29: a fade made no sense for a
+   panel that docks; before, 12px and a fade in, gone at once on closing. */
 @media (prefers-reduced-motion: no-preference) {
   .workspace-view {
-    animation: workspace-view-enter var(--dur-state, 160ms) var(--ease-out, ease-out) both;
+    animation: workspace-view-enter var(--dur-layer, 320ms) var(--ease-standard, ease) both;
   }
 
   @keyframes workspace-view-enter {
-    from { opacity: 0; transform: translateX(12px); }
+    from { transform: translateX(100%); }
   }
 
-  /* It leaves the way it came, a little faster (workspace-view.js leave). */
   .workspace-view.is-leaving {
-    animation: workspace-view-leave var(--dur-state, 160ms) var(--ease-in, ease-in) both;
+    animation: workspace-view-leave var(--dur-layer, 320ms) var(--ease-standard, ease) both;
     pointer-events: none;
   }
 
   @keyframes workspace-view-leave {
-    to { opacity: 0; transform: translateX(12px); }
+    to { transform: translateX(100%); }
   }
 }
 
