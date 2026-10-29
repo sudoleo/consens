@@ -273,6 +273,10 @@ class Worker:
     session_seq: int = 0
     result: dict | None = None
     reviewed_evidence: dict | None = None
+    # The OpenRouter session its requests use (worker_completion): its own
+    # id, or the id of an earlier session whose conversation it goes on
+    # with on the same endpoint (a reviewer's round cut short, agent_audit).
+    session_key: str = ""
 
 
 class DelegationLoop(AgentLoop):
@@ -1641,7 +1645,7 @@ class DelegationLoop(AgentLoop):
         ``review_round``: a reviewer's kind of round (agent_audit), which its
         receipt keeps as ``round`` (AgentRunStore.settle)."""
         value = self.factory()
-        value.session_id = provider_session_id(self.uid, self.chat_id, worker.id)
+        value.session_id = provider_session_id(self.uid, self.chat_id, getattr(worker, "session_key", "") or worker.id)
         value.one_off = one_off
         value.review_round = review_round
         return value

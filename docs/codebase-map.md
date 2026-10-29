@@ -5722,7 +5722,9 @@ die fixierte Antwort steht in der Schlussrunde nur einmal
 Prüfers voll, geht er in einem neuen weiter, mit dem Anfang des Laufs und
 seinen bisherigen Befunden (`ReviewerSession._carry`, `opening_entries`).
 Nach der Antwort fixiert `capture` die Version, `_finish_review`
-ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`:
+ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`
+(eine laufende Live-Runde bricht seit 2026-10-29 ab, `cut_round`/`RoundCut`,
+ihre Sitzung endet `round_cut` und reicht die OpenRouter-Sitzung weiter):
 Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
 seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
 ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,

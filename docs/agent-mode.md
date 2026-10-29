@@ -358,8 +358,9 @@ weiter, mit dem Anfang des Laufs und seinen bisherigen Befunden. Ist die
 Antwort fertig, fixiert sie `capture` als Version, und
 die App ruft `audit_answer` (`app_tools`, nie dem Modell angeboten; Aktivität
 „Reviewing the answer…“ / „Reviewed the answer“): `AnswerAudit.run` gibt jedem
-Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort
-(`REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
+Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort (eine
+Live-Runde, die dann noch läuft, bricht seit 2026-10-29 ab und ihre Einträge
+gehen mit, `cut_round`; `REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
 auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Jeder
 Beleg eines Prüfers (`llm_calls`) nennt seit 2026-10-29 seine Rundenart
 (`round`: `live`, `gate`, `final`, `repair` für einen zweiten Versuch). Die

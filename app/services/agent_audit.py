@@ -779,6 +779,12 @@ class ReviewCancellation(ProviderCancellation):
     deadline = False
 
 
+class RoundCut(Exception):
+    """A live round gave way before it ended (ReviewerSession.cut_round): the
+    answer is fixed and its final round starts now. Neither a failure nor a
+    stop of the reviewer."""
+
+
 class ReviewTooLong(ValueError):
     """The work and the answer do not fit the reviewer's context."""
 
@@ -1014,6 +1020,13 @@ class ReviewerSession:
         # final round's complete list.
         self.live_marks, self.final_marks = [], None
         self.cancellation = ReviewCancellation()
+        # The live round at work, under a stop of its own below the
+        # reviewer's (cut_round), and when it began (time.monotonic).
+        self.live = self.live_started = None
+        # The OpenRouter session of the conversation (Worker.session_key):
+        # a session that ends because its round was cut short hands it on,
+        # so the next one finds the conversation in the endpoint's cache.
+        self.conversation_key = None
         self.thread = None
 
     @property
@@ -1023,6 +1036,20 @@ class ReviewerSession:
     def _set(self, **fields):
         with self.tools.lock:
             self.state.update(fields)
+
+    def cut_round(self):
+        """The live round at work gives way (A-T1): the answer is fixed, so
+        no halt could come of it any more and the final round reads its
+        entries anyway. The reviewer goes on; until 2026-10-29 its final
+        round waited for it (MiMo Pro: up to 53 s) and paid for its entries
+        twice."""
+        live = self.live
+        if live is not None:
+            live.cancel()
+
+    def _round_due(self):
+        """Whether a live round must give way before it starts or as it does."""
+        return self.audit.final_answer is not None
 
     def run(self):
         audit, log = self.audit, self.audit.work_log
@@ -1093,6 +1120,7 @@ class ReviewerSession:
             self.loop._state(worker, "completed")
         self.messages = [self.messages[0]]
         self.chars = len(self.messages[0]["content"])
+        self.conversation_key = None
 
     def _round(self, entries):
         number = self.live_rounds + 1
@@ -1110,6 +1138,9 @@ class ReviewerSession:
         known = set(range(1, entries[-1][0]["seq"] + 1))
         try:
             value, marks = self._request(message, final=False, known=known)
+        except RoundCut:
+            # Cut short: its entries go into the final round, nothing failed.
+            return
         except ProviderCancelled:
             raise
         except Exception:
@@ -1156,6 +1187,9 @@ class ReviewerSession:
         try:
             _, (verdict, halt, marks) = self._request(text + "\n\n" + note, final=False, known=known,
                                                       parse=lambda reply: parse_gate(reply, known=known))
+        except RoundCut:
+            self.audit.gate_verdict(self, gate, "failed")
+            return
         except ProviderCancelled:
             self.audit.gate_verdict(self, gate, "failed")
             raise
@@ -1214,51 +1248,82 @@ class ReviewerSession:
         or unreadable round ends its session (the next round opens a new one)
         and leaves the conversation as it was; a final round may first try
         once more (_mendable). ``parse``: a gate round's reader (parse_gate),
-        whose result stands for the marks; such a round does not search."""
+        whose result stands for the marks; such a round does not search.
+        A live or gate round runs under a stop of its own (``live``): cut
+        short (cut_round), it raises RoundCut, its session ends "stopped"
+        (``round_cut``) and hands the conversation on (conversation_key),
+        and cursor, conversation and failures stay as they were."""
+        if not final and self._round_due():
+            raise RoundCut()
         if self.worker is None:
             self.worker = self._open()
         self.messages.append({"role": "user", "content": message})
+        cancellation, unregister = self.cancellation, None
+        if not final:
+            cancellation = ProviderCancellation()
+            unregister = self.cancellation.register(cancellation)
+            self.live, self.live_started = cancellation, time.monotonic()
+            if self._round_due():
+                # It came as the round began: cut_round found no round yet.
+                cancellation.cancel()
         attempts = 2 if final else 1
-        for attempt in range(attempts):
-            value = None
-            try:
-                value = self.tools.worker_request(
-                    self.worker, self.model, self.messages, cancellation=self.cancellation, slots=self.audit.slots,
-                    searching=parse is None, search_rounds=REVIEW_SEARCH_ROUNDS if final else LIVE_SEARCH_ROUNDS,
-                    one_off=final, review_round="repair" if attempt else "final" if final
-                    else "live" if parse is None else "gate")
-                marks = parse(value.text) if parse is not None else parse_review(value.text, known=known, final=final)
-                break
-            except BaseException as exc:
-                shape = reply_shape(exc, value) if isinstance(exc, Exception) else None
-                again = attempt + 1 < attempts and self._mendable(exc, shape)
-                if shape:
-                    # A reply came and could not be used: how, never its words.
-                    logging.warning("Agent reviewer reply unusable model=%s round=%s shape=%s chars=%s finish=%s "
-                                    "output_tokens=%s reasoning_tokens=%s again=%s", self.model.model,
-                                    "final" if final else self.live_rounds + 1, shape["shape"], shape["chars"],
-                                    shape["finish"], shape["output_tokens"], shape["reasoning_tokens"], again)
-                if again:
+        try:
+            for attempt in range(attempts):
+                value = None
+                try:
+                    value = self.tools.worker_request(
+                        self.worker, self.model, self.messages, cancellation=cancellation, slots=self.audit.slots,
+                        searching=parse is None, search_rounds=REVIEW_SEARCH_ROUNDS if final else LIVE_SEARCH_ROUNDS,
+                        one_off=final, review_round="repair" if attempt else "final" if final
+                        else "live" if parse is None else "gate")
+                    marks = (parse(value.text) if parse is not None
+                             else parse_review(value.text, known=known, final=final))
+                    break
+                except BaseException as exc:
+                    if (unregister is not None and isinstance(exc, ProviderCancelled) and cancellation.cancelled
+                            and not self.cancellation.cancelled):
+                        # Cut short: the claimed step was settled as stopped,
+                        # so its session ends; the next one goes on with the
+                        # conversation on the same OpenRouter session.
+                        self.messages.pop()
+                        worker, self.worker = self.worker, None
+                        self.loop._state(worker, "stopped", failure={"code": "round_cut"})
+                        raise RoundCut() from None
+                    shape = reply_shape(exc, value) if isinstance(exc, Exception) else None
+                    again = attempt + 1 < attempts and self._mendable(exc, shape)
                     if shape:
-                        # The reply came and was paid: the same session goes on.
-                        self.messages[-1] = {"role": "user", "content": message + "\n\n" + REPAIR_NOTE}
-                    else:
-                        # A failed step ends its session for good
-                        # (AgentSessionStore._claim_delegated): a new one tries again.
-                        failure = {**review_failure(exc, self.cancellation),
-                                   "error": "This attempt failed. The reviewer tries once more in a new session."}
-                        self.loop._terminal(self.worker, "failed", failure["error"], failure)
-                        self.worker = self._open()
-                    continue
-                self.messages.pop()
-                failure = review_failure(exc, self.cancellation)
-                if not final and not isinstance(exc, ProviderCancelled):
-                    # The reviewer goes on: the next round opens a new session.
-                    failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
-                worker, self.worker = self.worker, None
-                self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
-                                    failure["error"], failure)
-                raise
+                        # A reply came and could not be used: how, never its words.
+                        logging.warning("Agent reviewer reply unusable model=%s round=%s shape=%s chars=%s "
+                                        "finish=%s output_tokens=%s reasoning_tokens=%s again=%s", self.model.model,
+                                        "final" if final else self.live_rounds + 1, shape["shape"], shape["chars"],
+                                        shape["finish"], shape["output_tokens"], shape["reasoning_tokens"], again)
+                    if again:
+                        if shape:
+                            # The reply came and was paid: the same session goes on.
+                            self.messages[-1] = {"role": "user", "content": message + "\n\n" + REPAIR_NOTE}
+                        else:
+                            # A failed step ends its session for good
+                            # (AgentSessionStore._claim_delegated): a new one tries again.
+                            failure = {**review_failure(exc, self.cancellation),
+                                       "error": "This attempt failed. The reviewer tries once more in a new session."}
+                            self.loop._terminal(self.worker, "failed", failure["error"], failure)
+                            self.conversation_key = None
+                            self.worker = self._open()
+                        continue
+                    self.messages.pop()
+                    failure = review_failure(exc, self.cancellation)
+                    if not final and not isinstance(exc, ProviderCancelled):
+                        # The reviewer goes on: the next round opens a new session.
+                        failure = {**failure, "error": "This round failed. The reviewer goes on in a new session."}
+                    worker, self.worker = self.worker, None
+                    self.conversation_key = None
+                    self.loop._terminal(worker, "stopped" if isinstance(exc, ProviderCancelled) else "failed",
+                                        failure["error"], failure)
+                    raise
+        finally:
+            if unregister is not None:
+                unregister()
+                self.live = self.live_started = None
         reply = value.assistant_message()
         self.messages.append(reply)
         # What every later round sends again, its replayed reasoning included.
@@ -1280,12 +1345,15 @@ class ReviewerSession:
         return mendable and (left is None or left - REVIEW_TIME_MARGIN >= REVIEW_MIN_SECONDS)
 
     def _open(self):
-        """A new agent session for this reviewer (agent panel row)."""
+        """A new agent session for this reviewer (agent panel row), on the
+        OpenRouter session of its conversation if one hands it on."""
         from app.services.agent_delegation import Worker
         title = f"Review · {self.model.label}"
         worker = Worker(uuid4().hex, self.model, self.messages)
         worker.kind = "audit"
         worker.file_ids = self.audit.file_ids
+        worker.session_key = self.conversation_key or ""
+        self.conversation_key = self.conversation_key or worker.id
         self.loop._publish(worker, patch={
             "title": title, "kind": "audit", "comparison_id": None,
             "assignment": {"goal": title, "context": REVIEW_ASSIGNMENT}, "model": self.model.settings(),
@@ -1571,6 +1639,9 @@ class AnswerAudit:
             self._timer.daemon = True
             self._timer.start()
         self.final_answer = answer
+        for session in self.sessions.values():
+            # A live round at work gives way to the final round (A-T1).
+            session.cut_round()
         self.work_log.wake()
         for session in self.sessions.values():
             session.thread.join()

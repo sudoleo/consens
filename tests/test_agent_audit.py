@@ -82,6 +82,8 @@ class Audit:
         self.search = search
         self.tool_steps = tool_steps
         self.calls, self.offered, self.searches, self.prompts, self.rounds = [], [], {}, {}, {}
+        # Per family: when each reviewer call began and its OpenRouter session.
+        self.times, self.session_ids = {}, {}
         self.loop = None
 
     def factory(self):
@@ -119,6 +121,8 @@ class Audit:
                 family = model.model.split("/")[0]
                 final = messages[-1]["content"].startswith("Final round.")
                 script.rounds.setdefault(family, []).append("final" if final else "live")
+                script.times.setdefault(family, []).append(time.monotonic())
+                script.session_ids.setdefault(family, []).append(self.session_id)
                 script.prompts[family] = list(messages)
                 script.searches[family] = kwargs.get("native_searches")
                 reply = (script.reviews if final else script.live).get(family, json.dumps({"marks": []}))
@@ -392,6 +396,52 @@ def test_every_reviewer_receipt_names_its_round(store):
     assert receipt_rounds(store, loop) == {"anthropic": ["live", "final"], "openai": ["live", "final", "repair"]}
     # The agent's own steps are no reviewer's.
     assert "round" not in store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+
+
+def held(seconds, reply=json.dumps({"marks": []})):
+    """A reviewer reply that takes ``seconds`` unless its request is stopped first."""
+    def run(messages):
+        stop, deadline = current_provider_cancellation(), time.monotonic() + seconds
+        while not stop.cancelled and time.monotonic() < deadline:
+            time.sleep(.01)
+        if stop.cancelled:
+            raise ProviderCancelled("stopped")
+        return reply(messages) if callable(reply) else reply
+    return run
+
+
+def test_the_final_round_starts_at_once_and_cuts_a_live_round_short(store, monkeypatch):
+    """A-T1 (2026-10-29): the final round waited for a live round at work
+    (MiMo Pro up to 53 s) and then read its entries a second time."""
+    script = Audit(tool_steps=1, live={"anthropic": held(30)})
+    loop = audit_loop(store, script)
+    capture, fixed = loop.comparison.capture, []
+
+    def fix(text):
+        fixed.append(time.monotonic())
+        capture(text)
+    monkeypatch.setattr(loop.comparison, "capture", fix)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    assert script.rounds["anthropic"] == ["live", "final"]
+    assert script.times["anthropic"][1] - fixed[0] < 1
+    # The cut round is neither a round nor a failure; its entries go into the
+    # final round, which reads the log from its start.
+    session = loop.comparison.auditor.sessions["anthropic"]
+    assert session.live_rounds == 0 and session.failures == 0
+    entries, _ = round_entries(script.prompts["anthropic"][-1])
+    assert entries[0]["seq"] == 1
+    # Its session ended stopped and the next one goes on on the same
+    # OpenRouter session (the conversation in the endpoint's cache).
+    sessions = sorted((a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                       if a.get("kind") == "audit" and a["model"]["model"].startswith("anthropic")),
+                      key=lambda a: a["created_at"])
+    assert [(a["status"], (a.get("failure") or {}).get("code")) for a in sessions] == [
+        ("stopped", "round_cut"), ("completed", None)]
+    assert len(set(script.session_ids["anthropic"])) == 1
+    # Its receipt was settled as the live round it was.
+    assert receipt_rounds(store, loop)["anthropic"] == ["live", "final"]
 
 
 def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):

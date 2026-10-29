@@ -189,8 +189,15 @@ beschäftigt und nimmt danach alles Neue auf einmal. Ein Schritt ohne Tool-Aufru
 meist die Antwort: Eine Antwort in einem Schritt hat nur die Schlussrunde. Die
 Schlussrunde beginnt, wenn die Antwort fixiert ist (`answer_fixed`), mit dem
 Rest des Protokolls und der Antwort, und ist kurz, weil der Prüfer den Weg
-dorthin schon kennt. Läuft beim Fixieren noch eine Live-Runde, endet sie
-zuerst. Der Agent hält dafür 240 s vor dem harten Stopp frei.
+dorthin schon kennt. Läuft beim Fixieren noch eine Live-Runde, bricht sie
+seit 2026-10-29 sofort ab (`ReviewerSession.cut_round`, eine eigene
+Cancellation je Runde unter der des Prüfers): Ihre Einträge gehen in die
+Schlussrunde, sie zählt weder als Runde noch als Fehlschlag, und ihre Sitzung
+endet „stopped“ (`round_cut`). Die nächste Sitzung führt das Gespräch auf
+derselben OpenRouter-Sitzung weiter (`conversation_key`, `Worker.session_key`),
+der Cache bleibt. Vorher wartete die Schlussrunde auf sie (MiMo Pro bis 53 s)
+und las ihre Einträge ein zweites Mal. Der Agent hält dafür 240 s vor dem
+harten Stopp frei.
 
 **Was sie liefern:** Befunde (`wrong`, `doubtful`, `incomplete`, Anmerkung,
 Quelle). Ein Befund verweist auf einen Protokolleintrag (`entry`, jede Runde,
