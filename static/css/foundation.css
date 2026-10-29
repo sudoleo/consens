@@ -225,6 +225,50 @@
   cursor: default;
 }
 
+/* --------------------------------------------------------------------------
+   The text link (UX audit 2026-10-29, J2). The quiet way beside a card's one
+   filled button, and every "read more" between other words: --ink-2, an
+   underline in the text's own colour at 40 %, 3px below it. A <button> or an
+   <a>; 32px tall under a mouse, 44px under a finger (the drawn line stays
+   where it is). Until then seven classes each drew it again, in four
+   versions of the line. A component that places it sets only its position.
+   -------------------------------------------------------------------------- */
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: start;
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color var(--dur-press) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .text-link:hover:not(:disabled) {
+    color: var(--ink);
+  }
+}
+
+@media (pointer: coarse) {
+  .text-link {
+    min-height: 44px;
+  }
+}
+
+.text-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* One scroll lock (Apple audit F2). While a layer covers the page - a modal
    dialog, the phone menu, the activity sheet, a sentence card or the
    sources sheet on a phone, the Memory and Gmail & Calendar sheets - the page
