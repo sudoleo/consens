@@ -5941,9 +5941,9 @@ Elementnamen aus dem letzten `read`, `element_names`; Zitat des Prüfers
 `halt.quote`, nur wenn der Eintrag es enthält), Protokollnummer
 `.admin-only`; `composer-collapse.js` lässt Tipps auf `.agent-hold`/
 `.agent-queue` durch),
-`agent-activity.js` (`holdView`, „Paused for your decision“, wartende Pause
-faltet nie und nennt ihren Grund erst nach der Entscheidung, die Karte tut es
-davor), `tab-status.js` („Paused“).
+`agent-activity.js` (`holdView`; eine wartende Pause steht einmal als Eintrag
+und faltet nie, ohne eigene Statuszeile darunter, seit 2026-10-29, UX-Audit C9),
+`tab-status.js` („Paused“).
 
 **Vorab-Prüfung** (seit 2026-10-27, Details `docs/agent-mode.md`
 „Vorab-Prüfung“): `agent_gate.outward` erkennt nach Werkzeug und typisierten
