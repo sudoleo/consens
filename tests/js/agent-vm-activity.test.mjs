@@ -329,8 +329,11 @@ describe("a step in the workspace's browser", () => {
     const events = [];
     activity.receive(events, step({ status: "running", action: "open", url: "https://www.kfw.de/inlandsfoerderung/" }));
     activity.render(host, { running: true, status: "running", events });
-    const live = host.querySelector(".agent-progress .agent-page-card");
-    expect(live.classList.contains("agent-vm")).toBe(true);
+    // Pinned under the run's line, not among the live lines.
+    const pin = host.querySelector(".agent-page-pin");
+    const live = pin.querySelector(".agent-page-card");
+    expect(pin.hidden).toBe(false);
+    expect(host.querySelector(".agent-progress .agent-page-card")).toBeNull();
     expect(live.dataset.status).toBe("running");
     // While it opens: the site as its name, the picture's place waiting.
     expect(live.querySelector(".agent-page-title").textContent).toBe("kfw.de");
@@ -352,12 +355,49 @@ describe("a step in the workspace's browser", () => {
     expect(open.textContent).toBe("Open");
     open.click();
     expect(opened).toEqual([true]);
-    // The timeline holds the same card.
+    // The timeline holds a card per page in its order.
     const saved = host.querySelector(".agent-activity-content .agent-page-card");
     expect(saved.classList.contains("agent-activity-tool")).toBe(true);
     expect(saved.querySelector(".agent-page-shot img").getAttribute("src")).toBe(PREVIEW);
     // No step ends in a "Watch live" link any more.
     expect(host.querySelector(".agent-vm-watch")).toBeNull();
+  });
+
+  // 2026-10-29, Max: the card folded away with the earlier steps while the
+  // browser was still open. It stays, changed in place, also after the run.
+  it("keeps the page the browser shows pinned while the run goes on, and after it", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://kfw.de/", title: "KfW",
+      preview: PREVIEW }));
+    for (const [n, action] of [[2, "read"], [3, "click"], [4, "scroll"]]) {
+      activity.receive(events, step({ id: `completion:1:call_${n}/tool`, status: "succeeded", action, ref: "e1" }));
+    }
+    activity.receive(events, vm({ id: "completion:1:call_5/tool", status: "running", command: "ls" }));
+    activity.render(host, { running: true, status: "running", events });
+    const card = host.querySelector(".agent-page-pin .agent-page-card");
+    expect(card.querySelector(".agent-page-title").textContent).toBe("KfW");
+    // The earlier steps fold; the page is not among them.
+    expect(host.querySelector(".agent-progress .agent-vm-fold")).not.toBeNull();
+    expect(host.querySelector(".agent-progress .agent-page-card")).toBeNull();
+    // Another page: the same card, now with it; one that fails leaves it.
+    activity.receive(events, step({ id: "completion:1:call_6/tool", status: "succeeded", action: "open",
+      url: "https://bafa.de/", title: "BAFA" }));
+    activity.receive(events, step({ id: "completion:1:call_7/tool", status: "failed", action: "open",
+      url: "https://down.example/" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelector(".agent-page-pin .agent-page-card")).toBe(card);
+    expect(card.querySelector(".agent-page-title").textContent).toBe("BAFA");
+    expect(card.querySelector(".agent-page-shot").hidden).toBe(true);
+    // The answer comes and the run ends: the live lines go, the page stays.
+    activity.render(host, { running: false, status: "completed", events, answerText: "Done." });
+    expect(host.querySelector(".agent-page-pin").hidden).toBe(false);
+    // A saved turn shows it too; one without a page has no pin.
+    const other = setup();
+    other.activity.renderTurn(other.host, { status: "completed", agent_activity: events, assistant_response: "Done." });
+    expect(other.host.querySelector(".agent-page-pin .agent-page-title").textContent).toBe("BAFA");
+    other.activity.renderTurn(other.host, { status: "completed", agent_activity: [], assistant_response: "Done." });
+    expect(other.host.querySelector(".agent-page-pin").hidden).toBe(true);
   });
 
   it("shows a card without a picture for a page saved without one, and only valid pictures", () => {

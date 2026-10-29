@@ -1347,6 +1347,10 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   ansehen“ an jedem `browser`-Schritt), über das
   Bildschirm-Symbol in der Kopfzeile des Laufs (`agent-delegation.js`
   `.agent-workspace-toggle`) und in Einstellungen → Agent → Workspace.
+- **Auf und zu** wie die Aktivitäts-Leiste (Apple-Audit C5): 12 px Gleiten und
+  Einblenden, beim Schließen seit 2026-10-29 denselben Weg zurück an seinem Platz
+  (`leave`, `.is-leaving`), während der Chat seine Spur zurückbekommt; vorher
+  verschwand es beim Schließen sofort.
 - **Neben dem Chat** (ab 1100 px): Das Panel dockt rechts an, der Chat rückt
   in die verbleibende Spur und zentriert sich dort (`body.workspace-view-docked`,
   `--workspace-width`: Body-Innenabstand rechts, die Agent-Spalte rechnet die

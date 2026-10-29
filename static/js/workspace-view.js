@@ -840,11 +840,29 @@
     try { closing.termSocket?.close(); } catch (error) { /* already gone */ }
     closing.termResize?.disconnect();
     try { closing.term?.dispose(); } catch (error) { /* already gone */ }
-    closing.panel.remove();
     window.removeEventListener('resize', onWindowResize);
     closing.observer?.disconnect();
+    leave(closing.panel);
     document.body.classList.remove('workspace-view-open', 'workspace-view-docked', 'workspace-view-covers', 'workspace-view-resizing');
     document.body.style.removeProperty('--workspace-width');
+  }
+  // It leaves the way it came (Apple audit C5, like the activity panel):
+  // slides and fades out where it stood while the chat takes its lane back.
+  // Until 2026-10-29 it was gone at once. Its place is held inline, since the
+  // body's classes that dock it go at once.
+  function leave(panel) {
+    if (App.motion?.reduced?.() || !panel.isConnected) { panel.remove(); return; }
+    const box = panel.getBoundingClientRect();
+    Object.assign(panel.style, { boxSizing: 'border-box', left: `${box.left}px`, right: 'auto', width: `${box.width}px`,
+      borderLeft: getComputedStyle(panel).borderLeft });
+    panel.inert = true;
+    panel.classList.add('is-leaving');
+    // Gone when its way out ends: the chat's new lane can hold back its
+    // first frame, and a fixed timer cut it off before it showed (docked,
+    // 2026-10-29). The timer only covers a way out that never runs.
+    const gone = () => panel.remove();
+    panel.addEventListener('animationend', event => { if (event.target === panel) gone(); });
+    setTimeout(gone, (App.motion?.ms?.('state') ?? 200) * 3);
   }
 
   // ---- Settings → Agent: open the workspace, log its browser out -----------

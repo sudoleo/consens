@@ -397,8 +397,12 @@ describe("the workspace view", () => {
     await vi.waitFor(() => expect(controls(env.window)).toEqual(["user", "agent"]));
     expect(FakeRFB.made[0].disconnected).toBe(true);
     expect(socket.closed).toBe(true);
-    expect(env.document.querySelector(".workspace-view")).toBeNull();
     expect(env.workspace.isOpen()).toBe(false);
+    // It leaves the way it came (Apple audit C5), inert, then it is gone.
+    const leaving = env.document.querySelector(".workspace-view");
+    expect(leaving.classList.contains("is-leaving")).toBe(true);
+    expect(leaving.inert).toBe(true);
+    await vi.waitFor(() => expect(env.document.querySelector(".workspace-view")).toBeNull());
   });
 
   it("opens from the (+) menu in a chat and closes the menu", async () => {

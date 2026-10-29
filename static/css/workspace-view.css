@@ -153,6 +153,16 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   @keyframes workspace-view-enter {
     from { opacity: 0; transform: translateX(12px); }
   }
+
+  /* It leaves the way it came, a little faster (workspace-view.js leave). */
+  .workspace-view.is-leaving {
+    animation: workspace-view-leave var(--dur-state, 160ms) var(--ease-in, ease-in) both;
+    pointer-events: none;
+  }
+
+  @keyframes workspace-view-leave {
+    to { opacity: 0; transform: translateX(12px); }
+  }
 }
 
 .workspace-view-head {

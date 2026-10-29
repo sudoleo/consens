@@ -927,17 +927,18 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* One line box of the trace, as tall as the status line it takes the place
    of: the mono command and the small time made it 20.3px against 21.45px,
    and every command start pulled the page up by a pixel. */
-.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; min-width: 0; min-height: calc(var(--trace-lh) * 1em); list-style: none; cursor: default; }
+.agent-vm > summary { display: flex; align-items: baseline; gap: .5em; width: fit-content; max-width: 100%; min-width: 0; min-height: calc(var(--trace-lh) * 1em); list-style: none; cursor: default; }
 .agent-vm > summary::-webkit-details-marker { display: none; }
 .agent-vm.has-output > summary { cursor: pointer; }
 .agent-vm-verb { flex: none; }
 .agent-vm-verb[hidden] { display: none; }
 /* Plain mono text, not the inline-code pill: the output field below is the
-   only tinted surface. Its margin keeps how it ended and the chevron at the
-   right edge, on every line alike (UX audit F4: they stood after a short
-   command and at the edge after a long one). */
+   only tinted surface. How it ended and the chevron follow the text, as on
+   the plan's and the earlier steps' lines; a long command ends in "…" before
+   them. From UX audit F4 until 2026-10-29 they stood at the column's right
+   edge, far from a short line (Max: "looked odd"). */
 .agent-vm .agent-vm-target {
-  flex: 0 1 auto; min-width: 0; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 0; border-radius: 0; background: none; color: inherit;
   font-family: var(--font-mono); font-size: var(--font-size-xs);
 }
@@ -1014,10 +1015,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @media (pointer: coarse) { .agent-page-open { min-height: 36px; } }
 .agent-page-open:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* Live: one row, the picture a small tile at its start. */
-.agent-progress .agent-page-body { flex-direction: row; align-items: center; max-width: 420px; }
-.agent-progress .agent-page-shot { width: 64px; margin: 8px 0 8px 8px; border-radius: var(--radius-xs); }
-.agent-progress .agent-page-info { flex: 1; padding: 8px 10px; }
+/* The page the browser shows, pinned under the run's line (agent-activity.js
+   pinPage): it stays while the lines below fold, the answer comes and after
+   it; the open timeline holds it in its order instead. One row, the picture
+   a small tile at its start. */
+.agent-page-pin { margin: calc(-1 * var(--space-2)) 0 var(--space-5); }
+.agent-page-pin[hidden], .agent-activity[open] ~ .agent-page-pin { display: none; }
+.agent-page-pin:not([hidden]) + .agent-progress { margin-top: calc(-1 * var(--space-2)); }
+.agent-page-pin .agent-page-body { flex-direction: row; align-items: center; max-width: 420px; }
+.agent-page-pin .agent-page-shot { width: 64px; margin: 8px 0 8px 8px; border-radius: var(--radius-xs); }
+.agent-page-pin .agent-page-info { flex: 1; padding: 8px 10px; }
 @media (prefers-reduced-motion: reduce) {
   .agent-page-card:not(.is-shot-ready) .agent-page-shot::after { animation: none; background: none; }
 }

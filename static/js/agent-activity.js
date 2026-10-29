@@ -742,6 +742,23 @@
     open.textContent = App.t('Open');
     open.setAttribute('aria-label', App.t('Open the browser'));
   }
+  // The page the browser shows (2026-10-29, Max: the card folded away with
+  // the earlier steps while the browser was still open, and that was weird):
+  // one card under the run's line with the page opened last, changed in place
+  // when the agent opens another, still there while the answer comes and
+  // after it; a page that did not open leaves the one before. The timeline
+  // keeps a card per page; open, it holds this one too.
+  function pinPage(view, tools) {
+    const page = tools.findLast(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
+    if (!page) { view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return; }
+    if (!view.pinCard) {
+      view.pinCard = pageCard('agent-page-pinned');
+      view.pin.replaceChildren(view.pinCard);
+      view.pin.hidden = false;
+      if (view.running || page.status === 'running') reveal(view.pinCard);
+    }
+    updateCard(view.pinCard, page);
+  }
   function updateVm(details, item) {
     if (details.classList.contains('agent-page-card')) { updateCard(details, item); return; }
     const signature = JSON.stringify([item.status, item.command, item.path, item.output, item.output_truncated,
@@ -1031,6 +1048,9 @@
       vmRestoreEl.className = "agent-vm-restore audit-only";
       vmRestoreEl.textContent = "Restore the workspace to before this message";
       vmRestoreEl.hidden = true;
+      // The page the browser opened last, under the run's line: it stays while
+      // the run goes on, the answer comes and after it (pinPage).
+      const pin = document.createElement('div'); pin.className = 'agent-page-pin'; pin.hidden = true;
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
       // A line that changes swaps its text node, an addition: "text" as well
@@ -1055,8 +1075,8 @@
       details.append(summary, history);
       // Progress shows at the model icons in the summary (agent-chat.css,
       // "Progress at the models"), not on a line of its own.
-      host.replaceChildren(details, preview);
-      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, vmRestoreEl, preview, nodes: new Map(), previewNodes: new Map() };
+      host.replaceChildren(details, pin, preview);
+      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, vmRestoreEl, pin, preview, nodes: new Map(), previewNodes: new Map() };
       vmRestoreEl.addEventListener('click', () => host._agentActivity.vmRestore?.());
       summary.addEventListener('click', event => {
         event.preventDefault();
@@ -1132,11 +1152,14 @@
     // from announcing the entire history again whenever a new paragraph arrives.
     // The latest plan stands above the live progress, never in its order.
     const plan = tools.findLast(item => hasPlan(item) && item.status !== 'failed');
+    pinPage(view, tools);
     const paragraphs = events.flatMap(item => holds.includes(item) ? [{id:`hold:${item.id}`, kind:'hold', item}]
       : progress.includes(item)
       ? [{id:item.id, text:item.text, kind:item.from_user ? 'user' : 'progress'}]
       : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
         : tools.includes(item) && item.name === 'update_plan' ? []
+        // An opened page stands pinned above the lines (pinPage), not among them.
+        : tools.includes(item) && opensPage(item) ? []
         : tools.includes(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
         : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && !held && item === activeTool},

@@ -187,15 +187,23 @@ of the `browser` tool as a card (`.agent-page-card`, `pageCard`; before, a
 checked by `agent_browser.preview_url` and reported into the activity only,
 never into the agent's result), title, "host · opened in the browser" and
 Open; while it opens the picture's place waits in the skeleton's light; in
-the timeline the picture stands on top, in the live lines it is a small tile
-at the start of one row (they fold, a tall card would make the page jump);
+the timeline the picture stands on top. The page opened last also stands
+pinned under the run's line (`.agent-page-pin`, `pinPage`, one row with a small
+tile; open steps are no live lines since 2026-10-29): it changes in place when
+the agent opens another page (one that fails leaves the one before), stays
+while the earlier steps fold, the answer comes and after the run (saved turns
+too) and hides only while the timeline is open, which holds it in its order
+(Max: it folded away while the browser was still open);
 and `agent-delegation.js` the run
 header's shortcut (`.agent-workspace-toggle`, shown once a VM step stands in
 the run). From 1100px the panel docks beside the chat (`workspace-view-docked`,
 `--workspace-width`, a draggable `.workspace-view-resizer` remembered in
 `localStorage`); where the open activity panel would leave it under
 `MIN_WIDTH` it lies over that panel (`workspace-view-covers`, UX audit
-2026-10-29 G1), and its head wraps by its own width (container query). All `.workspace-only` (body class
+2026-10-29 G1), and its head wraps by its own width (container query). It
+comes in and, since 2026-10-29, leaves the way the activity panel does (Apple
+audit C5: 12 px and a fade; `close` holds its place inline, `.is-leaving`,
+removed on `animationend`), before that it was gone at once. All `.workspace-only` (body class
 `viewer-has-workspace` set by `firebase.js`). Details in `docs/agent-mode.md`
 ("Arbeitsplatz").
 
