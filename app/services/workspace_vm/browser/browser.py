@@ -97,6 +97,18 @@ CONNECT_SECONDS = 15
 RESTART_SECONDS = 30
 OPEN_SECONDS = 30
 LOADED_SECONDS = 10
+# After a navigation, how long the network may take to rest (loaded).
+IDLE_SECONDS = 2
+# Without a navigation (quiet, since 2026-10-30): an action's effect is
+# there once the page has not changed for QUIET_MS since the action and no
+# request it started is open, at most QUIET_SECONDS; after a scroll or a key
+# other than Enter and Space BRIEF_QUIET_MS and BRIEF_SECONDS. Looked at
+# every POLL_SECONDS while a request is open.
+QUIET_MS = 300
+QUIET_SECONDS = 1.0
+BRIEF_QUIET_MS = 100
+BRIEF_SECONDS = 0.3
+POLL_SECONDS = 0.05
 # The Tasks API hold that keeps the VM awake after a call (stay_awake), and
 # what the server's rest leaves of it at the end of a message.
 AWAKE_TASK = "consens-browser-awake"
@@ -365,9 +377,13 @@ IS_SECRET_JS = r"""el => el.type === 'password' || /password/i.test(el.autocompl
 # box gives every square's), and watches the page; "after" lists what
 # changed since, nearest to the points first. A change inside a shadow root
 # or a frame is no change here: what a canvas, a frame or a video shows is
-# compared as a picture (look_at).
+# compared as a picture (look_at). Since 2026-10-30 every action on the page
+# in front has this watch: "refs" names the elements it acts on, whose
+# middles count as its points for "after" (the nearest changes first), and
+# "idle" says how long the page has not changed (quiet: the action's effect
+# is there once it rests; ``fresh`` counts from now, the action's end).
 HIT_JS = r"""
-({mode, points, limit}) => {
+({mode, points, limit, refs}) => {
   const KEY = '__consensHit';
   if (mode === 'after') {
     const state = window[KEY];
@@ -446,11 +462,20 @@ HIT_JS = r"""
   };
   const old = window[KEY];
   if (old && old.observer) old.observer.disconnect();
+  // The middles of the elements the action is on (a click on a ref).
+  const around = [];
+  for (const ref of Array.isArray(refs) ? refs : []) {
+    const el = /^e\d+$/.test(ref) ? document.querySelector('[data-consens-ref="' + ref + '"]') : null;
+    if (!el) continue;
+    const [left, top, right, bottom] = box(el);
+    if (right > left && bottom > top) around.push([(left + right) / 2, (top + bottom) / 2]);
+  }
   // Element -> how it changed; a busy page counts the rest without them,
   // each once.
   const changed = new Map(), beyond = new WeakSet();
-  let more = 0;
+  let more = 0, last = performance.now();
   const note = (el, kind, what) => {
+    last = performance.now();
     let entry = changed.get(el);
     if (!entry) {
       if (changed.size >= 500) {
@@ -475,7 +500,7 @@ HIT_JS = r"""
       if (!target || !inPage(target)) continue;
       if (record.type === 'attributes') {
         // read's own marks on an element are no change of the page.
-        if (!/^data-consens-(ref|frame)$/.test(record.attributeName)) note(target, 'changed', record.attributeName);
+        if (!/^data-consens-/.test(record.attributeName || '')) note(target, 'changed', record.attributeName);
       } else if (record.type === 'characterData') {
         note(target, 'changed', 'text');
       } else {
@@ -495,10 +520,11 @@ HIT_JS = r"""
   const observer = new MutationObserver(take);
   // A call that never asks again leaves no watch behind.
   const timer = setTimeout(() => observer.disconnect(), 120000);
-  const report = (near, size) => {
+  const report = (points, size) => {
     take(observer.takeRecords());
     observer.disconnect();
     clearTimeout(timer);
+    const near = (Array.isArray(points) ? points : []).concat(around);
     const distance = ([left, top, right, bottom]) => Math.min(...near.map(([x, y]) =>
       Math.hypot(Math.max(left - x, 0, x - right), Math.max(top - y, 0, y - bottom))));
     const shown = [], gone = [];
@@ -523,9 +549,26 @@ HIT_JS = r"""
     shown.sort((a, b) => a.distance - b.distance);
     return {count, changed: shown.slice(0, size).map(({distance, ...item}) => item), removed: gone.slice(0, size)};
   };
+  // Milliseconds without a change; ``fresh``: counted from now at the latest.
+  const idle = fresh => {
+    take(observer.takeRecords());
+    const now = performance.now();
+    if (fresh) last = Math.max(last, now);
+    return now - last;
+  };
   observer.observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
-  window[KEY] = {observer, report};
+  window[KEY] = {observer, report, idle};
   return {view: [innerWidth, innerHeight], at: points.map(at)};
+}
+"""
+
+# quiet: how long the page in front has not changed since the action, or
+# null once its document is another (the watch went with the old one).
+QUIET_JS = r"""
+fresh => {
+  const state = window.__consensHit;
+  const idle = state && typeof state.idle === 'function' ? state.idle(fresh) : null;
+  return typeof idle === 'number' && isFinite(idle) ? Math.round(idle) : null;
 }
 """
 
@@ -731,15 +774,112 @@ def current_page(context):
     return pages[-1]
 
 
-def settle(page):
+def loaded(page, idle=True):
+    """After a navigation (or on a page without a watch), as before
+    2026-10-30: its document, then with ``idle`` up to IDLE_SECONDS for
+    the network to rest."""
     try:
-        page.wait_for_load_state("domcontentloaded", timeout=10_000)
+        page.wait_for_load_state("domcontentloaded", timeout=LOADED_SECONDS * 1000)
     except Exception:
         pass
-    try:
-        page.wait_for_load_state("networkidle", timeout=2_000)
-    except Exception:
-        pass
+    if idle:
+        try:
+            page.wait_for_load_state("networkidle", timeout=IDLE_SECONDS * 1000)
+        except Exception:
+            pass
+
+
+class Traffic:
+    """What a tab sends while an action runs and its effect comes (quiet,
+    since 2026-10-30): a navigation of its main frame, whether it committed
+    or ended (a download, an error), and the requests started since whose
+    answers can change the page and are still open."""
+    KINDS = frozenset({"fetch", "xhr", "script", "document"})
+
+    def __init__(self, page):
+        self.page, self.open = page, set()
+        self.navigation, self.committed, self.ended = None, False, False
+        self._handlers = (("request", self._request), ("requestfinished", self._finished),
+                          ("requestfailed", self._finished), ("framenavigated", self._navigated))
+        for event, handler in self._handlers:
+            with contextlib.suppress(Exception):
+                page.on(event, handler)
+
+    def _request(self, request):
+        with contextlib.suppress(Exception):
+            if request.is_navigation_request() and request.frame == self.page.main_frame:
+                self.navigation = request
+            elif request.resource_type in self.KINDS:
+                self.open.add(request)
+
+    def _finished(self, request):
+        self.open.discard(request)
+        if request is self.navigation:
+            self.ended = True
+
+    def _navigated(self, frame):
+        with contextlib.suppress(Exception):
+            if self.navigation is not None and frame == self.page.main_frame:
+                self.committed = True
+
+    def until_committed(self):
+        """Until the navigation committed or ended, at most LOADED_SECONDS
+        (Playwright hands over its events while it waits)."""
+        deadline = time.monotonic() + LOADED_SECONDS
+        while not (self.committed or self.ended) and (left := deadline - time.monotonic()) >= 0.001:
+            try:
+                self.page.wait_for_timeout(max(1, round(min(POLL_SECONDS, left) * 1000)))
+            except Exception:
+                return
+
+    def stop(self):
+        for event, handler in self._handlers:
+            with contextlib.suppress(Exception):
+                self.page.remove_listener(event, handler)
+
+
+def brief(action, request):
+    """Whether an action's effect is there almost at once (a scroll, a key
+    but Enter or Space, which act like a click)."""
+    return action == "scroll" or (action == "key" and request.get("key") not in {"Enter", "Space"})
+
+
+def quiet(page, traffic, short=False):
+    """Until the page shows an action's effect (since 2026-10-30, audit T4):
+    before, every action waited up to 2 s for the network to rest, which
+    pages with tracking, polling or a websocket never do (a click took a
+    median 1.9 s in Prod), and a page that had rested once got no wait at
+    all, so its answer could come before a menu opened. Now: a navigation of
+    the tab (Traffic) loads as before (loaded); else the page has not
+    changed for QUIET_MS since the action (HIT_JS's watch, a
+    MutationObserver from before the action) and no request it started is
+    open, at most QUIET_SECONDS; ``short`` (a scroll, most keys) for
+    BRIEF_QUIET_MS, at most BRIEF_SECONDS."""
+    still, most = (BRIEF_QUIET_MS, BRIEF_SECONDS) if short else (QUIET_MS, QUIET_SECONDS)
+    deadline, fresh = time.monotonic() + most, True
+    while True:
+        if traffic.navigation is not None:
+            traffic.until_committed()
+            loaded(page)
+            return
+        try:
+            idle = _whole(page.evaluate(QUIET_JS, fresh))
+        except Exception:
+            # Its document went with a navigation.
+            idle = None
+        if idle is None:
+            loaded(page)
+            return
+        fresh = False
+        left = deadline - time.monotonic()
+        if left < 0.001 or (idle >= still and not traffic.open):
+            return
+        # Until it would have rested that long, or a while when a request is open.
+        pause = min(max(POLL_SECONDS, (still - idle) / 1000), left)
+        try:
+            page.wait_for_timeout(max(1, round(pause * 1000)))
+        except Exception:
+            return
 
 
 def saved_sign_in(page):
@@ -1079,18 +1219,20 @@ def drag(page, strokes, seen=None):
     return f"Dragged {count} ({total} points)."
 
 
-def look_at(page, points, first_of=1):
-    """Before a click or drag at x,y (the mouse at its first point): what
-    lies at each point and a watch on the page (HIT_JS), and where a point
-    lies on a canvas, a frame or a video, the picture around it. For
-    hit_report once the action settled; None for a page the agent does not
-    read or one that cannot tell, and the action goes on all the same."""
+def look_at(page, points, first_of=1, refs=()):
+    """Before an action on the page in front (for a click or drag at x,y
+    with the mouse at its first point): a watch on the page (HIT_JS), what
+    lies at each point, and where a point lies on a canvas, a frame or a
+    video, the picture around it; ``refs`` are the elements the action is
+    on. For quiet and for hit_report once the action's effect is there;
+    None for a page the agent does not read or one that cannot tell, and the
+    action goes on all the same."""
     if hidden(page):
         return None
     points = [tuple(pair) for pair in points]
     try:
         found = page.evaluate(HIT_JS, {"mode": "before", "points": [list(pair) for pair in points],
-                                       "limit": CHANGES_SHOWN})
+                                       "limit": CHANGES_SHOWN, "refs": [str(ref) for ref in refs]})
         view = (_whole(found["view"][0]), _whole(found["view"][1]))
         hits = list(found["at"])[:len(points)] if isinstance(found["at"], list) else []
     except Exception:
@@ -1426,6 +1568,10 @@ def call_seconds(request):
             + (DOWNLOAD_SECONDS if action == "download" else 0))
 
 
+# The actions on the page in front that it watches (look_at in act, quiet).
+WATCHED = frozenset({"click", "drag", "type", "select", "upload", "key", "scroll"})
+
+
 def on_page(context, page, action, request, query, caught):
     """``action`` on ``page`` (the tab in front) once the browser is connected."""
     offset = int(request.get("offset") or 0)
@@ -1465,18 +1611,31 @@ def on_page(context, page, action, request, query, caught):
         said = ("The user still has the browser.\n" if user_control() else
                 "The user handed the browser back.\n" if held else "")
         page = current_page(context)
-        settle(page)
+        loaded(page, idle=False)
         return with_preview(page, request, with_picture(page, request, {
             "text": said + read_text(page, 0, AFTER_ACTION_CHARS)}))
-    seen = []
-    done = act(context, page, action, request, seen)
-    page = current_page(context)
-    settle(page)
-    if seen:
+    # An action on the page in front: its watch (look_at, in act) and the
+    # tab's requests (Traffic) until its effect is there (quiet). One that
+    # loads a page (open, back, forward), brings another tab to the front, or
+    # has no watch, waits as before (loaded).
+    seen, watch = [], None
+    traffic = Traffic(page) if action in WATCHED else None
+    try:
+        done = act(context, page, action, request, seen)
+        watch = seen[0] if seen else None
+        if traffic is not None and watch is not None:
+            quiet(page, traffic, short=brief(action, request))
+    finally:
+        if traffic is not None:
+            traffic.stop()
+    acted, page = page, current_page(context)
+    if watch is None or page is not acted:
+        loaded(page, idle=action != "tab")
+    if watch is not None:
         # The action ran: what the page answers about it never fails
         # its answer (the agent would take it again, a send twice).
         try:
-            report = hit_report(seen[0], page)
+            report = hit_report(watch, page)
         except Exception:
             report = ""
         done = "\n".join(filter(None, (done, report)))
@@ -1540,8 +1699,12 @@ def with_picture(page, request, answer):
 
 
 def act(context, page, action, request, seen=None):
-    """One action that changes the page; returns what it did. A click or
-    drag at x,y puts what lay at its points into ``seen`` (look_at)."""
+    """One action that changes the page; returns what it did. An action on
+    the page in front puts its watch into ``seen`` (look_at, just before it
+    acts), a click or drag at x,y with what lay at its points."""
+    def watch(refs=()):
+        if seen is not None:
+            seen.append(look_at(page, [], refs=refs))
     if action == "open":
         target = str(request.get("url") or "")
         if not target:
@@ -1568,7 +1731,9 @@ def act(context, page, action, request, seen=None):
         return fetch(context, page, str(request.get("url") or ""))
     if action == "click":
         if request.get("ref"):
-            element(page, request.get("ref")).click(timeout=10_000)
+            target = element(page, request.get("ref"))
+            watch([request.get("ref")])
+            target.click(timeout=10_000)
             return f"Clicked {request.get('ref')}."
         # A place on the page as the screenshot shows it (CSS pixels of the
         # viewport): for what read lists no element of, such as a canvas,
@@ -1589,6 +1754,7 @@ def act(context, page, action, request, seen=None):
         if target.evaluate(IS_SECRET_JS):
             raise Refused("That is a password or code field: only the user types those. Hand the browser to them "
                           "with ask_user (browser) to sign in, then go on.")
+        watch([ref])
         if target.evaluate("el => el.isContentEditable"):
             target.click(timeout=10_000)
             page.keyboard.insert_text(text)
@@ -1603,6 +1769,7 @@ def act(context, page, action, request, seen=None):
     if action == "select":
         ref, choice = request.get("ref"), str(request.get("option") or "")
         target = element(page, ref)
+        watch([ref])
         try:
             target.select_option(label=choice, timeout=5_000)
         except Exception:
@@ -1613,16 +1780,20 @@ def act(context, page, action, request, seen=None):
         # Only a file the server put here for this call.
         if os.path.dirname(os.path.abspath(path)) != os.path.abspath(UPLOADS) or not os.path.isfile(path):
             raise Refused("The file to upload is missing.")
-        element(page, ref).set_input_files(path, timeout=10_000)
+        target = element(page, ref)
+        watch([ref])
+        target.set_input_files(path, timeout=10_000)
         return f"Put {os.path.basename(path)} into {ref}."
     if action == "key":
         key = str(request.get("key") or "")
         if key not in KEYS:
             raise Refused("key takes one of: " + ", ".join(sorted(KEYS)) + ". Text goes in with the action type.")
+        watch()
         page.keyboard.press(key)
         return f"Pressed {key}."
     if action == "scroll":
         direction = -1 if request.get("direction") == "up" else 1
+        watch()
         page.evaluate("d => window.scrollBy(0, d * window.innerHeight * 0.8)", direction)
         return "Scrolled " + ("up." if direction < 0 else "down.")
     if action in {"back", "forward"}:

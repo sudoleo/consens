@@ -302,6 +302,146 @@ def test_a_ref_no_element_has_any_more_brings_the_page_as_it_is_now(tmp_path, mo
         assert answer == {"status": error.status, "text": str(error)} and "URL: https://shop.example/cart" in str(error)
 
 
+# --- T4: an action's effect, without waiting for the network to rest -------------
+
+class Clock:
+    """time as quiet sees it: the test moves it, the page's waits move it."""
+
+    def __init__(self):
+        self.now = 100.0
+
+    def monotonic(self):
+        return self.now
+
+    def time(self):
+        return self.now
+
+
+class Request:
+    def __init__(self, kind="fetch", navigation=False, frame=None):
+        self.resource_type, self.navigation, self.frame = kind, navigation, frame
+
+    def is_navigation_request(self):
+        return self.navigation
+
+
+class Settling:
+    """A tab after an action, as quiet sees it through Playwright: QUIET_JS's
+    answer from the times its DOM changed (seconds after the action), its
+    request events at their times, and its load states."""
+
+    def __init__(self, browser, clock, changes=(), events=(), gone_at=None):
+        self.browser, self.clock, self.changes, self.gone_at = browser, clock, list(changes), gone_at
+        self.start, self.last, self.handlers, self.waited = clock.now, None, {}, []
+        self.events = sorted(events, key=lambda event: event[0])
+        self.main_frame = object()
+
+    def on(self, event, handler):
+        self.handlers.setdefault(event, []).append(handler)
+
+    def remove_listener(self, event, handler):
+        self.handlers[event].remove(handler)
+
+    def _deliver(self):
+        # Playwright hands events over while one of its calls runs.
+        while self.events and self.events[0][0] <= self.clock.now - self.start + 1e-9:
+            _, event, argument = self.events.pop(0)
+            for handler in list(self.handlers.get(event, [])):
+                handler(argument)
+
+    def evaluate(self, script, fresh):
+        assert script == self.browser.QUIET_JS
+        self._deliver()
+        since = self.clock.now - self.start
+        if self.gone_at is not None and since >= self.gone_at:
+            return None
+        if fresh:
+            self.last = since
+        self.last = max([self.last] + [at for at in self.changes if at <= since + 1e-9])
+        return round((since - self.last) * 1000)
+
+    def wait_for_timeout(self, ms):
+        self.clock.now += ms / 1000
+        self._deliver()
+
+    def wait_for_load_state(self, state, timeout):
+        self.waited.append(state)
+
+
+def settle(browser, clock, page, short=False):
+    traffic = browser.Traffic(page)
+    begun = clock.now
+    browser.quiet(page, traffic, short=short)
+    traffic.stop()
+    assert all(not handlers for handlers in page.handlers.values())
+    return round(clock.now - begun, 2)
+
+
+def test_an_actions_effect_is_there_once_the_page_rests_not_once_the_network_does(monkeypatch):
+    """Audit T4: every action waited up to 2 s for the network to rest,
+    which a page with tracking, polling or a websocket never does (a click:
+    median 1.9 s in Prod); a page that had rested once got no wait at all,
+    and the answer could come before a menu opened. Now 300 ms without a
+    change of the page since the action, longer while a request it started
+    is open, at most 1 s; after a scroll or most keys 100 ms, at most 0.3 s;
+    a navigation loads as before."""
+    browser = load()
+    clock = Clock()
+    monkeypatch.setattr(browser, "time", clock)
+    # Nothing changes: the action's end plus 300 ms, no wait for the network.
+    page = Settling(browser, clock)
+    assert settle(browser, clock, page) == 0.3 and page.waited == []
+    # A timer opens a menu after 150 ms: its answer comes after the menu.
+    assert settle(browser, clock, Settling(browser, clock, changes=[0.15])) == 0.45
+    # A request the action started answers after 0.6 s and fills the page.
+    fetch = Request()
+    page = Settling(browser, clock, changes=[0.6], events=[(0.05, "request", fetch), (0.6, "requestfinished", fetch)])
+    assert settle(browser, clock, page) == 0.9
+    # A page that never rests (polling, an animation): 1 s at most.
+    endless = Request()
+    assert settle(browser, clock, Settling(browser, clock, events=[(0.01, "request", endless)])) == 1.0
+    assert settle(browser, clock, Settling(browser, clock, changes=[n / 10 for n in range(30)])) == 1.0
+    # A scroll, a key: almost at once.
+    assert settle(browser, clock, Settling(browser, clock), short=True) == 0.1
+    assert browser.brief("scroll", {}) and browser.brief("key", {"key": "Tab"})
+    assert not browser.brief("key", {"key": "Enter"}) and not browser.brief("click", {"ref": "e1"})
+
+
+def test_a_navigation_loads_as_before(monkeypatch):
+    """A link, a form sent: the tab's main frame asks for a new document;
+    once it committed (or ended: a download, an error) the page loads as
+    before, its document and then up to 2 s for the network."""
+    browser = load()
+    clock = Clock()
+    monkeypatch.setattr(browser, "time", clock)
+    page = Settling(browser, clock)
+    navigation = Request("document", navigation=True, frame=page.main_frame)
+    page.events = [(0.02, "request", navigation), (0.4, "framenavigated", page.main_frame)]
+    assert settle(browser, clock, page) == 0.4 and page.waited == ["domcontentloaded", "networkidle"]
+    # It ends without a new document (a download): no wait for one. (quiet
+    # hears of it at its next look, after the 300 ms it waits anyway.)
+    page = Settling(browser, clock)
+    navigation = Request("document", navigation=True, frame=page.main_frame)
+    page.events = [(0.02, "request", navigation), (0.2, "requestfailed", navigation)]
+    assert settle(browser, clock, page) == 0.3 and page.waited == ["domcontentloaded", "networkidle"]
+    # One that never commits waits LOADED_SECONDS at most.
+    page = Settling(browser, clock)
+    page.events = [(0.02, "request", Request("document", navigation=True, frame=page.main_frame))]
+    assert settle(browser, clock, page) == 0.3 + browser.LOADED_SECONDS
+    # A frame's document is no navigation of the page, but a request whose answer can change it.
+    page = Settling(browser, clock)
+    framed = Request("document", navigation=True, frame=object())
+    page.events = [(0.02, "request", framed), (0.5, "requestfinished", framed)]
+    assert settle(browser, clock, page) == 0.5 and page.waited == []
+    # The watch went with its document: the page loaded anew.
+    page = Settling(browser, clock, gone_at=0.1)
+    assert settle(browser, clock, page) == 0.3 and page.waited == ["domcontentloaded", "networkidle"]
+    # A same-document navigation (a router's pushState) is a change like any other.
+    page = Settling(browser, clock, changes=[0.1])
+    page.events = [(0.1, "framenavigated", page.main_frame)]
+    assert settle(browser, clock, page) == 0.4 and page.waited == []
+
+
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
     browser = load()
     ran = []
