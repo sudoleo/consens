@@ -321,25 +321,22 @@
       trigger.title = modeShown ? "Mode, files and options" : beta ? "Chat options" : "Add attachment";
       trigger.setAttribute("aria-label", trigger.title);
     }
+    const tools = document.getElementById("composerTools");
     const bar = document.getElementById("composerModeBar");
-    if (!bar) return;
+    if (!tools || !bar) return;
     // One rule for every mode and width: the tools belong to the start
-    // screen (the hero, or the Compare start); in a chat they live in the
-    // (+) menu. A docked bar only carries the status of a direct comparison
-    // on screen, never tools.
+    // screen (the hero, or the Compare start), in the field's own row; in a
+    // chat they live in the (+) menu. The bar under the field only carries
+    // the status of a direct comparison on screen, never tools.
     const start = window.App.composer?.isStartScreen?.() ?? document.body.classList.contains("is-hero");
     const summary = beta ? null : window.App.answerReader?.directSummary?.();
     const counts = summary ? window.App.answerReader?.directCounts?.() : null;
-    const wasHidden = bar.hidden;
-    // A bar fading out of the start screen stays until app-core.js lets it go.
-    const leaving = bar.classList.contains("is-leaving");
-    bar.hidden = !start && !summary && !leaving;
-    // The bar rises in when it comes back (a new chat, the Compare start),
-    // never on the first paint, where it is simply there (Apple-Audit B1).
-    if (wasHidden && !bar.hidden) revealBar(bar);
-    bar.dataset.docked = String(!start && !leaving);
-    window.App.attachments?.syncComposerPlacement?.();
-    bar.dataset.runMode = mode;
+    const wasHidden = tools.hidden;
+    tools.hidden = !start;
+    // The tools come in when they come back (a new chat, the Compare start),
+    // never on the first paint, where they are simply there (Apple-Audit B1).
+    if (wasHidden && !tools.hidden) revealBar(tools);
+    bar.hidden = !summary;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const comparisonCount = document.querySelector("#agentComparisonMenuOption .attach-menu-value");
@@ -381,11 +378,6 @@
           : effort?.dataset.available === "true" ? "This model thinks at one fixed level"
             : "This model has no reasoning setting";
       } else reasoningButton.removeAttribute("aria-haspopup");
-    }
-    const attachButton = document.getElementById("composerAttachButton");
-    if (attachButton) {
-      attachButton.disabled = false;
-      attachButton.title = "Add attachment";
     }
     const labels = models.map(pref => {
       const select = document.getElementById(pref.selectId);
@@ -442,10 +434,11 @@
   }
 
   // In audit mode the comparison models review the agent’s work and get a
-  // control of their own (Max, 2026-10-27): on the start screen the marks
-  // in the bar say "2 AIs cross-check", in a chat (no bar) the marks stand
-  // before the chip, which then names the chat model (model-picker.js).
-  // Both open the reviewers' level of the Agent menu.
+  // control of their own (Max, 2026-10-27): their marks stand before the
+  // chip, which then names the chat model (model-picker.js), and say "2 AIs
+  // cross-check" (#composerModelPicker on the start screen,
+  // #composerReviewers in a chat). Both open the reviewers' level of the
+  // Agent menu.
   function renderReviewers(beta, start, count) {
     const auditing = beta && window.App.agentPreferences?.auditing?.() === true;
     const words = auditing ? window.App.words.crossCheck(count, 1) : "";
@@ -469,6 +462,11 @@
       if (auditing) label.dataset.short = shortText; else delete label.dataset.short;
     }
     if (picker) {
+      // On the start screen the marks stand before the chip in every mode
+      // and say who answers; in a chat only the reviewers keep theirs.
+      const wasHidden = picker.hidden;
+      picker.hidden = !start;
+      if (wasHidden && !picker.hidden) revealBar(picker);
       // The name holds the words on screen (WCAG 2.5.3).
       write(picker, "aria-label", auditing ? words : "Configure models for your next question");
       write(picker, "title", auditing ? "Choose the reviewers of the agent’s work" : "Configure models");
@@ -673,12 +671,6 @@
     }
     document.getElementById("reasoningToggle")?.click();
     renderComposerMode();
-  });
-  // Both modes share the upload path: in Agent Beta attachments.js keeps the
-  // file in the composer and agent-workspace.js uploads it to the private
-  // chat store on send. The upload option carries the sign-in check.
-  document.getElementById("composerAttachButton")?.addEventListener("click", function () {
-    document.getElementById("attachUploadOption")?.click();
   });
   // From the (+) menu, which closes: a login dialog gives the focus back to (+).
   document.getElementById("agentReasoningMenuOption")?.addEventListener("click", function (event) {

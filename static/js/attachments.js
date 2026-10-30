@@ -71,23 +71,6 @@
     const questionInput = document.getElementById("questionInput");
     if (!trigger || !menu || !uploadOption || !fileInput || !bar) return;
 
-    // One tray, two homes: the toolbar on the start screen, the composer in a chat.
-    // Move the actual nodes so previews/removal keep their state and handlers.
-    const composerHome = document.createComment("composer-attachments-home");
-    bar.before(composerHome);
-    function syncComposerPlacement() {
-      const toolbar = document.getElementById("composerModeBar");
-      // A docked toolbar (in a chat) carries only a status line; files then
-      // belong above the question in the composer itself.
-      const inToolbar = toolbar && !toolbar.hidden && toolbar.dataset.docked !== "true";
-      const parent = inToolbar ? toolbar : composerHome.parentNode;
-      if (!parent || bar.parentNode === parent) return;
-      const focus = bar.contains(document.activeElement) ? document.activeElement : null;
-      if (inToolbar) toolbar.prepend(bar);
-      else composerHome.after(bar);
-      focus?.focus({ preventScroll: true });
-    }
-
     let pendingFileReads = 0;
     let dragDepth = 0;
     // Auswahlzustand je blockierter Familie vor dem Anhang.
@@ -527,13 +510,12 @@
       return Boolean(window.auth?.currentUser);
     }
     // The login dialog with the reason, as at every door a guest meets
-    // (App.askToLogIn, Apple-Audit H2, H3). The focus goes back to the
-    // control the reader used: the bar's Attach, else (+), whose menu closes.
+    // (App.askToLogIn, Apple-Audit H2, H3). The focus goes back to (+),
+    // whose menu closes.
     function showAttachmentSignIn(source) {
       setMenuOpen(false);
       trackAppEvent("app_attachment_locked_click", { source: source });
-      const used = document.activeElement?.id === "composerAttachButton" ? document.activeElement : trigger;
-      if (window.App?.askToLogIn) window.App.askToLogIn("Log in to add files.", { trigger: used, source: "attachments" });
+      if (window.App?.askToLogIn) window.App.askToLogIn("Log in to add files.", { trigger, source: "attachments" });
       else window.App?.showPopup?.("Log in to add files.");
     }
 
@@ -822,7 +804,6 @@
     }
 
     function renderAttachmentChips() {
-      syncComposerPlacement();
       bar.innerHTML = "";
       const items = window.pendingAttachments;
       bar.hidden = items.length === 0;
@@ -841,8 +822,7 @@
           window.pendingAttachments.splice(index, 1);
           renderAttachmentChips();
           const next = bar.querySelectorAll(".attachment-chip-remove")[Math.min(index, window.pendingAttachments.length - 1)];
-          const toolbar = document.getElementById("composerModeBar");
-          (next || (!toolbar?.hidden && toolbar.dataset.docked !== "true" && document.getElementById("composerAttachButton")) || trigger).focus({ preventScroll: true });
+          (next || trigger).focus({ preventScroll: true });
         });
         chip.appendChild(removeBtn);
 
@@ -904,10 +884,8 @@
       openStored: openAttachmentViewer,
       renderMessageAttachments: renderMessageAttachments,
       markError: markError,
-      refreshCompatibility: syncAttachmentCompatibility,
-      syncComposerPlacement: syncComposerPlacement
+      refreshCompatibility: syncAttachmentCompatibility
     };
-    syncComposerPlacement();
 
     window.clearPendingAttachments = function () {
       invalidateImports();

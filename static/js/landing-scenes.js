@@ -50,7 +50,7 @@
     const composer = scene.querySelector("[data-ask-composer]");
     const chip = scene.querySelector("[data-ask-chip]");
     const send = scene.querySelector("[data-ask-send]");
-    const tools = scene.querySelector(".lp-composer-tools");
+    const leaving = scene.querySelectorAll(".lp-composer-tools, .lp-composer-models");
     if (!text || !composer) return null;
     text.setAttribute("data-i18n-skip", "");
 
@@ -93,9 +93,9 @@
         send.classList.toggle("is-ready", typed >= 1);
         send.classList.toggle("is-pressed", p >= 0.9);
       }
-      // Agent Mode hides the starting toolbar after send, as in /app. Keep
-      // its layout slot so scrolling backwards has a stable progress range.
-      if (tools) tools.classList.toggle("is-sent", p >= 0.9);
+      // After send the start screen's tools and marks leave, as in /app.
+      // They keep their room so scrolling backwards has a stable progress range.
+      leaving.forEach(node => node.classList.toggle("is-sent", p >= 0.9));
     }
 
     return renderAsk;

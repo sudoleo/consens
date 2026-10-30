@@ -32,8 +32,8 @@ describe("A guest at the composer's doors", () => {
     <div id="attachMenu" hidden><button id="attachUploadOption"></button><button id="attachDriveOption" hidden></button>
       <button id="agentComparisonMenuOption"></button></div>
     <input id="attachFileInput" type="file"><div id="attachmentBar" hidden></div></div>
-    <div id="composerModeBar"><p id="composerModeDescription"></p><span id="composerModelIcons"></span>
-      <p id="composerComparisonStatus"></p><button id="composerAttachButton"></button></div></div>`;
+    <div id="composerTools"><p id="composerModeDescription"></p></div><span id="composerModelIcons"></span>
+    <div id="composerModeBar" hidden><p id="composerComparisonStatus"></p></div></div>`;
 
   function guest({ everyone = {} } = {}) {
     const ctx = loadScripts(["static/js/motion.js", "static/js/modal-dialog.js", "static/js/user-settings.js", "static/js/run-mode.js",
@@ -55,16 +55,12 @@ describe("A guest at the composer's doors", () => {
     return ctx;
   }
 
-  it("asks for the login to add a file, from the (+) menu and from the bar", () => {
+  it("asks for the login to add a file from the (+) menu", () => {
     const { window, document } = guest();
     document.getElementById("attachUploadOption").click();
     expect(window.App.askToLogIn).toHaveBeenLastCalledWith("Log in to add files.",
       { trigger: document.getElementById("attachTrigger"), source: "attachments" });
-    const bar = document.getElementById("composerAttachButton");
-    bar.focus();
-    bar.click();
-    expect(window.App.askToLogIn).toHaveBeenLastCalledWith("Log in to add files.", { trigger: bar, source: "attachments" });
-    expect(window.App.askToLogIn).toHaveBeenCalledTimes(2);
+    expect(window.App.askToLogIn).toHaveBeenCalledTimes(1);
   });
 
   it("offers Gmail, Calendar and Drive only where every account has them, and asks for the login there", () => {

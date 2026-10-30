@@ -10,12 +10,13 @@ const BODY = `
   <div id="runModeControl" class="attach-menu-modes"><select id="runModeSelect" hidden>
     <option value="compare">Compare</option></select></div>
   <select id="runModeSetting"><option value="agent">Agent · Beta</option><option value="compare">Compare</option></select>
-  <div id="composerModeBar">
-    <p id="composerModeDescription"></p><span id="composerModelIcons"></span>
-    <p id="composerComparisonStatus"></p>
+  <div id="composerTools">
     <button id="composerReasoningToggle"></button><span id="composerReasoningState"></span>
-    <button id="composerAttachButton"></button>
+    <p id="composerModeDescription"></p>
   </div>
+  <button id="composerModelPicker" aria-label="Configure models for your next question" title="Configure models">
+    <span id="composerModelLabel" hidden></span><span id="composerModelIcons"></span></button>
+  <div id="composerModeBar" hidden><p id="composerComparisonStatus"></p></div>
   <label><input id="reasoningToggle" type="checkbox"></label><button id="attachUploadOption"></button>
   <button id="agentReasoningMenuOption" hidden></button><span id="agentReasoningMenuState"></span>
   <button id="agentComparisonMenuOption" hidden></button>
@@ -75,7 +76,6 @@ describe("agent mode panel projection", () => {
     expect(select.value).toBe('agent');
     // An open Agent chat names its fixed mode on the (+) trigger only.
     expect(document.getElementById('attachTrigger').title).toBe('Chat options');
-    expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('composerReasoningState').textContent).toBe('High');
     document.getElementById('composerReasoningToggle').click();
     // The control that asked travels along (a guest's login dialog gives the focus back to it).
@@ -87,7 +87,7 @@ describe("agent mode panel projection", () => {
       {secondary: true, trigger: document.getElementById('attachTrigger')});
     expect(document.getElementById('agentReasoningMenuState').textContent).toBe('High');
     document.body.classList.add('is-hero');
-    await vi.waitFor(() => expect(document.getElementById('composerModeBar').hidden).toBe(false));
+    await vi.waitFor(() => expect(document.getElementById('composerTools').hidden).toBe(false));
     expect(document.getElementById('reasoningToggle').checked).toBe(false);
     window.App.agentChat.isSelected = () => false;
     window.App.agentChat.modeState = () => ({family: null, canUse: true, pending: false});
@@ -104,66 +104,65 @@ describe("agent mode panel projection", () => {
     expect(window.localStorage.getItem('runMode')).toBe('agent');
     expect(rows.find(row => row.dataset.value === 'agent').getAttribute('aria-pressed')).toBe('true');
     window.App.runMode.set('compare');
-    expect(document.getElementById('composerAttachButton').disabled).toBe(false);
     expect(document.getElementById('agentReasoningMenuOption').hidden).toBe(true);
     expect(document.getElementById('reasoningToggle').closest('label').hidden).toBe(false);
     dom.window.close();
   });
 
-  it("uses one toolbar rule for every mode: tools on the start screen, a docked status line in a chat", async () => {
+  it("uses one rule for every mode: tools and marks on the start screen, only a comparison's status under a chat", async () => {
     const { window, document, dom } = boot();
-    const sync = vi.fn();
-    window.App.attachments = { syncComposerPlacement: sync };
+    const tools = document.getElementById('composerTools');
+    const marks = document.getElementById('composerModelPicker');
     const bar = document.getElementById('composerModeBar');
     document.body.classList.add('is-hero');
     await Promise.resolve();
-    expect(bar.hidden).toBe(false);
-    expect(bar.dataset.docked).toBe('false');
     for (const mode of ['compare', 'agent']) {
       window.App.runMode.set(mode);
-      expect(bar.hidden).toBe(false);
+      expect(tools.hidden).toBe(false);
+      expect(marks.hidden).toBe(false);
+      expect(bar.hidden).toBe(true);
     }
     document.body.classList.remove('is-hero');
     await Promise.resolve();
     for (const mode of ['compare', 'agent']) {
       window.App.runMode.set(mode);
+      expect(tools.hidden).toBe(true);
+      expect(marks.hidden).toBe(true);
       expect(bar.hidden).toBe(true);
     }
-    // A comparison on screen keeps its status line, docked without tools;
-    // attachments follow the bar on every render.
-    window.App.answerReader = {directSummary: () => '2 of 2 ready'};
-    sync.mockClear();
-    window.updateAgentModeUI();
+    // A comparison on screen keeps its status line under the field, no tools.
+    window.App.answerReader = {directSummary: () => '2 of 2 ready', directCounts: () => ({ready: 2, total: 2})};
+    window.App.runMode.set('compare');
     expect(bar.hidden).toBe(false);
-    expect(bar.dataset.docked).toBe('true');
-    expect(sync).toHaveBeenCalled();
+    expect(document.getElementById('composerComparisonStatus').textContent).toBe('2 of 2 ready.');
+    expect(tools.hidden).toBe(true);
     dom.window.close();
   });
 
-  it("shows the starting toolbar, hides it in a chat in every mode and restores it on the start screen", async () => {
+  it("shows the start tools, hides them in a chat in every mode and brings them back on the start screen", async () => {
     const { window, document, dom } = boot();
-    const bar = document.getElementById('composerModeBar');
+    const tools = document.getElementById('composerTools');
     document.body.classList.add('is-hero');
     await Promise.resolve();
-    expect(bar.hidden).toBe(false);
+    expect(tools.hidden).toBe(false);
     document.body.classList.remove('is-hero');
     await Promise.resolve();
-    expect(bar.hidden).toBe(true);
+    expect(tools.hidden).toBe(true);
     window.App.runMode.set('compare');
-    expect(bar.hidden).toBe(true);
+    expect(tools.hidden).toBe(true);
     window.App.runMode.set('agent');
     document.body.classList.add('is-hero');
     await Promise.resolve();
-    expect(bar.hidden).toBe(false);
+    expect(tools.hidden).toBe(false);
+    // Coming back, they rise in (shell.css composer-mode-reveal).
+    expect(tools.classList.contains('is-revealing')).toBe(true);
     dom.window.close();
   });
 
-  it("routes toolbar actions through the original controls and respects a rejected reasoning toggle", () => {
+  it("routes the start tools through the original controls and respects a rejected reasoning toggle", () => {
     const { window, document, dom } = boot();
     const deep = document.getElementById('reasoningToggle');
     const button = document.getElementById('composerReasoningToggle');
-    const upload = vi.fn();
-    document.getElementById('attachUploadOption').addEventListener('click', upload);
     button.click();
     expect(deep.checked).toBe(true);
     expect(button.getAttribute('aria-checked')).toBe('true');
@@ -174,8 +173,6 @@ describe("agent mode panel projection", () => {
     button.click();
     expect(deep.checked).toBe(true);
     expect(button.getAttribute('aria-checked')).toBe('true');
-    document.getElementById('composerAttachButton').click();
-    expect(upload).toHaveBeenCalledOnce();
     dom.window.close();
   });
   it("keeps the mode choice independent of a frozen run and synchronizes selector and settings", () => {
@@ -238,9 +235,7 @@ describe("agent mode panel projection", () => {
   it("gives the reviewers their own control in audit mode", () => {
     const { window, document, dom } = loadScripts(["static/js/app-text.js", "static/js/user-settings.js",
       "static/js/run-mode.js", "static/js/agent-mode.js"], {
-      body: BODY + `<button id="composerModelPicker" aria-label="Configure models for your next question" title="Configure models">
-        <span id="composerModelLabel" hidden></span></button>
-        <button id="composerReviewers" hidden><span id="composerReviewerIcons"></span><span id="composerReviewersLabel"></span></button>`,
+      body: BODY + `<button id="composerReviewers" hidden><span id="composerReviewerIcons"></span><span id="composerReviewersLabel"></span></button>`,
       before(window) {
         window.App = { modelPrefs: [{ key: "OpenAI", label: "OpenAI", provider: "openai", checkId: "openaiCheck",
           selectId: "openaiModelSelect", textId: "openaiModelText", responseId: "openaiResponse" }],
@@ -269,12 +264,14 @@ describe("agent mode panel projection", () => {
     expect(label.textContent).toBe("1 AI cross-checks");
     expect(picker.getAttribute("aria-label")).toBe("1 AI cross-checks");
     expect(picker.title).toBe("Choose the reviewers of the agent’s work");
-    // The start screen has the bar: no second control in the field.
+    // The start screen has its marks before the chip: no second control.
+    expect(picker.hidden).toBe(false);
     expect(reviewers.hidden).toBe(true);
 
     document.body.classList.remove("is-hero");
     window.App.renderComposerMode();
-    expect(document.getElementById("composerModeBar").hidden).toBe(true);
+    expect(document.getElementById("composerTools").hidden).toBe(true);
+    expect(picker.hidden).toBe(true);
     expect(reviewers.hidden).toBe(false);
     expect(reviewers.getAttribute("aria-label")).toBe("1 AI cross-checks");
     // In words beside the marks, and what they do in the tooltip (2026-10-28).

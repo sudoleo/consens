@@ -587,10 +587,12 @@ den Mechanismus verdreht: die Modelle antworten, ein unbeteiligter Judge
 prüft. Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip mehr
 (der Modus steckt im (+)), rechts der Modell-Chip „3 AIs cross-check ⌄“ wie in
 /app (seit 2026-10-23 nennt er, was die Vergleichsmodelle tun, keinen
-Modellnamen); Lippe `partials/composer_toolbar_mockup.html` mit Reasoning
-Auto · Attach · den drei Marken von Daily. Das Wärmepumpen-Beispiel (Szene 01
+Modellnamen); seit 2026-10-30 wie der Start der App eine Fläche, eine Reihe:
+(+) · Reasoning Auto · die drei Marken von Daily vor dem Chip
+(`partials/composer_tools_mockup.html`, `partials/composer_marks_mockup.html`).
+Das Wärmepumpen-Beispiel (Szene 01
 bis zu den Marken 6/6, 4/6) ist ein Lauf mit sechs Modellen und behält sechs
-Marken und „6 AIs cross-check“ (`mockup_full_run`), ohne eigenes Fenster um
+Marken und „6 AIs cross-check“ (`{% set full_run = true %}`), ohne eigenes Fenster um
 Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
 2026-10-02 einen Agent-Turn so nach, wie `agent-activity.js`/`agent-review.js`
 ihn zeichnen: Uhr „Working for …s“ → „Thought for 24s“, Agent-Notizen,
@@ -755,14 +757,15 @@ dieselben Werte samt 95-%-Intervall, die großen Diagramme sind als Scroller
 fokussierbar. `tests/test_benchmark_charts.py` hält Balken und Tabelle gleich.
 Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
-Eingabe-Mockups im Landing-Hero und der Ask-Szene verwenden zusätzlich
-`partials/composer_toolbar_mockup.html`: dieselbe 36-px-Leiste wie die App
-(Reasoning, Attach und sechs gestapelte Provider-Icons; Modus und Check
-contradictions stehen seit 2026-10-02 nicht mehr darin), seitlich
-12 px eingerückt. Der Input liegt wie in `/app` explizit vor der animierten
-Leiste, damit seine abgerundete Unterkante vollständig sichtbar bleibt.
-Im Hero ersetzt sie die separate Provider-Zeile. Die
-Ask-Szene blendet sie beim Senden aus (reservierter Platz stabilisiert die
+Eingabe-Mockups im Landing-Hero und der Ask-Szene setzen die Reihe aus zwei
+Includes zusammen: `partials/composer_tools_mockup.html` (Reasoning Auto, wie
+`#composerTools`, ein `div`, damit die Chip-Worte daneben für die Übersetzung
+ein Satz bleiben; unter 701 px ausgeblendet) und
+`partials/composer_marks_mockup.html` (gestapelte Provider-Icons vor dem Chip,
+wie `#composerModelPicker`). Keine HTML-Kommentare mit Apostroph in diesen
+Templates: `scripts/i18n.py` liest sie sonst als offenen Attributwert. Seit 2026-10-30 hängt keine 36-px-Leiste
+mehr unter dem Feld (früher mit „Attach“). Die Ask-Szene blendet Werkzeuge
+und Marken beim Senden aus (`.is-sent`, reservierter Platz stabilisiert die
 Scroll-Zeitachse); reine Agent-Ergebnis-Mockups bleiben ohne Eingabeleiste.
 Die Vorschau enthält keine scheinbar bedienbaren Schalter; der Hero-Input
 verlinkt weiterhin auf die echte Demo.
@@ -2497,29 +2500,31 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **`agent-mode.js`** — gruppiertes Lauf-Panel (Status-Hub, Timer; die Namen
   „agent-mode" sind historisch und meinen den Consensus-Lauf, nicht Agent Beta),
   der Moduswähler `#runModeSelect` samt Settings-Spiegel `#runModeSetting` und
-  die Composer-Werkzeugleiste `#composerModeBar` direkt unter dem Input:
-  Reasoning (`#composerReasoningToggle`), Upload-Shortcut und
-  Anbieter-Favicons der nächsten Frage.
-  Die Leiste gehört in jedem Modus und jeder Breite zum Startbildschirm (Hero
-  oder Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`).
-  In einem Chat stehen die Werkzeuge im (+)-Menü; nur solange ein Direktvergleich
-  auf dem Schirm steht, bleibt die Leiste angedockt (`data-docked="true"`) als
-  reine Statuszeile ohne Werkzeuge. Sie
-  schließt ohne Abstand unter dem Input an und ist seitlich um 12 px eingerückt.
-  Sie bleibt auf Desktop und Mobile eine einzelne 36-px-Zeile. Die Erklärung
-  ist am Modusschalter als Tooltip/Screenreader-Beschreibung verfügbar;
-  die doppelte Modellzahl entfällt und mobil zeigt der Bereitschaftsstatus die Kurzform.
-  Reasoning und Upload nutzen per Klick die bestehenden Controls
-  (`#reasoningToggle` ohne Gate, Upload mit Plus-Gate). Mobil sind beide reine Icon-Buttons. Ein auf Hero-Wechsel
-  begrenzter Body-Observer synchronisiert Chatstart und „New comparison“
-  samt Anhangsplatzierung.
-  Unter 700px tatsächlicher Leistenbreite kürzt eine Container-Query die Werkzeuglabels,
-  auch neben dem angedockten Reader auf Desktop. Einen eigenen Status-Chip im
-  Input gibt es seit 2026-10-02 nicht mehr (früher `#deepThinkInputIndicator`).
-  Die Modell-Favicons überlappen leicht wie ein Icon-Stapel.
-  Beim Einblenden erscheinen Opazität und 5-px-Versatz über 260 ms; bei
+  die Werkzeuge des Startbildschirms. Seit 2026-10-30 ist der Composer dort
+  **eine Fläche, eine Reihe** (Max): `(+)` · `#composerTools` (Reasoning
+  `#composerReasoningToggle`, Arbeitsplatz `#composerWorkspaceButton`) ·
+  `#composerModelPicker` (Anbieter-Marken der nächsten Frage, im Audit mit
+  „N KIs prüfen mit“) vor dem Modell-Chip · Senden. Die frühere Leiste unter
+  dem Feld samt „Attach“-Knopf ist weg; Dateien kommen über das (+).
+  Werkzeuge und Marken gehören in jedem Modus zum Startbildschirm (Hero oder
+  Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`); in
+  einem Chat stehen die Werkzeuge im (+)-Menü und nur die Prüfer-Marken
+  (`#composerReviewers`) vor dem Chip. Unter 701 px fehlen die Werkzeuge in der
+  Reihe (das (+)-Menü ist dort vollständig). Wird die Reihe eng, geben die
+  Werkzeuge per Container-Query (`composer-tools`, ≤ 290 px) ihre Wörter ab,
+  bevor die Zeile umbricht. `#composerModeBar` unter dem Feld trägt nur noch
+  den Stand eines Direktvergleichs auf dem Schirm („6 of 6 ready“,
+  `#composerComparisonStatus`) und ist sonst `hidden`. Die Erklärung des
+  Modus steht als Screenreader-Beschreibung `#composerModeDescription` in der
+  Werkzeuggruppe. Reasoning nutzt per Klick das bestehende Control
+  (`#reasoningToggle` ohne Gate, in Agent das Effort-Menü des Chips). Ein auf
+  Hero-Wechsel begrenzter Body-Observer synchronisiert Chatstart und „New
+  chat“. Einen eigenen Status-Chip im Input gibt es seit 2026-10-02 nicht mehr
+  (früher `#deepThinkInputIndicator`). Die Modell-Favicons überlappen leicht
+  wie ein Icon-Stapel. Beim Wiederkommen steigen Werkzeuge und Marken mit
+  Opazität und 5-px-Versatz über 260 ms ein (`.is-revealing`); bei
   `prefers-reduced-motion` entfällt die Animation. Der lange Folgeturn-Hinweis
-  `#modeNotice` ist entfernt, damit die Leiste kompakt bleibt.
+  `#modeNotice` ist entfernt.
   `window.App.renderComposerMode()` synchronisiert sie mit Settings/Plus-Menü;
   `answerReader.directSummary()` liefert separat die Bereitschaft des sichtbaren
   Direktvergleichs (auch Bookmarks und Fehler). Der Leser aktualisiert die Leiste
@@ -2633,9 +2638,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   eine Bewegung auch für die Form (Apple-Audit C2): die Höhe der Box läuft mit
   (`.chat-input-container.is-morphing`, Bedienzeile an der Unterkante); beim
   Verlassen des Starts wandert die Unterkante (der Thread-Composer steht unten),
-  beim Zurückkehren die Oberkante. Die Werkzeugleiste blendet unter dem Feld
-  aus (`#composerModeBar.is-leaving`, aus dem Fluss, 150 ms), die Begrüßung
-  über `visibility` in der Transition, der Hinweis des leeren Feldes kommt am
+  beim Zurückkehren die Oberkante. Die Werkzeuge des Starts stehen in der
+  Reihe der Box und gehen mit dem Wechsel, die Begrüßung blendet über
+  `visibility` in der Transition aus, der Hinweis des leeren Feldes kommt am
   Ende. `body.composer-gliding` hält dabei `composer-collapse.js` (keine eigene
   Höhenanimation) und die Thread-Reserve still; ein zweiter Aufruf ohne
   Grenzwechsel lässt eine laufende Bewegung in Ruhe. Die Agent-Demo
@@ -2670,13 +2675,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   denselben Namen statt „Loading models…“, bis die Liste da ist, und die Zahl
   `+N` steht schon, solange die Verknüpfung noch wartet), Consensus-Chip,
   Reasoning-Wort (`data-seeded` bis `agent-chat.js` die Stufen gezeichnet hat),
-  die Anbieter-Marken der Werkzeugleiste (aus `MODEL_FAMILIES` und den
+  die Anbieter-Marken vor dem Chip (aus `MODEL_FAMILIES` und den
   gespeicherten Familien, `#composerModelIcons[data-providers]`; `agent-mode.js`
   behält dieselben Knoten), die Familien-Checkboxen, „Try the demo“ (steht jetzt
   im Template, `hidden`; `demo.js` verdrahtet es nur), Senden (im Template
   `disabled`), ein wartender Gast-Entwurf samt Höhe und `--starters-room`,
   Skelette für Chatliste und Konto-Fuß bei wiederherzustellender Sitzung und auf
-  dem Handy der Watches-Punkt am Menü. Die Werkzeugleiste steigt nur beim
+  dem Handy der Watches-Punkt am Menü. Werkzeuge und Marken steigen nur beim
   Wiederkommen ein (`.is-revealing`), nie beim ersten Paint. Der Umschalter heißt
   immer „Chat“, der Sidebar-Knopf immer „New chat“ (Max, H3); im mobilen Kopf
   wird der Umschalter nie gezeichnet (er lebt im Menü), die leere rechte Insel
@@ -4385,8 +4390,8 @@ Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset
 Metering-Katalog ergänzt die gemeinsame Registry automatisch um aktuelle
 Provider-Metadaten; neue Admin-Einträge benötigen keinen zusätzlichen Codeeintrag.
 
-Die gemeinsame `#composerModeBar` ist wie in jedem Modus nur auf dem Startbildschirm
-sichtbar. Nach Chatstart nutzt Beta das vorhandene `#attachMenu`: Agent-Status verwendet
+Die Werkzeuge in der Reihe (`#composerTools`) sind wie in jedem Modus nur auf dem
+Startbildschirm sichtbar. Nach Chatstart nutzt Beta das vorhandene `#attachMenu`: Agent-Status verwendet
 dieselben Controls, `#agentReasoningMenuOption` öffnet die Denkstufe des Chatmodells
 und `#agentComparisonMenuOption` die Vergleichsebene, beide im selben Menü des
 Agent-Chips (ebenso die Composer-Notiz `compare`/`choose-model`; ihre Notizen
@@ -7468,11 +7473,12 @@ Chevron). Das (+)-Menü `#attachMenu` hat seit
 2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·
 Label (höchstens eine kurze Zeile darunter) · Wert mit Chevron oder Schalter;
 „Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Ab 701 px
-steht jede Einstellung nur einmal: Reasoning, Comparison models und Google
-data schaltet die Leiste unter dem Feld (`#composerModeBar`), das (+)-Menü
-trägt dort den Modus und Dateien; auf dem Handy (Leiste nur mit Icons) bleibt
-das Menü vollständig. Reasoning trägt überall
-denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Leiste stehen
+steht jede Einstellung nur einmal: Reasoning, Arbeitsplatz und die
+Vergleichsmodelle stehen auf dem Startbildschirm in der Reihe des Feldes
+(`#composerTools`, `#composerModelPicker`), das (+)-Menü trägt dort den Modus
+und Dateien; auf dem Handy (ohne Werkzeuge in der Reihe) und in einem Chat
+bleibt das Menü vollständig. Reasoning trägt überall
+denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Reihe stehen
 Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
 stehen seit 2026-10-22 in ihren eigenen Farben (auch im Landing-Mockup
 `.lp-composer-model`): bei 14 px erkennt man eine Marke an der Farbe, und auf
@@ -7735,13 +7741,10 @@ wie die Antworten. Eine explizite Wahl (`App.runMode.set`) ueberschreibt den
 Default dauerhaft.
 
 ### Attachments (alle Konten seit 2026-10-02)
-Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips in
-der Leiste unter dem Eingabefeld. `attachments.js` verschiebt dieselbe
-`#attachmentBar` auf dem Startbildschirm in die `#composerModeBar`; in einem Chat
-(Leiste verborgen oder nur angedockt) steht sie in jedem Modus an ihrem
-Composer-Anker oberhalb des Felds, auch im eingeklappten Handy-Composer. `App.attachments.syncComposerPlacement()` wird beim Toolbar-Rendering
-und Attachment-Rendering aufgerufen; Fokus, Datei-Bytes und Listener bleiben
-erhalten. Neue Dateien oeffnen einen eingeklappten mobilen Composer. Beim Senden
+Noch nicht gesendete Dateien stehen als kompakte Vorschau-/Entfernen-Chips
+oberhalb der Frage im Feld (`#attachmentBar`), seit 2026-10-30 auch auf dem
+Startbildschirm (früher in der Leiste darunter), in jedem Modus und auch im
+eingeklappten Handy-Composer. Neue Dateien oeffnen einen eingeklappten mobilen Composer. Beim Senden
 geht die vorhandene Metadaten-Uebergabe weiterhin an die jeweilige Frage; leere
 Entwuerfe und gespeicherte Nachrichten zeigen keine bearbeitbaren Datei-Chips.
 `css/composer-attachments.css` gestaltet ausschliesslich den Composer-Tray;
@@ -11497,7 +11500,8 @@ und `body.is-guest` (seit 2026-10-15, Gäste tippen). Solange eine gespeicherte 
 noch wiederhergestellt wird (Auth unbekannt, `id_token` vorhanden), lässt
 `updateQuestionInputAccess` den Platzhalter stehen — vorher wechselte er beim
 Reload Vorlage → „Sign in…“ → „Enter your question“ → Agent-Text.
-`#composerModeBar` ist im Template sichtbar (Startbildschirm).
+`#composerTools` und `#composerModelPicker` sind im Template sichtbar
+(Startbildschirm), `#composerModeBar` ist `hidden` (nur Direktvergleich).
 Inter wird in `index.html` vorgeladen, bis dahin setzt „Inter Fallback“ (Arial
 mit Inter-Metriken, `typography.css`) den Text ohne Umbruchänderung;
 `.sidebar-content` reserviert eine dünne Scrollbar-Rinne.

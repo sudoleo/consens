@@ -549,7 +549,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Composer bleiben neben der Sidebar sichtbar. Light/Dark, eingeklappte
       Navigation, Expand, Zweiervergleich und Fragewechsel prüfen; auf Touch
       bleiben Bedienelemente mindestens 44 px hoch, Schließen/Expand auch breit.
-- [ ] Anhänge: PDF/Text/Bild im neuen Chat unter dem Feld in der Toolbar;
+- [ ] Anhänge: PDF/Text/Bild im neuen Chat über (+) → „Dateien hinzufügen“,
+      die Chips stehen über der Frage im Feld;
       Vorschau und Entfernen separat per Tastatur/Touch erreichbar. Lange Namen
       und zwei Dateien passen in Light/Dark bei 390 px. Nach dem Senden stehen
       Dateien an der Frage. Agent-Toolbar bleibt verborgen; neue Folgefrage-
@@ -696,7 +697,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „New chat“ bringt sie zurück. Der Composer ist in beiden Modi
       derselbe: (+) links (auf dem Startbildschirm unter dem Feld, im
       Desktop-Chat vor dem Feld), Modelle und Senden rechts; auch der Compare-Start mit den
-      leeren Antwortkarten zeigt ihn so, samt Werkzeugleiste. Der Modell-Chip
+      leeren Antwortkarten zeigt ihn so, samt Werkzeugen in der Reihe
+      (Nachdenken, Arbeitsplatz) und den Marken vor dem Chip; unter dem Feld
+      hängt keine Leiste. Der Modell-Chip
       sagt nur, wer antwortet („6 models“), nie „Compare“ und keinen Preset-Namen. Direkt nach dem Laden mit gespeicherter Agent-Wahl
       sendet nichts als Compare, solange der Agent-Zugang noch lädt.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.

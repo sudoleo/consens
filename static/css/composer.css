@@ -5,7 +5,7 @@
    in it. The box itself (surface, edge, shadow) stays in shell.css.
 
      start screen                [ field .......................................... ]
-     (hero, or the Compare       [ (+) ]                      [ models ] [ Demo Send ]
+     (hero, or the Compare       [ (+) ][ tools ]     [ marks ][ models ] [ Demo Send ]
      start with its empty cards)
 
      desktop thread, one line    ( (+) ][ field ............. ][ models ] [ Demo Send )  a pill
@@ -21,14 +21,19 @@
    first group in the (+) menu, not a chip in the row.
    The groups come from the markup (templates/index.html):
      .composer-lead            (+) with its menu (mode, files, options)
+     .composer-tools           start screen only, from 701px: Reasoning and
+                               the workspace written out; in a chat and on a
+                               phone they are in the (+) menu
      .composer-models          who answers, one chip per mode: in Agent the
                                chat model with its comparison models (one
                                menu), else the comparison or consensus
-                               models. In audit mode the chip names the chat
-                               model and the reviewers' marks stand before
-                               it in a chat (.composer-reviewers); on the
-                               start screen they sit in the bar below
+                               models. Their marks stand before it: on the
+                               start screen always (#composerModelPicker),
+                               in a chat the reviewers' (.composer-reviewers).
+                               In audit mode the chip names the chat model
      .input-actions-container  Demo (onboarding only), Send
+   Every setting has one place: what the row shows, the (+) menu leaves out
+   (see "Each setting in one place").
    Everything above the field (files, quote, run notice, Google chips) is a
    full-width row of its own.
    ========================================================================= */
@@ -62,6 +67,30 @@
   min-width: 0;
 }
 
+/* The start screen's tools (agent-mode.js renderComposerMode). They take
+   the room between (+) and the models and give up their words before the
+   row would break: the icons stay, each named by its tooltip and label. */
+.composer-tools {
+  order: 3;
+  container: composer-tools / inline-size;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  /* The size of the chip beside them: one line of small controls. */
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+.composer-tools[hidden] { display: none; }
+@container composer-tools (max-width: 290px) {
+  .composer-tools .composer-tool-label { display: none; }
+  .composer-tools .composer-tool { width: 32px; justify-content: center; padding: 0; }
+}
+@media (max-width: 700px) {
+  .composer-tools { display: none; }
+}
+
 .composer-models {
   order: 4;
   display: flex;
@@ -93,8 +122,11 @@
 
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 230px; flex: 1 1 auto; }
 /* Audit in a chat: the reviewers' marks before the chip, which names the
-   chat model (agent-mode.js renderReviewers). The start screen shows them
-   in the bar under the field instead. Built like the chip beside it. */
+   chat model (agent-mode.js renderReviewers). The start screen shows every
+   mode's marks there instead (#composerModelPicker). Built like the chip
+   beside it. */
+.composer-models > .composer-mode-models { flex: 0 0 auto; font-size: var(--font-size-xs); white-space: nowrap; }
+.composer-models > .composer-mode-models[hidden] { display: none; }
 .composer-reviewers {
   position: relative;
   display: inline-flex; align-items: center; flex: 0 0 auto;
@@ -247,9 +279,6 @@
    stays on the bottom edge: (+) and Send do not move inside it. */
 .chat-input-container.is-morphing { align-content: flex-end; }
 
-/* A docked bar carries only the status of a comparison on screen. */
-.composer-mode-bar[data-docked="true"] .composer-mode-controls { display: none; }
-
 /* ---- Desktop thread: one line while the question fits -------------------
    The field takes the place between the two groups; a second line of text
    (`.is-multiline`, set by the autosizer in app-init.js) returns to the
@@ -311,6 +340,11 @@
   .chat-input-container > .input-actions-container { order: 4; margin-left: 0; }
   .agent-model-picker { max-width: 100%; }
   .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { padding-inline: 8px; }
+  /* The chip already says in words who answers ("3 AIs cross-check"), and
+     its words come first here. The marks stay where they have words of their
+     own (the reviewers in audit mode, as in a chat) or stand in for the chip
+     a guest does not get. */
+  body:not(.is-guest) .composer-models > .composer-mode-models:not(:has(> .composer-tool-label:not([hidden]))) { display: none; }
 }
 /* The narrowest phones: the onboarding Demo button keeps its play mark and
    its accessible name but gives up the word, so the bottom row stays one. */
@@ -499,21 +533,21 @@
 }
 
 /* ---- Each setting in one place --------------------------------------------
-   On a desktop the bar under the field already switches Reasoning and the
-   comparison models, with their state written out.
+   On a desktop start screen the row already switches Reasoning, opens the
+   workspace and the comparison models, with their state written out.
    The (+) menu then only adds files (with the formats it takes). Phones keep
-   the full menu: there the bar shows icons only. */
+   the full menu: there the row has no tools. */
 @media (min-width: 701px) {
-  .input-section:has(> .composer-mode-bar:not([hidden])) .chat-input-container .attach-menu
-    :is(#agentReasoningMenuOption, #agentComparisonMenuOption, .attach-menu-toggle, .attach-menu-divider:not(.attach-menu-mode-divider)) {
+  .chat-input-container:has(> .composer-tools:not([hidden])) .attach-menu
+    :is(#agentReasoningMenuOption, #agentComparisonMenuOption, #attachWorkspaceOption, .attach-menu-toggle, .attach-menu-divider:not(.attach-menu-mode-divider)) {
     display: none;
   }
 }
 
 /* ---- Guests ----------------------------------------------------------------
    A guest types first and signs in on Send (composer-invite.js). The models
-   chip would only offer what a guest cannot choose yet; the provider marks in
-   the bar below already say who answers. body.is-guest: app-bootstrap.js
+   chip would only offer what a guest cannot choose yet; the provider marks
+   beside it already say who answers. body.is-guest: app-bootstrap.js
    from the first paint, then app-init.js. */
 body.is-guest .composer-models .consensus-model { display: none; }
 

@@ -301,10 +301,10 @@ def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, 
             page.locator("#attachTrigger").click()
             page.locator("#agentComparisonMenuOption").click()
             asks("Log in to choose your models.", "#attachTrigger")
-        page.locator("#composerReasoningToggle").click()
-        asks("Log in to choose the reasoning.", "#composerReasoningToggle")
-        page.locator("#composerAttachButton").click()
-        asks("Log in to add files.", "#composerAttachButton")
+        else:
+            # From 701px the start screen's row switches Reasoning itself.
+            page.locator("#composerReasoningToggle").click()
+            asks("Log in to choose the reasoning.", "#composerReasoningToggle")
         chip.click()
         asks("Log in to choose your models.", "#agentModelControls .model-picker-display")
 

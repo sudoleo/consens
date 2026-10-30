@@ -9,9 +9,9 @@ const BODY = `<div class="input-section">
     <div id="attachMenu" hidden><button id="attachUploadOption"></button></div>
     <input id="attachFileInput" type="file">
   </div>
-  <div id="composerModeBar" hidden><p id="composerModeDescription"></p>
-    <span id="composerModelIcons"></span><p id="composerComparisonStatus"></p>
-    <button id="composerAttachButton"></button></div>
+  <div id="composerTools"><p id="composerModeDescription"></p></div>
+  <span id="composerModelIcons"></span>
+  <div id="composerModeBar" hidden><p id="composerComparisonStatus"></p></div>
   </div>
   <input id="reasoningToggle" type="checkbox">
   <div id="threadAskAttachments"></div>
@@ -41,26 +41,25 @@ function boot() {
 afterEach(() => contexts.splice(0).forEach(ctx => ctx.window.close()));
 
 describe("composer attachment tray", () => {
-  it("moves the same tray and focused control between the start toolbar, a chat in any mode and a new comparison", async () => {
+  it("keeps the same tray and focused control above the question on the start screen, in a chat and in any mode", async () => {
     const { window, document } = boot();
     const tray = document.getElementById("attachmentBar");
-    const toolbar = document.getElementById("composerModeBar");
+    const field = document.querySelector(".chat-input-container");
     const preview = tray.querySelector(".attachment-chip-preview");
-    expect(tray.parentNode).toBe(toolbar);
+    expect(tray.parentNode).toBe(field);
     preview.focus();
     document.body.classList.remove("is-hero");
     await Promise.resolve();
-    expect(toolbar.hidden).toBe(true);
-    expect(tray.parentNode).toBe(document.querySelector(".chat-input-container"));
+    expect(document.getElementById("composerModeBar").hidden).toBe(true);
+    expect(tray.parentNode).toBe(field);
     expect(tray.hidden).toBe(false);
     expect(document.activeElement).toBe(preview);
-    // In a chat the tray stays above the question in every mode.
     window.App.runMode.set('compare');
-    expect(tray.parentNode).toBe(document.querySelector(".chat-input-container"));
+    expect(tray.parentNode).toBe(field);
     window.App.runMode.set('consensus');
     document.body.classList.add("is-hero");
     await Promise.resolve();
-    expect(tray.parentNode).toBe(toolbar);
+    expect(tray.parentNode).toBe(field);
     expect(tray.querySelector(".attachment-chip-preview")).toBe(preview);
     expect(document.querySelectorAll("#attachmentBar")).toHaveLength(1);
     expect(window.getAttachmentsPayload()[0].data).toBe(FILE.data);
@@ -157,7 +156,7 @@ describe("composer attachment tray", () => {
     expect(document.activeElement).toBe(document.querySelector(".attachment-chip-remove"));
     document.activeElement.click();
     expect(document.getElementById("attachmentBar").hidden).toBe(true);
-    expect(document.activeElement).toBe(document.getElementById("composerAttachButton"));
+    expect(document.activeElement).toBe(document.getElementById("attachTrigger"));
   });
 
   it("shows an Agent upload failure on the pending chip and clears it again", () => {

@@ -1,21 +1,5 @@
-/* Pending files share the material and width of the lower composer toolbar.
-   Sent-message chips keep their own, read-only presentation. */
-.composer-mode-bar:has(> #attachmentBar:not([hidden])) {
-  height: auto;
-  min-height: 36px;
-  flex-wrap: wrap;
-  row-gap: 0;
-}
-.composer-mode-bar > #attachmentBar:not([hidden]) {
-  flex: 1 0 100%;
-  order: -1;
-  margin: 10px 0 2px;
-  padding: 0 0 10px;
-  border-bottom: 1px solid var(--line-soft);
-}
-.composer-mode-bar:has(> #attachmentBar:not([hidden])) .composer-mode-controls {
-  min-height: 36px;
-}
+/* Pending files stand above the question in the field, on the start screen
+   as in a chat. Sent-message chips keep their own, read-only presentation. */
 #attachmentBar {
   min-width: 0;
   gap: 8px;

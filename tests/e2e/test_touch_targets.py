@@ -81,14 +81,15 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
             "next_cursor": None}))
         _pro_account(page)
         page.evaluate("() => window.loadBookmarks()")
-        # The start screen: (+), the models, Send or the demo, the bar under
-        # the field and an example question. The drawing stays 36 / 28 px.
+        # The start screen: (+), the models, Send or the demo and an example
+        # question; Reasoning is in the (+) menu on a phone, and the chip's
+        # words say who answers (no marks beside it). The drawing stays 36 px.
+        expect(page.locator("#composerReasoningToggle")).to_be_hidden()
+        expect(page.locator("#composerModelPicker")).to_be_hidden()
         for selector in ("#attachTrigger", ".composer-models .model-picker-display:visible",
-                         "#composerReasoningToggle", "#composerAttachButton", "#composerModelPicker",
                          ".composer-starter:not([hidden])"):
             assert_tappable(page, selector)
         assert_tappable(page, "#attachTrigger", drawn=[36, 36])
-        assert_tappable(page, "#composerReasoningToggle", drawn=[28, 32])
         send = "#sendButton:visible, .demo-chip:visible"
         assert_tappable(page, send)
         # Send draws its 36px circle in the middle of the 44px box.

@@ -106,10 +106,12 @@
           <span id="heroAskText" class="lp-prompt-text" data-type-loop="Can a heat pump heat our 1978 house with the original radiators?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?"></span>
           <span id="heroAskLabel" hidden>Open the app and ask your own question</span>
           </a>
-          <span class="lp-hero-prompt-bar">
+          <div class="lp-hero-prompt-bar">
             <span class="lp-attach" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
+            {% include "partials/composer_tools_mockup.html" %}
+            {% include "partials/composer_marks_mockup.html" %}
             <span class="lp-run-chip">3 AIs cross-check<i aria-hidden="true"></i></span>
             <a id="heroDemoButton" class="lp-demo-btn demo-action send-glow" href="/app?demo=1"
                data-umami-event="landing_hero_demo_start"
@@ -117,9 +119,8 @@
               <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>
               <span>Try the demo</span>
             </a>
-          </span>
+          </div>
         </div>
-        {% include "partials/composer_toolbar_mockup.html" %}
         </div>
       </div>
     </section>
@@ -139,14 +140,14 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">Agent is where every question starts: it researches, asks several models and writes one answer.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to files and reasoning.</span></p>
+              <p class="lp-lead">Agent is where every question starts: it researches, asks several models and writes one answer.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to your files.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- The field and nothing else: no window, no title bar, no
                    greeting. A frame around the field was a second frame
                    around the first, and the field types a real question
                    into itself, which says what the greeting said.
-                   The field types and the toolbar leaves as the page
+                   The field types and the tools in its row leave as the page
                    scrolls, so a screen reader met an empty or half-typed
                    field: it reads the finished scene from .lp-sr instead,
                    and the moving picture is aria-hidden (a11y audit P2). -->
@@ -158,17 +159,20 @@
                   <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text data-placeholder="Enter your question"></span>
+                    {# The heat-pump run asks six models (partials/composer_marks_mockup.html). #}
+                    {% set full_run = true %}
                     <div class="lp-composer-row">
                       <span class="lp-icon-btn" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                       </span>
+                      {% include "partials/composer_tools_mockup.html" %}
+                      {% include "partials/composer_marks_mockup.html" %}
                       <span class="lp-run-chip" data-ask-chip>6 AIs cross-check<i aria-hidden="true"></i></span>
                       <span class="lp-send send-glow" data-ask-send aria-hidden="true">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                       </span>
                     </div>
                   </div>
-                  {% with mockup_full_run = true %}{% include "partials/composer_toolbar_mockup.html" %}{% endwith %}
                   </div>
                   <p class="lp-composer-foot">Please avoid personal or sensitive data. AI models can make mistakes.</p>
               </div>

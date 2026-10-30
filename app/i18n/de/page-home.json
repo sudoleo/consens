@@ -198,7 +198,7 @@
   "Open the app and ask your own question": "App öffnen und eine eigene Frage stellen",
   "Try the demo: watch one question checked across six AI models": "Demo ausprobieren: Sieh zu, wie eine Frage mit sechs KI-Modellen geprüft wird",
   "Start from one prompt.": "Alles beginnt mit einer Frage.",
-  "Agent is where every question starts: it researches, asks several models and writes one answer.<0> Compare, the answers side by side, waits in the (+) menu, next to files and reasoning.</0>": "Mit Agent beginnt jede Frage: Er recherchiert, fragt mehrere Modelle und schreibt eine Antwort.<0> Vergleich, die Antworten nebeneinander, wartet im (+)-Menü, neben Dateien und Nachdenken.</0>",
+  "Agent is where every question starts: it researches, asks several models and writes one answer.<0> Compare, the answers side by side, waits in the (+) menu, next to your files.</0>": "Mit Agent beginnt jede Frage: Er recherchiert, fragt mehrere Modelle und schreibt eine Antwort.<0> Vergleich, die Antworten nebeneinander, wartet im (+)-Menü, neben deinen Dateien.</0>",
   "02 · Run": "02 · Lauf",
   "The agent shows its work.": "Der Agent legt seine Arbeit offen.",
   "It asks several models in parallel, writes one answer from what they said, and has that answer checked against all of them.<0> Where they contradict each other on a fact, a separate judge reads the sources they cited. Scroll to move the run.</0>": "Er fragt mehrere Modelle parallel, schreibt aus ihren Aussagen eine Antwort und lässt diese Antwort mit allen abgleichen.<0> Wo sie sich bei einer Tatsache widersprechen, liest ein separater Prüfer die Quellen, die sie zitiert haben. Scrolle, um den Lauf voranzubringen.</0>",

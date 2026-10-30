@@ -2642,12 +2642,8 @@ img { display: block; max-width: 100%; }
   .lp-final { gap: 20px; }
 }
 
-/* Shared composer preview: the same 36px starting toolbar as /app. */
+/* Shared composer preview: the start screen of /app, one field, one row. */
 .lp-composer-preview { isolation: isolate; container-type: inline-size; }
-.lp-composer-preview > :is(.lp-prompt, .lp-composer) {
-  /* The input's outer hairline must paint above the animated toolbar. */
-  z-index: 1;
-}
 .lp-hero-composer {
   width: min(680px, 100%);
   margin: clamp(30px, 4.5vw, 46px) auto 0;
@@ -2657,21 +2653,19 @@ img { display: block; max-width: 100%; }
 @media (hover: hover) and (pointer: fine) {
   .lp-hero-composer .lp-prompt.lp-hero-prompt:hover { transform: none; }
 }
+/* The row of the /app start screen (composer.css .composer-tools and the
+   marks before the chip, since 2026-10-30): Reasoning beside (+), the
+   comparison models' marks before the chip. Nothing hangs under the field. */
 .lp-composer-tools {
   --lp-mode-active: var(--agree);
-  position: relative;
-  z-index: 0;
   display: flex;
   align-items: center;
-  gap: 20px;
-  width: calc(100% - 24px);
-  height: 36px;
-  margin: 0 12px;
-  padding: 0 14px;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: var(--lp-field);
-  color: var(--ink-2);
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--ink);
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   line-height: 1.5;
   text-align: left;
   white-space: nowrap;
@@ -2680,40 +2674,49 @@ img { display: block; max-width: 100%; }
   animation: lpComposerToolsIn var(--dur-state) var(--ease-out) backwards;
   transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
 }
-.lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; padding: 3px 6px; }
 .lp-composer-state { font-size: inherit; font-weight: var(--font-weight-regular); color: var(--ink-3); }
 .lp-composer-state.is-on { color: var(--lp-mode-active); }
 .lp-composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.lp-composer-models { display: flex; align-items: center; padding-left: 8px; }
+.lp-composer-models {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding-left: 8px;
+  margin-left: auto;
+  transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
+}
+.lp-composer-models + .lp-run-chip { margin-left: 0; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
 .lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
 .dark-mode .lp-composer-mono { filter: invert(1); }
-.lp-composer-tools.is-sent { visibility: hidden; opacity: 0; }
+/* After send the start screen's tools and marks leave, as in /app; they keep
+   their room so scrolling back has a stable progress range. */
+:is(.lp-composer-tools, .lp-composer-models).is-sent { visibility: hidden; opacity: 0; }
 @keyframes lpComposerToolsIn {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* A phone keeps Reasoning in the (+) menu, as /app does, and leaves the
+   count to the chip's words ("3 AIs cross-check"): no marks beside it. */
 @media (max-width: 700px) {
-  .lp-composer-tool-label { display: none; }
+  .lp-composer-tools { display: none; }
 }
-/* The Ask preview can be narrower than the viewport even on desktop. */
+@media (max-width: 640px) {
+  .lp-composer-models { display: none; }
+}
+/* The Ask preview can be narrower than the viewport even on desktop: the
+   tools give up their words before the row would break. */
 @container (max-width: 480px) {
   .lp-composer-tool-label { display: none; }
 }
-@container (max-width: 300px) {
-  .lp-composer-preview .lp-composer-tools { gap: 8px; }
-}
 @media (max-width: 480px) {
-  .lp-composer-tools { padding: 0 8px; gap: 14px; font-size: var(--font-size-xs); }
-  .lp-composer-tool { gap: 4px; }
-  .lp-composer-models { padding-left: 10px; }
-  .lp-composer-model { width: 22px; height: 22px; margin-left: -10px; }
   /* A single auto-minimum grid track let the benchmark teaser widen the page. */
   .lp-section .bench-hero { grid-template-columns: minmax(0, 1fr); }
   .lp-section .bench-hero > * { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lp-composer-tools { animation: none; transition: none; }
+  .lp-composer-tools, .lp-composer-models { animation: none; transition: none; }
 }
 
 /* Phones: like the /app composer, the models chip takes its own line above

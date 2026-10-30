@@ -499,25 +499,14 @@
   // stands on the bottom, the box shrinks onto its row of controls); coming
   // back the top edge travels (the start field hangs from its top). The
   // empty field's hint changes its place inside the box and shows again
-  // where it ends; the tool bar under the field fades in the first part of
-  // the way, out of the block's flow (.is-leaving, shell.css), and the
-  // greeting fades with it (components-input.css). Nothing in between is
-  // measured again: composer-collapse.js does not animate its own height
-  // while body.composer-gliding is set.
-  // The glide is a layer move (--dur-layer, --ease-out); the bar leaves at
-  // the press tempo (shell.css .is-leaving) and settles just after it.
+  // where it ends, and the greeting fades (components-input.css). The start
+  // screen's tools sit in the box's own row and leave with the change.
+  // Nothing in between is measured again: composer-collapse.js does not
+  // animate its own height while body.composer-gliding is set.
+  // The glide is a layer move (--dur-layer, --ease-out).
   const glideMs = () => window.App.motion?.ms("layer") ?? 320;
   const glideEasing = () => window.App.motion?.ease("out") ?? "cubic-bezier(0.22, 1, 0.36, 1)";
-  const barFadeMs = () => (window.App.motion?.ms("press") ?? 120) + 20;
   let composerGlide = null;
-  let barSettle = null;
-  function settleLeavingBar(bar) {
-    clearTimeout(barSettle);
-    barSettle = null;
-    if (!bar?.classList.contains("is-leaving")) return;
-    bar.classList.remove("is-leaving");
-    window.App.renderComposerMode?.();
-  }
   function endGlide(composer, box) {
     composerGlide = null;
     document.body.classList.remove("composer-gliding");
@@ -528,13 +517,10 @@
   // forced the half-built thread's layout (Apple-Audit D3). Valid for the
   // task that read it.
   let anchoredBox = null;
-  function barShown(bar) {
-    return Boolean(bar && !bar.hidden && bar.getClientRects().length > 0);
-  }
   function anchorGlide() {
     const box = document.querySelector(".input-section .chat-input-container");
     if (!box || anchoredBox) return;
-    anchoredBox = { rect: box.getBoundingClientRect(), bar: barShown(document.getElementById("composerModeBar")) };
+    anchoredBox = { rect: box.getBoundingClientRect() };
     setTimeout(() => { anchoredBox = null; }, 0);
   }
   function glideComposer(change) {
@@ -544,20 +530,13 @@
     const wasHero = body.classList.contains("is-hero");
     const animate = Boolean(composer?.animate && box && !reducedMotion?.matches);
     const before = animate ? anchoredBox?.rect || box.getBoundingClientRect() : null;
-    const bar = document.getElementById("composerModeBar");
-    const fadeBar = animate && wasHero && (anchoredBox ? anchoredBox.bar : barShown(bar));
-    if (fadeBar) bar.classList.add("is-leaving");
     change();
     // A call that does not cross the start screen's edge (the run projecting
     // its thread once more) leaves a running glide alone.
-    if (!animate || wasHero === body.classList.contains("is-hero")) {
-      if (fadeBar) settleLeavingBar(bar);
-      return;
-    }
+    if (!animate || wasHero === body.classList.contains("is-hero")) return;
     // Crossing it again mid-way starts from where the box is drawn now.
     if (composerGlide) composerGlide.forEach(animation => animation.cancel());
     body.classList.add("composer-gliding");
-    if (fadeBar) barSettle = setTimeout(() => settleLeavingBar(bar), barFadeMs());
     requestAnimationFrame(() => {
       if (!composer.isConnected) { endGlide(composer, box); return; }
       // The field's height for its new state, written before the box is read.
@@ -579,7 +558,7 @@
         if (field) animations.push(field.animate([{ opacity: 0 }, { opacity: 0, offset: 0.55 }, { opacity: 1 }],
           { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));
       }
-      // The note under the pill comes in once the bar above it has gone.
+      // The note under the pill comes in once the box has nearly arrived.
       const note = leaving ? composer.querySelector(":scope > .app-footer") : null;
       if (note?.getClientRects().length) animations.push(note.animate([{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1 }],
         { duration: glideMs(), easing: window.App.motion?.ease("linear") ?? "linear" }));

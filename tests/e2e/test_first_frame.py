@@ -48,7 +48,9 @@ SAMPLER = r"""
       demo: shown(document.querySelector('.demo-chip')) ? 'demo' : '-',
       agent: chip('#agentModelControls'),
       consensus: chip('.consensus-model'),
-      reasoning: shown(document.getElementById('composerModeBar')) ? text(document.getElementById('composerReasoningState')) : 'no bar',
+      // Written out on a desktop start screen, in the (+) menu on a phone:
+      // the word is painted from the first frame either way.
+      reasoning: text(document.getElementById('composerReasoningState')),
       marks: document.querySelectorAll('#composerModelIcons .composer-model-icon').length,
       greeting: shown(document.querySelector('.hero-greeting')) ? text(document.querySelector('.hero-greeting')) : '-',
       tab: text(document.getElementById('viewSwitchConsensus')),

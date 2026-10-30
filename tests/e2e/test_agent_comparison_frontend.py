@@ -236,16 +236,24 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.route("**/agent", respond)
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
-        expect(page.locator('#composerModeBar')).to_be_visible()
+        # The marks stand before the chip on a desktop start screen; a phone
+        # leaves the count to the chip's words (composer.css).
+        if width > 700:
+            expect(page.locator('#composerModelPicker')).to_be_visible()
+        else:
+            expect(page.locator('#composerModelPicker')).to_be_hidden()
+        expect(page.locator('#composerModeBar')).to_be_hidden()
         assert page.evaluate("App.runMode.preference()") == 'agent'
         assert page.evaluate("localStorage.getItem('agentMode')") is None
-        # The toolbar Attach opens the same file picker as the (+) menu upload.
-        expect(page.locator('#composerAttachButton')).to_be_enabled()
-        with page.expect_file_chooser():
-            page.locator('#composerAttachButton').click()
         expect(page.locator('#composerSourcesToggle')).to_have_count(0)
-        page.locator('#composerReasoningToggle').focus()
-        page.keyboard.press('Enter')
+        # The start screen's row switches Reasoning; a phone's (+) menu does.
+        if width > 700:
+            page.locator('#composerReasoningToggle').focus()
+            page.keyboard.press('Enter')
+        else:
+            expect(page.locator('#composerReasoningToggle')).to_be_hidden()
+            page.locator('#attachTrigger').click()
+            page.locator('#agentReasoningMenuOption').click()
         expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
         page.locator('.agent-model-picker [data-setting-value="high"]').click()
         expect(page.locator('#agentReasoningEffort')).to_have_value('high')
@@ -273,7 +281,8 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.locator("#questionInput").fill(saved["question"])
         page.locator("#sendButton").click()
         expect(page.locator(".agent-review-status")).to_be_hidden()
-        expect(page.locator('#composerModeBar')).not_to_be_visible()
+        expect(page.locator('#composerTools')).not_to_be_visible()
+        expect(page.locator('#composerModelPicker')).not_to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         expect(page.locator('#attachTrigger')).to_be_visible()

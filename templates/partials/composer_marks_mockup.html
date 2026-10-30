@@ -1,0 +1,9 @@
+{# The comparison models' marks before the chip, as #composerModelPicker on the
+   /app start screen. Daily's three (the app's default since 2026-10-28); the
+   heat-pump example on the landing page is a run with six (full_run). #}
+<span class="lp-composer-models" role="group" aria-label="Comparison model providers">
+  {% set mockup_marks = [('ChatGPT', 'chatgpt.png', true), ('Mistral', 'mistral.png', false), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] if full_run else [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
+  {% for name, icon, mono in mockup_marks %}
+  <span class="lp-composer-model" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+  {% endfor %}
+</span>

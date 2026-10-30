@@ -1770,7 +1770,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   aufgebraucht, 4429 zu oft geöffnet).
 - **Einstiege** wie bisher: im Chat über (+) → „Workspace“
   (`#attachWorkspaceOption`), auf dem Startbildschirm über den Knopf in der
-  Werkzeugleiste (`#composerWorkspaceButton`), über „Öffnen“ auf der Karte
+  Reihe des Feldes (`#composerWorkspaceButton`, ab 701 px), über „Öffnen“ auf der Karte
   jeder Seite, die der Agent öffnet (`agent-activity.js` `.agent-page-card`,
   seit 2026-10-29 mit dem Bild der Seite, Titel und Website; vorher „Live
   ansehen“ an jedem `browser`-Schritt; seit 2026-10-30 zeigt die angeheftete

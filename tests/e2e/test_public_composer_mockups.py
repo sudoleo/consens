@@ -1,4 +1,4 @@
-"""Public input previews stay aligned with the app's starting toolbar."""
+"""Public input previews stay aligned with the app's start screen: one field, one row."""
 from pathlib import Path
 
 import pytest
@@ -39,6 +39,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.goto(phase4_server + '/', wait_until='networkidle')
         page.evaluate('() => document.fonts.ready')
         expect(page.locator('.lp-composer-tools')).to_have_count(2)
+        expect(page.locator('.lp-composer-preview > .lp-composer-tools')).to_have_count(0)
         # The field opens the app with the caret in the composer; only the demo
         # button starts the demo, and it sits above the field's link.
         expect(page.locator('#heroAskField')).to_have_attribute('href', '/app?focus=1')
@@ -51,50 +52,65 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         hit = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id',
             [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
         assert hit == 'heroAskField'
-        # The closing field repeats the hero without a tool lip.
         previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
         # The hero shows Daily's three marks (the app's default since
         # 2026-10-28); the heat-pump scene is a run with six.
         for preview, marks in zip(previews.all(), (3, 6), strict=True):
-            bar = preview.locator('.lp-composer-tools')
-            # The mode lives in the (+) menu (as in /app), so the lip starts
-            # with Reasoning. Its words are its name (a plain span may not
-            # carry an aria-label, test_a11y_axe.py).
-            expect(bar.locator('.lp-composer-tool').nth(0)).to_have_attribute(
-                'title', 'Reasoning auto · the model decides how long to think')
-            assert bar.locator('.lp-composer-tool').nth(0).get_attribute('aria-label') is None
-            expect(bar.locator('.lp-composer-tool')).to_have_count(2)
+            field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
+            tools = field.locator('.lp-composer-tools')
+            # The mode lives in the (+) menu (as in /app), so the row's tools
+            # start with Reasoning. Its words are its name (a plain span may
+            # not carry an aria-label, test_a11y_axe.py).
+            tool = tools.locator('.lp-composer-tool')
+            expect(tool).to_have_count(1)
+            expect(tool).to_have_attribute('title', 'Reasoning auto · the model decides how long to think')
+            assert tool.get_attribute('aria-label') is None
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
-            expect(bar.locator('img')).to_have_count(marks)
-            assert bar.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
-            assert bar.evaluate('el => Math.abs(el.getBoundingClientRect().height - 36) < 1')
-            assert bar.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
-            geometry = bar.evaluate("""el => {
-                const bar = el.getBoundingClientRect(), field = el.previousElementSibling.getBoundingClientRect();
-                return {gap: bar.top - field.bottom, inset: bar.left - field.left, width: field.width - bar.width};
+            # The marks stand inside the field, before the chip.
+            models = field.locator('.lp-composer-models')
+            expect(models.locator('img')).to_have_count(marks)
+            assert models.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
+            assert models.evaluate('el => el.nextElementSibling.classList.contains("lp-run-chip")')
+            # One field, one row: nothing below the field's own edge.
+            assert preview.evaluate("""el => {
+                const field = el.firstElementChild.getBoundingClientRect();
+                return Math.abs(el.getBoundingClientRect().bottom - field.bottom) < 1;
             }""")
-            assert abs(geometry['gap']) < 1
-            assert abs(geometry['inset'] - 12) < 1
-            assert abs(geometry['width'] - 24) < 1
+            if width > 700:
+                expect(tools).to_be_visible()
+                # (+), Reasoning, the marks and the chip share one line.
+                centres = field.evaluate("""el => [':is(.lp-attach, .lp-icon-btn)', '.lp-composer-tool', '.lp-composer-models', '.lp-run-chip']
+                    .map(selector => { const r = el.querySelector(selector).getBoundingClientRect(); return r.top + r.height / 2; })""")
+                assert max(centres) - min(centres) <= 2, centres
+                assert tools.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
+            else:
+                # A phone keeps Reasoning in the (+) menu, as /app does.
+                expect(tools).to_be_hidden()
         output = Path('test-results/public-composer-mockups')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}-{"still" if reduced else "motion"}'
         previews.nth(0).screenshot(path=str(output / f'hero-{suffix}.png'))
-        ask_bar = page.locator('[data-scene="ask"] .lp-composer-tools')
+        # The marks leave with the tools after send. A phone, as /app, leaves
+        # the count to the chip's words and shows no marks.
+        ask_bar = page.locator('[data-scene="ask"] .lp-composer-models')
+        ask_field = page.locator('[data-scene="ask"] .lp-composer')
         if reduced:
-            expect(ask_bar).to_be_visible()
-            assert ask_bar.evaluate('el => getComputedStyle(el).animationName') == 'none'
-            ask_bar.scroll_into_view_if_needed()
+            assert page.locator('[data-scene="ask"] .lp-composer-tools').evaluate('el => getComputedStyle(el).animationName') == 'none'
+            ask_field.scroll_into_view_if_needed()
         else:
             scroll_ask(page, .65)
-        expect(ask_bar).to_be_visible()
+        expect(ask_field.locator('.lp-run-chip')).to_be_visible()
+        if width > 640:
+            expect(ask_bar).to_be_visible()
+        else:
+            expect(ask_bar).to_be_hidden()
         # A screen reader reads the finished scene in words, never a frame
         # of the typing (a11y audit P2).
         expect(page.locator('[data-scene="ask"] .lp-ask-stage')).to_have_attribute('aria-hidden', 'true')
         expect(page.locator('[data-scene="ask"] .lp-sr')).to_contain_text(
             'Can a heat pump heat our 1978 house with the original radiators?')
         previews.nth(1).screenshot(path=str(output / f'ask-{suffix}.png'))
-        if not reduced:
+        if not reduced and width > 640:
             scroll_ask(page, .96)
             expect(ask_bar).to_be_hidden()
             scroll_ask(page, .65)
