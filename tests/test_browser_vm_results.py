@@ -581,7 +581,7 @@ def test_after_an_action_on_the_same_page_only_what_changed_comes(browser):
         "+ [e46] link \"Settings\"")
     # The server reads the page's title and address from it as before (agent_browser._activity).
     shown = agent_browser.BrowserTools._activity(
-        type("Tools", (), {"vm": type("VM", (), {"_outcome": lambda self, result: {}})()})(),
+        type("Tools", (), {"vm": type("VM", (), {"_outcome": lambda self, result: {}})(), "_timing": None})(),
         agent_browser.BrowserArgs(action="click", ref="e1"), {"action": "click", "page": clicked})
     assert shown["page_title"] == "Shop" and shown["page_url"] == "https://shop.example/cart"
 
