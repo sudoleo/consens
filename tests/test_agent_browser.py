@@ -219,6 +219,43 @@ def test_a_download_comes_into_the_chat_folder_and_leaves_the_browser(store, fak
     assert line.endswith(f"-> downloaded {folder}/downloads/invoice (2).pdf")
 
 
+def test_a_download_that_cannot_be_copied_is_skipped_never_the_answer(store, fake_vm, monkeypatch):
+    """A provider hiccup reading the download, a folder of its name in the way
+    or a file named downloads on the workbench cost that one file, as
+    downloads_skipped; before 2026-10-30 the click itself failed and with it
+    the turn (VMUnavailable and VMFileRefused are no ValueError)."""
+    from test_agent_vm import _FakeBackend
+    loop, browser = tools(store)
+    folder = chat_path(loop.chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"][f"{folder}/downloads/report/notes.txt"] = b"a folder named report"
+    read, write = _FakeBackend.read_file, _FakeBackend.write_file
+
+    def flaky_read(self, name, path, *, limit, agent=True):
+        if name == BROWSER and path.endswith("/flaky.pdf"):
+            raise agent_vm.VMUnavailable("read: HTTP 502")
+        if name == NAME and path == f"{folder}/downloads/report":
+            raise agent_vm.VMFileRefused(f"{path} is a folder, not a file.")
+        return read(self, name, path, limit=limit, agent=agent)
+
+    def full_write(self, name, path, data, *, agent=True):
+        if path.endswith("/full.zip"):
+            raise agent_vm.VMFileRefused(f"Permission denied: {path} (your user may not read or write there).")
+        return write(self, name, path, data, agent=agent)
+    monkeypatch.setattr(_FakeBackend, "read_file", flaky_read)
+    monkeypatch.setattr(_FakeBackend, "write_file", full_write)
+    downloaded(fake_vm, ("flaky.pdf", b"%PDF"), ("report", b"data"), ("full.zip", b"zip"), ("ok.txt", b"fine"))
+    result = call(browser, action="click", ref="e4")
+    assert result["action"] == "click" and result["page"].startswith('Page: "Invoices"')
+    # A folder of that name is taken like a file: the download goes next to it.
+    assert result["downloads"] == [{"path": f"{folder}/downloads/report (2)", "bytes": 4},
+                                   {"path": f"{folder}/downloads/ok.txt", "bytes": 4}]
+    assert [item["name"] for item in result["downloads_skipped"]] == ["flaky.pdf", "full.zip"]
+    assert all(item["reason"] for item in result["downloads_skipped"])
+    # The browser stays on for the next call.
+    assert not browser.off
+
+
 def test_only_the_browsers_download_folder_is_copied(store, fake_vm):
     loop, browser = tools(store)
     loop.vm_tools.session.ready(ProviderCancellation())

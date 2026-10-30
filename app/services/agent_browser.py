@@ -575,6 +575,11 @@ class BrowserTools:
                 kept.append({"path": target, "bytes": len(raw)})
             except agent_vm.VMFileMissing:
                 continue
+            except (agent_vm.VMUnavailable, agent_vm.VMFileRefused) as exc:
+                # A provider hiccup or a file in the way costs this file, never
+                # the call (no ValueError: it ended the turn until 2026-10-30).
+                logging.info("Agent browser download not kept category=%s", safe_exception(exc))
+                skipped.append({"name": name, "reason": "it could not be copied into your workspace"})
             finally:
                 try:
                     session.backend.delete_path(self.name, path, agent=False)
@@ -592,6 +597,9 @@ class BrowserTools:
                 session.backend.read_file(session.name, candidate, limit=1)
             except agent_vm.VMFileMissing:
                 return candidate
+            except agent_vm.VMFileRefused:
+                # A folder or an unreadable file of that name: taken as well.
+                continue
         raise ValueError(f"Too many files named {name} in {folder}.")
 
     def _activity(self, args, result):
