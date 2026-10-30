@@ -72,6 +72,31 @@ Suchfeld), falsch bei allem, was Koordinaten oder gleiche Figuren verlangt
 Sicherheit. Ein Ziel außerhalb des Bildes erkannte die begleitende Noul richtig
 (0,01).
 
+## 4. Nachtrag: 17 Entscheidungsmodelle auf 19 Fällen
+
+Die Kategorie ist erst sechs Wochen alt; mehrere Modelle sind jünger als
+Jev 1.14. Dieselben 11 echten Schritte plus 8 live gespeicherte Startseiten
+(bild.de und spiegel.de mit Consent-Dialog darüber, chess.com, GitHub, dwd.de,
+python.org, zwei Wikipedia-Artikel), nur die Wahl:
+
+| Modell | richtig | Median | Preis/Mio. Eingabe |
+| - | - | - | - |
+| openai/gpt-6-luna-decisions | 19/19 | 0,41 s | 0,10 $ |
+| baseten/mammoth-1 (Qwen3.5-27B) | 18/19 | 0,41 s | 0,10 $ |
+| cloudflare/clef (27B) | 18/19 | 0,86 s | 0,24 $ |
+| liquid/d1-ultra | 17/19 | 0,30 s | 0,042 $ |
+| inception/mercury-decide, nace-ai/drex-max | 17/19 | ~0,5 s | 0,02–0,06 $ |
+| perplexity/pplx-decider-v1.2, respan/span-02 | 16/19 | ~0,3–0,4 s | 0,01–0,02 $ |
+| typesafe/jev-1.14, liquid/d1.1, baseten/elephant-1 | 15/19 | 0,3 s (Jev unter Last 1,6 s) | 0,02–0,042 $ |
+| kleinere (Microsoft, Kev 4B, Clef Flash, Joey-1) | 11–14/19 | | |
+
+Der Prüfstein war bild.de: Nur Luna und Mammoth wählten zuerst den
+Consent-Knopf, die anderen „SPORT“ hinter dem Dialog. In der Klickschleife mit
+Verlauf erreichten Luna, Mammoth und d1-ultra bild.de, chess.com und dwd.de
+(spiegel.de: alle HELP); auf chess.com klickten Luna und Mammoth über das Ziel
+hinaus bis „Play“, weil „Ziel erreicht?“ bei allen schwach bleibt. Alle
+Entscheidungsaufrufe beider Runden zusammen: 620 Aufrufe, 0,15 $.
+
 ## Einordnung
 
 - Die Entscheidung ist in der Schleife nicht der Engpass: 80–90 % der Zeit sind
@@ -87,6 +112,9 @@ Sicherheit. Ein Ziel außerhalb des Bildes erkannte die begleitende Noul richtig
   jeder Klick ohnehin denselben Weg wie heute nehmen (Treffer-Rückmeldung,
   Gate) und vor allem, was kauft, sendet oder etwas annimmt, an den Agenten
   zurückgeben.
+
+- Bessere Wähler als Jev gibt es (Luna Decisions, Mammoth-1); sie lösen den
+  Qualitätseinwand, nicht den kleinen Hebel.
 
 **Entscheidung:** nicht bauen. Der größere Hebel bleibt die Zahl der
 Agentenschritte (siehe `docs/agent-workspace-runtime-audit-2026-10-30.md`).
