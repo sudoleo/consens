@@ -689,9 +689,10 @@ class BoardPage:
             return {"view": [1280, 720], "at": self.hits}
         return self.changes
 
-    def screenshot(self, type, clip, caret):
-        # The caret as it is: hiding it sets every field's style, a change.
-        assert caret == "initial"
+    def screenshot(self, type, clip, caret, timeout):
+        # The caret as it is: hiding it sets every field's style, a change;
+        # and soon, never Playwright's 30 s for a page's fonts.
+        assert caret == "initial" and timeout == self.browser.PICTURE_SECONDS * 1000
         self.done.append(("picture", clip["x"], clip["y"], clip["width"], clip["height"]))
         return self.pictures.pop(0)
 
@@ -797,10 +798,11 @@ def test_a_click_on_the_browsers_own_computer_looks_at_nothing():
 
 # --- The resident helper (browser.py --serve, since 2026-10-30) ---------------
 
-def helper_end(browser, said, answer=b""):
-    """A resident helper on the other end of a socket pair: it reads one
-    request line and says ``said``; after TOOK it waits for the call's GO
-    and then sends ``answer``. Returns the call's end and what it got."""
+def helper_end(browser, said, answer=b"", free=True):
+    """A resident helper on the other end of a socket pair: FREE (unless
+    ``free`` is False: busy with another call), one request line, then
+    ``said``; after TOOK it waits for the call's GO and then sends
+    ``answer``. Returns the call's end and what it got."""
     import socket
     import threading
     ours, theirs = socket.socketpair()
@@ -808,6 +810,10 @@ def helper_end(browser, said, answer=b""):
 
     def helper():
         with theirs:
+            if not free:
+                time.sleep(2)
+                return
+            theirs.sendall(browser.FREE)
             line, _ = browser.read_line(theirs, browser.REQUEST_BYTES)
             got.append(json.loads(line))
             if said:
@@ -844,6 +850,13 @@ def test_a_call_hands_its_request_to_the_resident_helper_and_never_runs_it_twice
             assert browser.exchange(conn, click) is None
         assert len(got) == 1
     assert len(started) == 3 and stopped == []
+    # Busy with another call (another chat's wait): not waited for, and no
+    # second helper; the call runs here at once.
+    conn, got = helper_end(browser, b"", free=False)
+    begun = time.monotonic()
+    with conn:
+        assert browser.exchange(conn, click) is None
+    assert time.monotonic() - begun < browser.SERVE_FREE_SECONDS + 1 and len(started) == 3 and got == []
     # Taken and never answered: an action fails, never a second click; a read reads here.
     conn, _ = helper_end(browser, browser.TOOK)
     with conn:
@@ -852,6 +865,8 @@ def test_a_call_hands_its_request_to_the_resident_helper_and_never_runs_it_twice
     with conn:
         assert browser.exchange(conn, {"action": "read"}) is None
     assert len(stopped) == 2
+    # The folder of the scripts keeps its name (FREE is the signal).
+    assert isinstance(browser.HERE, str) and os.path.isfile(os.path.join(browser.HERE, "display.sh"))
 
 
 def test_the_resident_helper_acts_only_on_the_calls_go(monkeypatch):
@@ -880,18 +895,52 @@ def test_the_resident_helper_acts_only_on_the_calls_go(monkeypatch):
             while chunk := ours.recv(65536):
                 data.extend(chunk)
         return go_on, bytes(data)
-    assert ask(line) == (True, browser.TOOK + b'{"status": "ok", "text": "read"}')
+    assert ask(line) == (True, browser.FREE + browser.TOOK + b'{"status": "ok", "text": "read"}')
     assert ran == readied == [request] and left == [True] and browser._sink is browser._to_stdout
-    assert ask(line, go=False) == (True, browser.TOOK) and ran == [request] and len(left) == 2
+    assert ask(line, go=False) == (True, browser.FREE + browser.TOOK) and ran == [request] and len(left) == 2
     # Another version of this file: it ends, the call starts the new one.
-    assert ask(json.dumps({"version": "old", "request": request}).encode() + b"\n") == (False, browser.STALE)
+    assert ask(json.dumps({"version": "old", "request": request}).encode() + b"\n", go=False) == (
+        False, browser.FREE + browser.STALE)
     # Anything else is no request.
-    assert ask(b"GET / HTTP/1.1\r\n\r\n", go=False) == (True, b"")
+    assert ask(b"GET / HTTP/1.1\r\n\r\n", go=False) == (True, browser.FREE)
     # The browser not ready (Chrome or the helper's Playwright broke): it
     # declines and ends; the call runs itself and heals the browser.
     monkeypatch.setattr(browser, "ready", lambda request: False)
-    assert ask(line) == (False, browser.DECLINED)
+    assert ask(line, go=False) == (False, browser.FREE + browser.DECLINED)
     assert ran == [request]
+
+
+def test_a_call_that_ends_before_its_answer_ends_the_action_with_the_helper(monkeypatch):
+    """Review 2026-10-30: the server's limit or Stop ended the call, and the
+    helper went on with the action (a type and Enter still sent). Before,
+    the action was the call's own process and ended with it."""
+    import socket
+    import threading
+    browser = load("browser")
+    exits, acting, released = [], threading.Event(), threading.Event()
+
+    def answer_for(request):
+        acting.set()
+        released.wait(5)
+        return {"status": "ok", "text": "typed"}
+
+    def exit(code):
+        exits.append(code)
+        released.set()
+    monkeypatch.setattr(browser, "answer_for", answer_for)
+    monkeypatch.setattr(browser, "ready", lambda request: True)
+    monkeypatch.setattr(browser, "disconnect", lambda: None)
+    monkeypatch.setattr(browser.os, "_exit", exit)
+    ours, theirs = socket.socketpair()
+    with theirs:
+        ours.sendall(json.dumps({"version": browser.VERSION, "request": {"action": "type"}}).encode() + b"\n")
+        ours.sendall(browser.GO)
+        helper = threading.Thread(target=browser.serve_one, args=(theirs,), daemon=True)
+        helper.start()
+        assert acting.wait(5)
+        ours.close()
+        helper.join(5)
+    assert exits == [1]
 
 
 def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeypatch):
@@ -922,7 +971,6 @@ def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeyp
     browser.disconnect()
     monkeypatch.setattr(browser, "user_control", lambda: True)
     assert browser.ready({"action": "click", "ref": "e1"}) is True and len(made) == 1
-    browser.disconnect()
     # Handed back between ready and the action: the helper's own driver connects, never a second one.
     with browser.chrome() as late:
         assert late is browser.KEPT["browser"] and len(made) == 2
@@ -962,7 +1010,10 @@ def test_the_resident_helper_answers_over_its_socket(tmp_path, monkeypatch):
         other.settimeout(5)
         other.connect(str(tmp_path / "serve.sock"))
         other.sendall(json.dumps({"version": "next", "request": {"action": "read"}}).encode() + b"\n")
-        assert other.recv(64) == browser.STALE
+        said = bytearray()
+        while chunk := other.recv(64):
+            said.extend(chunk)
+        assert bytes(said) == browser.FREE + browser.STALE
     helper.join(5)
     assert not helper.is_alive() and stopped == [True] and not (tmp_path / "serve.sock").exists()
     # None runs: the call runs itself.

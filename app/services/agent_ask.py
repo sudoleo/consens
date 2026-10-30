@@ -39,6 +39,7 @@ it does after a reviewer's halt.
 from __future__ import annotations
 
 import json
+import unicodedata
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -119,8 +120,12 @@ class AskUserArgs(BaseModel):
         if self.choices:
             if self.browser or self.secret:
                 raise ValueError("choices go without browser and secret.")
-            self.choices = [" ".join(choice.split()) for choice in self.choices]
-            if (len(self.choices) < MIN_CHOICES or not all(self.choices)
+            # Without invisible characters (zero-width and the like): "Bot"
+            # and "Bot" with one would be two buttons that read the same.
+            self.choices = [" ".join("".join(char for char in choice if unicodedata.category(char) != "Cf").split())
+                            for choice in self.choices]
+            if (len(self.choices) < MIN_CHOICES or not all(any(char.isalnum() for char in choice)
+                                                           for choice in self.choices)
                     or len({choice.casefold() for choice in self.choices}) < len(self.choices)):
                 raise ValueError(f"choices are {MIN_CHOICES} to {MAX_CHOICES} different answers, none empty.")
         return self

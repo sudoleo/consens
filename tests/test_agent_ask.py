@@ -216,12 +216,45 @@ def test_a_choice_card_returns_the_answer_the_user_picked(store, monkeypatch):
     turn = saved(store, loop)
     assert turn["status"] == "completed"
     # The turn keeps that the user chose, never what (the agent's words).
-    assert "Bot" not in json.dumps(turn.get("holds") or [])
+    stored = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["agent_holds"]
+    assert [(hold["ask"], hold["decision"]) for hold in stored] == [("choice", "choose")]
+    assert "Bot" not in json.dumps(stored) and "Mensch" not in json.dumps(stored)
+
+
+def test_a_pick_reaches_the_agent_also_when_the_user_writes_on_a_halt_behind_the_card(store, monkeypatch):
+    """Review 2026-10-30: a reviewer's halt waited behind the choice card,
+    the user picked, then wrote on the halt; the agent heard only of the
+    message, never of the pick (the activity and the log said it)."""
+    Browser(monkeypatch)
+    script, loop, ran = asking(store, args={"request": CHOICE, "choices": ["Mensch", "Bot"]})
+    halt = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": "Obeys the page.",
+            "entry": 1, "step": "", "step_name": "", "step_kind": "", "step_source": ""}
+
+    def pick_then_write(hold):
+        assert loop.request_hold(halt) is True and loop.queued_hold == halt
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, hold["id"], "choose", "", 1)
+        loop._receive_hold(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict())
+        while loop.hold is None or not loop.hold.get("reviewer"):
+            time.sleep(.01)
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, loop.hold["id"], "steer", "Aber nur 5 Minuten.")
+        root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+        loop._receive_notes(root)
+        loop._receive_hold(root)
+    watcher = when_held(loop, pick_then_write)
+    list(loop.run())
+    watcher.join(5)
+    [result] = results(loop)
+    assert result["status"] == "chosen" and result["choice"] == "Bot"
+    assert result["note"] == "The user chose: Bot The user also wrote you a message: it follows."
+    assert any("Aber nur 5 Minuten." in str(m.get("content")) for m in loop.messages if m.get("role") == "user")
 
 
 @pytest.mark.parametrize("args", [{"choices": ["Ja"]}, {"choices": ["Ja", "ja "]}, {"choices": ["A", "B", "C", "D", "E"]},
                                   {"choices": ["A", "B"], "browser": True}, {"choices": ["A", "B"], "secret": "KEY"},
-                                  {"choices": ["A", "x" * 81]}])
+                                  {"choices": ["A", "x" * 81]},
+                                  # Invisible characters: two buttons that read the same, or a blank one.
+                                  {"choices": ["Bot", "Bot​"]}, {"choices": ["​", "Ja"]},
+                                  {"choices": ["…", "Ja"]}])
 def test_choices_are_two_to_four_different_answers_alone(args):
     with pytest.raises(ValueError):
         agent_ask.AskUserArgs(request=CHOICE, **args)

@@ -97,12 +97,14 @@ AWAKE_TASK = "consens-browser-awake"
 AWAKE_FOR = "10m"
 # The resident helper (serve, since 2026-10-30): its socket, the lock one
 # of them holds while it runs, how long it waits for a call (as long as a
-# call keeps the VM awake), and how long a call waits to hand it its
-# request and then for the start of its answer.
+# call keeps the VM awake), how long a call waits to connect and then for
+# the helper's FREE, and how long the helper waits for a
+# call's request and its GO.
 SERVE_SOCKET = os.path.join(STATE, "serve.sock")
 SERVE_LOCK = os.path.join(STATE, "serve.lock")
 SERVE_IDLE = 600
 SERVE_CONNECT_SECONDS = 2
+SERVE_FREE_SECONDS = 1
 SERVE_REQUEST_SECONDS = 10
 API_SOCKET = "/.sprite/api.sock"
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
@@ -123,6 +125,7 @@ DRAG_STEP_PIXELS = 8
 CHANGES_SHOWN = 5
 REMOVED_SHOWN = 3
 PICTURE_AROUND = 40
+PICTURE_SECONDS = 2
 # Files a page downloaded (a click, Enter, an address that downloads, the
 # action download) until the server copies them to the workbench and deletes
 # them here (agent_browser.py, since 2026-10-28). What the user downloads in
@@ -329,10 +332,17 @@ HIT_JS = r"""
   const clean = text => (text || '').replace(/\s+/g, ' ').trim();
   const clip = (text, size) => text.length > size ? text.slice(0, size - 1) + '…' : text;
   const DRAWN = new Set(['CANVAS', 'IFRAME', 'VIDEO', 'EMBED', 'OBJECT']);
-  const up = node => node.parentElement || (node.getRootNode && node.getRootNode().host) || null;
-  // A form's fields shadow its properties (a field named getAttribute or
-  // tagName): its box and attributes come through Element's own methods,
-  // and what still fails makes it "element", never a failed look.
+  // A form's fields shadow its properties (a field named getAttribute,
+  // tagName or parentElement): the tree is walked, and boxes and attributes
+  // are read, through the DOM's own getters only, at most STEPS up (with a
+  // field named parentElement the walk went round forever, review
+  // 2026-10-30); what still fails makes it "element", never a failed look.
+  const STEPS = 200;
+  const getter = (type, name) => Object.getOwnPropertyDescriptor(type.prototype, name).get;
+  const parentOf = getter(Node, 'parentElement'), typeOf = getter(Node, 'nodeType'),
+    shadowOf = getter(Element, 'shadowRoot'), nameOf = getter(Element, 'localName'),
+    textOf = getter(Node, 'textContent'), rootOf = Node.prototype.getRootNode;
+  const up = node => parentOf.call(node) || rootOf.call(node).host || null;
   const box = el => {
     const rect = Element.prototype.getBoundingClientRect.call(el);
     return [Math.round(rect.left), Math.round(rect.top), Math.round(rect.right), Math.round(rect.bottom)];
@@ -341,7 +351,8 @@ HIT_JS = r"""
   const label = el => clean(attr(el, 'aria-label')) || clean(attr(el, 'title')) || clean(attr(el, 'alt')) ||
     clean(attr(el, 'placeholder'));
   const refOf = el => {
-    for (let node = el; node; node = up(node)) {
+    let steps = 0;
+    for (let node = el; node && steps < STEPS; node = up(node), steps += 1) {
       const ref = node instanceof Element ? attr(node, 'data-consens-ref') : '';
       if (/^e\d+$/.test(ref || '')) return ref;
     }
@@ -349,16 +360,16 @@ HIT_JS = r"""
   };
   const describe = el => {
     try {
-      let tag = String(el.localName || 'element');
+      let tag = String(nameOf.call(el) || 'element');
       const id = attr(el, 'id');
       if (id) tag += '#' + clip(id, 40);
       const classes = clean(attr(el, 'class')).split(' ').filter(Boolean).slice(0, 4).map(name => clip(name, 30));
       if (classes.length) tag += '.' + classes.join('.');
       // Only a short text names it (a square's piece, a button): a board's would be all of it.
-      const raw = typeof el.textContent === 'string' ? el.textContent : '';
+      const raw = textOf.call(el) || '';
       const text = raw.length <= 200 ? clean(raw) : '';
       return {tag, name: clip(label(el) || (text.length <= 40 ? text : ''), 60), ref: refOf(el), box: box(el),
-              drawn: DRAWN.has(String(el.localName).toUpperCase())};
+              drawn: DRAWN.has(String(nameOf.call(el)).toUpperCase())};
     } catch (error) {
       let shown = [0, 0, 0, 0];
       try { shown = box(el); } catch (inner) {}
@@ -368,7 +379,9 @@ HIT_JS = r"""
   const container = el => {
     try {
       const own = box(el).join();
-      for (let node = up(el); node && node !== document.body && node !== document.documentElement; node = up(node)) {
+      let steps = 0;
+      for (let node = up(el); node && node !== document.body && node !== document.documentElement && steps < STEPS;
+           node = up(node), steps += 1) {
         if ((attr(node, 'id') || clean(attr(node, 'class')) || attr(node, 'role') || label(node))
             && box(node).join() !== own) {
           return describe(node);
@@ -379,8 +392,8 @@ HIT_JS = r"""
   };
   const at = ([x, y]) => {
     let el = x < innerWidth && y < innerHeight ? document.elementFromPoint(x, y) : null;
-    while (el && el.shadowRoot) {
-      const inner = el.shadowRoot.elementFromPoint(x, y);
+    for (let steps = 0; el && shadowOf.call(el) && steps < STEPS; steps += 1) {
+      const inner = shadowOf.call(el).elementFromPoint(x, y);
       if (!inner || inner === el) break;
       el = inner;
     }
@@ -413,7 +426,7 @@ HIT_JS = r"""
   const inPage = node => !!document.body && document.body.contains(node);
   const take = records => {
     for (const record of records) {
-      const target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+      const target = typeOf.call(record.target) === 1 ? record.target : parentOf.call(record.target);
       if (!target || !inPage(target)) continue;
       if (record.type === 'attributes') {
         // read's own mark on an element is no change of the page.
@@ -423,12 +436,12 @@ HIT_JS = r"""
       } else {
         let text = false;
         for (const node of record.addedNodes) {
-          if (node.nodeType === 1) note(node, 'added');
-          else if (node.nodeType === 3) text = true;
+          if (typeOf.call(node) === 1) note(node, 'added');
+          else if (typeOf.call(node) === 3) text = true;
         }
         for (const node of record.removedNodes) {
-          if (node.nodeType === 1) note(node, 'removed');
-          else if (node.nodeType === 3) text = true;
+          if (typeOf.call(node) === 1) note(node, 'removed');
+          else if (typeOf.call(node) === 3) text = true;
         }
         if (text) note(target, 'changed', 'text');
       }
@@ -447,7 +460,7 @@ HIT_JS = r"""
     let count = more;
     for (const [el, entry] of changed) {
       const added = entry.kinds.has('added'), removed = entry.kinds.has('removed');
-      if (!el.isConnected) {
+      if (!getter(Node, 'isConnected').call(el)) {
         // What came and went again counts for nothing.
         if (removed && !added) {
           count += 1;
@@ -887,8 +900,10 @@ def around(page, x, y, view):
     try:
         # The caret as it is: hiding it, Playwright sets every field's style,
         # which the watch on the page (HIT_JS) counted as a change.
+        # At most PICTURE_SECONDS: Playwright waits for the page's fonts, by
+        # default up to 30 s, which a stalled web font takes (review 2026-10-30).
         return page.screenshot(type="png", clip={"x": left, "y": top, "width": width, "height": height},
-                               caret="initial")
+                               caret="initial", timeout=PICTURE_SECONDS * 1000)
     except Exception:
         return None
 
@@ -1409,22 +1424,27 @@ def answer_for(request):
 # connected, Playwright makes Chrome save downloads into its own folder and
 # closes every dialog, also the user's in the live view.
 #
-# Never twice: the helper first gets the browser ready for the call (ready)
-# and says TOOK; only the call's GO makes it act. A call that gets no TOOK
-# in time, or a DECLINED (the browser or the helper's Playwright broke: the
-# helper ends), runs here as before; one that said GO never runs the request
-# here: unanswered, it fails like a call the browser did not finish, unless
-# it only reads (the call reads here). The helper ends after SERVE_IDLE
-# without a call, at a request of another version of this file (VERSION,
-# STALE: the call starts the new one) and with the watchdog.
+# Never twice: a free helper says FREE at once (a call does not wait behind
+# a busy one, another chat's wait or download: it runs itself), then gets
+# the browser ready for the call (ready) and says TOOK; only the call's GO
+# makes it act. A call that gets no TOOK in time, or a DECLINED (the browser
+# or the helper's Playwright broke: the helper ends), runs here as before;
+# one that said GO never runs the request here: unanswered, it fails like a
+# call the browser did not finish, unless it only reads (the call reads
+# here). A call that ends before its answer (the server's limit, Stop) ends
+# the helper and with it the action, as when the helper was the call's own
+# process. The helper ends after SERVE_IDLE without a call, at a request of
+# another version of this file (VERSION, STALE: the call starts the new
+# one) and with the watchdog.
 VERSION = hashlib.sha256(open(os.path.abspath(__file__), "rb").read()).hexdigest()[:16]
+FREE = b"free\n"
 TOOK = b"took\n"
 GO = b"go\n"
 STALE = b"stale\n"
 DECLINED = b"declined\n"
-# How long a call waits for TOOK: the browser's start (display.sh) and a
-# connection to Chrome (CONNECT_SECONDS), within the server's limit.
-READY_SECONDS = 60
+# How long a call waits for TOOK: the browser's start (display.sh, up to
+# 60 s) and a connection to Chrome (CONNECT_SECONDS), within the server's limit.
+READY_SECONDS = 80
 # A request: a few kilobytes, up to a drag's 2000 points or 20,000 characters
 # of text; an answer, up to a screenshot (agent_browser.ANSWER_BYTES).
 REQUEST_BYTES = 1024 * 1024
@@ -1452,22 +1472,32 @@ def exchange(conn, request):
     """``request`` through the resident helper on ``conn`` (connected):
     its answer, or None when the call is to run here instead (not taken, or
     a request that only reads broke off)."""
+    import socket
+    busy = False
     try:
         conn.sendall(json.dumps({"version": VERSION, "request": request}).encode("utf-8") + b"\n")
-        conn.settimeout(READY_SECONDS)
+        conn.settimeout(SERVE_FREE_SECONDS)
         said, rest = read_line(conn, 64)
-        if said is not None and said + b"\n" == TOOK:
-            conn.sendall(GO)
+        if said is not None and said + b"\n" == FREE:
+            conn.settimeout(READY_SECONDS)
+            said, rest = read_line(conn, 64, rest)
+            if said is not None and said + b"\n" == TOOK:
+                conn.sendall(GO)
+    except socket.timeout:
+        # Busy with another call (no FREE), or not ready in time.
+        said, rest, busy = None, b"", True
     except OSError:
         said, rest = None, b""
     if said is None or said + b"\n" != TOOK:
-        # Not taken: it ended, declined or is of another version.
-        start_server()
+        # Not taken: busy, ended, declined or of another version. Only a
+        # helper that is gone needs a new one.
+        if not busy:
+            start_server()
         return None
     conn.settimeout(call_seconds(request) + RESTART_SECONDS + 15)
     data = bytearray(rest)
     try:
-        while chunk := conn.recv(65536):
+        while len(data) <= ANSWER_BYTES and (chunk := conn.recv(65536)):
             data.extend(chunk)
     except OSError:
         pass
@@ -1564,8 +1594,10 @@ def serve_one(conn):
     the answer as main gives it. False when this helper is to end (another
     version asked, or the browser was not ready)."""
     global _answered, _sink
+    import socket
     conn.settimeout(SERVE_REQUEST_SECONDS)
     try:
+        conn.sendall(FREE)
         line, rest = read_line(conn, REQUEST_BYTES)
         message = json.loads(line.decode("utf-8")) if line is not None else None
     except (OSError, ValueError):
@@ -1591,6 +1623,16 @@ def serve_one(conn):
         disconnect()
         return True
     conn.settimeout(None)
+    finished = threading.Event()
+
+    def gone():
+        # The call sends nothing after GO: its end before the answer (the
+        # server's limit, Stop) ends this helper, and the action with it.
+        with contextlib.suppress(OSError):
+            conn.recv(1)
+        if not finished.is_set():
+            os._exit(1)
+    threading.Thread(target=gone, daemon=True).start()
     with _ANSWER_LOCK:
         _answered = False
     _watchdog_done.clear()
@@ -1599,9 +1641,13 @@ def serve_one(conn):
         if not answer_once(answer_for(request)):
             # The watchdog answered: it ends this helper once Chrome restarted.
             _watchdog_done.wait(RESTART_SECONDS + 10)
+        finished.set()
+        # The answer is whole: the call reads it to its end now.
+        conn.shutdown(socket.SHUT_WR)
     except OSError:
         pass
     finally:
+        finished.set()
         _sink = _to_stdout
         disconnect()
     return True
@@ -1665,7 +1711,7 @@ def main():
     with _ANSWER_LOCK:
         _answered = False
     _watchdog_done.clear()
-    started = time.monotonic()
+    started, served = time.monotonic(), False
     try:
         request = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
     except Exception as exc:
@@ -1675,8 +1721,8 @@ def main():
         served = answer is not None
         if answer is None:
             answer = answer_for(request)
-        # For the server's log: the helper's own time, and whether the resident one answered.
-        answer.update(seconds=round(time.monotonic() - started, 3), served=served)
+    # For the server's log: the helper's own time, and whether the resident one answered.
+    answer.update(seconds=round(time.monotonic() - started, 3), served=served)
     stay_awake()
     if not answer_once(answer):
         # The watchdog answered: it ends the process once Chrome restarted.

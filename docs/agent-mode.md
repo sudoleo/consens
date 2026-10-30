@@ -608,8 +608,11 @@ geloggt, und jede Entscheidung bekam 409. `deny` nimmt der Endpunkt seit
 2026-10-29 nur, wo es eine Antwort ist (`agent_sessions.deniable`: eine
 Domain, die Frage des Agenten mit `confirm` oder `secret`), sonst 422
 `invalid_action`; vorher lief ein Prüfer- oder Gate-Halt danach weiter wie
-nach `continue` (auch ein gegatetes `update_memory`). Kommt `deny` doch an
-einen anderen Halt, wirkt es wie Stop. Text im Feld ist während der Pause die
+nach `continue` (auch ein gegatetes `update_memory`). Seit 2026-10-30 prüft
+`agent_sessions.check_answer` alle Entscheidungen (auch `decide_unsaved`):
+`choose` nur auf einer Auswahlkarte und mit einem ihrer Indizes, dort weder
+`continue` noch `deny` (je 422). Kommt eine solche Entscheidung doch an
+(`_hold_wait`), wirkt sie wie Stop. Text im Feld ist während der Pause die
 Steer-Entscheidung (außer bei einer offenen Key-Karte, siehe „Ein Key vom
 Nutzer“).
 Ohne Entscheidung stoppt die Antwort nach `HOLD_TIMEOUT_SECONDS` (30 min) wie
@@ -1235,18 +1238,25 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   den des Nutzers (unabhängige Prüfung 2026-10-30). Lokal gegen Chromium: ein
   Aufruf samt Verbinden und Trennen 28–156 ms statt rund 900 ms; Chrome
   behält seine Seiten, die Listener eines Aufrufs gehen mit ihm. **Nie
-  doppelt:** Der Helfer macht den Browser bereit (`display.sh`, Verbindung),
-  sagt `took` und handelt erst auf das `go` des Aufrufs. Kommt kein `took`
-  (der Aufruf wartet bis `READY_SECONDS`), ein `declined` (Browser oder
-  Treiber kaputt: der Helfer endet, der Aufruf heilt den Browser selbst) oder
+  doppelt:** Ein freier Helfer sagt sofort `free`; ein beschäftigter (die
+  Wartezeit oder der Download eines anderen Chats) wird nicht abgewartet,
+  der Aufruf läuft nach `SERVE_FREE_SECONDS` (1 s) selbst. Dann macht der
+  Helfer den Browser bereit (`display.sh`, Verbindung), sagt `took` und
+  handelt erst auf das `go` des Aufrufs. Kommt kein `took` (der Aufruf
+  wartet bis `READY_SECONDS`, 80 s), ein `declined` (Browser oder Treiber
+  kaputt: der Helfer endet, der Aufruf heilt den Browser selbst) oder
   `stale`, läuft der Aufruf selbst; ein Helfer, dem das `go` fehlt, tut
   nichts. Nach `go` und ohne Antwort scheitert eine Aktion (`NOT_FINISHED`,
   der Helfer wird beendet), nur ein reiner Lesezugriff liest dann selbst.
-  Der Helfer endet nach `SERVE_IDLE` (10 min) ohne Aufruf, bei einer Anfrage
-  einer anderen Version der Datei (`VERSION` = Hash von `browser.py`) und mit
-  dem Watchdog, dessen Antwort an den Aufruf geht, der lief. Es läuft immer
-  nur einer (`serve.lock` mit seiner PID). Jede
-  Antwort trägt `seconds` und `served`; der Server loggt je Aufruf
+  Endet der Aufruf vor seiner Antwort (Zeitlimit des Servers, Stop), endet
+  der Helfer und mit ihm die Aktion, wie früher mit dem Prozess des Aufrufs
+  (unabhängige Prüfung 2026-10-30: sonst hätte ein Tippen samt Enter nach
+  Stop noch abgeschickt). Der Helfer endet außerdem nach `SERVE_IDLE`
+  (10 min) ohne Aufruf, bei einer Anfrage einer anderen Version der Datei
+  (`VERSION` = Hash von `browser.py`) und mit dem Watchdog, dessen Antwort an
+  den Aufruf geht, der lief. Es läuft immer nur einer (`serve.lock` mit
+  seiner PID). Jede Antwort von `main` trägt `seconds` und `served` (die des
+  Watchdogs nicht); der Server loggt je Aufruf
   `Agent browser call … first= seconds= before= exec= helper= served=`, und die
   Vorbereitung der Werkbank loggt ihre Schritte (`Agent VM ready seconds=…
   lease= rules= tools= folder= checkpoint= …`). Bewusst noch nicht
@@ -1268,10 +1278,16 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   die eigenen `data-consens-ref` zählen nicht), oder „No element of the page
   changed after it.“ bzw. „The page loaded anew after it.“. Für eine Canvas,
   einen Frame oder ein Video vergleicht der Helfer das Bild um den Punkt
-  (`PICTURE_AROUND` px, PNG vorher und nachher). Die Maus steht dafür schon
+  (`PICTURE_AROUND` px, PNG vorher und nachher, je höchstens
+  `PICTURE_SECONDS`: Playwright wartet sonst bis zu 30 s auf die Schriften
+  der Seite). Die Maus steht dafür schon
   vor dem Blick am Punkt, wie der Klick sie bewegen würde. Seiten der eigenen
   VM (`own_computer`) beschreibt er nicht (`HIT_JS`, `look_at`,
-  `hit_report` in `browser.py`). Die Antwort schreibt die Seite mit, also
+  `hit_report` in `browser.py`). Den Baum läuft das Skript nur über die
+  eingebauten Getter ab (`parentElement`, `nodeType`, `shadowRoot`,
+  `localName` …, höchstens 200 Schritte): Ein Formularfeld namens
+  `parentElement` überdeckt sonst die Eigenschaft des Formulars, und der Weg
+  nach oben lief im Kreis. Die Antwort schreibt die Seite mit, also
   nimmt der Helfer nur passende Typen (Infinity und NaN ergeben keine Box)
   und lässt eine Aktion, die lief, nie wegen des Berichts scheitern: Sonst
   hätte der Agent einen Senden-Knopf ein zweites Mal gedrückt. Die Bilder
@@ -1622,6 +1638,14 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   gewählt wurde. Anlass: Prod 2026-10-29 fragte DeepSeek „gegen einen
   Menschen oder einen Bot?“ auf der Bestätigungskarte, die nur „Allow“ und
   „Don’t allow“ kannte, und schloss aus „allowed“ auf den Menschen.
+  Wartete hinter der Karte ein Prüfer-Halt und schreibt der Nutzer dort,
+  hört der Agent seit 2026-10-30 trotzdem die Antwort der Karte (Wahl, Key,
+  Rückgabe; `ask_decision`) und dazu, dass eine Nachricht folgt; vorher nur
+  die Nachricht. Unsichtbare Zeichen (Kategorie Cf, etwa U+200B) fallen aus
+  den Antworten, und jede braucht einen Buchstaben oder eine Ziffer: sonst
+  gäbe es zwei gleich aussehende oder einen leeren Knopf. Ein Fenster mit
+  dem alten Bundle zeigt eine Auswahlkarte als Bestätigung, deren Knöpfe 422
+  bekommen; Schreiben und Stop gehen, und das App-Update lädt es neu.
 - **Ein Key vom Nutzer** (`ask_user` mit `secret`, `agent_secrets.py`, seit
   2026-10-29, Max: Geheimnis-Dialog wie in T3 Code): Braucht die Arbeit einen
   API-Key oder ein Token des Nutzers, fragt der Agent mit dem Namen

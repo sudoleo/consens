@@ -385,6 +385,8 @@ class DelegationLoop(AgentLoop):
         # The answer the user picked on a choice card (its index, agent_ask.py),
         # with "choose" as hold_decision; for the tool, the picked answer.
         self.hold_choice = self.ask_choice = None
+        # The decision on the user's own card (_hold_wait), for ask_user's result.
+        self.ask_decision = None
         # A reviewer's halt that came while the user's own card was open
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
@@ -2339,10 +2341,16 @@ class DelegationLoop(AgentLoop):
             return "run"
         request, browser, secret, choices = asked
         kind = "browser" if browser else "secret" if secret else "choice" if choices else "confirm"
-        self.ask_choice = None
+        self.ask_choice = self.ask_decision = None
         decision = yield from self._user_hold(agent_ask.hold(kind, request, secret, choices),
                                               self._handed_back(had=False) if browser else None)
-        self.ask_answer = agent_ask.answer(kind, decision, secret, self.ask_choice)
+        # The card's own answer counts, also when the user then wrote on a
+        # reviewer's halt that waited behind it ("steer"): before 2026-10-30
+        # the agent heard only of the message, never of the pick or the key.
+        own = self.ask_decision or decision
+        self.ask_answer = agent_ask.answer(kind, own, secret, self.ask_choice)
+        if decision == "steer" and own != "steer":
+            self.ask_answer["note"] += " The user also wrote you a message: it follows."
         return decision
 
     def _takeover_wait(self):
@@ -2468,6 +2476,9 @@ class DelegationLoop(AgentLoop):
         if picked is not None:
             # For ask_user's result (_ask_wait).
             self.ask_choice = picked
+        if hold.get("ask"):
+            # The user's own card: its answer, also when a reviewer's halt follows it.
+            self.ask_decision = decision
         self._end_hold(hold, decision, waited, picked)
         asked = hold.get("ask")
         if self.work_log is not None:

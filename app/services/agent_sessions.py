@@ -38,6 +38,7 @@ USER_NOTES_MAX = 10
 USER_NOTE_CHARS = 4000
 HOLD_NOT_DENIABLE = "This pause cannot be declined. Let it continue, write to the agent or stop it."
 HOLD_CHOOSE = "Choose one of the answers, write to the agent or stop it."
+HOLD_NO_CHOICES = "This pause has no answers to choose from. Let it continue, write to the agent or stop it."
 # Updates of a store's time under the account lock (lock_time).
 _LOCK_TIMES = threading.Lock()
 
@@ -69,7 +70,7 @@ def check_answer(hold, action, choice=None):
     if action == "deny" and not deniable(hold):
         raise HoldActionRefused(HOLD_CHOOSE if (hold or {}).get("ask") == "choice" else HOLD_NOT_DENIABLE)
     if action == "choose" and chosen(hold, choice) is None:
-        raise HoldActionRefused(HOLD_CHOOSE if (hold or {}).get("ask") == "choice" else HOLD_NOT_DENIABLE)
+        raise HoldActionRefused(HOLD_CHOOSE if (hold or {}).get("ask") == "choice" else HOLD_NO_CHOICES)
     if action == "continue" and (hold or {}).get("ask") == "choice":
         raise HoldActionRefused(HOLD_CHOOSE)
 

@@ -984,6 +984,7 @@
   "Your decision did not reach the server. Try again.": "Deine Entscheidung kam nicht beim Server an. Versuch es noch mal.",
   "This pause cannot be declined. Let it continue, write to the agent or stop it.": "Diese Pause lässt sich nicht ablehnen. Lass den Agenten weiterlaufen, schreib ihm oder stopp ihn.",
   "Choose one of the answers, write to the agent or stop it.": "Wähl eine der Antworten, schreib dem Agenten oder stopp ihn.",
+  "This pause has no answers to choose from. Let it continue, write to the agent or stop it.": "Diese Pause hat keine Antworten zur Wahl. Lass den Agenten weiterlaufen, schreib ihm oder stopp ihn.",
   "A reviewer paused the work": "Ein Prüfer hat die Arbeit pausiert",
   "Two reviewers paused the work": "Zwei Prüfer haben die Arbeit pausiert",
   "{count} reviewers paused the work": "{count} Prüfer haben die Arbeit pausiert",
