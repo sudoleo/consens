@@ -1414,11 +1414,12 @@ def answer_for(request):
 
 
 # The resident helper (since 2026-10-30). Every call started a process and
-# Playwright's driver: in Prod a read took a median 1.5 s, about 1 s of it
-# for the start (0.9 s on a laptop, of it 0.6 s for Python's import and the
-# driver). Now a call that finds no helper runs as before and starts one for
-# the next call (``--serve``): it keeps Playwright's driver and runs the
-# requests it gets over SERVE_SOCKET, a socket only the server's user on
+# Playwright's driver: in Prod a read took a median 1.5 s; measured on the
+# browser VM, Python's import took 0.14 s, Playwright's driver 0.44 s and the
+# connection to Chrome 0.06 s of it. Now a call that finds no helper runs
+# as before and starts one for the next call (``--serve``): it keeps
+# Playwright's driver and runs the requests it gets over SERVE_SOCKET, a
+# socket only the server's user on
 # this VM reaches (never a TCP port: a page reaches those), with the same
 # run(). It connects to Chrome for each call and lets go after it (KEPT):
 # connected, Playwright makes Chrome save downloads into its own folder and

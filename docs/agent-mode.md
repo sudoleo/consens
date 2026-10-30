@@ -1223,8 +1223,10 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Aufruf startete einen Prozess, Playwrights Treiber und eine neue
   Verbindung zu Chrome: In Prod dauerte ein `read` im Median 1,5 s, ein
   Browser-Aufruf 1,9 s, ein Schritt von DeepSeek V4.1 Flash nur 2,7 s
-  (19 Läufe vom 28./29.10.). Lokal gemessen kostet der Start 0,9 s, davon
-  0,6 s Pythons Import und Playwrights Treiber. Jetzt startet ein Aufruf, der
+  (19 Läufe vom 28./29.10.). Auf der Browser-VM gemessen (2026-10-30): ein
+  Exec beim Anbieter 0,22 s, Pythons Import 0,13–0,16 s, Playwrights Treiber
+  0,39–0,47 s, die Verbindung zu Chrome 0,06 s. Der Helfer spart Import und
+  Treiber, rund 0,55 s je Aufruf. Jetzt startet ein Aufruf, der
   keinen Helfer findet, einen für den nächsten Aufruf (eigene Session wie
   Chrome aus `display.sh`) und läuft selbst wie bisher. Jeder weitere Aufruf
   gibt seine Anfrage über `~/.consens/browser/serve.sock` weiter, einen
