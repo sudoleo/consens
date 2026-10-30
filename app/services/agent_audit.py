@@ -112,6 +112,13 @@ MAX_MARK_SENTENCES = 3
 # the reviewer's whole conversation again (2026-10-27).
 QUIET_TOOLS = frozenset({"update_plan", "read_settings", "read_file", "read_document", "gmail_read",
                          "calendar_read", "vm_read_file", "vm_process_output", "vm_view_image", "wait_agents"})
+# The browser's actions that only read the page in front or the tabs, like
+# vm_read_file the VM (agent_browser.ACTIONS; workspace_vm/browser/browser.py
+# on_page answers them without acting, settling or navigating). By the
+# action in the call's arguments, never its text (Max, 2026-10-30, audit K6:
+# about 30 % fewer live rounds in browser runs). Every other action, and a
+# call whose arguments cannot be read, gets its round as before.
+QUIET_BROWSER_ACTIONS = frozenset({"read", "text", "find", "tabs", "screenshot"})
 QUIET_STEPS = 3
 # A final round whose reply could not be read, or whose provider failed in
 # passing, gets one more request on the same session, with REPAIR_NOTE after
@@ -485,11 +492,29 @@ def _acting(entry, text):
         return False
 
 
+def quiet_call(call):
+    """Whether one logged call neither acts outward nor changes anything:
+    a tool of QUIET_TOOLS, or the browser with an action of
+    QUIET_BROWSER_ACTIONS."""
+    if not isinstance(call, dict):
+        return False
+    name = call.get("name")
+    if name in QUIET_TOOLS:
+        return True
+    if name != "browser":
+        return False
+    try:
+        arguments = json.loads(call.get("arguments") or "")
+    except (TypeError, ValueError):
+        return False
+    return isinstance(arguments, dict) and arguments.get("action") in QUIET_BROWSER_ACTIONS
+
+
 def work_goes_on(entries):
     """Whether these new entries are worth a live round: a model step (the
-    agent's or a worker's) that called a tool beyond QUIET_TOOLS, or
-    QUIET_STEPS steps that called only those. A step without tool calls is
-    usually the answer, which the final round reviews."""
+    agent's or a worker's) that called a tool beyond the quiet ones
+    (quiet_call), or QUIET_STEPS steps that called only those. A step
+    without tool calls is usually the answer, which the final round reviews."""
     quiet = 0
     for entry, text in entries:
         if entry.get("kind") != "step":
@@ -498,10 +523,9 @@ def work_goes_on(entries):
             calls = (json.loads(text) or {}).get("tool_calls") or []
         except (ValueError, AttributeError):
             continue
-        names = {call.get("name") if isinstance(call, dict) else None for call in calls}
-        if not names:
+        if not calls:
             continue
-        if names - QUIET_TOOLS:
+        if not all(quiet_call(call) for call in calls):
             return True
         quiet += 1
         if quiet >= QUIET_STEPS:

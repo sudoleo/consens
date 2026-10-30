@@ -167,3 +167,61 @@ def test_a_gate_the_user_decides_keeps_its_step_and_wait_on_the_pause(store):
     waiter.join(5)
     [(paused, _)] = log_entries(loop, kind="app", name="paused")
     assert paused["step"] == "completion:0" and type(paused["gate_ms"]) is int
+
+
+# --- L7: what an unknown tool's refusal says ------------------------------------------
+
+def _refusal(names, called="browser"):
+    from pydantic import BaseModel, ConfigDict
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+
+    class Args(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+
+    registry = ToolRegistry([ReadOnlyTool(name, name, Args, lambda args, **kw: {}) for name in names])
+    with pytest.raises(ValueError) as refused:
+        registry.validate({"function": {"name": called, "arguments": "{}"}})
+    return str(refused.value)
+
+
+def test_an_unknown_tool_refusal_says_only_what_holds():
+    # read_source: no claim which pages it opens (in audit mode any public page).
+    text = _refusal(["read_source", "find_pictures"])
+    assert "Of these, read_source opens web pages." in text and "cited" not in text
+    # A direct call of the browser while the workspace is closed names open_workspace.
+    text = _refusal(["read_source", "open_workspace"])
+    assert "open_workspace ran" in text and "unknown tool" in text
+    # Without any way to a page, as before.
+    assert "There is no tool that opens web pages." in _refusal(["compare_models"], called="open_url")
+    # With the browser listed, nothing more to say.
+    assert _refusal(["browser", "vm_exec"], called="fetch").endswith("Available tools: browser, vm_exec.")
+
+
+# --- K6: the browser's reads wait for the next round ----------------------------------
+
+def _step(*calls):
+    return ({"kind": "step"}, json.dumps({"tool_calls": [
+        {"id": f"c{n}", "name": name, "arguments": json.dumps(arguments) if isinstance(arguments, dict) else arguments}
+        for n, (name, arguments) in enumerate(calls)]}))
+
+
+@pytest.mark.parametrize("action", ["read", "text", "find", "tabs", "screenshot"])
+def test_a_browser_read_is_quiet_like_reading_a_file(action):
+    from app.services.agent_audit import QUIET_STEPS, work_goes_on
+    read = _step(("browser", {"action": action, "text": "Login"}))
+    assert not work_goes_on([read]) and not work_goes_on([read] * (QUIET_STEPS - 1))
+    # Quiet steps still get their round once QUIET_STEPS of them came.
+    assert work_goes_on([read] * QUIET_STEPS)
+    assert not work_goes_on([_step(("browser", {"action": action}), ("vm_read_file", {"path": "a"}))])
+
+
+@pytest.mark.parametrize("arguments", [
+    {"action": "open", "url": "https://example.com"}, {"action": "click", "ref": "e1"},
+    {"action": "type", "ref": "e2", "text": "read"}, {"action": "wait", "seconds": 5},
+    {"action": "download"}, {"action": "key", "key": "Enter"}, {"action": "scroll", "direction": "down"},
+    {}, "not json", '["read"]'])
+def test_every_other_browser_call_gets_its_round(arguments):
+    from app.services.agent_audit import work_goes_on
+    assert work_goes_on([_step(("browser", arguments))])
+    # Also beside a quiet read in the same step.
+    assert work_goes_on([_step(("browser", {"action": "read"}), ("browser", arguments))])
