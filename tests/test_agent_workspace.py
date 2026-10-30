@@ -365,9 +365,11 @@ def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_ha
     assert started == []
     assert run_helper(browser, monkeypatch, capsys, {"action": "rm -rf /"}) == {
         "status": "refused", "text": "Unknown action rm -rf /."}
-    # "warm" is the server's own start of the browser (agent_browser._warm):
-    # never one of the agent's actions, and it reads nothing of the pages.
-    assert browser.ACTIONS == set(agent_browser.ACTIONS) | {"warm"} and "warm" not in browser.ACTING
+    # "warm" is the server's own start of the browser (agent_browser._warm),
+    # "rest" its end of a message (since 2026-10-30): never one of the
+    # agent's actions, and neither reads anything of the pages.
+    assert browser.ACTIONS == set(agent_browser.ACTIONS) | {"warm", "rest"} and "warm" not in browser.ACTING
+    assert browser.SERVER_ACTIONS == {"warm", "rest"} and not browser.SERVER_ACTIONS & browser.ACTING
     assert run_helper(browser, monkeypatch, capsys, {"action": "warm"})["text"] == ""
     assert started == [True]
     assert set(browser.KEYS) == set(agent_browser.KEYS)
@@ -727,9 +729,11 @@ def test_download_fetches_with_the_browsers_sign_ins_but_never_its_own_computer(
             return self.response
     page = type("Page", (), {"url": "https://shop.example/viewer/invoice-7.pdf"})()
     said = browser.fetch(Context(Response("https://shop.example/viewer/invoice-7.pdf")), page, "")
-    assert said == "Downloaded invoice-7.pdf (16 bytes)." and asked == ["https://shop.example/viewer/invoice-7.pdf"]
+    assert said == "Downloaded invoice-7.pdf: 16 bytes, no Content-Type." and asked == [
+        "https://shop.example/viewer/invoice-7.pdf"]
     named = Response("https://shop.example/get?id=7", disposition="attachment; filename=\"Rechnung 7.pdf\"")
-    assert browser.fetch(Context(named), page, "https://shop.example/get?id=7") == "Downloaded Rechnung 7.pdf (16 bytes)."
+    assert browser.fetch(Context(named), page, "https://shop.example/get?id=7") == (
+        "Downloaded Rechnung 7.pdf: 16 bytes, no Content-Type.")
     assert sorted(os.listdir(tmp_path / "downloads")) == ["Rechnung 7.pdf", "invoice-7.pdf"]
     for url in ("http://localhost:9222/json", "http://127.0.0.1/", "file:///etc/passwd", "http://10.0.0.1/x"):
         with pytest.raises(browser.Refused):
@@ -1083,6 +1087,8 @@ def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeyp
     monkeypatch.setitem(browser.KEPT, "playwright", type("Playwright", (), {"chromium": Chromium()})())
     monkeypatch.setattr(browser, "ensure_browser", lambda: None)
     monkeypatch.setattr(browser, "user_control", lambda: False)
+    # A Chrome that takes no connection restarts once (since 2026-10-30), never here.
+    monkeypatch.setattr(browser, "restart_browser", lambda: None)
     fail = False
     assert browser.ready({"action": "read"}) is True and made == [browser.CDP] and browser.KEPT["prepared"]
     with browser.chrome() as kept:

@@ -10,18 +10,23 @@ for its card in the chat (base64), and so does another action whose request
 asks for it (since 2026-10-30). Status "ok", "refused" (the action cannot be
 done, the text says why), "user" (the user has the browser), "setup" (the
 browser is being installed) or "failed". No code of the agent runs here: it
-only chooses among these actions and their typed arguments.
+only chooses among these actions and their typed arguments. Two actions are
+the server's own and never the agent's: "warm" starts the browser, "rest"
+lets the VM sleep soon after the message (since 2026-10-30).
 
 The same Chrome the user sees and steers in the live view, with the sign-ins
 the user made there. Pages are read as text: ``read`` lists the page's
 headings and the elements one can act on, each with a ref (e12) that click,
 type, select and upload take; ``find`` looks up a text in what the page shows
-and names the ref of the element it lies in; every action prints the page
-again, so the agent sees what changed in the same step. A click or drag at
-x,y also says what lay at its points, with their boxes in the screenshot's
-pixels, and which elements changed after it (HIT_JS, since 2026-10-30). The
-page's head says whether the browser holds cookies for its address (yes or
-no, never which).
+and names the ref of the element it lies in. Every action on a page says
+which elements changed after it, the nearest first (HIT_JS; a click or drag
+at x,y also what lay at its points, with their boxes in the screenshot's
+pixels), and then the page: the whole list after a navigation, else only the
+lines that changed since the agent's last look, after a scroll first what is
+in view (after_text, since 2026-10-30). Its answer comes once the page
+rests, not the network (quiet). A failure names its cause from Playwright's
+log and the page in front (on_failure). The page's head says whether the
+browser holds cookies for its address (yes or no, never which).
 
 Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
@@ -43,7 +48,9 @@ went "offline" between two moves, and so do consens.io's live updates. Each
 call therefore holds the VM awake for AWAKE_FOR after it, through the Sprites
 Tasks API like the workbench's background processes (agent_vm_processes): an
 expiring hold, renewed by the next call, gone by itself after the last one.
-The live view keeps it awake anyway (its exec session).
+The live view keeps it awake anyway (its exec session). At the end of a
+message the server shortens it to REST_FOR (the action rest, since
+2026-10-30): before, the VM stayed awake 10 minutes after every run.
 
 A resident helper keeps Playwright's driver running between calls (since
 2026-10-30, serve) and connects to Chrome for each call only: a call that
@@ -75,6 +82,13 @@ UPLOADS = os.path.join(STATE, "uploads")
 CDP = "http://127.0.0.1:9222"
 READ_CHARS = 6000
 AFTER_ACTION_CHARS = 4000
+# The page as the agent last looked at it (after_text, since 2026-10-30):
+# its address, when, and read's lines, for the next action's answer. Older
+# than LOOK_SECONDS it no longer counts; a list up to WHOLE_BELOW_CHARS
+# comes whole, a diff would save nothing.
+LOOKED = os.path.join(STATE, "last-look.json")
+LOOK_SECONDS = 600
+WHOLE_BELOW_CHARS = 600
 TEXT_CHARS = 12000
 # find: the text to look for, how many places it lists, and the characters
 # of the page it shows on either side of one.
@@ -93,9 +107,23 @@ CONNECT_SECONDS = 15
 RESTART_SECONDS = 30
 OPEN_SECONDS = 30
 LOADED_SECONDS = 10
-# The Tasks API hold that keeps the VM awake after a call (stay_awake).
+# After a navigation, how long the network may take to rest (loaded).
+IDLE_SECONDS = 2
+# Without a navigation (quiet, since 2026-10-30): an action's effect is
+# there once the page has not changed for QUIET_MS since the action and no
+# request it started is open, at most QUIET_SECONDS; after a scroll or a key
+# other than Enter and Space BRIEF_QUIET_MS and BRIEF_SECONDS. Looked at
+# every POLL_SECONDS while a request is open.
+QUIET_MS = 300
+QUIET_SECONDS = 1.0
+BRIEF_QUIET_MS = 100
+BRIEF_SECONDS = 0.3
+POLL_SECONDS = 0.05
+# The Tasks API hold that keeps the VM awake after a call (stay_awake), and
+# what the server's rest leaves of it at the end of a message.
 AWAKE_TASK = "consens-browser-awake"
 AWAKE_FOR = "10m"
+REST_FOR = "2m"
 # The resident helper (serve, since 2026-10-30): its socket, the lock one
 # of them holds while it runs, how long it waits for a call (as long as a
 # call keeps the VM awake), how long a call waits to connect and then for
@@ -111,7 +139,9 @@ API_SOCKET = "/.sprite/api.sock"
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
 ACTIONS = {"open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
-           "tabs", "tab", "screenshot", "upload", "download", "wait", "warm"}
+           "tabs", "tab", "screenshot", "upload", "download", "wait", "warm", "rest"}
+# The server's own (agent_browser.py), never the agent's: they look at no page.
+SERVER_ACTIONS = {"warm", "rest"}
 # What changes the page or sends something: never while the user has the browser.
 ACTING = {"open", "click", "drag", "type", "select", "upload", "download", "key", "scroll", "back", "forward", "tab"}
 # A place on the page and drag's strokes (agent_browser.py checks the same).
@@ -136,8 +166,15 @@ CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
 DOWNLOAD_SECONDS = 60
 # The picture of an opened page on its card in the chat (agent-activity.js,
 # since 2026-10-29): the viewport at this width, as a JPEG of this quality.
-PREVIEW_WIDTH = 480
-PREVIEW_QUALITY = 60
+# Since 2026-10-30 (audit V7) 720 px instead of 480 at 60: the card shows it
+# up to 360 CSS pixels, soft on a retina screen. At most PREVIEW_BYTES
+# (agent_browser.PREVIEW_BYTES: a larger one is no card picture); measured
+# locally, a news page 41 KB at 720/50, a page full of small text 98 KB,
+# 53 KB at 600/35 and 31 KB at 480/40 (PREVIEW_TRIES, in this order).
+PREVIEW_WIDTH = 720
+PREVIEW_QUALITY = 50
+PREVIEW_BYTES = 64 * 1024
+PREVIEW_TRIES = ((PREVIEW_WIDTH, PREVIEW_QUALITY), (600, 35), (480, 40))
 
 # A ref stays with its element, and a new element takes the next number of
 # the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
@@ -350,9 +387,13 @@ IS_SECRET_JS = r"""el => el.type === 'password' || /password/i.test(el.autocompl
 # box gives every square's), and watches the page; "after" lists what
 # changed since, nearest to the points first. A change inside a shadow root
 # or a frame is no change here: what a canvas, a frame or a video shows is
-# compared as a picture (look_at).
+# compared as a picture (look_at). Since 2026-10-30 every action on the page
+# in front has this watch: "refs" names the elements it acts on, whose
+# middles count as its points for "after" (the nearest changes first), and
+# "idle" says how long the page has not changed (quiet: the action's effect
+# is there once it rests; ``fresh`` counts from now, the action's end).
 HIT_JS = r"""
-({mode, points, limit}) => {
+({mode, points, limit, refs}) => {
   const KEY = '__consensHit';
   if (mode === 'after') {
     const state = window[KEY];
@@ -431,11 +472,20 @@ HIT_JS = r"""
   };
   const old = window[KEY];
   if (old && old.observer) old.observer.disconnect();
+  // The middles of the elements the action is on (a click on a ref).
+  const around = [];
+  for (const ref of Array.isArray(refs) ? refs : []) {
+    const el = /^e\d+$/.test(ref) ? document.querySelector('[data-consens-ref="' + ref + '"]') : null;
+    if (!el) continue;
+    const [left, top, right, bottom] = box(el);
+    if (right > left && bottom > top) around.push([(left + right) / 2, (top + bottom) / 2]);
+  }
   // Element -> how it changed; a busy page counts the rest without them,
   // each once.
   const changed = new Map(), beyond = new WeakSet();
-  let more = 0;
+  let more = 0, last = performance.now();
   const note = (el, kind, what) => {
+    last = performance.now();
     let entry = changed.get(el);
     if (!entry) {
       if (changed.size >= 500) {
@@ -460,7 +510,7 @@ HIT_JS = r"""
       if (!target || !inPage(target)) continue;
       if (record.type === 'attributes') {
         // read's own marks on an element are no change of the page.
-        if (!/^data-consens-(ref|frame)$/.test(record.attributeName)) note(target, 'changed', record.attributeName);
+        if (!/^data-consens-/.test(record.attributeName || '')) note(target, 'changed', record.attributeName);
       } else if (record.type === 'characterData') {
         note(target, 'changed', 'text');
       } else {
@@ -480,10 +530,11 @@ HIT_JS = r"""
   const observer = new MutationObserver(take);
   // A call that never asks again leaves no watch behind.
   const timer = setTimeout(() => observer.disconnect(), 120000);
-  const report = (near, size) => {
+  const report = (points, size) => {
     take(observer.takeRecords());
     observer.disconnect();
     clearTimeout(timer);
+    const near = (Array.isArray(points) ? points : []).concat(around);
     const distance = ([left, top, right, bottom]) => Math.min(...near.map(([x, y]) =>
       Math.hypot(Math.max(left - x, 0, x - right), Math.max(top - y, 0, y - bottom))));
     const shown = [], gone = [];
@@ -508,9 +559,26 @@ HIT_JS = r"""
     shown.sort((a, b) => a.distance - b.distance);
     return {count, changed: shown.slice(0, size).map(({distance, ...item}) => item), removed: gone.slice(0, size)};
   };
+  // Milliseconds without a change; ``fresh``: counted from now at the latest.
+  const idle = fresh => {
+    take(observer.takeRecords());
+    const now = performance.now();
+    if (fresh) last = Math.max(last, now);
+    return now - last;
+  };
   observer.observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
-  window[KEY] = {observer, report};
+  window[KEY] = {observer, report, idle};
   return {view: [innerWidth, innerHeight], at: points.map(at)};
+}
+"""
+
+# quiet: how long the page in front has not changed since the action, or
+# null once its document is another (the watch went with the old one).
+QUIET_JS = r"""
+fresh => {
+  const state = window.__consensHit;
+  const idle = state && typeof state.idle === 'function' ? state.idle(fresh) : null;
+  return typeof idle === 'number' && isFinite(idle) ? Math.round(idle) : null;
 }
 """
 
@@ -525,6 +593,16 @@ class UserHasControl(Exception):
 
 class SettingUp(Exception):
     status = "setup"
+
+
+class Failed(Exception):
+    """An action that failed on a page: its text already names the cause
+    and the page (run)."""
+    status = "failed"
+
+
+class StaleRef(Refused):
+    """A ref no element on the page has any more: run adds the page as it is now."""
 
 
 def user_control():
@@ -556,16 +634,24 @@ def ensure_browser():
         raise RuntimeError("The browser did not start: " + (started.stderr.strip() or "no reason given"))
 
 
-def stay_awake():
-    """The VM awake for AWAKE_FOR from now (an expiring Tasks API hold; the
-    next call renews it). A failure only costs the hold."""
+def stay_awake(expire=AWAKE_FOR):
+    """The VM awake for ``expire`` from now (an expiring Tasks API hold; the
+    next call renews it, rest shortens it to REST_FOR). A failure only costs
+    the hold."""
     try:
         subprocess.run(["curl", "-s", "--max-time", "5", "--unix-socket", API_SOCKET,
                         "-H", "Content-Type: application/json", "-X", "PUT",
-                        f"http://sprite/v1/tasks/{AWAKE_TASK}", "-d", json.dumps({"expire": AWAKE_FOR})],
+                        f"http://sprite/v1/tasks/{AWAKE_TASK}", "-d", json.dumps({"expire": expire})],
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
     except Exception:
         pass
+
+
+# rest's answer: the server ends a message with it (agent_browser.py) and
+# only logs it. A browser.py before 2026-10-30 refuses rest as an unknown
+# action (and holds the VM its 10 minutes once more).
+RESTED = (f"The hold that keeps the browser VM awake ends in {REST_FOR} now; then the VM sleeps unless a call or "
+          "the live view keeps it awake.")
 
 
 def restart_browser():
@@ -698,15 +784,121 @@ def current_page(context):
     return pages[-1]
 
 
-def settle(page):
+def loaded(page, idle=True):
+    """After a navigation (or on a page without a watch), as before
+    2026-10-30: its document, then with ``idle`` up to IDLE_SECONDS for
+    the network to rest."""
     try:
-        page.wait_for_load_state("domcontentloaded", timeout=10_000)
+        page.wait_for_load_state("domcontentloaded", timeout=LOADED_SECONDS * 1000)
     except Exception:
         pass
-    try:
-        page.wait_for_load_state("networkidle", timeout=2_000)
-    except Exception:
-        pass
+    if idle:
+        try:
+            page.wait_for_load_state("networkidle", timeout=IDLE_SECONDS * 1000)
+        except Exception:
+            pass
+
+
+class Traffic:
+    """What a tab sends while an action runs and its effect comes (quiet,
+    since 2026-10-30): a navigation of its main frame, whether it committed
+    or ended (a download, an error), and the requests started since whose
+    answers can change the page and are still open."""
+    KINDS = frozenset({"fetch", "xhr", "script", "document"})
+
+    def __init__(self, page):
+        self.page, self.open = page, set()
+        self.navigation, self.committed, self.ended = None, False, False
+        self._handlers = (("request", self._request), ("requestfinished", self._finished),
+                          ("requestfailed", self._finished), ("framenavigated", self._navigated))
+        for event, handler in self._handlers:
+            with contextlib.suppress(Exception):
+                page.on(event, handler)
+
+    def _request(self, request):
+        with contextlib.suppress(Exception):
+            if request.is_navigation_request() and request.frame == self.page.main_frame:
+                self.navigation = request
+            elif request.resource_type in self.KINDS:
+                self.open.add(request)
+
+    def _finished(self, request):
+        self.open.discard(request)
+        if request is self.navigation:
+            self.ended = True
+
+    def _navigated(self, frame):
+        with contextlib.suppress(Exception):
+            if self.navigation is not None and frame == self.page.main_frame:
+                self.committed = True
+
+    def until_committed(self):
+        """Until the navigation committed or ended, at most LOADED_SECONDS
+        (Playwright hands over its events while it waits)."""
+        deadline = time.monotonic() + LOADED_SECONDS
+        while not (self.committed or self.ended) and (left := deadline - time.monotonic()) >= 0.001:
+            try:
+                self.page.wait_for_timeout(max(1, round(min(POLL_SECONDS, left) * 1000)))
+            except Exception:
+                return
+
+    def stop(self):
+        for event, handler in self._handlers:
+            with contextlib.suppress(Exception):
+                self.page.remove_listener(event, handler)
+
+
+def brief(action, request):
+    """Whether an action's effect is there almost at once (a scroll, a key
+    but Enter or Space, which act like a click)."""
+    return action == "scroll" or (action == "key" and request.get("key") not in {"Enter", "Space"})
+
+
+def quiet(page, traffic, short=False):
+    """Until the page shows an action's effect (since 2026-10-30, audit T4):
+    before, every action waited up to 2 s for the network to rest, which
+    pages with tracking, polling or a websocket never do (a click took a
+    median 1.9 s in Prod), and a page that had rested once got no wait at
+    all, so its answer could come before a menu opened. Now: a navigation of
+    the tab (Traffic) loads as before (loaded); else the page has not
+    changed for QUIET_MS since the action (HIT_JS's watch, a
+    MutationObserver from before the action) and no request it started is
+    open, at most QUIET_SECONDS; ``short`` (a scroll, most keys) for
+    BRIEF_QUIET_MS, at most BRIEF_SECONDS. ``page`` is the document the
+    watch is on: the tab's (traffic.page), or a frame's for a ref in one."""
+    still, most = (BRIEF_QUIET_MS, BRIEF_SECONDS) if short else (QUIET_MS, QUIET_SECONDS)
+    deadline, fresh = time.monotonic() + most, True
+    while True:
+        if traffic.navigation is not None:
+            traffic.until_committed()
+            loaded(traffic.page)
+            return
+        try:
+            idle = _whole(page.evaluate(QUIET_JS, fresh))
+        except Exception:
+            # Its document went with a navigation, or its frame left the page.
+            idle = None
+        if idle is None:
+            loaded(page)
+            if page is not traffic.page:
+                # A frame that left (a dialog closed) or loads anew: the page around it may still change.
+                with contextlib.suppress(Exception):
+                    traffic.page.wait_for_timeout(still)
+            return
+        fresh = False
+        left = deadline - time.monotonic()
+        if left < 0.001 or (idle >= still and not traffic.open):
+            return
+        # Until it would have rested that long, or a while when a request is open.
+        pause = min(max(POLL_SECONDS, (still - idle) / 1000), left)
+        try:
+            page.wait_for_timeout(max(1, round(pause * 1000)))
+        except Exception:
+            if page is not traffic.page:
+                # Its frame left the page meanwhile: the page around it may still change.
+                with contextlib.suppress(Exception):
+                    traffic.page.wait_for_timeout(still)
+            return
 
 
 def saved_sign_in(page):
@@ -900,15 +1092,257 @@ def paged(lines, offset, limit_chars):
     return shown, rest
 
 
-def read_text(page, offset=0, limit=READ_CHARS, frames="front"):
+def read_text(page, offset=0, limit=READ_CHARS, frames="front", keep=False):
+    """The page's head and read's lines from ``offset`` (``frames``: see
+    page_lines); with ``keep`` the agent's look at it, for the next action's
+    answer (after_text)."""
     if hidden(page):
         return hidden_text(page)
     lines = page_lines(page, frames)
+    if keep:
+        remember(page, lines)
+    return listed_text(page, lines, offset, limit)
+
+
+def listed_text(page, lines, offset, limit):
     shown, rest = paged(lines, offset, limit)
     out = [header(page), "\n".join(shown) if shown else
            "(no headings or elements to act on; read the page with the action text)"]
     if rest > 0:
         out.append(f"(… {rest} more lines: read with offset {offset + len(shown)})")
+    return "\n".join(out)
+
+
+# The page after an action (since 2026-10-30, audit L2): until then every
+# action brought read's list again, up to 4,000 characters, also after a
+# type without Enter, a key or a scroll (about 950 tokens of repetition per
+# step), and a menu that opened past them took a read with an offset. Now
+# the whole list comes after a navigation (another address, another tab,
+# FULL_AFTER), the first time and when the last look is older than
+# LOOK_SECONDS; on the page the agent looked at last only the lines that
+# changed since (+ new, ~ changed, - gone, by their refs: a ref names its
+# element or none, see SNAPSHOT_JS), the whole list again when more than half
+# of it changed (another document at the same address). After a scroll the
+# elements in view come first: read's list does not depend on the view.
+FULL_AFTER = frozenset({"open", "back", "forward", "tab"})
+
+
+def remember(page, lines):
+    """The agent's look at ``page`` (read's ``lines``), kept in LOOKED: the
+    resident helper and a call of its own both answer from it."""
+    try:
+        os.makedirs(os.path.dirname(LOOKED), exist_ok=True)
+        with open(LOOKED + ".new", "w", encoding="utf-8") as handle:
+            json.dump({"url": str(page.url), "at": time.time(), "lines": list(lines)}, handle)
+        os.replace(LOOKED + ".new", LOOKED)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def remembered(page):
+    """read's lines at the agent's last look, when it was at ``page``'s
+    address within LOOK_SECONDS; else None."""
+    try:
+        with open(LOOKED, encoding="utf-8") as handle:
+            look = json.load(handle)
+        at = float(look["at"])
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if look.get("url") != str(page.url) or not 0 <= time.time() - at <= LOOK_SECONDS:
+        return None
+    lines = look.get("lines")
+    return [line for line in lines if isinstance(line, str)] if isinstance(lines, list) else None
+
+
+# A frame's line in read (with_frames): its address, then whether its
+# elements follow, or why not. Read after an action, a frame not over the
+# page is "(read lists its elements)" where read listed them.
+FRAME_HEAD = re.compile(r"(\s*)frame (.+?)(, its elements:| \((?:read lists its elements|not read|the browser's own "
+                        r"computer, which you do not read|its content could not be read|nothing to act on in it)\))?")
+FRAME_UNREAD = (" (read lists its elements)", " (not read)", " (its content could not be read)")
+
+
+def outline(lines):
+    """read's lines as changes compares them: each with its ref, the key
+    of a frame's line (its depth, its address and how many such came before)
+    and whether its elements were read, the frames it lies in, and the lines
+    that say where it is (over the page, its frames' lines)."""
+    items, stack, over, seen = [], [], None, {}
+    for index, line in enumerate(lines):
+        indent = len(line) - len(line.lstrip(" "))
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        if line == OVER_PAGE:
+            over = index
+        elif line == UNDER_IT:
+            over = None
+        head, key = FRAME_HEAD.fullmatch(line), None
+        if head:
+            base = (indent, head.group(2))
+            seen[base] = seen.get(base, 0) + 1
+            key = (*base, seen[base])
+        found = REF_AT_START.match(line)
+        items.append({"line": line, "ref": found.group(1) if found else None, "key": key,
+                      "unread": bool(head) and (head.group(3) or "") in FRAME_UNREAD,
+                      "frames": {frame for _, frame, _ in stack},
+                      "where": ([over] if over is not None and over != index else []) + [at for _, _, at in stack]})
+        if head:
+            stack.append((indent, key, index))
+    return items
+
+
+def changes(before, after, shown=()):
+    """What changed from read's lines ``before`` to ``after``: ``[(mark,
+    line)]``, new (+) and changed (~) in the page's order, then the gone
+    (-) as they were, each after the lines that say where it is (mark " ":
+    over the page, its frame's line) unless those are marked themselves.
+    An element's line goes by its ref, a frame's by its address, a
+    heading's and the like by its text. The elements of a frame not read
+    now (after an action read reads a frame only over the page) are
+    neither new nor gone, a frame's other wording no change, and a frame
+    that went goes as one line. ``shown``: lines of ``after`` the answer
+    lists anyway (in view after a scroll), not marked again."""
+    old, new = outline(before), outline(after)
+    unread = {item["key"] for item in new if item["unread"]}
+    new_refs = {item["ref"] for item in new if item["ref"]}
+    new_keys = {item["key"] for item in new if item["key"]}
+    old_refs = {item["ref"]: item["line"] for item in old if item["ref"] and not item["frames"] & unread}
+    old_keys = {item["key"] for item in old if item["key"]}
+    plain = {}
+    for item in old:
+        if not (item["ref"] or item["key"]):
+            plain[item["line"]] = plain.get(item["line"], 0) + 1
+    marks = {}
+    for index, item in enumerate(new):
+        if item["line"] in shown and (item["ref"] or item["key"]):
+            continue
+        if item["ref"]:
+            if item["ref"] not in old_refs:
+                marks[index] = "+"
+            elif old_refs[item["ref"]] != item["line"]:
+                marks[index] = "~"
+        elif item["key"]:
+            if item["key"] not in old_keys:
+                marks[index] = "+"
+        elif plain.get(item["line"]):
+            plain[item["line"]] -= 1
+        elif item["line"] not in shown:
+            marks[index] = "+"
+    gone_frames = old_keys - new_keys
+    gone = {}
+    for index, item in enumerate(old):
+        if item["frames"] & (unread | gone_frames):
+            continue
+        if (item["ref"] and item["ref"] not in new_refs) or (item["key"] and item["key"] in gone_frames):
+            gone[index] = "-"
+        elif not (item["ref"] or item["key"]) and plain.get(item["line"]):
+            plain[item["line"]] -= 1
+            gone[index] = "-"
+    out = []
+    for items, marked in ((new, marks), (old, gone)):
+        said = set()
+        for index in sorted(marked):
+            for at in items[index]["where"]:
+                if at not in said and at not in marked:
+                    out.append((" ", items[at]["line"]))
+                    said.add(at)
+            out.append((marked[index], items[index]["line"]))
+            said.add(index)
+    return out
+
+
+def marked_only(marked):
+    """Of changes' answer: the lines that changed, without the lines that say where."""
+    return [entry for entry in marked if entry[0] != " "]
+
+
+def counted(lines):
+    return "1 line" if len(lines) == 1 else f"{len(lines)} lines"
+
+
+# What of read's list is in view: the refs of the elements and the
+# headings as read words them (SNAPSHOT_JS).
+IN_VIEW_JS = r"""
+() => {
+  const clean = text => (text || '').replace(/\s+/g, ' ').trim();
+  const clip = (text, size) => text.length > size ? text.slice(0, size - 1) + '…' : text;
+  const seen = el => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight &&
+      box.left < innerWidth;
+  };
+  const refs = [], headings = [];
+  for (const el of document.querySelectorAll('[data-consens-ref]')) {
+    if (seen(el)) refs.push(el.getAttribute('data-consens-ref'));
+  }
+  for (const el of document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role=heading]')) {
+    if (seen(el) && clean(el.innerText)) headings.push('heading "' + clip(clean(el.innerText), 200) + '"');
+  }
+  return {refs, headings};
+}
+"""
+
+
+def in_view(page, lines):
+    """read's ``lines`` that are in view now, or None when the page cannot tell."""
+    try:
+        seen = page.evaluate(IN_VIEW_JS)
+        refs = {ref for ref in seen["refs"] if isinstance(ref, str)}
+        headings = {heading for heading in seen["headings"] if isinstance(heading, str)}
+    except Exception:
+        return None
+    return [line for line in lines if ((found := REF_AT_START.match(line)) and found.group(1) in refs)
+            or line.strip() in headings]
+
+
+def after_text(page, action):
+    """The page after ``action``: its head, then the whole list or what
+    changed since the agent's last look (see FULL_AFTER), and this look kept
+    for the next. Its frames as read reads them after an action: only one
+    over the page with its elements (page_lines)."""
+    if hidden(page):
+        return hidden_text(page)
+    lines = page_lines(page)
+    before = None if action in FULL_AFTER else remembered(page)
+    remember(page, lines)
+    shown = in_view(page, lines) if action == "scroll" else None
+    marked = None if before is None else changes(before, lines, shown or ())
+    most = marked is not None and len(marked_only(marked)) * 2 > len(lines)
+    if shown is not None:
+        return scrolled_text(page, lines, shown, None if most else marked, most)
+    if marked is None or most or sum(len(line) + 1 for line in lines) <= WHOLE_BELOW_CHARS:
+        return listed_text(page, lines, 0, AFTER_ACTION_CHARS)
+    if not marked:
+        return (f"{header(page)}\nThe page's headings and elements are as at your last look "
+                f"({counted(lines)}; read lists them).")
+    part, rest = paged([f"{mark} {line}" for mark, line in marked], 0, AFTER_ACTION_CHARS)
+    out = [header(page), f"Changed since your last look at this page ({CHANGE_MARKS}; read lists all "
+                         f"{counted(lines)}):", *part]
+    if rest > 0:
+        out.append(f"(… {rest} more lines of changes; read lists the page)")
+    return "\n".join(out)
+
+
+CHANGE_MARKS = "+ new, ~ changed, - gone, unmarked: where"
+
+
+def scrolled_text(page, lines, shown, marked, most):
+    """After a scroll: what is in view now, then what changed elsewhere."""
+    out = [header(page)]
+    if shown:
+        part, rest = paged(shown, 0, AFTER_ACTION_CHARS)
+        out += [f"In view now ({len(shown)} of {counted(lines)}; read lists all):", *part]
+        if rest > 0:
+            out.append(f"(… {rest} more in view; read lists the page)")
+    else:
+        out.append(f"No heading or element of the page is in view now ({counted(lines)}; read lists them).")
+    if most:
+        out.append("Most of the page changed since your last look; read lists it.")
+    elif marked:
+        part, more = paged([f"{mark} {line}" for mark, line in marked], 0, AFTER_ACTION_CHARS // 2)
+        out += [f"Changed elsewhere since your last look ({CHANGE_MARKS}):", *part]
+        if more > 0:
+            out.append(f"(… {more} more lines of changes; read lists the page)")
     return "\n".join(out)
 
 
@@ -990,6 +1424,12 @@ def find_text(page, query):
 def element(page, ref):
     """The element read gave ``ref``: on the page, or in the frame read
     found it in (remember_frames), never in one of the browser's own computer."""
+    return located(page, ref)[1]
+
+
+def located(page, ref):
+    """``(frame, element)`` for ``ref`` (element): the frame it lies in,
+    None for the page's own document."""
     if not isinstance(ref, str) or not ref.startswith("e") or not ref[1:].isdigit():
         raise Refused(f"{ref} is no ref: take one from read (like e12).")
     address = frame_refs().get(ref)
@@ -1001,8 +1441,9 @@ def element(page, ref):
     for frame in frames:
         locator = frame.locator(f'[data-consens-ref="{ref}"]')
         if locator.count():
-            return locator.first
-    raise Refused(f"{ref} is not on the page any more (it changed). Call read for the current refs.")
+            return (None if address is None else frame), locator.first
+    # The page as it is now follows (on_failure): before, only "Call read", one more step.
+    raise StaleRef(f"{ref} is not on the page any more (it changed). The page as it is now:")
 
 
 def point(x, y):
@@ -1045,18 +1486,20 @@ def drag(page, strokes, seen=None):
     return f"Dragged {count} ({total} points)."
 
 
-def look_at(page, points, first_of=1):
-    """Before a click or drag at x,y (the mouse at its first point): what
-    lies at each point and a watch on the page (HIT_JS), and where a point
-    lies on a canvas, a frame or a video, the picture around it. For
-    hit_report once the action settled; None for a page the agent does not
-    read or one that cannot tell, and the action goes on all the same."""
+def look_at(page, points, first_of=1, refs=()):
+    """Before an action on the page in front (for a click or drag at x,y
+    with the mouse at its first point): a watch on the page (HIT_JS), what
+    lies at each point, and where a point lies on a canvas, a frame or a
+    video, the picture around it; ``refs`` are the elements the action is
+    on. For quiet and for hit_report once the action's effect is there;
+    None for a page the agent does not read or one that cannot tell, and the
+    action goes on all the same."""
     if hidden(page):
         return None
     points = [tuple(pair) for pair in points]
     try:
         found = page.evaluate(HIT_JS, {"mode": "before", "points": [list(pair) for pair in points],
-                                       "limit": CHANGES_SHOWN})
+                                       "limit": CHANGES_SHOWN, "refs": [str(ref) for ref in refs]})
         view = (_whole(found["view"][0]), _whole(found["view"][1]))
         hits = list(found["at"])[:len(points)] if isinstance(found["at"], list) else []
     except Exception:
@@ -1131,7 +1574,9 @@ def change_words(how):
 
 def hit_report(seen, page):
     """What a click or drag at x,y met (look_at) and what changed after it,
-    once the page settled: lines for the action's answer, or ""."""
+    once the page settled: lines for the action's answer, or "". An action
+    on a ref in a frame was watched there: its changes are the frame's,
+    their boxes in the frame."""
     if not seen:
         return ""
     lines = []
@@ -1149,8 +1594,12 @@ def hit_report(seen, page):
             line += f", in {hit_words(hit['in'])}"
         lines.append(line + ".")
     acted = seen["page"]
-    if page is not acted:
+    if page is not seen.get("tab", acted):
         lines.append("Another tab is in front now.")
+        return "\n".join(lines)
+    framed = acted is not seen.get("tab", acted)
+    if framed and _detached(acted):
+        lines.append("Its frame left the page after it.")
         return "\n".join(lines)
     if hidden(acted):
         # It led to the browser's own computer: nothing of it, as in read.
@@ -1161,16 +1610,18 @@ def hit_report(seen, page):
     except Exception:
         return "\n".join(lines)
     if not isinstance(changes, dict):
-        lines.append("The page loaded anew after it.")
+        lines.append("Its frame loaded anew after it." if framed else "The page loaded anew after it.")
         return "\n".join(lines)
     listed = _items(changes.get("changed"), CHANGES_SHOWN)
     removed = _items(changes.get("removed"), REMOVED_SHOWN)
     count = _whole(changes.get("count"))
     count = len(listed) + len(removed) if count is None else count
     if count <= 0:
-        lines.append("No element of the page changed after it.")
+        lines.append("No element of its frame changed after it." if framed else
+                     "No element of the page changed after it.")
     else:
-        said = f"Changed after it: {'1 element' if count == 1 else f'{count} elements'}"
+        said = ("Changed in its frame after it (boxes in the frame): " if framed else "Changed after it: ") + (
+            "1 element" if count == 1 else f"{count} elements")
         if listed:
             said += (", nearest first: " if len(listed) > 1 else ": ") + "; ".join(
                 f"{hit_words(item)} {change_words(_said(item.get('how'), 60))}" for item in listed)
@@ -1184,6 +1635,13 @@ def hit_report(seen, page):
             if after is not None:
                 lines.append(f"The picture around {x},{y} {'did not change' if after == before else 'changed'}.")
     return "\n".join(lines)
+
+
+def _detached(frame):
+    try:
+        return bool(frame.is_detached())
+    except Exception:
+        return False
 
 
 def safe_name(name):
@@ -1278,7 +1736,11 @@ def public_address(url):
 def fetch(context, page, url):
     """download: the file at ``url`` (else the current page's address) with
     the browser's sign-ins, as Chrome would send its cookies; a PDF Chrome
-    shows in its viewer comes as the file this way."""
+    shows in its viewer comes as the file this way. Its answer is the file
+    alone (since 2026-10-30, audit L5: before, 4,000 characters of the tab
+    followed, and a sign-in page saved as report.pdf, or 0 bytes, counted as
+    a download): its name, its bytes, its Content-Type and where a redirect
+    led; an empty answer is refused."""
     target = url or page.url
     if not public_address(target):
         raise Refused("download takes the address of a file on the web (or the current page's).")
@@ -1288,6 +1750,12 @@ def fetch(context, page, url):
     if not response.ok:
         raise Refused(f"The download failed: HTTP {response.status}.")
     body = response.body()
+    kind = " ".join(str(response.headers.get("content-type") or "").split())[:120]
+    typed = f"Content-Type {kind}" if kind else "no Content-Type"
+    moved = f", after a redirect to {response.url[:300]}" if response.url != target else ""
+    if not body:
+        raise Refused(f"The download came back empty: 0 bytes (HTTP {response.status}, {typed}{moved}). Nothing "
+                      "was saved.")
     disposition = response.headers.get("content-disposition", "")
     named = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", disposition, re.I)
     from urllib.parse import unquote, urlsplit
@@ -1295,7 +1763,7 @@ def fetch(context, page, url):
     path = free_path(DOWNLOADS, name)
     with open(path, "wb") as handle:
         handle.write(body)
-    return f"Downloaded {os.path.basename(path)} ({len(body)} bytes)."
+    return f"Downloaded {os.path.basename(path)}: {len(body)} bytes, {typed}{moved}."
 
 
 def finished_downloads():
@@ -1323,6 +1791,10 @@ def run(request):
     if action in ACTING and user_control():
         raise UserHasControl("The user has taken over the browser in the workspace view. Do not act in it now: "
                              "your next call waits until they hand it back, or answer with what you have.")
+    if action == "rest":
+        # The server's end of a message (main shortens the hold): no
+        # browser to start, no page to look at.
+        return {"text": RESTED}
     query = find_query(request) if action == "find" else ""
     LOCAL_PORTS.clear()
     LOCAL_PORTS.update(port for port in request.get("local_ports") or () if type(port) is int)
@@ -1353,6 +1825,10 @@ def run(request):
         context.on("page", watch)
         try:
             return on_page(context, page, action, request, query, caught)
+        except (UserHasControl, SettingUp):
+            raise
+        except Exception as exc:
+            raise on_failure(context, page, action, exc) from None
         finally:
             # The resident helper keeps the connection: this call's
             # listeners end with the call.
@@ -1374,11 +1850,15 @@ def call_seconds(request):
             + (DOWNLOAD_SECONDS if action == "download" else 0))
 
 
+# The actions on the page in front that it watches (look_at in act, quiet).
+WATCHED = frozenset({"click", "drag", "type", "select", "upload", "key", "scroll"})
+
+
 def on_page(context, page, action, request, query, caught):
     """``action`` on ``page`` (the tab in front) once the browser is connected."""
     offset = int(request.get("offset") or 0)
     if action == "read":
-        return {"text": read_text(page, offset, frames="all")}
+        return {"text": read_text(page, offset, frames="all", keep=True)}
     if action == "text":
         return {"text": page_text(page, offset)}
     if action == "find":
@@ -1400,6 +1880,9 @@ def on_page(context, page, action, request, query, caught):
             raise Refused(OWN_COMPUTER)
         line, png = picture(page)
         return {"text": header(page) + "\n" + line, "png": png}
+    if action == "download":
+        # The file, never the tab: the request changes no page (fetch).
+        return {"text": act(context, page, action, request)}
     if action == "wait":
         seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
         deadline, held = time.time() + seconds, user_control()
@@ -1410,26 +1893,54 @@ def on_page(context, page, action, request, query, caught):
         said = ("The user still has the browser.\n" if user_control() else
                 "The user handed the browser back.\n" if held else "")
         page = current_page(context)
-        settle(page)
-        return with_preview(page, request, with_picture(page, request, {
-            "text": said + read_text(page, 0, AFTER_ACTION_CHARS)}))
-    seen = []
-    done = act(context, page, action, request, seen)
-    page = current_page(context)
-    settle(page)
-    if seen:
+        loaded(page, idle=False)
+        return with_preview(page, request, with_picture(page, request, {"text": said + after_text(page, action)}))
+    # An action on the page in front: its watch (look_at, in act) and the
+    # tab's requests (Traffic) until its effect is there (quiet). One that
+    # loads a page (open, back, forward), brings another tab to the front, or
+    # has no watch, waits as before (loaded).
+    seen, watch = [], None
+    traffic = Traffic(page) if action in WATCHED else None
+    try:
+        done = act(context, page, action, request, seen)
+        watch = seen[0] if seen else None
+        if traffic is not None and watch is not None:
+            # On the document it watches: the page's, or its frame's for a ref in one.
+            quiet(watch["page"], traffic, short=brief(action, request))
+    finally:
+        if traffic is not None:
+            traffic.stop()
+    acted, page = page, current_page(context)
+    if watch is None or page is not acted:
+        loaded(page, idle=action != "tab")
+    if watch is not None:
         # The action ran: what the page answers about it never fails
         # its answer (the agent would take it again, a send twice).
         try:
-            report = hit_report(seen[0], page)
+            report = hit_report(watch, page)
         except Exception:
             report = ""
         done = "\n".join(filter(None, (done, report)))
     saved = keep_downloads(caught)
     if saved:
         done += "\nDownloaded: " + ", ".join(saved) + "."
-    answer = with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
+    answer = with_picture(page, request, {"text": done + "\n" + settled_text(page, action)})
     return with_preview(page, request, answer)
+
+
+def settled_text(page, action):
+    """after_text once the action ran: a page that cannot be read now (it
+    is going away) is read again once it loaded, and one that still cannot
+    costs the page, never the answer of an action that ran (the agent would
+    take it again)."""
+    try:
+        return after_text(page, action)
+    except Exception:
+        loaded(page, idle=False)
+    try:
+        return after_text(page, action)
+    except Exception as exc:
+        return f"URL: {page.url}\n(the page could not be read after it: {failure_text(exc, log=False)})"
 
 
 def picture(page):
@@ -1445,17 +1956,22 @@ def preview(page):
     """A small JPEG (base64) of the page now, for the card of its open step
     in the chat; "" when Chrome gives none, which never fails the step.
     Chrome scales it itself (a scaled clip of the viewport), so nothing here
-    decodes a picture."""
+    decodes a picture. A page whose JPEG is over PREVIEW_BYTES goes again
+    smaller (PREVIEW_TRIES); one too large even then has none."""
     try:
         x, y, width, height = page.evaluate("() => [scrollX, scrollY, innerWidth, innerHeight]")
         session = page.context.new_cdp_session(page)
         try:
-            shot = session.send("Page.captureScreenshot", {
-                "format": "jpeg", "quality": PREVIEW_QUALITY,
-                "clip": {"x": x, "y": y, "width": width, "height": height, "scale": min(1, PREVIEW_WIDTH / width)}})
+            for wide, quality in PREVIEW_TRIES:
+                shot = session.send("Page.captureScreenshot", {
+                    "format": "jpeg", "quality": quality,
+                    "clip": {"x": x, "y": y, "width": width, "height": height, "scale": min(1, wide / width)}})
+                data = str(shot.get("data") or "")
+                if len(base64.b64decode(data)) <= PREVIEW_BYTES:
+                    return data
         finally:
             session.detach()
-        return str(shot.get("data") or "")
+        return ""
     except Exception:
         return ""
 
@@ -1480,8 +1996,16 @@ def with_picture(page, request, answer):
 
 
 def act(context, page, action, request, seen=None):
-    """One action that changes the page; returns what it did. A click or
-    drag at x,y puts what lay at its points into ``seen`` (look_at)."""
+    """One action that changes the page; returns what it did. An action on
+    the page in front puts its watch into ``seen`` (look_at, just before it
+    acts), a click or drag at x,y with what lay at its points."""
+    def watch(refs=(), frame=None):
+        # A ref in a frame: the watch is on the frame's document (its
+        # changes are no change of the page's own).
+        if seen is not None:
+            seen.append(look_at(frame or page, [], refs=refs))
+            if seen[-1] is not None:
+                seen[-1]["tab"] = page
     if action == "open":
         target = str(request.get("url") or "")
         if not target:
@@ -1508,7 +2032,9 @@ def act(context, page, action, request, seen=None):
         return fetch(context, page, str(request.get("url") or ""))
     if action == "click":
         if request.get("ref"):
-            element(page, request.get("ref")).click(timeout=10_000)
+            frame, target = located(page, request.get("ref"))
+            watch([request.get("ref")], frame)
+            target.click(timeout=10_000)
             return f"Clicked {request.get('ref')}."
         # A place on the page as the screenshot shows it (CSS pixels of the
         # viewport): for what read lists no element of, such as a canvas,
@@ -1525,10 +2051,11 @@ def act(context, page, action, request, seen=None):
         return drag(page, request.get("strokes"), seen)
     if action == "type":
         ref, text = request.get("ref"), str(request.get("text") or "")
-        target = element(page, ref)
+        frame, target = located(page, ref)
         if target.evaluate(IS_SECRET_JS):
             raise Refused("That is a password or code field: only the user types those. Hand the browser to them "
                           "with ask_user (browser) to sign in, then go on.")
+        watch([ref], frame)
         if target.evaluate("el => el.isContentEditable"):
             target.click(timeout=10_000)
             page.keyboard.insert_text(text)
@@ -1542,7 +2069,8 @@ def act(context, page, action, request, seen=None):
         return f"Typed into {ref}" + (" and pressed Enter." if request.get("enter") else ".")
     if action == "select":
         ref, choice = request.get("ref"), str(request.get("option") or "")
-        target = element(page, ref)
+        frame, target = located(page, ref)
+        watch([ref], frame)
         try:
             target.select_option(label=choice, timeout=5_000)
         except Exception:
@@ -1553,18 +2081,22 @@ def act(context, page, action, request, seen=None):
         # Only a file the server put here for this call.
         if os.path.dirname(os.path.abspath(path)) != os.path.abspath(UPLOADS) or not os.path.isfile(path):
             raise Refused("The file to upload is missing.")
-        element(page, ref).set_input_files(path, timeout=10_000)
+        frame, target = located(page, ref)
+        watch([ref], frame)
+        target.set_input_files(path, timeout=10_000)
         return f"Put {os.path.basename(path)} into {ref}."
     if action == "key":
         key = str(request.get("key") or "")
         if key not in KEYS:
             raise Refused("key takes one of: " + ", ".join(sorted(KEYS)) + ". Text goes in with the action type.")
+        watch()
         page.keyboard.press(key)
         return f"Pressed {key}."
     if action == "scroll":
         direction = -1 if request.get("direction") == "up" else 1
-        page.evaluate("d => window.scrollBy(0, d * window.innerHeight * 0.8)", direction)
-        return "Scrolled " + ("up." if direction < 0 else "down.")
+        watch()
+        moved = page.evaluate(SCROLL_JS, direction)
+        return scrolled(direction, moved)
     if action in {"back", "forward"}:
         (page.go_back if action == "back" else page.go_forward)(wait_until="domcontentloaded", timeout=15_000)
         return f"Went {action}."
@@ -1578,9 +2110,100 @@ def act(context, page, action, request, seen=None):
     raise Refused(f"Unknown action {action}.")
 
 
+# Playwright's call log, which follows its message, lists every step of an
+# action: these say nothing of why one failed (its waits and retries, the
+# scrolling, our own selector, the text typed).
+ROUTINE_STEP = re.compile(
+    r"(?:waiting for (?:locator\(|element to be |navigation|scheduled navigations)|locator resolved to |"
+    r"attempting \w+ action|retrying \w+ action|waiting \d+ms|element is visible, enabled and |"
+    r"scrolling into view|done scrolling|performing \w+ action|\w+ action done|navigations have finished|"
+    r"navigating to |\w+\(.*\)$)")
+
+
+def failure_text(exc, log=True):
+    """What failed, for the agent: Playwright's message and, with ``log``,
+    the last step of its call log that says why (since 2026-10-30, audit L4:
+    "Timeout 10000ms exceeded." alone, where the log said
+    "<div class="consent-layer"></div> intercepts pointer events"). A page of
+    the browser's own computer gives no ``log``: its steps quote the page."""
+    text = str(exc).strip()
+    if not text:
+        return type(exc).__name__
+    first, _, rest = text.partition("\n")
+    said = " ".join(first.split())[:400]
+    if log and "Call log:" in rest:
+        steps = [re.sub(r"^\d+ × ", "", re.sub(r"^-\s*", "", line.strip()))
+                 for line in rest.split("Call log:", 1)[1].splitlines()]
+        why = [step for step in steps if step and not ROUTINE_STEP.match(step)]
+        if why:
+            said += "\nLast step in Playwright's log: " + " ".join(why[-1].split())[:300]
+    return said
+
+
+def on_failure(context, page, action, exc):
+    """An action on a page that failed or was refused, as the exception
+    answer_for turns into its answer: the reason, then the page in front as
+    it is now (since 2026-10-30, audit L4: "refused" and "failed" named no
+    page, and the agent read it again in its next step). A ref no element
+    has any more brings the page's whole list (StaleRef); a download, which
+    changes no page, only its reason."""
+    if action == "download":
+        return exc if isinstance(exc, Refused) else Failed(failure_text(exc))
+    try:
+        now = current_page(context)
+        own = hidden(now) or hidden(page)
+    except Exception:
+        now, own = None, True
+    said = str(exc) if isinstance(exc, Refused) else failure_text(exc, log=not own)
+    try:
+        if now is None:
+            where = ""
+        elif hidden(now):
+            where = f"URL: {now.url}"
+        elif isinstance(exc, StaleRef):
+            where = read_text(now, 0, AFTER_ACTION_CHARS, keep=True)
+        else:
+            where = header(now)
+    except Exception:
+        where = ""
+    said = "\n".join(filter(None, (said, where)))
+    return Refused(said) if isinstance(exc, Refused) else Failed(said)
+
+
 def failed(exc):
-    message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-    return {"status": "failed", "text": message[:400]}
+    return {"status": "failed", "text": failure_text(exc)}
+
+
+# scroll: the page by 80 % of its view, at once (a page's smooth scrolling
+# would still be under way when the view is read), and where its view is
+# before and after, in CSS pixels of the page (since 2026-10-30: "Scrolled
+# down." alone also when the page did not move, a page that scrolls in a
+# box of its own).
+SCROLL_JS = r"""
+direction => {
+  const root = document.scrollingElement || document.documentElement;
+  const before = Math.round(scrollY);
+  scrollBy({top: direction * innerHeight * 0.8, behavior: 'instant'});
+  return [before, Math.round(scrollY), innerHeight, root ? root.scrollHeight : 0];
+}
+"""
+
+
+def scrolled(direction, moved):
+    """What a scroll did, from SCROLL_JS's answer."""
+    way = "up" if direction < 0 else "down"
+    values = [_whole(value) for value in moved] if isinstance(moved, list) and len(moved) == 4 else []
+    if len(values) != 4 or None in values:
+        return f"Scrolled {way}."
+    before, top, view, height = values
+    where = f"the view shows {top}-{top + view} of {max(height, top + view)} px"
+    if top == before:
+        return f"The page did not move: {where}."
+    if top + view >= height - 1:
+        where += ", the end of the page"
+    elif top <= 0:
+        where += ", the top of the page"
+    return f"Scrolled {way}: {where}."
 
 
 def answer_for(request):
@@ -1590,7 +2213,7 @@ def answer_for(request):
             raise Refused("The request is no JSON object.")
         answer = {"status": "ok", **run(request)}
         answer["downloads"] = finished_downloads()
-    except (Refused, UserHasControl, SettingUp) as exc:
+    except (Refused, UserHasControl, SettingUp, Failed) as exc:
         answer = {"status": exc.status, "text": str(exc)}
     except Exception as exc:
         answer = failed(exc)
@@ -1629,9 +2252,12 @@ TOOK = b"took\n"
 GO = b"go\n"
 STALE = b"stale\n"
 DECLINED = b"declined\n"
-# How long a call waits for TOOK: the browser's start (display.sh, up to
-# 60 s) and a connection to Chrome (CONNECT_SECONDS), within the server's limit.
-READY_SECONDS = 80
+# How long a call waits for TOOK: a running browser (display.sh mends one
+# whose debugging port does not answer, ~20 s) and a connection to Chrome
+# (CONNECT_SECONDS). Until 2026-10-30 80 s (audit A7): with a hanging
+# display.sh the call then ran itself, with its own restart and the 70 s of
+# its watchdog, past the server's 180 s (agent_browser.CALL_SECONDS).
+READY_SECONDS = 35
 # A request: a few kilobytes, up to a drag's 2000 points or 20,000 characters
 # of text; an answer, up to a screenshot (agent_browser.ANSWER_BYTES).
 REQUEST_BYTES = 1024 * 1024
@@ -1749,17 +2375,23 @@ def stop_server():
 
 def ready(request):
     """Before the resident helper takes a call: the browser running and,
-    for an action on the pages, this call's connection to Chrome. False
-    when either fails: the call then runs itself, which heals the browser
-    (a restart), and this helper ends, since its Playwright may be what
-    broke."""
+    for an action on the pages, this call's connection to Chrome, which
+    restarts Chrome once when it takes none (connect, as a call of its own
+    does; since 2026-10-30, audit A7: before, the helper declined, and the
+    call healed the browser itself after waiting for it). False when that
+    fails too: the call then runs itself, and this helper ends, since its
+    Playwright may be what broke."""
     action = request.get("action") if isinstance(request, dict) else None
+    if action == "rest":
+        # It lets the VM sleep (main answers it without a helper): no browser to start.
+        return True
     try:
         ensure_browser()
         KEPT["prepared"] = True
-        # What run refuses before it looks at a page needs no connection.
-        if action in ACTIONS and action != "warm" and not (action in ACTING and user_control()):
-            KEPT["browser"] = KEPT["playwright"].chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
+        # What run refuses before it looks at a page needs no connection,
+        # nor do the server's own actions.
+        if action in ACTIONS and action not in SERVER_ACTIONS and not (action in ACTING and user_control()):
+            KEPT["browser"] = connect(KEPT["playwright"])
         return True
     except Exception:
         disconnect()
@@ -1898,19 +2530,25 @@ def main():
     with _ANSWER_LOCK:
         _answered = False
     _watchdog_done.clear()
-    started, served = time.monotonic(), False
+    started, served, resting = time.monotonic(), False, False
     try:
         request = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
     except Exception as exc:
         answer = failed(exc)
     else:
-        answer = through_server(request) if isinstance(request, dict) else None
-        served = answer is not None
+        # rest only shortens the hold: no helper, no browser, nothing else.
+        resting = isinstance(request, dict) and request.get("action") == "rest"
+        answer = {"status": "ok", "text": RESTED} if resting else (
+            through_server(request) if isinstance(request, dict) else None)
+        served = answer is not None and not resting
         if answer is None:
             answer = answer_for(request)
     # For the server's log: the helper's own time, and whether the resident one answered.
     answer.update(seconds=round(time.monotonic() - started, 3), served=served)
-    stay_awake()
+    if resting:
+        stay_awake(REST_FOR)
+    else:
+        stay_awake()
     if not answer_once(answer):
         # The watchdog answered: it ends the process once Chrome restarted.
         _watchdog_done.wait(RESTART_SECONDS + 10)

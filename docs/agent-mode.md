@@ -1313,11 +1313,15 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Wartezeit oder der Download eines anderen Chats) wird nicht abgewartet,
   der Aufruf läuft nach `SERVE_FREE_SECONDS` (1 s) selbst. Dann macht der
   Helfer den Browser bereit (`display.sh`, Verbindung), sagt `took` und
-  handelt erst auf das `go` des Aufrufs. Kommt kein `took` (der Aufruf
-  wartet bis `READY_SECONDS`, 80 s), ein `declined` (Browser oder Treiber
-  kaputt: der Helfer endet, der Aufruf heilt den Browser selbst) oder
-  `stale`, läuft der Aufruf selbst; ein Helfer, dem das `go` fehlt, tut
-  nichts. Nach `go` und ohne Antwort scheitert eine Aktion (`NOT_FINISHED`,
+  handelt erst auf das `go` des Aufrufs. Nimmt Chrome die Verbindung nicht
+  an, startet der Helfer es einmal neu wie ein Aufruf ohne Helfer
+  (`connect`, seit 2026-10-30, Laufzeit-Audit A7: vorher meldete er sofort
+  `declined`, und der Aufruf heilte den Browser erst nach seiner Wartezeit
+  selbst). Kommt kein `took` (der Aufruf wartet bis `READY_SECONDS`, 35 s;
+  bis 2026-10-30 80 s, mit eigenem Neustart und 70-s-Wächter danach über
+  den 180 s des Servers), ein `declined` (Browser oder Treiber auch nach dem
+  Neustart kaputt: der Helfer endet) oder `stale`, läuft der Aufruf selbst;
+  ein Helfer, dem das `go` fehlt, tut nichts. Nach `go` und ohne Antwort scheitert eine Aktion (`NOT_FINISHED`,
   der Helfer wird beendet), nur ein reiner Lesezugriff liest dann selbst.
   Endet der Aufruf vor seiner Antwort (Zeitlimit des Servers, Stop), endet
   der Helfer und mit ihm die Aktion, wie früher mit dem Prozess des Aufrufs
@@ -1383,8 +1387,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   in offene Shadow Roots), mit Tag, Id, Klassen, Namen, Ref und Box in
   Screenshot-Pixeln, dazu das Element darum mit eigener Box (ein Brett, dessen
   Box jedes Feld ergibt). Danach folgt, was sich geändert hat, die nächsten
-  zuerst (`CHANGES_SHOWN`, ein `MutationObserver` vom Druck bis nach `settle`,
-  die eigenen `data-consens-ref` zählen nicht), oder „No element of the page
+  zuerst (`CHANGES_SHOWN`, ein `MutationObserver` vom Druck bis nach `quiet`,
+  die eigenen `data-consens-*`-Marken zählen nicht), oder „No element of the page
   changed after it.“ bzw. „The page loaded anew after it.“. Für eine Canvas,
   einen Frame oder ein Video vergleicht der Helfer das Bild um den Punkt
   (`PICTURE_AROUND` px, PNG vorher und nachher, je höchstens
@@ -1402,6 +1406,71 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   hätte der Agent einen Senden-Knopf ein zweites Mal gedrückt. Die Bilder
   um den Punkt entstehen mit `caret="initial"`, denn beim Ausblenden des
   Cursors setzt Playwright den Stil jedes Felds, und das zählte als Änderung.
+- **Antworten nach Aktionen** (seit 2026-10-30, Laufzeit-Audit
+  [T4, L2, L4, L5](agent-workspace-runtime-audit-2026-10-30.md)).
+  - *Warten auf die Wirkung* (`quiet`, T4): Bis dahin wartete jede ändernde
+    Aktion bis 2 s auf `networkidle`. Seiten mit Tracking, Polling oder
+    Websocket werden nie ruhig (ein `click` brauchte in Prod im Median
+    1,9 s), und eine Seite, die einmal ruhig war, bekam gar keine Wartezeit,
+    sodass die Antwort vor einem Menü kommen konnte, das ein Timer oder ein
+    `fetch` öffnet. Jetzt beobachtet `HIT_JS` jede Aktion auf der Seite vorn
+    (`look_at` kurz vor ihr, auch `click` per Ref, `type`, `select`,
+    `upload`, `key`, `scroll`; die Refs geben die Nähe vor), und `quiet`
+    wartet, bis die Seite seit dem Ende der Aktion `QUIET_MS` (300 ms)
+    unverändert ist und keine Anfrage offen, die die Aktion startete (`fetch`,
+    `xhr`, `script`, Frame-Dokument; `Traffic` über Playwrights
+    Request-Ereignisse), höchstens `QUIET_SECONDS` (1 s); nach `scroll` und
+    Tasten außer Enter/Space 100 ms, höchstens 0,3 s. Eine Navigation des
+    Tabs (Navigations-Request des Hauptframes) wartet bis zum Commit oder
+    Ende (Download, Fehler), höchstens `LOADED_SECONDS`, und lädt dann wie
+    bisher (`loaded`: `domcontentloaded`, bis `IDLE_SECONDS` 2 s Netzruhe);
+    ebenso `open`, `back`, `forward`, ein neuer Tab vorn und Seiten ohne
+    Beobachtung. Eine Ref in einem Frame wird in diesem Frame beobachtet
+    („Changed in its frame after it (boxes in the frame)“, „Its frame left
+    the page after it.“). Lokal gegen Chromium: Menü per Timer nach 0,56 s
+    im Ergebnis, `fetch` mit 0,5 s Antwort nach 0,89 s, `scroll`/`key`
+    0,12 s, Klick auf einer Seite mit Polling 0,44 s statt 2 s.
+  - *Nur, was sich änderte* (`after_text`, L2): Vorher kam nach jeder Aktion
+    die Liste von `read` noch einmal (bis 4.000 Zeichen, ~950 Tokens je
+    Schritt), auch nach `type` ohne Enter, `key` und `scroll`; ein Klick per
+    Ref sagte nur „Clicked e12.“. Jetzt folgen auf den Wirkungsbericht der
+    Kopf der Seite und von der Liste nur die Zeilen, die sich seit dem
+    letzten Blick des Agenten geändert haben (`changes`: `+` neu, `~`
+    geändert, `-` weg, nach Refs; unmarkiert davor, wo sie stehen: „(over the
+    page:)“, die Zeile ihres Frames), oder „The page's headings and elements
+    are as at your last look (N lines; read lists them).“. Die ganze Liste
+    kommt bei `read`, nach `open`, `back`, `forward`, `tab`, auf einer
+    anderen Adresse, beim ersten Blick, wenn der letzte älter als
+    `LOOK_SECONDS` (10 min) ist, mehr als die Hälfte neu ist (ein anderes
+    Dokument unter derselben Adresse) oder die Liste kürzer als
+    `WHOLE_BELOW_CHARS` ist. Der letzte Blick liegt in
+    `~/.consens/browser/last-look.json` (Adresse, Zeit, Zeilen), gilt also
+    für den residenten Helfer und den Aufruf ohne ihn; Refs bleiben bei ihrem
+    Element wie zuvor, eine veraltete Ref wird erkannt (unten). Da das Lesen
+    nach einer Aktion nur Frames über der Seite liest, `read` aber alle,
+    gelten die Elemente eines dabei nicht gelesenen Frames weder als neu
+    noch als weg (`outline`); ein Frame, der ging, geht als eine Zeile, einer,
+    der über die Seite kommt, bringt seine Elemente als neu. `scroll` nennt
+    die Lage („Scrolled down: the view shows 648-1368 of 4000 px.“, „The page
+    did not move: …“ bei Seiten, die in einer eigenen Box scrollen) und
+    listet zuerst, was im Blick ist (`IN_VIEW_JS`), dann, was sich sonst
+    änderte. Kann die Seite nach einer gelaufenen Aktion nicht gelesen
+    werden, kostet das nur die Seite (`settled_text`), nie die Antwort.
+  - *Fehler mit Ursache und Ort* (`on_failure`, L4): `failed` behielt nur die
+    erste Zeile einer Playwright-Meldung („Timeout 10000ms exceeded.“), und
+    `refused`/`failed` nannten keine Seite. Jetzt folgt die letzte
+    aussagekräftige Zeile aus Playwrights Call-Log („Last step in
+    Playwright's log: <div class="consent-layer"></div> intercepts pointer
+    events“; Routine-Schritte wie Warten, Wiederholen, Scrollen, der eigene
+    Selektor und der getippte Text zählen nicht, `ROUTINE_STEP`), dann der
+    Kopf der Seite vorn. Eine veraltete Ref bringt gleich die ganze Liste
+    (`StaleRef`) statt „Call read“. Seiten der eigenen VM: nur ihre Adresse,
+    kein Call-Log (es zitiert die Seite).
+  - *Download* (L5): Die Antwort von `download` ist die Datei: Name, Bytes,
+    Content-Type und wohin eine Weiterleitung führte, kein Tab-Zustand
+    mehr; eine leere Antwort ist `refused` mit dieser Tatsache, gespeichert
+    wird nichts (vorher galten 0 Byte und eine Login-Seite als `report.pdf`
+    als Erfolg).
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
   `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
   `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,
@@ -1572,10 +1641,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   wie die Hintergrundprozesse der Werkbank), den der nächste Aufruf erneuert und
   der nach dem letzten von selbst endet. Kosten höchstens 10 Minuten Wachzeit
   nach dem letzten Browser-Schritt; sie zählen nicht zur VM-Zeit des Tages.
-  Seit 2026-10-30 (K2) ruft das Ende einer Nachricht, die den Browser nutzte
-  oder vorwärmte, die Helfer-Aktion `rest` (`BrowserTools._rest`, eigener
-  Backend, 20 s, Fehler nur im Log): Sie kürzt den Hold auf rund 2 min. Ein
-  `browser.py` ohne `rest` antwortet mit einem Fehler, der nichts ändert.
+  Seit 2026-10-30 (Laufzeit-Audit K2) kürzt das Ende einer Nachricht, die den
+  Browser nutzte oder vorwärmte, den Hold: Die Server-Aktion `rest` (wie
+  `warm` nie eine des Agenten, `SERVER_ACTIONS`) setzt ihn auf `REST_FOR`
+  (2 min) und tut sonst nichts (kein Helfer, kein Chrome, keine Seite).
+  Aufgerufen wird sie von `BrowserTools._rest` (eigener Backend, 20 s, Fehler
+  nur im Log); eine ältere `browser.py` lehnt sie als unbekannte Aktion ab,
+  was nichts ändert (die VM bleibt dann noch einmal 10 min wach).
   Geprüft (2026-10-29, Test-VM danach gelöscht): nach einem Aufruf 60 s ohne
   Befehl 121 Herzschläge ohne Lücke, der Hold in `GET /v1/tasks` mit Ablauf
   +10 min, Foony nach 90 s Pause noch verbunden. Dabei gesehen: Foonys
@@ -1605,7 +1677,11 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   bringen höchstens alle `PREVIEW_SECONDS` (12 s) ein neues Bild, und die
   Karte ist so groß wie in der Zeitleiste statt einer Zeile mit 64-px-Bild;
   die Werkzeugbeschreibung sagt dem Agenten, dass der Nutzer die Seite dort
-  sieht), über das
+  sieht; das Bild ist seit dem Laufzeit-Audit V7 720 px breit bei Qualität 50
+  statt 480 px/60, auf Retina sonst weich; über `PREVIEW_BYTES` (64 KB, wie
+  `agent_browser.PREVIEW_BYTES`) folgen 600 px/35 und 480 px/40,
+  `PREVIEW_TRIES`: lokal eine Nachrichtenseite 41 KB, eine Seite voller
+  kleiner Schrift 98 KB, mit 600/35 53 KB), über das
   Bildschirm-Symbol in der Kopfzeile des Laufs (`agent-delegation.js`
   `.agent-workspace-toggle`) und in Einstellungen → Agent → Workspace.
 - **Auf und zu** (seit 2026-10-29): Es klappt von der rechten Kante aus auf und
