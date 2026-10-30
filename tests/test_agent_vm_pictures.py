@@ -68,10 +68,15 @@ def test_only_pictures_and_only_for_a_model_that_takes_them(store, fake_vm, sees
 
 def test_only_the_newest_pictures_stay_in_view_and_count_as_little():
     messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
-    for n in range(agent_compaction.PICTURES_KEPT + 2):
+    for n in range(agent_compaction.PICTURES_SHOWN + 1):
         messages.append(picture_message(f"/home/sprite/p{n}.png", "image/png", PNG * 1000))
+    # Not seen yet (no step after them): all stay.
+    assert older_pictures(messages, 2) == []
+    messages.append({"role": "assistant", "content": "Looked."})
     gone = older_pictures(messages, 2)
-    assert [index for index, _ in gone] == [2, 3]
+    # Over PICTURES_SHOWN, all but the newest PICTURES_KEPT leave at once.
+    assert [index for index, _ in gone] == list(range(2, 2 + agent_compaction.PICTURES_SHOWN + 1
+                                                       - agent_compaction.PICTURES_KEPT))
     assert gone[0][1]["content"] == [messages[2]["content"][0], {"type": "text", "text": PICTURE_GONE}]
     # A picture weighs PICTURE_CHARS towards compaction, not its base64 length.
     assert own_chars(messages[2:3], 0) < agent_compaction.PICTURE_CHARS + 500

@@ -879,7 +879,8 @@ class DelegationLoop(AgentLoop):
         """The pictures vm_view_image read, the browser's screenshots and
         the pictures find_pictures fetched in this batch follow its
         results as user messages with the image; older ones leave the view
-        (agent_compaction.older_pictures)."""
+        together once there are many (agent_compaction.older_pictures),
+        never those of this batch."""
         pictures = [*(self.vm_tools.take_pictures() if self.vm_tools is not None else ()),
                     *(self.image_tools.take_pictures() if self.image_tools is not None else ())]
         if not pictures:
@@ -902,6 +903,10 @@ class DelegationLoop(AgentLoop):
         if cut is None:
             return
         for index, message in cut.replacements:
+            self.messages[index] = message
+        # The cut rewrites the cached prefix anyway: older pictures go with it.
+        for index, message in agent_compaction.older_pictures(self.messages, self.turn_start,
+                                                               shown_max=agent_compaction.PICTURES_KEPT):
             self.messages[index] = message
         logging.info("Agent long run compacted results=%s chars_before=%s chars_after=%s",
                      len(cut.replacements), cut.before, cut.after)
