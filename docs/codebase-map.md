@@ -6099,16 +6099,27 @@ die Werkbank (`agent_vm.workspace_name(uid)`) und die Browser-VM
 Nachrichten und Chats wiederverwendet, jeder Chat in seinem Ordner
 `/home/agent/chats/<chat>` (`agent_vm.chat_dir`: Startordner der Befehle, Ziel
 relativer Pfade; seit 2026-10-28 nach dem Titel benannt, `agent_vm.chat_folder`,
-Name am Chat unter `agent_vm.folder`, umbenannt per `move_path` in
-`agent_workspace.make_chat_dir`). Immer nur ein Chat: Der erste Aufruf einer Nachricht nimmt
+Name am Chat unter `agent_vm.folder`, umbenannt in `agent_workspace.open_chat`,
+einem Befehl als Agent mit Marker, Schlüsseln und Notizen). Immer nur ein Chat: Der erste Aufruf einer Nachricht nimmt
 die Sperre (`agent_workspace.claim`, Dokument
 `users/{uid}/chat_state/agent_workspace` mit `name`, `browser`,
-`lease {chat_id, turn_id, until}`, 10 min, bei VM-Aufrufen verlängert, am
-Nachrichtenende freigegeben, und seit 2026-10-29 `tunnel_ports` (höchstens 8)
-und `secret_names` (höchstens 32, nie Werte), die `Claim` mitliefert); hält sie ein anderer Chat, sagt `VM_BUSY` das
-dem Agenten (Aktivität `outcome: busy`), die Antwort läuft weiter. Derselbe
-Aufruf schreibt das Konto-Dokument und das Chat-Feld `agent_vm`
-(`workspace: true`), ruft `ensure(name, rules)` (Netz zu bis auf die
+`lease {chat_id, turn_id, until}`, 10 min, seit 2026-10-30 von einem eigenen
+Thread alle 4 min verlängert (`VMSession._keep_lease`, auch während die
+Nachricht auf den Nutzer wartet), am
+Nachrichtenende freigegeben, seit 2026-10-29 `tunnel_ports` (höchstens 8)
+und `secret_names` (höchstens 32, nie Werte), die `Claim` mitliefert, und
+seit 2026-10-30 `policy`, der Fingerabdruck der zuletzt bestätigten
+Netzregeln: `claim` setzt ihn für die Sperre auf `None`, `release` bestätigt
+ihn); hält sie ein anderer Chat, sagt `VM_BUSY` das
+dem Agenten (Aktivität `outcome: busy`), die Antwort läuft weiter. Die Sperre
+reicht dem Browser; die Werkbank startet erst mit ihrem ersten Werkzeug
+(`VMSession.ready(bench=…)`, Teile `_lease` und `_bench` je als `_Job` auf
+eigenem Thread, `open_workspace` beginnt beide schon während des nächsten
+Modellschritts: `VMTools.prewarm`, aus `DelegationLoop._request_workspace`;
+eine offen beginnende Nachricht wärmt nur den Browser). Der Start der
+Werkbank schreibt das Konto-Dokument und das Chat-Feld `agent_vm`
+(`workspace: true`), ruft `ensure(name, rules)` (nur wenn die Regeln vom
+bestätigten Stand abweichen; Netz zu bis auf die
 Paketquellen `WORKBENCH_RULES`, dazu die Domains, die der Nutzer dem Chat
 erlaubt hat, `agent_domains.rules`; am Nachrichtenende zurück auf die
 Paketquellen), bringt die Werkbank auf Stand (`agent_workspace.prepare`, nur
@@ -6118,8 +6129,15 @@ Browser und Gateway-Dienst weg, Xvfb/x11vnc/openbox der alten Bauweise
 entfernt, ripgrep und headless Chrome installiert, wo sie fehlen; dafür
 öffnet `prepare` `dl.google.com` nur um das Setup herum: Regeln lesen
 (`get_policy`), plus `CHROME_RULE` setzen, danach im `finally` genau die
-gelesenen zurück, nie die Grundliste), legt den Chat-Ordner an, den Checkpoint der
-Nachricht und kopiert ihre Anhänge in den `input`-Ordner des Chats. Jeder
+gelesenen zurück, nie die Grundliste), legt den Chat-Ordner an
+(`agent_workspace.open_chat`), nimmt den Checkpoint der Nachricht neben dem
+Rest (nur ändernde Aufrufe warten darauf, `checkpoint_wait`) und kopiert ihre
+Anhänge danach in den `input`-Ordner des Chats. Ein Ausfall des Anbieters
+kostet den Aufruf, erst drei in Folge die VM (`VMSession.failed`,
+`MAX_FAILURES`); unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) setzt
+Regeln zurück und gibt die Sperre frei auf einem eigenen Thread (`_finish`,
+höchstens 2 s gewartet). Jeder
 Befehl und jede Datei des Agenten läuft als dieser Nutzer über
 `agent_vm.agent_argv` (`sudo -n /bin/bash agent-run …`: eigener
 Mount-Namespace ohne `/.sprite/api.sock` und Checkpoints, `setpriv
@@ -6138,7 +6156,12 @@ leben oder `browser.py` `--restart` verlangt (`--keep` startet nur, beendet nie)
 noch ladende Seite; `relay.py` hält Chrome bei offener Live-Ansicht am Leben
 (`keep_chrome`). Seit 2026-10-29 hält jeder Aufruf die Browser-VM 10 min wach
 (`browser.stay_awake`, ablaufender Hold der Sprites-Tasks-API): eingeschlafen
-verlor Chrome zwischen zwei Schritten jede Live-Verbindung. Details
+verlor Chrome zwischen zwei Schritten jede Live-Verbindung. Seit 2026-10-30
+kürzt das Ende einer Nachricht mit Browser den Hold auf 2 min (Helfer-Aktion
+`rest`, `BrowserTools._rest`). Der localhost-Tunnel (`agent_tunnel.py`) lebt
+nur, solange eine Nachricht den Arbeitsplatz nutzt (`begin`/`end`) oder die
+Live-Ansicht offen ist (`viewing`, Herzschlag über
+`agent_workspace.holds_view`), plus 2 min (`wanted`). Details
 `docs/agent-mode.md`, „Browser-VM“.
 Während der Übernahme wartet der Agent: `control` im Konto-Dokument
 lässt jeden Aufruf warten (`VMSession.wait_for_user`, höchstens 120 s, dann
@@ -6160,9 +6183,12 @@ Jeder Aufruf ist ein Tool-Event mit `command`/`path`, live `output`
 (`ReadOnlyTool.reports`, `_execute` übergibt `report`), am Ende `exit_code`,
 `duration_ms`, `timed_out` oder `outcome`; im Audit-Modus steht das Ergebnis
 als `tool`-Eintrag mit Herkunft `vm` im Arbeitsprotokoll. Der Turn speichert
-`agent_vm` (`checkpoint`, `calls`, `commands`, `seconds`; `finish_run`,
+`agent_vm` (`checkpoint`, `calls`, `commands`, `seconds`; seit 2026-10-30
+`phases`, `cold`, `browser_calls`, `browser_seconds`, bei Ausfall
+`unavailable_reason`; `finish_run`,
 `turn_detail`). VM-Werkzeuge sind `REPEATABLE_TOOLS`, `vm_exec`/`vm_read_file`
-sperren Memory. Ein Ausfall (`VMUnavailable`) schaltet die VM für die
+sperren Memory. Ein Ausfall (`VMUnavailable`) kostet den Aufruf (Aktivität
+`outcome: interrupted`), drei in Folge schalten die VM für die
 Nachricht ab, die Antwort läuft weiter. Anzeige: `agent-activity.js` `vmView`
 (kompakter Block, offen während der Befehl läuft, danach eingeklappt;
 Befehl/Ausgabe in `<code>`/`<pre>`); live faltet `foldPast` frühere Schritte in

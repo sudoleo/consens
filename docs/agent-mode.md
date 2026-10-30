@@ -889,10 +889,14 @@ selbst auf `~/.local` zurück, gemessen) oder uv, Node-Pakete mit npm im
 Projekt (`nvm` verträgt kein eigenes `prefix`, `npx` für Werkzeuge). Dazu
 `browser` (siehe „Arbeitsplatz“) und `request_domain` (siehe „Netz der
 Werkbank“).
-Ab dem ersten VM-Start einer Nachricht ist sie ein langer Lauf mit eigenen
+Ab dem ersten Start der Werkbank oder der ersten Antwort des Browsers in einer
+Nachricht ist sie ein langer Lauf mit eigenen
 Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
 unter „Tageskontingent“; mit dem Arbeitsplatz auf Abruf schon ab
-`open_workspace`); VM-Aufrufe zählen nicht zur
+`open_workspace`). Der Browser allein zählt bewusst mit (geprüft beim
+Laufzeit-Audit 2026-10-30, T5): Dieselbe Browser-Aufgabe hätte sonst andere
+Grenzen, je nachdem, ob ihre Nachricht offen begann oder `open_workspace`
+rief. VM-Aufrufe zählen nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
 Änderung sind Fortschritt). Jedes VM-Werkzeug sperrt Memory wie `read_file`
 (Memory-Sperre unten): Ausgaben, Dateien und die Notizen des Arbeitsplatzes
@@ -901,24 +905,52 @@ sind Fremdinhalt.
 **Lebenszyklus.** Seit 2026-10-27 eine VM pro Konto, der Arbeitsplatz (siehe
 „Arbeitsplatz“ unten), Name `workspace_name(uid)` (stabil, ohne Konto-ID);
 davor eine pro Chat (`vm_name(uid, chat)`), die solche Chats bis zu ihrer
-Löschung behalten. Erst der erste VM-Aufruf einer Nachricht weckt sie
-(`VMSession.ready`): In einer Transaktion mit Kontosperre und aktivem Chat
-nimmt die Nachricht die Sperre des Arbeitsplatzes und schreibt ihn ins
-Konto-Dokument und als `agent_vm: {provider, name, workspace, created_at,
-used_at}` an den Chat, bevor der Anbieter ihn anlegt (so finden Konto- und
-Chat-Löschung ihn immer); dann `ensure` (anlegen, falls es ihn nicht gibt, und
-die Egress-Regeln setzen), `agent_workspace.prepare` (die Werkzeuge der VM, nur
-bei neuer Version), der Ordner des Chats, der Checkpoint der Nachricht
-(Kommentar `consens.io message <turn>`, also der Stand, bevor diese Nachricht
-etwas änderte; scheitert er, geht es ohne weiter) und die Anhänge dieser
-Nachricht in den `input`-Ordner des Chats (`FileContext.attachment`, gleiche
-Namen werden zu `name (2).ext`; das erste Ergebnis nennt dem Agenten den
-Chat-Ordner und die Anhänge). Wird der Chat dabei gelöscht, löscht der Lauf
-den Ordner selbst (`_still_active`). Eine Nachricht ohne VM-Aufruf weckt die
-VM nicht und legt keinen Checkpoint an. Der Turn speichert `agent_vm:
+Löschung behalten. Der Start einer Nachricht hat seit dem Laufzeit-Audit
+2026-10-30 zwei Teile (`VMSession.ready`, je auf einem eigenen Thread,
+`_Job`): **die Sperre** (`_lease`), alles, was der Browser braucht: In einer
+Transaktion mit Kontosperre und aktivem Chat nimmt die Nachricht die Sperre
+des Arbeitsplatzes und schreibt ihn ins Konto-Dokument und als `agent_vm:
+{provider, name, workspace, created_at, used_at}` an den Chat, bevor der
+Anbieter ihn anlegt (so finden Konto- und Chat-Löschung ihn immer). **Die
+Werkbank** (`_bench`) erst mit ihrem ersten Werkzeug (`vm_*`, GitHub, eine
+localhost-Adresse, ein Upload oder Download des Browsers): `ensure` (anlegen,
+falls es sie nicht gibt; die Egress-Regeln nur, wenn sie sich gegenüber dem
+von der letzten Nachricht bestätigten Stand ändern, siehe „Pro Chat“),
+`agent_workspace.prepare` (die Werkzeuge der VM, nur bei neuer Version, das
+Setup höchstens so lange, wie die Antwort Zeit lässt), dann **ein** Befehl als
+Agent (`agent_workspace.open_chat`, `CHAT_SCRIPT`; vorher vier Rundgänge):
+Ordner des Chats nach Titel samt Marker, die Schlüssel des Kontos fürs
+Maskieren und der Anfang der Notizen. Danach der Checkpoint der Nachricht
+(Kommentar `consens.io message <turn>`, der Stand, bevor diese Nachricht etwas
+änderte; scheitert er, geht es ohne weiter) **neben** dem Rest: Nur ein
+Aufruf, der die Werkbank ändert, wartet auf ihn (`checkpoint_wait`), Lesen
+läuft sofort. Die Anhänge dieser Nachricht kommen nach dem Checkpoint in den
+`input`-Ordner des Chats (`FileContext.attachment`, gleiche Namen werden zu
+`name (2).ext`; das erste Ergebnis nach dem Start der Werkbank nennt dem
+Agenten den Chat-Ordner, die Anhänge und die Notizen, ein reiner
+Browser-Aufruf nichts davon). Wird der Chat dabei gelöscht, löscht der Lauf
+den Ordner selbst (`_still_active`). Ein Aufruf wartet auf einen schon
+laufenden Start nur, bis kein Befehl mehr vor die Antwort passt
+(`VM_NO_TIME`); der Start läuft weiter. **Fehler** (A1): Ein Ausfall des
+Anbieters kostet nur den Aufruf, in dem er geschah, mit einer Tatsache für
+den Agenten (`VM_NOT_STARTED`, `VM_INTERRUPTED`: ob es lief, ist unbekannt,
+`VM_NOT_REACHED`); ein Lesen (Datei, Prozessstatus) wird vorher einmal
+wiederholt. Erst `MAX_FAILURES` = 3 in Folge schalten die VM für die
+Nachricht ab (`VM_UNAVAILABLE`); ein gescheitertes Setup sofort. Eine
+unerwartete Ausnahme eines Werkzeugs des Arbeitsplatzes (Dateiablage,
+Fehler im Code) wird zum Fehler des Aufrufs (`TOOL_FAILED`) und gemeldet
+(`report_server_exception`), nie zum Ende des Laufs (`VMTools._guarded`, A3).
+Eine Nachricht ohne Werkbank-Aufruf weckt die Werkbank nicht und legt keinen
+Checkpoint an (die REST-API kann Checkpoints nicht löschen, OpenAPI
+2026-10-30, also entstehen keine unnötigen, K4). Der Turn speichert `agent_vm:
 {provider, checkpoint, calls, commands, seconds}` (Summe der
-Befehlslaufzeiten; `unavailable: true`, wenn die VM ausfiel, `busy: true`,
-wenn ein anderer Chat sie hatte). Wiederherstellen in der Oberfläche seit
+Befehlslaufzeiten; `unavailable: true` mit `unavailable_reason` (Operation
+und Fehlerart, nie Daten), wenn die VM ausfiel, `busy: true`, wenn ein
+anderer Chat sie hatte) und seit 2026-10-30 `phases` (Sekunden je Teil des
+Starts: `lease`, `rules`, `tools`, `chat`, `checkpoint`, `inputs`), `cold`
+(je VM, ob der Anbieter sie beim Start `cold` nannte, aus `GET
+/v1/sprites/{name}`), `browser_calls` und `browser_seconds`. Log-Zeilen des
+Arbeitsplatzes tragen `turn=<8 Zeichen> step=<n>`. Wiederherstellen in der Oberfläche seit
 2026-10-26 (siehe „Eingreifen“), seit dem Arbeitsplatz nur, solange kein
 Chat ihn nutzt, und mit Hinweis an jeden Chat, der ihn vorher nutzte
 (`restores`/`restores_seen`). Die Sprite friert nach einigen Sekunden
@@ -957,8 +989,13 @@ das kostet einmal so viel wie ein Aufruf ohne Cache. Zurück geht es in derselbe
 Nachricht nie. Ab dem Öffnen gelten die Grenzen eines langen Laufs
 (`_long_run`), nicht erst ab dem VM-Start. Das Ergebnis nennt sie
 (`step_limit`, `time_limit_minutes`) und was die Nachricht bis dahin brauchte
-(`steps_so_far`, `minutes_so_far`). Die VM selbst startet weiter erst mit dem
-ersten VM-Aufruf. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
+(`steps_so_far`, `minutes_so_far`). Seit 2026-10-30 beginnt `open_workspace`
+den Start schon während des nächsten Modellschritts (`VMTools.prewarm`:
+Browser-VM mit Chrome, Sperre und Werkbank, vorher Tageszeit und Zustand
+geprüft, Stop beendet ihn); der erste Aufruf wartet nur auf den Rest. Eine
+Nachricht, die offen beginnt, weckt so nur den Browser; Werkbank und Sperre
+kommen mit ihrem ersten Aufruf. Ein Start, den die Nachricht nie nutzte, gibt
+die Sperre mit ihrem Ende zurück. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
 Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
 Fremdinhalt und sperrt Memory nicht (`MEMORY_KEEPING_TOOLS`).
 
@@ -1002,10 +1039,14 @@ auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
   abgeleiteten Namen; Checkpoints gibt es nur von der Werkbank, die
   Browser-VM bekommt nie einen.
 - **Ein Chat zur Zeit.** Die Sperre (`lease {chat_id, turn_id, until}`,
-  `LEASE_SECONDS` = 10 min) hält, solange die Nachricht die VM nutzt; jeder
-  VM-Aufruf verlängert sie, wenn weniger als 2 min übrig sind; das
+  `LEASE_SECONDS` = 10 min) hält, solange die Nachricht die VM nutzt; seit
+  2026-10-30 verlängert ein eigener Thread sie alle `LEASE_KEEP_SECONDS`
+  (4 min), auch während die Nachricht auf den Nutzer wartet (`ask_user`,
+  Übernahme, Halt; vorher nur ein VM-Aufruf, A2); das
   Nachrichtenende gibt sie frei, ein abgestürzter Lauf blockiert höchstens bis
-  zu ihrem Ablauf. Ein anderer Chat bekommt in der Zeit `VM_BUSY` und
+  zu ihrem Ablauf. Ein Restore geht auch dann nicht, wenn die Sperre abgelaufen
+  ist, der Chat der Sperre aber noch eine Antwort laufen hat (seine Run-Sperre
+  `agent_lock_until`, `agent_workspace.in_use`). Ein anderer Chat bekommt in der Zeit `VM_BUSY` und
   antwortet ohne VM. Dieselbe Chat-Folge (eine Nachricht zur Zeit) übernimmt
   ihre eigene Sperre. Das Werkzeug `browser` nutzt dieselbe Sperre.
 - **Ordner pro Chat.** `/home/agent/chats/<chat>`: Befehle starten dort,
@@ -1014,7 +1055,7 @@ auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
   nur seinen Ordner, Konto löschen beide VMs (`account_deletion` Bereich
   `agent_workspace`, vor den Chats).
 - **Ordner mit Namen** (2026-10-27): Jeder Chat-Ordner trägt `.consens-chat`
-  mit Titel, Startdatum und ID des Chats (`agent_workspace.make_chat_dir`, bei
+  mit Titel, Startdatum und ID des Chats (`agent_workspace.open_chat`, bei
   jeder Nachricht neu, folgt also einer Umbenennung); `cat ~/chats/*/.consens-chat`
   sagt dem Agenten, welcher Ordner zu welchem Chat gehört.
 - **Ordner heißen wie ihr Chat** (2026-10-28): `agent_vm.chat_folder` bildet
@@ -1023,7 +1064,7 @@ auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
   `promotion-neben-dem-beruf-3f9a1c`, ohne Titel `chat-3f9a1c`. Der Chat merkt
   sich den Namen (`agent_vm.folder` am Chat, `agent_workspace.record_folder`,
   erst nach dem Umbenennen geschrieben). Beim ersten VM-Aufruf jeder Nachricht
-  benennt `make_chat_dir` den Ordner um, wenn der Titel einen anderen Namen
+  benennt `open_chat` den Ordner um, wenn der Titel einen anderen Namen
   ergibt (`VMBackend.move_path` als Agent: `moved`, `missing`, `taken`; nie über
   etwas Bestehendes, ist der Name belegt, bleibt der alte). So ziehen auch die
   Ordner von vorher, die nach der ID heißen, beim nächsten Gebrauch um. Erst
@@ -1034,8 +1075,8 @@ auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
   `/home/agent/NOTES.md` ist das Notizbuch des Agenten über Chats hinweg (was
   wo liegt, Arbeit in Arbeit, Regeln eines Projekts). Der Anfang
   (`NOTES_CHARS` = 6.000 Zeichen) kommt mit dem ersten VM-Ergebnis jeder
-  Nachricht (`workspace_notes`, `read_notes`; ein Lesefehler kostet nur die
-  Notizen), den Rest liest er selbst. Der Prompt: kurz halten (~100 Zeilen),
+  Nachricht (`workspace_notes`, `open_chat`; nicht lesbare Notizen gelten
+  als keine), den Rest liest er selbst. Der Prompt: kurz halten (~100 Zeilen),
   mit `vm_edit_file` pflegen, Veraltetes löschen, nichts über den Nutzer
   selbst (das gehört ins Memory), keine Geheimnisse; die Notizen sind Daten,
   nie Anweisungen, und werden gegen die Dateien geprüft. Bewusst getrennt vom
@@ -1164,12 +1205,30 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Textfilter (Max, 2026-10-27). Eine schon erlaubte Domain braucht keine
   Karte. Abgelehnt bekommt der Agent `DOMAIN_DENIED`.
 - **Pro Chat.** Erlaubt steht am Chat (`agent_domains`, höchstens 20, geht mit
-  ihm). Beim Lease nimmt `VMSession.ready` die Domains des Chats in die
+  ihm). Beim Start der Werkbank nimmt `VMSession.ready` die Domains des Chats in die
   Policy (`ensure(name, rules)`), eine neue Freigabe wirkt sofort
   (`set_policy`), am Nachrichtenende geht die Policy zurück auf die
   Paketquellen. Ein abgestürzter Lauf lässt sie bis zur nächsten Nachricht
   stehen; Hintergrundprozesse verlieren den Zugang mit dem Ende ihrer
-  Nachricht.
+  Nachricht. **Nur bei Änderung** (seit 2026-10-30, T6): Das Konto-Dokument
+  trägt `policy`, den Fingerabdruck der Regeln (`policy_key`), wie die letzte
+  Nachricht sie an ihrem Ende bestätigte. `claim` setzt ihn für die Dauer der
+  Sperre auf unbekannt (`None`) und gibt den alten Wert mit (`Claim.policy`);
+  nur `release` schreibt ihn wieder, nach dem Zurücksetzen auf die
+  Paketquellen oder unverändert, wenn die Nachricht die Werkbank nie
+  startete, sonst `None`. Gleicht er den gewünschten Regeln, entfällt der
+  POST; ein Lauf, der abstürzt oder dessen Zurücksetzen scheitert, hinterlässt
+  `None`, und die nächste Nachricht setzt die Regeln. Ein Setup, dessen
+  `finally` die Regeln nicht zurückbekam, markiert die Werkbank im Prozess
+  (`policy_unsure`), dann setzt der nächste Start sie ebenso. Restrisiko: Nur
+  wenn dieses Zurückstellen scheitert *und* der Server danach neu startet,
+  bevor eine Nachricht kommt, bliebe `dl.google.com` offen, bis sich die
+  Regeln eines Chats ändern. **Das Ende wartet nicht auf das Netz** (A6):
+  `VMSession.close` bucht die VM-Zeit, dann setzt ein eigener Thread
+  (`_finish`) die Regeln zurück, gibt die Sperre frei (erst danach, damit kein
+  anderer Chat die Domains sieht) und lässt den Browser ruhen; die Nachricht
+  wartet darauf höchstens `CLOSE_WAIT_SECONDS` (2 s) statt bis zu 90 s.
+  `_kill` beim Stop hat 5 s (`KILL_SECONDS`).
 - Lesen im Web läuft weiter über `web_search` und `read_source` im Backend.
 - **Vier Wege ins Web, als Fakten im Prompt (seit 2026-10-28).** Max: Der
   Agent wusste oft nicht, wann er Browser, Websuche oder VM nehmen soll. Nach
@@ -1216,6 +1275,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   sofort (Prod 2026-10-29 10:30: eine VM, die nicht startete, antwortete nach
   40 s mit 502, und der zweite Versuch kostete noch einmal 40 s). Fällt der
   Browser aus, steht der Grund im Log (`Agent browser unavailable reason=…`).
+  Seit 2026-10-30 (Laufzeit-Audit T5, A1, A5, V3) braucht der Browser nur die
+  Sperre, nicht mehr die Werkbank (`VMTools._start(bench=False)`); ein
+  Ausfall kostet den Aufruf (`BROWSER_INTERRUPTED`, `BROWSER_NOT_STARTED`),
+  erst drei in Folge den Browser für die Nachricht; Warmlauf und Helfer teilen
+  sich eine Restzeit statt zweimal die ganze; jedes Ereignis bekommt
+  `started_at`, wenn der Helfer beginnt (vorher zeigt die App den Start des
+  Arbeitsplatzes), und am Ende `duration_ms`.
 - **Bild mit der Aktion** (seit 2026-10-29). Prod, Tic-Tac-Toe auf einer
   Canvas-Seite mit DeepSeek V4.1 Flash: 309 s bis zur Antwort, 45 Modellschritte,
   davon 15 nur, um nach einem Klick den Screenshot anzufordern; 20 Screenshots,
@@ -1264,11 +1330,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Watchdogs nicht); der Server loggt je Aufruf
   `Agent browser call … first= seconds= before= exec= helper= served=`, und die
   Vorbereitung der Werkbank loggt ihre Schritte (`Agent VM ready seconds=…
-  lease= rules= tools= folder= checkpoint= …`). Bewusst noch nicht
-  umgesetzt: Der erste Browser-Aufruf einer Nachricht wartet weiter auf diese
-  Vorbereitung, in Prod 2–4 s, einmal 10 s. Sie zu entkoppeln greift in Lease,
-  Lock und Checkpoint der VM-Sitzung ein; erst zeigt das Log, welcher Schritt
-  teuer ist.
+  lease= rules= tools= chat= checkpoint= … turn= step=`). Seit 2026-10-30
+  wartet der erste Browser-Aufruf nicht mehr auf diese Vorbereitung, nur auf
+  die Sperre (siehe „Öffnen und erster Aufruf“).
 - **Was über der Seite liegt, und Frames** (seit 2026-10-30). Prod, bild.de
   mit DeepSeek V4.1 Flash: Der Cookie-Dialog ist ein Frame, `read` sagte nur
   „open its address“ (was die Seite verlässt), drei Klicks an x,y trafen
@@ -1508,6 +1572,10 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   wie die Hintergrundprozesse der Werkbank), den der nächste Aufruf erneuert und
   der nach dem letzten von selbst endet. Kosten höchstens 10 Minuten Wachzeit
   nach dem letzten Browser-Schritt; sie zählen nicht zur VM-Zeit des Tages.
+  Seit 2026-10-30 (K2) ruft das Ende einer Nachricht, die den Browser nutzte
+  oder vorwärmte, die Helfer-Aktion `rest` (`BrowserTools._rest`, eigener
+  Backend, 20 s, Fehler nur im Log): Sie kürzt den Hold auf rund 2 min. Ein
+  `browser.py` ohne `rest` antwortet mit einem Fehler, der nichts ändert.
   Geprüft (2026-10-29, Test-VM danach gelöscht): nach einem Aufruf 60 s ohne
   Befehl 121 Herzschläge ohne Lücke, der Hold in `GET /v1/tasks` mit Ablauf
   +10 min, Foony nach 90 s Pause noch verbunden. Dabei gesehen: Foonys
@@ -1841,14 +1909,26 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   **Wie lange:** Ein Tunnel je Konto in diesem Prozess (Render: ein uvicorn,
   eine Instanz), gestartet vom ersten `open` auf localhost
   (`BrowserTools._tunnel`), beendet `IDLE_SECONDS` (10 min) nach den letzten
-  Bytes, auch bei offenen Verbindungen (ein Live-Reload-Socket hielte sonst
-  beide VMs wach). Die Live-Ansicht (`routers/agent_workspace._open`, mit
+  Daten, auch bei offenen Verbindungen (ein Live-Reload-Socket hielte sonst
+  beide VMs wach); ein Verbindungsversuch (`O`) zählt seit 2026-10-30 nicht
+  mehr als Nutzung. Außerdem lebt er nur, solange ihn jemand braucht
+  (`agent_tunnel.wanted`, K1): eine Nachricht des Kontos nutzt den
+  Arbeitsplatz (`begin`/`end` an der Sperre) oder die Live-Ansicht ist offen
+  (`viewing`: ihr Öffnen, `record_for_view`/`claim_view`, und ihr Herzschlag
+  `holds_view` alle 30 s; eine Übernahme über `touch`), danach noch
+  `KEEP_SECONDS` (2 min). Vorher hielt eine offene Dev-Seite, deren
+  Live-Reload ihren Server jede Sekunde neu rief, beide VMs bis zu 6 h wach.
+  Die Live-Ansicht (`routers/agent_workspace._open`, mit
   Suche nach neuen Servern), jede Übernahme und deren Auffrischung
-  (`workspace_control`: `touch` hält ihn wach, solange der Nutzer in der App
-  arbeitet) und jeder Browser-Aufruf starten ihn für die genommenen Ports neu
-  (`resume`); eine Aktion, die von einer localhost-Seite laden kann
+  (`workspace_control`) und ein Browser-Aufruf auf einer localhost-Seite
+  starten ihn für die genommenen Ports neu (`resume`, nur wenn er gewollt
+  ist); eine Aktion, die von dieser Seite laden kann
   (`NETWORK_ACTIONS`), wartet darauf, damit ihr erster Klick nach einer Pause
-  nicht vor verschlossener Tür steht. Ein neuer `tunnel.py` beendet einen
+  nicht vor verschlossener Tür steht. Ob die Seite vorn localhost ist, weiß
+  der Aufruf aus der letzten Antwort, der erste einer Nachricht aus der
+  letzten Seite des Kontos (`note_page`, `page_local`); vorher wartete jeder
+  erste Aufruf eines Kontos, das je localhost nutzte, bis zu 20 s auf den
+  Tunnel, auch auf einer fremden Seite (T7). Ein neuer `tunnel.py` beendet einen
   alten seines Modus auf seiner VM (`end_others`): Beim Deploy hielt sonst
   der Tunnel des alten Servers die Ports; solange beide laufen, nimmt der
   jeweils neueste sie, das ist in Kauf genommen. Auf einer Werkbank, deren
@@ -2095,7 +2175,9 @@ Pro `PRO_DAILY_SECONDS` = 2 Stunden, Admins ohne Grenze. Seit dem
 Sicherheitsaudit 2026-10-27 zählt jeder Befehl, den der Server für die Arbeit
 des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
 `vm_process_output` (gedeckelt auf den Rest), das Entpacken von
-`github_import` und die offene Live-Ansicht. Ein Befehl läuft nie
+`github_import` und die offene Live-Ansicht. Endet ein Hintergrundprozess vor
+seinem Zeitlimit, kommt seit 2026-10-30 die ungenutzte Zeit zurück (K5,
+`agent_vm_time.refund`, siehe „Hintergrundprozesse“). Ein Befehl läuft nie
 über den Rest (`VMTools._timeout`), ein Prozess höchstens so lange; ist nichts
 mehr übrig, bekommt der Agent `VM_DAY_LIMIT` und arbeitet ohne VM weiter, die
 Aktivität sagt „Skipped · workspace time for today used up“. Gebucht wird beim Ende der
@@ -2188,7 +2270,14 @@ Liste, ohne je gelaufen zu sein), jeder endet spätestens nach
 seine ID). Status: `running`, `exited` mit `exit_code`, `stopped` (seit
 2026-10-28: `vm_stop_process` hat ihn beendet, Marke `stopped` im Prozessordner;
 vorher stand dort der Exit-Code von coreutils `timeout`, 124, der wie sein
-Zeitlimit las) oder `lost` (die VM hat ihn ohne Exit-Code beendet). Das Modell bekommt das Ende der Ausgabe wie bei
+Zeitlimit las) oder `lost` (die VM hat ihn ohne Exit-Code beendet). **Erstattung**
+(seit 2026-10-30, K5): Der Start bucht das ganze Zeitlimit und schreibt es mit
+dem UTC-Tag nach `reserve`; der Aufseher schreibt Start und Ende (`started`,
+`ended`). Findet ein Blick darauf (`vm_process_output` mit `id`,
+`vm_stop_process`) den Prozess beendet, kommt die ungenutzte Zeit einmal
+zurück (`refunded` wird zuerst geschrieben): an die Nachricht, die ihn
+startete, sonst an den Tag, an dem sie gebucht wurde (nur heute). Vorher
+verbrauchten vier Dev-Server-Starts die 2 h eines Pro-Kontos. Das Modell bekommt das Ende der Ausgabe wie bei
 `vm_exec` (12.000 Zeichen, Kürzung im Text), die Anzeige zeigt den Start wie
 einen Befehl („Started in the background“, `$ Befehl`, „Running in the
 background“) und Lesen/Stoppen mit der Prozess-ID; alte Ergebnisse werden
