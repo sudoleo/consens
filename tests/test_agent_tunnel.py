@@ -28,10 +28,16 @@ BIG = 5 * 1024 * 1024
 
 @pytest.fixture(autouse=True)
 def no_tunnels():
+    # A message of the account uses the workspace: the tunnel is wanted
+    # (agent_tunnel.wanted; its own tests below say when it is not).
+    agent_tunnel.begin(UID)
     yield
     for uid in list(agent_tunnel._tunnels):
         agent_tunnel.close(uid)
     agent_tunnel._asked.clear()
+    agent_tunnel._working.clear()
+    agent_tunnel._kept_until.clear()
+    agent_tunnel._local_page.clear()
 
 
 class SocketStream:

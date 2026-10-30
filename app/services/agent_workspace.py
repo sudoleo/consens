@@ -29,7 +29,7 @@ Folders and notes (like Claude Code's memory): each chat's folder names its
 chat in CHAT_MARKER (title, start, id), so a chat finds another's files; and
 NOTES_PATH is the agent's own notebook of the workspace across chats (what is
 where, what is in progress, a project's conventions). Its beginning comes with
-the first VM result of every message (read_notes), as data; the user's memory
+the first VM result of every message (open_chat), as data; the user's memory
 (agent_memory.py) stays what the user said about themselves.
 
 Takeover: the account's record says the user has the browser until a time
@@ -54,6 +54,7 @@ import json
 import logging
 from pathlib import Path
 import secrets
+import threading
 import time
 
 from app.core.observability import safe_exception
@@ -121,7 +122,7 @@ class Claim:
     started: str = ""
     # The domains the user allowed for this chat (agent_domains.py).
     domains: tuple = ()
-    # The name of the chat's folder as the chat records it (make_chat_dir),
+    # The name of the chat's folder as the chat records it (open_chat),
     # empty before its first message since 2026-10-28.
     folder: str = ""
     # Since 2026-10-29: the ports the browser reached on the workbench
@@ -129,6 +130,27 @@ class Claim:
     # (agent_secrets.py), both kept on the account's record across restarts.
     tunnel_ports: tuple = ()
     secrets: tuple = ()
+    # The workbench's network rules as the last message confirmed them at
+    # its end (policy_key), or None when nobody knows them for sure. The
+    # claim leaves the record's key unknown until this message's release
+    # says it again (release), so a run that died never leaves a key behind
+    # that the workbench does not have (runtime audit 2026-10-30, T6).
+    policy: str | None = None
+
+
+def policy_key(rules):
+    """A short fingerprint of network rules, to see whether they changed."""
+    return hashlib.sha256(json.dumps(list(rules), sort_keys=True).encode()).hexdigest()[:16]
+
+
+# Workbenches whose rules this process changed and could not confirm back
+# (_open_for_setup's restore failed): their next start sets the rules
+# whatever the record says.
+_policy_unsure: set[str] = set()
+
+
+def policy_unsure(name):
+    return name in _policy_unsure
 
 
 def tool_files(kind="workbench"):
@@ -178,7 +200,7 @@ def claim(store, uid, chat_id, turn_id, *, provider):
     chat (before the provider creates either) and leased to this message.
     Raises WorkspaceBusy when another chat's message holds it. Returns a
     Claim: whether the workspace was restored since this chat last used it,
-    the chat's title and start for its folder (make_chat_dir) and the
+    the chat's title and start for its folder (open_chat) and the
     domains its user allowed (agent_domains.py)."""
     from app.services import persistence_guard
     from app.services.chat_store import ChatNotFound
@@ -208,9 +230,13 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         outcome["domains"] = agent_domains.granted(chat_data)
         outcome["tunnel_ports"] = listed(record, "tunnel_ports", int)
         outcome["secrets"] = listed(record, "secret_names", str)
+        policy = record.get("policy")
+        outcome["policy"] = policy if isinstance(policy, str) else None
         tx.set(workspace, {**{key: value for key, value in record.items() if key != "lease"},
                            "provider": provider, "name": name, "browser": agent_vm.browser_name(uid),
                            "created_at": record.get("created_at") or now.isoformat(),
+                           # Unknown while this message may change the rules (Claim.policy).
+                           "policy": None,
                            "lease": {"chat_id": chat_id, "turn_id": turn_id, "until": now + timedelta(
                                seconds=LEASE_SECONDS)}})
         tx.update(chat, {"agent_vm": {**{key: value for key, value in used.items()
@@ -222,7 +248,7 @@ def claim(store, uid, chat_id, turn_id, *, provider):
     return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
                  started=outcome.get("started", ""), domains=tuple(outcome.get("domains") or ()),
                  folder=outcome.get("folder", ""), tunnel_ports=outcome.get("tunnel_ports", ()),
-                 secrets=outcome.get("secrets", ()))
+                 secrets=outcome.get("secrets", ()), policy=outcome.get("policy"))
 
 
 def listed(record, field, kind):
@@ -257,14 +283,17 @@ def renew(store, uid, turn_id):
     return held["ours"]
 
 
-def release(store, uid, turn_id):
-    """Ends this message's lease; failures only cost the wait for its expiry."""
+def release(store, uid, turn_id, policy=None):
+    """Ends this message's lease; failures only cost the wait for its expiry.
+    ``policy``: the workbench's rules as this message leaves them, confirmed
+    (policy_key), or None when it does not know them for sure; the next
+    message sets its rules unless they are confirmed the same (Claim.policy)."""
     workspace = ref(store.db, uid)
 
     def operation(tx):
         record = workspace.get(transaction=tx).to_dict() or {}
         if (record.get("lease") or {}).get("turn_id") == turn_id:
-            tx.update(workspace, {"lease": None})
+            tx.update(workspace, {"lease": None, "policy": policy})
     try:
         store._transaction(operation)
     except Exception as exc:
@@ -278,6 +307,27 @@ def record(db, uid):
 def held_by(db, uid, now=None):
     """The chat whose message holds the workspace now, or None."""
     return _held_by_other(record(db, uid).get("lease"), None, now or _now())
+
+
+def in_use(store, uid, now=None):
+    """Whether a chat's message may be using the workspace now: its lease
+    holds, or the chat named by the lease, also one past its time, still
+    runs a response (its run lock, ``agent_lock_until``, which the running
+    response keeps moving on). A restore never goes under a running agent,
+    also when its lease ran out (runtime audit 2026-10-30, A2)."""
+    now = now or _now()
+    lease = record(store.db, uid).get("lease")
+    if _held_by_other(lease, None, now):
+        return True
+    if not isinstance(lease, dict) or not lease.get("chat_id"):
+        return False
+    try:
+        chat = store._chat_ref(uid, lease["chat_id"]).get().to_dict() or {}
+    except Exception as exc:
+        logging.warning("Agent workspace lease chat unreadable category=%s", safe_exception(exc))
+        return True
+    lock = chat.get("agent_lock_until")
+    return isinstance(lock, datetime) and lock > now
 
 
 def mark_restored(store, uid):
@@ -297,7 +347,10 @@ def record_for_view(store, uid, *, provider):
     """The view may open the workspace before any chat used it: both VMs
     recorded on the account (no lease) before the provider creates one.
     Returns the record as it was."""
-    from app.services import persistence_guard
+    from app.services import agent_tunnel, persistence_guard
+    # The view opening may start the localhost tunnel: it is wanted from now
+    # on, before claim_view names the view (agent_tunnel.viewing).
+    agent_tunnel.viewing(uid)
     workspace = ref(store.db, uid)
     seen = {}
 
@@ -333,12 +386,25 @@ def claim_view(store, uid, seconds, kind="view"):
         if workspace.get(transaction=tx).exists:
             tx.update(workspace, {kind: {"id": view_id, "until": _now() + timedelta(seconds=seconds)}})
     store._transaction(operation)
+    if kind == "view":
+        _viewing(uid)
     return view_id
 
 
 def holds_view(db, uid, view_id, kind="view"):
-    """Whether ``view_id`` is still the account's view of that kind (no newer one took over)."""
-    return (record(db, uid).get(kind) or {}).get("id") == view_id
+    """Whether ``view_id`` is still the account's view of that kind (no newer
+    one took over). The open view asks every VIEW_CHECK_SECONDS: for the
+    browser's view that is its heartbeat, which keeps the localhost tunnel
+    wanted while the user may look at the agent's app (agent_tunnel.viewing)."""
+    held = (record(db, uid).get(kind) or {}).get("id") == view_id
+    if held and kind == "view":
+        _viewing(uid)
+    return held
+
+
+def _viewing(uid):
+    from app.services import agent_tunnel
+    agent_tunnel.viewing(uid)
 
 
 def open_workbench(vm, uid, cancellation=None):
@@ -376,22 +442,33 @@ def _open_for_setup(vm, name):
     widen = bool(before) and not any(rule.get("action") == "allow" and rule.get("domain") in {CHROME_DOMAIN, "*"}
                                      for rule in before)
     if widen:
+        # Until the rules are back for sure, the next start sets them anew
+        # (policy_unsure), whatever the account's record says.
+        _policy_unsure.add(name)
         vm.set_policy(name, [*before, CHROME_RULE])
     try:
         yield
     finally:
         if widen:
             vm.set_policy(name, before)
+            _policy_unsure.discard(name)
 
 
-def prepare(vm, name, cancellation=None):
+class SetupFailed(agent_vm.VMUnavailable):
+    """setup.sh did not succeed: no command of the agent may run there
+    (a refusal of the workbench, not a broken connection)."""
+
+
+def prepare(vm, name, cancellation=None, timeout=None):
     """The workbench at this VERSION, only when the version there differs
     (else one read): its tools written to the provider's home, the live
     view's gateway service of the layout before removed, and setup.sh run
     as root (the agent's user, the tools every workbench has; once, the
     move of its files out of the provider's home) while the policy lets it
-    reach CHROME_DOMAIN. Returns whether it wrote them; raises VMUnavailable
-    when the setup failed, so no command runs with the provider's rights."""
+    reach CHROME_DOMAIN. Returns whether it wrote them; raises SetupFailed
+    when the setup failed, so no command runs with the provider's rights.
+    ``timeout``: at most this long for the setup (the time the message has
+    left before its answer, runtime audit 2026-10-30, A5)."""
     from app.services.llm.provider_runtime import ProviderCancellation
     if _current(vm, name, VERSION):
         return False
@@ -399,13 +476,14 @@ def prepare(vm, name, cancellation=None):
         vm.write_file(name, f"{WORKSPACE_DIR}/{file}", data, agent=False)
     vm.delete_service(name, OLD_GATEWAY_SERVICE)
     said = []
+    seconds = SETUP_SECONDS if timeout is None else max(1, min(SETUP_SECONDS, int(timeout)))
     with _open_for_setup(vm, name):
         outcome = vm.exec(name, f"sudo -n bash {WORKSPACE_DIR}/setup.sh", cwd=agent_vm.SERVER_HOME,
-                          timeout=SETUP_SECONDS, on_output=lambda stream, chunk: said.append(chunk),
+                          timeout=seconds, on_output=lambda stream, chunk: said.append(chunk),
                           cancellation=cancellation or ProviderCancellation(), agent=False)
     if outcome.exit_code != 0:
         logging.warning("Agent workbench setup failed exit=%s", outcome.exit_code)
-        raise agent_vm.VMUnavailable("setup")
+        raise SetupFailed("setup")
     vm.write_file(name, VERSION_PATH, VERSION.encode(), agent=False)
     return True
 
@@ -450,21 +528,6 @@ def chat_marker(chat_id, title="", started=""):
             "This folder holds the files of that chat; it is deleted with the chat.\n").encode("utf-8")
 
 
-def make_chat_dir(vm, name, chat_id, title="", started="", folder=""):
-    """At every message's first VM call: the chat's folder follows its title
-    (``folder``: the name the chat recorded, empty for a folder named by its
-    id from before 2026-10-28, which moves too). Returns the folder's name
-    now; the old one when the new name is taken. Its marker is rewritten."""
-    wanted = agent_vm.chat_folder(title, chat_id)
-    if wanted != folder:
-        outcome = vm.move_path(name, agent_vm.chat_dir(chat_id, folder or None), agent_vm.chat_dir(chat_id, wanted))
-        if outcome == "taken":
-            wanted = folder
-    vm.write_file(name, f"{agent_vm.chat_dir(chat_id, wanted or None)}/{CHAT_MARKER}",
-                  chat_marker(chat_id, title, started))
-    return wanted
-
-
 def record_folder(store, uid, chat_id, folder):
     """The chat names its folder (chat field ``agent_vm.folder``): its
     deletion finds it there (agent_vm.delete_chat_vm), the next message
@@ -484,19 +547,98 @@ def record_folder(store, uid, chat_id, folder):
         logging.warning("Agent chat folder not recorded category=%s", safe_exception(exc))
 
 
-def read_notes(vm, name):
-    """The beginning of the workspace's notes for the agent, or that there
-    are none yet: ``{"path", "text", "more"}``. Data, never instructions
-    (AGENT_VM_PROMPT)."""
-    try:
-        raw, complete = vm.read_file(name, NOTES_PATH, limit=NOTES_CHARS * 4)
-    except agent_vm.VMFileMissing:
+# A message's chat on the workbench in one command (since 2026-10-30, runtime
+# audit T6; before, four: the move, the marker, the notes and the keys, one
+# round trip each), as the agent's user like each of them was: the chat's
+# folder follows its title ($1 the folder now, $2 the one its title wants;
+# "taken" keeps it where it is), its marker comes on stdin, then the keys
+# the account gave ($5...: name NUL value NUL, as agent_secrets.LOAD_SCRIPT)
+# and last the notes' beginning ($3, at most $4 bytes, to the end).
+CHAT_SCRIPT = (
+    'old=$1; new=$2; notes=$3; limit=$4; shift 4; dir=$old; state=same; '
+    'if [ "$new" != "$old" ]; then '
+    'if [ ! -e "$old" ] && [ ! -L "$old" ]; then dir=$new; state=missing; '
+    'elif [ -e "$new" ] || [ -L "$new" ]; then state=taken; '
+    'elif mkdir -p -- "$(dirname -- "$new")" && mv -T -- "$old" "$new"; then dir=$new; state=moved; '
+    'else state=failed; fi; fi; '
+    'mkdir -p -- "$dir" 2>/dev/null && cat > "$dir/' + CHAT_MARKER + '" 2>/dev/null || exit 46; '
+    'printf "folder %s\\n" "$state"; '
+    'if cd "$HOME/.secrets" 2>/dev/null; then for name in "$@"; do [ -f "$name" ] || continue; '
+    'printf "key %s\\0" "$name"; head -c 16384 -- "$name"; printf "\\0"; done; fi; '
+    'if [ -f "$notes" ] && [ -r "$notes" ]; then printf "notes +\\n"; exec head -c "$limit" -- "$notes"; fi; '
+    'printf "notes -\\n"')
+CHAT_SECONDS = 60
+
+
+@dataclass(frozen=True)
+class ChatOpened:
+    folder: str
+    notes: dict
+    keys: tuple
+    seconds: float
+
+
+def parse_chat(raw):
+    """``(state, keys, notes)`` of CHAT_SCRIPT's output: the folder's
+    state, ``(name, value)`` pairs and the notes' bytes (None: no notes)."""
+    head, _, rest = raw.partition(b"\n")
+    if not head.startswith(b"folder "):
+        raise agent_vm.VMUnavailable("chat: unreadable")
+    state, keys = head[7:].decode("ascii", "replace"), []
+    while rest.startswith(b"key "):
+        name, _, rest = rest[4:].partition(b"\0")
+        value, _, rest = rest.partition(b"\0")
+        keys.append((name.decode("ascii", "replace"), value.decode("utf-8", "replace")))
+    if rest.startswith(b"notes +\n"):
+        return state, keys, rest[8:]
+    if rest.startswith(b"notes -"):
+        return state, keys, None
+    raise agent_vm.VMUnavailable("chat: unreadable")
+
+
+def notes_for_agent(raw):
+    """The beginning of the workspace's notes for the agent (``raw``, None:
+    there are none), or that there are none yet: ``{"path", "text", "more"}``.
+    Data, never instructions (AGENT_VM_PROMPT)."""
+    if raw is None:
         return {"path": NOTES_PATH, "text": "", "note": "No notes yet: start them when something lasting comes up."}
     text = raw.decode("utf-8", "replace")
     notes = {"path": NOTES_PATH, "text": text[:NOTES_CHARS]}
-    if len(text) > NOTES_CHARS or not complete:
+    if len(raw) >= NOTES_CHARS * 4 or len(text) > NOTES_CHARS:
         notes["more"] = f"The notes go on: read the rest with vm_read_file {NOTES_PATH}, and keep them shorter."
     return notes
+
+
+def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), cancellation=None):
+    """At a message's first workbench call: the chat's folder follows its
+    title (``folder``: the name the chat recorded, empty for a folder named
+    by its id from before 2026-10-28, which moves too) with its marker
+    rewritten, the account's keys read again for masking (as
+    agent_secrets.load) and the notes' beginning (notes_for_agent), in one
+    command. Returns ChatOpened: the folder's name now, the old one when the
+    new name is taken or the move failed."""
+    from app.services import agent_secrets
+    from app.services.llm.provider_runtime import ProviderCancellation
+    wanted = agent_vm.chat_folder(title, chat_id)
+    old = agent_vm.chat_dir(chat_id, folder or None)
+    names = [key for key in dict.fromkeys(keys) if agent_secrets.NAME.fullmatch(str(key))][:agent_secrets.KEEP_NAMES]
+    out = bytearray()
+    limit = NOTES_CHARS * 4
+    cap = limit + len(names) * (agent_secrets.VALUE_CHARS + 80) + 256
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) <= cap:
+            out.extend(chunk)
+    outcome = vm.run(name, agent_vm.agent_argv(["bash", "-c", CHAT_SCRIPT, "chat", old,
+                                                agent_vm.chat_dir(chat_id, wanted), NOTES_PATH, str(limit), *names],
+                                               CHAT_SECONDS, HOME),
+                     cwd="/", timeout=CHAT_SECONDS, on_output=keep, cancellation=cancellation or ProviderCancellation(),
+                     input=chat_marker(chat_id, title, started))
+    if outcome.exit_code != 0:
+        raise agent_vm.VMUnavailable(f"chat: exit {outcome.exit_code}")
+    state, found, notes = parse_chat(bytes(out))
+    return ChatOpened(folder=wanted if state in {"moved", "missing", "same"} else folder, notes=notes_for_agent(notes),
+                      keys=tuple(found), seconds=outcome.seconds)
 
 
 def control_payload(holder, *, now=None):
@@ -518,10 +660,12 @@ def set_control(db, uid, vm, holder):
     browser = agent_vm.browser_name(uid)
     if holder == "user":
         ref(db, uid).update({"control": control})
+        _forget_control(uid)
         vm.write_file(browser, BROWSER_CONTROL, payload, agent=False)
         return
     vm.write_file(browser, BROWSER_CONTROL, payload, agent=False)
     ref(db, uid).update({"control": control})
+    _forget_control(uid)
 
 
 def control_state(db, uid, now=None):
@@ -541,9 +685,38 @@ def control_state(db, uid, now=None):
     return control.get("holder") == "user" and number("until") > (now or time.time()), number("returned_at")
 
 
-def user_has_browser(db, uid, now=None):
-    """Whether the user has the workspace's browser now (control_state)."""
-    return control_state(db, uid, now)[0]
+# user_has_browser's answer for a moment: a call into the workspace asks
+# twice right after another (the run's takeover check, then the session's
+# wait), one read of the account's record each (runtime audit 2026-10-30,
+# T6). A takeover in this process (set_control) forgets it at once; on the
+# browser VM itself browser.py refuses to act while the user has it.
+CONTROL_CACHE_SECONDS = 1.0
+_control_seen: dict = {}
+_control_lock = threading.Lock()
+
+
+def _forget_control(uid):
+    with _control_lock:
+        for key in [key for key in _control_seen if key[1] == uid]:
+            del _control_seen[key]
+
+
+def user_has_browser(db, uid, now=None, fresh=False):
+    """Whether the user has the workspace's browser now (control_state);
+    ``fresh``: read now, as a wait for their hand-back does."""
+    if now is not None or fresh:
+        return control_state(db, uid, now)[0]
+    key, moment = (id(db), uid), time.monotonic()
+    with _control_lock:
+        seen = _control_seen.get(key)
+    if seen is not None and seen[0] is db and moment - seen[1] < CONTROL_CACHE_SECONDS:
+        return seen[2]
+    holding = control_state(db, uid)[0]
+    with _control_lock:
+        if len(_control_seen) > 1000:
+            _control_seen.clear()
+        _control_seen[key] = (db, moment, holding)
+    return holding
 
 
 def reset_browser(vm, uid, cancellation):

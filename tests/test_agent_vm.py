@@ -56,7 +56,7 @@ class FakeVM:
     def __init__(self, clock=None):
         self.vms, self.calls, self.commands, self.fail = {}, [], {}, set()
         self.server, self.server_files = [], []
-        self.requests, self.warmed = [], []
+        self.requests, self.warmed, self.rested = [], [], []
         self.browser = lambda request: {"status": "ok", "text": 'Page: "Example"\nURL: https://example.com/\n'
                                                                 '[e1] link "More information"'}
         self.clock = clock or Clock()
@@ -111,7 +111,12 @@ class _FakeBackend(VMBackend):
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
         """The browser VM's helper (agent_browser.py) runs this way, and the
         keys the user gives the agent (agent_secrets.py): saved to and read
-        from the workbench's files, as the agent's user."""
+        from the workbench's files, as the agent's user. The chat's folder,
+        marker, keys and notes in one command (agent_workspace.open_chat)
+        are its parts as calls of their own: the move, the marker's write,
+        the notes' read."""
+        if agent_workspace.CHAT_SCRIPT in argv:
+            return self._chat(name, argv, input, on_output)
         self._call("run", name, argv[-1])
         from app.services import agent_secrets
         if agent_secrets.SAVE_SCRIPT in argv or agent_secrets.LOAD_SCRIPT in argv:
@@ -129,11 +134,37 @@ class _FakeBackend(VMBackend):
             self.vm.warmed.append(name)
             on_output("stdout", b'{"status": "ok", "text": ""}')
             return ExecOutcome(exit_code=0, timed_out=False, seconds=.5)
+        if request.get("action") == "rest":
+            # The message's end (agent_browser._rest), not the agent's.
+            self.vm.rested.append(name)
+            on_output("stdout", b'{"status": "ok", "text": "Resting."}')
+            return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         self.vm.requests.append(request)
         answer = self.vm.browser(request)
         self.vm.clock.now += .5
         on_output("stdout", json.dumps(answer).encode())
         return ExecOutcome(exit_code=0, timed_out=False, seconds=.5)
+
+    def _chat(self, name, argv, marker, on_output):
+        from app.services import agent_secrets
+        script = argv.index(agent_workspace.CHAT_SCRIPT)
+        old, new, notes, limit, *keys = argv[script + 2:]
+        assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
+        state = "same" if new == old else self.move_path(name, old, new)
+        target = new if state in {"moved", "missing"} else old
+        self.write_file(name, f"{target}/{agent_workspace.CHAT_MARKER}", marker)
+        out = f"folder {state}\n".encode()
+        files = self.vm.vms[name]["files"]
+        for key in keys:
+            if agent_secrets.path(key) in files:
+                out += b"key " + key.encode() + b"\0" + files[agent_secrets.path(key)][:16384] + b"\0"
+        try:
+            raw, _ = self.read_file(name, notes, limit=int(limit))
+            out += b"notes +\n" + raw
+        except (VMFileMissing, agent_vm.VMFileRefused):
+            out += b"notes -\n"
+        on_output("stdout", out)
+        return ExecOutcome(exit_code=0, timed_out=False, seconds=0.0)
 
     def exec_url(self, name, argv, *, cwd, stdin, tty=None):
         self._call("exec_url", name, tuple(argv), tty)
@@ -247,6 +278,9 @@ def fake_vm(monkeypatch):
     vm = FakeVM()
     monkeypatch.setattr(agent_vm, "backend", vm.backend)
     monkeypatch.setattr(agent_vm, "configured", lambda: True)
+    # The start before the first call (VMTools.prewarm) runs beside the
+    # loop: its own tests turn it on (test_agent_vm_runtime.py).
+    monkeypatch.setattr(agent_vm_tools.VMTools, "prewarm", lambda self, **kwargs: None)
     return vm
 
 
@@ -340,6 +374,8 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     # The message's summary: its checkpoint (in which VM, when) and the commands' run time.
     taken = datetime.fromisoformat(turn["agent_vm"].pop("checkpoint_at"))
     assert taken.tzinfo is not None
+    # How long each part of the start took (runtime audit 2026-10-30, I5).
+    assert set(turn["agent_vm"].pop("phases")) == {"lease", "rules", "tools", "chat", "checkpoint"}
     assert turn["agent_vm"] == {"provider": "fake", "name": NAME, "checkpoint": "v1", "calls": 3, "commands": 1,
                                 "seconds": 3.0}
     # Command output is outside content: memory is locked from then on.
@@ -515,22 +551,30 @@ def test_the_messages_attachments_are_in_the_input_folder_at_first_use(store, fa
 
 
 def test_an_unreachable_vm_costs_its_tools_never_the_answer(store, fake_vm):
+    """A provider failure costs the call it happened in; three in a row turn
+    the workspace off for the message (runtime audit 2026-10-30, A1: before,
+    the first one did, also a waking VM's broken handshake)."""
     fake_vm.fail.add("ensure")
-    script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
+    # Two calls a step: three failed steps in a row would end the run (TURN_INVALID_LIMIT).
+    script = Agent([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})],
+                    [("vm_exec", {"command": "ls -a"}), ("vm_exec", {"command": "whoami"})]])
     loop = vm_loop(store, script)
     events = list(loop.run())
     turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    # One short message for the agent; the second call never reaches the provider.
-    assert results(loop) == [{"error": VM_UNAVAILABLE}, {"error": VM_UNAVAILABLE}]
-    assert [call[0] for call in fake_vm.calls].count("ensure") == 1
+    # A fact for the agent each time; the fourth call never reaches the provider.
+    assert results(loop) == [{"error": agent_vm_tools.VM_NOT_STARTED}] * 2 + [{"error": VM_UNAVAILABLE}] * 2
+    assert [call[0] for call in fake_vm.calls].count("ensure") == 3
     # The user sees a calm state, not the provider's error.
     ended = [e for e in tool_events(events, "vm_exec") if e["status"] != "running"]
-    assert {e["outcome"] for e in ended} == {"unavailable"} and all("text" not in e for e in ended)
+    assert [e["outcome"] for e in ended] == ["interrupted", "interrupted", "unavailable", "unavailable"]
+    assert all("text" not in e for e in ended)
+    # The turn says why, never with data (I2).
     assert turn["agent_vm"]["unavailable"] is True and turn["agent_vm"]["commands"] == 0
+    assert turn["agent_vm"]["unavailable_reason"] == "bench: ensure"
 
 
-def test_a_vm_failing_mid_command_is_off_for_the_rest_of_the_message(store, fake_vm):
+def test_a_vm_failing_mid_command_costs_that_command_and_the_next_one_runs(store, fake_vm):
     script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "make"})],
                     [("vm_exec", {"command": "ls"})]])
     loop = vm_loop(store, script)
@@ -539,15 +583,41 @@ def test_a_vm_failing_mid_command_is_off_for_the_rest_of_the_message(store, fake
     def flaky(self, name, command, **kwargs):
         if command == "make":
             self.vm.calls.append(("exec", name, command))
-            raise VMUnavailable("connection lost")
+            raise VMUnavailable("exec: connection closed before the exit code")
         return original(self, name, command, **kwargs)
     _FakeBackend.exec = flaky
     try:
         list(loop.run())
     finally:
         _FakeBackend.exec = original
-    assert [r.get("error") for r in results(loop)] == [None, VM_UNAVAILABLE, VM_UNAVAILABLE]
-    assert [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] != SETUP] == ["ls", "make"]
+    # Whether make ran is unknown, and the agent hears exactly that; the workspace stays.
+    assert [r.get("error") for r in results(loop)] == [None, agent_vm_tools.VM_INTERRUPTED, None]
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] != SETUP] == ["ls", "make", "ls"]
+    assert "unavailable" not in store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]
+
+
+def test_a_read_that_breaks_off_is_tried_once_more(store, fake_vm):
+    loop = vm_loop(store, Agent())
+    tools = loop.vm_tools
+    tools.write(agent_vm_tools.VmWriteFileArgs(path="a.txt", content="a"), cancellation=ProviderCancellation())
+    original, failed = _FakeBackend.read_file, []
+
+    def flaky(self, name, path, **kwargs):
+        if path.endswith("/a.txt") and len(failed) < 1:
+            failed.append(path)
+            raise VMUnavailable("read: no connection")
+        return original(self, name, path, **kwargs)
+    _FakeBackend.read_file = flaky
+    try:
+        read = tools.read(agent_vm_tools.VmReadFileArgs(path="a.txt"), cancellation=ProviderCancellation())
+        # Twice in a row: the call's error, nothing changed.
+        failed.clear()
+        _FakeBackend.read_file = lambda self, name, path, **kwargs: (_ for _ in ()).throw(VMUnavailable("read"))
+        with pytest.raises(ValueError, match="did not answer"):
+            tools.read(agent_vm_tools.VmReadFileArgs(path="a.txt"), cancellation=ProviderCancellation())
+    finally:
+        _FakeBackend.read_file = original
+    assert read["content"] == "a\n" and tools.session.failures == 1 and tools.session.state == "ready"
 
 
 @pytest.mark.parametrize("operation", ["ensure", "exec"])
@@ -565,13 +635,15 @@ def test_an_unexpected_vm_failure_also_costs_only_the_tools(store, fake_vm, monk
             return original(self, *args, **kwargs)
         raise ModuleNotFoundError("No module named 'websockets'")
     monkeypatch.setattr(_FakeBackend, operation, broken)
-    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]))
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]] * 3))
     list(loop.run())
     turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    assert results(loop) == [{"error": VM_UNAVAILABLE}, {"error": VM_UNAVAILABLE}]
-    assert reported == [("ModuleNotFoundError", f"agent_vm.{'start' if operation == 'ensure' else 'exec'}")]
+    first = agent_vm_tools.VM_NOT_STARTED if operation == "ensure" else agent_vm_tools.VM_INTERRUPTED
+    assert results(loop) == [{"error": first}, {"error": first}, {"error": VM_UNAVAILABLE}]
+    assert set(reported) == {("ModuleNotFoundError", f"agent_vm.{'start' if operation == 'ensure' else 'exec'}")}
     assert turn["agent_vm"]["unavailable"] is True
+    assert turn["agent_vm"]["unavailable_reason"].endswith(": ModuleNotFoundError")
 
 
 def test_no_vm_without_the_setting_or_in_chats_with_google_data(store, fake_vm):
@@ -782,7 +854,7 @@ def test_an_unreadable_takeover_counts_as_the_users(store, fake_vm, monkeypatch)
     session.clock = fake_vm.clock
     reads, seen = iter([RuntimeError("firestore"), False]), []
 
-    def read(db, uid):
+    def read(db, uid, **kwargs):
         value = next(reads)
         if isinstance(value, Exception):
             raise value
@@ -1591,10 +1663,17 @@ def test_long_notes_come_cut_with_the_way_to_the_rest(store, fake_vm):
 
 
 def test_notes_that_cannot_be_read_cost_nothing_else(store, fake_vm, monkeypatch):
-    def failing(vm, name):
-        raise VMUnavailable("read")
-    monkeypatch.setattr(agent_workspace, "read_notes", failing)
+    """Since 2026-10-30 the notes come in one command with the chat's folder
+    (agent_workspace.open_chat): notes the agent's user cannot read are no
+    notes, and the rest goes on."""
+    original = _FakeBackend.read_file
+
+    def refusing(self, name, path, **kwargs):
+        if path == agent_workspace.NOTES_PATH:
+            raise agent_vm.VMFileRefused(path)
+        return original(self, name, path, **kwargs)
+    monkeypatch.setattr(_FakeBackend, "read_file", refusing)
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(loop.run())
     first = results(loop)[0]
-    assert first["exit_code"] == 0 and "workspace_notes" not in first
+    assert first["exit_code"] == 0 and first["workspace_notes"]["text"] == ""

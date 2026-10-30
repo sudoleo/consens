@@ -112,6 +112,12 @@ def test_the_workspace_is_restored_only_while_no_chat_uses_it_and_every_chat_hea
     assert busy.status_code == 409 and busy.json()["code"] == "running"
     agent_workspace.ref(store.db, UID).update({"lease": {
         "chat_id": other, "turn_id": "running", "until": datetime.now(timezone.utc) - timedelta(seconds=1)}})
+    # A lease that ran out while its chat's response still runs (its run
+    # lock): not under the running agent (runtime audit 2026-10-30, A2).
+    still = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
+    assert still.status_code == 409 and still.json()["code"] == "running"
+    # A run that died: its lock ran out too.
+    store._chat_ref(UID, other).update({"agent_lock_until": datetime.now(timezone.utc) - timedelta(seconds=1)})
     done = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
     assert done.status_code == 200 and ("restore", agent_vm.workspace_name(UID), "v3") in fake_vm.calls
     assert agent_workspace.record(store.db, UID)["restores"] == 1

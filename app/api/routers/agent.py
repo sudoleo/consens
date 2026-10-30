@@ -846,9 +846,10 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     if not agent_workspace.restorable(workspace, turn.get("agent_vm")):
         return JSONResponse({"error": "The workspace can no longer go back to before this message.", "code": "expired"},
                             status_code=409)
-    # The workspace is the account's: no chat's message may be using it.
+    # The workspace is the account's: no chat's message may be using it, also
+    # not one whose lease ran out while its response still runs (in_use).
     if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)) or \
-            agent_workspace.held_by(db_firestore, uid):
+            agent_workspace.in_use(store, uid):
         return JSONResponse({"error": "Wait until the response is done, then restore the workspace.", "code": "running"},
                             status_code=409)
     try:

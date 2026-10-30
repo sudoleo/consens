@@ -494,16 +494,20 @@ def test_the_programs_refusals_and_the_users_takeover_reach_the_agent(store, fak
 
 
 def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
-    script = Agent([[("browser", {"action": "read"})], [("browser", {"action": "read"})],
+    """A failure costs its call; three in a row the browser for the message
+    (runtime audit 2026-10-30, A1: before, the first one did)."""
+    script = Agent([[("browser", {"action": "read"}), ("browser", {"action": "read"})],
+                    [("browser", {"action": "read"}), ("browser", {"action": "read"})],
                     [("vm_exec", {"command": "ls"})]])
     fake_vm.fail.add("run")
     loop = vm_loop(store, script)
     list(loop.run())
-    first, second, command = results(loop)
-    assert first == {"error": BROWSER_UNAVAILABLE} and second == {"error": BROWSER_UNAVAILABLE}
-    # The warm-up and the first call tried it; the second never did.
+    *browser, command = results(loop)
+    interrupted = {"error": agent_browser.BROWSER_INTERRUPTED}
+    assert browser == [interrupted, interrupted, {"error": BROWSER_UNAVAILABLE}, {"error": BROWSER_UNAVAILABLE}]
+    # The warm-up and three calls tried it, the fourth never did; the rest at the end tried too (K2).
     runs = [call for call in fake_vm.calls if call[0] == "run"]
-    assert len(runs) == 2 and all(call[1] == BROWSER for call in runs)
+    assert len(runs) == 5 and all(call[1] == BROWSER for call in runs)
     assert command["exit_code"] == 0
 
 
@@ -518,9 +522,10 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
         raise agent_vm.VMUnavailable("read: HTTP 502")
     monkeypatch.setattr(agent_workspace, "open_browser", refuse)
     loop, browser = tools(store)
-    with pytest.raises(ValueError, match="not available"):
+    with pytest.raises(ValueError, match="did not start"):
         call(browser, action="read")
-    assert len(opened) == 1 and browser.off is True
+    # A fact for this call; the next one tries again (A1).
+    assert len(opened) == 1 and browser.off is False and browser.failures == 1
     assert fake_vm.requests == [] and fake_vm.warmed == []
 
 

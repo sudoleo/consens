@@ -7,14 +7,18 @@ comparison or audit tools on the account's token ledger (DelegationLoop).
 Since 2026-10-27 the VM is the account's workspace (agent_workspace.py),
 shared by its chats one message at a time, each chat in its own folder
 (agent_vm.chat_dir), where commands start and relative paths lead. One
-VMSession per message: on the first VM call it leases the workspace and
+VMSession per message: its first call of the workspace leases it and
 records it on the account and the chat (before the provider creates it, so
-deleting either always finds it), wakes or creates it, brings its tools up to
-date, takes the message's checkpoint (the state before this message changed
-anything) and copies the message's attachments into the chat folder's
-``input``. Another chat holding the workspace costs the VM tools for this
-message (VM_BUSY), never the answer. Messages that never call a VM tool
-neither wake the VM nor take a checkpoint.
+deleting either always finds it); the browser needs no more (since
+2026-10-30). The first call of the workbench wakes or creates it, sets its
+rules where they changed, brings its tools up to date, takes the message's
+checkpoint (the state before this message changed anything; only a call
+that changes the workbench waits for it) and copies the message's
+attachments into the chat folder's ``input``. open_workspace begins all of
+it while the model thinks (VMTools.prewarm). Another chat holding the
+workspace costs the VM tools for this message (VM_BUSY), never the answer.
+Messages that never call the workbench neither wake it nor take a
+checkpoint.
 
 Each call is one activity event of its tool (agent-activity.js): what ran,
 its output's end while it runs (``report``, at most every REPORT_SECONDS),
@@ -22,8 +26,11 @@ then exit code and duration. The model gets each stream's end
 (MODEL_STREAM_CHARS) with the cut said in the text; in audit mode the same
 result is the call's ``tool`` entry in the work log, which the reviewers
 follow live. The turn keeps the summary (``agent_vm``: checkpoint, commands,
-seconds). A failing VM costs its tools, never the answer: the agent gets one
-short message and works on without the VM for the rest of the message.
+seconds; since 2026-10-30 also the start's parts in seconds, whether a VM
+was cold, the browser's calls and seconds, and why the workspace went off).
+A failing VM costs its tools, never the answer: a failure is the call's
+error, said as a fact (whether it ran is unknown), and MAX_FAILURES in a row
+turn the workspace off for the rest of the message.
 
 vm_edit_file (since 2026-10-26) replaces exact text in a file, like Claude
 Code's Edit: old_string must occur once (or replace_all), the bytes around it
@@ -54,6 +61,7 @@ user allowed for the chat (request_domain, agent_domains.py).
 """
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timezone
 import hashlib
 import logging
@@ -110,6 +118,25 @@ EDIT_SNIPPET_CHARS = 2_000
 # the same calmly (agent-activity.js, ``outcome``).
 VM_UNAVAILABLE = ("The VM is not available right now. Continue without it for this message and do not call VM "
                   "tools again; say so if the answer needed it.")
+# A provider failure costs the call it happened in; MAX_FAILURES in a row
+# turn the workspace off for the message (VM_UNAVAILABLE). Until 2026-10-30
+# the first one did, a waking VM's broken handshake included (runtime audit
+# A1). A read is tried once more first; for anything else whether it ran is
+# not known, and the agent is told that fact.
+MAX_FAILURES = 3
+VM_INTERRUPTED = "The connection to your workspace broke off during this call, so whether it ran is unknown."
+VM_NOT_REACHED = "Your workspace did not answer just now; nothing was changed."
+VM_NOT_STARTED = "Your workspace did not start just now; nothing ran."
+# A failure on the server's side of a workspace tool (a file store, a bug):
+# the call's error, reported, never the end of the run (runtime audit A3).
+TOOL_FAILED = "This call failed on consens.io's side, not in your workspace, and was reported."
+# The lease is moved on this often while the message holds it (_keep_lease),
+# for at most this long, and the message's end waits this long for its
+# release (VMSession.close); a start still running at the end, this long.
+LEASE_KEEP_SECONDS = 240
+LEASE_KEEP_MAX_SECONDS = 6 * 3600
+CLOSE_WAIT_SECONDS = 2.0
+CHECKPOINT_WAIT_SECONDS = agent_vm.CHECKPOINT_SECONDS + 10
 VM_NO_TIME = ("Not enough time is left in this message for a command. Write the answer from what you have.")
 VM_DAY_LIMIT = ("The VM time of this account for today is used up. Continue without the VM for this message and "
                 "tell the user that the VM is available again tomorrow (the day starts at midnight UTC).")
@@ -194,6 +221,20 @@ class OpenWorkspaceArgs(BaseModel):
 
 class _VMOff(ValueError):
     """The VM failed or was never reachable in this message."""
+
+
+class _Interrupted(ValueError):
+    """A provider failure that costs this call only (VMSession.failed)."""
+
+
+class _StartFailed(Exception):
+    """A part of the start failed for now; its message is the reason (I2)."""
+
+
+def log_tag(loop):
+    """The turn (its id's start) and the agent's step for a log line of the
+    workspace (runtime audit 2026-10-30, I3)."""
+    return f"turn={str(getattr(loop, 'turn_id', '') or '')[:8]} step={getattr(loop, 'routing_steps', '-')}"
 
 
 def _now():
@@ -337,9 +378,41 @@ class _Output:
         return model_text(bytes(self.streams[stream]), self.sizes[stream], stream)
 
 
+class _Job:
+    """One part of a message's start (VMSession._job) on a thread of its
+    own: open_workspace can begin it while the model still thinks
+    (VMTools.prewarm), and the call that needs it waits only for the rest."""
+
+    def __init__(self, name, target):
+        self.done = threading.Event()
+        self.error = None
+        self.thread = threading.Thread(target=self._run, args=(target,), name=f"agent-vm-{name}", daemon=True)
+
+    def _run(self, target):
+        try:
+            target()
+        except BaseException as exc:
+            self.error = exc
+        finally:
+            self.done.set()
+
+    def start(self):
+        self.thread.start()
+        return self
+
+
 class VMSession:
-    """The VM of one message (thread-safe). ``factory`` returns a backend or
-    None without a configured provider (tests pass a fake)."""
+    """The workspace of one message (thread-safe). ``factory`` returns a
+    backend or None without a configured provider (tests pass a fake).
+
+    Its start has two parts (since 2026-10-30, runtime audit T5): the lease
+    (``lease``), all the browser needs, and the workbench (``bench``): its
+    rules, tools, the chat's folder with the notes and keys, the message's
+    checkpoint and its attachments, which only the workbench's own tools
+    wait for. Each runs on a thread of its own (_Job), so open_workspace
+    starts them while the model thinks (VMTools.prewarm). The checkpoint
+    runs beside the rest; only a call that changes the workbench waits for
+    it (checkpoint_wait)."""
 
     def __init__(self, loop, factory=None, clock=time.monotonic, sleep=time.sleep):
         self.loop = loop
@@ -348,25 +421,31 @@ class VMSession:
         self.sleep = sleep
         self.name = agent_vm.workspace_name(loop.uid)
         # The chat's own folder: where commands start and relative paths lead.
-        # Named after the chat's title once the VM is ready (ready, make_chat_dir).
+        # Named after the chat's title once the workbench is ready (agent_workspace.open_chat).
         self.dir = agent_vm.chat_dir(loop.chat_id)
         self._lock = threading.Lock()
         # The workspace's lease (agent_workspace.claim): held from the first
-        # VM call, moved on by later ones, released when the message ends.
+        # call of the workspace, kept by a thread of its own (_keep_lease),
+        # released when the message ends.
         self.leased = False
         self._leased_at = 0.0
         self.claim = None
-        # The workspace's notes (agent_workspace.read_notes), with the first result.
+        # The workspace's notes (agent_workspace.open_chat), with the first result.
         self.notes = None
         # The domains the user allowed for this chat, in the workbench's
         # policy while this message has the workspace (agent_domains.py).
         self.domains = []
         self.backend = None
+        # idle, leased (the browser may run), ready (the workbench too),
+        # unavailable or busy (both for the rest of the message).
         self.state = "idle"
-        # Set once the VM was ready in this message, also if it fails later:
-        # the turn is a long run from then on (DelegationLoop._long_run).
+        # Set once the workbench was ready or a browser call answered in this
+        # message, also if it fails later: the turn is a long run from then
+        # on (DelegationLoop._long_run), the browser alone included, as after
+        # open_workspace (the same browser task keeps the same limits whether
+        # its message started with the workspace open or opened it).
         self.started = False
-        # The checkpoint before this message's first VM call, with when it
+        # The checkpoint before this message's first workbench call, with when it
         # was taken: a restore checks both (agent_workspace.restorable).
         self.checkpoint = self.checkpoint_at = None
         self.inputs, self.skipped = [], []
@@ -377,84 +456,279 @@ class VMSession:
         # their time limit (``reserved``). Charged when the message ends.
         self._day = None
         self.reserved = 0.0
-        # The first result after the VM became ready tells the agent which
+        # The first result after the workbench became ready tells the agent which
         # folder is the chat's and which attachments are in its input folder.
         self._announced = False
+        # Failures of the provider in a row: the workspace goes off for the
+        # message at MAX_FAILURES (runtime audit 2026-10-30, A1), with why
+        # (``unavailable_reason``: the operation and the kind, never data, I2).
+        self.failures = 0
+        self.unavailable_reason = None
+        # For the turn's summary (I5): seconds of each part of the start,
+        # whether a VM was cold, the browser's calls and their seconds.
+        self.phases = {}
+        self.cold = {}
+        self.browser_calls = 0
+        self.browser_seconds = 0.0
+        self._jobs = {}
+        self._checkpoint_job = None
+        self._closed = False
+        self._stop = threading.Event()
+        # The workbench's rules as this message set them (policy_key), None
+        # while unknown; whether its start touched them (_leave_policy).
+        self._policy = None
+        self._bench_ran = False
+        self._tunnel = False
+        # What else ends with the message (the browser's rest, agent_browser).
+        self._on_close = []
+        self.closer = None
 
-    def ready(self, cancellation):
-        from app.services import agent_workspace
+    # --- Start ------------------------------------------------------------------
+
+    def ready(self, cancellation, *, bench=True):
+        """The workspace for a call: the lease, and with ``bench`` the
+        workbench as well. Waits for a start already running (a prewarm), at
+        most until the answer must start; a provider failure is this call's
+        (VM_NOT_STARTED) and the next one tries again, until MAX_FAILURES in
+        a row turn the workspace off for the message."""
+        job = self._job("bench" if bench else "lease", cancellation)
+        if job is None:
+            return
+        self._wait(job, cancellation)
+        error = job.error
+        if error is None:
+            self.succeeded()
+            return
+        if isinstance(error, _StartFailed):
+            raise self.failed(str(error), VM_NOT_STARTED) from None
+        raise error
+
+    def start(self, cancellation, *, bench=True):
+        """Begins the start without waiting for it (VMTools.prewarm)."""
+        try:
+            self._job("bench" if bench else "lease", cancellation)
+        except ValueError:
+            pass
+
+    def _job(self, stage, cancellation):
+        """The running start of ``stage``, a new one after one that failed,
+        or None when it is done; raises when the workspace is off."""
+        from app.services.agent_workspace import VM_BUSY
         with self._lock:
-            if self.state == "unavailable":
+            if self.state == "unavailable" or self._closed:
                 raise _VMOff(VM_UNAVAILABLE)
             if self.state == "busy":
-                raise _VMOff(agent_workspace.VM_BUSY)
-            if self.state == "ready":
-                return
-            # How long each step takes, in the log (since 2026-10-30): a
-            # message's first browser call waits for all of them, 2 to 4 s
-            # in Prod on top of the call, before the browser runs.
-            phases, mark = {}, [time.monotonic()]
+                raise _VMOff(VM_BUSY)
+            if self.state == "ready" or (stage == "lease" and self.state == "leased"):
+                return None
+            job = self._jobs.get(stage)
+            if job is None or job.done.is_set():
+                target = self._lease if stage == "lease" else self._bench
+                job = self._jobs[stage] = _Job(stage, lambda: target(cancellation)).start()
+            return job
 
-            def took(phase):
-                now = time.monotonic()
-                phases[phase], mark[0] = now - mark[0], now
-            try:
+    def _answer_left(self):
+        return getattr(self.loop, "answer_time_left", lambda: None)()
+
+    def _wait(self, job, cancellation):
+        """Until ``job`` is done, at most until a command would no longer fit
+        before the answer (VM_NO_TIME; the job goes on), and never past Stop."""
+        left = self._answer_left()
+        deadline = None if left is None else time.monotonic() + max(0.0, left - MIN_COMMAND_SECONDS)
+        while not job.done.wait(.1):
+            cancellation.raise_if_cancelled()
+            if deadline is not None and time.monotonic() >= deadline:
+                raise ValueError(VM_NO_TIME)
+
+    def _took(self, phase, since):
+        with self._lock:
+            self.phases[phase] = self.phases.get(phase, 0.0) + time.monotonic() - since
+        return time.monotonic()
+
+    def _go_on(self, cancellation):
+        cancellation.raise_if_cancelled()
+        if self._closed:
+            raise _VMOff(VM_UNAVAILABLE)
+
+    def _off(self, reason):
+        """The workspace refused for good (no provider, its setup, the chat gone)."""
+        logging.warning("Agent VM off reason=%s %s", reason, log_tag(self.loop))
+        with self._lock:
+            self.state, self.unavailable_reason = "unavailable", reason[:120]
+        return _VMOff(VM_UNAVAILABLE)
+
+    def _lease(self, cancellation):
+        """The lease (agent_workspace.claim): the account and the chat name
+        the workspace before the provider creates it, and this message holds
+        it, kept by _keep_lease while it runs."""
+        from app.services import agent_tunnel, agent_workspace
+        since = time.monotonic()
+        with self._lock:
+            if self.backend is None:
                 self.backend = self._factory()
-                if self.backend is None:
-                    raise agent_vm.VMUnavailable("no provider configured")
-                from app.services import agent_domains
-                self._record()
-                took("lease")
-                cancellation.raise_if_cancelled()
-                self.domains = list(self.claim.domains)
-                self.backend.ensure(self.name, agent_domains.rules(self.domains))
-                took("rules")
-                agent_workspace.prepare(self.backend, self.name, cancellation)
-                took("tools")
-                folder = agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id,
-                                                       self.claim.title, self.claim.started, self.claim.folder)
-                self.dir = agent_vm.chat_dir(self.loop.chat_id, folder or None)
-                if folder != self.claim.folder:
-                    agent_workspace.record_folder(self.loop.store, self.loop.uid, self.loop.chat_id, folder)
-                self._still_active()
-                took("folder")
-                try:
-                    self.checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
-                    self.checkpoint_at = _now()
-                except agent_vm.VMUnavailable:
-                    # Works on without it: the checkpoint only marks a state to return to.
-                    logging.warning("Agent VM checkpoint unavailable")
-                took("checkpoint")
-                self._copy_inputs(cancellation)
-                took("inputs")
-                try:
-                    self.notes = agent_workspace.read_notes(self.backend, self.name)
-                except agent_vm.VMUnavailable:
-                    # Works on without them, like without a checkpoint.
-                    logging.warning("Agent workspace notes unavailable")
-                took("notes")
-                if self.claim.secrets:
-                    # The keys the user gave, so this message masks them (agent_secrets.scrub).
-                    from app.services import agent_secrets
-                    try:
-                        self.seconds += agent_secrets.load(self.backend, self.name, self.loop.uid,
-                                                           self.claim.secrets, cancellation)
-                    except agent_vm.VMUnavailable:
-                        logging.warning("Agent workspace keys unavailable")
-                    took("keys")
-                self.state = "ready"
-                self.started = True
-                logging.info("Agent VM ready seconds=%.1f %s", sum(phases.values()),
-                             " ".join(f"{phase}={seconds:.1f}" for phase, seconds in phases.items()))
-            except ProviderCancelled:
-                raise
-            except agent_workspace.WorkspaceBusy:
+            backend = self.backend
+        if backend is None:
+            raise self._off("lease: no provider configured")
+        self._go_on(cancellation)
+        try:
+            claim = agent_workspace.claim(self.loop.store, self.loop.uid, self.loop.chat_id, self.loop.turn_id,
+                                          provider=backend.provider)
+        except agent_workspace.WorkspaceBusy:
+            with self._lock:
                 self.state = "busy"
-                raise _VMOff(agent_workspace.VM_BUSY) from None
+            raise _VMOff(agent_workspace.VM_BUSY) from None
+        except Exception as exc:
+            logging.warning("Agent VM record failed category=%s %s", safe_exception(exc), log_tag(self.loop))
+            raise _StartFailed(f"lease: {type(exc).__name__}") from None
+        with self._lock:
+            closed = self._closed
+            if not closed:
+                self.claim, self.leased, self._leased_at = claim, True, self.clock()
+                if self.state == "idle":
+                    self.state = "leased"
+                self._tunnel = True
+        if closed:
+            # The message ended while this start ran (a prewarm it never used).
+            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=claim.policy)
+            raise _VMOff(VM_UNAVAILABLE)
+        agent_tunnel.begin(self.loop.uid)
+        threading.Thread(target=self._keep_lease, name="agent-vm-lease", daemon=True).start()
+        self._took("lease", since)
+
+    def _keep_lease(self):
+        """Moves the lease on every LEASE_KEEP_SECONDS while the message
+        holds it, also while it waits for the user (ask_user, a takeover, a
+        reviewer's halt): before 2026-10-30 only a call did, and a wait of
+        15 minutes let another chat take the workspace (runtime audit A2)."""
+        from app.services import agent_workspace
+        began = time.monotonic()
+        while not self._stop.wait(LEASE_KEEP_SECONDS):
+            if time.monotonic() - began > LEASE_KEEP_MAX_SECONDS:
+                return
+            with self._lock:
+                if not self.leased or self._closed:
+                    return
+            try:
+                held = agent_workspace.renew(self.loop.store, self.loop.uid, self.loop.turn_id)
             except Exception as exc:
-                _unexpected(exc, "start")
-                self.state = "unavailable"
-                raise _VMOff(VM_UNAVAILABLE) from None
+                logging.warning("Agent workspace renew failed category=%s %s", safe_exception(exc),
+                                log_tag(self.loop))
+                continue
+            with self._lock:
+                if held:
+                    self._leased_at = self.clock()
+                    continue
+                self.leased = False
+                if self.state != "unavailable":
+                    self.state = "busy"
+            logging.warning("Agent workspace lease lost %s", log_tag(self.loop))
+            return
+
+    def _bench(self, cancellation):
+        """The workbench: its rules (only when they differ from what the last
+        message confirmed, T6), its tools, the chat's folder with notes and
+        keys in one command, then the checkpoint beside the rest."""
+        from app.services import agent_domains, agent_secrets, agent_workspace
+        lease = self._job("lease", cancellation)
+        if lease is not None:
+            while not lease.done.wait(.1):
+                self._go_on(cancellation)
+            if lease.error is not None:
+                raise lease.error
+        backend, claim = self.backend, self.claim
+        since = time.monotonic()
+        try:
+            self._go_on(cancellation)
+            with self._lock:
+                self.domains = list(dict.fromkeys([*claim.domains, *self.domains]))
+                domains, self._bench_ran, self._policy = list(self.domains), True, None
+            rules = agent_domains.rules(domains)
+            key = agent_workspace.policy_key(rules)
+            if claim.policy == key and not agent_workspace.policy_unsure(self.name):
+                if backend.ensure(self.name):
+                    # Made anew: no rules yet.
+                    backend.set_policy(self.name, rules)
+            else:
+                backend.ensure(self.name, rules)
+            with self._lock:
+                self._policy = key
+            status = getattr(backend, "statuses", {}).get(self.name)
+            if status:
+                self.cold["workbench"] = status == "cold"
+            since = self._took("rules", since)
+            self._go_on(cancellation)
+            # A setup widens the rules for a moment (agent_workspace._open_for_setup):
+            # unknown until it is through.
+            with self._lock:
+                self._policy = None
+            agent_workspace.prepare(backend, self.name, cancellation, timeout=self._answer_left())
+            with self._lock:
+                self._policy = key
+            since = self._took("tools", since)
+            self._go_on(cancellation)
+            opened = agent_workspace.open_chat(backend, self.name, self.loop.chat_id, title=claim.title,
+                                               started=claim.started, folder=claim.folder, keys=claim.secrets,
+                                               cancellation=cancellation)
+            # The keys the user gave, so this message masks them (agent_secrets.scrub).
+            for key_name, value in opened.keys:
+                agent_secrets.remember(self.loop.uid, value, key_name)
+            self.notes = opened.notes
+            self.dir = agent_vm.chat_dir(self.loop.chat_id, opened.folder or None)
+            if opened.folder != claim.folder:
+                agent_workspace.record_folder(self.loop.store, self.loop.uid, self.loop.chat_id, opened.folder)
+            self._still_active()
+            since = self._took("chat", since)
+            self._checkpoint_start()
+            context = self.loop.file_context
+            if context is not None and context.file_ids:
+                # The attachments come after the checkpoint: a restore never brings them back.
+                self.checkpoint_wait(cancellation)
+                self._copy_inputs(cancellation)
+                self._took("inputs", since)
+            with self._lock:
+                if self.state == "leased":
+                    self.state = "ready"
+                self.started = True
+            logging.info("Agent VM ready seconds=%.1f %s %s", sum(self.phases.values()),
+                         " ".join(f"{phase}={seconds:.1f}" for phase, seconds in self.phases.items()),
+                         log_tag(self.loop))
+        except (ProviderCancelled, _VMOff, ValueError):
+            raise
+        except agent_workspace.SetupFailed:
+            raise self._off("bench: setup") from None
+        except agent_vm.VMUnavailable as exc:
+            if str(exc) == "chat deleted":
+                raise self._off("bench: chat deleted") from None
+            raise _StartFailed(f"bench: {str(exc)[:80]}") from None
+        except Exception as exc:
+            _unexpected(exc, "start")
+            raise _StartFailed(f"bench: {type(exc).__name__}") from None
+
+    def _checkpoint_start(self):
+        with self._lock:
+            if self._checkpoint_job is None:
+                self._checkpoint_job = _Job("checkpoint", self._take_checkpoint).start()
+
+    def _take_checkpoint(self):
+        since = time.monotonic()
+        try:
+            checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
+            with self._lock:
+                self.checkpoint, self.checkpoint_at = checkpoint, _now()
+        except agent_vm.VMUnavailable:
+            # Works on without it: the checkpoint only marks a state to return to.
+            logging.warning("Agent VM checkpoint unavailable %s", log_tag(self.loop))
+        except Exception as exc:
+            _unexpected(exc, "checkpoint")
+        finally:
+            self._took("checkpoint", since)
+
+    def checkpoint_wait(self, cancellation):
+        """A call that changes the workbench waits for the message's checkpoint
+        (the state before it changed anything); reads go on beside it."""
+        job = self._checkpoint_job
+        if job is not None and not job.done.is_set():
+            self._wait(job, cancellation)
 
     def wait_for_user(self, cancellation):
         """While the user has the workspace's browser, the agent waits: the
@@ -468,20 +742,25 @@ class VMSession:
         left = getattr(self.loop, "answer_time_left", lambda: None)()
         if left is not None:
             deadline = min(deadline, self.clock() + left - MIN_COMMAND_SECONDS)
+        looked = False
         while getattr(self.loop, "hold", None) is None:
             try:
-                if not agent_workspace.user_has_browser(self.loop.store.db, self.loop.uid):
+                # The first look may share the run's own of a moment ago
+                # (DelegationLoop._takeover_wait); a wait reads anew.
+                if not agent_workspace.user_has_browser(self.loop.store.db, self.loop.uid, fresh=looked):
                     return
             except Exception as exc:
                 logging.warning("Agent workspace control unavailable category=%s", safe_exception(exc))
+            looked = True
             if self.clock() >= deadline:
                 raise ValueError(VM_USER_HAS_BROWSER)
             cancellation.raise_if_cancelled()
             self.sleep(USER_POLL_SECONDS)
 
     def renew(self):
-        """Moves the lease on when it runs low (between VM calls); a lease
-        that is gone (expired, another chat took it) turns the VM off."""
+        """Moves the lease on when it runs low (between calls; _keep_lease
+        does it while the message waits); a lease that is gone (expired,
+        another chat took it) turns the workspace off."""
         from app.services import agent_workspace
         if not self.leased or self.clock() - self._leased_at < agent_workspace.LEASE_RENEW_SECONDS:
             return
@@ -500,24 +779,24 @@ class VMSession:
         if not held:
             raise _VMOff(agent_workspace.VM_BUSY)
 
-    def failed(self):
-        """The VM failed during a call: off for the rest of the message."""
+    def failed(self, reason="", text=None):
+        """A provider failure in a call: the call's own error (``text``) and
+        the next call tries again, until MAX_FAILURES in a row turn the
+        workspace off for the message (VM_UNAVAILABLE). Without ``text`` it
+        goes off at once. Returns the error to raise."""
         with self._lock:
-            self.state = "unavailable"
+            self.failures += 1
+            off = text is None or self.failures >= MAX_FAILURES
+            if off and self.state != "busy":
+                self.state = "unavailable"
+                self.unavailable_reason = (reason or "failed")[:120]
+        logging.warning("Agent VM call failed reason=%s failures=%s off=%s %s", (reason or "failed")[:120],
+                        self.failures, off, log_tag(self.loop))
+        return _VMOff(VM_UNAVAILABLE) if off else _Interrupted(text)
 
-    def _record(self):
-        """The account and the chat name the workspace before the provider
-        creates it, and this message leases it (agent_workspace.claim)."""
-        from app.services import agent_workspace
-        try:
-            self.claim = agent_workspace.claim(self.loop.store, self.loop.uid, self.loop.chat_id,
-                                                  self.loop.turn_id, provider=self.backend.provider)
-        except agent_workspace.WorkspaceBusy:
-            raise
-        except Exception as exc:
-            logging.warning("Agent VM record failed category=%s", safe_exception(exc))
-            raise agent_vm.VMUnavailable("record") from None
-        self.leased, self._leased_at = True, self.clock()
+    def succeeded(self):
+        with self._lock:
+            self.failures = 0
 
     def _still_active(self):
         """A chat deleted while its folder was being made already looked for
@@ -552,10 +831,11 @@ class VMSession:
 
     def announce(self, result):
         """``result`` with the chat's folder, the inputs and the workspace's
-        notes, once per message."""
+        notes, once per message, with the first result after the workbench
+        is ready (a browser call alone needs none of it, T5)."""
         from app.services import agent_workspace
         with self._lock:
-            if self._announced:
+            if self._announced or self.state != "ready":
                 return result
             self._announced = True
         extra = {"chat_folder": self.dir}
@@ -574,16 +854,25 @@ class VMSession:
         return {**result, **extra}
 
     def summary(self):
-        """The turn's ``agent_vm``, or None when no VM tool ran."""
-        if self.state == "idle":
+        """The turn's ``agent_vm``, or None when no call reached the workspace."""
+        if self.state == "idle" and not self.calls and not self.browser_calls:
             return None
-        data = {"provider": self.backend.provider if self.backend else "", "name": self.name,
-                "checkpoint": self.checkpoint, "checkpoint_at": self.checkpoint_at,
-                "calls": self.calls, "commands": self.commands, "seconds": round(self.seconds, 1)}
-        if self.state == "unavailable":
-            data["unavailable"] = True
-        if self.state == "busy":
-            data["busy"] = True
+        with self._lock:
+            data = {"provider": self.backend.provider if self.backend else "", "name": self.name,
+                    "checkpoint": self.checkpoint, "checkpoint_at": self.checkpoint_at,
+                    "calls": self.calls, "commands": self.commands, "seconds": round(self.seconds, 1)}
+            if self.phases:
+                data["phases"] = {phase: round(seconds, 1) for phase, seconds in self.phases.items()}
+            if self.cold:
+                data["cold"] = dict(self.cold)
+            if self.browser_calls:
+                data.update(browser_calls=self.browser_calls, browser_seconds=round(self.browser_seconds, 1))
+            if self.state == "unavailable":
+                data["unavailable"] = True
+                if self.unavailable_reason:
+                    data["unavailable_reason"] = self.unavailable_reason
+            if self.state == "busy":
+                data["busy"] = True
         return data
 
     def left(self):
@@ -600,26 +889,83 @@ class VMSession:
         limit, before = self._day
         return None if limit is None else limit - before - self.seconds - self.reserved
 
+    def on_close(self, callback):
+        """``callback()`` runs once the message ends, after its lease is
+        released (VMSession.close), never failing it."""
+        with self._lock:
+            if callback not in self._on_close:
+                self._on_close.append(callback)
+
     def close(self):
-        if self.state != "idle":
-            from app.services import agent_vm_time
+        """The message's end: its VM time charged, then on a thread of its
+        own (_finish) the chat's domains out of the workbench's rules, the
+        lease released and the browser told to rest. The message waits for
+        that at most CLOSE_WAIT_SECONDS: until 2026-10-30 it waited for the
+        rules up to WAKE_SECONDS, also when a deploy's interrupt left it 20
+        (runtime audit A6). Whatever does not finish leaves the record's rules
+        unknown, so the next start sets them (Claim.policy), and the lease
+        ends by itself."""
+        from app.services import agent_tunnel, agent_vm_time
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            tunnel = self._tunnel
+        self._stop.set()
+        if self.seconds + self.reserved > 0:
             agent_vm_time.charge(self.loop.store, self.loop.uid, self.seconds + self.reserved)
-        if self.leased and self.domains and self.backend is not None:
-            # The chat's domains leave the policy with its message (the next
-            # claim sets its own chat's); a failure leaves them until then.
-            try:
-                self.backend.set_policy(self.name, agent_vm.WORKBENCH_RULES)
-            except Exception as exc:
-                logging.warning("Agent workbench policy reset failed category=%s", safe_exception(exc))
-        if self.leased:
-            from app.services import agent_workspace
-            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id)
+        if tunnel:
+            agent_tunnel.end(self.loop.uid)
+        self.closer = threading.Thread(target=self._finish, name="agent-vm-close", daemon=True)
+        self.closer.start()
+        self.closer.join(CLOSE_WAIT_SECONDS)
+
+    def _finish(self):
+        from app.services import agent_workspace
+        # A start still running ends at its next part (_go_on); its lease, if
+        # it gets one now, goes at once (_lease).
+        for job in [job for job in (*self._jobs.values(), self._checkpoint_job) if job is not None]:
+            job.done.wait(CHECKPOINT_WAIT_SECONDS)
+        with self._lock:
+            leased = self.leased
             self.leased = False
+            callbacks = list(self._on_close)
+        if leased:
+            policy = self._leave_policy()
+            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=policy)
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception as exc:
+                logging.info("Agent workspace close step failed category=%s", safe_exception(exc))
         if self.backend is not None:
             try:
                 self.backend.close()
             except Exception as exc:
                 logging.info("Agent VM backend close failed category=%s", safe_exception(exc))
+
+    def _leave_policy(self):
+        """The workbench's rules as the message leaves them: the chat's
+        domains go (the next claim sets its own chat's), and the key the
+        release confirms; None when unknown (a failure, a start cut short)."""
+        from app.services import agent_workspace
+        with self._lock:
+            ran, key, domains, claim = self._bench_ran, self._policy, list(self.domains), self.claim
+        if not ran:
+            # The workbench's start never touched them: as the claim found them.
+            return claim.policy if claim is not None else None
+        if key is None:
+            return None
+        base = agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
+        if not domains and key == base:
+            return base
+        try:
+            self.backend.set_policy(self.name, agent_vm.WORKBENCH_RULES)
+        except Exception as exc:
+            logging.warning("Agent workbench policy reset failed category=%s %s", safe_exception(exc),
+                            log_tag(self.loop))
+            return None
+        return base
 
 
 class VMTools:
@@ -646,7 +992,7 @@ class VMTools:
         # GitHub through the user's own installation of the app (agent_github.py);
         # without the app's configuration the tools say "not set up".
         github = agent_github.GitHubTools(self).tools()
-        return [
+        return [self._guarded(tool) for tool in [
             ReadOnlyTool("vm_exec", "Run a shell command in your workspace (bash, in this chat's folder by default). "
                          "Returns stdout, stderr (their ends when long), exit code and duration.",
                          VmExecArgs, self.exec, activity=self._exec_activity, reports=True),
@@ -678,7 +1024,56 @@ class VMTools:
             *AskTools(self).tools(),
             *DomainTools(self).tools(),
             *github,
-        ]
+        ]]
+
+    def _guarded(self, tool):
+        """``tool`` whose unexpected failures (a file store's outage, a bug)
+        are the call's error and reported, never the end of the run: until
+        2026-10-30 a storage error in vm_share_file failed the whole answer
+        (runtime audit A3). Stop, the run's limits and the tools' own errors
+        pass as they are."""
+        execute = tool.execute
+        loop = self.loop
+
+        def guarded(args, *, cancellation, **kwargs):
+            from app.services.agent_provider_limits import AgentRunInterrupted
+            from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+            try:
+                return execute(args, cancellation=cancellation, **kwargs)
+            except (ProviderCancelled, ValueError, TypeError, AnalysisBudgetExceeded, AgentRunInterrupted):
+                raise
+            except Exception as exc:
+                logging.warning("Agent workspace tool failed unexpectedly tool=%s category=%s %s", tool.name,
+                                safe_exception(exc), log_tag(loop))
+                report_server_exception(exc, where=f"agent_vm.{tool.name}", phase="tool")
+                raise ValueError(TOOL_FAILED) from None
+        return dataclasses.replace(tool, execute=guarded)
+
+    def prewarm(self, *, bench=True):
+        """Starts the workspace while the model still thinks, on a thread of
+        its own (runtime audit 2026-10-30, T1): after open_workspace the
+        browser VM with its Chrome and, with ``bench``, the lease and the
+        workbench; for a message that starts with the workspace open only
+        the browser (nothing else is known to be needed). Nothing when the
+        day's VM time is used up or the workspace is off; Stop ends it."""
+        def run():
+            from app.services.agent_browser import BrowserTools
+            cancellation = self.loop.cancellation
+            try:
+                left = self.session.left()
+                if cancellation.cancelled or (left is not None and left < 1):
+                    return
+                if self.session.state in {"unavailable", "busy"}:
+                    return
+                self._browser_tools(BrowserTools).prewarm(cancellation)
+                if bench:
+                    self.session.start(cancellation, bench=True)
+            except Exception as exc:
+                logging.info("Agent workspace prewarm failed category=%s %s", safe_exception(exc),
+                             log_tag(self.loop))
+        thread = threading.Thread(target=run, name="agent-vm-prewarm", daemon=True)
+        thread.start()
+        return thread
 
     def _browser_tools(self, cls):
         if getattr(self, "browser_tools", None) is None:
@@ -697,33 +1092,52 @@ class VMTools:
                 self._files = AgentFiles(self.loop.store.db)
         return self._files
 
-    def _start(self, cancellation):
+    def _start(self, cancellation, *, bench=True, change=True):
+        """Before a call of the workspace: the day's VM time, the user's
+        takeover, the lease, and with ``bench`` the workbench; a call that
+        ``change``s the workbench waits for the message's checkpoint."""
         left = self.session.left()
         if left is not None and left < 1:
             raise ValueError(VM_DAY_LIMIT)
         with self.session._lock:
             self.session.calls += 1
         self.session.wait_for_user(cancellation)
-        self.session.ready(cancellation)
+        self.session.ready(cancellation, bench=bench)
         self.session.renew()
+        if bench and change:
+            self.session.checkpoint_wait(cancellation)
 
-    def _provider(self, operation, call):
-        """One call to the provider: any failure turns the VM off for the rest
-        of the message and becomes the agent's short message, never a failed
-        answer. A missing file and Stop pass through, and a path the agent's
-        user may not use is the agent's error."""
-        try:
-            return call()
-        except (ProviderCancelled, agent_vm.VMFileMissing):
-            raise
-        except agent_vm.VMFileRefused as exc:
-            raise ValueError(str(exc)) from None
-        except Exception as exc:
-            _unexpected(exc, operation)
-            self.session.failed()
-            raise _VMOff(VM_UNAVAILABLE) from None
+    def _provider(self, operation, call, *, idempotent=False):
+        """One call to the provider. A failure is this call's error, never a
+        failed answer: an ``idempotent`` one (a read) is tried once more and
+        then says nothing changed, any other that whether it ran is unknown;
+        MAX_FAILURES in a row turn the workspace off for the message
+        (VMSession.failed). A missing file and Stop pass through, and a path
+        the agent's user may not use is the agent's error."""
+        for attempt in (1, 2):
+            try:
+                result = call()
+            except ProviderCancelled:
+                raise
+            except agent_vm.VMFileMissing:
+                self.session.succeeded()
+                raise
+            except agent_vm.VMFileRefused as exc:
+                self.session.succeeded()
+                raise ValueError(str(exc)) from None
+            except Exception as exc:
+                _unexpected(exc, operation)
+                if idempotent and attempt == 1:
+                    logging.info("Agent VM %s tried again category=%s %s", operation, safe_exception(exc),
+                                 log_tag(self.loop))
+                    continue
+                reason = f"{operation}: {str(exc)[:80]}" if isinstance(exc, agent_vm.VMUnavailable) \
+                    else f"{operation}: {type(exc).__name__}"
+                raise self.session.failed(reason, VM_NOT_REACHED if idempotent else VM_INTERRUPTED) from None
+            self.session.succeeded()
+            return result
 
-    def _exec(self, command, *, cwd, timeout, on_output, cancellation, agent=True):
+    def _exec(self, command, *, cwd, timeout, on_output, cancellation, agent=True, idempotent=False):
         """A command the server runs in the VM for the agent's work (a
         process's status or wait, an import's unpacking, an installation):
         its run time counts against today's VM time like the agent's own
@@ -732,7 +1146,7 @@ class VMTools:
         step as the provider's user."""
         outcome = self._provider("exec", lambda: self.session.backend.exec(
             self.session.name, command, cwd=cwd, timeout=timeout, on_output=on_output, cancellation=cancellation,
-            agent=agent))
+            agent=agent), idempotent=idempotent)
         with self.session._lock:
             self.session.seconds += outcome.seconds
         return outcome
@@ -789,7 +1203,7 @@ class VMTools:
             outcome = self._provider("exec", lambda: self.session.backend.exec(
                 self.session.name, args.command, cwd=cwd, timeout=timeout, on_output=on_output,
                 cancellation=command))
-        except _VMOff:
+        except (_VMOff, _Interrupted):
             report(output.shown())
             raise
         except ProviderCancelled:
@@ -862,11 +1276,11 @@ class VMTools:
 
     def read(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation)
+        self._start(cancellation, change=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("read", lambda: self.session.backend.read_file(
-                self.session.name, path, limit=READ_BYTES))
+                self.session.name, path, limit=READ_BYTES), idempotent=True)
         except agent_vm.VMFileMissing:
             raise ValueError(f"No file at {path}.") from None
         report({"bytes": len(raw)})
@@ -923,7 +1337,7 @@ class VMTools:
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("edit", lambda: self.session.backend.read_file(
-                self.session.name, path, limit=READ_BYTES))
+                self.session.name, path, limit=READ_BYTES), idempotent=True)
         except agent_vm.VMFileMissing:
             raise ValueError(f"No file at {path}. Create it with vm_write_file.") from None
         if not complete:
@@ -949,11 +1363,11 @@ class VMTools:
 
     def view(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation)
+        self._start(cancellation, change=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("view", lambda: self.session.backend.read_file(
-                self.session.name, path, limit=PICTURE_BYTES + 1))
+                self.session.name, path, limit=PICTURE_BYTES + 1), idempotent=True)
         except agent_vm.VMFileMissing:
             raise ValueError(f"No file at {path}.") from None
         report({"bytes": len(raw)})
@@ -977,11 +1391,11 @@ class VMTools:
 
     def share(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation)
+        self._start(cancellation, change=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("share", lambda: self.session.backend.read_file(
-                self.session.name, path, limit=SHARE_BYTES + 1))
+                self.session.name, path, limit=SHARE_BYTES + 1), idempotent=True)
         except agent_vm.VMFileMissing:
             raise ValueError(f"No file at {path}.") from None
         report({"bytes": len(raw)})
@@ -1018,7 +1432,8 @@ class VMTools:
         from app.services.agent_workspace import VM_BUSY
         error = (result or {}).get("error") if isinstance(result, dict) else None
         outcomes = {VM_UNAVAILABLE: "unavailable", VM_NO_TIME: "no_time", VM_DAY_LIMIT: "day_limit",
-                    VM_BUSY: "busy"}
+                    VM_BUSY: "busy", VM_INTERRUPTED: "interrupted", VM_NOT_REACHED: "interrupted",
+                    VM_NOT_STARTED: "interrupted"}
         return {"outcome": outcomes[error]} if error in outcomes else {}
 
     def _exec_activity(self, args, result):

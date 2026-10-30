@@ -37,11 +37,17 @@ works. The ports are kept on the account's record
 
 One tunnel per account in this process (Render: one uvicorn, one instance),
 started by the agent's first localhost address and ended IDLE_SECONDS after
-its last bytes; the live view, a takeover and the next browser call start it
-again (resume), so the user goes on in the agent's app after the run. At
-most MAX_CONNECTIONS connections. The browser VM is the side the audit
-trusts least: a frame longer than MAX_FRAME ends the tunnel, and a
-connection to a port the tunnel does not hold is refused.
+its last data, or KEEP_SECONDS after nobody wants it any more: wanted while
+a message of the account uses the workspace (begin, end) or the live view
+is open (viewing, its heartbeat), since 2026-10-30. Before, every
+connection attempt counted as use, and a dev page's live reload in the
+browser's Chrome (Vite retries about once a second) kept both VMs awake for
+up to TUNNEL_SECONDS, six hours (runtime audit K1). The live view, a
+takeover and a browser call on a localhost page start it again (resume), so
+the user goes on in the agent's app after the run. At most MAX_CONNECTIONS
+connections. The browser VM is the side the audit trusts least: a frame
+longer than MAX_FRAME ends the tunnel, and a connection to a port the
+tunnel does not hold is refused.
 """
 from __future__ import annotations
 
@@ -61,6 +67,11 @@ RESERVED_PORTS = frozenset({9222})
 # The two programs' own limit on the VMs; the backend ends them much sooner.
 TUNNEL_SECONDS = 6 * 3600
 IDLE_SECONDS = 10 * 60
+# How long the tunnel stays once no message uses the workspace and no view
+# is open, and how long one heartbeat of the open view (VIEW_CHECK_SECONDS,
+# 30 s, agent_workspace.holds_view) counts as an open view.
+KEEP_SECONDS = 2 * 60
+VIEW_BEAT_SECONDS = 45
 # Both sides started (their H), a port listened on, the ports found.
 LISTEN_SECONDS = 20
 POLL_SECONDS = 5
@@ -193,18 +204,24 @@ class Tunnel:
 
     def _read(self, stream, handle):
         buffer = b""
+        looked = self.clock()
         try:
             while not self.closing:
                 chunk = stream.recv(POLL_SECONDS)
                 if chunk is None:
                     break
-                if not chunk:
-                    # Idle by its bytes, not its connections: a dev server's
+                if not chunk or self.clock() - looked >= POLL_SECONDS:
+                    # Idle by its data, not its connections: a dev server's
                     # live-reload socket stays open without a word and would
-                    # keep both VMs awake for TUNNEL_SECONDS.
-                    if self.clock() - self.used > IDLE_SECONDS:
+                    # keep both VMs awake for TUNNEL_SECONDS. And only while
+                    # someone may look (wanted): a page that keeps calling
+                    # its server is no user (runtime audit 2026-10-30, K1).
+                    looked = self.clock()
+                    if self.clock() - self.used > IDLE_SECONDS or not wanted(self.uid):
+                        logging.info("Agent tunnel ended idle=%s", self.clock() - self.used > IDLE_SECONDS)
                         break
-                    continue
+                    if not chunk:
+                        continue
                 buffer += chunk
                 while len(buffer) >= HEADER.size:
                     kind, conn, length = HEADER.unpack_from(buffer)
@@ -236,7 +253,8 @@ class Tunnel:
             if answer is not None:
                 answer.set()
         elif kind == b"O" and len(payload) == 2:
-            self.used = self.clock()
+            # A connection attempt is no use of the tunnel (a page retrying
+            # its server once a second); its data is (_carry).
             port = struct.unpack(">H", payload)[0]
             with self.lock:
                 # Only to a port this tunnel holds, and not too many at once.
@@ -303,6 +321,59 @@ _tunnels: dict[str, Tunnel] = {}
 # record (agent_workspace.Claim.tunnel_ports, record_for_view).
 _asked: dict[str, set[int]] = {}
 _lock = threading.Lock()
+# Who wants the account's tunnel (wanted): its messages that use the
+# workspace now, and until when an open view or a message that ended keeps
+# it (time.monotonic). And whether the browser's last page was the
+# workbench's localhost (note_page): a message's first browser call does not
+# know its page yet (runtime audit 2026-10-30, T7).
+_working: dict[str, int] = {}
+_kept_until: dict[str, float] = {}
+_local_page: dict[str, bool] = {}
+
+
+def _keep(uid, seconds):
+    with _lock:
+        _kept_until[uid] = max(_kept_until.get(uid, 0.0), time.monotonic() + seconds)
+
+
+def begin(uid):
+    """A message of the account uses the workspace: its tunnel may live."""
+    with _lock:
+        _working[uid] = _working.get(uid, 0) + 1
+
+
+def end(uid):
+    """That message ended: the tunnel stays KEEP_SECONDS more."""
+    with _lock:
+        count = _working.get(uid, 0) - 1
+        if count > 0:
+            _working[uid] = count
+        else:
+            _working.pop(uid, None)
+    _keep(uid, KEEP_SECONDS)
+
+
+def viewing(uid):
+    """The account's live view is open (its opening and its heartbeat,
+    agent_workspace.holds_view; a takeover's refresh, touch)."""
+    _keep(uid, VIEW_BEAT_SECONDS + KEEP_SECONDS)
+
+
+def wanted(uid):
+    """Whether someone may use the account's tunnel now (_read ends it otherwise)."""
+    with _lock:
+        return _working.get(uid, 0) > 0 or time.monotonic() < _kept_until.get(uid, 0.0)
+
+
+def note_page(uid, local):
+    """Whether the page in front of the account's browser is the workbench's localhost."""
+    with _lock:
+        _local_page[uid] = bool(local)
+
+
+def page_local(uid):
+    with _lock:
+        return _local_page.get(uid, False)
 
 
 def _tunnel(uid, backend_factory):
@@ -389,6 +460,7 @@ def touch(uid):
         tunnel = _tunnels.get(uid)
     if tunnel is not None:
         tunnel.used = tunnel.clock()
+    viewing(uid)
 
 
 def resume(uid, *, backend_factory=None, db=None, find=False):
@@ -397,12 +469,12 @@ def resume(uid, *, backend_factory=None, db=None, find=False):
     and with ``find`` also on the ports the agent's servers listen on now
     (the open of a localhost address, the live view). Nothing for an
     account that never used localhost, or when the tunnel runs and nothing
-    is to be found. Returns the thread, or None."""
+    is to be found, or nobody wants it (wanted). Returns the thread, or None."""
     with _lock:
         ports = sorted(_asked.get(uid, ()))
         tunnel = _tunnels.get(uid)
         live = tunnel is not None and tunnel.live()
-    if not ports or (live and not find):
+    if not ports or (live and not find) or not wanted(uid):
         return None
 
     def run():
@@ -426,5 +498,7 @@ def close(uid):
     with _lock:
         tunnel = _tunnels.pop(uid, None)
         _asked.pop(uid, None)
+        _kept_until.pop(uid, None)
+        _local_page.pop(uid, None)
     if tunnel is not None:
         tunnel.close()

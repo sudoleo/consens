@@ -634,6 +634,11 @@ class DelegationLoop(AgentLoop):
                 self.messages[0]["content"] += self._workspace_prompt()
                 self.registry = ToolRegistry([*self.registry.tools.values(), *self._workspace_tool_list()],
                                              argument_limit=max(self.registry.argument_limit, 24_000))
+                if agent_vm.on_demand():
+                    # Open because the chat's last message used it: the browser
+                    # wakes while the model thinks (VMTools.prewarm, runtime
+                    # audit 2026-10-30 T1), nothing of the workbench.
+                    self.vm_tools.prewarm(bench=False)
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
@@ -756,11 +761,16 @@ class DelegationLoop(AgentLoop):
     def _request_workspace(self, args, *, cancellation):
         """open_workspace: the workspace opens once this step's calls are done
         (_open_workspace, on the run's own thread). Its result says what the
-        message may take from then on."""
+        message may take from then on. Its start begins now, beside the
+        model's next step (VMTools.prewarm, runtime audit 2026-10-30 T1):
+        the first call waits only for what is left of it."""
         from app.services.agent_vm_tools import WORKSPACE_OPENED
         with self.condition:
+            first = self.workspace_task is None
             self.workspace_task = " ".join(args.task.split())
             steps = self.routing_steps
+        if first:
+            self.vm_tools.prewarm(bench=True)
         result = {"workspace": "open", "note": WORKSPACE_OPENED, "steps_so_far": steps,
                   "minutes_so_far": round(self._turn_elapsed() / 60, 1)}
         if self.policy.vm_turn_steps:
