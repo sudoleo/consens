@@ -800,6 +800,12 @@ describe("the workspace view after the runtime audit", () => {
       expect(FakeSocket.last).toBe(replaced);
       expect(status(env).textContent).toBe("The workspace opened in another window, so this view closed.");
       expect(env.document.querySelector(".workspace-view-reconnect").hidden).toBe(false);
+      // The agent's request does not take the view back from the other
+      // window; the user opening it here does.
+      await env.workspace.open({ takeOver: true });
+      expect(FakeSocket.last).toBe(replaced);
+      await env.workspace.open();
+      expect(FakeSocket.last).not.toBe(replaced);
       // Nothing to try with the day's time used up.
       const other = setup();
       const refused = await opened(other);

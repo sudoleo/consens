@@ -1172,8 +1172,12 @@
       if (take && view.tab !== 'browser') showTab('browser');
       if (take && view.rfb) takeOver();
       else if (take) view.wantControl = true;
-      // Opened again after the connection ended: it tries again, unless trying cannot help.
-      if (!view.rfb && !view.connecting && !NO_RETRY.has(view.final)) reconnect({ fresh: true });
+      // Opened again after the connection ended: it tries again, unless trying
+      // cannot help; a view another window took over comes back only when
+      // the user opens it here, not for the agent's request (renderHold).
+      if (!view.rfb && !view.connecting && !NO_RETRY.has(view.final) && !(take && view.final === 'replaced')) {
+        reconnect({ fresh: true });
+      }
       return;
     }
     view = build();
