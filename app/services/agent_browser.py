@@ -340,8 +340,12 @@ class BrowserTools:
             "browser", "Use the browser you share with the user, a Chrome on a computer of its own that they see "
                        "live and can take over, signed in where the user signed in; http://localhost:<port> there is "
                        "that port of your workspace. Pages come back as text with refs (e12) for click, "
-                       "type, select and upload, and find looks up a text on the page with the refs it is in; every "
-                       "action returns the page again. A file the page downloads, also one the user downloads there, "
+                       "type, select and upload, and find looks up a text on the page with the refs it is in. After "
+                       "an action on the same page comes what it did, the Page and URL lines and only the lines that "
+                       "changed since you last looked (+ new, ~ changed, - gone); read lists the whole page, as do "
+                       "open, back, forward, tab, another address and a large change. scroll says where the view is "
+                       "now. download returns the file's name, bytes and Content-Type; an empty file comes back "
+                       "refused and nothing is saved. A file the page downloads, also one the user downloads there, "
                        "comes into your chat folder's downloads folder. The user sees the page in front on a card in "
                        "the chat, its picture renewed as you work, and opens it live from there.",
             BrowserArgs, self.call, activity=self._activity, reports=True)]
