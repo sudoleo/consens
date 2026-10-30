@@ -254,6 +254,22 @@ def test_rules_whose_reset_failed_are_set_again_by_the_next_message(store, fake_
         agent_workspace._policy_unsure.discard(NAME)
 
 
+def test_rules_left_unknown_by_a_failed_setup_go_back_at_the_messages_end(store, fake_vm, monkeypatch):
+    # A setup widens the rules for a moment; when it fails, they are unknown,
+    # and the message's end still sets the base list (the chat's domain too).
+    from app.services import agent_domains
+    seen = recorded_rules(monkeypatch)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    agent_domains.grant(store, UID, loop.chat_id, "api.example.com", "t0")
+
+    def failing(*args, **kwargs):
+        raise agent_vm.VMUnavailable("setup: no connection")
+    monkeypatch.setattr(agent_workspace, "prepare", failing)
+    list(loop.run())
+    assert seen[-1] == ("policy", agent_vm.WORKBENCH_RULES)
+    assert agent_workspace.record(store.db, UID)["policy"] == agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
+
+
 def test_the_chats_folder_notes_and_keys_come_in_one_command(store, fake_vm):
     from app.services import agent_secrets
     fake_vm.vms[NAME] = {"files": {agent_secrets.path("OPENAI_API_KEY"): b"sk-test-123456789",

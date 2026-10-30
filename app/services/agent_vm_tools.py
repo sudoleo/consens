@@ -954,11 +954,11 @@ class VMSession:
         if not ran:
             # The workbench's start never touched them: as the claim found them.
             return claim.policy if claim is not None else None
-        if key is None:
-            return None
         base = agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
         if not domains and key == base:
             return base
+        # The chat's domains in them, or unknown (a setup that widened them
+        # for a moment, a start cut short): back to the base list either way.
         try:
             self.backend.set_policy(self.name, agent_vm.WORKBENCH_RULES)
         except Exception as exc:
