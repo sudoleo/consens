@@ -118,9 +118,8 @@ class ToolRegistry:
         tool = self.tools.get(function.get("name"))
         raw = function.get("arguments")
         if tool is None:
-            pages = ("read_source opens only URLs that comparison answers cited." if "read_source" in self.tools
-                     else "There is no tool that opens web pages.")
-            raise ValueError(f"Tool is not authorized: unknown tool. Available tools: {', '.join(self.tools)}. {pages}")
+            raise ValueError(" ".join(["Tool is not authorized: unknown tool. Available tools: "
+                                       f"{', '.join(self.tools)}.", *self._unknown_notes()]))
         limit = tool.argument_limit or self.default_argument_limit
         if not isinstance(raw, str) or len(raw) > limit:
             raise ValueError(f"Tool is not authorized: {tool.name} arguments must be one JSON object "
@@ -152,6 +151,22 @@ class ToolRegistry:
                 for error in exc.errors(include_url=False, include_input=False))
             raise ValueError(f"Invalid {tool.name} arguments - {problems}") from exc
         return tool, arguments
+
+    def _unknown_notes(self):
+        """What an unknown tool's refusal adds, true of this registry: which
+        tool opens web pages (read_source's own description says which ones:
+        cited pages, in audit mode any public page), and that the workspace's
+        tools come with open_workspace while it is closed (audit L7: a direct
+        call of browser did not say so)."""
+        notes = []
+        if "read_source" in self.tools:
+            notes.append("Of these, read_source opens web pages.")
+        elif "browser" not in self.tools and "open_workspace" not in self.tools:
+            notes.append("There is no tool that opens web pages.")
+        if "open_workspace" in self.tools:
+            notes.append("Your workspace is closed in this message: its tools, the browser and vm_exec among "
+                         "them, come from the step after open_workspace ran.")
+        return notes
 
     def result(self, tool, arguments, *, cancellation, limit):
         cancellation.raise_if_cancelled()
