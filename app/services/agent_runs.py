@@ -551,6 +551,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # The turn's pauses (DelegationLoop._end_hold): kind, gate,
                     # ask, domain, reviewer, decision and seconds, no reasons.
                     patch["agent_holds"] = completion.holds
+                if isinstance(getattr(completion, "wrap_up", None), dict):
+                    # Which limit ended its work (DelegationLoop._wrap_up):
+                    # reason code, steps and seconds, no text (audit I1).
+                    patch["agent_wrap_up"] = completion.wrap_up
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])

@@ -124,6 +124,10 @@ TURN_ALLOWANCE_LIMIT = ("This response ended because today's token allowance is 
                         "The available results have been saved.")
 TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
                       "The available results have been saved; send a follow-up message to continue.")
+# Which limit ended a turn's work (_wrap_up): the turn's ``agent_wrap_up``
+# and the work log's ``limit`` entry keep the code, never a text.
+WRAP_UP_REASONS = {TURN_TIME_LIMIT: "time", TURN_STEP_LIMIT: "steps", TURN_REPEAT_LIMIT: "repeat",
+                   TURN_INVALID_LIMIT: "invalid", TURN_ALLOWANCE_LIMIT: "allowance", TURN_CONTEXT_LIMIT: "context"}
 # A message the user sends into the running response (add_user_note): it
 # opens the user-role message the agent gets before its next step.
 USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the user:]"
@@ -3051,11 +3055,14 @@ class DelegationLoop(AgentLoop):
         logging.info("Agent turn limit reached; the agent writes the answer from what it has")
         if not comparison.text:
             self._close_open_calls()
-            self.messages.append({"role": "user", "content":
-                "App rule: this message has reached its limit. Write the answer now from the comparisons you have, "
-                "without tool calls; the app checks it." if compared and not comparison.audit_mode else
-                "App rule: this message has reached its limit. Write the answer now from what you have, without "
-                "tool calls."})
+            # Which limit, and that the work can go on (audit L3): facts the
+            # answer can pass on, instead of "has reached its limit" alone.
+            fact, then = self._limit_fact(reason)
+            write = ("Write the answer now from the comparisons you have, without tool calls; the app checks it."
+                     if compared and not comparison.audit_mode else
+                     "Write the answer now from what you have, without tool calls.")
+            self.messages.append({"role": "user", "content": " ".join(filter(None, (
+                "App rule: this message has reached its limit.", fact, write, then)))})
             index = next(steps, None)
             if index is None:
                 raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
@@ -3097,11 +3104,37 @@ class DelegationLoop(AgentLoop):
             yield from self._finish_review(value)
         self.completion.text, self.completion.finish_reason = comparison.text, "stop"
 
+    def _limit_fact(self, reason):
+        """What the wrap-up step reads of ``reason``: the limit, and whether
+        a follow-up message can go on with the work."""
+        code = WRAP_UP_REASONS.get(reason)
+        seconds, steps = self._turn_seconds(), self._turn_steps()
+        fact = {"time": f"It reached its time limit ({round(seconds / 60)} minutes per message)." if seconds else
+                        "It reached its time limit.",
+                "steps": f"It reached its step limit ({steps} steps per message)." if steps else
+                         "It reached its step limit.",
+                "repeat": "The same tool request repeated without progress.",
+                "invalid": "Tool requests were invalid three times in a row.",
+                "allowance": "Today's token allowance is nearly used up.",
+                "context": "The conversation nearly fills the model's context window."}.get(code, "")
+        then = ("The work can go on in a later message once the allowance renews." if code == "allowance" else
+                "The user can continue the work with a follow-up message.")
+        return fact, then
+
     def _wrap_up(self, reason, steps, value):
         """A per-turn limit: answer and check from the evidence held, else stop.
 
         With comparison tools the agent writes the answer from the
-        comparisons it has (_merged_wrap_up); a delegation-only run stops."""
+        comparisons it has (_merged_wrap_up); a delegation-only run stops.
+        Which limit it was stays with the turn (``agent_wrap_up``) and in the
+        work log (``limit``), written by the app (audit I1): until 2026-10-30
+        a wrap-up looked like an answer the agent chose to give."""
+        code = WRAP_UP_REASONS.get(reason, "other")
+        self.completion.wrap_up = {"reason": code, "steps": self.routing_steps,
+                                   "seconds": round(max(0.0, self._turn_elapsed()), 1)}
+        logging.info("Agent turn limit reached reason=%s steps=%s", code, self.routing_steps)
+        if self.work_log is not None:
+            self.work_log.app("limit", {**self.completion.wrap_up, "text": reason})
         if self.merged:
             yield from self._merged_wrap_up(reason, steps, value)
             return
