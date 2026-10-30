@@ -59,6 +59,41 @@ def test_rest_shortens_the_hold_and_does_nothing_else(monkeypatch, capsys):
     assert answer["status"] == "refused" and holds == ["10m"]
 
 
+# --- A7: the resident helper heals Chrome itself ---------------------------------
+
+def test_the_resident_helper_restarts_a_chrome_that_takes_no_connection(monkeypatch):
+    """Audit A7: ready connected without a restart and declined; the call
+    then healed the browser itself after waiting up to 80 s for the helper,
+    past the server's 180 s with its own restart and watchdog. Now the
+    helper restarts Chrome once, as a call of its own does, and the call
+    waits READY_SECONDS (35 s) for it."""
+    browser = load()
+    restarts, tries = [], []
+
+    class Chromium:
+        def connect_over_cdp(self, endpoint, timeout):
+            tries.append(timeout)
+            if len(tries) == 1 or broken:
+                raise TimeoutError("BrowserType.connect_over_cdp: Timeout 15000ms exceeded.")
+            return type("Browser", (), {"close": lambda self: None})()
+    broken = False
+    monkeypatch.setitem(browser.KEPT, "playwright", type("Playwright", (), {"chromium": Chromium()})())
+    monkeypatch.setattr(browser, "ensure_browser", lambda: None)
+    monkeypatch.setattr(browser, "user_control", lambda: False)
+    monkeypatch.setattr(browser, "restart_browser", lambda: restarts.append(True))
+    assert browser.ready({"action": "click", "ref": "e1"}) is True and restarts == [True] and len(tries) == 2
+    assert browser.KEPT.get("browser") is not None
+    browser.disconnect()
+    # Still none after the restart: declined, the call runs itself.
+    broken = True
+    assert browser.ready({"action": "read"}) is False and len(restarts) == 2 and "browser" not in browser.KEPT
+    # A helper that takes the call at the last moment, then an action that
+    # hangs until the watchdog restarts Chrome: well within the server's
+    # limit (with 80 s it was the limit exactly, the exec's own time not counted).
+    assert browser.READY_SECONDS == 35
+    assert browser.READY_SECONDS + browser.CALL_LIMIT + browser.RESTART_SECONDS <= agent_browser.CALL_SECONDS - 30
+
+
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
     browser = load()
     ran = []

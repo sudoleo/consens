@@ -1649,9 +1649,12 @@ TOOK = b"took\n"
 GO = b"go\n"
 STALE = b"stale\n"
 DECLINED = b"declined\n"
-# How long a call waits for TOOK: the browser's start (display.sh, up to
-# 60 s) and a connection to Chrome (CONNECT_SECONDS), within the server's limit.
-READY_SECONDS = 80
+# How long a call waits for TOOK: a running browser (display.sh mends one
+# whose debugging port does not answer, ~20 s) and a connection to Chrome
+# (CONNECT_SECONDS). Until 2026-10-30 80 s (audit A7): with a hanging
+# display.sh the call then ran itself, with its own restart and the 70 s of
+# its watchdog, past the server's 180 s (agent_browser.CALL_SECONDS).
+READY_SECONDS = 35
 # A request: a few kilobytes, up to a drag's 2000 points or 20,000 characters
 # of text; an answer, up to a screenshot (agent_browser.ANSWER_BYTES).
 REQUEST_BYTES = 1024 * 1024
@@ -1769,10 +1772,12 @@ def stop_server():
 
 def ready(request):
     """Before the resident helper takes a call: the browser running and,
-    for an action on the pages, this call's connection to Chrome. False
-    when either fails: the call then runs itself, which heals the browser
-    (a restart), and this helper ends, since its Playwright may be what
-    broke."""
+    for an action on the pages, this call's connection to Chrome, which
+    restarts Chrome once when it takes none (connect, as a call of its own
+    does; since 2026-10-30, audit A7: before, the helper declined, and the
+    call healed the browser itself after waiting for it). False when that
+    fails too: the call then runs itself, and this helper ends, since its
+    Playwright may be what broke."""
     action = request.get("action") if isinstance(request, dict) else None
     if action == "rest":
         # It lets the VM sleep (main answers it without a helper): no browser to start.
@@ -1783,7 +1788,7 @@ def ready(request):
         # What run refuses before it looks at a page needs no connection,
         # nor do the server's own actions.
         if action in ACTIONS and action not in SERVER_ACTIONS and not (action in ACTING and user_control()):
-            KEPT["browser"] = KEPT["playwright"].chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
+            KEPT["browser"] = connect(KEPT["playwright"])
         return True
     except Exception:
         disconnect()

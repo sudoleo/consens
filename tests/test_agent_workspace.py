@@ -1085,6 +1085,8 @@ def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeyp
     monkeypatch.setitem(browser.KEPT, "playwright", type("Playwright", (), {"chromium": Chromium()})())
     monkeypatch.setattr(browser, "ensure_browser", lambda: None)
     monkeypatch.setattr(browser, "user_control", lambda: False)
+    # A Chrome that takes no connection restarts once (since 2026-10-30), never here.
+    monkeypatch.setattr(browser, "restart_browser", lambda: None)
     fail = False
     assert browser.ready({"action": "read"}) is True and made == [browser.CDP] and browser.KEPT["prepared"]
     with browser.chrome() as kept:
