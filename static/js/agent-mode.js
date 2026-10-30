@@ -501,7 +501,9 @@
   }
 
   function revealBar(bar) {
-    // display:none until now, so the animation starts with the class.
+    // display:none until now, so the animation starts with the class. Where
+    // CSS keeps it out (a phone), no animation ends to take the class off.
+    if (!bar.getClientRects().length) return;
     bar.classList.add("is-revealing");
     bar.addEventListener("animationend", () => bar.classList.remove("is-revealing"), { once: true });
   }

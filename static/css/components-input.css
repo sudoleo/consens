@@ -160,11 +160,12 @@ html:has(> body.is-hero) { overscroll-behavior-y: none; }
    The shift used to be half of the block's own height: every notice, file,
    new example or line of text below the field moved the field itself, half
    up and half down. It is now fixed for the start screen: half of the empty
-   start block (field, tool bar, examples, note), so the empty screen looks
-   as centred as before, and whatever appears later grows downward.
+   start block (field, examples, note), so the empty screen looks as centred
+   as before, and whatever appears later grows downward. 117px since the tool
+   bar under the field moved into it (2026-10-30: 36px bar, 10px margin back).
    #verifyBanner follows under the block by the same shift (shell.css). */
 body.is-hero .container {
-  --hero-lift: 130px;
+  --hero-lift: 117px;
   --hero-shift: max(0px, calc(50svh - var(--hero-lift) - 68px));
 }
 body.is-hero .input-section {

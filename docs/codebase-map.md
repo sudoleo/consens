@@ -2515,8 +2515,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   bevor die Zeile umbricht. `#composerModeBar` unter dem Feld trägt nur noch
   den Stand eines Direktvergleichs auf dem Schirm („6 of 6 ready“,
   `#composerComparisonStatus`) und ist sonst `hidden`. Die Erklärung des
-  Modus steht als Screenreader-Beschreibung `#composerModeDescription` in der
-  Werkzeuggruppe. Reasoning nutzt per Klick das bestehende Control
+  Modus steht als Screenreader-Beschreibung `#composerModeDescription` neben
+  dem (+) (`.composer-lead`, auch am Handy da). Reasoning nutzt per Klick das bestehende Control
   (`#reasoningToggle` ohne Gate, in Agent das Effort-Menü des Chips). Ein auf
   Hero-Wechsel begrenzter Body-Observer synchronisiert Chatstart und „New
   chat“. Einen eigenen Status-Chip im Input gibt es seit 2026-10-02 nicht mehr
@@ -2687,7 +2687,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   wird der Umschalter nie gezeichnet (er lebt im Menü), die leere rechte Insel
   eines Gasts ab dem ersten Bild nicht. `continueSignedIn()` speichert vor dem
   Neuladen nach dem Login das `id_token`. Der Startbildschirm hält die Oberkante
-  des Feldes fest (`--hero-lift: 130px`, `--hero-shift` an `.container`):
+  des Feldes fest (`--hero-lift: 117px` seit dem Wegfall der Leiste, `--hero-shift` an `.container`):
   Hinweise, Anhänge, neue Beispielfragen und Zeilen wachsen nach unten,
   `#verifyBanner` steht im DOM nach dem Composer und folgt dessen Verschiebung,
   ein Composer-Hinweis nimmt im Hero den Platz der Beispielfragen ein (B5). Der

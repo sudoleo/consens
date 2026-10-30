@@ -61,13 +61,17 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         # On the start screen the tools are simply there: no rise on the first
         # paint or a mode change (Apple-Audit B1) ...
         assert tools.evaluate("el => getComputedStyle(el).animationName") == 'none'
-        # ... they rise in when they come back (a new chat, the Compare start).
         tools.evaluate("el => { el.hidden = true; App.renderComposerMode(); }")
-        assert tools.evaluate("el => getComputedStyle(el).animationName") == 'composer-mode-reveal'
-        page.emulate_media(reduced_motion='reduce')
-        assert tools.evaluate("el => getComputedStyle(el).animationName") == 'none'
-        page.emulate_media(reduced_motion='no-preference')
-        tools.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
+        if width > 700:
+            # ... they rise in when they come back (a new chat, the Compare start).
+            assert tools.evaluate("el => getComputedStyle(el).animationName") == 'composer-mode-reveal'
+            page.emulate_media(reduced_motion='reduce')
+            assert tools.evaluate("el => getComputedStyle(el).animationName") == 'none'
+            page.emulate_media(reduced_motion='no-preference')
+            tools.evaluate("el => Promise.all(el.getAnimations().map(animation => animation.finished))")
+        else:
+            # A phone draws no tools in the row: nothing to rise, no class left behind.
+            assert tools.evaluate("el => el.classList.contains('is-revealing')") is False
         page.evaluate("""() => {
             window.enterDirectComparisonView();
             App.answerReader.showDirectBookmark({id: 'mode-bar-test', query: 'Which approach works best?',

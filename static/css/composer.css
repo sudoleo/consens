@@ -77,7 +77,9 @@
   align-items: center;
   gap: 4px;
   flex: 1 1 0;
-  min-width: 0;
+  /* Room for the two icons at the least: a narrower row breaks before
+     they would draw over the marks. */
+  min-width: 72px;
   /* The size of the chip beside them: one line of small controls. */
   font-size: var(--font-size-xs);
   white-space: nowrap;

@@ -470,8 +470,8 @@
       syncHeroResponseAccess();
     });
     // Compare's start (the answer grid) is a start screen without the hero:
-    // leaving it runs no glide that settles the tool bar, so the bar is drawn
-    // again here instead of standing until the next render.
+    // leaving it changes no hero class the composer watches, so its row is
+    // drawn again here instead of keeping the start tools until the next render.
     if (wasPreview) window.App.renderComposerMode?.();
   }
 

@@ -154,8 +154,6 @@ describe("agent mode panel projection", () => {
     document.body.classList.add('is-hero');
     await Promise.resolve();
     expect(tools.hidden).toBe(false);
-    // Coming back, they rise in (shell.css composer-mode-reveal).
-    expect(tools.classList.contains('is-revealing')).toBe(true);
     dom.window.close();
   });
 
