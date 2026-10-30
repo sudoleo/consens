@@ -16,6 +16,37 @@
 // nothing else. The shortcut never reaches noVNC: a hidden field takes the
 // browser's paste.
 //
+// Typing on a phone (since 2026-10-30, runtime audit V1): iOS and Android
+// open no keyboard for noVNC's canvas. "Keyboard" (touch screens, while the
+// user has the browser) focuses a field out of sight (16px, no capitals or
+// corrections) whose keys go to the VM like noVNC's own keyboard input
+// (app/ui.js keyboardinput): typed text from beforeinput, what a keyboard
+// composes from the field's change, Backspace, Enter, Tab and the arrows on
+// their own. Tapping the screen keeps it open (focusOnClick off meanwhile).
+//
+// A connection that drops without a reason from the server (the phone went
+// to its 2FA app and iOS closed the socket, a network change) comes back by
+// itself (V2): after 1, 2, 5 and 10 s, and at once when the page is in front
+// again or back online. Meanwhile the skeleton and "Reconnecting…" show; the
+// bar with "Hand back" stays, and so does the takeover. A close with a
+// server's reason (FINAL) or four failed tries say why in up to two lines,
+// with "Reconnect". Before, the view stayed empty without "Hand back", and
+// closing it was the only way out, which gave the browser back mid-login.
+// Closing the panel still hands back what the user holds, without
+// "consensio:workspace-handback"; a dropped connection never closes it.
+//
+// While the agent has the browser and this tab is hidden for HIDDEN_MS, the
+// view lets go (its time counts as VM time, V4: a forgotten view used half a
+// day's time) and comes back when the tab does. The head says what is left
+// of today's VM time (the server's "connecting" state, left_seconds), and
+// while the agent has the browser, the status line names the step it is on
+// (agentStep, from agent-activity.js; V6) instead of a fixed sentence.
+//
+// The picture stands at the top of its place, not in the middle (V5). On a
+// narrow panel, while the user has the browser, "100%" shows the page at
+// its real size, to pan by dragging (noVNC clipViewport, dragViewport);
+// handing back fits it again.
+//
 // Wide screens (DOCK_QUERY) dock the panel at the right edge beside the
 // chat, which narrows and re-centres in the space left of it (the body's
 // workspace-view-docked, --workspace-width; workspace-view.css), next to the
@@ -47,10 +78,10 @@
 // window.App.workspaceView: open({ takeOver }), close(), isOpen(), init()
 // (the start screen's Workspace button, the (+) menu's row, the row in
 // Settings → Agent), holder(), handBack() (also without an open view, for the
-// card in the chat), agentWaits(request or null); agent-activity.js opens it
-// from an opened page's card (Open). A change of holder is the window's
-// event "consensio:workspace-holder", the hand-back button's own
-// "consensio:workspace-handback".
+// card in the chat), agentWaits(request or null), agentStep(line or null);
+// agent-activity.js opens it from an opened page's card (Open). A change of
+// holder is the window's event "consensio:workspace-holder", the hand-back
+// button's own "consensio:workspace-handback".
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -68,6 +99,17 @@
   // A start that takes longer than this (the workspace's first start, outside
   // a chat) says so calmly.
   const SLOW_MS = 6_000;
+  // Tries after a dropped connection, then "Reconnect" (the server allows
+  // six views a minute, routers/agent_workspace.py VIEWS_PER_MINUTE).
+  const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000];
+  // A connection that held this long starts the tries over.
+  const STABLE_MS = 30_000;
+  // A hidden tab lets the view go after this long while the agent has the browser.
+  const HIDDEN_MS = 60_000;
+  // The day's time left is counted down this often while the view is open.
+  const TIME_MS = 30_000;
+  // Below this width the picture is small (1280 pixels wide in the VM): "100%" is offered.
+  const FULL_SIZE_BELOW = 1024;
   const STATES = {
     connecting: 'Connecting to the workspace…',
     slow: 'Starting your workspace. The first start can take a minute.',
@@ -79,10 +121,20 @@
     replaced: 'The workspace opened in another window, so this view closed.',
     no_time: 'The workspace’s time for today is used up. It is back tomorrow.',
     too_many: 'The workspace was opened many times in a row. Try again in a minute.',
+    forbidden: 'The workspace is not available on your account.',
+    reconnecting: 'Reconnecting…',
+    lost: 'The connection to the workspace ended. Reconnect to go on.',
+    paused: 'Paused while this tab was in the background, to save your workspace time.',
+    watching: 'Watching. Click the screen to take over.',
   };
   // Why the server closed the view, by close code: noVNC owns the socket's
   // messages once it is ready, so these come as codes, not states.
   const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many' };
+  // Closes the view does not try again by itself: the server said why
+  // (4403 before it opened, 1011 after "error").
+  const FINAL = { ...CLOSED, 4403: 'forbidden', 1011: 'error' };
+  // Nothing to try again: "Reconnect" would only hear the same.
+  const NO_RETRY = new Set(['no_time', 'forbidden']);
   const TERMINAL = {
     connecting: 'Opening a terminal in the workspace…',
     ready: 'Your terminal in the workspace, with the agent’s rights.',
@@ -111,12 +163,24 @@
   const PASTE_MAX = 2000;
   const XK_RETURN = 0xff0d;
   const XK_TAB = 0xff09;
+  const XK_BACKSPACE = 0xff08;
+  const XK_DELETE = 0xffff;
+  // The keys a phone's keyboard field sends as they are (X11 keysyms).
+  const FIELD_KEYS = { Backspace: XK_BACKSPACE, Enter: XK_RETURN, Tab: XK_TAB, Escape: 0xff1b, Delete: XK_DELETE,
+    ArrowLeft: 0xff51, ArrowUp: 0xff52, ArrowRight: 0xff53, ArrowDown: 0xff54, Home: 0xff50, End: 0xff57 };
+  // What the keyboard field holds, so a Backspace has something to delete
+  // (noVNC's app/ui.js keyboardinputReset does the same).
+  const FIELD_FILL = '_'.repeat(40);
   // Shift, Control, Meta, Alt and Super, left and right: still down in the VM
   // from the shortcut, they would turn the text into shortcuts.
   const MODIFIERS = [0xffe1, 0xffe2, 0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffe9, 0xffea, 0xffeb, 0xffec];
   let view = null;
   // What the agent waits for the user to do in the browser (agentWaits), also before the view opens.
   let waitingFor = null;
+  // The step the agent is on, in the page's language (agentStep), or null.
+  let agentLine = null;
+  // Sockets whose end was handled (ended runs once per socket).
+  const endedSockets = new WeakSet();
   let loadRFB = () => import(NOVNC).then(module => module.default);
   let loadTerminal = () => Promise.all([import(XTERM), import(XTERM_FIT)])
     .then(([xterm, fit]) => ({ Terminal: xterm.Terminal, FitAddon: fit.FitAddon }));
@@ -125,6 +189,8 @@
   // The window without its scrollbar: where a fixed panel's right edge is.
   const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth;
   function docked() { return matches(DOCK_QUERY); }
+  // A finger, not a mouse: the phone's keyboard needs the field.
+  function touch() { return matches('(pointer: coarse)'); }
   // The activity panel's width, when it docks too.
   function activityWidth() {
     return document.body.classList.contains('agent-sidebar-open') && matches(WIDE_QUERY) ? ACTIVITY_WIDTH : 0;
@@ -188,6 +254,7 @@
       resizer.removeEventListener('pointercancel', end);
       document.body.classList.remove('workspace-view-resizing');
       if (view) remember(view.width);
+      showControls();
     };
     resizer.addEventListener('pointermove', move);
     resizer.addEventListener('pointerup', end);
@@ -200,8 +267,12 @@
     if (next === undefined) return;
     event.preventDefault();
     resizeTo(next);
+    showControls();
   }
-  function onWindowResize() { layout(); }
+  function onWindowResize() {
+    layout();
+    showControls();
+  }
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -264,8 +335,15 @@
       tabButtons[key] = tab;
       tabs.append(tab);
     }
+    // The line and the tools after the tabs; on a narrow panel they take a
+    // second row, and title, tabs and the close cross keep the first (V7).
+    const tools = node('div', 'workspace-view-tools');
     const status = node('span', 'workspace-view-status', STATES.connecting);
     status.setAttribute('role', 'status');
+    // What is left of today's VM time (V4): already in the page's language.
+    const time = node('span', 'workspace-view-time');
+    time.dataset.i18nSkip = '';
+    time.hidden = true;
     const toggle = button('workspace-view-toggle', 'Take over', () => (view?.holder === 'user' ? handBack() : takeOver()));
     toggle.hidden = true;
     // The app's one close cross (foundation.css .close-button, J1).
@@ -276,7 +354,18 @@
     const paster = button('workspace-view-paste', 'Paste', pasteClipboard);
     paster.title = 'Type your clipboard into the page';
     paster.hidden = true;
-    head.append(title, tabs, status, paster, toggle, closer);
+    const keyboard = button('workspace-view-tool workspace-view-keyboard', 'Keyboard', toggleKeyboard);
+    keyboard.title = 'Type into the page with your keyboard';
+    keyboard.setAttribute('aria-pressed', 'false');
+    // Pressed down, so the field keeps its focus and the keyboard stays open.
+    keyboard.addEventListener('pointerdown', event => event.preventDefault());
+    keyboard.hidden = true;
+    const zoom = button('workspace-view-tool workspace-view-zoom', '100%', toggleFullSize);
+    zoom.title = 'Show the page at its real size, to move it by dragging';
+    zoom.setAttribute('aria-pressed', 'false');
+    zoom.hidden = true;
+    tools.append(status, time, paster, keyboard, zoom, toggle);
+    head.append(title, tabs, tools, closer);
     const hint = node('p', 'workspace-view-hint', HINTS.browser);
     // Whose turn it is (showTurn): a dot in the state's colour, a title over a
     // quiet line (the app's words, or the agent's request as data), the one button.
@@ -306,7 +395,23 @@
     const pasteTarget = node('textarea', 'workspace-view-paste-target');
     pasteTarget.tabIndex = -1;
     pasteTarget.setAttribute('aria-hidden', 'true');
-    screen.append(skeleton('browser'), cover, pasteTarget);
+    // The phone's keyboard types here (V1), out of sight like the paste target.
+    const keys = node('input', 'workspace-view-paste-target workspace-view-keys');
+    keys.type = 'text';
+    keys.tabIndex = -1;
+    keys.setAttribute('aria-label', 'Type into the page');
+    for (const [name, value] of [['autocapitalize', 'off'], ['autocomplete', 'off'], ['autocorrect', 'off'],
+      ['spellcheck', 'false'], ['enterkeyhint', 'enter']]) keys.setAttribute(name, value);
+    keys.addEventListener('keydown', onFieldKey);
+    keys.addEventListener('beforeinput', onFieldBeforeInput);
+    keys.addEventListener('input', onFieldInput);
+    keys.addEventListener('focus', () => showKeyboard(true));
+    keys.addEventListener('blur', () => showKeyboard(false));
+    // After a dropped connection: try again now (V2).
+    const reconnectButton = button('workspace-view-reconnect', 'Reconnect',
+      () => reconnect({ fresh: true }));
+    reconnectButton.hidden = true;
+    screen.append(skeleton('browser'), cover, pasteTarget, keys, reconnectButton);
     screen.addEventListener('keydown', onPasteKey, true);
     // What counts as doing something there: the idle reminder starts over.
     for (const type of ['pointerdown', 'keydown', 'wheel']) {
@@ -342,12 +447,17 @@
     resizer.addEventListener('dblclick', () => {
       try { localStorage.removeItem(STORAGE_KEY); } catch (error) { /* per browser only */ }
       resizeTo(preferredWidth(), { save: false });
+      showControls();
     });
     panel.append(resizer, head, hint, turn, screen, terminal);
-    return { panel, status, hint, tabButtons, toggle, paster, cover, pasteTarget, screen, terminal, terminalHost,
+    return { panel, status, time, hint, tabButtons, toggle, paster, keyboard, zoom, cover, pasteTarget, keys, screen,
+      terminal, terminalHost, reconnectButton,
       turn, turnSays, turnNote, turnRequest, turnButton, isIdle: false, idle: null, wantControl: false,
-      restart, resizer, socket: null, rfb: null, holder: 'agent', refresh: null, width: 0, tab: 'browser',
-      said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, slow: null,
+      restart, resizer, socket: null, rfb: null, rfbGone: null, RFB: null, holder: 'agent', refresh: null, width: 0,
+      tab: 'browser', said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, sayAs: {}, slow: null,
+      // The connection (V2, V4): trying, its tries and timer, why it ended for good, paused while hidden.
+      connecting: false, again: false, retries: 0, retry: null, readyAt: 0, final: null, paused: false,
+      pausing: null, away: null, dayLeft: null, clock: null, full: false, fieldValue: '',
       term: null, fit: null, termSocket: null, termReady: false, termResize: null };
   }
 
@@ -365,7 +475,7 @@
     view.terminal.hidden = key !== 'terminal';
     if (view.hint.textContent !== App.t(HINTS[key])) view.hint.textContent = HINTS[key];
     view.panel.dataset.tab = key;
-    say(view.said[key], key);
+    say(view.said[key], key, view.sayAs[key]);
     showHolder();
     if (key === 'terminal') {
       if (!view.term && !view.termSocket) startTerminal();
@@ -402,6 +512,15 @@
   function keysym(codePoint) {
     return codePoint >= 0x20 && codePoint <= 0xff ? codePoint : 0x01000000 | codePoint;
   }
+  // Characters as key presses: a line break is Return, a tab Tab, control characters nothing.
+  function pressChars(rfb, text) {
+    for (const char of text) {
+      const code = char.codePointAt(0);
+      if (char === '\n') rfb.sendKey(XK_RETURN, null);
+      else if (char === '\t') rfb.sendKey(XK_TAB, null);
+      else if (code >= 0x20 && !(code >= 0x7f && code < 0xa0)) rfb.sendKey(keysym(code), null);
+    }
+  }
   function typeIn(text) {
     if (!pasting()) return;
     // A copied line often ends in a line break: pasted, it would send the form.
@@ -413,13 +532,9 @@
     }
     const { rfb } = view;
     for (const modifier of MODIFIERS) rfb.sendKey(modifier, null, false);
-    for (const char of clean) {
-      const code = char.codePointAt(0);
-      if (char === '\n') rfb.sendKey(XK_RETURN, null);
-      else if (char === '\t') rfb.sendKey(XK_TAB, null);
-      else if (code >= 0x20 && !(code >= 0x7f && code < 0xa0)) rfb.sendKey(keysym(code), null);
-    }
-    rfb.focus();
+    pressChars(rfb, clean);
+    // With the phone's keyboard open, it stays open.
+    if (document.activeElement !== view.keys) rfb.focus();
   }
   function onPasteKey(event) {
     if (!pasting()) return;
@@ -453,45 +568,159 @@
     typeIn(text);
   }
 
-  // Each tab has its own line; the head shows the open tab's.
-  function say(text, key = 'browser') {
+  // ---- The phone's keyboard (V1) -------------------------------------------
+  function resetField() {
+    if (!view) return;
+    view.keys.value = FIELD_FILL;
+    view.fieldValue = FIELD_FILL;
+    try { view.keys.setSelectionRange(FIELD_FILL.length, FIELD_FILL.length); } catch (_) { /* not focusable yet */ }
+  }
+  // Called inside the button's own click: iOS opens a keyboard only then.
+  function toggleKeyboard() {
+    if (!pasting()) return;
+    if (document.activeElement === view.keys) { view.keys.blur(); return; }
+    resetField();
+    view.keys.focus({ preventScroll: true });
+  }
+  // While the field has the focus, a tap on the screen clicks there without taking it away.
+  function showKeyboard(open) {
+    if (!view) return;
+    view.keyboard.setAttribute('aria-pressed', String(open));
+    if (view.rfb) view.rfb.focusOnClick = !open;
+  }
+  function onFieldKey(event) {
+    if (!pasting() || event.isComposing || event.keyCode === 229) return;
+    const sym = FIELD_KEYS[event.key];
+    // Characters come with beforeinput or input; a shortcut is the paste's.
+    if (sym === undefined || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    view.rfb.sendKey(sym, null);
+  }
+  // Typed text and deletes as they come, where the browser lets them be
+  // cancelled; a keyboard's composition changes the field and goes by input.
+  function onFieldBeforeInput(event) {
+    if (!pasting() || !event.cancelable) return;
+    const type = event.inputType;
+    if (type === 'insertText' && event.data) {
+      event.preventDefault();
+      pressChars(view.rfb, event.data);
+    } else if (type === 'insertLineBreak' || type === 'insertParagraph') {
+      event.preventDefault();
+      view.rfb.sendKey(XK_RETURN, null);
+    } else if (type === 'deleteContentBackward') {
+      event.preventDefault();
+      view.rfb.sendKey(XK_BACKSPACE, null);
+    } else if (type === 'deleteContentForward') {
+      event.preventDefault();
+      view.rfb.sendKey(XK_DELETE, null);
+    }
+  }
+  // What changed in the field since last time: as many Backspaces as went,
+  // then what came (noVNC's keyInput: also a correction of a whole word).
+  function onFieldInput() {
+    if (!view) return;
+    const field = view.keys;
+    const now = field.value;
+    const before = view.fieldValue;
+    if (pasting()) {
+      let same = 0;
+      while (same < now.length && same < before.length && now[same] === before[same]) same += 1;
+      for (let index = same; index < before.length; index += 1) view.rfb.sendKey(XK_BACKSPACE, null);
+      pressChars(view.rfb, now.slice(same));
+    }
+    view.fieldValue = now;
+    if (now.length > FIELD_FILL.length * 2) resetField();
+    else if (!now) {
+      // Android notices new text in an emptied field only after a new focus.
+      resetField();
+      field.blur();
+      setTimeout(() => field.focus({ preventScroll: true }), 0);
+    }
+  }
+
+  // ---- Lines in the head -----------------------------------------------------
+  // Each tab has its own line; the head shows the open tab's. `raw`: already
+  // in the page's language (the agent's step with its target), not translated
+  // again. `wrap`: a reason that may take two lines.
+  function say(text, key = 'browser', { raw = false, wrap = false } = {}) {
     if (!view) return;
     view.said[key] = text;
+    view.sayAs[key] = { raw, wrap };
     if (view.tab !== key) return;
+    if (raw) view.status.dataset.i18nSkip = ''; else delete view.status.dataset.i18nSkip;
+    view.status.classList.toggle('is-wrapping', wrap);
     view.status.textContent = text;
     // A narrow panel cuts the line: the whole of it on hover.
     view.status.title = text;
+  }
+  // While the agent has the browser: the step it is on, or the way to take over.
+  function sayWatching() {
+    if (agentLine) say(agentLine, 'browser', { raw: true });
+    else say(STATES.watching);
+  }
+  // What is left of today's VM time (V4), counted down while the view is open.
+  function showTime() {
+    if (!view) return;
+    const left = view.dayLeft;
+    const seconds = left ? left.seconds - (left.at ? (Date.now() - left.at) / 1000 : 0) : null;
+    const text = seconds === null ? '' : App.t('{time} left today',
+      { time: App.format?.duration?.(Math.max(0, seconds) * 1000, { minutes: true }) || '' });
+    if (view.time.textContent !== text) view.time.textContent = text;
+    view.time.hidden = !text || view.holder === 'user' || view.tab !== 'browser';
+  }
+  function setDayLeft(seconds) {
+    if (!view) return;
+    view.dayLeft = Number.isFinite(seconds) && seconds >= 0 ? { seconds, at: Date.now() } : null;
+    showTime();
+  }
+  function stopDayClock() {
+    const left = view?.dayLeft;
+    if (!left?.at) return;
+    left.seconds = Math.max(0, left.seconds - (Date.now() - left.at) / 1000);
+    left.at = 0;
+  }
+
+  // Which tools show: the ones the open tab and the holder have use for.
+  function showControls() {
+    if (!view) return;
+    const user = view.holder === 'user';
+    const browser = view.tab === 'browser';
+    const live = Boolean(view.rfb);
+    view.toggle.hidden = !live || !browser || user;
+    view.paster.hidden = !live || !user || !browser || !navigator.clipboard?.readText;
+    view.keyboard.hidden = !live || !user || !browser || !touch();
+    view.zoom.hidden = !live || !user || !browser || (!view.full && view.screen.clientWidth >= FULL_SIZE_BELOW);
+    view.cover.hidden = !live || user;
+    if (!view.turn.hidden) view.toggle.hidden = true;
+    showTime();
   }
 
   function showHolder() {
     if (!view) return;
     const user = view.holder === 'user';
-    const browser = view.tab === 'browser';
-    // While the user has it, the bar above the picture holds the way back.
-    view.toggle.hidden = !view.rfb || !browser || user;
     view.toggle.textContent = 'Take over';
-    view.paster.hidden = !view.rfb || !user || !browser || !navigator.clipboard?.readText;
-    view.cover.hidden = !view.rfb || user;
     view.panel.classList.toggle('is-user', user);
     if (view.rfb) {
       view.rfb.viewOnly = !user;
       // While the user has it, the bar says so: the head stays quiet.
-      say(user ? '' : 'Watching. Click the screen to take over.');
+      if (user) say(''); else sayWatching();
     }
     showTurn();
+    showControls();
   }
 
   // The bar: the user's turn (and after IDLE_MS a reminder), or what the
   // agent waits for them to do, or nothing while the agent works. What the
   // agent asked for stays its quiet line while the user has the browser;
-  // "The agent waits." only for a takeover nobody asked for (G2).
+  // "The agent waits." only for a takeover nobody asked for (G2). While the
+  // connection comes back the user's bar stays, with "Hand back" (V2).
   function showTurn() {
     if (!view) return;
     const user = view.holder === 'user';
     const asked = waitingFor !== null;
     const idle = user && view.isIdle;
     const browser = view.tab === 'browser';
-    view.turn.hidden = !view.rfb || !(user || (asked && browser));
+    view.turn.hidden = !(user || (asked && browser && (view.rfb || view.again)));
     // One way to take over or hand back at a time: the bar's, when it shows.
     if (!view.turn.hidden) view.toggle.hidden = true;
     // The hint gives way to the bar: two blocks of words over the picture were one too many (G5).
@@ -547,6 +776,12 @@
     restartIdle();
     clearInterval(view.refresh);
     view.refresh = holder === 'user' ? setInterval(refreshNow, REFRESH_MS) : null;
+    // The agent's turn: the picture fits again, the phone's keyboard closes.
+    if (holder !== 'user') {
+      view.full = false;
+      applySize();
+      if (document.activeElement === view.keys) view.keys.blur();
+    }
     showHolder();
     announceHolder(holder);
   }
@@ -554,12 +789,23 @@
   // run its interval: the takeover lapsed after CONTROL_SECONDS and the agent
   // went on mid-login. Back in front, it is refreshed at once and the
   // interval starts over (A-S6; the server no longer takes a lapse for a
-  // hand-back while the agent waits for the user).
-  function onVisible() {
-    if (document.visibilityState === 'hidden' || view?.holder !== 'user') return;
-    clearInterval(view.refresh);
-    view.refresh = setInterval(refreshNow, REFRESH_MS);
-    refreshNow();
+  // hand-back while the agent waits for the user). A dropped connection
+  // comes back at once (V2); hidden for HIDDEN_MS while the agent has the
+  // browser, the view lets go until the tab is back (V4).
+  function onVisibility() {
+    if (!view) return;
+    if (document.visibilityState === 'hidden') {
+      if (view.holder !== 'user' && !view.away && !view.paused) view.away = setTimeout(pause, HIDDEN_MS);
+      return;
+    }
+    clearTimeout(view.away);
+    view.away = null;
+    if (view.holder === 'user') {
+      clearInterval(view.refresh);
+      view.refresh = setInterval(refreshNow, REFRESH_MS);
+      refreshNow();
+    }
+    nudge();
   }
   // After a reload: the user had the browser in this tab a moment ago, so the
   // view opens again and takes it, once this tab's account is signed in.
@@ -573,7 +819,9 @@
   }
 
   async function takeOver() {
-    if (!view?.rfb || view.holder === 'user') return;
+    if (!view || view.holder === 'user') return;
+    // No picture right now (it comes back): taken over as soon as there is one.
+    if (!view.rfb) { view.wantControl = true; return; }
     view.wantControl = false;
     try {
       await setHolder('user');
@@ -617,12 +865,48 @@
     if (next === waitingFor) return;
     waitingFor = next;
     showTurn();
+    showControls();
+  }
+  // The step the agent is on, in the page's language with its target as data
+  // (agent-activity.js), or null: the status line names it while the agent
+  // has the browser (V6; on a phone the panel covers the chat).
+  function agentStep(line) {
+    const next = line ? String(line) : null;
+    if (next === agentLine) return;
+    agentLine = next;
+    if (view?.rfb && view.holder !== 'user') sayWatching();
   }
 
-  function connect(RFB) {
+  // ---- The picture's size (V5) -----------------------------------------------
+  // Fitted into the panel while the agent works; the page's real size, moved by
+  // dragging, while the user has it and asked for it.
+  function applySize() {
+    if (!view) return;
+    const full = view.full && view.holder === 'user';
+    const rfb = view.rfb;
+    if (rfb) {
+      // noVNC: scaling trumps clipping, so it goes first.
+      rfb.scaleViewport = !full;
+      rfb.clipViewport = full;
+      rfb.dragViewport = full;
+    }
+    view.zoom.setAttribute('aria-pressed', String(full));
+    view.zoom.title = full ? 'Fit the page into the panel' : 'Show the page at its real size, to move it by dragging';
+    view.panel.classList.toggle('is-full-size', full);
+  }
+  function toggleFullSize() {
+    if (!pasting()) return;
+    view.full = !view.full;
+    applySize();
+    showControls();
+  }
+
+  // ---- The connection --------------------------------------------------------
+  function connect() {
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(`${scheme}//${location.host}/agent/workspace/view`);
     view.socket = socket;
+    view.connecting = true;
     socket.binaryType = 'arraybuffer';
     socket.onopen = async () => {
       try {
@@ -634,47 +918,137 @@
     };
     socket.onmessage = (event) => {
       if (typeof event.data !== 'string' || !view || view.socket !== socket) return;
-      let state = '';
-      try { state = JSON.parse(event.data).state; } catch (error) { return; }
+      let message = null;
+      try { message = JSON.parse(event.data); } catch (error) { return; }
+      const state = message?.state;
       if (state !== 'ready') {
-        if (STATES[state]) say(STATES[state]);
-        if (state === 'connecting') watchSlow();
+        if (state === 'connecting') {
+          setDayLeft(Number(message.left_seconds ?? NaN));
+          watchSlow();
+        }
+        // Coming back: "Reconnecting…" stays until the relay says more.
+        if (STATES[state] && !(state === 'connecting' && view.again)) say(STATES[state]);
         if (state === 'error') loading('browser', false);
         return;
       }
       clearTimeout(view.slow);
       loading('browser', false);
+      view.connecting = false;
+      view.again = false;
+      view.final = null;
+      view.readyAt = Date.now();
+      view.reconnectButton.hidden = true;
       // Synchronously, inside this event: noVNC takes over the socket's
       // handlers, so the VNC bytes that follow "ready" all reach it.
-      const rfb = new RFB(view.screen, socket, { shared: true });
+      const rfb = new view.RFB(view.screen, socket, { shared: true });
       rfb.scaleViewport = true;
       rfb.resizeSession = false;
       rfb.viewOnly = true;
       // The panel's own tone around the picture, not noVNC's dark grey.
       rfb.background = 'transparent';
+      let gone = false;
       rfb.addEventListener('disconnect', () => {
-        if (view?.rfb !== rfb) return;
-        view.rfb = null;
-        say('The connection to the workspace ended. Close and open it again.');
-        showHolder();
+        gone = true;
+        // Its socket's close says why (ended); this only covers one that never comes.
+        if (view?.rfb === rfb) setTimeout(() => ended(socket, 0), 0);
       });
+      view.rfbGone = () => gone;
       view.rfb = rfb;
+      applySize();
+      if (document.activeElement === view.keys) rfb.focusOnClick = false;
       showHolder();
       // Opened to take over (the agent's card asked for it): as soon as there is a picture.
       if (view.wantControl) takeOver();
     };
-    socket.onclose = (event) => {
-      if (!view || view.socket !== socket || view.rfb) return;
-      clearTimeout(view.slow);
-      loading('browser', false);
-      say(event.code === 4403 ? 'The workspace is not available on your account.'
-        : 'The connection to the workspace ended. Close and open it again.');
-    };
-    // After noVNC's own handler (it takes over onclose): the reason wins
-    // over its general "ended".
-    socket.addEventListener('close', (event) => {
-      if (view && view.socket === socket && CLOSED[event.code]) say(STATES[CLOSED[event.code]]);
-    });
+    // Before "ready" and after it (noVNC takes over onclose): once per socket.
+    socket.onclose = (event) => ended(socket, event.code);
+    socket.addEventListener('close', (event) => ended(socket, event.code));
+  }
+  function ended(socket, code) {
+    if (!view || view.socket !== socket || endedSockets.has(socket)) return;
+    endedSockets.add(socket);
+    clearTimeout(view.slow);
+    view.connecting = false;
+    stopDayClock();
+    const rfb = view.rfb;
+    const gone = view.rfbGone?.();
+    view.rfb = null;
+    view.rfbGone = null;
+    if (rfb && !gone) {
+      try { rfb.disconnect(); } catch (error) { /* already gone */ }
+    }
+    if (view.readyAt && Date.now() - view.readyAt >= STABLE_MS) view.retries = 0;
+    view.readyAt = 0;
+    if (view.pausing === socket) {
+      // Let go on purpose while the tab was hidden (pause): back with the tab.
+      view.pausing = null;
+      view.paused = true;
+      loading('browser', true);
+      say(STATES.paused);
+    } else if (FINAL[code]) {
+      stop(FINAL[code]);
+    } else {
+      retryLater();
+    }
+    showHolder();
+  }
+  // The server said why it closed, or the tries are over: the reason in up
+  // to two lines and, where trying again can help, "Reconnect".
+  function stop(reason) {
+    view.final = reason;
+    view.again = false;
+    clearTimeout(view.retry);
+    view.retry = null;
+    loading('browser', false);
+    view.reconnectButton.hidden = NO_RETRY.has(reason);
+    say(STATES[reason], 'browser', { wrap: true });
+  }
+  function retryLater() {
+    if (view.retries >= BACKOFF_MS.length) { stop('lost'); return; }
+    view.again = true;
+    view.final = null;
+    loading('browser', true);
+    view.reconnectButton.hidden = true;
+    say(STATES.reconnecting);
+    clearTimeout(view.retry);
+    view.retry = setTimeout(() => reconnect(), BACKOFF_MS[view.retries]);
+    view.retries += 1;
+  }
+  // `fresh`: asked for (the button, the tab or the network back), the tries start over.
+  function reconnect({ fresh = false } = {}) {
+    if (!view || view.connecting || view.rfb || !view.RFB) return;
+    if (fresh) view.retries = 0;
+    clearTimeout(view.retry);
+    view.retry = null;
+    view.again = true;
+    view.final = null;
+    view.paused = false;
+    view.reconnectButton.hidden = true;
+    loading('browser', true);
+    say(STATES.reconnecting);
+    connect();
+    showTurn();
+  }
+  // Back in front or online: a view that lost its connection tries at once.
+  function nudge() {
+    if (!view || view.rfb || view.connecting) return;
+    if (view.paused || view.retry || view.final === 'lost') reconnect({ fresh: true });
+  }
+  // The tab was hidden for HIDDEN_MS while the agent had the browser: the
+  // view lets go, so it stops counting as VM time, until the tab is back.
+  function pause() {
+    if (!view) return;
+    view.away = null;
+    if (view.holder === 'user' || document.visibilityState !== 'hidden' || !(view.rfb || view.connecting)) return;
+    clearTimeout(view.retry);
+    view.retry = null;
+    const socket = view.socket;
+    view.pausing = socket;
+    const rfb = view.rfb;
+    if (rfb && !view.rfbGone?.()) {
+      try { rfb.disconnect(); } catch (error) { /* already gone */ }
+    }
+    try { socket?.close(); } catch (error) { /* already gone */ }
   }
 
   // ---- Terminal --------------------------------------------------------------
@@ -786,7 +1160,7 @@
     socket.onclose = (event) => {
       if (!view || view.termSocket !== socket) return;
       const reason = CLOSED[event.code];
-      endTerminal(event.code === 4403 ? 'The workspace is not available on your account.'
+      endTerminal(event.code === 4403 ? STATES.forbidden
         : reason === 'replaced' ? TERMINAL.replaced : reason ? STATES[reason]
           : event.code === 1000 ? TERMINAL.ended : view.termReady ? TERMINAL.lost : TERMINAL.error);
     };
@@ -798,6 +1172,8 @@
       if (take && view.tab !== 'browser') showTab('browser');
       if (take && view.rfb) takeOver();
       else if (take) view.wantControl = true;
+      // Opened again after the connection ended: it tries again, unless trying cannot help.
+      if (!view.rfb && !view.connecting && !NO_RETRY.has(view.final)) reconnect({ fresh: true });
       return;
     }
     view = build();
@@ -812,6 +1188,7 @@
     watchSlow();
     layout();
     window.addEventListener('resize', onWindowResize);
+    view.clock = setInterval(showTime, TIME_MS);
     // The Agent activity panel opening or closing beside it moves its right
     // edge, or lets it lie over the activity.
     view.right = activityWidth();
@@ -819,6 +1196,7 @@
       if (!view || view.right === activityWidth()) return;
       view.right = activityWidth();
       layout();
+      showControls();
     });
     view.observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
     let RFB;
@@ -830,7 +1208,9 @@
       say('The view could not load. Reload the page and try again.');
       return;
     }
-    if (view) connect(RFB);
+    if (!view) return;
+    view.RFB = RFB;
+    connect();
   }
 
   function close() {
@@ -838,8 +1218,11 @@
     const closing = view;
     view = null;
     clearInterval(closing.refresh);
+    clearInterval(closing.clock);
     clearTimeout(closing.slow);
     clearTimeout(closing.idle);
+    clearTimeout(closing.retry);
+    clearTimeout(closing.away);
     // The agent may go on at once; an unsent hand-back expires by itself
     // (also after a logout: never with another account's token).
     if (closing.holder === 'user' && closing.uid === (window.auth?.currentUser?.uid || null)) {
@@ -847,6 +1230,7 @@
     }
     rememberHolder('agent');
     announceHolder('agent');
+    if (document.activeElement === closing.keys) closing.keys.blur();
     try { closing.rfb?.disconnect(); } catch (error) { /* already gone */ }
     try { closing.socket?.close(); } catch (error) { /* already gone */ }
     // The shell ends shortly after its socket (TERMINAL_AFTER_DISCONNECT).
@@ -915,7 +1299,7 @@
   }
 
   App.workspaceView = {
-    open, close, init, handBack, agentWaits,
+    open, close, init, handBack, agentWaits, agentStep,
     isOpen: () => Boolean(view),
     // 'user' or 'agent' in the open view, else null.
     holder: () => view?.holder || null,
@@ -927,7 +1311,8 @@
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  document.addEventListener('visibilitychange', onVisible);
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('online', nudge);
   // The account is known (auth-session-state.js): a takeover from before a
   // reload is taken up again, also when that was said before this script ran.
   // A logout does not reload the page: the view of an account that is no
