@@ -328,3 +328,86 @@ def test_signing_the_browser_out_waits_for_the_agent_and_deletes_its_profile(vie
     assert fake_vm.server == [command]
     # No checkpoint from before brings the sign-ins back (restorable).
     assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
+
+
+# --- Runtime audit 2026-10-30 (V4, I8) ----------------------------------------------------
+
+def test_the_view_names_what_is_left_of_the_days_vm_time(view_api, fake_vm, monkeypatch):
+    """The panel's head shows the day's VM time left (V4): the first state
+    carries it, and nothing without a cap."""
+    client, store, _, _ = view_api
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        first = json.loads(ws.receive_text())
+    assert first == {"state": "connecting"}
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 7200)
+    agent_vm_time.charge(store, UID, 1200.4)
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        first = json.loads(ws.receive_text())
+    assert first == {"state": "connecting", "left_seconds": 5999}
+
+
+def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(view_api, fake_vm, monkeypatch,
+                                                                             caplog):
+    """I8: why a view ended, in numbers and labels only, and today's
+    anonymous counters."""
+    import logging
+    client, _, _, _ = view_api
+    counted = []
+    monkeypatch.setattr(workspace_router, "_count", lambda kind, outcome, seconds=None: counted.append(
+        (kind, outcome, seconds is not None)))
+    caplog.set_level(logging.INFO)
+    ws = open_view(client)
+    ws.close(code=1001)
+    ws.__exit__(None, None, None)
+    import time as clock
+    deadline = clock.monotonic() + 5
+    while not any("closed" in record.getMessage() for record in caplog.records) and clock.monotonic() < deadline:
+        clock.sleep(0.02)
+    [line] = [record.getMessage() for record in caplog.records if "Agent workspace view closed" in record.getMessage()]
+    assert "code=1000 by=browser browser_code=1001" in line and UID not in line
+    assert counted[0] == ("view", "opened", False) and ("view", "end_browser", True) in counted
+    # A refusal says why, before anything opened.
+    allowed = view_api[3]
+    allowed.clear()
+    with client.websocket_connect("/agent/workspace/view") as refused:
+        refused.send_text(json.dumps({"id_token": "verified"}))
+        with pytest.raises(WebSocketDisconnect):
+            refused.receive_text()
+    assert ("view", "refused_forbidden", False) in counted
+    assert any("Agent workspace view refused code=4403" in record.getMessage() for record in caplog.records)
+
+
+def test_the_views_counters_are_one_anonymous_merge_per_day(monkeypatch):
+    from google.cloud import firestore
+    writes = []
+
+    class Doc:
+        def __init__(self, name):
+            self.name = name
+
+        def set(self, data, merge=False):
+            writes.append((self.name, data, merge))
+
+    class Db:
+        def collection(self, name):
+            assert name == "ops_metrics"
+            return type("C", (), {"document": lambda _, doc: Doc(doc)})()
+
+    monkeypatch.setattr(workspace_router, "_metrics_on", lambda: True)
+    monkeypatch.setattr(workspace_router, "db_firestore", Db())
+    monkeypatch.setattr(agent_vm_time, "day_key", lambda: "2026-10-30")
+    workspace_router._count("view", "end_browser", 95.7)
+    [(name, data, merge)] = writes
+    assert name == "workspace-view-2026-10-30" and merge and data["day"] == "2026-10-30"
+    counts = data["view"]
+    assert set(counts) == {"end_browser", "seconds", "open_le120"}
+    assert all(isinstance(value, firestore.Increment) for value in counts.values())
+    # Off in tests and mock profiles; a failed write is only logged.
+    monkeypatch.setattr(workspace_router, "_metrics_on", lambda: False)
+    workspace_router._count("view", "opened")
+    assert len(writes) == 1
+    monkeypatch.setattr(workspace_router, "_metrics_on", lambda: True)
+    monkeypatch.setattr(workspace_router, "db_firestore", None)
+    workspace_router._count("view", "opened")
