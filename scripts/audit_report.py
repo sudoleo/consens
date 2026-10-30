@@ -14,7 +14,12 @@ Method as in that spec (section 8):
   (``answer_fixed``, ``checked``, ``paused``, ``decision`` and the agent's
   ``step`` entries, by time; never their text);
 - the anonymous daily counters ``ops_metrics/agent-audit-{day}``
-  (agent_audit_metrics), which also count turns whose chats were deleted.
+  (agent_audit_metrics), which also count turns whose chats were deleted,
+  since 2026-10-30 every turn that used the workspace too (``ws_*``) and the
+  reasons of wrap-ups (``wrap_up``);
+- since 2026-10-30 the agent's steps split by their receipts' own times
+  (``request_started_at``, ``first_token_at``, ``stream_ended_at``): ours
+  before the request, the provider's, ours after the stream.
 
 Times: total = turn created until the run finished; to the answer = until
 the last ``answer_fixed``; marks after the last word = from there until the
