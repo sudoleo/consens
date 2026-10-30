@@ -1301,7 +1301,11 @@ def public_address(url):
 def fetch(context, page, url):
     """download: the file at ``url`` (else the current page's address) with
     the browser's sign-ins, as Chrome would send its cookies; a PDF Chrome
-    shows in its viewer comes as the file this way."""
+    shows in its viewer comes as the file this way. Its answer is the file
+    alone (since 2026-10-30, audit L5: before, 4,000 characters of the tab
+    followed, and a sign-in page saved as report.pdf, or 0 bytes, counted as
+    a download): its name, its bytes, its Content-Type and where a redirect
+    led; an empty answer is refused."""
     target = url or page.url
     if not public_address(target):
         raise Refused("download takes the address of a file on the web (or the current page's).")
@@ -1311,6 +1315,12 @@ def fetch(context, page, url):
     if not response.ok:
         raise Refused(f"The download failed: HTTP {response.status}.")
     body = response.body()
+    kind = " ".join(str(response.headers.get("content-type") or "").split())[:120]
+    typed = f"Content-Type {kind}" if kind else "no Content-Type"
+    moved = f", after a redirect to {response.url[:300]}" if response.url != target else ""
+    if not body:
+        raise Refused(f"The download came back empty: 0 bytes (HTTP {response.status}, {typed}{moved}). Nothing "
+                      "was saved.")
     disposition = response.headers.get("content-disposition", "")
     named = re.search(r"filename\*?=(?:UTF-8'')?\"?([^\";]+)", disposition, re.I)
     from urllib.parse import unquote, urlsplit
@@ -1318,7 +1328,7 @@ def fetch(context, page, url):
     path = free_path(DOWNLOADS, name)
     with open(path, "wb") as handle:
         handle.write(body)
-    return f"Downloaded {os.path.basename(path)} ({len(body)} bytes)."
+    return f"Downloaded {os.path.basename(path)}: {len(body)} bytes, {typed}{moved}."
 
 
 def finished_downloads():
@@ -1427,6 +1437,9 @@ def on_page(context, page, action, request, query, caught):
             raise Refused(OWN_COMPUTER)
         line, png = picture(page)
         return {"text": header(page) + "\n" + line, "png": png}
+    if action == "download":
+        # The file, never the tab: the request changes no page (fetch).
+        return {"text": act(context, page, action, request)}
     if action == "wait":
         seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
         deadline, held = time.time() + seconds, user_control()

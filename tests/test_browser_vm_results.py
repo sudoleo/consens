@@ -11,7 +11,10 @@ import base64
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from app.services import agent_browser, agent_workspace
 
@@ -132,6 +135,52 @@ def test_the_cards_picture_is_720_pixels_wide_and_smaller_only_when_it_must_be()
     # Whatever the helper sends fits the server's card.
     sizes[:] = [browser.PREVIEW_BYTES - 3]
     assert agent_browser.preview_url(browser.preview(Page())).startswith("data:image/jpeg;base64,")
+
+
+# --- L5: a download's answer is the file ------------------------------------------
+
+class Response:
+    def __init__(self, url, body=b"%PDF-1.7 invoice", kind="application/pdf", status=200):
+        self.url, self.body_bytes, self.status, self.ok = url, body, status, status < 400
+        self.headers = {"content-type": kind} if kind else {}
+
+    def body(self):
+        return self.body_bytes
+
+
+class Fetching:
+    """A browser context whose request API answers ``response``."""
+
+    def __init__(self, response):
+        self.request, self.response = self, response
+
+    def get(self, url, **kwargs):
+        return self.response
+
+
+def test_a_download_says_name_bytes_and_type_and_never_the_tab(tmp_path, monkeypatch):
+    """Audit L5: 4,000 characters of the tab followed every download, and a
+    sign-in page saved as report.pdf, or nothing at all, counted as one. Now
+    the answer is the file: name, bytes, Content-Type, where a redirect led;
+    0 bytes is refused with that fact."""
+    browser = load()
+    monkeypatch.setattr(browser, "DOWNLOADS", str(tmp_path / "downloads"))
+    page = type("Page", (), {"url": "https://shop.example/orders"})()
+    target = "https://shop.example/report.pdf"
+    answer = browser.on_page(Fetching(Response(target)), page, "download", {"action": "download", "url": target},
+                             "", [])
+    assert answer == {"text": "Downloaded report.pdf: 16 bytes, Content-Type application/pdf."}
+    # A sign-in page where the file was: what came, and from where.
+    login = Response("https://shop.example/login?next=/report.pdf", body=b"<html>Sign in</html>",
+                     kind="text/html; charset=utf-8")
+    said = browser.fetch(Fetching(login), page, target)
+    assert said == ("Downloaded login: 20 bytes, Content-Type text/html; charset=utf-8, after a redirect to "
+                    "https://shop.example/login?next=/report.pdf.")
+    # Nothing came: refused, nothing saved.
+    with pytest.raises(browser.Refused) as empty:
+        browser.fetch(Fetching(Response(target, body=b"", kind="")), page, target)
+    assert str(empty.value) == "The download came back empty: 0 bytes (HTTP 200, no Content-Type). Nothing was saved."
+    assert sorted(os.listdir(tmp_path / "downloads")) == ["login", "report.pdf"]
 
 
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
