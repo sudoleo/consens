@@ -574,7 +574,7 @@ def test_after_an_action_on_the_same_page_only_what_changed_comes(browser):
         "Changed after it: 2 elements, nearest first: button#menu \"Account\" [e1] (box x 8-72, y 66-87) "
         "aria-expanded changed; div.menu \"Settings\" (box x 8-200, y 90-120) new.\n"
         "Page: \"Shop\"\nURL: https://shop.example/cart\nCookies saved for this site: no\n"
-        "Changed since your last look at this page (+ new, ~ changed, - gone; read lists all 35 lines):\n"
+        "Changed since your last look at this page (+ new, ~ changed, - gone, unmarked: where; read lists all 35 lines):\n"
         "~ [e1] button \"Account\" expanded\n"
         "+ [e46] link \"Settings\"")
     # The server reads the page's title and address from it as before (agent_browser._activity).
@@ -589,7 +589,7 @@ def test_after_an_action_on_the_same_page_only_what_changed_comes(browser):
         tab.changes = {"count": 0, "changed": [], "removed": []}
     page.effect = typed
     assert acting(browser, page, "type", ref="e2", text="Paris").splitlines()[-2:] == [
-        "Changed since your last look at this page (+ new, ~ changed, - gone; read lists all 35 lines):",
+        "Changed since your last look at this page (+ new, ~ changed, - gone, unmarked: where; read lists all 35 lines):",
         "~ [e2] textbox \"Search\" value=\"Paris\""]
     # Nothing changed: said so.
     page.effect = None
@@ -650,7 +650,7 @@ def test_a_scroll_brings_what_is_in_view_first(browser):
         'Page: "Shop"', "URL: https://shop.example/cart", "Cookies saved for this site: no",
         "In view now (4 of 35 lines; read lists all):",
         'heading "Cart"', *PRODUCTS[10:13],
-        "Changed elsewhere since your last look (+ new, ~ changed, - gone):",
+        "Changed elsewhere since your last look (+ new, ~ changed, - gone, unmarked: where):",
         '+ [e47] link "Product 47, loaded on scrolling"']
     assert browser.scrolled(1, [0, 0, 720, 720]) == "The page did not move: the view shows 0-720 of 720 px."
     assert browser.scrolled(1, [2000, 3280, 720, 4000]) == (
@@ -669,6 +669,129 @@ def test_lines_change_by_their_refs():
                                               ("+", '[e4] link "New"'), ("-", '[e2] link "Gone"')]
     assert browser.changes(after, after) == []
     assert browser.changes(['heading "A"', 'heading "A"'], ['heading "A"']) == [("-", 'heading "A"')]
+
+
+# read's frames and what lies over the page (4c8c2b8d): read lists every
+# frame's elements, the read after an action only those of a frame over the page.
+CONSENT = ["(over the page:)", "frame https://consent.example/c, its elements:", '  [e50] button "Accept all"',
+           '  [e51] button "Settings"', "(the page under it:)"]
+NEWS = ['heading "News"', '[e1] link "Home"']
+READ_FRAMES = ["frame https://ads.example/a, its elements:", '  [e60] link "Ad"',
+               "frame https://video.example/v, its elements:", '  [e70] button "Play"']
+ACTION_FRAMES = ["frame https://ads.example/a (read lists its elements)",
+                 "frame https://video.example/v (read lists its elements)"]
+
+
+def test_a_frames_elements_and_what_lies_over_the_page_change_as_the_page_does():
+    """After an action read reads a frame only over the page: the elements
+    of the others are neither gone nor new, only unread. A dialog over the
+    page comes and goes with its lines; a change in a frame over the page
+    says where it is."""
+    browser = load()
+    # Read listed every frame; after an action the others are not read: no change.
+    assert browser.changes(NEWS + READ_FRAMES, NEWS + ACTION_FRAMES) == []
+    # A consent dialog in a frame appears over the page: all of it is new.
+    assert browser.changes(NEWS + ACTION_FRAMES, CONSENT + NEWS + ACTION_FRAMES) == [
+        ("+", line) for line in CONSENT]
+    # It went (Accept all): the frame goes as one line, with the lines around it.
+    assert browser.changes(CONSENT + NEWS + READ_FRAMES, NEWS + ACTION_FRAMES) == [
+        ("-", "(over the page:)"), ("-", "frame https://consent.example/c, its elements:"),
+        ("-", "(the page under it:)")]
+    # A step of the dialog: what changed in it, after where it is.
+    step = ["(over the page:)", "frame https://consent.example/c, its elements:", '  [e50] button "Accept all"',
+            '  [e51] button "Settings" expanded', '  [e52] checkbox "Analytics" unchecked', "(the page under it:)"]
+    assert browser.changes(CONSENT + NEWS, step + NEWS) == [
+        (" ", "(over the page:)"), (" ", "frame https://consent.example/c, its elements:"),
+        ("~", '  [e51] button "Settings" expanded'), ("+", '  [e52] checkbox "Analytics" unchecked')]
+    # A frame the last look did not read comes over the page: its elements are new to the agent.
+    unread = ["heading \"News\"", "frame https://consent.example/c (read lists its elements)"]
+    assert browser.changes(unread, CONSENT[:3] + CONSENT[4:] + NEWS[:1]) == [
+        ("+", "(over the page:)"), (" ", "frame https://consent.example/c, its elements:"),
+        ("+", '  [e50] button "Accept all"'), ("+", "(the page under it:)")]
+    # A dialog of the page itself (no frame): its elements say they are over the page.
+    dialog = ["(over the page:)", '[e80] button "Close"', '[e81] button "Next"', "(the page under it:)"]
+    assert browser.changes(dialog + NEWS, dialog[:2] + ['[e81] button "Next" disabled'] + dialog[3:] + NEWS) == [
+        (" ", "(over the page:)"), ("~", '[e81] button "Next" disabled')]
+
+
+class ConsentFrame:
+    """A frame over the page whose read gave e50 (frame-refs.json): its own
+    document, watched for an action on e50 (HIT_JS, QUIET_JS)."""
+
+    def __init__(self, browser, changes):
+        self.browser, self.url, self.changes, self.detached, self.asked = (
+            browser, "https://consent.example/c", changes, False, [])
+        frame = self
+
+        class Locator:
+            first = None
+
+            def count(self):
+                return 1
+
+            def click(self, timeout):
+                frame.asked.append("click")
+        Locator.first = Locator()
+        self.Locator = Locator
+
+    def locator(self, selector):
+        assert selector == '[data-consens-ref="e50"]'
+        return self.Locator()
+
+    def is_detached(self):
+        return self.detached
+
+    def evaluate(self, script, arg=None):
+        self.asked.append(script)
+        if script == self.browser.HIT_JS:
+            return {"view": [800, 400], "at": []} if arg["mode"] == "before" else self.changes
+        if script == self.browser.QUIET_JS:
+            return 0 if arg else 10_000
+        raise AssertionError(script)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def wait_for_load_state(self, state, timeout):
+        pass
+
+
+def test_an_action_on_a_ref_in_a_frame_is_watched_in_that_frame(browser, tmp_path, monkeypatch):
+    """A consent dialog in a frame (4c8c2b8d): its changes are no change of
+    the page's own document, which said "No element of the page changed
+    after it." while the dialog had opened its settings."""
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    browser.remember_frames({"e50": "https://consent.example/c"})
+    page = Shop(browser, lines=CONSENT + NEWS)
+    frame = ConsentFrame(browser, {"count": 1, "removed": [], "changed": [
+        {"tag": "label", "name": "Analytics", "ref": "", "box": [150, 57, 234, 74], "how": "new"}]})
+    page.frames = [page.main_frame, frame]
+    clicked = acting(browser, page, "click", ref="e50")
+    assert clicked.splitlines()[:2] == [
+        "Clicked e50.",
+        "Changed in its frame after it (boxes in the frame): 1 element: label \"Analytics\" (box x 150-234, y 57-74) new."]
+    # Watched before the click, then its rest looked at in the frame.
+    assert frame.asked[:3] == [browser.HIT_JS, "click", browser.QUIET_JS]
+    # Accept all: the frame left the page.
+    frame.detached = True
+    assert acting(browser, page, "click", ref="e50").splitlines()[1] == "Its frame left the page after it."
+
+
+def test_after_an_action_the_diff_holds_to_the_frames_read_listed(browser):
+    """End to end: a read with every frame, then a click: the frames read
+    does not read after an action stay out of the answer."""
+    page = Shop(browser, lines=NEWS + [f'[e{n}] link "Story number {n} with a longer headline"' for n in range(10, 30)]
+                + READ_FRAMES)
+    browser.on_page(None, page, "read", {"action": "read"}, "", [])
+
+    def opened(tab):
+        tab.lines = CONSENT + NEWS + tab.lines[2:22] + ACTION_FRAMES
+    page.effect = opened
+    clicked = acting(browser, page, "click", ref="e1")
+    assert clicked.split("Cookies saved for this site: no\n", 1)[1] == (
+        "Changed since your last look at this page (+ new, ~ changed, - gone, unmarked: where; read lists all "
+        "29 lines):\n+ (over the page:)\n+ frame https://consent.example/c, its elements:\n"
+        "+   [e50] button \"Accept all\"\n+   [e51] button \"Settings\"\n+ (the page under it:)")
 
 
 def test_an_action_that_ran_never_fails_because_the_page_cannot_be_read(browser):

@@ -864,21 +864,26 @@ def quiet(page, traffic, short=False):
     changed for QUIET_MS since the action (HIT_JS's watch, a
     MutationObserver from before the action) and no request it started is
     open, at most QUIET_SECONDS; ``short`` (a scroll, most keys) for
-    BRIEF_QUIET_MS, at most BRIEF_SECONDS."""
+    BRIEF_QUIET_MS, at most BRIEF_SECONDS. ``page`` is the document the
+    watch is on: the tab's (traffic.page), or a frame's for a ref in one."""
     still, most = (BRIEF_QUIET_MS, BRIEF_SECONDS) if short else (QUIET_MS, QUIET_SECONDS)
     deadline, fresh = time.monotonic() + most, True
     while True:
         if traffic.navigation is not None:
             traffic.until_committed()
-            loaded(page)
+            loaded(traffic.page)
             return
         try:
             idle = _whole(page.evaluate(QUIET_JS, fresh))
         except Exception:
-            # Its document went with a navigation.
+            # Its document went with a navigation, or its frame left the page.
             idle = None
         if idle is None:
             loaded(page)
+            if page is not traffic.page:
+                # A frame that left (a dialog closed) or loads anew: the page around it may still change.
+                with contextlib.suppress(Exception):
+                    traffic.page.wait_for_timeout(still)
             return
         fresh = False
         left = deadline - time.monotonic()
@@ -889,6 +894,10 @@ def quiet(page, traffic, short=False):
         try:
             page.wait_for_timeout(max(1, round(pause * 1000)))
         except Exception:
+            if page is not traffic.page:
+                # Its frame left the page meanwhile: the page around it may still change.
+                with contextlib.suppress(Exception):
+                    traffic.page.wait_for_timeout(still)
             return
 
 
@@ -1116,7 +1125,6 @@ def listed_text(page, lines, offset, limit):
 # of it changed (another document at the same address). After a scroll the
 # elements in view come first: read's list does not depend on the view.
 FULL_AFTER = frozenset({"open", "back", "forward", "tab"})
-REF_LINE = re.compile(r"\s*\[(e\d+)\] ")
 
 
 def remember(page, lines):
@@ -1146,40 +1154,106 @@ def remembered(page):
     return [line for line in lines if isinstance(line, str)] if isinstance(lines, list) else None
 
 
-def changes(before, after):
+# A frame's line in read (with_frames): its address, then whether its
+# elements follow, or why not. Read after an action, a frame not over the
+# page is "(read lists its elements)" where read listed them.
+FRAME_HEAD = re.compile(r"(\s*)frame (.+?)(, its elements:| \((?:read lists its elements|not read|the browser's own "
+                        r"computer, which you do not read|its content could not be read|nothing to act on in it)\))?")
+FRAME_UNREAD = (" (read lists its elements)", " (not read)", " (its content could not be read)")
+
+
+def outline(lines):
+    """read's lines as changes compares them: each with its ref, the key
+    of a frame's line (its depth, its address and how many such came before)
+    and whether its elements were read, the frames it lies in, and the lines
+    that say where it is (over the page, its frames' lines)."""
+    items, stack, over, seen = [], [], None, {}
+    for index, line in enumerate(lines):
+        indent = len(line) - len(line.lstrip(" "))
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        if line == OVER_PAGE:
+            over = index
+        elif line == UNDER_IT:
+            over = None
+        head, key = FRAME_HEAD.fullmatch(line), None
+        if head:
+            base = (indent, head.group(2))
+            seen[base] = seen.get(base, 0) + 1
+            key = (*base, seen[base])
+        found = REF_AT_START.match(line)
+        items.append({"line": line, "ref": found.group(1) if found else None, "key": key,
+                      "unread": bool(head) and (head.group(3) or "") in FRAME_UNREAD,
+                      "frames": {frame for _, frame, _ in stack},
+                      "where": ([over] if over is not None and over != index else []) + [at for _, _, at in stack]})
+        if head:
+            stack.append((indent, key, index))
+    return items
+
+
+def changes(before, after, shown=()):
     """What changed from read's lines ``before`` to ``after``: ``[(mark,
     line)]``, new (+) and changed (~) in the page's order, then the gone
-    (-) as they were. An element's line goes by its ref, a heading's and the
-    like by its text."""
-    old_refs, old_plain = {}, {}
-    for line in before:
-        found = REF_LINE.match(line)
-        if found:
-            old_refs[found.group(1)] = line
-        else:
-            old_plain[line] = old_plain.get(line, 0) + 1
-    marked, kept = [], set()
-    for line in after:
-        found = REF_LINE.match(line)
-        if found:
-            kept.add(found.group(1))
-            old = old_refs.get(found.group(1))
-            if old is None:
-                marked.append(("+", line))
-            elif old != line:
-                marked.append(("~", line))
-        elif old_plain.get(line):
-            old_plain[line] -= 1
-        else:
-            marked.append(("+", line))
-    for line in before:
-        found = REF_LINE.match(line)
-        if found and found.group(1) not in kept:
-            marked.append(("-", line))
-        elif not found and old_plain.get(line):
-            old_plain[line] -= 1
-            marked.append(("-", line))
-    return marked
+    (-) as they were, each after the lines that say where it is (mark " ":
+    over the page, its frame's line) unless those are marked themselves.
+    An element's line goes by its ref, a frame's by its address, a
+    heading's and the like by its text. The elements of a frame not read
+    now (after an action read reads a frame only over the page) are
+    neither new nor gone, a frame's other wording no change, and a frame
+    that went goes as one line. ``shown``: lines of ``after`` the answer
+    lists anyway (in view after a scroll), not marked again."""
+    old, new = outline(before), outline(after)
+    unread = {item["key"] for item in new if item["unread"]}
+    new_refs = {item["ref"] for item in new if item["ref"]}
+    new_keys = {item["key"] for item in new if item["key"]}
+    old_refs = {item["ref"]: item["line"] for item in old if item["ref"] and not item["frames"] & unread}
+    old_keys = {item["key"] for item in old if item["key"]}
+    plain = {}
+    for item in old:
+        if not (item["ref"] or item["key"]):
+            plain[item["line"]] = plain.get(item["line"], 0) + 1
+    marks = {}
+    for index, item in enumerate(new):
+        if item["line"] in shown and (item["ref"] or item["key"]):
+            continue
+        if item["ref"]:
+            if item["ref"] not in old_refs:
+                marks[index] = "+"
+            elif old_refs[item["ref"]] != item["line"]:
+                marks[index] = "~"
+        elif item["key"]:
+            if item["key"] not in old_keys:
+                marks[index] = "+"
+        elif plain.get(item["line"]):
+            plain[item["line"]] -= 1
+        elif item["line"] not in shown:
+            marks[index] = "+"
+    gone_frames = old_keys - new_keys
+    gone = {}
+    for index, item in enumerate(old):
+        if item["frames"] & (unread | gone_frames):
+            continue
+        if (item["ref"] and item["ref"] not in new_refs) or (item["key"] and item["key"] in gone_frames):
+            gone[index] = "-"
+        elif not (item["ref"] or item["key"]) and plain.get(item["line"]):
+            plain[item["line"]] -= 1
+            gone[index] = "-"
+    out = []
+    for items, marked in ((new, marks), (old, gone)):
+        said = set()
+        for index in sorted(marked):
+            for at in items[index]["where"]:
+                if at not in said and at not in marked:
+                    out.append((" ", items[at]["line"]))
+                    said.add(at)
+            out.append((marked[index], items[index]["line"]))
+            said.add(index)
+    return out
+
+
+def marked_only(marked):
+    """Of changes' answer: the lines that changed, without the lines that say where."""
+    return [entry for entry in marked if entry[0] != " "]
 
 
 def counted(lines):
@@ -1217,36 +1291,39 @@ def in_view(page, lines):
         headings = {heading for heading in seen["headings"] if isinstance(heading, str)}
     except Exception:
         return None
-    return [line for line in lines if ((found := REF_LINE.match(line)) and found.group(1) in refs)
+    return [line for line in lines if ((found := REF_AT_START.match(line)) and found.group(1) in refs)
             or line.strip() in headings]
 
 
 def after_text(page, action):
     """The page after ``action``: its head, then the whole list or what
     changed since the agent's last look (see FULL_AFTER), and this look kept
-    for the next."""
+    for the next. Its frames as read reads them after an action: only one
+    over the page with its elements (page_lines)."""
     if hidden(page):
         return hidden_text(page)
     lines = page_lines(page)
     before = None if action in FULL_AFTER else remembered(page)
     remember(page, lines)
-    marked = None if before is None else changes(before, lines)
-    most = marked is not None and len(marked) * 2 > len(lines)
-    if action == "scroll":
-        shown = in_view(page, lines)
-        if shown is not None:
-            return scrolled_text(page, lines, shown, None if most else marked, most)
+    shown = in_view(page, lines) if action == "scroll" else None
+    marked = None if before is None else changes(before, lines, shown or ())
+    most = marked is not None and len(marked_only(marked)) * 2 > len(lines)
+    if shown is not None:
+        return scrolled_text(page, lines, shown, None if most else marked, most)
     if marked is None or most or sum(len(line) + 1 for line in lines) <= WHOLE_BELOW_CHARS:
         return listed_text(page, lines, 0, AFTER_ACTION_CHARS)
     if not marked:
         return (f"{header(page)}\nThe page's headings and elements are as at your last look "
                 f"({counted(lines)}; read lists them).")
-    shown, rest = paged([f"{mark} {line}" for mark, line in marked], 0, AFTER_ACTION_CHARS)
-    out = [header(page), f"Changed since your last look at this page (+ new, ~ changed, - gone; read lists all "
-                         f"{counted(lines)}):", *shown]
+    part, rest = paged([f"{mark} {line}" for mark, line in marked], 0, AFTER_ACTION_CHARS)
+    out = [header(page), f"Changed since your last look at this page ({CHANGE_MARKS}; read lists all "
+                         f"{counted(lines)}):", *part]
     if rest > 0:
-        out.append(f"(… {rest} more changed lines; read lists the page)")
+        out.append(f"(… {rest} more lines of changes; read lists the page)")
     return "\n".join(out)
+
+
+CHANGE_MARKS = "+ new, ~ changed, - gone, unmarked: where"
 
 
 def scrolled_text(page, lines, shown, marked, most):
@@ -1262,13 +1339,10 @@ def scrolled_text(page, lines, shown, marked, most):
     if most:
         out.append("Most of the page changed since your last look; read lists it.")
     elif marked:
-        visible = set(shown)
-        rest = [f"{mark} {line}" for mark, line in marked if mark == "-" or line not in visible]
-        if rest:
-            part, more = paged(rest, 0, AFTER_ACTION_CHARS // 2)
-            out += ["Changed elsewhere since your last look (+ new, ~ changed, - gone):", *part]
-            if more > 0:
-                out.append(f"(… {more} more changed lines; read lists the page)")
+        part, more = paged([f"{mark} {line}" for mark, line in marked], 0, AFTER_ACTION_CHARS // 2)
+        out += [f"Changed elsewhere since your last look ({CHANGE_MARKS}):", *part]
+        if more > 0:
+            out.append(f"(… {more} more lines of changes; read lists the page)")
     return "\n".join(out)
 
 
@@ -1350,6 +1424,12 @@ def find_text(page, query):
 def element(page, ref):
     """The element read gave ``ref``: on the page, or in the frame read
     found it in (remember_frames), never in one of the browser's own computer."""
+    return located(page, ref)[1]
+
+
+def located(page, ref):
+    """``(frame, element)`` for ``ref`` (element): the frame it lies in,
+    None for the page's own document."""
     if not isinstance(ref, str) or not ref.startswith("e") or not ref[1:].isdigit():
         raise Refused(f"{ref} is no ref: take one from read (like e12).")
     address = frame_refs().get(ref)
@@ -1361,7 +1441,7 @@ def element(page, ref):
     for frame in frames:
         locator = frame.locator(f'[data-consens-ref="{ref}"]')
         if locator.count():
-            return locator.first
+            return (None if address is None else frame), locator.first
     # The page as it is now follows (on_failure): before, only "Call read", one more step.
     raise StaleRef(f"{ref} is not on the page any more (it changed). The page as it is now:")
 
@@ -1494,7 +1574,9 @@ def change_words(how):
 
 def hit_report(seen, page):
     """What a click or drag at x,y met (look_at) and what changed after it,
-    once the page settled: lines for the action's answer, or ""."""
+    once the page settled: lines for the action's answer, or "". An action
+    on a ref in a frame was watched there: its changes are the frame's,
+    their boxes in the frame."""
     if not seen:
         return ""
     lines = []
@@ -1512,8 +1594,12 @@ def hit_report(seen, page):
             line += f", in {hit_words(hit['in'])}"
         lines.append(line + ".")
     acted = seen["page"]
-    if page is not acted:
+    if page is not seen.get("tab", acted):
         lines.append("Another tab is in front now.")
+        return "\n".join(lines)
+    framed = acted is not seen.get("tab", acted)
+    if framed and _detached(acted):
+        lines.append("Its frame left the page after it.")
         return "\n".join(lines)
     if hidden(acted):
         # It led to the browser's own computer: nothing of it, as in read.
@@ -1524,16 +1610,18 @@ def hit_report(seen, page):
     except Exception:
         return "\n".join(lines)
     if not isinstance(changes, dict):
-        lines.append("The page loaded anew after it.")
+        lines.append("Its frame loaded anew after it." if framed else "The page loaded anew after it.")
         return "\n".join(lines)
     listed = _items(changes.get("changed"), CHANGES_SHOWN)
     removed = _items(changes.get("removed"), REMOVED_SHOWN)
     count = _whole(changes.get("count"))
     count = len(listed) + len(removed) if count is None else count
     if count <= 0:
-        lines.append("No element of the page changed after it.")
+        lines.append("No element of its frame changed after it." if framed else
+                     "No element of the page changed after it.")
     else:
-        said = f"Changed after it: {'1 element' if count == 1 else f'{count} elements'}"
+        said = ("Changed in its frame after it (boxes in the frame): " if framed else "Changed after it: ") + (
+            "1 element" if count == 1 else f"{count} elements")
         if listed:
             said += (", nearest first: " if len(listed) > 1 else ": ") + "; ".join(
                 f"{hit_words(item)} {change_words(_said(item.get('how'), 60))}" for item in listed)
@@ -1547,6 +1635,13 @@ def hit_report(seen, page):
             if after is not None:
                 lines.append(f"The picture around {x},{y} {'did not change' if after == before else 'changed'}.")
     return "\n".join(lines)
+
+
+def _detached(frame):
+    try:
+        return bool(frame.is_detached())
+    except Exception:
+        return False
 
 
 def safe_name(name):
@@ -1810,7 +1905,8 @@ def on_page(context, page, action, request, query, caught):
         done = act(context, page, action, request, seen)
         watch = seen[0] if seen else None
         if traffic is not None and watch is not None:
-            quiet(page, traffic, short=brief(action, request))
+            # On the document it watches: the page's, or its frame's for a ref in one.
+            quiet(watch["page"], traffic, short=brief(action, request))
     finally:
         if traffic is not None:
             traffic.stop()
@@ -1903,9 +1999,13 @@ def act(context, page, action, request, seen=None):
     """One action that changes the page; returns what it did. An action on
     the page in front puts its watch into ``seen`` (look_at, just before it
     acts), a click or drag at x,y with what lay at its points."""
-    def watch(refs=()):
+    def watch(refs=(), frame=None):
+        # A ref in a frame: the watch is on the frame's document (its
+        # changes are no change of the page's own).
         if seen is not None:
-            seen.append(look_at(page, [], refs=refs))
+            seen.append(look_at(frame or page, [], refs=refs))
+            if seen[-1] is not None:
+                seen[-1]["tab"] = page
     if action == "open":
         target = str(request.get("url") or "")
         if not target:
@@ -1932,8 +2032,8 @@ def act(context, page, action, request, seen=None):
         return fetch(context, page, str(request.get("url") or ""))
     if action == "click":
         if request.get("ref"):
-            target = element(page, request.get("ref"))
-            watch([request.get("ref")])
+            frame, target = located(page, request.get("ref"))
+            watch([request.get("ref")], frame)
             target.click(timeout=10_000)
             return f"Clicked {request.get('ref')}."
         # A place on the page as the screenshot shows it (CSS pixels of the
@@ -1951,11 +2051,11 @@ def act(context, page, action, request, seen=None):
         return drag(page, request.get("strokes"), seen)
     if action == "type":
         ref, text = request.get("ref"), str(request.get("text") or "")
-        target = element(page, ref)
+        frame, target = located(page, ref)
         if target.evaluate(IS_SECRET_JS):
             raise Refused("That is a password or code field: only the user types those. Hand the browser to them "
                           "with ask_user (browser) to sign in, then go on.")
-        watch([ref])
+        watch([ref], frame)
         if target.evaluate("el => el.isContentEditable"):
             target.click(timeout=10_000)
             page.keyboard.insert_text(text)
@@ -1969,8 +2069,8 @@ def act(context, page, action, request, seen=None):
         return f"Typed into {ref}" + (" and pressed Enter." if request.get("enter") else ".")
     if action == "select":
         ref, choice = request.get("ref"), str(request.get("option") or "")
-        target = element(page, ref)
-        watch([ref])
+        frame, target = located(page, ref)
+        watch([ref], frame)
         try:
             target.select_option(label=choice, timeout=5_000)
         except Exception:
@@ -1981,8 +2081,8 @@ def act(context, page, action, request, seen=None):
         # Only a file the server put here for this call.
         if os.path.dirname(os.path.abspath(path)) != os.path.abspath(UPLOADS) or not os.path.isfile(path):
             raise Refused("The file to upload is missing.")
-        target = element(page, ref)
-        watch([ref])
+        frame, target = located(page, ref)
+        watch([ref], frame)
         target.set_input_files(path, timeout=10_000)
         return f"Put {os.path.basename(path)} into {ref}."
     if action == "key":
