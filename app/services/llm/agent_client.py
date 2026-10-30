@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime, timezone
 from decimal import Decimal
 import json
 import logging
@@ -708,6 +709,12 @@ class AgentCompletion:
         # The chat model's steps: index of the chat's last earlier message,
         # a cache point of its own (with_cache_points, AgentLoop.history_end).
         self.history_end = None
+        # When the request left, its first streamed token (text, reasoning
+        # or a tool call) arrived and its stream ended, in UTC (since
+        # 2026-10-30, audit I7): the receipt keeps them (AgentRunStore.settle),
+        # so the time between claim and settlement splits into ours before
+        # the request, the provider's and ours after it (T3).
+        self.request_started_at = self.first_token_at = self.stream_ended_at = None
 
     def _output_limited(self):
         """The step ended without a usable answer or tool call after reasoning.
@@ -1114,6 +1121,7 @@ class AgentCompletion:
         from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float
         progress = ProviderProgressWatchdog(_bounded_env_float("AGENT_PROVIDER_STALL_SECONDS", 180, 30, 600))
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
+            self.request_started_at = datetime.now(timezone.utc)
             lines = _sse_lines(
                 lambda body: cancellable_sse_lines(OPENROUTER_CHAT_COMPLETIONS_URL, json=body,
                                                    headers=headers, progress=progress),
@@ -1137,6 +1145,8 @@ class AgentCompletion:
                            or (choice.get("finish_reason") and not self.finish_reason)
                            for choice in data.get("choices") or []):
                         progress.touch()
+                        if self.first_token_at is None:
+                            self.first_token_at = datetime.now(timezone.utc)
                     self.generation_id = str(data.get("id") or self.generation_id)[:200]
                     terminal = self.finish_reason or any(choice.get("finish_reason") for choice in data.get("choices") or [])
                     reported = data.get("usage")
@@ -1269,6 +1279,7 @@ class AgentCompletion:
                     raise AgentStreamIncomplete(self._end_diagnostic())
             finally:
                 lines.close()
+                self.stream_ended_at = datetime.now(timezone.utc)
                 # Also the partial text of a stream that broke off.
                 self._drop_presearch_text(model)
                 self._record_search_overrun(model, native_searches)

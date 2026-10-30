@@ -53,6 +53,8 @@ TURN_DOCUMENT_MARGIN = 64_000
 ACTIVITY_MAX_BYTES = 600_000
 ACTIVITY_SHORT_CHARS = 200
 PLAN_ITEM_SHORT_CHARS = 60
+# A model call's own times on its receipt (settle, since 2026-10-30).
+REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 
 
 class ConversationTooLong(ValueError):
@@ -430,6 +432,12 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if getattr(completion, "search_hits", None) is not None:
                 # The pages a step that searched kept (agent_client._record_missing_citations).
                 receipt_patch["search_hits"] = completion.search_hits
+            for field in REQUEST_TIMES:
+                # When the request left, its first token came and its stream
+                # ended (AgentCompletion.stream, audit I7): between created_at
+                # and settled_at, the provider's part and ours.
+                if isinstance(getattr(completion, field, None), datetime):
+                    receipt_patch[field] = getattr(completion, field)
             review_round = getattr(completion, "review_round", None)
             if isinstance(review_round, str) and review_round:
                 # A reviewer's call (audit mode): live, gate, final, repair
