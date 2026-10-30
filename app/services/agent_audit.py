@@ -723,12 +723,15 @@ class Gate:
     then; ``verdicts``: provider -> ("go" | "halt" | "failed", halt or None);
     ``decision``: what the run made of it ("continue", "steer");
     ``ready_at``: when the reviewers were asked (the run's clock), ``times``
-    the milliseconds from then to each verdict, ``ms`` to the result (A-M3)."""
+    the milliseconds from then to each verdict, ``ms`` to the result (A-M3).
+    ``step``: the agent's step whose calls these are (``completion:N``), for
+    the gate's ``checked`` or ``paused`` entry in the work log (I9)."""
 
-    def __init__(self, calls):
+    def __init__(self, calls, step=None):
         self.id = uuid4().hex[:12]
         self.calls = calls
         self.call_ids = {call.get("id") for call in calls}
+        self.step = step
         self.entry = None
         self.ready = False
         self.ready_at = None
@@ -1883,11 +1886,11 @@ class AnswerAudit:
 
     # --- Before a call that acts outside the workspace (agent_gate) ---------
 
-    def open_gate(self, calls):
+    def open_gate(self, calls, step=None):
         """A step's outward calls wait for the reviewers. Opened before the
         step's log entry is written, so no reviewer starts an ordinary round
         on it first; ready_gate follows once it is."""
-        gate = Gate(calls)
+        gate = Gate(calls, step)
         with self._gate_changed:
             self.gate = gate
             self._gate_changed.notify_all()
