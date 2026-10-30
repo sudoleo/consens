@@ -7,6 +7,7 @@ Nothing here calls Sprites or starts a browser: browser.py runs against
 fakes of Playwright's objects, as in test_agent_workspace.py; its scripts
 run in tests/js/workspace-browser-settle.test.mjs.
 """
+import base64
 import importlib.util
 import io
 import json
@@ -92,6 +93,45 @@ def test_the_resident_helper_restarts_a_chrome_that_takes_no_connection(monkeypa
     # limit (with 80 s it was the limit exactly, the exec's own time not counted).
     assert browser.READY_SECONDS == 35
     assert browser.READY_SECONDS + browser.CALL_LIMIT + browser.RESTART_SECONDS <= agent_browser.CALL_SECONDS - 30
+
+
+# --- V7: the page's card -------------------------------------------------------
+
+def test_the_cards_picture_is_720_pixels_wide_and_smaller_only_when_it_must_be():
+    """Audit V7: 480 px at quality 60, shown up to 360 CSS pixels, was soft
+    on a retina screen. Now 720 px; a page whose JPEG is over the server's
+    PREVIEW_BYTES (a page full of small text: 98 KB) goes again smaller,
+    and one too large even then has no picture, never a failed step."""
+    browser = load()
+    assert browser.PREVIEW_WIDTH == 720 and browser.PREVIEW_BYTES <= agent_browser.PREVIEW_BYTES
+    sizes, sent = [], []
+
+    class Session:
+        def send(self, method, params):
+            sent.append((params["quality"], params["clip"]["scale"]))
+            return {"data": base64.b64encode(b"\xff\xd8\xff" + b"x" * sizes.pop(0)).decode()}
+
+        def detach(self):
+            sent.append("detached")
+
+    class Page:
+        context = type("Context", (), {"new_cdp_session": lambda self, page: Session()})()
+
+        def evaluate(self, script):
+            return [0, 0, 1280, 800]
+    sizes[:] = [40_000]
+    assert len(base64.b64decode(browser.preview(Page()))) == 40_003
+    assert sent == [(50, 720 / 1280), "detached"]
+    sent.clear()
+    sizes[:] = [98_000, 53_000]
+    assert len(base64.b64decode(browser.preview(Page()))) == 53_003
+    assert sent == [(50, 720 / 1280), (35, 600 / 1280), "detached"]
+    sent.clear()
+    sizes[:] = [200_000, 150_000, 90_000]
+    assert browser.preview(Page()) == "" and len(sent) == 4 and sent[-1] == "detached"
+    # Whatever the helper sends fits the server's card.
+    sizes[:] = [browser.PREVIEW_BYTES - 3]
+    assert agent_browser.preview_url(browser.preview(Page())).startswith("data:image/jpeg;base64,")
 
 
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):

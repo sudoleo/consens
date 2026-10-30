@@ -144,8 +144,15 @@ CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
 DOWNLOAD_SECONDS = 60
 # The picture of an opened page on its card in the chat (agent-activity.js,
 # since 2026-10-29): the viewport at this width, as a JPEG of this quality.
-PREVIEW_WIDTH = 480
-PREVIEW_QUALITY = 60
+# Since 2026-10-30 (audit V7) 720 px instead of 480 at 60: the card shows it
+# up to 360 CSS pixels, soft on a retina screen. At most PREVIEW_BYTES
+# (agent_browser.PREVIEW_BYTES: a larger one is no card picture); measured
+# locally, a news page 41 KB at 720/50, a page full of small text 98 KB,
+# 53 KB at 600/35 and 31 KB at 480/40 (PREVIEW_TRIES, in this order).
+PREVIEW_WIDTH = 720
+PREVIEW_QUALITY = 50
+PREVIEW_BYTES = 64 * 1024
+PREVIEW_TRIES = ((PREVIEW_WIDTH, PREVIEW_QUALITY), (600, 35), (480, 40))
 
 # A ref stays with its element, and a new element takes the next number of
 # the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
@@ -1465,17 +1472,22 @@ def preview(page):
     """A small JPEG (base64) of the page now, for the card of its open step
     in the chat; "" when Chrome gives none, which never fails the step.
     Chrome scales it itself (a scaled clip of the viewport), so nothing here
-    decodes a picture."""
+    decodes a picture. A page whose JPEG is over PREVIEW_BYTES goes again
+    smaller (PREVIEW_TRIES); one too large even then has none."""
     try:
         x, y, width, height = page.evaluate("() => [scrollX, scrollY, innerWidth, innerHeight]")
         session = page.context.new_cdp_session(page)
         try:
-            shot = session.send("Page.captureScreenshot", {
-                "format": "jpeg", "quality": PREVIEW_QUALITY,
-                "clip": {"x": x, "y": y, "width": width, "height": height, "scale": min(1, PREVIEW_WIDTH / width)}})
+            for wide, quality in PREVIEW_TRIES:
+                shot = session.send("Page.captureScreenshot", {
+                    "format": "jpeg", "quality": quality,
+                    "clip": {"x": x, "y": y, "width": width, "height": height, "scale": min(1, wide / width)}})
+                data = str(shot.get("data") or "")
+                if len(base64.b64decode(data)) <= PREVIEW_BYTES:
+                    return data
         finally:
             session.detach()
-        return str(shot.get("data") or "")
+        return ""
     except Exception:
         return ""
 
