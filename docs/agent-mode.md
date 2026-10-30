@@ -816,6 +816,9 @@ Randfällen, Anforderungen in Paketen):
 [agent-audit-readiness-2026-10-29.md](agent-audit-readiness-2026-10-29.md).
 UX-Audit auf Apple-Niveau (98 Befunde in 10 Paketen, Entscheidung offen):
 [ux-audit-agent-audit-2026-10-29.md](ux-audit-agent-audit-2026-10-29.md).
+Laufzeit des Arbeitsplatzes (Prod-Messung 26.–30.10.; Tempo, Abbrüche,
+Modell-Interaktion, Ansicht, App-Tempo, Kosten, Messbarkeit in sechs Paketen):
+[agent-workspace-runtime-audit-2026-10-30.md](agent-workspace-runtime-audit-2026-10-30.md).
 
 ### Agent VM (seit 2026-10-25; seit 2026-10-26 Teil von Audit)
 
@@ -1489,7 +1492,12 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Werkzeugleiste (`#composerWorkspaceButton`), über „Öffnen“ auf der Karte
   jeder Seite, die der Agent öffnet (`agent-activity.js` `.agent-page-card`,
   seit 2026-10-29 mit dem Bild der Seite, Titel und Website; vorher „Live
-  ansehen“ an jedem `browser`-Schritt), über das
+  ansehen“ an jedem `browser`-Schritt; seit 2026-10-30 zeigt die angeheftete
+  Karte die Seite, wie sie jetzt ist: Aktionen, die die Seite ändern können,
+  bringen höchstens alle `PREVIEW_SECONDS` (8 s) ein neues Bild, und die
+  Karte ist so groß wie in der Zeitleiste statt einer Zeile mit 64-px-Bild;
+  die Werkzeugbeschreibung sagt dem Agenten, dass der Nutzer die Seite dort
+  sieht), über das
   Bildschirm-Symbol in der Kopfzeile des Laufs (`agent-delegation.js`
   `.agent-workspace-toggle`) und in Einstellungen → Agent → Workspace.
 - **Auf und zu** (seit 2026-10-29): Es klappt von der rechten Kante aus auf und

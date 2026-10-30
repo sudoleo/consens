@@ -1040,14 +1040,13 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-page-open:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* The page the browser shows, pinned under the run's line (agent-activity.js
    pinPage): it stays while the lines below fold, the answer comes and after
-   it; the open timeline holds it in its order instead. One row, the picture
-   a small tile at its start. */
-.agent-page-pin { margin: calc(-1 * var(--space-2)) 0 var(--space-5); }
+   it; the open timeline holds it in its order instead. Since 2026-10-30 the
+   card as in the timeline, its picture renewed as the agent works (Max: one
+   row with a 64-px tile said nothing of where the agent was and sat oddly
+   tucked under the run's line). */
+.agent-page-pin { margin: var(--space-1) 0 var(--space-5); }
 .agent-page-pin[hidden], .agent-activity[open] ~ .agent-page-pin { display: none; }
 .agent-page-pin:not([hidden]) + .agent-progress { margin-top: calc(-1 * var(--space-2)); }
-.agent-page-pin .agent-page-body { flex-direction: row; align-items: center; max-width: 420px; }
-.agent-page-pin .agent-page-shot { width: 64px; margin: 8px 0 8px 8px; border-radius: var(--radius-xs); }
-.agent-page-pin .agent-page-info { flex: 1; padding: 8px 10px; }
 @media (prefers-reduced-motion: reduce) {
   .agent-page-card:not(.is-shot-ready) .agent-page-shot::after { animation: none; background: none; }
 }

@@ -192,8 +192,14 @@ checked by `agent_browser.preview_url` and reported into the activity only,
 never into the agent's result), title, "host · opened in the browser" and
 Open; while it opens the picture's place waits in the skeleton's light; in
 the timeline the picture stands on top. The page opened last also stands
-pinned under the run's line (`.agent-page-pin`, `pinPage`, one row with a small
-tile; open steps are no live lines since 2026-10-29): it changes in place when
+pinned under the run's line (`.agent-page-pin`, `pinPage`; open steps are no
+live lines since 2026-10-29): since 2026-10-30 the same card as in the
+timeline, and it shows the page as it is now: an action that can change the
+page (`agent_browser.PREVIEW_AFTER`) asks the helper for a new picture once
+the last is `PREVIEW_SECONDS` (8 s) old, its activity carries `page_title`
+and `page_url`, and the pinned card takes the newest picture after the open
+with them, swapping it without the waiting light (Max: a 64-px tile in one
+row showed nothing of where the agent was); it changes in place when
 the agent opens another page (one that fails leaves the one before), stays
 while the earlier steps fold, the answer comes and after the run (saved turns
 too) and hides only while the timeline is open, which holds it in its order

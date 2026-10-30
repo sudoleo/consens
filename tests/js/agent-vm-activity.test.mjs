@@ -400,6 +400,40 @@ describe("a step in the workspace's browser", () => {
     expect(other.host.querySelector(".agent-page-pin").hidden).toBe(true);
   });
 
+  // 2026-10-30, Max: the card kept the page as it opened. A later step's
+  // picture (agent_browser.PREVIEW_SECONDS) takes its place, with the title
+  // and address of that step's page, and without the waiting light between.
+  it("shows the page as it is now on the pinned card, from the newest picture a later step brought", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://www.bild.de/",
+      title: "Aktuelle Nachrichten | BILD.de", preview: PREVIEW }));
+    activity.render(host, { running: true, status: "running", events });
+    const card = host.querySelector(".agent-page-pin .agent-page-card");
+    const img = card.querySelector(".agent-page-shot img");
+    img.dispatchEvent(new host.ownerDocument.defaultView.Event("load"));
+    expect(card.classList.contains("is-shot-ready")).toBe(true);
+    const LATER = "data:image/jpeg;base64,/9j/LATER";
+    activity.receive(events, step({ id: "completion:1:call_2/tool", status: "succeeded", action: "click", ref: "e4",
+      page_title: "Live-Ticker | BILD.de", page_url: "https://www.bild.de/regional/ticker", preview: LATER }));
+    activity.receive(events, step({ id: "completion:1:call_3/tool", status: "succeeded", action: "read" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelector(".agent-page-pin .agent-page-card")).toBe(card);
+    expect(img.getAttribute("src")).toBe(LATER);
+    expect(card.classList.contains("is-shot-ready")).toBe(true);
+    expect(card.querySelector(".agent-page-title").textContent).toBe("Live-Ticker | BILD.de");
+    expect(card.querySelector(".agent-page-title").title).toBe("https://www.bild.de/regional/ticker");
+    // The timeline's card of the open step keeps the page as it opened.
+    expect(host.querySelector(".agent-activity-content .agent-page-card .agent-page-shot img").getAttribute("src"))
+      .toBe(PREVIEW);
+    // Another page opened later starts the card anew from its own picture.
+    activity.receive(events, step({ id: "completion:1:call_4/tool", status: "succeeded", action: "open",
+      url: "https://www.welt.de/", title: "WELT", preview: PREVIEW }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(img.getAttribute("src")).toBe(PREVIEW);
+    expect(card.querySelector(".agent-page-title").textContent).toBe("WELT");
+  });
+
   it("shows a card without a picture for a page saved without one, and only valid pictures", () => {
     const { host, activity } = setup();
     const events = [];

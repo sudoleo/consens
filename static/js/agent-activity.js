@@ -689,8 +689,8 @@
     return opensPage(item) ? pageCard(className) : vmView(className);
   }
   // Its own surface inside the entry: the timeline draws its dot and rail
-  // on the entry itself (agent-chat.css). Live it is one row with a small
-  // picture, so the live lines barely grow when it comes and folds away.
+  // on the entry itself (agent-chat.css). The same card stands pinned under
+  // the run's line (pinPage), never among the live lines, which fold.
   function pageCard(className) {
     const card = document.createElement('div');
     card.className = `${className} agent-page-card`;
@@ -737,8 +737,10 @@
       || (item.title && host ? App.t('{host} · opened in the browser', { host }) : App.t('Opened in the browser'));
     // The picture when it came, its waiting place while the page opens,
     // nothing for a step without one (saved before 2026-10-29, or none came).
+    // A newer picture of the same card takes the place of the one shown,
+    // without the waiting light in between.
     if (picture && img.getAttribute('src') !== picture) {
-      card.classList.remove('is-shot-ready');
+      if (!img.getAttribute('src')) card.classList.remove('is-shot-ready');
       img.src = picture;
     } else if (!picture) {
       card.classList.remove('is-shot-ready');
@@ -757,9 +759,17 @@
   // when the agent opens another, still there while the answer comes and
   // after it; a page that did not open leaves the one before. The timeline
   // keeps a card per page; open, it holds this one too.
+  // Since 2026-10-30 it shows the page as it is now (Max: it kept the page
+  // as it opened, so nobody saw where the agent was): the newest picture a
+  // later step on it brought (agent_browser.PREVIEW_SECONDS), with the title
+  // and address that step's page had.
   function pinPage(view, tools) {
-    const page = tools.findLast(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
-    if (!page) { view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return; }
+    const at = tools.findLastIndex(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
+    if (at < 0) { view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return; }
+    const opened = tools[at];
+    const now = tools.slice(at + 1).findLast(item => item.name === 'browser' && pagePicture(item));
+    const page = now ? { ...opened, preview: now.preview, title: now.page_title || opened.title,
+      url: now.page_url || opened.url } : opened;
     if (!view.pinCard) {
       view.pinCard = pageCard('agent-page-pinned');
       view.pin.replaceChildren(view.pinCard);

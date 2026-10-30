@@ -6,7 +6,8 @@ One action per call, as JSON on stdin, typed by the server: {"action":
 "open", "url": ...}, {"action": "click", "ref": "e12"} and so on (ACTIONS).
 The answer is one JSON object on stdout: {"status", "text"} and, for a
 screenshot, "png" (base64); open adds "preview", a small JPEG of the page
-for its card in the chat (base64). Status "ok", "refused" (the action cannot be
+for its card in the chat (base64), and so does another action whose request
+asks for it (since 2026-10-30). Status "ok", "refused" (the action cannot be
 done, the text says why), "user" (the user has the browser), "setup" (the
 browser is being installed) or "failed". No code of the agent runs here: it
 only chooses among these actions and their typed arguments.
@@ -1233,7 +1234,8 @@ def on_page(context, page, action, request, query, caught):
                 "The user handed the browser back.\n" if held else "")
         page = current_page(context)
         settle(page)
-        return with_picture(page, request, {"text": said + read_text(page, 0, AFTER_ACTION_CHARS)})
+        return with_preview(page, request, with_picture(page, request, {
+            "text": said + read_text(page, 0, AFTER_ACTION_CHARS)}))
     seen = []
     done = act(context, page, action, request, seen)
     page = current_page(context)
@@ -1250,9 +1252,7 @@ def on_page(context, page, action, request, query, caught):
     if saved:
         done += "\nDownloaded: " + ", ".join(saved) + "."
     answer = with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
-    if action == "open" and not hidden(page):
-        answer["preview"] = preview(page)
-    return answer
+    return with_preview(page, request, answer)
 
 
 def picture(page):
@@ -1281,6 +1281,15 @@ def preview(page):
         return str(shot.get("data") or "")
     except Exception:
         return ""
+
+
+def with_preview(page, request, answer):
+    """An action's answer, with the small picture for the page's card in the
+    chat: always after open, after another action when the server asks for
+    it (agent_browser.PREVIEW_SECONDS, since 2026-10-30)."""
+    if (request.get("action") == "open" or request.get("preview") is True) and not hidden(page):
+        answer["preview"] = preview(page)
+    return answer
 
 
 def with_picture(page, request, answer):

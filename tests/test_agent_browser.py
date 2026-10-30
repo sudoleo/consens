@@ -19,6 +19,13 @@ BROWSER = agent_vm.browser_name(UID)
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 
 
+@pytest.fixture(autouse=True)
+def no_card_pictures(monkeypatch):
+    """The requests as the agent typed them: the card's renewed picture
+    (PREVIEW_AFTER) has a test of its own."""
+    monkeypatch.setattr(agent_browser, "PREVIEW_AFTER", frozenset())
+
+
 def tools(store):
     loop = vm_loop(store, Agent())
     return loop, BrowserTools(loop.vm_tools)
@@ -370,6 +377,37 @@ def test_an_opened_page_brings_its_picture_to_the_card_never_to_the_agent(store,
     # Only an open has a card; the agent's results never carry the picture.
     assert "preview" not in saved[1]
     assert all("preview" not in json.dumps(result) and "/9j/" not in json.dumps(result) for result in results(loop))
+
+
+def test_the_pages_card_gets_a_new_picture_now_and_then_as_the_agent_works(store, fake_vm, monkeypatch):
+    """2026-10-30, Max: the card kept the page as it opened, so nobody saw
+    where the agent was. An action that can change the page asks for a new
+    picture once the last is PREVIEW_SECONDS old; the card takes the title
+    and address of that step's page; the agent never sees the picture."""
+    monkeypatch.setattr(agent_browser, "PREVIEW_AFTER", agent_browser.PICTURE_AFTER - {"open"})
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(agent_browser.time, "monotonic", lambda: clock["now"])
+    picture = base64.b64encode(JPEG).decode()
+    fake_vm.browser = lambda request: {"status": "ok", "text": 'Clicked e4.\nPage: "Kasse"\nURL: https://shop.example/kasse',
+                                       **({"preview": picture} if request.get("preview") else {})}
+    loop, browser = tools(store)
+    reported = []
+
+    def act(**fields):
+        return browser.call(BrowserArgs(**fields), cancellation=ProviderCancellation(), report=reported.append)
+    act(action="click", ref="e4")
+    clock["now"] += 3
+    act(action="click", ref="e5")
+    act(action="read")
+    clock["now"] += agent_browser.PREVIEW_SECONDS
+    result = act(action="key", key="Enter")
+    assert [request.get("preview") for request in fake_vm.requests] == [True, None, None, True]
+    assert sum(1 for fields in reported if "preview" in fields) == 2
+    assert "preview" not in json.dumps(result) and "/9j/" not in json.dumps(result)
+    shown = browser._activity(BrowserArgs(action="key", key="Enter"), result)
+    assert shown["page_title"] == "Kasse" and shown["page_url"] == "https://shop.example/kasse"
+    # A step's own line keeps its fields: no title where it had none.
+    assert "title" not in shown
 
 
 @pytest.mark.parametrize("value", [None, "", "not base64!", base64.b64encode(PNG).decode(),
