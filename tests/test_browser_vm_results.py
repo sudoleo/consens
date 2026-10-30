@@ -183,6 +183,125 @@ def test_a_download_says_name_bytes_and_type_and_never_the_tab(tmp_path, monkeyp
     assert sorted(os.listdir(tmp_path / "downloads")) == ["login", "report.pdf"]
 
 
+# --- L4: a failure names its cause and the page -----------------------------------
+
+# As Playwright 1.64 words it (measured locally against Chromium).
+INTERCEPTED = """Locator.click: Timeout 10000ms exceeded.
+Call log:
+  - waiting for locator("[data-consens-ref=\\"e12\\"]").first
+    - locator resolved to <button id="b" data-consens-ref="e12">Pay</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="consent-layer"></div> intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    3 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="consent-layer"></div> intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+"""
+NOT_EDITABLE = """Locator.fill: Error: Element is not an <input>, <textarea>, <select> or [contenteditable]
+Call log:
+  - waiting for locator("[data-consens-ref=\\"e4\\"]").first
+    - locator resolved to <div id="t" data-consens-ref="e4">text</div>
+    - fill("my secret text")
+  - attempting fill action
+    - waiting for element to be visible, enabled and editable
+"""
+
+
+class Tab:
+    """A tab as on_failure sees it: its address, title and cookies, read's
+    lines (SNAPSHOT_JS) and its main frame without frames in it, where no
+    element has a ref."""
+
+    def __init__(self, browser, url="https://shop.example/cart", title="Shop", lines=()):
+        self.browser, self.url, self.name, self.lines = browser, url, title, list(lines)
+        self.context = type("Context", (), {"cookies": lambda self, urls: []})()
+        self.main_frame = type("Frame", (), {"child_frames": [], "locator": lambda self, selector: type(
+            "Locator", (), {"count": lambda self: 0})()})()
+
+    def is_closed(self):
+        return False
+
+    def title(self):
+        return self.name
+
+    def evaluate(self, script, arg=None):
+        if script == "document.visibilityState":
+            return "visible"
+        if script == self.browser.SNAPSHOT_JS:
+            return {"lines": self.lines, "count": arg + len(self.lines)}
+        raise AssertionError(script)
+
+
+def tabs(*pages):
+    return type("Context", (), {"pages": list(pages)})()
+
+
+def test_a_failure_says_why_and_where(tmp_path, monkeypatch):
+    """Audit L4: only the first line of Playwright's message ("Timeout
+    10000ms exceeded."), no page, and the agent took a read or a screenshot
+    to find out. Now the last step of the call log that says why, and the
+    page in front; never the text typed, never a page of the browser's own
+    computer."""
+    browser = load()
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    assert browser.failure_text(RuntimeError(INTERCEPTED)) == (
+        "Locator.click: Timeout 10000ms exceeded.\n"
+        "Last step in Playwright's log: <div class=\"consent-layer\"></div> intercepts pointer events")
+    # Nothing in the log says more than the message: the message alone, never the typed text.
+    said = browser.failure_text(RuntimeError(NOT_EDITABLE))
+    assert said == "Locator.fill: Error: Element is not an <input>, <textarea>, <select> or [contenteditable]"
+    assert browser.failure_text(RuntimeError("")) == "RuntimeError"
+    assert browser.failed(RuntimeError(INTERCEPTED))["text"].endswith("intercepts pointer events")
+
+    page = Tab(browser)
+    failure = browser.on_failure(tabs(page), page, "click", RuntimeError(INTERCEPTED))
+    assert isinstance(failure, browser.Failed) and failure.status == "failed"
+    assert str(failure) == ("Locator.click: Timeout 10000ms exceeded.\n"
+                            "Last step in Playwright's log: <div class=\"consent-layer\"></div> intercepts pointer "
+                            "events\nPage: \"Shop\"\nURL: https://shop.example/cart\nCookies saved for this site: no")
+    # A refusal on a page keeps its status and names the page as well.
+    refused = browser.on_failure(tabs(page), page, "key", browser.Refused("key takes one of: Enter."))
+    assert type(refused) is browser.Refused and str(refused).splitlines()[1] == 'Page: "Shop"'
+    # A page of the browser's own computer: its address only, and no step of the log (it quotes the page).
+    own = Tab(browser, url="file:///home/sprite/.consens/browser/profile/Default/Preferences", title="secret")
+    failure = browser.on_failure(tabs(own), own, "click", RuntimeError(INTERCEPTED))
+    assert str(failure) == ("Locator.click: Timeout 10000ms exceeded.\n"
+                            "URL: file:///home/sprite/.consens/browser/profile/Default/Preferences")
+    # A download changes no page: its reason alone.
+    refused = browser.on_failure(tabs(page), page, "download", browser.Refused("The download failed: HTTP 403."))
+    assert str(refused) == "The download failed: HTTP 403."
+
+
+def test_a_ref_no_element_has_any_more_brings_the_page_as_it_is_now(tmp_path, monkeypatch):
+    """Audit L4: "e12 is not on the page any more (it changed). Call read
+    for the current refs." cost one more step; now the read follows."""
+    browser = load()
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    page = Tab(browser, lines=['heading "Cart"', '[e40] button "Pay now"'])
+    with pytest.raises(browser.StaleRef) as stale:
+        browser.act(None, page, "click", {"ref": "e12"})
+    refused = browser.on_failure(tabs(page), page, "click", stale.value)
+    assert type(refused) is browser.Refused and str(refused) == (
+        "e12 is not on the page any more (it changed). The page as it is now:\n"
+        "Page: \"Shop\"\nURL: https://shop.example/cart\nCookies saved for this site: no\n"
+        "heading \"Cart\"\n[e40] button \"Pay now\"")
+    # To the server a refusal and a failure as before, now with the page.
+    for error in (refused, browser.on_failure(tabs(page), page, "click", RuntimeError(INTERCEPTED))):
+        monkeypatch.setattr(browser, "run", lambda request, error=error: (_ for _ in ()).throw(error))
+        answer = browser.answer_for({"action": "click", "ref": "e12"})
+        assert answer == {"status": error.status, "text": str(error)} and "URL: https://shop.example/cart" in str(error)
+
+
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
     browser = load()
     ran = []

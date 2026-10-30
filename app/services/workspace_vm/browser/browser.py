@@ -542,6 +542,16 @@ class SettingUp(Exception):
     status = "setup"
 
 
+class Failed(Exception):
+    """An action that failed on a page: its text already names the cause
+    and the page (run)."""
+    status = "failed"
+
+
+class StaleRef(Refused):
+    """A ref no element on the page has any more: run adds the page as it is now."""
+
+
 def user_control():
     """Whether the user has the browser now (the view's takeover; it
     expires by itself when the view stops refreshing it)."""
@@ -1025,7 +1035,8 @@ def element(page, ref):
         locator = frame.locator(f'[data-consens-ref="{ref}"]')
         if locator.count():
             return locator.first
-    raise Refused(f"{ref} is not on the page any more (it changed). Call read for the current refs.")
+    # The page as it is now follows (on_failure): before, only "Call read", one more step.
+    raise StaleRef(f"{ref} is not on the page any more (it changed). The page as it is now:")
 
 
 def point(x, y):
@@ -1390,6 +1401,10 @@ def run(request):
         context.on("page", watch)
         try:
             return on_page(context, page, action, request, query, caught)
+        except (UserHasControl, SettingUp):
+            raise
+        except Exception as exc:
+            raise on_failure(context, page, action, exc) from None
         finally:
             # The resident helper keeps the connection: this call's
             # listeners end with the call.
@@ -1623,9 +1638,68 @@ def act(context, page, action, request, seen=None):
     raise Refused(f"Unknown action {action}.")
 
 
+# Playwright's call log, which follows its message, lists every step of an
+# action: these say nothing of why one failed (its waits and retries, the
+# scrolling, our own selector, the text typed).
+ROUTINE_STEP = re.compile(
+    r"(?:waiting for (?:locator\(|element to be |navigation|scheduled navigations)|locator resolved to |"
+    r"attempting \w+ action|retrying \w+ action|waiting \d+ms|element is visible, enabled and |"
+    r"scrolling into view|done scrolling|performing \w+ action|\w+ action done|navigations have finished|"
+    r"navigating to |\w+\(.*\)$)")
+
+
+def failure_text(exc, log=True):
+    """What failed, for the agent: Playwright's message and, with ``log``,
+    the last step of its call log that says why (since 2026-10-30, audit L4:
+    "Timeout 10000ms exceeded." alone, where the log said
+    "<div class="consent-layer"></div> intercepts pointer events"). A page of
+    the browser's own computer gives no ``log``: its steps quote the page."""
+    text = str(exc).strip()
+    if not text:
+        return type(exc).__name__
+    first, _, rest = text.partition("\n")
+    said = " ".join(first.split())[:400]
+    if log and "Call log:" in rest:
+        steps = [re.sub(r"^\d+ × ", "", re.sub(r"^-\s*", "", line.strip()))
+                 for line in rest.split("Call log:", 1)[1].splitlines()]
+        why = [step for step in steps if step and not ROUTINE_STEP.match(step)]
+        if why:
+            said += "\nLast step in Playwright's log: " + " ".join(why[-1].split())[:300]
+    return said
+
+
+def on_failure(context, page, action, exc):
+    """An action on a page that failed or was refused, as the exception
+    answer_for turns into its answer: the reason, then the page in front as
+    it is now (since 2026-10-30, audit L4: "refused" and "failed" named no
+    page, and the agent read it again in its next step). A ref no element
+    has any more brings the page's whole list (StaleRef); a download, which
+    changes no page, only its reason."""
+    if action == "download":
+        return exc if isinstance(exc, Refused) else Failed(failure_text(exc))
+    try:
+        now = current_page(context)
+        own = hidden(now) or hidden(page)
+    except Exception:
+        now, own = None, True
+    said = str(exc) if isinstance(exc, Refused) else failure_text(exc, log=not own)
+    try:
+        if now is None:
+            where = ""
+        elif hidden(now):
+            where = f"URL: {now.url}"
+        elif isinstance(exc, StaleRef):
+            where = read_text(now, 0, AFTER_ACTION_CHARS)
+        else:
+            where = header(now)
+    except Exception:
+        where = ""
+    said = "\n".join(filter(None, (said, where)))
+    return Refused(said) if isinstance(exc, Refused) else Failed(said)
+
+
 def failed(exc):
-    message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-    return {"status": "failed", "text": message[:400]}
+    return {"status": "failed", "text": failure_text(exc)}
 
 
 def answer_for(request):
@@ -1635,7 +1709,7 @@ def answer_for(request):
             raise Refused("The request is no JSON object.")
         answer = {"status": "ok", **run(request)}
         answer["downloads"] = finished_downloads()
-    except (Refused, UserHasControl, SettingUp) as exc:
+    except (Refused, UserHasControl, SettingUp, Failed) as exc:
         answer = {"status": exc.status, "text": str(exc)}
     except Exception as exc:
         answer = failed(exc)
