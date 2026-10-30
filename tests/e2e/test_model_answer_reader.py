@@ -631,10 +631,11 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
         expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
         # The first demo answer starts 500 ms after the question; check the
         # waiting state in one atomic poll instead of four round trips.
+        # Daily compares three models since 2026-10-28.
         page.wait_for_function("""() =>
-          document.getElementById('answerReaderStatus')?.textContent.trim() === '0 of 6 ready'
-          && document.querySelectorAll('.is-direct .answer-reader-answer').length === 6
-          && document.querySelectorAll('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton').length === 6
+          document.getElementById('answerReaderStatus')?.textContent.trim() === '0 of 3 ready'
+          && document.querySelectorAll('.is-direct .answer-reader-answer').length === 3
+          && document.querySelectorAll('.is-direct .answer-reader-body[aria-busy="true"] .answer-skeleton').length === 3
         """, polling=16, timeout=5000)
         reader_screenshot(page, 'demo-daily-waiting')
         page.wait_for_function('() => window.__demoFinished === true', timeout=60000)
@@ -644,18 +645,18 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
             text:box.dataset.consensusAnswer, state:box.dataset.responseState};
         })""")
         expected = page.evaluate("CONSENSUS_PRESETS.find(p => p.id === 'fast').models")
-        assert len(result) == 6
+        assert len(result) == 3
         assert {r['provider']:r['model'] for r in result} == expected
         assert all(r['state'] == 'complete' and len(r['text']) > 100 for r in result)
         assert all('<span' not in r['text'] and '<div' not in r['text'] and 'thinking-wrap' not in r['text'] for r in result)
         # The demo shows Daily without making it the visitor's choice.
         assert page.evaluate("localStorage.getItem('pref_consensus_preset')") == 'balanced'
         answers = page.locator('.is-direct .answer-reader-body')
-        expect(answers).to_have_count(6)
+        expect(answers).to_have_count(3)
         for answer in answers.all():
             expect(answer).to_be_visible()
             assert '<span' not in answer.inner_text() and '<div' not in answer.inner_text()
-        expect(page.locator('#answerReaderStatus')).to_have_text('6 of 6 ready')
+        expect(page.locator('#answerReaderStatus')).to_have_text('3 of 3 ready')
         if cdn_dir:
             assert page.locator('.is-direct .answer-reader-body h4').count() > 0
             assert page.locator('.is-direct .answer-reader-body li').count() > 10

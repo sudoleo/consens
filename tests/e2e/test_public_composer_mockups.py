@@ -53,7 +53,9 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         assert hit == 'heroAskField'
         # The closing field repeats the hero without a tool lip.
         previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
-        for preview in previews.all():
+        # The hero shows Daily's three marks (the app's default since
+        # 2026-10-28); the heat-pump scene is a run with six.
+        for preview, marks in zip(previews.all(), (3, 6), strict=True):
             bar = preview.locator('.lp-composer-tools')
             # The mode lives in the (+) menu (as in /app), so the lip starts
             # with Reasoning. Its words are its name (a plain span may not
@@ -63,7 +65,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             assert bar.locator('.lp-composer-tool').nth(0).get_attribute('aria-label') is None
             expect(bar.locator('.lp-composer-tool')).to_have_count(2)
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
-            expect(bar.locator('img')).to_have_count(6)
+            expect(bar.locator('img')).to_have_count(marks)
             assert bar.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
             assert bar.evaluate('el => Math.abs(el.getBoundingClientRect().height - 36) < 1')
             assert bar.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
