@@ -491,3 +491,78 @@ def test_pictures_of_this_batch_stay_and_older_ones_leave_together(store, fake_v
     assert shown() == ([agent_compaction.WEB_PICTURE_GONE] * 6 + [agent_compaction.SCREENSHOT_GONE,
                        agent_compaction.PICTURE_GONE] + ["image"] * 3)
     assert agent_compaction.PICTURES_KEPT == 3
+
+
+# --- T3: the settlement reads its ledger day in its one round trip ----------------------
+
+def _counting_store():
+    from app.services.agent_runs import AgentRunStore
+    from test_agent_runs import Database
+    from test_chat_history import FakeTransaction
+    trips = []
+
+    class Counting(FakeTransaction):
+        def get(self, ref):
+            trips.append(("get", ref.path))
+            return super().get(ref)
+
+        def get_all(self, refs):
+            refs = list(refs)
+            trips.append(("get_all", len(refs)))
+            return [FakeTransaction.get(self, ref) for ref in refs]
+
+    class CountingDatabase(Database):
+        def run_transaction(self, operation):
+            with self.lock:
+                transaction = Counting(self)
+                result = operation(transaction)
+                transaction.commit()
+                return result
+    return AgentRunStore(CountingDatabase()), trips
+
+
+def _settled_step(guess):
+    """A delegated step claimed and settled; ``guess``: whether the
+    settlement may read the expected ledger day with the rest."""
+    from app.services import agent_quota
+    from test_agent_delegation import make_loop
+    store, trips = _counting_store()
+    if not guess:
+        store._expected_daily = lambda uid: None
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    del trips[:]
+    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    saved = store.receipt_ref(*args).get().to_dict()
+    day = agent_quota.quota_ref(store.db, UID, saved["quota_day"])
+    ledger = {key: value for key, value in store.db.documents[day.path].items() if not key.endswith("_at")}
+    return trips, saved, ledger
+
+
+def test_a_settlement_is_one_read_round_trip_and_books_the_same():
+    trips, saved, ledger = _settled_step(guess=True)
+    # One batched read (the ledger day with the rest), no read of its own.
+    assert [kind for kind, _ in trips] == ["get_all"]
+    before_trips, before_saved, before_ledger = _settled_step(guess=False)
+    assert [kind for kind, _ in before_trips] == ["get_all", "get"]
+    # The allowance and the receipt come out exactly the same.
+    assert ledger == before_ledger
+    assert saved["quota_charged"] == before_saved["quota_charged"] and saved["usage"] == before_saved["usage"]
+
+
+def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
+    """A call claimed before midnight (or a reset) settles into its own day."""
+    from app.services import agent_quota
+    from app.services.agent_runs import AgentRunStore
+    store, trips = _counting_store()
+    from test_agent_delegation import make_loop
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    monkeypatch.setattr(AgentRunStore, "_expected_daily",
+                        lambda self, uid: agent_quota.quota_ref(store.db, uid, "2026-10-31"))
+    del trips[:]
+    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    assert [kind for kind, _ in trips] == ["get_all", "get"]
+    assert store.receipt_ref(*args).get().to_dict()["status"] == "succeeded"
