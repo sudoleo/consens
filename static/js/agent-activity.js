@@ -282,9 +282,13 @@
   const quietMotion = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const activeMotion = new Set();
   let offscreenUpdate = false;
+  // The app's easing, read once: App.motion.ease reads the page's style,
+  // and each read laid the page out anew in the middle of a render (P1).
+  let easeOut = '';
   function motion(element, frames, finish = () => {}, duration = 220) {
     if (offscreenUpdate || quietMotion?.matches || !element.animate || !element.isConnected) { finish(); return null; }
-    const animation = element.animate(frames, { duration, easing: window.App?.motion?.ease?.("out") ?? 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
+    easeOut ||= window.App?.motion?.ease?.("out") || '';
+    const animation = element.animate(frames, { duration, easing: easeOut || 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
     activeMotion.add(animation);
     animation.onfinish = () => { activeMotion.delete(animation); if (finish() !== false) animation.cancel(); };
     animation.oncancel = () => activeMotion.delete(animation);
@@ -303,12 +307,18 @@
   }
   function dispose(host) {
     if (!host) return;
+    if (host._agentActivity?.reported) reportStep(host._agentActivity, null);
     clearInterval(host._agentActivity?.clockTimer);
     if (host._agentActivity) { host._agentActivity.clockTimer = null; dropLine(host._agentActivity); }
     for (const animation of [...activeMotion]) {
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
     }
     cancelMotion(host._agentActivity?.historyMotion);
+  }
+  // An attribute is written only when it changes: every write is a mutation
+  // the page's observers and its style look at again (P1).
+  function hide(element, hidden) {
+    if (element.hidden !== hidden) element.hidden = hidden;
   }
   // `lift: false` fades only: the answer's first words must not glide.
   function reveal(element, { lift = true } = {}) {
@@ -473,6 +483,37 @@
     }, wait + 20);
   }
 
+  // Every change to an event gets a new number (receive; a saved turn's
+  // event its own on first sight), and a node compares that number with its
+  // status instead of all its fields as JSON (runtime audit P1: at 150 steps
+  // each render wrote ~950 KB of signatures). The status stays in the stamp
+  // for a caller that changes it in place.
+  const revisions = new WeakMap();
+  let lastRevision = 0;
+  function touch(item) { revisions.set(item, ++lastRevision); }
+  function stamp(item) {
+    let revision = revisions.get(item);
+    if (revision === undefined) { revision = ++lastRevision; revisions.set(item, revision); }
+    return `${revision}:${item.status ?? ''}:${item.state ?? ''}`;
+  }
+  // A thought's excerpt, kept per event while its text is the same (it was
+  // worked out three times per thought and render, P1).
+  const excerpts = new WeakMap();
+  function compact(item) {
+    const kept = excerpts.get(item);
+    if (kept && kept.text === item.text) return kept.value;
+    const value = compactReasoning(item.text);
+    excerpts.set(item, { text: item.text, value });
+    return value;
+  }
+  // When a workspace step's call really began here, and when its output
+  // last changed (V3: a cold start, a long command and a hang looked alike).
+  const startSeen = new WeakMap(), outputSeen = new WeakMap();
+  function seen(item, event, now = Date.now()) {
+    if (event.started_at && !startSeen.has(item)) startSeen.set(item, now);
+    if (typeof event.output === 'string' && event.output !== item.output) outputSeen.set(item, now);
+  }
+
   // Room in a live run's activity besides its steps: status and reasoning
   // entries, and apart from them the pauses (as many as a turn saves in
   // agent_holds, A-M5).
@@ -482,8 +523,11 @@
     const existing = events.find(item => item.id === event.id);
     if (existing && event.append && event.kind === "reasoning") {
       existing.text = (existing.text + String(event.text || "")).slice(0, 32000);
+      touch(existing);
     } else if (existing) {
+      seen(existing, event);
       Object.assign(existing, event);
+      touch(existing);
       if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
     } else {
       // Keep commentary and confirmed steps together for the full timeline.
@@ -498,7 +542,11 @@
       }
       // A progress note keeps the agent's whole text beside a tool call
       // (agent_answer_mode.NOTE_CHARS); status lines are short anyway.
-      events.push({ ...event, text: String(event.text || "").slice(0, event.kind === "progress" || event.kind === "tool" ? 8000 : 32000) });
+      const item = { ...event, text: String(event.text || "").slice(0, event.kind === "progress" || event.kind === "tool" ? 8000 : 32000) };
+      events.push(item);
+      touch(item);
+      if (event.started_at) startSeen.set(item, Date.now());
+      if (typeof event.output === 'string') outputSeen.set(item, Date.now());
     }
   }
 
@@ -520,7 +568,7 @@
   // translates data-label, which it was compared with (2026-10-23).
   function renderRunDetails(view, settings) {
     const text = settings?.label ? label(settings) : '';
-    view.runDetails.hidden = !text;
+    hide(view.runDetails, !text);
     if (view.runDetailsText === text) return;
     view.runDetailsText = text;
     view.runDetails.replaceChildren();
@@ -623,11 +671,40 @@
     return item.path || item.process;
   }
   // The glossary's word: the workspace, never "VM" on the page (docs/i18n.md).
+  // "interrupted" (since 2026-10-30, agent_vm_tools.py): the connection broke
+  // and whether the call ran is unknown; before, it read "Failed".
   const vmOutcomes = { unavailable: 'Workspace not available', no_time: 'Skipped · no time left',
-    day_limit: 'Skipped · workspace time for today used up', busy: 'Skipped · workspace in use by another chat' };
+    day_limit: 'Skipped · workspace time for today used up', busy: 'Skipped · workspace in use by another chat',
+    interrupted: 'Connection lost' };
+  // Steps that say when their call began, after the workspace started and
+  // warmed up (`started_at`: agent_vm_tools.py, agent_browser.py): until then
+  // "Starting the workspace…", then "Running · 42s"; a command quiet for
+  // QUIET_MS "No output for 45s" (runtime audit V3). An event saved without
+  // the field is done: it never gets this far.
+  const timedTools = new Set(['vm_exec', 'vm_install_packages', 'browser']);
+  const QUIET_MS = 30_000;
+  function sinceStart(item, now) {
+    const server = Date.parse(item.started_at);
+    // The server's clock while it agrees with this one, else when it came here.
+    if (Number.isFinite(server) && now >= server && now - server < 6 * 3600_000) return now - server;
+    const here = startSeen.get(item);
+    return here === undefined ? 0 : Math.max(0, now - here);
+  }
+  function liveClock(item, now = Date.now()) {
+    if (item.status !== 'running' || !timedTools.has(item.name) || vmOutcomes[item.outcome]) return null;
+    if (!item.started_at) return { label: 'Starting the workspace…' };
+    const started = sinceStart(item, now);
+    if (item.name === 'vm_exec') {
+      const output = outputSeen.get(item);
+      // Silence since its last output, or since it began when none came after.
+      const quiet = output === undefined || output < now - started ? started : now - output;
+      if (quiet >= QUIET_MS) return { label: 'No output for', gap: ' ', ms: quiet };
+    }
+    return { label: 'Running', gap: ' · ', ms: started };
+  }
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
-    if (item.status === 'running') return ['vm_exec', 'vm_install_packages'].includes(item.name) ? App.t('Running…') : '';
+    if (item.status === 'running') return '';
     // A background process that still runs once its call is done.
     if (item.process_status === 'running') return App.t('Running in the background');
     // Ended by vm_stop_process: no exit code (timeout's 124 read as its limit).
@@ -655,6 +732,65 @@
   function commandFailed(item) {
     return item.status === 'succeeded' && commandTools.has(item.name)
       && (item.timed_out === true || (Number.isInteger(item.exit_code) && item.exit_code !== 0));
+  }
+  // The meta of a step: its words, or while it runs its live clock (a word
+  // and the time in a slot of steady width, like the run's own clock in the
+  // head). True while it ticks.
+  function writeMeta(meta, item) {
+    const clock = liveClock(item);
+    if (!clock || clock.ms === undefined) {
+      const text = clock ? App.t(clock.label) : vmMeta(item);
+      if (meta._clock || meta.textContent !== text) { meta._clock = null; meta.textContent = text; }
+      return false;
+    }
+    if (!meta._clock) {
+      const label = document.createElement('span'), gap = document.createTextNode(''), time = document.createElement('span');
+      time.className = 'agent-vm-clock';
+      meta.replaceChildren(label, gap, time);
+      meta._clock = { label, gap, time };
+    }
+    const { label, gap, time } = meta._clock;
+    const word = App.t(clock.label), text = durationText(clock.ms);
+    const seconds = Math.floor(clock.ms / 1000);
+    const unit = seconds < 60 ? 'seconds' : seconds < 600 ? 'minutes' : 'long';
+    if (label.textContent !== word) label.textContent = word;
+    if (gap.data !== clock.gap) gap.data = clock.gap;
+    if (time.textContent !== text) time.textContent = text;
+    if (time.dataset.unit !== unit) time.dataset.unit = unit;
+    return true;
+  }
+  // One tick a second for every step whose clock runs, while it is on the page.
+  const ticking = new Set();
+  let tickTimer = null;
+  function tick() {
+    for (const details of ticking) {
+      const meta = details.firstElementChild?.lastElementChild;
+      if (!details.isConnected || !meta || !details._item || !writeMeta(meta, details._item)) ticking.delete(details);
+    }
+    if (!ticking.size) { clearInterval(tickTimer); tickTimer = null; }
+  }
+  function keepTicking(details, on) {
+    if (on) ticking.add(details); else ticking.delete(details);
+    if (ticking.size && !tickTimer) tickTimer = setInterval(tick, 1000);
+    if (!ticking.size && tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  }
+  // Outputs shown at their end, all in one frame: reading scrollHeight lays
+  // the page out, and every update of a running command did so twice (its
+  // live line and its entry in the closed timeline, P1).
+  const toEnd = new Set();
+  let endFrame = false;
+  function scrollToEnd(output) {
+    toEnd.add(output);
+    if (endFrame) return;
+    endFrame = true;
+    (window.requestAnimationFrame || (run => setTimeout(run, 16)))(() => {
+      endFrame = false;
+      const outputs = [...toEnd].filter(element => element.isConnected);
+      toEnd.clear();
+      // All heights first, then the scrolls: one layout for all of them.
+      const heights = outputs.map(element => element.scrollHeight);
+      outputs.forEach((element, index) => { element.scrollTop = heights[index]; });
+    });
   }
   function vmView(className) {
     const details = document.createElement('details');
@@ -713,13 +849,14 @@
     card.append(body);
     return card;
   }
-  function updateCard(card, item) {
-    const picture = pagePicture(item);
+  // `key`: what the card shows changes with it (a stamp, P1).
+  function updateCard(card, item, key = stamp(item)) {
     const canOpen = document.body.classList.contains('viewer-has-workspace') && Boolean(App.workspaceView);
-    const signature = JSON.stringify([item.status, item.url, item.title, item.outcome, picture.length,
-      picture.slice(-32), canOpen, App.t('Open')]);
-    if (card.dataset.signature === signature) return;
-    card.dataset.signature = signature;
+    const signature = `${key}|${canOpen}|${App.t('Open')}`;
+    if (card._signature === signature) return;
+    card._signature = signature;
+    card._item = item;
+    const picture = pagePicture(item);
     card.dataset.status = item.status;
     card.dataset.tool = item.name;
     if (item.status === 'failed') card.dataset.outcome = 'failed'; else delete card.dataset.outcome;
@@ -767,24 +904,27 @@
     const at = tools.findLastIndex(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
     if (at < 0) { view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return; }
     const opened = tools[at];
-    const now = tools.slice(at + 1).findLast(item => item.name === 'browser' && pagePicture(item));
-    const page = now ? { ...opened, preview: now.preview, title: now.page_title || opened.title,
-      url: now.page_url || opened.url } : opened;
+    let now = null;
+    for (let index = tools.length - 1; index > at && !now; index -= 1) {
+      if (tools[index].name === 'browser' && pagePicture(tools[index])) now = tools[index];
+    }
     if (!view.pinCard) {
       view.pinCard = pageCard('agent-page-pinned');
       view.pin.replaceChildren(view.pinCard);
       view.pin.hidden = false;
-      if (view.running || page.status === 'running') reveal(view.pinCard);
+      if (view.running || opened.status === 'running') reveal(view.pinCard);
     }
-    updateCard(view.pinCard, page);
+    // The page as it is now: the opened step with the newest picture after it.
+    const page = now ? { ...opened, preview: now.preview, title: now.page_title || opened.title,
+      url: now.page_url || opened.url } : opened;
+    updateCard(view.pinCard, page, `${stamp(opened)}/${now ? stamp(now) : ''}`);
   }
   function updateVm(details, item) {
     if (details.classList.contains('agent-page-card')) { updateCard(details, item); return; }
-    const signature = JSON.stringify([item.status, item.command, item.path, item.output, item.output_truncated,
-      item.exit_code, item.duration_ms, item.timed_out, item.outcome, item.action, item.url, item.ref, item.page,
-      item.title, item.packages, item.domain, item.query]);
-    if (details.dataset.signature === signature) return;
-    details.dataset.signature = signature;
+    const signature = stamp(item);
+    if (details._signature === signature) return;
+    details._signature = signature;
+    details._item = item;
     details.dataset.status = item.status;
     details.dataset.tool = item.name;
     if (item.status === 'failed' || commandFailed(item)) details.dataset.outcome = 'failed';
@@ -798,7 +938,7 @@
     // An opened page's address, on hover.
     if (details.dataset.target === 'text' && item.url) target.title = String(item.url).slice(0, 500);
     else target.removeAttribute('title');
-    meta.textContent = vmMeta(item);
+    keepTicking(details, writeMeta(meta, item));
     const output = details.lastElementChild;
     // A browser step shows the page as it read it; a command its output.
     const text = String((item.name === 'browser' ? item.page : item.output) || '');
@@ -806,7 +946,7 @@
     output.hidden = !text;
     details.classList.toggle('has-output', Boolean(text));
     if (!('chosen' in details.dataset)) details.open = item.status === 'running' && Boolean(text);
-    if (details.open) output.scrollTop = output.scrollHeight;
+    if (details.open) scrollToEnd(output);
   }
 
   // The agent's plan (agent_plan.py, update_plan), like Claude Code's todo
@@ -831,10 +971,11 @@
     return details;
   }
   function updatePlan(details, item, open) {
+    const signature = stamp(item);
+    if (details._signature === signature) return;
+    details._signature = signature;
+    details._item = item;
     const steps = item.items.slice(0, 20);
-    const signature = JSON.stringify([item.status, steps]);
-    if (details.dataset.signature === signature) return;
-    details.dataset.signature = signature;
     details.dataset.status = item.status;
     const done = steps.filter(step => step.status === 'completed').length;
     details.firstElementChild.textContent = item.status === 'failed' ? App.t('Plan not updated')
@@ -902,9 +1043,10 @@
       const states = item.ask === 'confirm' ? confirmStates : item.ask === 'secret' ? secretStates
         : item.ask === 'choice' ? choiceStates : askStates;
       const state = states[item.state] ? item.state : 'waiting';
-      const signature = JSON.stringify([item.ask, item.request, state, item.choice]);
-      if (node.dataset.signature === signature) return;
-      node.dataset.signature = signature;
+      const signature = stamp(item);
+      if (node._signature === signature) return;
+      node._signature = signature;
+      node._item = item;
       node.dataset.state = state;
       const heads = state === 'waiting' ? askHeadsNow : askHeads;
       node._head.textContent = heads[item.ask] || heads.confirm;
@@ -915,9 +1057,10 @@
       return;
     }
     const state = holdStates[item.state] ? item.state : 'waiting';
-    const signature = JSON.stringify([item.reviewer, item.halt, item.reason, state, item.domain]);
-    if (node.dataset.signature === signature) return;
-    node.dataset.signature = signature;
+    const signature = stamp(item);
+    if (node._signature === signature) return;
+    node._signature = signature;
+    node._item = item;
     node.dataset.state = state;
     const domain = item.halt === 'domain' && item.domain;
     node._head.textContent = domain ? App.t(state === 'waiting' ? 'The agent asks to reach {domain}' : 'The agent asked to reach {domain}',
@@ -939,11 +1082,12 @@
   // provider summary only its headings. The words are the model's: never
   // translated; a step still thinking (no sections yet) shows its line.
   function updateThought(node, item) {
+    const signature = stamp(item);
+    if (node._signature === signature) return;
+    node._signature = signature;
+    node._item = item;
     const sections = (Array.isArray(item.sections) ? item.sections : [])
       .filter(section => section && (section.title || section.text)).slice(0, 40);
-    const signature = JSON.stringify([item.text, sections]);
-    if (node.dataset.signature === signature) return;
-    node.dataset.signature = signature;
     const paragraph = (text, className) => {
       const p = document.createElement('p');
       if (className) p.className = className;
@@ -956,6 +1100,27 @@
       ...(section.title ? [paragraph(section.title, 'agent-thought-title')] : []),
       ...String(section.text || '').split(/\n{2,}/).filter(text => text.trim()).map(text => paragraph(text)),
     ]) : [paragraph(item.text)]));
+  }
+
+  // The step the agent is on, for the live view's line (workspace-view.js
+  // agentStep, runtime audit V6): its verb and target ("Clicking e12",
+  // "Opening Docs – Example"), or the run's heading ("Thinking…"); nothing
+  // while it waits for the user or in a run without the workspace. The verb
+  // in the page's language, the target as data.
+  function workspaceStep(steps, activeTool, heading, held) {
+    if (held || !steps.some(item => vmTools.has(item.name) || item.name === 'open_workspace')) return null;
+    if (activeTool && vmTools.has(activeTool.name)) {
+      const verbs = activeTool.name === 'browser' ? browserVerbs[activeTool.action] : vmVerbs[activeTool.name];
+      const target = String(vmTarget(activeTool) || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+      if (verbs) return target ? `${App.t(verbs[0])} ${target}` : App.t(verbs[0]);
+      return App.t(tools[activeTool.name]?.[1] || stepLabel(activeTool));
+    }
+    return App.t(heading);
+  }
+  function reportStep(view, line) {
+    if ((view.reported ?? null) === line) return;
+    view.reported = line;
+    App.workspaceView?.agentStep?.(line);
   }
 
   function userNote(className, text) {
@@ -1115,9 +1280,13 @@
     // hid every thought of the run, live and saved (a rule from the time
     // progress lines were summaries standing in for it). Only a step's
     // reasoning that its own note repeats word for word stands back.
-    const said = step => progress.filter(item => item.step_id === step).map(item => item.text).join('\n');
+    const notes = new Map();
+    for (const item of progress) {
+      if (item.step_id) notes.set(item.step_id, notes.has(item.step_id) ? `${notes.get(item.step_id)}\n${item.text}` : item.text);
+    }
+    const said = step => notes.get(step) || '';
     const reasoning = events.filter(item => item.kind === "reasoning" && ["text", "summary"].includes(item.format)
-      && item.text && !(item.step_id && compactReasoning(item.text).split('\n').every(line => said(item.step_id).includes(line))));
+      && item.text && !(item.step_id && compact(item).split('\n').every(line => said(item.step_id).includes(line))));
     // Older saved turns mistook a missing search counter for tool activity.
     // Preserve real client calls and searches backed by counts or citations.
     // `answer` only ends the steering; the answer itself is what follows.
@@ -1131,6 +1300,8 @@
     // reviewer's reason of their own, yet stay in the history: every opened
     // pause names its kind (halt).
     const holds = events.filter(item => item.kind === 'hold' && (item.reason || item.domain || item.halt));
+    // Asked once per event and render: Sets, not includes over every event (P1).
+    const isProgress = new Set(progress), isReasoning = new Set(reasoning), isTool = new Set(tools), isHold = new Set(holds);
     const textOnly = textOnlyReview(review);
     const latest = events.filter(item => item.kind === "status").at(-1);
     // Text the model writes before a tool call is a preamble, not the answer.
@@ -1167,7 +1338,7 @@
       settled ? 'succeeded' : status);
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
-    view.details.dataset.status = status;
+    if (view.details.dataset.status !== status) view.details.dataset.status = status;
     // Completion collapses a manually opened live history only offscreen
     // (below). Later explicit expansion is preserved across saved-turn and usage updates.
     const finished = view.running && !running;
@@ -1177,15 +1348,17 @@
     // The latest plan stands above the live progress, never in its order.
     const plan = tools.findLast(item => hasPlan(item) && item.status !== 'failed');
     pinPage(view, tools);
-    const paragraphs = events.flatMap(item => holds.includes(item) ? [{id:`hold:${item.id}`, kind:'hold', item}]
-      : progress.includes(item)
+    // The step the agent is on, for the live view's line (V6).
+    if (running || finished) reportStep(view, running ? workspaceStep(tools, activeTool, heading, held) : null);
+    const paragraphs = events.flatMap(item => isHold.has(item) ? [{id:`hold:${item.id}`, kind:'hold', item}]
+      : isProgress.has(item)
       ? [{id:item.id, text:item.text, kind:item.from_user ? 'user' : 'progress'}]
-      : reasoning.includes(item) ? [{id:item.id, text:compactReasoning(item.text), kind:'progress'}]
-        : tools.includes(item) && item.name === 'update_plan' ? []
+      : isReasoning.has(item) ? [{id:item.id, text:compact(item), kind:'progress'}]
+        : isTool.has(item) && item.name === 'update_plan' ? []
         // An opened page stands pinned above the lines (pinPage), not among them.
-        : tools.includes(item) && opensPage(item) ? []
-        : tools.includes(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
-        : tools.includes(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
+        : isTool.has(item) && opensPage(item) ? []
+        : isTool.has(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
+        : isTool.has(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && !held && item === activeTool},
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
@@ -1277,13 +1450,14 @@
         place(item, p);
         continue;
       }
-      if (item.quiet) p.setAttribute('aria-hidden', 'true');
+      if (item.quiet && p.getAttribute('aria-hidden') !== 'true') p.setAttribute('aria-hidden', 'true');
       // The agent's note beside a call: a few lines here, whole in the timeline.
       p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
       p.classList.toggle('agent-progress-step', item.kind === 'step');
       p.classList.toggle('agent-current-status', Boolean(item.current));
-      if (item.current) p.setAttribute('role', 'status'); else p.removeAttribute('role');
-      if (item.status) p.dataset.status = item.status;
+      if (item.current) { if (p.getAttribute('role') !== 'status') p.setAttribute('role', 'status'); }
+      else if (p.hasAttribute('role')) p.removeAttribute('role');
+      if (item.status && p.dataset.status !== item.status) p.dataset.status = item.status;
       // A reasoning line that changes in place (a comparison model's quote,
       // the chat model's thinking) cross-fades; a step only brightens.
       if (item.kind === 'progress') crossfade(p, item.text);
@@ -1313,8 +1487,8 @@
     // of its own ("Plan · 1 of 4 done", "2 of 4", "3 of 4"). An update that
     // failed keeps its own line ("Plan not updated").
     const firstPlan = tools.find(item => hasPlan(item) && item.status !== 'failed');
-    for (const item of events.filter(item => progress.includes(item) || reasoning.includes(item) || (tools.includes(item)
-      && !(hasPlan(item) && item.status !== 'failed' && item !== firstPlan)) || holds.includes(item))) {
+    for (const item of events.filter(item => isProgress.has(item) || isReasoning.has(item) || (isTool.has(item)
+      && !(hasPlan(item) && item.status !== 'failed' && item !== firstPlan)) || isHold.has(item))) {
       ids.add(item.id);
       let node = view.nodes.get(item.id);
       if (!node) {
@@ -1340,11 +1514,12 @@
         if (hasPlan(item)) updatePlan(node, item === firstPlan ? plan || item : item, false);
       } else if (node.classList.contains('agent-activity-thought')) {
         updateThought(node, item);
-        node.setAttribute('aria-label', item.summary_source === 'provider_summary' ? 'Reasoning summary' : 'Reasoning highlights');
+        const name = item.summary_source === 'provider_summary' ? 'Reasoning summary' : 'Reasoning highlights';
+        if (node._label !== name) { node._label = name; node.setAttribute('aria-label', name); }
       } else if (item.kind === "tool") {
-        const signature = JSON.stringify([item, textOnly]);
-        if (node.dataset.signature !== signature) {
-          node.dataset.signature = signature;
+        const signature = `${stamp(item)}|${textOnly}`;
+        if (node._signature !== signature) {
+          node._signature = signature;
           node.dataset.status = item.status;
           const pills = [];
           for (const source of (Array.isArray(item.sources) ? item.sources : []).slice(0, 5)) {
@@ -1374,9 +1549,10 @@
           }
         }
       } else {
-        const text = item.kind === 'progress' ? item.text : compactReasoning(item.text);
-        if (node.textContent !== window.App.t(text)) node.textContent = text;
-        node.setAttribute("aria-label", item.kind === 'progress' ? 'Progress update' : item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary");
+        const text = item.kind === 'progress' ? item.text : compact(item);
+        if (node._text !== text || node.textContent !== window.App.t(text)) { node._text = text; node.textContent = text; }
+        const name = item.kind === 'progress' ? 'Progress update' : item.summary_source === "excerpt" || item.format === "text" ? "Reasoning highlights" : "Reasoning summary";
+        if (node._label !== name) { node._label = name; node.setAttribute("aria-label", name); }
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
@@ -1389,20 +1565,25 @@
     } else view.current.remove();
     view.timeline.classList.toggle('has-current', Boolean(currentStep));
     view.current.classList.toggle('is-paused', held);
-    view.content.hidden = !progress.length && !reasoning.length && !tools.length && !holds.length;
+    hide(view.content, !progress.length && !reasoning.length && !tools.length && !holds.length);
     App.agentReview?.renderActivity(view.insights, review, answerText);
     view.timeline.classList.toggle('has-insights', !view.insights.hidden);
-    view.note.textContent = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
+    const noteText = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
       : !reasoning.length ? (running ? "Waiting for the model’s response."
         : "No detailed progress updates were saved for this response.") : "";
-    if (finishReason === "length") {
-      // A sentence of its own, so it is translated on its own (docs/i18n.md).
-      const limit = document.createElement("span");
-      limit.textContent = "The response reached its output limit.";
-      view.note.append(view.note.textContent ? " " : "", limit);
+    const noteKey = `${noteText}|${finishReason === "length"}`;
+    if (view.noteKey !== noteKey) {
+      view.noteKey = noteKey;
+      view.note.textContent = noteText;
+      if (finishReason === "length") {
+        // A sentence of its own, so it is translated on its own (docs/i18n.md).
+        const limit = document.createElement("span");
+        limit.textContent = "The response reached its output limit.";
+        view.note.append(view.note.textContent ? " " : "", limit);
+      }
+      view.note.hidden = !view.note.textContent;
     }
-    view.note.hidden = !view.note.textContent;
     const measured = usage && Number.isFinite(usage.input_tokens) && Number.isFinite(usage.output_tokens);
     const number = App.format.number;
     const total = measured ? number(usage.input_tokens + usage.output_tokens) : "";
@@ -1419,11 +1600,16 @@
     // The commands' summed run time in the agent's VM (agent_vm_tools.py).
     const vmTime = Number.isFinite(vm?.seconds) && vm.commands > 0
       ? ` · ${App.t("VM {time}", { time: App.format.duration(vm.seconds * 1000) })}` : "";
-    view.usageEl.textContent = tokens + cost + vmTime;
-    view.usageEl.title = measured ? `${number(usage.input_tokens)} input · ${number(usage.output_tokens)} output tokens` : "The provider did not report token usage.";
-    view.usageEl.hidden = running;
+    const usageText = tokens + cost + vmTime;
+    const usageTitle = measured ? `${number(usage.input_tokens)} input · ${number(usage.output_tokens)} output tokens` : "The provider did not report token usage.";
+    if (view.usageKey !== `${usageText}|${usageTitle}`) {
+      view.usageKey = `${usageText}|${usageTitle}`;
+      view.usageEl.textContent = usageText;
+      view.usageEl.title = usageTitle;
+    }
+    hide(view.usageEl, running);
     view.vmRestore = vmRestore;
-    view.vmRestoreEl.hidden = running || !vmRestore || !vm?.checkpoint;
+    hide(view.vmRestoreEl, running || !vmRestore || !vm?.checkpoint);
     // A history the reader opened stays open while it is on screen: closing
     // it there moved the answer below. Above the viewport the correction in
     // render() keeps the reading position, so it can tidy itself up.

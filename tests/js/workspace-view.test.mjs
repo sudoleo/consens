@@ -695,3 +695,283 @@ describe("the workspace beside the chat", () => {
     expect(env.document.body.style.getPropertyValue("--workspace-width")).toBe("0px");
   });
 });
+
+// Runtime audit 2026-10-30 (docs/agent-workspace-runtime-audit-2026-10-30.md).
+describe("the workspace view after the runtime audit", () => {
+  async function watching(env) {
+    const socket = await opened(env);
+    socket.deliver(JSON.stringify({ state: "ready" }));
+    return socket;
+  }
+  async function holding(env) {
+    const socket = await watching(env);
+    env.document.querySelector(".workspace-view-cover").click();
+    await vi.waitFor(() => expect(FakeRFB.made.at(-1).viewOnly).toBe(false));
+    return socket;
+  }
+  const status = env => env.document.querySelector(".workspace-view-status");
+  const screen = env => env.document.querySelector("#workspacePane-browser");
+
+  // V2: the phone went to its 2FA app and iOS closed the socket; the view
+  // stayed empty, without "Hand back", and closing it handed back mid-login.
+  it("comes back by itself after a dropped connection, with the takeover and its bar", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const handbacks = [];
+      env.window.addEventListener("consensio:workspace-handback", () => handbacks.push("button"));
+      const first = await holding(env);
+      expect(controls(env.window)).toEqual(["user"]);
+      first.closedBy(1006);
+      expect(status(env).textContent).toBe("Reconnecting…");
+      expect(screen(env).classList.contains("is-loading")).toBe(true);
+      // The bar and its "Hand back" stay; nothing handed back, nothing closed.
+      const bar = env.document.querySelector(".workspace-view-turn");
+      expect(bar.hidden).toBe(false);
+      expect(bar.querySelector(".workspace-view-turn-button").textContent).toBe("Hand back");
+      expect(env.workspace.isOpen()).toBe(true);
+      expect(env.workspace.holder()).toBe("user");
+      expect(FakeSocket.last).toBe(first);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const second = FakeSocket.last;
+      expect(second).not.toBe(first);
+      await second.onopen();
+      second.deliver(JSON.stringify({ state: "connecting" }));
+      expect(status(env).textContent).toBe("Reconnecting…");
+      second.deliver(JSON.stringify({ state: "ready" }));
+      // Still the user's: the new picture takes their keys at once.
+      expect(FakeRFB.made.at(-1).viewOnly).toBe(false);
+      expect(screen(env).classList.contains("is-loading")).toBe(false);
+      expect(controls(env.window)).toEqual(["user"]);
+      // Handing back while it comes back again is the button's hand-back.
+      second.closedBy(1006);
+      bar.querySelector(".workspace-view-turn-button").click();
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user", "agent"]));
+      expect(handbacks).toEqual(["button"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tries after 1, 2, 5 and 10 seconds, then says so in two lines with Reconnect", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      let socket = await watching(env);
+      for (const wait of [1_000, 2_000, 5_000, 10_000]) {
+        socket.closedBy(1006);
+        await vi.advanceTimersByTimeAsync(wait - 50);
+        expect(FakeSocket.last).toBe(socket);
+        await vi.advanceTimersByTimeAsync(50);
+        expect(FakeSocket.last).not.toBe(socket);
+        socket = FakeSocket.last;
+      }
+      socket.closedBy(1006);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(FakeSocket.last).toBe(socket);
+      expect(status(env).textContent).toBe("The connection to the workspace ended. Reconnect to go on.");
+      expect(status(env).classList.contains("is-wrapping")).toBe(true);
+      const again = env.document.querySelector(".workspace-view-reconnect");
+      expect(again.hidden).toBe(false);
+      expect(again.textContent).toBe("Reconnect");
+      again.click();
+      expect(FakeSocket.last).not.toBe(socket);
+      expect(again.hidden).toBe(true);
+      expect(status(env).textContent).toBe("Reconnecting…");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("comes back at once when the page is in front again or online, never after a server's reason", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await watching(env);
+      socket.closedBy(1006);
+      env.window.dispatchEvent(new env.window.Event("online"));
+      expect(FakeSocket.last).not.toBe(socket);
+      const replaced = FakeSocket.last;
+      await replaced.onopen();
+      replaced.deliver(JSON.stringify({ state: "ready" }));
+      replaced.closedBy(4409);
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(FakeSocket.last).toBe(replaced);
+      expect(status(env).textContent).toBe("The workspace opened in another window, so this view closed.");
+      expect(env.document.querySelector(".workspace-view-reconnect").hidden).toBe(false);
+      // The agent's request does not take the view back from the other
+      // window; the user opening it here does.
+      await env.workspace.open({ takeOver: true });
+      expect(FakeSocket.last).toBe(replaced);
+      await env.workspace.open();
+      expect(FakeSocket.last).not.toBe(replaced);
+      // Nothing to try with the day's time used up.
+      const other = setup();
+      const refused = await opened(other);
+      refused.closedBy(4402);
+      expect(other.document.querySelector(".workspace-view-reconnect").hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // V4: a forgotten view counted its hour as VM time.
+  it("lets go of the view after a minute in a hidden tab while the agent has the browser, and comes back", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let env;
+    const visibility = state => Object.defineProperty(env.document, "visibilityState", { value: state, configurable: true });
+    try {
+      env = setup();
+      const socket = await watching(env);
+      visibility("hidden");
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(socket.closed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(socket.closed).toBe(true);
+      expect(FakeRFB.made[0].disconnected).toBe(true);
+      expect(status(env).textContent).toBe("Paused while this tab was in the background, to save your workspace time.");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(FakeSocket.last).toBe(socket);
+      visibility("visible");
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      expect(FakeSocket.last).not.toBe(socket);
+      expect(status(env).textContent).toBe("Reconnecting…");
+      // While the user has the browser, a hidden tab keeps it (the 2FA app).
+      const next = FakeSocket.last;
+      await next.onopen();
+      next.deliver(JSON.stringify({ state: "ready" }));
+      env.document.querySelector(".workspace-view-cover").click();
+      await vi.waitFor(() => expect(FakeRFB.made.at(-1).viewOnly).toBe(false));
+      visibility("hidden");
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(next.closed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says what is left of today's VM time while the agent has the browser", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // The window's clock is jsdom's own: it follows the test's.
+      const env = setup({ prepare: window => { window.Date.now = () => Date.now(); } });
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "connecting", left_seconds: 4_320 }));
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      const time = env.document.querySelector(".workspace-view-time");
+      expect(time.hidden).toBe(false);
+      expect(time.textContent).toBe("1h 12m left today");
+      // Already in the page's language.
+      expect(time.hasAttribute("data-i18n-skip")).toBe(true);
+      // The open view counts as VM time: it counts down.
+      await vi.advanceTimersByTimeAsync(150_500);
+      expect(time.textContent).toBe("1h 10m left today");
+      env.document.querySelector(".workspace-view-cover").click();
+      await vi.waitFor(() => expect(time.hidden).toBe(true));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // V1: iOS and Android open no keyboard for noVNC's canvas.
+  it("opens the phone's keyboard on a field whose keys go to the browser, only while the user has it", async () => {
+    const env = setup({ prepare: window => {
+      window.matchMedia = query => ({ matches: query === "(pointer: coarse)" });
+    } });
+    await watching(env);
+    const keyboard = env.document.querySelector(".workspace-view-keyboard");
+    expect(keyboard.hidden).toBe(true);
+    env.document.querySelector(".workspace-view-cover").click();
+    const rfb = FakeRFB.made[0];
+    await vi.waitFor(() => expect(keyboard.hidden).toBe(false));
+    keyboard.click();
+    const field = env.document.querySelector(".workspace-view-keys");
+    expect(env.document.activeElement).toBe(field);
+    expect(keyboard.getAttribute("aria-pressed")).toBe("true");
+    // 16px, no capitals or corrections: iOS neither zooms nor changes the words.
+    for (const [name, value] of [["autocapitalize", "off"], ["autocorrect", "off"], ["spellcheck", "false"]]) {
+      expect(field.getAttribute(name)).toBe(value);
+    }
+    // A tap on the screen clicks there and leaves the keyboard open.
+    expect(rfb.focusOnClick).toBe(false);
+    rfb.keys = [];
+    const typed = new env.window.InputEvent("beforeinput", { inputType: "insertText", data: "Hü", cancelable: true });
+    field.dispatchEvent(typed);
+    expect(typed.defaultPrevented).toBe(true);
+    for (const key of ["Backspace", "Enter", "Tab"]) {
+      field.dispatchEvent(new env.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    }
+    expect(rfb.keys).toEqual([[0x48, undefined], [0xfc, undefined], [0xff08, undefined], [0xff0d, undefined],
+      [0xff09, undefined]]);
+    // What a keyboard composes changes the field: the difference goes as keys.
+    rfb.keys = [];
+    field.value = `${field.value}ok`;
+    field.dispatchEvent(new env.window.Event("input", { bubbles: true }));
+    field.value = field.value.slice(0, -3);
+    field.dispatchEvent(new env.window.Event("input", { bubbles: true }));
+    expect(rfb.keys).toEqual([[0x6f, undefined], [0x6b, undefined], [0xff08, undefined], [0xff08, undefined],
+      [0xff08, undefined]]);
+    keyboard.click();
+    expect(env.document.activeElement).not.toBe(field);
+    expect(rfb.focusOnClick).toBe(true);
+    // Watching only: the field sends nothing and the button is gone.
+    field.focus();
+    env.document.querySelector(".workspace-view-turn-button").click();
+    await vi.waitFor(() => expect(keyboard.hidden).toBe(true));
+    expect(env.document.activeElement).not.toBe(field);
+    rfb.keys = [];
+    field.dispatchEvent(new env.window.InputEvent("beforeinput", { inputType: "insertText", data: "x", cancelable: true }));
+    expect(rfb.keys).toEqual([]);
+  });
+
+  // V5: on a phone the picture was a quarter of its size.
+  it("shows the page at its real size while the user has it, and fits it again on hand-back", async () => {
+    const env = setup();
+    await holding(env);
+    const rfb = FakeRFB.made[0];
+    const zoom = env.document.querySelector(".workspace-view-zoom");
+    expect(zoom.hidden).toBe(false);
+    expect(zoom.textContent).toBe("100%");
+    zoom.click();
+    expect([rfb.scaleViewport, rfb.clipViewport, rfb.dragViewport]).toEqual([false, true, true]);
+    expect(zoom.getAttribute("aria-pressed")).toBe("true");
+    env.document.querySelector(".workspace-view-turn-button").click();
+    await vi.waitFor(() => expect(rfb.viewOnly).toBe(true));
+    expect([rfb.scaleViewport, rfb.clipViewport, rfb.dragViewport]).toEqual([true, false, false]);
+    expect(zoom.hidden).toBe(true);
+  });
+
+  // V6: on a phone the panel covers the chat, and its line said the same all the time.
+  it("names the agent's step in its line while the agent has the browser", async () => {
+    const env = setup();
+    await watching(env);
+    env.workspace.agentStep("Clicking e12");
+    expect(status(env).textContent).toBe("Clicking e12");
+    // The step's target is data, its verb already in the page's language.
+    expect(status(env).hasAttribute("data-i18n-skip")).toBe(true);
+    env.workspace.agentStep(null);
+    expect(status(env).textContent).toBe("Watching. Click the screen to take over.");
+    expect(status(env).hasAttribute("data-i18n-skip")).toBe(false);
+    env.workspace.agentStep("Opening example.com");
+    env.document.querySelector(".workspace-view-cover").click();
+    await vi.waitFor(() => expect(FakeRFB.made[0].viewOnly).toBe(false));
+    expect(status(env).textContent).toBe("");
+    env.workspace.agentStep(null);
+  });
+
+  // V7: at 390px the close cross stood alone in the head's second row.
+  it("keeps title, tabs and the close cross apart from the line and its tools", async () => {
+    const env = setup();
+    await opened(env);
+    const head = env.document.querySelector(".workspace-view-head");
+    expect([...head.children].map(child => child.className.split(" ").at(-1)))
+      .toEqual(["workspace-view-title", "workspace-view-tabs", "workspace-view-tools", "workspace-view-close"]);
+    const tools = head.querySelector(".workspace-view-tools");
+    for (const name of ["status", "time", "paste", "keyboard", "zoom", "toggle"]) {
+      expect(tools.querySelector(`.workspace-view-${name}`)).not.toBeNull();
+    }
+  });
+});

@@ -221,6 +221,19 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   }
 }
 
+/* The line and the tools after the tabs (workspace-view.js build): in the
+   head's row beside the tabs, on a narrow panel a row of their own (V7). */
+.workspace-view-tools {
+  flex: 1;
+  min-width: 0;
+  /* As tall as its buttons also without them (a dropped connection, the
+     terminal): the picture below never moves when they come and go. */
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .workspace-view-status {
   flex: 1;
   min-width: 0;
@@ -231,8 +244,34 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   white-space: nowrap;
 }
 
+/* Why the connection ended takes up to two lines, never cut after a few
+   words (runtime audit V2). */
+.workspace-view-status.is-wrapping {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 17px;
+}
+
+/* What is left of today's VM time (V4): quiet, its digits steady. */
+.workspace-view-time {
+  flex: none;
+  font-size: var(--font-size-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.workspace-view-time[hidden] {
+  display: none;
+}
+
 .workspace-view-toggle,
-.workspace-view-paste {
+.workspace-view-paste,
+.workspace-view-tool {
   position: relative;
   flex: none;
   padding: 6px var(--space-3);
@@ -246,9 +285,16 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   cursor: pointer;
 }
 
+/* Pressed: the keyboard is open, the page at its real size. */
+.workspace-view-tool[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--ground);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .workspace-view-toggle:hover,
-  .workspace-view-paste:hover {
+  .workspace-view-paste:hover,
+  .workspace-view-tool:not([aria-pressed="true"]):hover {
     background: var(--hover, var(--raise));
   }
 }
@@ -258,7 +304,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 @media (pointer: coarse) {
   .workspace-view-tab::after,
   .workspace-view-toggle::after,
-  .workspace-view-paste::after {
+  .workspace-view-paste::after,
+  .workspace-view-tool::after {
     content: "";
     position: absolute;
     inset: var(--hit-slop);
@@ -401,6 +448,13 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   inset: 0;
 }
 
+/* The picture at the top of its place, not in the middle (V5): on a phone
+   the page stood in a band halfway down an empty field. noVNC centres its
+   canvas with an inline margin: auto. */
+.workspace-view-screen:not(.workspace-view-terminal) canvas {
+  margin-top: 0 !important;
+}
+
 /* While a tab loads: what comes, drawn in the app's tones (a browser
    window, a terminal's lines), pulsing calmly like the activity's skeleton
    (agent-chat.css .agent-detail-skeleton). Gone once the picture is there. */
@@ -479,7 +533,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   background: transparent !important;
 }
 
-.workspace-view-restart {
+.workspace-view-restart,
+.workspace-view-reconnect {
   position: absolute;
   left: 50%;
   bottom: 18px;
@@ -496,8 +551,16 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   cursor: pointer;
 }
 
-.workspace-view-restart[hidden] {
+.workspace-view-restart[hidden],
+.workspace-view-reconnect[hidden] {
   display: none;
+}
+
+/* After a dropped connection, over the empty picture: the way back (V2). */
+.workspace-view-reconnect {
+  bottom: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 /* While the agent has the browser: one click anywhere takes it over. */
@@ -515,8 +578,9 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   outline-offset: -2px;
 }
 
-/* Takes the browser's paste for a moment (workspace-view.js onPasteKey):
-   never seen, 16px so iOS does not zoom in on it. */
+/* Takes the browser's paste for a moment (workspace-view.js onPasteKey),
+   and the phone's keyboard while it is open (the field .workspace-view-keys,
+   V1): never seen, 16px so iOS does not zoom in on it. */
 .workspace-view-paste-target {
   position: absolute;
   top: 0;
@@ -528,7 +592,10 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   opacity: 0;
   resize: none;
   pointer-events: none;
-  font-size: var(--font-size-base);
+  font-size: 16px;
+  color: transparent;
+  caret-color: transparent;
+  background: transparent;
 }
 
 @media (max-width: 760px) {
@@ -537,16 +604,21 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   }
 }
 
-/* Narrow, also docked beside the chat: the switch keeps its room, the
-   status line gives way (by the panel's width since G1). */
+/* Narrow, also docked beside the chat (by the panel's width since G1):
+   title, switch and the close cross keep the first row, the line and the
+   tools take the second (V7: at 390px the cross stood alone in a row). */
 @container workspace-view (max-width: 760px) {
   .workspace-view-head {
     flex-wrap: wrap;
     row-gap: var(--space-2);
   }
 
-  .workspace-view-status {
-    order: 5;
+  .workspace-view-close {
+    margin-left: auto;
+  }
+
+  .workspace-view-tools {
+    order: 1;
     flex-basis: 100%;
   }
 }

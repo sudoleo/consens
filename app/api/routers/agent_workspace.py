@@ -14,7 +14,16 @@ stderr and go on as text; after "ready" both ways carry VNC bytes. A view
 ends after VIEW_SECONDS: an open view keeps the VM awake. An account has one
 view at a time (the newest wins, agent_workspace.claim_view), its time
 counts against the day's VM time (agent_vm_time.py) and never runs past it,
-and opening is rate limited.
+and opening is rate limited. Its first state ("connecting") names what is
+left of the day's VM time (``left_seconds``, absent without a cap) for the
+panel's head (since 2026-10-30, runtime audit V4).
+
+How a view or terminal ended goes to the log with its close code, who ended
+it (the browser, the relay, the provider's socket) and the numbers they gave,
+never an account; the relay's "error" state and a failed carry too. Per UTC
+day ``ops_metrics/workspace-view-{day}`` counts them anonymously: opened,
+refused or failed by reason, how they ended, their open seconds and a bucket
+of their length (runtime audit I8; written off the event loop, never raised).
 
 The terminal (since 2026-10-28) is the user's own shell on the workbench,
 the same way: a WebSocket carried to an exec with a TTY on the provider's
@@ -227,30 +236,75 @@ async def connect_upstream(url):
                          ping_timeout=40, close_timeout=2)
 
 
-async def _state(websocket, state):
-    await websocket.send_text(json.dumps({"state": state}))
+async def _state(websocket, state, **fields):
+    await websocket.send_text(json.dumps({"state": state, **fields}))
 
 
-def _view_seconds(uid):
-    """How long this view may stay open: VIEW_SECONDS, at most what is left
-    of today's VM time (agent_vm_time.py); a failed read leaves the hour."""
+def _time_left(uid):
+    """``(seconds, day_left)``: how long this view may stay open, VIEW_SECONDS
+    at most what is left of today's VM time (agent_vm_time.py), and what is
+    left of the day (None without a cap). A failed read leaves the hour and
+    says nothing about the day."""
     try:
         limit = agent_vm_time.daily_limit(uid)
         if limit is None:
-            return VIEW_SECONDS
-        return min(VIEW_SECONDS, int(limit - agent_vm_time.used(db_firestore, uid)))
+            return VIEW_SECONDS, None
+        left = int(limit - agent_vm_time.used(db_firestore, uid))
+        return min(VIEW_SECONDS, left), max(0, left)
     except Exception as exc:
         logging.warning("Agent workspace view time unavailable category=%s", safe_exception(exc))
-        return VIEW_SECONDS
+        return VIEW_SECONDS, None
+
+
+# Anonymous daily counters of views and terminals (I8), beside the audit's
+# (agent_audit_metrics.py): one document per UTC day, labels and numbers only.
+METRICS_COLLECTION = "ops_metrics"
+# Upper bounds of a view's open time in seconds; the last bucket is "over3600".
+OPEN_BOUNDS = (10, 30, 120, 600, 1800, 3600)
+
+
+def _metrics_on():
+    # Test and mock profiles share the real Firestore locally: no counters.
+    return not any(os.getenv(key) == "1" for key in ("UNIT_TEST_MODE", "E2E_TEST_MODE", "MOCK_LLM"))
+
+
+def _open_bucket(seconds):
+    for bound in OPEN_BOUNDS:
+        if seconds <= bound:
+            return f"le{bound}"
+    return f"over{OPEN_BOUNDS[-1]}"
+
+
+def _count(kind, outcome, seconds=None):
+    """Adds one ``outcome`` of a view or terminal to today's counters (and its
+    open seconds with their bucket): one merge of Firestore increments. Never
+    an account, a chat or any text; failures are logged, never raised."""
+    if not _metrics_on():
+        return
+    try:
+        from google.cloud import firestore
+        day = agent_vm_time.day_key()
+        counts = {outcome: firestore.Increment(1)}
+        if seconds is not None:
+            counts["seconds"] = firestore.Increment(int(seconds))
+            counts["open_" + _open_bucket(seconds)] = firestore.Increment(1)
+        db_firestore.collection(METRICS_COLLECTION).document(f"workspace-view-{day}").set(
+            {kind: counts, "day": day, "updated_at": firestore.SERVER_TIMESTAMP}, merge=True)
+    except Exception as exc:
+        logging.warning("Agent workspace %s metrics not saved category=%s", kind, safe_exception(exc))
 
 
 def _charge(uid, seconds):
     agent_vm_time.charge(_store(), uid, seconds)
 
 
-# Why the server closed a view (workspace-view.js CLOSED): once noVNC has the
-# socket, text states would reach it as VNC bytes, so the reason is the code.
+# Why the server closed a view (workspace-view.js CLOSED, FINAL): once noVNC
+# has the socket, text states would reach it as VNC bytes, so the reason is
+# the code. The view tries again by itself only after a close without one.
 CLOSE_ENDED, CLOSE_REPLACED, CLOSE_NO_TIME, CLOSE_TOO_MANY = 4410, 4409, 4402, 4429
+CLOSE_FORBIDDEN = 4403
+CLOSE_REASONS = {CLOSE_ENDED: "ended", CLOSE_REPLACED: "replaced", CLOSE_NO_TIME: "no_time",
+                 CLOSE_TOO_MANY: "too_many", CLOSE_FORBIDDEN: "forbidden"}
 
 
 async def _end(websocket, code):
@@ -260,10 +314,18 @@ async def _end(websocket, code):
         pass
 
 
+async def _refuse(websocket, kind, code):
+    """Closes a view or terminal before it opened, with its reason, logged and counted."""
+    logging.info("Agent workspace %s refused code=%d", kind, code)
+    await _end(websocket, code)
+    await asyncio.to_thread(_count, kind, "refused_" + CLOSE_REASONS[code])
+
+
 async def _admit(websocket, kind):
     """A view's or terminal's start: the account behind its first message
     (signed in, allowed the VM), the rate limit and what is left of today's
-    VM time. ``(uid, seconds, first message)``, or None once it is closed."""
+    VM time. ``(uid, seconds, first message, day_left)``, or None once it is
+    closed."""
     await websocket.accept()
     try:
         first = await asyncio.wait_for(websocket.receive_text(), SIGN_IN_SECONDS)
@@ -273,24 +335,26 @@ async def _admit(websocket, kind):
     hello = hello if isinstance(hello, dict) else {}
     uid = await asyncio.to_thread(_sign_in, hello.get("id_token"))
     if uid is None:
-        await websocket.close(code=4403)
+        await _refuse(websocket, kind, CLOSE_FORBIDDEN)
         return None
     try:
         api_uid_limiter.check(uid, f"agent:workspace_{kind}", VIEWS_PER_MINUTE)
     except ApiUidRateLimitExceeded:
-        await _end(websocket, CLOSE_TOO_MANY)
+        await _refuse(websocket, kind, CLOSE_TOO_MANY)
         return None
-    seconds = await asyncio.to_thread(_view_seconds, uid)
+    seconds, day_left = await asyncio.to_thread(_time_left, uid)
     if seconds < 1:
-        await _end(websocket, CLOSE_NO_TIME)
+        await _refuse(websocket, kind, CLOSE_NO_TIME)
         return None
-    return uid, seconds, hello
+    return uid, seconds, hello, day_left
 
 
-async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_vm, to_browser):
+async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_vm, to_browser, ending=None):
     """Carries both ways until one side ends, the time is up or a newer
     one of this kind took over; then counts the open time as VM time and
-    closes with the reason (CLOSE_*)."""
+    closes with the reason (CLOSE_*). ``ending`` is what the two ways noted
+    about their end (who, and the numbers they got), for the log."""
+    ending = ending if ending is not None else {}
     async def replaced():
         # A newer view (or terminal) of the account took over: this one ends.
         while True:
@@ -306,6 +370,12 @@ async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_v
     done, _ = await asyncio.wait(tasks, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
     for task in tasks:
         task.cancel()
+    # A way that broke (the provider's socket dropped, a send into a closed
+    # socket): its kind of error, never its words.
+    for task in done:
+        if task is not watcher and not task.cancelled() and task.exception() is not None:
+            ending.setdefault("by", "error")
+            logging.warning("Agent workspace %s carry failed category=%s", kind, safe_exception(task.exception()))
     try:
         # Stdin ends (0x04, the relay's; a terminal ends with its socket).
         if kind == "view":
@@ -319,11 +389,15 @@ async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_v
     # Open views keep the VM awake: their time counts as VM time.
     elapsed = time.monotonic() - started
     await asyncio.to_thread(_charge, uid, elapsed)
-    logging.info("Agent workspace %s closed seconds=%d", kind, int(elapsed))
     # Its hour, or today's VM time, is over; or a newer one took over.
     code = (CLOSE_ENDED if seconds >= VIEW_SECONDS else CLOSE_NO_TIME) if not done \
         else CLOSE_REPLACED if watcher in done else 1000
+    by = CLOSE_REASONS.get(code) or ending.get("by") or "unknown"
+    details = "".join(f" {key}={ending[key]}" for key in ("browser_code", "upstream_code", "exit")
+                      if isinstance(ending.get(key), int))
+    logging.info("Agent workspace %s closed seconds=%d code=%d by=%s%s", kind, int(elapsed), code, by, details)
     await _end(websocket, code)
+    await asyncio.to_thread(_count, kind, "end_" + by, elapsed)
 
 
 @router.websocket("/agent/workspace/view")
@@ -331,8 +405,8 @@ async def workspace_view(websocket: WebSocket):
     admitted = await _admit(websocket, "view")
     if admitted is None:
         return
-    uid, seconds, _ = admitted
-    await _state(websocket, "connecting")
+    uid, seconds, _, day_left = admitted
+    await _state(websocket, "connecting", **({} if day_left is None else {"left_seconds": day_left}))
     started = time.monotonic()
     try:
         url = await asyncio.to_thread(_open, uid, seconds)
@@ -342,13 +416,18 @@ async def workspace_view(websocket: WebSocket):
         logging.warning("Agent workspace view unavailable category=%s", safe_exception(exc))
         await _state(websocket, "error")
         await websocket.close(code=1011)
+        await asyncio.to_thread(_count, "view", "failed")
         return
+    await asyncio.to_thread(_count, "view", "opened")
+    ending = {}
 
     async def to_vm():
         # The view's bytes go to the relay's stdin (exec frames 0x00).
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
+                ending.setdefault("by", "browser")
+                ending.setdefault("browser_code", message.get("code"))
                 return
             if message.get("bytes") is not None:
                 await upstream.send(b"\x00" + message["bytes"])
@@ -371,12 +450,18 @@ async def workspace_view(websocket: WebSocket):
                         state = (json.loads(line) or {}).get("state")
                     except ValueError:
                         continue
+                    if state == "error":
+                        logging.warning("Agent workspace view relay error")
                     if state in {"setup", "starting", "ready", "error"}:
                         await _state(websocket, state)
             elif stream == 3:
+                ending.setdefault("by", "relay")
+                ending.setdefault("exit", payload[0] if payload else None)
                 return
+        ending.setdefault("by", "upstream")
+        ending.setdefault("upstream_code", getattr(upstream, "close_code", None))
 
-    await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser)
+    await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser, ending)
 
 
 @router.websocket("/agent/workspace/terminal")
@@ -384,7 +469,7 @@ async def workspace_terminal(websocket: WebSocket):
     admitted = await _admit(websocket, "terminal")
     if admitted is None:
         return
-    uid, seconds, hello = admitted
+    uid, seconds, hello, _ = admitted
     size = _size(hello.get("cols"), hello.get("rows")) or (80, 24)
     await _state(websocket, "connecting")
     started = time.monotonic()
@@ -396,8 +481,11 @@ async def workspace_terminal(websocket: WebSocket):
         logging.warning("Agent workspace terminal unavailable category=%s", safe_exception(exc))
         await _state(websocket, "error")
         await websocket.close(code=1011)
+        await asyncio.to_thread(_count, "terminal", "failed")
         return
     await _state(websocket, "ready")
+    await asyncio.to_thread(_count, "terminal", "opened")
+    ending = {}
 
     async def to_vm():
         # Keystrokes go to the TTY as they are; a resize as the provider's
@@ -405,6 +493,8 @@ async def workspace_terminal(websocket: WebSocket):
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
+                ending.setdefault("by", "browser")
+                ending.setdefault("browser_code", message.get("code"))
                 return
             if message.get("bytes") is not None:
                 await upstream.send(message["bytes"])
@@ -431,6 +521,10 @@ async def workspace_terminal(websocket: WebSocket):
             except ValueError:
                 continue
             if isinstance(data, dict) and data.get("type") == "exit":
+                ending.setdefault("by", "relay")
+                ending.setdefault("exit", data.get("exit_code"))
                 return
+        ending.setdefault("by", "upstream")
+        ending.setdefault("upstream_code", getattr(upstream, "close_code", None))
 
-    await _carry(websocket, upstream, uid, "terminal", terminal_id, seconds, started, to_vm, to_browser)
+    await _carry(websocket, upstream, uid, "terminal", terminal_id, seconds, started, to_vm, to_browser, ending)

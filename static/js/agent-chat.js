@@ -19,6 +19,9 @@
   // projectFrame() runs once per run on screen; viewEpoch changes whenever
   // the view leaves that run, so returning to it frames it again.
   let frameKey = '', viewEpoch = 0, framedRunId = null;
+  // The run whose projection only carries new words of its answer (follow's
+  // flush): its activity is not drawn again (runtime audit P1).
+  let paintOnly = null;
   // The local demo (demo.js) plays a scripted Agent turn on the real answer
   // surface, also for guests without Agent access. While it is on screen the
   // panel stays visible; the first real run or a new chat ends it.
@@ -851,8 +854,20 @@
     // A message that never left (offline, refused before it started) is
     // back in the box and says so: no "Failed after 0s" above that line.
     const unsent = !running && context.status === "failed" && !context.metadata.requestSent;
-    if (unsent) activityHost(`${context.runId}:unsent`);
-    else App.agentActivity?.render(activityHost(context.runId), {
+    const activity = activityHost(unsent ? `${context.runId}:unsent` : context.runId);
+    // What the activity reads of the answer: whether there is one (its lines
+    // give way, "Writing answer…") and whether it is the version the review
+    // holds. New words alone change neither: until 2026-10-30 every 100 ms
+    // of streamed answer drew the whole activity again (P1: 120 ms a frame
+    // at 150 steps on a slowed phone).
+    const answer = state.text || state.streamText || "";
+    const answerReview = state.completedTurn?.agent_review || context.metadata.agentReview;
+    const answerKey = `${Boolean(answer)}:${Boolean(answer.trim())}:${
+      answerReview?.versions?.some(version => version?.text === answer) ? 1 : 0}`;
+    const wordsOnly = paintOnly === context.runId && Boolean(activity?._agentActivity)
+      && activity._answerKey === answerKey;
+    if (activity && !unsent) activity._answerKey = answerKey;
+    if (!unsent && !wordsOnly) App.agentActivity?.render(activity, {
       elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
@@ -2459,6 +2474,20 @@
   // turn that is already running (after a reload) without sending anything.
   async function follow(context, body, signal, { headers = null, post = true } = {}) {
     let timer = null, resumeTracked = false, lastByte = Date.now();
+    // One projection per 100 ms for what the stream brings; whether anything
+    // but the answer's words came since the last (P1, project's paintOnly).
+    let activityDirty = false;
+    const flush = () => {
+      timer = null;
+      const wordsOnly = !activityDirty;
+      activityDirty = false;
+      if (wordsOnly) paintOnly = context.runId;
+      try { registry.update(context.runId, () => {}); } finally { paintOnly = null; }
+    };
+    const scheduleFlush = (dirty = true) => {
+      if (dirty) activityDirty = true;
+      if (!timer) timer = setTimeout(flush, 100);
+    };
     // Streamed text is painted once per frame, apart from the rest of the
     // projection (every 100 ms): the answer flows instead of jumping on by a
     // bundle of words ten times a second (Apple audit D4). A frame that took
@@ -2508,7 +2537,7 @@
       delegation: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         App.agentDelegation?.receive(context, event);
-        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        scheduleFlush();
       } },
       delegation_progress: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
@@ -2573,13 +2602,13 @@
         }
         if (event.settings) context.metadata.agentSettings = event.settings;
         if (event.kind === "usage") context.metadata.agentUsage = event.usage;
-        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        scheduleFlush();
       } },
       // A reader behind the server's frame window: the answer text so far.
       reset: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.consensus.streamText = typeof event.text === "string" ? event.text : "";
-        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        scheduleFlush();
       } },
       delta: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
@@ -2587,7 +2616,7 @@
         if (!text) return;
         context.consensus.streamText += text;
         schedulePaint();
-        if (!timer) timer = setTimeout(() => { timer = null; registry.update(context.runId, () => {}); }, 100);
+        scheduleFlush(false);
       } },
     };
     // The one path every Agent frame takes, from the stream or from a

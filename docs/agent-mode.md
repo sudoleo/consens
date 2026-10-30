@@ -2057,6 +2057,35 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   ohne Puls), kein Spinner. Dauert die Verbindung länger als `SLOW_MS`
   (6 s), etwa beim ersten Start außerhalb eines Chats, sagt die Statuszeile
   „Starting your workspace. The first start can take a minute.“
+- **Abbrüche, Handy und Restzeit** (seit 2026-10-30, Laufzeit-Audit
+  [V1–V7](agent-workspace-runtime-audit-2026-10-30.md), `workspace-view.js`):
+  Schließt sich der Socket ohne Grund vom Server (iOS beim Wechsel in die
+  2FA-App, Netzwechsel), verbindet die Ansicht nach 1, 2, 5 und 10 s selbst
+  neu, sofort, wenn der Tab wieder vorn oder das Netz zurück ist; dazwischen
+  Skeleton und „Reconnecting…“, die Leiste mit „Hand back“ und die Übernahme
+  bleiben. Gründe des Servers (4403, 4409, 4410, 4402, 4429, 1011 nach
+  `error`) und das Ende der Versuche stehen zweizeilig in der Statuszeile, mit
+  „Reconnect“ über dem Bild (nicht bei 4402/4403). Vorher blieb das Feld leer
+  ohne „Hand back“, und nur Schließen half, das mitten im Login zurückgab;
+  Schließen gibt weiterhin still zurück, ein Abbruch nie. Am Touchgerät
+  öffnet „Keyboard“ während der Übernahme ein unsichtbares Feld (16 px, ohne
+  Großschreibung und Korrektur): Text aus `beforeinput`, was eine Tastatur
+  zusammensetzt als Differenz aus `input`, Backspace, Enter, Tab und Pfeile
+  eigens, alles über `rfb.sendKey` wie noVNCs `keyboardinput`; solange es den
+  Fokus hat, klickt ein Tipp ins Bild, ohne die Tastatur zu schließen
+  (`focusOnClick`). Ist der Tab 60 s verborgen, während der Agent den
+  Browser hat, trennt die Ansicht (ihre Zeit zählt als VM-Zeit) und verbindet
+  bei Rückkehr neu; der Kopf nennt beim Zuschauen die VM-Zeit des Tages
+  (`left_seconds` im Zustand `connecting`, lokal heruntergezählt). Das Bild
+  steht oben statt mittig; bei Übernahme auf einem Panel unter 1024 px
+  zeigt „100%“ die Seite in echter Größe zum Verschieben (`clipViewport`,
+  `dragViewport`), Zurückgeben passt sie wieder ein. Beim Zuschauen nennt
+  die Statuszeile den Schritt des Agenten („Clicking e12“,
+  `App.workspaceView.agentStep` aus `agent-activity.js`). Titel, Umschalter
+  und Schließen-Kreuz bleiben in der ersten Kopfzeile, Statuszeile und
+  Werkzeuge rücken auf schmalen Panels in die zweite. Der Server loggt das
+  Ende jeder Ansicht mit Close-Code und Seite (Browser, Relay, Anbieter) und
+  zählt Ansichten anonym je Tag (`ops_metrics/workspace-view-{tag}`).
 - **Überall abmelden** (`POST /agent/workspace/reset-browser`, nach
   Rückfrage): beendet Chrome auf der Browser-VM und löscht dort Profil und
   Upload-Ordner, nie während ein Chat den Arbeitsplatz nutzt (409 `running`).

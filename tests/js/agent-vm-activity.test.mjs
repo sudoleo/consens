@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // The agent's own VM (agent_vm_tools.py): each call is one activity event,
@@ -25,7 +25,8 @@ describe("VM calls in the activity", () => {
     const live = host.querySelector(".agent-progress .agent-vm");
     expect(live.dataset.status).toBe("running");
     expect(live.querySelector(".agent-vm-target").textContent).toBe("pip install pandas");
-    expect(live.querySelector(".agent-vm-meta").textContent).toBe("Running…");
+    // Before its call began, the workspace starts (runtime audit V3).
+    expect(live.querySelector(".agent-vm-meta").textContent).toBe("Starting the workspace…");
     expect(live.open).toBe(true);
     expect(live.querySelector(".agent-vm-output").textContent).toBe("Collecting pandas\nDownloading…\n");
     // Command and output are data: never translated.
@@ -90,6 +91,20 @@ describe("VM calls in the activity", () => {
     expect(write.classList.contains("has-output")).toBe(false);
     expect(failed.querySelector(".agent-vm-meta").textContent).toBe("Workspace not available");
     expect(failed.textContent).not.toMatch(/error|exception|HTTP/i);
+  });
+
+  // Runtime audit 2026-10-30 (A1): a broken connection is no failed command.
+  it("says the connection was lost, not that the step failed, and shows no clock", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, vm({ status: "failed", command: "make", outcome: "interrupted" }));
+    activity.receive(events, { version: 1, kind: "tool", id: "s:2/tool", name: "browser", action: "click", ref: "e3",
+      status: "running", started_at: "2026-10-30T10:00:00Z", outcome: "interrupted" });
+    activity.render(host, { running: true, status: "running", events });
+    const [command, click] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    expect(command.querySelector(".agent-vm-meta").textContent).toBe("Connection lost");
+    expect(click.querySelector(".agent-vm-meta").textContent).toBe("Connection lost");
+    expect(click.querySelector(".agent-vm-clock")).toBeNull();
   });
 
   // Like Claude Code: the earlier steps fold into one line, the latest note
@@ -643,5 +658,113 @@ describe("the agent's thinking in the activity", () => {
       ["agent-thought-title", "Choosing the efficiency"], ["", "A SCOP of 3.4 is cautious."], ["", "I will also run 3.0 and 3.8."]]);
     expect([...saved.children].every(p => p.hasAttribute("data-i18n-skip"))).toBe(true);
     expect(saved.getAttribute("aria-label")).toBe("Reasoning summary");
+  });
+});
+
+// Runtime audit 2026-10-30 (docs/agent-workspace-runtime-audit-2026-10-30.md).
+describe("workspace steps after the runtime audit", () => {
+  // The window's clock, set by the test (jsdom's Date is its own).
+  function clocked() {
+    const env = setup();
+    let now = Date.parse("2026-10-30T10:00:00Z");
+    env.app.window.Date.now = () => now;
+    return { ...env, at: iso => { now = Date.parse(iso); } };
+  }
+  const meta = node => node.querySelector(".agent-vm-meta");
+
+  // V3: a cold start, a long command and a hang looked the same.
+  it("says the workspace starts, then how long the call runs, and when a command went quiet", () => {
+    vi.useFakeTimers();
+    try {
+      const { host, activity, at } = clocked();
+      const events = [];
+      activity.receive(events, vm({ status: "running", command: "npm run build" }));
+      activity.render(host, { running: true, status: "running", events });
+      const live = host.querySelector(".agent-progress .agent-vm");
+      expect(meta(live).textContent).toBe("Starting the workspace…");
+      at("2026-10-30T10:00:20Z");
+      activity.receive(events, vm({ status: "running", started_at: "2026-10-30T10:00:20Z" }));
+      activity.render(host, { running: true, status: "running", events });
+      expect(meta(live).textContent).toBe("Running · 0s");
+      // The clock ticks by itself, in a slot of steady width.
+      at("2026-10-30T10:00:28Z");
+      activity.receive(events, vm({ status: "running", output: "compiling…\n" }));
+      activity.render(host, { running: true, status: "running", events });
+      at("2026-10-30T10:00:42Z");
+      vi.advanceTimersByTime(1_000);
+      expect(meta(live).textContent).toBe("Running · 22s");
+      expect(live.querySelector(".agent-vm-clock").dataset.unit).toBe("seconds");
+      // Thirty seconds without a new line of output: it says so.
+      at("2026-10-30T10:01:03Z");
+      vi.advanceTimersByTime(1_000);
+      expect(meta(live).textContent).toBe("No output for 35s");
+      at("2026-10-30T10:01:04Z");
+      activity.receive(events, vm({ status: "running", output: "compiling…\ndone\n" }));
+      activity.render(host, { running: true, status: "running", events });
+      expect(meta(live).textContent).toBe("Running · 44s");
+      // Done: its words as before, no clock.
+      activity.receive(events, vm({ status: "succeeded", exit_code: 0, duration_ms: 45_000 }));
+      activity.render(host, { running: true, status: "running", events });
+      expect(meta(live).textContent).toBe("45s");
+      expect(live.querySelector(".agent-vm-clock")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("times a browser step from its start, and leaves an old saved step as it was", () => {
+    const { host, activity, at } = clocked();
+    const events = [];
+    const step = fields => activity.receive(events, { version: 1, kind: "tool", id: "s:1/tool", name: "browser",
+      action: "click", ref: "e12", ...fields });
+    step({ status: "running" });
+    activity.render(host, { running: true, status: "running", events });
+    const live = host.querySelector(".agent-progress .agent-vm");
+    expect(meta(live).textContent).toBe("Starting the workspace…");
+    step({ status: "running", started_at: "2026-10-30T10:00:00Z" });
+    at("2026-10-30T10:00:03Z");
+    activity.render(host, { running: true, status: "running", events });
+    expect(meta(live).textContent).toBe("Running · 3s");
+    // Saved before 2026-10-30: no started_at, no duration, no clock.
+    const saved = setup();
+    saved.activity.renderTurn(saved.host, { status: "completed", assistant_response: "Done.", agent_activity: [
+      { version: 1, kind: "tool", id: "s:1/tool", name: "browser", action: "click", ref: "e12", status: "succeeded" }] });
+    expect(meta(saved.host.querySelector(".agent-activity-content .agent-vm")).textContent).toBe("");
+  });
+
+  // V6: the live view's line says what the agent does there.
+  it("tells the live view the step the agent is on, and nothing once the run is over", () => {
+    const { app, host, activity } = setup();
+    const lines = [];
+    app.window.App.workspaceView = { agentStep: line => lines.push(line) };
+    const events = [];
+    // A run without the workspace says nothing there.
+    activity.receive(events, { version: 1, kind: "tool", id: "s:0/tool", name: "web_search", status: "running" });
+    activity.render(host, { running: true, status: "running", events });
+    expect(lines).toEqual([]);
+    activity.receive(events, { version: 1, kind: "tool", id: "s:0/tool", name: "web_search", status: "succeeded" });
+    activity.receive(events, { version: 1, kind: "tool", id: "s:1/tool", name: "browser", action: "click", ref: "e12",
+      status: "running" });
+    activity.render(host, { running: true, status: "running", events });
+    activity.receive(events, { version: 1, kind: "tool", id: "s:1/tool", name: "browser", status: "succeeded" });
+    activity.render(host, { running: true, status: "running", events });
+    activity.render(host, { running: true, status: "running", events });
+    activity.render(host, { running: false, status: "succeeded", events });
+    expect(lines).toEqual(["Clicking e12", "Thinking…", null]);
+  });
+
+  // P1: an unchanged step is not written again on the next render.
+  it("leaves a step it already drew alone until its event changes", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, vm({ status: "succeeded", command: "ls", output: "a\n", exit_code: 0 }));
+    activity.render(host, { running: true, status: "running", events });
+    const saved = host.querySelector(".agent-activity-content .agent-vm .agent-vm-output");
+    saved.textContent = "untouched";
+    activity.render(host, { running: true, status: "running", events });
+    expect(saved.textContent).toBe("untouched");
+    activity.receive(events, vm({ output: "a\nb\n" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(saved.textContent).toBe("a\nb\n");
   });
 });

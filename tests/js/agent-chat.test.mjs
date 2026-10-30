@@ -2671,6 +2671,44 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Runtime audit 2026-10-30 P1: every 100 ms of streamed answer drew the
+  // whole activity again, 120 ms a frame at 150 steps on a slowed phone.
+  it('draws the activity again for its own events, never for new words of the answer alone', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { window: w, document: d, dom } = boot();
+      await selectAgent(w);
+      w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+      w.resetMarkdownStream = vi.fn();
+      // As run-view.js: every update of the run on screen projects it.
+      w.App.runRegistry.setProjector(context => context && w.App.agentChat.project(context));
+      let handlers, resolve;
+      w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+      d.getElementById('questionInput').value = 'Question';
+      const pending = w.App.agentChat.send();
+      await vi.waitFor(() => expect(handlers).toBeDefined());
+      // The first words: the activity's lines give way to the answer.
+      handlers.delta.append('First part.');
+      await vi.advanceTimersByTimeAsync(150);
+      const render = vi.spyOn(w.App.agentActivity, 'render');
+      for (const chunk of [' More.', ' Even more.', ' Last.']) {
+        handlers.delta.append(chunk);
+        await vi.advanceTimersByTimeAsync(150);
+      }
+      expect(render).not.toHaveBeenCalled();
+      handlers.activity.receive({ version: 1, kind: 'tool', id: 'c:1/tool', name: 'web_search', status: 'running' });
+      handlers.delta.append(' After.');
+      await vi.advanceTimersByTimeAsync(150);
+      expect(render).toHaveBeenCalledTimes(1);
+      resolve({ ok: true, data: { response: 'Final answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+        turn: { id: 'b'.repeat(32), consensus: 'Final answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+      await pending;
+      dom.window.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('paints streamed text once per frame, and in full into the same nodes once the review holds it', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

@@ -1,4 +1,11 @@
-"""Authenticated private file operations for Agent chats."""
+"""Authenticated private file operations for Agent chats.
+
+A picture under an answer loads as a preview (``?preview=1``, since
+2026-10-30, runtime audit P2): at most agent_web_images.MAX_SIDE pixels on a
+side, as WebP, when the stored file is larger; a GIF keeps its frames. The
+original stays the download and what the file viewer opens.
+"""
+import io
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
@@ -94,11 +101,37 @@ def list_files(request: Request, chat_id: str):
     return JSONResponse({"files": invoke(lambda: files.list(uid, chat_id), uid)}, headers={"Cache-Control": "private, no-store"})
 
 
+# Pictures a preview can stand for; a GIF would lose its frames.
+PREVIEW_MIMES = frozenset({"image/png", "image/jpeg", "image/webp"})
+
+
+def _preview(mime, raw):
+    """The picture at most MAX_SIDE pixels on a side as WebP (the encoding of
+    the pictures from the web, agent_web_images.encode), or None when the
+    stored one is no larger or no picture to shrink."""
+    if mime not in PREVIEW_MIMES:
+        return None
+    from PIL import Image
+    from app.services import agent_web_images
+    try:
+        with Image.open(io.BytesIO(raw)) as image:
+            if max(image.size) <= agent_web_images.MAX_SIDE and len(raw) <= agent_web_images.STORED_BYTES:
+                return None
+    except Exception:
+        return None
+    shrunk = agent_web_images.encode(raw)
+    return shrunk[0] if shrunk and len(shrunk[0]) < len(raw) else None
+
+
 @router.get("/agent/chats/{chat_id}/files/{file_id}")
 @limiter.limit("60/minute")
-def download_file(request: Request, chat_id: str, file_id: str):
+def download_file(request: Request, chat_id: str, file_id: str, preview: bool = False):
     uid, files = service(request)
     meta, raw = invoke(lambda: files.download(uid, chat_id, file_id), uid)
+    smaller = _preview(meta["mime"], raw) if preview else None
+    if smaller is not None:
+        return Response(smaller, media_type="image/webp", headers={"Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"})
     return Response(raw, media_type=meta["mime"], headers={"Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff", "Content-Disposition": "attachment; filename*=UTF-8''" + quote(meta["name"], safe="")})
 
