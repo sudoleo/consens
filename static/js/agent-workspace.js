@@ -16,6 +16,11 @@
 //   text, above its evidence row (Notes, Watch, Share): .agent-answer-pictures,
 //   directly after the answer body. App.answerTail(body) is where that row
 //   and the answer check line go (agent-review.js, watch.js, share-dialog.js).
+//   Each loads when its place comes near the screen, as the server's preview
+//   (?preview=1, at most 1600 px on a side, routers/agent_files.py); the
+//   viewer and the download get the original (runtime audit 2026-10-30 P2:
+//   an opened chat fetched every picture of every turn at once, up to 5 MB
+//   each, as data: URLs).
 //
 // refresh(chatId, force) is cheap to call on every render: without force it
 // only re-projects the cached list (for example when the turn changes). A
@@ -39,6 +44,9 @@
   // Pictures the agent shared from its VM, loaded once per file as a data:
   // URL (the CSP's img-src allows data:, not blob:). fileId -> { url, load }
   const pictures = new Map();
+  // How far below the screen a picture starts to load, so it is there when it scrolls in.
+  const NEAR = '600px 0px';
+  let watcher = null;
   // Shown as pictures; any other file is a row with its download.
   const PICTURE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
   const openState = { versions: new Set() };
@@ -409,6 +417,7 @@
       shown.some(file => confirmKey === `${scope}:file:${file.id}`) ? confirmKey : '']);
     if (slot.dataset.signature === signature) return;
     slot.dataset.signature = signature;
+    for (const old of slot.children) watcher?.unobserve(old);
     slot.replaceChildren(...shown.map(file => pictureCard(chatId, file, scope)));
     slot.hidden = !shown.length;
   }
@@ -420,11 +429,27 @@
       reader.readAsDataURL(blob);
     });
   }
+  // Runs `load` once `element` comes near the screen; at once without an
+  // IntersectionObserver.
+  function whenNear(element, load) {
+    if (typeof IntersectionObserver !== 'function') { load(); return; }
+    watcher ||= new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        watcher.unobserve(entry.target);
+        const run = entry.target._whenNear;
+        delete entry.target._whenNear;
+        run?.();
+      }
+    }, { rootMargin: NEAR });
+    element._whenNear = load;
+    watcher.observe(element);
+  }
   function picture(chatId, file) {
     let entry = pictures.get(file.id);
     if (!entry) {
       entry = { url: '' };
-      entry.load = request(`/agent/chats/${chatId}/files/${file.id}`).then(response => response.blob()).then(readDataUrl)
+      entry.load = request(`/agent/chats/${chatId}/files/${file.id}?preview=1`).then(response => response.blob()).then(readDataUrl)
         .then(url => { entry.url = url; return url; });
       // A failed load (chat changed, file removed) may be tried again later.
       entry.load.catch(() => { if (pictures.get(file.id) === entry) pictures.delete(file.id); });
@@ -458,14 +483,15 @@
     open.setAttribute('aria-label', `Open ${name}`);
     const img = node('img'); img.alt = name; img.decoding = 'async';
     open.append(img);
-    const entry = picture(chatId, file);
-    if (entry.url) img.src = entry.url;
+    const loaded = pictures.get(file.id);
+    if (loaded?.url) img.src = loaded.url;
     else {
       // Until it is drawn, the skeleton's field with its light passing, then
       // the picture fades in (an old chat opening; before, a blank white or
       // grey field stood there). One that cannot come says so in the field.
+      // It loads once its place comes near the screen.
       figure.classList.add('is-loading');
-      entry.load.then(url => {
+      whenNear(figure, () => picture(chatId, file).load.then(url => {
         img.addEventListener('load', () => {
           figure.classList.remove('is-loading');
           if (img.animate && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
@@ -477,7 +503,7 @@
       }, () => {
         figure.classList.remove('is-loading'); figure.classList.add('is-failed');
         open.append(node('span', 'agent-vm-picture-failed', 'Picture couldn’t load'));
-      });
+      }));
     }
     open.addEventListener('click', () => App.attachments?.openStored?.({ fileId: file.id, name: file.name, mime: file.mime, size: file.size }));
     const caption = node('figcaption', 'agent-vm-picture-caption');
@@ -635,6 +661,7 @@
     waiting?.resolve(); waiting = null;
     lastStart = -Infinity; data = null; error = ''; revision++; confirmKey = ''; retried = false;
     pictures.clear();
+    watcher?.disconnect(); watcher = null;
   }
   function knownEmpty(chatId) {
     // A chat created for the run in progress has no files yet; skip that GET.

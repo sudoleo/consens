@@ -120,7 +120,7 @@ describe('private Agent workspace', () => {
     const EARLIER = { ...PICTURE, id: '9'.repeat(32), name: 'earlier.png', turn_id: TURN_ONE };
     const files = [PICTURE, TABLE, EARLIER];
     const { window, document, dom } = boot({ files });
-    window.fetch = vi.fn(async url => url.endsWith(PICTURE.id)
+    window.fetch = vi.fn(async url => url.includes(`/files/${PICTURE.id}`)
       ? { ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } : reply(files));
     window.App.attachments = { openStored: vi.fn() };
     // The evidence row (Notes, Watch, Share) already stands under the text.
@@ -149,7 +149,7 @@ describe('private Agent workspace', () => {
     // A picture loads once and is not drawn again while the list refreshes.
     await window.App.agentWorkspace.refresh(CHAT, true);
     expect(slot.querySelector('.agent-vm-picture')).toBe(figures[0]);
-    expect(window.fetch.mock.calls.filter(([url]) => url.endsWith(PICTURE.id))).toHaveLength(1);
+    expect(window.fetch.mock.calls.filter(([url]) => url.includes(`/files/${PICTURE.id}`))).toHaveLength(1);
     // Another turn on screen: its answer has no pictures, the place is empty.
     const plain = '7'.repeat(32);
     window.App.runRegistry.getSelectedConversationBasis = () => ({ chatId: CHAT, turnId: plain, currentTurn: { id: plain } });
@@ -224,6 +224,39 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // Runtime audit 2026-10-30 P2: an opened chat fetched every picture of
+  // every turn at once, up to 5 MB each.
+  it("loads a picture once its place comes near the screen, as the server's preview", async () => {
+    const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
+      turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z' };
+    const { window, document, dom } = boot({ files: [PICTURE] });
+    const watched = [];
+    window.IntersectionObserver = class {
+      constructor(callback, options) { this.callback = callback; this.options = options; watched.push(this); this.targets = new Set(); }
+      observe(target) { this.targets.add(target); }
+      unobserve(target) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); }
+    };
+    window.fetch = vi.fn(async url => url.includes(`/files/${PICTURE.id}`)
+      ? { ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } : reply([PICTURE]));
+    await window.App.agentWorkspace.refresh(CHAT);
+    const figure = document.querySelector('.agent-vm-picture');
+    expect(figure.classList.contains('is-loading')).toBe(true);
+    expect(window.fetch.mock.calls.filter(([url]) => url.includes(PICTURE.id))).toHaveLength(0);
+    const [observer] = watched;
+    expect(observer.options.rootMargin).toBe('600px 0px');
+    expect(observer.targets.has(figure)).toBe(true);
+    observer.callback([{ target: figure, isIntersecting: true }]);
+    const img = figure.querySelector('img');
+    await vi.waitFor(() => expect(img.getAttribute('src')).toMatch(/^data:image\/png;base64,/));
+    expect(img.decoding).toBe('async');
+    // The preview under the answer; the original stays the download and the viewer's.
+    expect(window.fetch.mock.calls.filter(([url]) => url.includes(PICTURE.id)).map(([url]) => url))
+      .toEqual([`/agent/chats/${CHAT}/files/${PICTURE.id}?preview=1`]);
+    expect(observer.targets.size).toBe(0);
+    dom.window.close();
+  });
+
   it('holds a picture’s place in the skeleton until it is drawn, and says so when it cannot come', async () => {
     const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
       turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z' };
@@ -231,9 +264,9 @@ describe('private Agent workspace', () => {
     const files = [PICTURE, MISSING];
     const { window, document, dom } = boot({ files });
     let deliver;
-    window.fetch = vi.fn(url => url.endsWith(PICTURE.id)
+    window.fetch = vi.fn(url => url.includes(`/files/${PICTURE.id}`)
       ? new Promise(resolve => { deliver = () => resolve({ ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) }); })
-      : url.endsWith(MISSING.id) ? Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: 'Gone' }) })
+      : url.includes(`/files/${MISSING.id}`) ? Promise.resolve({ ok: false, status: 404, json: async () => ({ detail: 'Gone' }) })
       : Promise.resolve(reply(files)));
     await window.App.agentWorkspace.refresh(CHAT);
     const [shown, gone] = document.querySelectorAll('.agent-vm-picture');
@@ -329,7 +362,7 @@ describe('private Agent workspace', () => {
     const history = '<div id="threadHistory"><article><div class="consensus-answer-body" id="oldBody"></div>'
       + '<section class="agent-review" id="oldReview"></section><div id="old"></div></article></div>';
     const { window, document, dom } = boot({ files: [PICTURE], body: history + ANSWER });
-    window.fetch = vi.fn(async url => url.endsWith(PICTURE.id)
+    window.fetch = vi.fn(async url => url.includes(`/files/${PICTURE.id}`)
       ? { ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) } : reply([PICTURE]));
     const row = document.getElementById('old');
     row._answerBody = document.getElementById('oldBody');
