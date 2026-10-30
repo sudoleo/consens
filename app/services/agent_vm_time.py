@@ -11,7 +11,8 @@ have no cap.
 
 A command never runs past what is left (agent_vm_tools.VMTools._timeout); a
 background process counts with its whole time limit when it starts, because
-it outlives its message and nobody watches it end. Reads, writes and shares
+it outlives its message and nobody watches it end; what it did not run comes
+back once a look at it finds it ended (refund, since 2026-10-30). Reads, writes and shares
 take seconds and do not count. A message charges its time once, when it ends
 (VMSession.close); messages running at the same time can overshoot the cap by
 what they started with, which stays small.
@@ -24,8 +25,11 @@ from datetime import datetime, timezone
 from app.core.observability import safe_exception
 
 # Two hours of running VM a day: several long agent runs, whose time is
-# mostly spent thinking, not running commands. About $0.10 at typical load,
-# about $1 at full load on 8 CPUs (Fly.io's prices of 2026-10).
+# mostly spent thinking, not running commands. Fly.io bills what a sprite
+# uses (fly.io/pricing, 2026-10-30): $0.0385 a CPU hour and $0.021875 a GB
+# hour of memory. Two hours at full load on all 8 CPUs are about $0.62 plus
+# memory (about $0.04 to $0.09 at 1 to 2 GB); a command that waits on the
+# network or a dev server at rest uses a small part of that.
 PRO_DAILY_SECONDS = 2 * 60 * 60
 
 
@@ -70,3 +74,23 @@ def charge(store, uid, seconds):
         store._transaction(operation)
     except Exception as exc:
         logging.warning("Agent VM time charge failed category=%s", safe_exception(exc))
+
+
+def refund(store, uid, seconds, day):
+    """Gives back ``seconds`` charged on ``day`` (a background process that
+    ended before its limit, agent_vm_processes.ProcessTools._refund), never
+    below zero; failures are logged like a charge's."""
+    if seconds <= 0:
+        return
+    doc = ref(store.db, uid, day)
+
+    def operation(tx):
+        data = doc.get(transaction=tx).to_dict() or {}
+        if not data:
+            return
+        tx.set(doc, {**data, "seconds": max(0.0, float(data.get("seconds") or 0) - float(seconds)),
+                     "updated_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        store._transaction(operation)
+    except Exception as exc:
+        logging.warning("Agent VM time refund failed category=%s", safe_exception(exc))

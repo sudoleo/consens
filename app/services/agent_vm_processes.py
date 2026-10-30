@@ -22,9 +22,16 @@ what the VM can cost after the message is done to MAX_RUNNING x MAX_SECONDS
 of awake time. A process outlives its message: the next one finds it by its
 id (the work record names it, agent_compaction.work_record).
 
+Its whole limit counts as VM time when it starts (agent_vm_time.py). Once a
+look at it (vm_process_output, vm_stop_process) finds it ended, the time it
+did not run is given back, once (``refunded``): to the message that started
+it, or to the day it was charged on (since 2026-10-30; before, four dev
+server starts used up a Pro account's two hours, runtime audit K5).
+
 Everything lives in PROCESSES_DIR/<id>: the command, its combined output
-(``output.log``), the supervisor's pid file and, once it ended, its exit
-code. The VM holds no secret, so neither does any of it.
+(``output.log``), the supervisor's pid file, its start and, once it ended,
+its end and exit code, and the VM time it was charged (``reserve``: seconds
+and UTC day). The VM holds no secret, so neither does any of it.
 """
 from __future__ import annotations
 
@@ -50,8 +57,11 @@ OUTPUT_CHARS = 12_000
 MAX_WAIT_SECONDS = 60
 STOP_GRACE_SECONDS = 10
 ID = r"^[a-f0-9]{8}$"
-# The first line of every status: "consens-process <state> <bytes>".
-STATUS_LINE = re.compile(r"^consens-process (running|lost|stopped|-?\d+) (\d+)$")
+# The first line of every status: "consens-process <state> <bytes>", since
+# 2026-10-30 with the seconds it ran once it ended, the VM time it was
+# charged (seconds, day) and whether the rest was given back.
+STATUS_LINE = re.compile(r"^consens-process (running|lost|stopped|-?\d+) (\d+)"
+                         r"(?: (-|\d+) (-|\d+) (-|\d{4}-\d{2}-\d{2}) ([01]))?$")
 
 # The supervisor of one process (``bash run.sh <dir> <task>``): the agent's
 # command (``launch.sh``, under its time limit), a Tasks API hold while it
@@ -61,6 +71,7 @@ RUNNER = r"""#!/bin/bash
 dir="$1"; task="$2"
 api() { curl -s --max-time 5 --unix-socket /.sprite/api.sock -H 'Content-Type: application/json' "$@" >/dev/null 2>&1; }
 hold() { api -X PUT "http://sprite/v1/tasks/$task" -d '{"expire": "%(expire)s"}'; }
+date +%%s > "$dir/started"
 bash "$dir/launch.sh" > "$dir/output.log" 2>&1 < /dev/null &
 child=$!
 echo "$child" > "$dir/pid"
@@ -70,7 +81,9 @@ while kill -0 "$child" 2>/dev/null; do
   kill -0 "$child" 2>/dev/null && hold
 done
 wait "$child"
-echo "$?" > "$dir/exit_code"
+code=$?
+date +%%s > "$dir/ended"
+echo "$code" > "$dir/exit_code"
 api -X DELETE "http://sprite/v1/tasks/$task"
 """ % {"expire": HOLD_EXPIRE, "heartbeat": HEARTBEAT_SECONDS}
 
@@ -123,7 +136,13 @@ def status_command(directory, chars=OUTPUT_CHARS, wait=0):
             "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; else code=lost; fi; fi; "
             "[ -f \"$dir/stopped\" ] && [ \"$code\" != running ] && code=stopped; "
             "size=$(stat -c %s \"$dir/output.log\" 2>/dev/null || echo 0); "
-            "printf 'consens-process %s %s\\n' \"$code\" \"$size\"; "
+            "ran=-; if [ -f \"$dir/exit_code\" ]; then s=$(cat \"$dir/started\" 2>/dev/null); "
+            "e=$(cat \"$dir/ended\" 2>/dev/null || date +%s); "
+            "case \"$s:$e\" in *[!0-9:]*|:*|*:) ;; *) ran=$((e - s)); [ \"$ran\" -ge 0 ] || ran=-;; esac; fi; "
+            "res=$(head -c 40 \"$dir/reserve\" 2>/dev/null | tr -cd '0-9 -'); "
+            "case \"$res\" in [0-9]*\\ [0-9]*-[0-9]*-[0-9]*) ;; *) res='- -';; esac; "
+            "ref=0; [ -f \"$dir/refunded\" ] && ref=1; "
+            "printf 'consens-process %s %s %s %s %s\\n' \"$code\" \"$size\" \"$ran\" \"$res\" \"$ref\"; "
             f"tail -c {int(chars)} \"$dir/output.log\" 2>/dev/null; true")
 
 
@@ -151,7 +170,7 @@ def stop_command(directory, task):
             f"for _ in $(seq {STOP_GRACE_SECONDS}); do [ -f \"$dir/exit_code\" ] && break; sleep 1; done; "
             "if [ ! -f \"$dir/exit_code\" ]; then [ -n \"$pid\" ] && kill -KILL \"$pid\" 2>/dev/null; "
             "if [ -n \"$sid\" ]; then sudo -n pkill -KILL -s \"$sid\" 2>/dev/null || pkill -KILL -s \"$sid\" "
-            "2>/dev/null; fi; echo 137 > \"$dir/exit_code\"; "
+            "2>/dev/null; fi; date +%s > \"$dir/ended\"; echo 137 > \"$dir/exit_code\"; "
             "curl -s --max-time 5 --unix-socket /.sprite/api.sock -X DELETE "
             f"http://sprite/v1/tasks/{shlex.quote(task)} >/dev/null 2>&1; fi; " + status_command(directory))
 
@@ -182,11 +201,25 @@ def parse_status(text):
     return (state if state in {"running", "lost", "stopped"} else int(state)), int(match.group(2)), rest
 
 
+def spent(text):
+    """``(ran, reserved, day, refunded)`` of a status's first line once the
+    process ended (seconds it ran, the VM time it was charged and on which
+    UTC day, whether the rest was given back), else None: still running,
+    lost, or started before 2026-10-30."""
+    match = STATUS_LINE.match(text.partition("\n")[0].strip())
+    if not match or match.group(3) in {None, "-"} or match.group(4) == "-" or match.group(5) == "-":
+        return None
+    return int(match.group(3)), int(match.group(4)), match.group(5), match.group(6) == "1"
+
+
 class ProcessTools:
     """The background-process tools of one message, next to its VM tools."""
 
     def __init__(self, vm_tools):
         self.vm = vm_tools
+        # The processes this message started: their time comes off its own
+        # charge (VMSession.reserved) when they end before it does.
+        self.started = set()
 
     def tools(self):
         return [
@@ -200,14 +233,42 @@ class ProcessTools:
                          activity=self._activity, reports=True),
         ]
 
-    def _run(self, command, cancellation, timeout):
+    def _run(self, command, cancellation, timeout, idempotent=False):
         """One command of the server in the VM, counted as VM time
         (VMTools._exec); ``(exit_code, stdout)``."""
         from app.services.agent_vm_tools import _Output
         output = _Output()
         outcome = self.vm._exec(command, cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=output.add,
-                                cancellation=cancellation, agent=False)
+                                cancellation=cancellation, agent=False, idempotent=idempotent)
         return outcome.exit_code, bytes(output.streams["stdout"]).decode("utf-8", "replace")
+
+    def _refund(self, process_id, text):
+        """A process found ended gives back the VM time it did not run, once:
+        ``refunded`` is written first, so a failed write never gives twice."""
+        from app.services import agent_vm_time
+        found = spent(text)
+        if found is None:
+            return
+        ran, reserved, day, refunded = found
+        unused = max(0, reserved - ran)
+        if refunded or not unused:
+            return
+        session = self.vm.session
+        mine = process_id in self.started
+        if not mine and day != agent_vm_time.day_key():
+            return
+        try:
+            session.backend.write_file(session.name, posixpath.join(process_dir(process_id), "refunded"), b"1",
+                                       agent=False)
+        except Exception as exc:
+            logging.info("Agent VM process refund not marked category=%s", type(exc).__name__)
+            return
+        if mine:
+            self.started.discard(process_id)
+            with session._lock:
+                session.reserved = max(0.0, session.reserved - unused)
+        else:
+            agent_vm_time.refund(self.vm.loop.store, self.vm.loop.uid, unused, day)
 
     def _result(self, process_id, text, extra=None):
         from app.services.agent_vm_tools import clean, model_text
@@ -237,10 +298,11 @@ class ProcessTools:
             if left < 60:
                 raise ValueError(VM_DAY_LIMIT)
             seconds = min(seconds, int(left))
+        from app.services import agent_vm_time
         process_id = new_id()
         directory = process_dir(process_id)
         for name, content in (("run.sh", RUNNER), ("launch.sh", launch_script(args.command, cwd, seconds)),
-                              ("command", args.command)):
+                              ("command", args.command), ("reserve", f"{seconds} {agent_vm_time.day_key()}")):
             self.vm._provider("write", lambda name=name, content=content: session.backend.write_file(
                 session.name, posixpath.join(directory, name), content.encode("utf-8"), agent=False))
         code, text = self._run(start_command(directory, task_name(process_id)), cancellation, 30)
@@ -258,15 +320,17 @@ class ProcessTools:
             raise ValueError("The background process could not be started.")
         with session._lock:
             session.reserved += seconds
+        self.started.add(process_id)
+        self._refund(process_id, text)
         result = self._result(process_id, text, {"max_seconds": seconds, "note": PROCESSES_NOTE})
         report({"output": result.pop("_view"), "process": process_id})
         return self.vm.session.announce(result)
 
     def output(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self.vm._start(cancellation)
+        self.vm._start(cancellation, change=False)
         if not args.id:
-            code, text = self._run(list_command(), cancellation, 30)
+            code, text = self._run(list_command(), cancellation, 30, idempotent=True)
             processes = []
             for line in text.splitlines():
                 parts = line.split("\t", 2)
@@ -285,9 +349,11 @@ class ProcessTools:
         day = self.vm.session.left()
         if day is not None:
             wait = max(0, min(wait, int(day)))
-        code, text = self._run(status_command(process_dir(args.id), wait=wait), cancellation, wait + 30)
+        code, text = self._run(status_command(process_dir(args.id), wait=wait), cancellation, wait + 30,
+                               idempotent=True)
         if code == 5:
             raise ValueError(f"No background process {args.id}. List them with vm_process_output without an id.")
+        self._refund(args.id, text)
         result = self._result(args.id, text)
         report({"output": result.pop("_view"), "process": args.id})
         return self.vm.session.announce(result)
@@ -299,6 +365,7 @@ class ProcessTools:
                                STOP_GRACE_SECONDS + 30)
         if code == 5:
             raise ValueError(f"No background process {args.id}. List them with vm_process_output without an id.")
+        self._refund(args.id, text)
         result = self._result(args.id, text)
         report({"output": result.pop("_view"), "process": args.id})
         return self.vm.session.announce(result)

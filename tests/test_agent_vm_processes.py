@@ -63,7 +63,7 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
                                         chat_path(loop.chat_id) + "/app"]
     assert files[f"{directory}/command"] == b"npm run dev"
     assert {path for _, path in fake_vm.server_files if path.startswith(directory)} == {
-        f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command"}
+        f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command", f"{directory}/reserve"}
     # Started, read and stopped by the server, which holds the VM awake.
     assert fake_vm.server[-3:] == [start_command(directory, task_name(PID)), status_command(directory, wait=5),
                                    stop_command(directory, task_name(PID))]
@@ -234,3 +234,41 @@ def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):
     state, _, output = parse_status(run(status_command(directory))[1])
     # coreutils timeout: 124 after its limit.
     assert state == 124 and output == "started\n"
+
+
+def test_a_process_that_ends_early_gives_its_unused_time_back_once(store, fake_vm, fixed_id, monkeypatch):
+    """Its whole limit is charged when it starts; once a look finds it ended,
+    what it did not run comes back (runtime audit 2026-10-30, K5): to the
+    message that started it, or to the day it was charged on, never twice."""
+    from app.services import agent_vm_time
+    from app.services.agent_vm_processes import spent
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 7200)
+    day = agent_vm_time.day_key()
+    directory = process_dir(PID)
+
+    def ended(ran, refunded=0):
+        return [("stdout", f"consens-process 0 4 {ran} 1800 {day} {refunded}\nbye\n".encode())]
+    fake_vm.commands[start_command(directory, task_name(PID))] = (status("running", "Listening\n"), 0, 2.0)
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (ended(100), 0, 1.0)
+    loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev"})],
+                                 [("vm_stop_process", {"id": PID})]]))
+    list(loop.run())
+    assert results(loop)[1]["status"] == "exited"
+    # 1800 s reserved, 100 s ran: the message charged 100 s and the commands' own 3 s.
+    assert agent_vm_time.used(store.db, UID) == 103
+    files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
+    assert files[f"{directory}/reserve"] == f"1800 {day}".encode() and files[f"{directory}/refunded"] == b"1"
+    # A later message that stops one of an earlier message gives back to its day.
+    agent_vm_time.charge(store, UID, 1800)
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (ended(300), 0, 1.0)
+    del files[f"{directory}/refunded"]
+    later = vm_loop(store, Agent([[("vm_stop_process", {"id": PID})]]), chat_id=loop.chat_id, request_id="later")
+    list(later.run())
+    assert agent_vm_time.used(store.db, UID) == 103 + 1800 - 1500 + 1
+    # Already given back: nothing more.
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (ended(300, refunded=1), 0, 1.0)
+    again = vm_loop(store, Agent([[("vm_stop_process", {"id": PID})]]), chat_id=loop.chat_id, request_id="again")
+    list(again.run())
+    assert agent_vm_time.used(store.db, UID) == 103 + 1800 - 1500 + 2
+    # A process from before 2026-10-30 says nothing of its time.
+    assert spent("consens-process 0 4\nbye") is None and spent("consens-process running 4 - 1800 2026-10-30 0") is None
