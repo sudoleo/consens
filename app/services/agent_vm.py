@@ -93,6 +93,12 @@ REQUEST_SECONDS = 30
 # a policy request ran into REQUEST_SECONDS (the browser was off for the
 # message, the live view did not open).
 WAKE_SECONDS = 90
+# A sprite pauses within seconds of its last work and goes cold later. A
+# command after more than this long without contact (the user answered a
+# card for 15 minutes) first wakes it with a REST request, which waits
+# WAKE_SECONDS, instead of meeting the sleep in the exec handshake, which
+# gave up after WS_OPEN_SECONDS (runtime audit 2026-10-30, A4).
+WAKE_AFTER_SECONDS = 5 * 60
 CHECKPOINT_SECONDS = 120
 WS_OPEN_SECONDS = 20
 WS_MAX_FRAME = 10 * 1024 * 1024
@@ -104,11 +110,45 @@ STDIN_CHUNK = 256 * 1024
 TERMINAL_AFTER_DISCONNECT = "5s"
 # Exit codes of ``timeout``: the limit passed (TERM), or KILL after the grace.
 TIMEOUT_EXIT_CODES = frozenset({124, 137})
+# Ending a session in the VM on Stop or a deploy's interrupt: the VM-side
+# limit ends the command anyway, so this never holds the message's end long
+# (until 2026-10-30 it had REQUEST_SECONDS, A6).
+KILL_SECONDS = 5
 
 
 class VMUnavailable(Exception):
-    """The provider cannot be reached or refused the request. The message is
-    for logs only; the agent and the user get agent_vm_tools' own words."""
+    """The provider cannot be reached or refused the request. The message
+    names the operation and the kind of failure, never data, for logs and
+    the turn's ``agent_vm.unavailable_reason``; the agent and the user get
+    agent_vm_tools' own words."""
+
+
+def _unavailable(reason):
+    """VMUnavailable for ``reason``, logged where it arises (runtime audit
+    2026-10-30, I2: several places raised it without a log line)."""
+    logging.warning("Agent VM unavailable reason=%s", reason)
+    return VMUnavailable(reason)
+
+
+# When the server last reached each VM (time.monotonic), across the
+# backends of all messages in this process: the exec WebSocket's handshake
+# is no place to wait for a VM's wake (WAKE_AFTER_SECONDS).
+_contact: dict[str, float] = {}
+_contact_lock = threading.Lock()
+
+
+def _touch(name):
+    with _contact_lock:
+        _contact[name] = time.monotonic()
+
+
+def _asleep(name):
+    """Whether ``name`` was reached before, but not within WAKE_AFTER_SECONDS.
+    Never reached in this process: its first contact is a REST request of
+    the session's start anyway (agent_workspace.prepare reads the version)."""
+    with _contact_lock:
+        last = _contact.get(name)
+    return last is not None and time.monotonic() - last > WAKE_AFTER_SECONDS
 
 
 class VMFileMissing(FileNotFoundError):
@@ -161,7 +201,7 @@ def chat_folder(title, chat_id):
     """The name of a chat's folder since 2026-10-28: its title as words and
     the start of its id, ``promotion-neben-dem-beruf-3f9a1c`` (``chat-…``
     while it has no title yet). The id part keeps two chats of one title
-    apart; the folder follows a new title (agent_workspace.make_chat_dir)."""
+    apart; the folder follows a new title (agent_workspace.open_chat)."""
     chat_dir(chat_id)
     text = unicodedata.normalize("NFKD", str(title or "").lower().translate(_GERMAN_LETTERS))
     words = re.sub(r"[^a-z0-9]+", "-", text.encode("ascii", "ignore").decode()).strip("-")
@@ -364,6 +404,10 @@ class SpritesBackend(VMBackend):
                                   timeout=REQUEST_SECONDS, transport=transport)
         self._connect = connect
         self._clock = clock
+        # Each VM's runtime status as the last GET of it said ("cold",
+        # "warm", "running"; the API's Sprite.status): whether a message met
+        # it cold (VMSession.summary, runtime audit 2026-10-30, I5).
+        self.statuses = {}
 
     # --- REST -----------------------------------------------------------------
 
@@ -386,9 +430,20 @@ class SpritesBackend(VMBackend):
     def exists(self, name):
         return self._request("get", "GET", self._sprite(name), missing_ok=True).status_code != 404
 
+    def _seen(self, name, response):
+        try:
+            status = response.json().get("status")
+        except (ValueError, AttributeError):
+            status = None
+        if isinstance(status, str) and status:
+            self.statuses[name] = status[:20]
+
     def ensure(self, name, rules=None):
         created = False
-        if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
+        response = self._request("get", "GET", self._sprite(name), missing_ok=True)
+        if response.status_code != 404:
+            self._seen(name, response)
+        else:
             try:
                 self._request("create", "POST", "/v1/sprites", json={"name": name})
                 created = True
@@ -403,6 +458,7 @@ class SpritesBackend(VMBackend):
     def set_policy(self, name, rules):
         self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": list(rules)},
                       timeout=WAKE_SECONDS)
+        _touch(name)
 
     def get_policy(self, name):
         # {"rules": [...]}, [] on a sprite whose policy was never set (measured 2026-10-28).
@@ -436,7 +492,7 @@ class SpritesBackend(VMBackend):
             if error is not None:
                 raise error
             if code != 0:
-                raise VMUnavailable(f"read: exit {code}")
+                raise _unavailable(f"read: exit {code}")
             return data[:limit], len(data) <= limit
         params = {"path": path, "workingDir": SERVER_HOME}
         try:
@@ -447,6 +503,7 @@ class SpritesBackend(VMBackend):
                 if not response.is_success:
                     logging.warning("Agent VM request refused operation=read status=%s", response.status_code)
                     raise VMUnavailable(f"read: HTTP {response.status_code}")
+                _touch(name)
                 data = bytearray()
                 for chunk in response.iter_bytes():
                     data.extend(chunk)
@@ -465,7 +522,7 @@ class SpritesBackend(VMBackend):
             if error is not None:
                 raise error
             if code != 0:
-                raise VMUnavailable(f"write: exit {code}")
+                raise _unavailable(f"write: exit {code}")
             try:
                 return int(out.decode().strip())
             except ValueError:
@@ -473,6 +530,7 @@ class SpritesBackend(VMBackend):
         response = self._request("write", "PUT", self._sprite(name) + "/fs/write", content=data,
                                  params={"path": path, "workingDir": SERVER_HOME, "mkdir": "true"},
                                  headers={"Content-Type": "application/octet-stream"})
+        _touch(name)
         try:
             return int(response.json().get("size", len(data)))
         except (ValueError, AttributeError):
@@ -501,11 +559,13 @@ class SpritesBackend(VMBackend):
             logging.warning("Agent VM request failed operation=checkpoint category=%s", safe_exception(exc))
             raise VMUnavailable("checkpoint: no connection") from None
         if not done:
-            raise VMUnavailable("checkpoint: no completion")
+            raise _unavailable("checkpoint: no completion")
+        # The completion names the id only in its text ("Checkpoint v8
+        # created", OpenAPI 2026-10-30), so the list says it.
         listed = self._request("checkpoints", "GET", self._sprite(name) + "/checkpoints").json()
         found = [item for item in listed if isinstance(item, dict) and item.get("comment") == comment]
         if not found:
-            raise VMUnavailable("checkpoint: not listed")
+            raise _unavailable("checkpoint: not listed")
         return str(max(found, key=lambda item: str(item.get("create_time") or ""))["id"])
 
     def restore(self, name, checkpoint):
@@ -530,7 +590,7 @@ class SpritesBackend(VMBackend):
             logging.warning("Agent VM request failed operation=restore category=%s", safe_exception(exc))
             raise VMUnavailable("restore: no connection") from None
         if not done:
-            raise VMUnavailable("restore: no completion")
+            raise _unavailable("restore: no completion")
 
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
@@ -540,7 +600,7 @@ class SpritesBackend(VMBackend):
             code, _ = self._collect(name, agent_argv(["bash", "-c", DELETE_SCRIPT, "delete", path], FILE_SECONDS),
                                     limit=0)
             if code != 0:
-                raise VMUnavailable(f"delete path: exit {code}")
+                raise _unavailable(f"delete path: exit {code}")
             return
         self._request("delete path", "DELETE", self._sprite(name) + "/fs/delete", missing_ok=True,
                       json={"path": path, "workingDir": SERVER_HOME, "recursive": True, "asRoot": False})
@@ -550,7 +610,7 @@ class SpritesBackend(VMBackend):
                                 limit=0)
         outcome = {0: "moved", 44: "missing", 47: "taken"}.get(code)
         if outcome is None:
-            raise VMUnavailable(f"move path: exit {code}")
+            raise _unavailable(f"move path: exit {code}")
         return outcome
 
     def delete_service(self, name, service):
@@ -596,7 +656,11 @@ class SpritesBackend(VMBackend):
 
     def _connect_exec(self, url, operation="exec"):
         """The exec socket; a handshake that broke off (a sprite waking from
-        its sleep, seen 2026-10-27) is tried once more: no command started."""
+        its sleep, seen 2026-10-27) is tried once more. A handshake that ran
+        out of time is not: the command is in the request, and whether the
+        provider starts it before its answer is not known, so a second try
+        might run it twice (runtime audit 2026-10-30, A4). The wake before
+        it (_wake) keeps that case rare."""
         from websockets.exceptions import InvalidHandshake, InvalidStatus
         for attempt in (1, 2):
             try:
@@ -605,19 +669,41 @@ class SpritesBackend(VMBackend):
                 status = exc.response.status_code
                 logging.warning("Agent VM request refused operation=%s status=%s", operation, status)
                 raise VMUnavailable(f"{operation}: HTTP {status}") from None
-            except (OSError, TimeoutError, InvalidHandshake) as exc:
+            except TimeoutError as exc:
+                logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
+                                safe_exception(exc))
+                raise VMUnavailable(f"{operation}: handshake timed out") from None
+            except (OSError, InvalidHandshake) as exc:
                 logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
                                 safe_exception(exc))
                 if attempt == 2:
                     raise VMUnavailable(f"{operation}: no connection") from None
                 time.sleep(HANDSHAKE_RETRY_SECONDS)
 
+    def _wake(self, name):
+        """A VM not reached for WAKE_AFTER_SECONDS is woken by a REST request
+        that waits WAKE_SECONDS (a listing of its root, which the VM itself
+        answers), before a command's handshake meets its sleep. Best effort:
+        what it cannot do the handshake still tries."""
+        if not _asleep(name):
+            return
+        try:
+            self._http.request("GET", self._sprite(name) + "/fs/list", params={"path": "/"}, timeout=WAKE_SECONDS)
+            _touch(name)
+        except httpx.HTTPError as exc:
+            logging.info("Agent VM wake failed category=%s", safe_exception(exc))
+
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
         from websockets.exceptions import ConnectionClosed
         url = self.exec_url(name, argv, cwd=cwd, stdin=input is not None)
         cancellation.raise_if_cancelled()
-        started = self._clock()
+        self._wake(name)
+        cancellation.raise_if_cancelled()
         ws = self._connect_exec(url)
+        # The command's time runs from the open socket: a handshake that
+        # waited for the VM never eats its limit (runtime audit 2026-10-30, A4).
+        started = self._clock()
+        _touch(name)
         # Stop closes the socket at once; the loop below then ends the command.
         unregister = cancellation.register(ws)
         session, exit_code, killed = None, None, False
@@ -676,8 +762,9 @@ class SpritesBackend(VMBackend):
             self._kill(name, session)
         cancellation.raise_if_cancelled()
         seconds = self._clock() - started
+        _touch(name)
         if exit_code is None and not killed:
-            raise VMUnavailable("exec: connection closed before the exit code")
+            raise _unavailable("exec: connection closed before the exit code")
         timed_out = killed or (exit_code in TIMEOUT_EXIT_CODES and seconds >= timeout)
         return ExecOutcome(exit_code=None if killed else exit_code, timed_out=timed_out, seconds=seconds)
 
@@ -687,7 +774,7 @@ class SpritesBackend(VMBackend):
     def _kill(self, name, session):
         try:
             with self._http.stream("POST", f"{self._sprite(name)}/exec/{quote(session, safe='')}/kill",
-                                   params={"signal": "SIGKILL"}) as response:
+                                   params={"signal": "SIGKILL"}, timeout=KILL_SECONDS) as response:
                 for _ in response.iter_lines():
                     pass
         except httpx.HTTPError as exc:
@@ -794,7 +881,7 @@ def restore_workspace(uid, checkpoint, *, factory=None):
     VMUnavailable when there is no provider or it fails."""
     vm = (factory or backend)()
     if vm is None:
-        raise VMUnavailable("restore: no provider configured")
+        raise _unavailable("restore: no provider configured")
     try:
         vm.restore(workspace_name(uid), checkpoint)
     finally:
