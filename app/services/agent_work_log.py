@@ -74,6 +74,10 @@ TOOL_DATA = {
     # Pictures of the web the server fetched (agent_web_images.py).
     "find_pictures": "web", "show_image": "web",
 }
+# Measurements an entry may carry beside its content (since 2026-10-30): a
+# tool result's start and duration (``tool``, audit I4), a gate's wait on its
+# ``checked`` or ``paused`` entry (I9). Numbers and times only, never text.
+ENTRY_FIELDS = ("started_at", "duration_ms", "gate_ms")
 
 
 def _now():
@@ -82,6 +86,15 @@ def _now():
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _measure(value):
+    """A value ENTRY_FIELDS may hold: a non-negative number or a short time text."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return value >= 0
+    return isinstance(value, str) and 0 < len(value) <= 40
 
 
 def readable_reasoning(value):
@@ -206,8 +219,9 @@ class WorkLog:
 
     # --- Recording ------------------------------------------------------------
 
-    def add(self, kind, *, actor="app", name="", data="app", step=None, content=""):
-        """Append one entry; returns its sequence number (None if refused)."""
+    def add(self, kind, *, actor="app", name="", data="app", step=None, content="", fields=None):
+        """Append one entry; returns its sequence number (None if refused).
+        ``fields``: measurements of ENTRY_FIELDS beside the content."""
         try:
             text = content if isinstance(content, str) else _json(content)
             with self._condition:
@@ -219,6 +233,9 @@ class WorkLog:
                          "format": "text" if isinstance(content, str) else "json", "chars": len(text)}
                 if step:
                     entry["step"] = str(step)[:80]
+                for key, value in (fields or {}).items():
+                    if key in ENTRY_FIELDS and _measure(value):
+                        entry[key] = value
                 self._pending.append((entry, text))
                 self._entries.append((entry, text))
                 self._start()
@@ -303,22 +320,24 @@ class WorkLog:
             self.incomplete = True
             return None
 
-    def tool(self, actor, step, call, message):
+    def tool(self, actor, step, call, message, *, started_at=None, duration_ms=None):
         """A tool result as it goes into the actor's conversation (where the
-        next ``context`` then skips it)."""
+        next ``context`` then skips it), with when the call started (UTC,
+        ISO) and how long it ran: a slow browser or VM call shows in the log
+        itself, not only as the gap to the next entry (audit I4)."""
         try:
             name = (call.get("function") or {}).get("name") or ""
             with self._condition:
                 self._logged.setdefault(actor, set()).add(id(message))
             self.add("tool", actor=actor, name=name, data=TOOL_DATA.get(name, "app"), step=step,
-                     content=message_text(message))
+                     content=message_text(message), fields={"started_at": started_at, "duration_ms": duration_ms})
         except Exception as exc:
             logging.warning("Agent work log tool result dropped category=%s", safe_exception(exc))
             self.incomplete = True
 
-    def app(self, name, content="", *, step=None):
-        """An intervention of the app itself."""
-        return self.add("app", name=name, step=step, content=content)
+    def app(self, name, content="", *, step=None, **fields):
+        """An intervention of the app itself; ``fields`` as in ``add``."""
+        return self.add("app", name=name, step=step, content=content, fields=fields)
 
     # --- Reading while it grows (the reviewers) -------------------------------
 

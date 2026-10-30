@@ -53,6 +53,8 @@ TURN_DOCUMENT_MARGIN = 64_000
 ACTIVITY_MAX_BYTES = 600_000
 ACTIVITY_SHORT_CHARS = 200
 PLAN_ITEM_SHORT_CHARS = 60
+# A model call's own times on its receipt (settle, since 2026-10-30).
+REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 
 
 class ConversationTooLong(ValueError):
@@ -372,6 +374,16 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         return self._agent_transaction(uid, operation)
 
+    def _expected_daily(self, uid):
+        """The ledger document a claim of now books into (agent_quota.period_key
+        of the cached budget configuration), or None when it cannot be told:
+        the settlement then reads the receipt's own day as before."""
+        try:
+            from app.services import agent_budget_config
+            return agent_quota.quota_ref(self.db, uid, agent_quota.period_key(agent_budget_config.get_config(self.db)))
+        except Exception:
+            return None
+
     def settle(self, uid, chat_id, turn_id, *, completion, status, step="completion:0", final=True):
         if status not in {"succeeded", "failed", "cancelled"}:
             raise ValueError("Invalid agent settlement status")
@@ -380,12 +392,18 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         user_ref = self.db.collection("users").document(uid)
         active_ref = self.active_ref(uid)
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
+        # The ledger day a claim of now books into (_claim_delegated): read
+        # in the same round trip as the rest, it is almost always the
+        # receipt's own (T3, since 2026-10-30). Until then the ledger was a
+        # second round trip of every settlement, under the account's lock.
+        expected_daily = self._expected_daily(uid)
 
         def operation(tx):
-            # One round trip for all of them (_read_all); the quota day is on the receipt.
-            tombstone, receipt, user, chat, turn, active, root = self._read_all(tx, (
+            # One round trip for all of them (_read_all), the expected ledger
+            # day included; the receipt names the day it books into.
+            tombstone, receipt, user, chat, turn, active, root, *guessed = self._read_all(tx, (
                 persistence_guard.deletion_ref(self.db, uid), receipt_ref, user_ref, chat_ref, turn_ref, active_ref,
-                root_ref))
+                root_ref, *([expected_daily] if expected_daily is not None else [])))
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
             if not receipt.exists or not user.exists:
                 raise ChatNotFound("Agent receipt not found")
@@ -395,7 +413,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             receipt_data = receipt.to_dict() or {}
             daily_ref = (agent_quota.quota_ref(self.db, uid, receipt_data["quota_day"])
                          if receipt_data.get("quota_day") else None)
-            daily = daily_ref.get(transaction=tx).to_dict() if daily_ref else None
+            if daily_ref is None:
+                daily = None
+            elif guessed and daily_ref.path == expected_daily.path:
+                daily = guessed[0].to_dict()
+            else:
+                # A call claimed before midnight or a reset: its own day.
+                daily = daily_ref.get(transaction=tx).to_dict()
             usage = completion.usage
             totals = dict((user.to_dict() or {}).get("agent_usage") or {})
             totals["unsettled_calls"] = max(0, totals.get("unsettled_calls", 0) - 1)
@@ -430,6 +454,12 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if getattr(completion, "search_hits", None) is not None:
                 # The pages a step that searched kept (agent_client._record_missing_citations).
                 receipt_patch["search_hits"] = completion.search_hits
+            for field in REQUEST_TIMES:
+                # When the request left, its first token came and its stream
+                # ended (AgentCompletion.stream, audit I7): between created_at
+                # and settled_at, the provider's part and ours.
+                if isinstance(getattr(completion, field, None), datetime):
+                    receipt_patch[field] = getattr(completion, field)
             review_round = getattr(completion, "review_round", None)
             if isinstance(review_round, str) and review_round:
                 # A reviewer's call (audit mode): live, gate, final, repair
@@ -543,6 +573,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # The turn's pauses (DelegationLoop._end_hold): kind, gate,
                     # ask, domain, reviewer, decision and seconds, no reasons.
                     patch["agent_holds"] = completion.holds
+                if isinstance(getattr(completion, "wrap_up", None), dict):
+                    # Which limit ended its work (DelegationLoop._wrap_up):
+                    # reason code, steps and seconds, no text (audit I1).
+                    patch["agent_wrap_up"] = completion.wrap_up
                 if status == "succeeded":
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])

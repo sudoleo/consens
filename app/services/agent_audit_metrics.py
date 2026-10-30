@@ -19,6 +19,16 @@ logged, never raised. Fields that later packages add (a reviewer's
 ``final_ms`` and ``backlog``, the turn's ``agent_holds``, a gate entry's
 ``gate_ms``) are read when present; without them their bucket stays empty.
 ``scripts/audit_report.py`` reads the documents back.
+
+Since 2026-10-30 (audit I6) every turn that used the workspace counts there
+too, in audit mode or not, because 47 % of them lay in chats deleted since
+and took all their details along: in fields of their own (``ws_*``), its
+status, steps, active time (pauses for the user left out), the first call
+into the workspace (browser or VM: how long it took, how far into the
+message it came, whether it failed) and the workspace's outages (VM
+unavailable or busy, browser off). Every turn that ended its work at a limit
+counts its reason (``wrap_up``, I1). A workspace turn outside audit mode
+adds only these fields, never to the audit counters above.
 """
 from __future__ import annotations
 
@@ -37,6 +47,8 @@ COLLECTION = "ops_metrics"
 SECOND_BOUNDS = (2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 300, 600, 1800, 3600, 7200)
 # Unread log entries of a reviewer when the answer was fixed.
 COUNT_BOUNDS = (0, 1, 2, 3, 5, 10, 20)
+# The agent's steps in a workspace turn (up to AgentPolicy.vm_turn_steps).
+STEP_BOUNDS = (1, 2, 3, 5, 10, 20, 30, 50, 100, 200)
 _LABEL = re.compile(r"[^A-Za-z0-9_-]")
 
 
@@ -101,12 +113,26 @@ def capture(loop):
              for item in loop.completion.activity or [] if item.get("kind") == "hold"]
     auditor = loop.comparison.auditor if loop.comparison is not None else None
     captured = {"entries": entries, "holds": holds, "reviewers": len(auditor.reviewers) if auditor is not None else 0,
-                "ended_at": datetime.now(timezone.utc)}
-    if getattr(loop, "vm_tools", None) is not None:
+                "ended_at": datetime.now(timezone.utc),
+                "audit": bool(loop.comparison is not None and loop.comparison.audit_mode)}
+    wrap_up = getattr(loop.completion, "wrap_up", None)
+    if isinstance(wrap_up, dict):
+        captured["wrap_up"] = wrap_up.get("reason")
+    vm_tools = getattr(loop, "vm_tools", None)
+    if vm_tools is not None:
         # The workspace on demand (DelegationLoop._open_workspace): how often
         # the agent opens it, stays without it, or has it from the start.
         captured["workspace"] = ("opened" if loop.workspace_opened else "closed" if loop.workspace_closed
                                  else "open")
+    if vm_tools is not None and getattr(loop, "workspace_used", False):
+        vm = getattr(loop.completion, "vm", None) or {}
+        browser = getattr(vm_tools, "browser_tools", None)
+        first = getattr(loop, "first_workspace_call", None)
+        captured["workspace_run"] = {
+            "steps": loop.routing_steps, "active_s": round(max(0.0, loop._turn_elapsed()), 1),
+            "first": dict(first) if isinstance(first, dict) else None,
+            "outages": [code for code, hit in (("vm_unavailable", vm.get("unavailable")), ("vm_busy", vm.get("busy")),
+                                               ("browser_off", getattr(browser, "off", False))) if hit is True]}
     return captured
 
 
@@ -134,11 +160,46 @@ def _hold_kind(hold):
     return f"gate_{kind}" if hold.get("gate") else kind
 
 
+def workspace_counters(turn, captured, counters):
+    """A workspace turn's own fields (``ws_*``) and any turn's ``wrap_up``,
+    added to ``counters``: codes and buckets, never a text or an id."""
+    if captured.get("wrap_up"):
+        _add(counters, "wrap_up", label(captured["wrap_up"]))
+    run = captured.get("workspace_run")
+    if not isinstance(run, dict):
+        return counters
+    status = _status(turn)
+    _add(counters, "ws_turns", label(status))
+    if isinstance(run.get("steps"), int):
+        _add(counters, "ws_steps", bucket(run["steps"], STEP_BOUNDS))
+    if isinstance(run.get("active_s"), (int, float)):
+        _add(counters, "ws_active_s", bucket(run["active_s"]))
+    first = run.get("first") if isinstance(run.get("first"), dict) else None
+    if first and isinstance(first.get("ms"), (int, float)):
+        _add(counters, "ws_first_call_s", label(first.get("kind")), bucket(first["ms"] / 1000))
+        if isinstance(first.get("after_s"), (int, float)):
+            # From the message's start to the first result of the workspace.
+            _add(counters, "ws_first_result_s", bucket(first["after_s"] + first["ms"] / 1000))
+        if first.get("failed"):
+            _add(counters, "ws_failures", "first_call")
+    for code in run.get("outages") or []:
+        _add(counters, "ws_failures", label(code))
+    if status in {"failed", "cancelled"}:
+        failure = turn.get("agent_failure") if isinstance(turn.get("agent_failure"), dict) else {}
+        _add(counters, "ws_failures", label(f"turn_{failure.get('code') or turn.get('error_code')}"))
+    return counters
+
+
 def turn_counters(turn, captured):
-    """The increments one audit turn adds to its day: {field: {key: n}}.
-    ``turn``: the saved turn (None once its chat was deleted)."""
+    """The increments one turn adds to its day: {field: {key: n}}, an audit
+    turn's and a workspace turn's (workspace_counters). ``turn``: the saved
+    turn (None once its chat was deleted)."""
     counters = {}
     turn = turn or {}
+    if not captured.get("audit", True):
+        # A workspace turn outside audit mode: its own fields only.
+        return workspace_counters(turn, captured, counters)
+    workspace_counters(turn, captured, counters)
     status = _status(turn)
     _add(counters, "turns", label(status))
     if captured.get("workspace"):
@@ -229,7 +290,8 @@ def _enabled():
 
 
 def record(loop):
-    """At the end of an audit turn: copy what it holds, count it off this thread."""
+    """At the end of an audit turn or a turn that used the workspace: copy
+    what it holds, count it off this thread."""
     if not _enabled():
         return False
     try:

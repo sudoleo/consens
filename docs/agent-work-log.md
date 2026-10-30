@@ -34,8 +34,8 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 | `start` | Beginn von `DelegationLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
 | `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App und Nachrichten von Workern, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
 | `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`, nur wenn der Anbieter sie schickt), Abschlussgrund, Verbrauch (mit der Zahl der Suchen) |
-| `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler |
-| `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis). Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
+| `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler. Seit 2026-10-30 mit den Feldern `started_at` (UTC, ISO) und `duration_ms` des Aufrufs (I4) |
+| `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis), seit 2026-10-30 die Grenze, an der die Arbeit endete (`limit`: `{reason, steps, seconds, text}`, `reason` = `time`, `steps`, `repeat`, `invalid`, `allowance` oder `context`; dieselben Werte ohne `text` als `agent_wrap_up` am Turn, I1). Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
 Worker (`start_agent`) schreiben in dasselbe Protokoll, mit ihrer ID als
@@ -74,6 +74,10 @@ Ergebnis steht als `tool`-Eintrag darin.
   anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
   Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`).
 - `format`: `text`, oder `json` für `start`, `step`, `app` mit Daten und `end`.
+- Messwerte neben dem Inhalt (seit 2026-10-30, `ENTRY_FIELDS`, nur Zahlen und
+  Zeiten): `started_at`/`duration_ms` an `tool`, `gate_ms` an `checked` und am
+  `paused` einer Gate-Karte. `step` tragen seitdem auch `checked` und
+  `paused` (die Pause eines Prüfers den Schritt des Eintrags, den sie nennt).
 - `content` bis 16.000 Zeichen direkt im Eintrag. Länger: ganz im
   Objektspeicher (`ref`), im Eintrag die ersten 2.000 Zeichen. Ohne
   Objektspeicher bleibt er auf 16.000 Zeichen gekürzt (`truncated`).
@@ -198,6 +202,12 @@ Ein Schritt, der nur liest oder seinen Plan pflegt (`QUIET_TOOLS`:
 `wait_agents`), löst seit 2026-10-27 keine eigene Runde aus: Er geht mit der
 nächsten Runde mit, die ein handelnder Schritt auslöst, spätestens beim
 dritten solchen Schritt in Folge (`QUIET_STEPS`) oder in der Schlussrunde.
+Seit 2026-10-30 gehört dazu auch `browser` mit `read`, `text`, `find`,
+`tabs` oder `screenshot` (`QUIET_BROWSER_ACTIONS`, `quiet_call`; eingeordnet
+über die Aktion in den Argumenten, Max' Entscheidung zu K6 im
+[Laufzeit-Audit](agent-workspace-runtime-audit-2026-10-30.md)): Diese
+Aktionen lesen die Seite oder die Tabs, ohne zu handeln, zu warten oder zu
+navigieren. Jede andere Aktion und unlesbare Argumente bekommen ihre Runde.
 Ein Halt könnte an ihnen nichts verhindern, und jede Runde kostet das ganze
 Gespräch des Prüfers.
 Es gibt keine Rundengrenze: Die Prüfer beobachten den ganzen Lauf, auch lange
@@ -341,7 +351,10 @@ Agent-Panel.
    Prüfer steht auf seiner Karte (`GATE_DOMAIN_NOTE`). Im Protokoll:
    App-Eintrag `checked` bei Freigabe (seit 2026-10-29 mit `gate_ms` und den
    Urteilen je Prüfer: `verdicts` mit `provider`, `model`, `verdict` =
-   go/halt/failed, `ms`; eine Karte trägt dieselben Felder am Hold), sonst
+   go/halt/failed, `ms`; eine Karte trägt dieselben Felder am Hold; seit
+   2026-10-30 tragen `checked` und der `paused`-Eintrag einer Gate-Karte
+   `step` und `gate_ms` auch als Felder des Eintrags, wo
+   `scripts/audit_report.py` zuerst liest, I9), sonst
    `paused`/`decision` wie beim
    Aussteuern („The agent asks to reach …“, „The user did not allow it.“).
    Browser-Aktionen (`open`, `click`, `upload`, Enter, Leertaste) und

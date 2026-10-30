@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime, timezone
 from decimal import Decimal
 import json
 import logging
@@ -708,6 +709,22 @@ class AgentCompletion:
         # The chat model's steps: index of the chat's last earlier message,
         # a cache point of its own (with_cache_points, AgentLoop.history_end).
         self.history_end = None
+        # When the request left, its first streamed token (text, reasoning
+        # or a tool call) arrived and its stream ended, in UTC (since
+        # 2026-10-30, audit I7): the receipt keeps them (AgentRunStore.settle),
+        # so the time between claim and settlement splits into ours before
+        # the request, the provider's and ours after it (T3).
+        self.request_started_at = self.first_token_at = self.stream_ended_at = None
+        # Several calls per step (DelegationLoop._parallel_calls: while the
+        # workspace is open, audit T2); off, the request asks for one call.
+        self.parallel_tool_calls = False
+        # Calls past tool_call_limit stay in tool_calls, without arguments,
+        # their ids in over_limit_ids, so that each gets a result instead of
+        # vanishing from the conversation (DelegationLoop, T2). Off, they are
+        # skipped as before.
+        self.keep_over_limit = False
+        self._over_limit = set()
+        self.over_limit_ids = set()
 
     def _output_limited(self):
         """The step ended without a usable answer or tool call after reasoning.
@@ -876,14 +893,18 @@ class AgentCompletion:
                 continue
             target = self._tool_parts.get(index)
             if target is None:
-                if len(self._tool_parts) >= self.tool_call_limit:
-                    self.skipped_tool_parts += 1
-                    continue
+                if len(self._tool_parts) - len(self._over_limit) >= self.tool_call_limit:
+                    if not self.keep_over_limit:
+                        self.skipped_tool_parts += 1
+                        continue
+                    self._over_limit.add(index)
                 target = self._tool_parts[index] = {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
             self._tool_last = index
             function = part.get("function") if isinstance(part.get("function"), dict) else {}
+            # A call past the limit keeps its id and name, never its arguments.
+            argument_limit = -1 if index in self._over_limit else self.tool_argument_limit
             for key, source, output, limit in (("id", part, target, 160), ("name", function, target["function"], 64),
-                                                ("arguments", function, target["function"], self.tool_argument_limit)):
+                                                ("arguments", function, target["function"], argument_limit)):
                 fragment = source.get(key)
                 if key == "arguments" and isinstance(fragment, (dict, list)):
                     # Arguments sent as an object instead of JSON text.
@@ -900,12 +921,17 @@ class AgentCompletion:
         long or missing no longer fails the step; its tool result names it the
         same way, so call and result still match."""
         calls, seen = [], set()
+        self.over_limit_ids = set()
         for number, index in enumerate(sorted(self._tool_parts)):
             call = self._tool_parts[index]
             ident = re.sub(r"[^A-Za-z0-9_-]", "_", call["id"])[:64]
             if not ident or ident in seen:
                 ident = f"call_{number}_{uuid.uuid4().hex[:12]}"
             seen.add(ident)
+            if index in self._over_limit:
+                # Not run (keep_over_limit): an empty object, valid for every provider.
+                self.over_limit_ids.add(ident)
+                call = {**call, "function": {**call["function"], "arguments": "{}"}}
             calls.append({**call, "id": ident})
         return calls
 
@@ -1095,7 +1121,10 @@ class AgentCompletion:
             payload["tools"] = tools
             if any(tool.get("type") == "function" for tool in tools):
                 payload["tool_choice"] = "auto" if allow_tool_calls or native_searches else "none"
-                payload["parallel_tool_calls"] = False
+                # Off unless the loop asks (DelegationLoop._parallel_calls). It
+                # is part of Anthropic's tool_choice: a change rewrites the
+                # cached messages, so it changes only with open_workspace.
+                payload["parallel_tool_calls"] = bool(self.parallel_tool_calls)
         if native_searches:
             payload["max_tool_calls"] = native_searches
         # Cached for the requests that read the prompt again: the chat model's
@@ -1114,6 +1143,7 @@ class AgentCompletion:
         from app.services.llm.provider_runtime import ProviderProgressWatchdog, _bounded_env_float
         progress = ProviderProgressWatchdog(_bounded_env_float("AGENT_PROVIDER_STALL_SECONDS", 180, 30, 600))
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
+            self.request_started_at = datetime.now(timezone.utc)
             lines = _sse_lines(
                 lambda body: cancellable_sse_lines(OPENROUTER_CHAT_COMPLETIONS_URL, json=body,
                                                    headers=headers, progress=progress),
@@ -1137,6 +1167,8 @@ class AgentCompletion:
                            or (choice.get("finish_reason") and not self.finish_reason)
                            for choice in data.get("choices") or []):
                         progress.touch()
+                        if self.first_token_at is None:
+                            self.first_token_at = datetime.now(timezone.utc)
                     self.generation_id = str(data.get("id") or self.generation_id)[:200]
                     terminal = self.finish_reason or any(choice.get("finish_reason") for choice in data.get("choices") or [])
                     reported = data.get("usage")
@@ -1247,6 +1279,9 @@ class AgentCompletion:
                     # providers say so instead of "tool_calls").
                     self.finish_reason = "tool_calls"
                     self.tool_calls = self._completed_tool_calls()
+                    if self.over_limit_ids:
+                        logging.info("Agent calls past the step's limit model=%s step=%s count=%s limit=%s",
+                                     model.model, self.step_id, len(self.over_limit_ids), self.tool_call_limit)
                 elif not allow_tool_calls and self.finish_reason == "tool_calls" and self.text.strip():
                     # A call it was not offered (see above): its text is the answer.
                     self.finish_reason = "stop"
@@ -1269,6 +1304,7 @@ class AgentCompletion:
                     raise AgentStreamIncomplete(self._end_diagnostic())
             finally:
                 lines.close()
+                self.stream_ended_at = datetime.now(timezone.utc)
                 # Also the partial text of a stream that broke off.
                 self._drop_presearch_text(model)
                 self._record_search_overrun(model, native_searches)

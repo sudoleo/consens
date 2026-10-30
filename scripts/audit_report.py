@@ -14,7 +14,12 @@ Method as in that spec (section 8):
   (``answer_fixed``, ``checked``, ``paused``, ``decision`` and the agent's
   ``step`` entries, by time; never their text);
 - the anonymous daily counters ``ops_metrics/agent-audit-{day}``
-  (agent_audit_metrics), which also count turns whose chats were deleted.
+  (agent_audit_metrics), which also count turns whose chats were deleted,
+  since 2026-10-30 every turn that used the workspace too (``ws_*``) and the
+  reasons of wrap-ups (``wrap_up``);
+- since 2026-10-30 the agent's steps split by their receipts' own times
+  (``request_started_at``, ``first_token_at``, ``stream_ended_at``): ours
+  before the request, the provider's, ours after the stream.
 
 Times: total = turn created until the run finished; to the answer = until
 the last ``answer_fixed``; marks after the last word = from there until the
@@ -70,6 +75,9 @@ def _usage(receipt):
             "round": receipt.get("round"), "model": model.get("model") if isinstance(model, dict) else model,
             "created_at": receipt.get("created_at"), "settled_at": receipt.get("settled_at"),
             "finished_at": receipt.get("finished_at"), "status": receipt.get("status"),
+            # The call's own times (AgentCompletion.stream, since 2026-10-30).
+            "request_started_at": receipt.get("request_started_at"), "first_token_at": receipt.get("first_token_at"),
+            "stream_ended_at": receipt.get("stream_ended_at"),
             "input": usage.get("input_tokens"), "cached": usage.get("cached_input_tokens"),
             "output": usage.get("output_tokens"), "cost": usage.get("estimated_cost_nano_usd"),
             "searches": usage.get("web_search_requests"), "search_hits": receipt.get("search_hits"),
@@ -345,6 +353,18 @@ def _search(data, rows):
              "share": round(c["without_hits"] / c["steps"], 3)} for (model, source), c in sorted(out.items())]
 
 
+def step_split(receipts):
+    """The agent's steps (every mode) from their receipts' times: ours before
+    the request (claim to request), the provider until its first token and
+    in all, ours after the stream (to the settlement); the audit's T3 asks
+    which part the 0.8 s outside the provider are."""
+    steps = [r for r in receipts if str(r.get("step") or "").startswith("completion:") and r.get("request_started_at")]
+    return {"before_request": quantiles(_seconds(r.get("created_at"), r.get("request_started_at")) for r in steps),
+            "to_first_token": quantiles(_seconds(r.get("request_started_at"), r.get("first_token_at")) for r in steps),
+            "stream": quantiles(_seconds(r.get("request_started_at"), r.get("stream_ended_at")) for r in steps),
+            "after_stream": quantiles(_seconds(r.get("stream_ended_at"), r.get("settled_at")) for r in steps)}
+
+
 def _counters(days):
     """The daily counters of the window, added up ({field: {key: n}})."""
     total = {}
@@ -358,6 +378,18 @@ def _counters(days):
     for day in days:
         add(total, {k: v for k, v in day.items() if k not in {"day", "updated_at"}})
     return {"days": sorted(d.get("day") for d in days if d.get("day")), **total}
+
+
+# The anonymous fields of workspace turns and wrap-ups (agent_audit_metrics,
+# since 2026-10-30): every turn that used the workspace, in audit mode or not,
+# deleted chats included.
+WORKSPACE_FIELDS = ("ws_turns", "ws_steps", "ws_active_s", "ws_first_call_s", "ws_first_result_s", "ws_failures",
+                    "wrap_up")
+
+
+def workspace(counters):
+    """The workspace turns of the window from the daily counters, by field."""
+    return {field: counters.get(field) or {} for field in WORKSPACE_FIELDS}
 
 
 def _target(target_id, metric, value, target, ok):
@@ -402,6 +434,7 @@ def report(data):
                 final_by_model[model].append(_seconds(start, stop))
     times["final_round_by_model"] = {model: quantiles(values) for model, values in sorted(final_by_model.items())}
     times["live_request_by_model"] = {model: quantiles(values) for model, values in sorted(live_by_model.items())}
+    times["agent_step"] = step_split(data["receipts"])
     gates = [gate for row in rows for gate in _gates(row)]
     holds = [hold for row in rows for hold in row["info"].get("holds") or []]
     reviewer_failures = Counter(item["failure"] for r in rows for item in (r["info"]["review"] or {}).get("reviewers") or []
@@ -462,6 +495,7 @@ def report(data):
                   "until_decision": quantiles(_seconds(p.get("at"), d.get("at")) for r in rows for p, d in r["pauses"] if d)},
         "tokens": tokens, "quota": quota, "search": _search(data, rows),
         "counters": _counters(data.get("counters") or []),
+        "workspace": workspace(_counters(data.get("counters") or [])),
         "targets": targets,
         "release": {"turns": len(rows), "three_reviewers": reviewers.get(3, 0), "long_workspace_runs": long_runs,
                     "needed": RELEASE},
@@ -493,6 +527,8 @@ def render(result):
         for model, value in result["times"][key].items():
             add(f"  {title:<13} {model:<30} {_q(value)}")
     add(f"  live rounds per turn      {_q(result['live_rounds_per_turn'])}")
+    for name, value in result["times"]["agent_step"].items():
+        add(f"  agent step {name:<14} {_q(value)}")
     gate = result["gate"]
     add(f"\nGate: {gate['rounds']} rounds {gate['results']}; wait {_q(gate['wait'])}")
     halts = result["halts"]
@@ -508,6 +544,9 @@ def render(result):
     add("\nSearch steps without a kept page")
     for item in result["search"] or [{"model": "no data", "source": "", "steps": 0, "without_hits": 0, "share": None}]:
         add(f"  {item['model']:<30} {item['source']:<9} {item['without_hits']}/{item['steps']} ({item['share']})")
+    add("\nWorkspace turns (daily counters, every mode, deleted chats included)")
+    for field, value in result["workspace"].items():
+        add(f"  {field:<18} {value or '-'}")
     counters = result["counters"]
     add(f"\nDaily counters (ops_metrics): {counters if counters.get('days') else 'none in the window'}")
     add("\nTargets")

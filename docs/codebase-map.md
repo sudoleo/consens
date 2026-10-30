@@ -4406,8 +4406,16 @@ derselbe Plan per `update_plan` und die VM-Werkzeuge ausgenommen). Wrap-up (`_me
 einem letzten Schritt ohne aufrufbare Tools aus einem Vergleich mit ≥2
 Antworten, danach Judges; sonst `AnalysisBudgetExceeded` mit
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
-Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Details und
-Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt).
+Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
+nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
+fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Bei
+offenem Arbeitsplatz fragt jeder Schritt des Agenten mit `parallel_tool_calls`
+(`_parallel_calls`, schaltet nur mit `open_workspace` um); die Aufrufe laufen
+nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit genau einem
+Ergebnis (`CALL_OVER_LIMIT`, `CALL_AFTER_*`), und nach jedem Batch einer
+Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`). Details und
+Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt,
+„Arbeitsplatz: Schritte, Zeit und Bilder“).
 Worker-Delegation bleibt separat durch delegation_config.enabled und die
 geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
 hier auch ohne Worker-Freigabe das gemeinsame persistente Schrittjournal.
@@ -5016,7 +5024,11 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   `save_review`, `protect_review`; der Löschungs-Tombstone kommt über
   `persistence_guard.deletion_ref` und `ensure_account_write_allowed(snapshot=)`
   mit). Vorher war jeder Lesezugriff ein eigener Rundgang, ein Claim las neun
-  Dokumente nacheinander.
+  Dokumente nacheinander. Seit 2026-10-30 liest das Settlement auch den
+  Kontingent-Tag, in den ein Claim von jetzt bucht (`_expected_daily`), im
+  selben Rundgang; nur ein Beleg eines anderen Tages liest seinen eigenen
+  nach (T3). Belege tragen seitdem `request_started_at`, `first_token_at`,
+  `stream_ended_at` (`REQUEST_TIMES`, I7).
 - Sitzungs-Updates schreibt das Journal des Laufs
   (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf; am
   Laufende warten Journal und Arbeitsprotokoll seit 2026-10-29 zusammen
@@ -5865,7 +5877,9 @@ Thread, eine Sitzung Art `audit`, Runden über
 `ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde je
 neuem Schritt mit Tool-Aufrufen (`work_goes_on`, `round_message`; Schritte
 nur mit `QUIET_TOOLS` wie `update_plan` oder `vm_read_file` gehen seit
-2026-10-27 mit der nächsten Runde mit, spätestens beim dritten in Folge),
+2026-10-27 mit der nächsten Runde mit, spätestens beim dritten in Folge; seit
+2026-10-30 ebenso `browser` mit `read`/`text`/`find`/`tabs`/`screenshot`,
+`quiet_call`),
 Befunde mit `entry`, ohne Rundengrenze über den ganzen Lauf. Die
 Anweisungen des Agenten lesen die Prüfer als Kurzfassung mit seinen
 Werkzeugen und dem vollen Memory (`instructions_brief`, `AnswerAudit.brief`,
@@ -5938,7 +5952,8 @@ eine Audit-Review, die bei Erfolg noch `required`/`running` sagt, auf
 `audit.reviewers[]` in `waiting`/`running` (`failed`, `run_interrupted`). Nach
 `finish_run` zählt `agent_audit_metrics.record` den Turn anonym
 in `ops_metrics/agent-audit-{Tag}` (seit 2026-10-29, A-M1; nie in Tests oder
-unter `MOCK_LLM`). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
+unter `MOCK_LLM`), seit 2026-10-30 auch jeden Turn, der den Arbeitsplatz
+nutzte, in eigenen `ws_*`-Feldern (I6). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
 `--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
 Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
 Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer bringen Fremdinhalt in den Blick
@@ -8814,7 +8829,7 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
-  agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt
+  agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
   agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
@@ -8828,8 +8843,8 @@ app/services/
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import (öffentliche Repos auch ohne App), prepare_pull_request (seit 2026-10-29 nur angeboten, wenn die App eingerichtet ist; sonst auch AGENT_GITHUB_IMPORT_PROMPT statt AGENT_GITHUB_PROMPT; Vorschlag am Turn agent_pull_request; seit 2026-10-27 Diff im Backend aus den Bytes der Datei-API gegen Tree und Blobs des Import-Commits von GitHub, die VM nennt nur die Pfade) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
-  agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
-  agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
+  agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Bilder (older_pictures, seit 2026-10-30): gesammelt ab mehr als 10 sichtbaren auf die neuesten 3 und mit jeder Kompaktierung, nie die des aktuellen Batches; Ersatztext nach Herkunft (picture_gone). Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
+  agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie; seit 2026-10-30 Messfelder ENTRY_FIELDS: started_at/duration_ms an tool, gate_ms an checked/paused), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge; im Audit-Modus seit 2026-10-28 jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN, nur mit Prüfern, vorher durch die Vorab-Prüfung), SourceReader.knows für das Gate
   agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, Audit-Modus, wo read_source läuft): find_pictures holt bis zu 6 Adressen gleichzeitig (18 je Nachricht), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht
@@ -9377,7 +9392,10 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Merge aus Increments (`turns`, `reviews`, `reviewers.n{k}`,
   `reviewer_status`, Buckets `total_s`, `answer_s`, `marks_s`, `gate_s`,
   `final_s.{modell}`, `backlog_entries`, `halts.{art}.{entscheidung}`,
-  `failures.{turn|reviewer|review}.{code}`), ohne UID, Chat, Turn oder Text;
+  `failures.{turn|reviewer|review}.{code}`), seit 2026-10-30 dazu `wrap_up.{grund}`
+  und je Turn mit Arbeitsplatz (auch ohne Audit) `ws_turns`, `ws_steps`,
+  `ws_active_s`, `ws_first_call_s.{browser|vm}`, `ws_first_result_s`,
+  `ws_failures.{code}`; ohne UID, Chat, Turn oder Text;
   übersteht das Löschen der Chats. Nur Server (Rules deny-all), kein Index.
 - `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
   Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
