@@ -1,7 +1,9 @@
 """What browser.py on the browser VM answers and how fast (runtime audit
 2026-10-30, docs/agent-workspace-runtime-audit-2026-10-30.md): the
 server's rest at the end of a message (K2), a resident helper that heals
-Chrome (A7) and the page's picture for its card (V7).
+Chrome (A7), the page's picture for its card (V7), a download's answer
+(L5), failures with their cause and page (L4), an action's effect without
+waiting for the network (T4) and only what changed after it (L2).
 
 Nothing here calls Sprites or starts a browser: browser.py runs against
 fakes of Playwright's objects, as in test_agent_workspace.py; its scripts
