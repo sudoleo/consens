@@ -375,6 +375,18 @@ def _counters(days):
     return {"days": sorted(d.get("day") for d in days if d.get("day")), **total}
 
 
+# The anonymous fields of workspace turns and wrap-ups (agent_audit_metrics,
+# since 2026-10-30): every turn that used the workspace, in audit mode or not,
+# deleted chats included.
+WORKSPACE_FIELDS = ("ws_turns", "ws_steps", "ws_active_s", "ws_first_call_s", "ws_first_result_s", "ws_failures",
+                    "wrap_up")
+
+
+def workspace(counters):
+    """The workspace turns of the window from the daily counters, by field."""
+    return {field: counters.get(field) or {} for field in WORKSPACE_FIELDS}
+
+
 def _target(target_id, metric, value, target, ok):
     return {"id": target_id, "metric": metric, "value": value, "target": target, "ok": ok}
 
@@ -478,6 +490,7 @@ def report(data):
                   "until_decision": quantiles(_seconds(p.get("at"), d.get("at")) for r in rows for p, d in r["pauses"] if d)},
         "tokens": tokens, "quota": quota, "search": _search(data, rows),
         "counters": _counters(data.get("counters") or []),
+        "workspace": workspace(_counters(data.get("counters") or [])),
         "targets": targets,
         "release": {"turns": len(rows), "three_reviewers": reviewers.get(3, 0), "long_workspace_runs": long_runs,
                     "needed": RELEASE},
@@ -526,6 +539,9 @@ def render(result):
     add("\nSearch steps without a kept page")
     for item in result["search"] or [{"model": "no data", "source": "", "steps": 0, "without_hits": 0, "share": None}]:
         add(f"  {item['model']:<30} {item['source']:<9} {item['without_hits']}/{item['steps']} ({item['share']})")
+    add("\nWorkspace turns (daily counters, every mode, deleted chats included)")
+    for field, value in result["workspace"].items():
+        add(f"  {field:<18} {value or '-'}")
     counters = result["counters"]
     add(f"\nDaily counters (ops_metrics): {counters if counters.get('days') else 'none in the window'}")
     add("\nTargets")

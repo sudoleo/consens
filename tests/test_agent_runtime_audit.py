@@ -566,3 +566,75 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     store.settle(*args, completion=receipt(), status="succeeded", final=False)
     assert [kind for kind, _ in trips] == ["get_all", "get"]
     assert store.receipt_ref(*args).get().to_dict()["status"] == "succeeded"
+
+
+# --- I6: anonymous times of every workspace turn ---------------------------------------
+
+def test_a_workspace_turn_counts_its_times_without_any_name(store, fake_vm, monkeypatch):
+    from app.services import agent_audit_metrics
+    recorded = []
+    monkeypatch.setattr(agent_audit_metrics, "record", recorded.append)
+    script = Steps([[("vm_exec", {"command": "ls"})], [("browser", {"action": "read"})]])
+    loop = vm_loop(store, script, audit="off")
+    list(loop.run())
+    # Outside audit mode too: the turn used the workspace.
+    assert recorded == [loop]
+    captured = agent_audit_metrics.capture(loop)
+    run = captured["workspace_run"]
+    assert captured["audit"] is False and run["steps"] == 3 and run["outages"] == []
+    assert run["first"]["kind"] == "vm" and type(run["first"]["ms"]) is int and run["first"]["failed"] is False
+    turn = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    counters = agent_audit_metrics.turn_counters(turn, captured)
+    # Its own fields only, never the audit counters.
+    assert set(counters) == {"ws_turns", "ws_steps", "ws_active_s", "ws_first_call_s", "ws_first_result_s"}
+    assert counters["ws_turns"] == {"completed": 1} and counters["ws_steps"] == {"le3": 1}
+    assert list(counters["ws_first_call_s"]) == ["vm"]
+    # Nothing that names the account, the chat, the turn or any text.
+    written = json.dumps(counters)
+    assert not any(value in written for value in (UID, loop.chat_id, loop.turn_id, "ls", ANSWER))
+
+
+def test_a_turn_without_the_workspace_adds_no_workspace_fields(store, fake_vm, monkeypatch):
+    from app.services import agent_audit_metrics
+    recorded = []
+    monkeypatch.setattr(agent_audit_metrics, "record", recorded.append)
+    loop = vm_loop(store, Steps(), audit="off")
+    list(loop.run())
+    assert recorded == []
+    loop = vm_loop(store, Steps(), request_id="two")
+    list(loop.run())
+    # An audit turn counts as before, without workspace fields.
+    assert recorded == [loop] and "workspace_run" not in agent_audit_metrics.capture(loop)
+
+
+def test_outages_failed_turns_and_wrap_ups_are_counted_by_code():
+    from app.services.agent_audit_metrics import turn_counters
+    captured = {"audit": False, "wrap_up": "time", "ended_at": datetime.now(timezone.utc), "workspace_run": {
+        "steps": 120, "active_s": 7300.0, "outages": ["vm_unavailable", "browser_off"],
+        "first": {"kind": "browser", "ms": 59_000, "after_s": 12.0, "failed": True}}}
+    counters = turn_counters({"status": "failed", "agent_failure": {"code": "run_limit"}}, captured)
+    assert counters["wrap_up"] == {"time": 1} and counters["ws_steps"] == {"le200": 1}
+    assert counters["ws_active_s"] == {"over7200": 1} and counters["ws_first_call_s"] == {"browser": {"le60": 1}}
+    assert counters["ws_first_result_s"] == {"le90": 1}
+    assert counters["ws_failures"] == {"first_call": 1, "vm_unavailable": 1, "browser_off": 1, "turn_run_limit": 1}
+
+
+def test_the_report_reads_workspace_counters_and_the_step_split():
+    from datetime import timedelta
+    from scripts.audit_report import render, report, step_split
+    t0 = datetime(2026, 10, 30, 10, tzinfo=timezone.utc)
+    at = lambda seconds: t0 + timedelta(seconds=seconds)  # noqa: E731
+    receipts = [{"account": "guest", "own": False, "chat": "c1", "turn": "t1", "step": f"completion:{n}",
+                 "created_at": at(10 * n), "request_started_at": at(10 * n + .3),
+                 "first_token_at": at(10 * n + 1.3), "stream_ended_at": at(10 * n + 3.3),
+                 "settled_at": at(10 * n + 3.5)} for n in range(3)]
+    split = step_split([*receipts, {"step": "agent:" + "a" * 32 + ":0", "created_at": at(0)}])
+    assert (split["before_request"]["p50"], split["to_first_token"]["p50"], split["stream"]["p50"],
+            split["after_stream"]["p50"]) == (.3, 1.0, 3.0, .2)
+    counters = [{"day": "2026-10-30", "ws_turns": {"completed": 2}, "ws_steps": {"le10": 2},
+                 "ws_failures": {"browser_off": 1}, "wrap_up": {"steps": 1}}]
+    result = report({"receipts": receipts, "turns": {}, "counters": counters, "since": t0})
+    assert result["workspace"]["ws_turns"] == {"completed": 2} and result["workspace"]["wrap_up"] == {"steps": 1}
+    assert result["times"]["agent_step"]["stream"]["n"] == 3
+    shown = render(result)
+    assert "Workspace turns" in shown and "browser_off" in shown and "agent step after_stream" in shown

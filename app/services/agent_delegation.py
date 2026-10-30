@@ -630,6 +630,8 @@ class DelegationLoop(AgentLoop):
         self.workspace_closed = self.workspace_opened = self.workspace_used = False
         self.workspace_task = None
         self.workspace_names = frozenset()
+        # The first call into the workspace in this message (_execute, I6).
+        self.first_workspace_call = None
         # The user's answer on an ask_user card, for the tool to return (_ask_wait, agent_ask.py).
         self.ask_answer = None
         # Domains the user allowed on a card in this message: request_domain
@@ -1268,6 +1270,12 @@ class DelegationLoop(AgentLoop):
         reason = None
         # When the call started and how long it ran, for the work log (I4).
         started_at, began = datetime.now(timezone.utc).isoformat(), time.monotonic()
+        # The message's first call into the workspace, for the anonymous
+        # counters (agent_audit_metrics, I6): its kind, how long it took and
+        # how far into the message it started.
+        first_in_workspace = None
+        if self.first_workspace_call is None and (call.get("function") or {}).get("name") in self.workspace_tools:
+            first_in_workspace = self._turn_elapsed()
         def publish(status):
             if registry in (self.registry, self.app_registry) and tool:
                 # A refused update_memory keeps a content-free reason code
@@ -1352,10 +1360,16 @@ class DelegationLoop(AgentLoop):
         result = agent_secrets.scrub(self.uid, result)
         message = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
         # The app's own calls (the review of the fixed answer) are not the agent's work.
+        duration_ms = int((time.monotonic() - began) * 1000)
+        if first_in_workspace is not None and self.first_workspace_call is None:
+            self.first_workspace_call = {
+                "kind": "browser" if (call.get("function") or {}).get("name") == "browser" else "vm",
+                "ms": duration_ms, "after_s": round(max(0.0, first_in_workspace), 1), "failed": status != "succeeded"
+                or (isinstance(result, dict) and "error" in result)}
         log_actor = self._log_actor(value.step_id) if registry is not self.app_registry else None
         if log_actor:
             self.work_log.tool(log_actor, value.step_id, call, message, started_at=started_at,
-                               duration_ms=int((time.monotonic() - began) * 1000))
+                               duration_ms=duration_ms)
         return message
 
     def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
@@ -3582,8 +3596,10 @@ class DelegationLoop(AgentLoop):
                                       status=status, run_token=self.run_token)
             else:
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
-            if self.comparison is not None and self.comparison.audit_mode:
-                # Anonymous daily counters of audit turns, saved off this thread.
+            if self.comparison is not None and (self.comparison.audit_mode
+                                                or (self.vm_tools is not None and self.workspace_used)):
+                # Anonymous daily counters of audit turns and of turns that
+                # used the workspace (I6), saved off this thread.
                 from app.services import agent_audit_metrics
                 agent_audit_metrics.record(self)
             # The turn's time under the account lock (A-T5).
