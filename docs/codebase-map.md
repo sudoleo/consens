@@ -160,12 +160,17 @@ resumes it, `agent_tunnel.resume`), and `POST
 /agent/chats/{chat}/requests/{request}/secret` (`routers/agent.py`) writes a
 key the agent asked for with `ask_user` `secret` to `~/.secrets/<name>` on the
 workbench, never into the chat (`agent_secrets.py`).
-One view and one terminal per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
+One view and one terminal per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429; since 2026-10-30 the first state carries `left_seconds`, the day's VM time left, and every end is logged with its code and side and counted anonymously in `ops_metrics/workspace-view-{day}`); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
 since 2026-10-27, `AGENT_VM_ACCESS=pro` for every account with audit) on a
 server with a VM provider.
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
 `open({ takeOver })`, `close`, `init`, `isOpen`, `showTab`, `holder`, `handBack`
-(also without an open view), `agentWaits(request)`; window event
+(also without an open view), `agentWaits(request)`, `agentStep(line)` (the
+agent's step for the status line, from `agent-activity.js`, since 2026-10-30);
+a drop without a server reason reconnects after 1/2/5/10 s and on
+`visibilitychange`/`online`, keeping the takeover and its bar; a tab hidden
+60 s while the agent has the browser lets go; "Keyboard" on touch screens and
+"100%" while the user has it, runtime audit V1–V7; window event
 `consensio:workspace-holder` on every change of holder, and since 2026-10-29
 `consensio:workspace-handback` only for the hand-back button, on which
 `agent-chat.js continueAfterHandback` sends "Done in the browser." unless a run
@@ -6165,7 +6170,11 @@ als `tool`-Eintrag mit Herkunft `vm` im Arbeitsprotokoll. Der Turn speichert
 sperren Memory. Ein Ausfall (`VMUnavailable`) schaltet die VM für die
 Nachricht ab, die Antwort läuft weiter. Anzeige: `agent-activity.js` `vmView`
 (kompakter Block, offen während der Befehl läuft, danach eingeklappt;
-Befehl/Ausgabe in `<code>`/`<pre>`); live faltet `foldPast` frühere Schritte in
+Befehl/Ausgabe in `<code>`/`<pre>`; seit 2026-10-30 sagen laufende `vm_exec`,
+`vm_install_packages` und `browser` „Starting the workspace…“ bis
+`started_at`, dann „Running · 42s“ in einem Slot fester Breite, ein Befehl
+ohne neue Ausgabe seit 30 s „No output for 45s“, `liveClock`/`writeMeta`;
+`outcome: interrupted` heißt „Connection lost“); live faltet `foldPast` frühere Schritte in
 eine Zeile („Ran 3 commands“), seit 2026-10-28 alle Schrittarten, nicht nur
 VM-Befehle, und lange Notizen des Agenten kürzt die Live-Ansicht auf drei
 Zeilen (`.agent-progress-note`): Die Live-Zeilen wachsen in langen Läufen
@@ -6181,7 +6190,9 @@ zweiten Zeile, vorher hatte eine geöffnete Seite nie einen). `vm_share_file` (s
 VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `kind: "vm_file"`, `turn_id`, `origin {source: vm, path}`; Typ per
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
-`agent-workspace.js` zeigt PNG/JPEG/WebP/GIF der Turn (`vm_file`, seit
+`agent-workspace.js` (seit 2026-10-30 erst, wenn ihr Platz in Sicht kommt,
+`IntersectionObserver`, als Vorschau `GET …/files/{id}?preview=1` bis 1600 px,
+Original für Download und Ansicht) zeigt PNG/JPEG/WebP/GIF der Turn (`vm_file`, seit
 2026-10-28 auch `web_image` von `show_image`, seit 2026-10-29 nur ein
 Bild, das der Agent vorher mit `find_pictures` angesehen hat, mit Bildunterschrift und der
 Website als Link, `webSource`) als Bild direkt unter dem
@@ -11217,7 +11228,16 @@ sichtbarem Run/Status, Basis); `App.agentChat.render()` ohne Argument ist daher
 billig, `render()` aus eigenen Aktionen erzwingt es. `project(context)` ruft
 `projectFrame()` einmal pro Run/Sicht (Titel, Frage, Anhänge, Verlauf, Listen)
 und danach nur noch den Lauf: Antwort, Aktivität, Delegation. Der
-Registry-Listener rendert keinen zweiten Durchgang. Evidence-Links
+Registry-Listener rendert keinen zweiten Durchgang. Seit 2026-10-30
+(Laufzeit-Audit P1) zeichnet eine Projektion, die nur neue Wörter der Antwort
+bringt (`follow` `flush` ohne andere Events, `paintOnly`), die Aktivität nicht
+neu, solange sich nicht ändert, ob es eine Antwort gibt oder ob die Review sie
+als Version hält; `agent-activity.js` vergleicht je Knoten eine Revision des
+Events (`receive` → `touch`, `stamp`) statt JSON-Signaturen, filtert über Sets,
+hält Gedankenauszüge je Event (`compact`) und schreibt Attribute nur bei
+Änderung (gleichwertige Schreibvorgänge erzwangen eine Stilberechnung des
+ganzen Baums). Der Glanz der laufenden Zeile ist eine Transform-Animation
+(`label-shine`, P3). Evidence-Links
 (`agentReview.render`) entstehen erst am Ende eines Laufs. Endet der Lauf mit
 genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
 gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
