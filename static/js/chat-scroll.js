@@ -63,6 +63,30 @@
   // answer is still short. The answer, its evidence row and late files fill
   // this space instead of lengthening the page: nothing above or on screen
   // moves, and the page only grows once the turn is taller than the viewport.
+  //
+  // The layout keeps that space, not a measurement after the fact (since
+  // 2026-10-30): the column holds a minimum height that ends the page one
+  // viewport below the scroll offset that puts the question at the top, and
+  // the reserve (flex-grow, chat-scroll.css) takes whatever the turn leaves
+  // of it, in the same layout. Until then the reserve's own height followed
+  // the turn from a ResizeObserver: a turn that got shorter at the end of the
+  // page, where Send leaves every later question, first shortened the page
+  // for one layout, the browser clamped the scroll offset, and the whole chat
+  // jumped by that much and back (Max, 2026-10-30: a live line going from two
+  // lines to one, 21px; the phone's composer folding after Send, 151px).
+  // A turn taller than the window still never gets shorter while its run
+  // works: the reviewers finish while the reader types the next question,
+  // and their row (or the live lines leaving) took a line from the end of the
+  // page, which pulled the chat down under the reader's eyes. The tallest
+  // column of the run holds until the next run, chat or window size.
+  let floor = "", peak = 0;
+  // The turn's own height: the column without the room the reserve fills.
+  // The column alone holds its floor, and a floor measured into the next
+  // floor would never let go.
+  function contentHeight(bounds) {
+    const room = reserve?.isConnected ? reserve.getBoundingClientRect() : null;
+    return bounds.bottom - bounds.top - (room ? room.bottom - room.top : 0);
+  }
   function updateReserve() {
     const column = container();
     if (!column) return;
@@ -70,40 +94,33 @@
       reserve = document.createElement("div");
       reserve.className = "chat-scroll-reserve";
       reserve.setAttribute("aria-hidden", "true");
+      // A turn above that changes moves the question without changing the
+      // column's height (the reserve gives way): the reserve's own size says so.
+      observer?.observe(reserve);
     }
     if (reserve.parentNode !== column) column.append(reserve);
     const question = head();
-    let height = 0;
+    let next = "";
     if (question && !document.body.classList.contains("is-hero") && column.getClientRects().length) {
-      const style = window.getComputedStyle(column);
-      const composer = column.querySelector(".input-section");
-      const inFlow = composer && window.getComputedStyle(composer).position !== "fixed";
       // What follows the column in the body, measured in layout pixels. Not
-      // via scrollHeight: that is rounded and includes the reserve itself, so
-      // a fractional layout (a question at 292.625px) made the reserve and the
-      // page height swap 1px every frame, and the scrollbar flickered.
-      const after = Math.max(0, document.body.getBoundingClientRect().bottom - column.getBoundingClientRect().bottom)
+      // via scrollHeight: that is rounded, so a fractional layout (a question
+      // at 292.625px) swapped the page height by 1px every frame.
+      const bounds = column.getBoundingClientRect();
+      const after = Math.max(0, document.body.getBoundingClientRect().bottom - bounds.bottom)
         + (parseFloat(window.getComputedStyle(document.body).marginBottom) || 0);
-      const below = (parseFloat(style.paddingBottom) || 0) + (inFlow ? composer.offsetHeight : 0) + after;
-      const ask = question.getBoundingClientRect().top;
-      const turn = reserve.getBoundingClientRect().top - ask;
-      const land = landing(question);
-      // The page ends one viewport below the scroll offset that puts the
-      // question at the top (headTop, a whole pixel), whatever the turn's
-      // height: the reserve takes up every fraction of it. Rounded down to
-      // whole pixels until 2026-10-29, it left the end of the page at the
-      // turn's own fraction, so every new line of the live run (20.8px, and
-      // each frame of its growth) moved the end by a fraction. At the end of
-      // the page, where Send leaves every later question, the browser pulled
-      // the page 1px down whenever that end rounded a pixel lower, and back
-      // up with the next line (Max: the chat jiggled as reasoning came in).
-      const head = ask + window.scrollY - land;
-      // Down to the layout's own unit (1/64px): a reserve a fraction too
-      // tall would make the page scroll by that fraction.
-      height = Math.max(0, Math.floor((window.innerHeight - land - turn - below + Math.round(head) - head) * 64) / 64);
+      const head = question.getBoundingClientRect().top + window.scrollY - landing(question);
+      // The page ends one viewport below headTop (a whole pixel), whatever the
+      // turn's height and fraction (20.8px lines), down to the layout's own
+      // unit (1/64px): a floor a fraction too tall would scroll by that fraction.
+      const height = Math.floor((Math.round(head) + window.innerHeight - after - (bounds.top + window.scrollY)) * 64) / 64;
+      if (context?.runId && App.runRegistry?.isExecuting?.(context.runId)) peak = Math.max(peak, contentHeight(bounds));
+      // The column's own floor (shell.css) still holds on a short page.
+      next = `max(calc(100dvh - 10px), ${Math.max(0, height, peak)}px)`;
     }
-    const current = parseFloat(reserve.style.height) || 0;
-    if (current !== height) reserve.style.height = `${height}px`;
+    if (next !== floor) {
+      floor = next;
+      column.style.minHeight = next;
+    }
   }
   function contentEnd() {
     return reserve?.isConnected ? reserve.getBoundingClientRect().bottom + window.scrollY : null;
@@ -156,6 +173,14 @@
       // Use document coordinates so native scroll anchoring, if it already ran,
       // cannot double the correction. Preserve the same text in the viewport.
       const shift = position() - before;
+      // Growth above the reader that the run's floor took into the reserve
+      // below: the floor grows with it, or the page could not follow and the
+      // text in view would move down by that much.
+      const missing = y + shift - maxTop();
+      if (peak && missing > 0) {
+        peak = Math.max(peak, contentHeight(container().getBoundingClientRect())) + missing;
+        updateReserve();
+      }
       const target = Math.max(0, Math.min(maxTop(), y + shift));
       if (Math.abs(target - window.scrollY) > .5) write(target);
       syncButton();
@@ -230,6 +255,7 @@
     if (!observer && column && typeof ResizeObserver === "function") {
       observer = new ResizeObserver(changed);
       observer.observe(column);
+      if (reserve) observer.observe(reserve);
     }
     updateReserve();
   }
@@ -247,6 +273,7 @@
         || context?.auth?.generation !== next?.auth?.generation || !eligible) {
       pause();
       context = eligible ? next : null;
+      peak = 0;
     }
     ensure();
     syncButton();
@@ -302,7 +329,12 @@
     window.addEventListener(name, interrupt, { passive: true, capture: true });
   });
   window.addEventListener("scroll", syncButton, { passive: true });
-  window.addEventListener("resize", changed, { passive: true });
+  let width = window.innerWidth;
+  window.addEventListener("resize", () => {
+    // Another width sets the turn anew; the phone's keyboard does not.
+    if (window.innerWidth !== width) { width = window.innerWidth; peak = 0; }
+    changed();
+  }, { passive: true });
   window.visualViewport?.addEventListener("resize", changed, { passive: true });
   document.addEventListener("selectionchange", () => { if (!window.getSelection()?.isCollapsed) pause(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });

@@ -5,7 +5,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // the top once, nothing follows streamed output, "Latest message" and opening
 // a conversation jump to the end once. Geometry is faked: `askAt` is the
 // question's document position, `height` the document height.
-function boot({ reduced = false, mode = "agent", askAt = 2000 } = {}) {
+function boot({ reduced = false, mode = "agent", askAt = 2000, executing = false } = {}) {
   let y = 0, height = 3200, now = 0, serial = 0, resize, ask = askAt;
   const frames = new Map();
   let visible = { runId: "one", config: { executionMode: mode, agentMode: true } };
@@ -14,9 +14,13 @@ function boot({ reduced = false, mode = "agent", askAt = 2000 } = {}) {
     body: '<main class="container"><div id="threadPendingAsk" hidden></div><div id="threadAsk">New question</div><section class="input-section"><textarea id="questionInput"></textarea></section></main>',
     before(window) {
       window.matchMedia = () => ({ matches: reduced });
-      window.App = { runRegistry: { visible: () => visible, isAuthCurrent: () => true, getSelectedConversationIdentity: () => basis } };
+      window.App = { runRegistry: { visible: () => visible, isAuthCurrent: () => true, getSelectedConversationIdentity: () => basis,
+        isExecuting: runId => executing && runId === visible?.runId } };
       Object.defineProperty(window, "scrollY", { get: () => y });
-      Object.defineProperty(window.document.documentElement, "scrollHeight", { get: () => height });
+      // With a working run, the column's floor (its min-height) holds the
+      // page as the layout would: the page is at least that tall.
+      const floor = () => executing ? parseFloat(/([\d.]+)px\)$/.exec(window.document.querySelector(".container")?.style.minHeight || "")?.[1]) || 0 : 0;
+      Object.defineProperty(window.document.documentElement, "scrollHeight", { get: () => Math.max(height, floor()) });
       window.innerHeight = 800;
       window.performance.now = () => now;
       window.requestAnimationFrame = fn => { const id = ++serial; frames.set(id, fn); return id; };
@@ -32,11 +36,15 @@ function boot({ reduced = false, mode = "agent", askAt = 2000 } = {}) {
   question.getClientRects = () => [{}];
   question.getBoundingClientRect = () => ({ top: ask - y, bottom: ask + 40 - y });
   const column = document.querySelector(".container");
-  column.getBoundingClientRect = () => ({ top: -y, bottom: height - y });
+  // The column is as tall as its floor, at least (min-height).
+  const floor = () => parseFloat(/([\d.]+)px\)$/.exec(column.style.minHeight || "")?.[1]) || 0;
+  column.getBoundingClientRect = () => ({ top: -y, bottom: (executing ? Math.max(height, floor()) : height) - y });
   column.getClientRects = () => [{}];
   result.window.App.chatScroll.project(visible);
   // The reserve closes the content; the composer has no height here.
-  document.querySelector(".chat-scroll-reserve").getBoundingClientRect = () => ({ top: height - y, bottom: height - y });
+  // With a floor above the content, the reserve fills the room between them.
+  document.querySelector(".chat-scroll-reserve").getBoundingClientRect = () => ({ top: height - y,
+    bottom: (executing ? Math.max(height, floor()) : height) - y });
   return { ...result, frames,
     tick(count = 40) { for (let i = 0; i < count; i++) { now += 16; const current = [...frames.values()]; frames.clear(); current.forEach(fn => fn(now)); } },
     grow(amount) { height += amount; resize(); },
@@ -105,38 +113,69 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
-  it('sizes the reserve so a short turn can sit at the top without lengthening the page later', () => {
+  // The column holds the page's end (its minimum height) and the reserve
+  // takes what the turn leaves of it in the same layout: a turn that gets
+  // shorter cannot shorten the page for a frame and clamp the scroll offset.
+  const floorOf = app => app.document.querySelector('.container').style.minHeight;
+  it('ends the page one viewport below the question while the turn is short', () => {
     const app = boot({ askAt: 100 });
-    const reserve = app.document.querySelector('.chat-scroll-reserve');
-    expect(reserve).not.toBeNull();
-    reserve.getBoundingClientRect = () => ({ top: 400 - app.window.scrollY });
+    expect(app.document.querySelector('.chat-scroll-reserve')).not.toBeNull();
     app.grow(0);
-    // 800 viewport - 0 landing - 300 turn - 0 below.
-    expect(reserve.style.height).toBe('500px');
+    // 100 question offset - 0 landing + 800 viewport - 0 above and below the column.
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 900px)');
     app.document.body.classList.add('is-hero');
     app.grow(0);
-    expect(reserve.style.height).toBe('0px');
+    expect(floorOf(app)).toBe('');
     app.dom.window.close();
   });
 
-  // The live lines are 20.8px tall: a reserve in whole pixels left the end of
-  // the page at the turn's fraction, and at the end of the page every line
-  // that moved it across a pixel pulled the chat 1px down and back.
-  it('ends the page at the same place whatever fraction the turn above the reserve has', () => {
+  // The live lines are 20.8px tall: an end at the turn's own fraction moved
+  // with every line, and at the end of the page every line that crossed a
+  // pixel pulled the chat 1px down and back. The end does not depend on the
+  // turn at all: one viewport below the whole-pixel offset of the question.
+  it('ends the page at the same place whatever the turn does', () => {
     const app = boot({ askAt: 100.3 });
     const reserve = app.document.querySelector('.chat-scroll-reserve');
-    const ends = [];
+    const floors = new Set();
     for (const top of [400.6, 421.397, 442.194, 457.563, 478.36]) {
       reserve.getBoundingClientRect = () => ({ top: top - app.window.scrollY });
       app.grow(0);
-      ends.push(top + parseFloat(reserve.style.height));
+      floors.add(floorOf(app));
     }
-    // One viewport below the whole-pixel offset that puts the question at
-    // the top (100), never past it, never more than the layout unit short.
-    for (const end of ends) {
-      expect(end).toBeLessThanOrEqual(900);
-      expect(end).toBeGreaterThan(900 - 1 / 64);
-    }
+    expect([...floors]).toEqual(['max(calc(100dvh - 10px), 900px)']);
+    app.dom.window.close();
+  });
+
+  // The reviewers finish while the reader types the next question: a row
+  // that gets shorter at the end of a long turn pulled the chat down.
+  it('never lets the column of a working run get shorter, until the next run', () => {
+    const app = boot({ askAt: 100, executing: true });
+    app.grow(0);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3200px)');
+    app.grow(-300);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3200px)');
+    app.show({ runId: 'two', config: { executionMode: 'agent', agentMode: true } });
+    app.grow(0);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 2900px)');
+    app.dom.window.close();
+  });
+
+  // A reader at the end of a long working turn while the activity above
+  // grows: the floor that held a taller moment of the run took the growth
+  // into the reserve below, and the text in view moved down (2026-10-30).
+  it('lets the floor grow with what grows above a reader at the end', () => {
+    const app = boot({ askAt: 100, executing: true });
+    app.grow(60); app.grow(-60);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3260px)');
+    app.scroll(2460);
+    const activity = app.document.createElement('div');
+    app.document.querySelector('.container').prepend(activity);
+    let bottom = 900;
+    activity.getBoundingClientRect = () => ({ bottom: bottom - app.window.scrollY });
+    const restore = app.window.App.chatScroll.preserveAbove(activity);
+    bottom += 24.8; app.grow(24.8);
+    restore();
+    expect(app.window.scrollY).toBeCloseTo(2484.8, 3);
     app.dom.window.close();
   });
 

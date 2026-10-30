@@ -2817,6 +2817,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Bruchteil der Live-Zeilen (20,8 px, dazu ihre Höhen-Animation); am
   Seitenende, wo jede spätere Frage nach dem Senden steht, zog der Browser den
   Chat dann bei neuen Reasoning-Zeilen 1 px herunter und wieder hoch.
+  **Seit 2026-10-30 hält das Layout die Reserve, nicht eine Nachmessung:**
+  `updateReserve()` schreibt dieses Seitenende als `min-height` der Spalte
+  (`max(calc(100dvh - 10px), …px)`, Border-Box, Composer und Handy-Padding
+  liegen darin), die Reserve ist `flex: 1 0 0` und nimmt im selben Layout, was
+  der Turn davon übrig lässt. Vorher folgte ihre eigene Höhe dem Turn per
+  ResizeObserver: Wurde der Turn am Seitenende kürzer, war die Seite ein Layout
+  lang kürzer, der Browser klemmte `scrollY`, und der ganze Chat sprang um so
+  viel und zurück (gemessen: Denkzeile zwei→eine Zeile 21/42 px, Handy-Composer
+  klappt nach dem Senden zu 151 px). Ein Turn über Viewport-Höhe wird zudem
+  nicht kürzer, solange sein Lauf arbeitet (`peak`, größte Inhaltshöhe des
+  laufenden Runs = Spalte ohne Reserve, sonst hielte die Untergrenze sich
+  selbst fest; zurückgesetzt bei neuem Run/Chat und neuer Fensterbreite):
+  die Prüfer werden fertig, während der Leser schon die nächste Frage tippt,
+  und ihre kürzere Zeile zog den Chat sonst unter den Augen herunter. Wächst
+  über einem Leser am Seitenende etwas, das `preserveAbove` ausgleicht (offene
+  Aktivität), wächst `peak` ab der aktuellen Inhaltshöhe um den fehlenden Rest mit, sonst schluckte die
+  Reserve das Wachstum und der Text im Bild rutschte nach unten. Der
+  ResizeObserver beobachtet Spalte und Reserve (deren Höhe ändert sich, wenn
+  sich der Verlauf über der Frage ändert, die Spalte aber nicht).
   `openBookmark()` ruft nach der Projektion `App.chatScroll.opened()` auf, auch
   bei noch lokal vorhandenen Runs: **seit 2026-10-20 ohne Fahrt** (Apple-Audit
   A2/A3) — die neueste Frage wird synchron vor dem ersten Bild an ihre
@@ -11416,11 +11435,26 @@ Was schon sichtbar ist, bewegt sich nicht mehr: Claim-Marken (`.cx-claim`)
 haben keinen horizontalen Innen-/Außenabstand mehr, der Überstand ist ein
 `box-shadow` in Markenfarbe (`--cx-paint`, `--cx-bleed`; `cx-join-*` lassen die
 innere Seite weg), Filter/Ausblenden setzen auch `box-shadow: none`. Die
-Fortschrittszeilen über der Antwort (`.agent-progress`) verschwinden ohne
-Animation, sobald Antworttext steht und kein Tool läuft (eine Präambel vor einem
-laufenden Tool zählt nicht); die App-Prüfungen der fertigen Antwort
+Fortschrittszeilen über der Antwort (`.agent-progress`) weichen, sobald
+Antworttext steht und kein Tool läuft (eine Präambel vor einem laufenden Tool
+zählt nicht); die App-Prüfungen der fertigen Antwort
 (`judge_answer`, `answerChecks`) holen sie nicht zurück –
-bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Eine vom Leser geöffnete Aktivitäts-Historie bleibt
+bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Seit 2026-10-30
+(Max: „das Bild springt die ganze Zeit, wenn das Reasoning erscheint“) übergeben
+sie an die Antwort (`handoff`): Sie blenden in `HANDOFF_MS` (160 ms) aus, die
+schon geschriebene Antwort steht derweil unsichtbar (`#agentAnswerBody.is-awaiting-trace`,
+`visibility: hidden`, ein Timer hebt das sicher auf) und erscheint dann dort,
+wo sie standen; vorher verschwanden sie im Frame der ersten Antwortwörter.
+Jede andere Änderung der Live-Zeilen läuft durch `settle(view, change)`
+(FLIP): Höhe gleitet in `SETTLE_MS` (220 ms), bleibende Zeilen gleiten von
+ihrer alten Lage (Transform), neue blenden ein, gehende (gefaltet oder
+entfernt) blenden als `.agent-progress-ghost` an ihrer Stelle aus (nur Wörter
+und Schrift der Zeile, ohne Klasse, Rolle oder Status); auch eine
+Denkzeile, die beim Überblenden (`crossfade`) die Zeilenzahl ändert. Vorher
+sprangen Faltung, Kürzung und Entfernen in einem Frame. Die Zeilen eines
+Modellschritts (`completion:N`: Gedanke, Notiz, Aufruf) stehen `--space-2`
+auseinander, ein neuer Schritt `--space-4` (`.is-step-start`), statt alle im
+selben Abstand. Eine vom Leser geöffnete Aktivitäts-Historie bleibt
 am Laufende offen, solange sie im Bild ist (oberhalb des Viewports klappt sie mit
 `preserveAbove`-Korrektur zu). Der Antwortbeginn blendet nur ein
 (`reveal(body, {lift:false})`). Laden: `app-bootstrap.js` setzt per
@@ -11519,7 +11553,13 @@ liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt, **und seit
 Apple-Audit A9): ein neuer Turn übernimmt die Wahl des Chats, und solange eine
 Folgefrage ihren Turn noch nicht kennt (`project({chatId, running})` ohne
 `turnId`), bleibt eine offene Leiste mit „Starting…“ stehen, statt zu- und
-wieder aufzugehen (`chatPanelStaysOpen`: Wahl des Chats, sonst der Standard). Sie geht auf demselben Weg, wie sie kam
+wieder aufzugehen (`chatPanelStaysOpen`: Wahl des Chats, sonst der Standard).
+Im Audit-Modus (`App.agentPreferences.auditing()`, Prüfer folgen immer) öffnet
+sie sich ab 1200 px seit 2026-10-30 schon mit der Nachricht, auch im neuen Chat
+ohne `chatId`: mit dem ersten Aufruf geöffnet, verengte sie die Spalte einen
+Moment nach dem Senden, und die neue Frage brach unter den Augen um. Die
+Spalte nimmt dabei ihre Breite ohne Gleiten an (`body.agent-panel-instant`,
+zwei Frames lang): ein Umbruch mitten im Gleiten war der Sprung. Sie geht auf demselben Weg, wie sie kam
 (`setPanelVisible`, `.is-leaving` gleitet/blendet samt Scrim aus, erst danach
 `hidden`; C5). Logo-Einflug (`.agent-inline-model.is-arriving`) nur für Modelle,
 die während eines laufenden Turns dazukommen; ein gespeicherter Turn zeigt seine

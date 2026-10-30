@@ -308,6 +308,9 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
     --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 346px - 48px));
     margin-left: calc((var(--app-sidebar-offset) + 100% - 346px - var(--agent-chat-width)) / 2);
   }
+  /* Opened with the message (agent-delegation.js, audit mode): the column is
+     at its width in the frame the question appears. */
+  body.single-agent-active.agent-panel-instant:not(.answer-reader-docked) .container { transition: none; }
 }
 /* The one scrim (foundation.css). An --ink tint dimmed in light mode but
    laid a pale veil over the chat in dark mode. Scrim and sheet stand above
@@ -880,8 +883,22 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--trace-lh); font-size: var(--font-size-ui); }
 .agent-activity-tool, .agent-activity-current { color: var(--agent-ink); overflow-wrap: anywhere; font-size: var(--font-size-ui); line-height: var(--trace-lh); }
 .agent-activity-current > strong { display: block; font-weight: 500; }
-/* -8px: the head's 36px row already holds air under its words. */
-.agent-progress { display: flow-root; margin: calc(-1 * var(--space-2)) 0 var(--space-5); color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); }
+/* -8px: the head's 36px row already holds air under its words. The lines of
+   one model step (its thought, the note beside its call, the call) stand
+   --space-2 apart, the next step --space-4 (agent-activity.js .is-step-start,
+   2026-10-30): one even gap made thoughts, notes and steps one undivided
+   list. Relative: a line that leaves fades where it stood
+   (.agent-progress-ghost, agent-activity.js settle). */
+.agent-progress {
+  --trace-gap: var(--space-2);
+  position: relative; display: flow-root; margin: calc(-1 * var(--space-2)) 0 var(--space-5);
+  color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh);
+}
+.agent-progress > .is-step-start:not(.agent-progress-ghost) { margin-top: var(--space-4); }
+.agent-progress > .agent-progress-ghost { position: absolute; left: 0; right: 0; margin: 0; pointer-events: none; }
+/* The answer waits, written but unseen, while the live lines fade out above
+   it (agent-activity.js handoff): it appears where they stood. */
+#agentAnswerBody.is-awaiting-trace { visibility: hidden; }
 /* pre-line: the agent's note beside a tool call keeps its lines. */
 .agent-progress p { margin: 0 0 var(--trace-gap); overflow-wrap: anywhere; white-space: pre-line; }
 /* In the live lines a note stays three lines tall (the timeline has it

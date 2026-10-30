@@ -78,6 +78,29 @@ describe("Agent sidebar", () => {
     expect(sidebar.classList.contains('is-leaving')).toBe(false);
     dom.window.close();
   });
+  // 2026-10-30: opened with the turn's first call, the panel narrowed the
+  // column a moment after Send and the new question broke onto another line.
+  it('opens with the message in audit mode, before the server named the turn', () => {
+    const {window:w,document:d,dom} = boot();
+    w.App.agentPreferences = { auditing: () => true };
+    w.App.agentDelegation.project({running:true});
+    const sidebar = d.getElementById('agentSidebar');
+    expect(sidebar.hidden).toBe(false);
+    expect(d.body.classList.contains('agent-sidebar-open')).toBe(true);
+    expect(sidebar.querySelector('.agent-sidebar-progress').textContent).toBe('Starting…');
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    expect(sidebar.hidden).toBe(false);
+    expect(sidebar.classList.contains('is-leaving')).toBe(false);
+    dom.window.close();
+  });
+  it('waits for the turn outside audit mode', () => {
+    const {window:w,document:d,dom} = boot();
+    w.App.agentPreferences = { auditing: () => false };
+    w.App.agentDelegation.project({running:true});
+    expect(d.getElementById('agentSidebar')?.hidden ?? true).toBe(true);
+    expect(d.body.classList.contains('agent-sidebar-open')).toBe(false);
+    dom.window.close();
+  });
   it("shows a saved turn's model icons at once and lets only live arrivals settle in (Apple audit A10)", async () => {
     let release;
     const {window:w,document:d,dom} = boot(() => new Promise(resolve => { release = () => resolve({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}); }));

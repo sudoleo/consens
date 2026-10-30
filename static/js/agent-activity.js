@@ -314,6 +314,8 @@
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
     }
     cancelMotion(host._agentActivity?.historyMotion);
+    // Lines on their way out (and an answer waiting for them) are gone now.
+    if (host._agentActivity?.previewExit) clearPreview(host._agentActivity);
   }
   // An attribute is written only when it changes: every write is a mutation
   // the page's observers and its style look at again (P1).
@@ -326,19 +328,121 @@
       : [{ opacity: 0 }, { opacity: 1 }]);
   }
   function clearPreview(view) {
+    endHandoff(view);
     view.preview.hidden = true;
     view.preview.replaceChildren();
     view.previewNodes.clear();
     view.previewExit = false;
     view.previewMotion = null;
   }
-  function hidePreview(view, instant = false) {
-    if (view.previewExit && !instant) return;
+  // The live lines move as one surface (2026-10-30, Max: "the picture jumps
+  // the whole time while the reasoning comes in"). Every change to them goes
+  // through settle(): their height glides from the old to the new, the lines
+  // that stay slide from where they stood, a new line fades in and a line
+  // that goes fades out where it stood. Before, a thought that went from two
+  // lines to one, a step folding the ones before it and a line leaving all
+  // snapped in one frame, and everything under them with it.
+  const SETTLE_MS = 220;
+  function lineTops(view) {
+    const tops = new Map();
+    for (const node of view.preview.children) {
+      if (!node.classList.contains('agent-progress-ghost')) tops.set(node, node.getBoundingClientRect().top);
+    }
+    return tops;
+  }
+  // What the lines show: a render that changes none of it leaves every
+  // motion under way alone (it restarted them before, in each render).
+  function shown(preview) {
+    let text = '';
+    for (const node of preview.children) {
+      if (!node.classList.contains('agent-progress-ghost')) text += `${node.className}${node.textContent}`;
+    }
+    return text;
+  }
+  function settle(view, change) {
+    const preview = view.preview;
+    const quiet = offscreenUpdate || quietMotion?.matches || view.details.open
+      || preview.hidden || !preview.isConnected || !preview.childElementCount;
+    if (quiet) { change(); return false; }
+    const was = shown(preview);
+    const from = preview.getBoundingClientRect().height;
+    const before = lineTops(view);
+    change();
+    if (preview.hidden || shown(preview) === was) return true;
+    // Each motion starts again from where it stands now.
+    cancelMotion(view.previewMotion);
+    view.previewMotion = null;
+    for (const node of before.keys()) { cancelMotion(node._slide); node._slide = null; }
+    const now = preview.getBoundingClientRect();
+    const to = now.height;
+    for (const [node, top] of before) {
+      if (node.parentNode === preview) {
+        const shift = top - node.getBoundingClientRect().top;
+        if (Math.abs(shift) >= .5) node._slide = motion(node, [{ transform: `translateY(${shift}px)` }, { transform: 'none' }], () => {}, SETTLE_MS);
+      } else if (!node.isConnected || !node.getClientRects().length) {
+        // A line that left (gone, or folded out of sight) fades where it
+        // stood, over the lines that take its place: only its words in its
+        // type, without the class, role or state of a line, so nothing reads
+        // it as one (a second "status" while it fades).
+        const ghost = node.cloneNode(false);
+        preview.append(ghost);
+        const look = getComputedStyle(ghost);
+        const type = { color: look.color, fontFamily: look.fontFamily, fontSize: look.fontSize,
+          fontWeight: look.fontWeight, lineHeight: look.lineHeight, whiteSpace: look.whiteSpace };
+        for (const name of ghost.getAttributeNames()) ghost.removeAttribute(name);
+        ghost.className = 'agent-progress-ghost';
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.inert = true;
+        ghost.textContent = node.textContent;
+        Object.assign(ghost.style, type, { top: `${top - now.top}px` });
+        // Without motion the fade ends at once, and the ghost with it.
+        motion(ghost, [{ opacity: 1 }, { opacity: 0 }], () => { ghost.remove(); }, SETTLE_MS * .6);
+      }
+    }
+    if (Math.abs(to - from) >= .5) {
+      view.previewMotion = motion(preview, [
+        { height: `${from}px`, overflow: 'clip' }, { height: `${to}px`, overflow: 'clip' },
+      ], () => {}, SETTLE_MS);
+    }
+    return true;
+  }
+  // The answer takes the place of the live lines (2026-10-30): they fade out
+  // first, and the answer, written meanwhile but not yet shown, appears where
+  // they stood once they are gone. Before, the lines vanished in the frame of
+  // the answer's first words and those stood where the lines had begun.
+  const HANDOFF_MS = 160;
+  function handoff(view, answer) {
+    if (view.previewExit) return;
+    const preview = view.preview;
+    if (preview.hidden || !preview.childElementCount || offscreenUpdate || quietMotion?.matches || view.details.open
+      || !preview.animate || !preview.isConnected) {
+      clearPreview(view);
+      return;
+    }
+    cancelMotion(view.previewMotion);
+    view.previewExit = true;
+    preview.setAttribute('aria-hidden', 'true');
+    preview.inert = true;
+    view.handoffAnswer = answer || null;
+    view.handoffAnswer?.classList.add('is-awaiting-trace');
+    view.previewMotion = motion(preview, [{ opacity: 1 }, { opacity: 0 }], () => false, HANDOFF_MS);
+    // A timer, not the animation's end: a cancelled motion must never leave
+    // the answer hidden.
+    view.handoffTimer = setTimeout(() => clearPreview(view), HANDOFF_MS);
+  }
+  function endHandoff(view) {
+    clearTimeout(view.handoffTimer);
+    view.handoffTimer = null;
+    view.handoffAnswer?.classList.remove('is-awaiting-trace');
+    view.handoffAnswer = null;
+  }
+  function hidePreview(view) {
+    if (view.previewExit) return;
     const height = view.preview.getBoundingClientRect().height;
     cancelMotion(view.previewMotion);
     view.preview.setAttribute('aria-hidden', 'true');
     view.preview.inert = true;
-    if (!height || instant) { clearPreview(view); return; }
+    if (!height) { clearPreview(view); return; }
     view.previewExit = true;
     const style = getComputedStyle(view.preview);
     view.previewMotion = motion(view.preview, [
@@ -426,14 +530,17 @@
   }
   // A line that changes in place fades out and back in with its new words
   // (at once with reduced motion, motion()): one quiet change, not a jump.
-  function crossfade(p, text) {
+  // A line of more or fewer lines than before settles the live lines (the
+  // height glides, the lines below slide) instead of moving them in one frame.
+  function crossfade(p, text, view = null) {
     if ((p._fadeText ?? p.textContent) === text) return;
     const previous = p.textContent;
     p._fadeText = text;
     cancelMotion(p._fadeMotion);
     if (!previous) { p.textContent = text; return; }
     p._fadeMotion = motion(p, [{ opacity: 1 }, { opacity: 0 }], () => {
-      p.textContent = p._fadeText;
+      const swap = () => { p.textContent = p._fadeText; };
+      if (view && p.parentNode === view.preview) settle(view, swap); else swap();
       p._fadeMotion = motion(p, [{ opacity: 0 }, { opacity: 1 }], () => {}, 220);
     }, 140);
   }
@@ -478,7 +585,7 @@
       const node = view.previewNodes.get('comparison-highlight');
       if (!view.running || !node?.isConnected) return;
       const line = comparisonLine(view, view.highlights);
-      if (line) crossfade(node, line.text);
+      if (line) crossfade(node, line.text, view);
       scheduleLine(view);
     }, wait + 20);
   }
@@ -1378,10 +1485,6 @@
       scheduleLine(view);
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
-    // A hidden or still empty preview is 0 tall without asking the layout (a
-    // new run's first render happens inside the click on Send, Apple-Audit D3).
-    const previewHeight = view.preview.hidden || !view.preview.childElementCount
-      ? 0 : view.preview.getBoundingClientRect().height;
     // Like ChatGPT/Claude, the progress lines give way the moment the answer
     // starts: at that point nothing stands below them yet. Kept until the
     // run ended, their collapse pulled the finished answer up under the eye.
@@ -1392,95 +1495,118 @@
       && Boolean(String(answerText || '').trim());
     const showPreview = running && paragraphs.length && !answering;
     let previewChanged = false;
+    const previewIds = new Set();
+    const pinned = showPreview && plan ? 1 : 0;
+    const folded = showPreview ? foldPast(paragraphs) : null;
+    const pastIds = new Set(folded?.past.map(item => item.id) || []);
+    // The lines of one model step (a thought, the note beside its call, the
+    // call) stand close together, the next step a line apart (2026-10-30):
+    // before, every line stood as far from the next, and thoughts, notes and
+    // steps read as one undivided list.
+    const stepOf = id => String(id).match(/completion:\d+/)?.[0] || String(id);
+    const update = () => {
+      if (pinned) {
+        previewIds.add('plan');
+        let node = view.previewNodes.get('plan');
+        if (!node) { node = planView('agent-plan'); view.previewNodes.set('plan', node); previewChanged = true; }
+        updatePlan(node, plan, true);
+        if (view.preview.firstElementChild !== node) view.preview.insertBefore(node, view.preview.firstElementChild);
+      }
+      let fold = view.previewNodes.get('vm-fold');
+      if (folded) {
+        previewIds.add('vm-fold');
+        if (!fold) { fold = foldView(); view.previewNodes.set('vm-fold', fold); }
+        if (fold._label.textContent !== window.App.t(folded.label)) fold._label.textContent = folded.label;
+        if (fold.dataset.count !== String(pastIds.size)) { fold.dataset.count = String(pastIds.size); previewChanged = true; }
+        if (view.preview.children[pinned] !== fold) view.preview.insertBefore(fold, view.preview.children[pinned] || null);
+      }
+      let pastIndex = 0, presentIndex = pinned + (folded ? 1 : 0), lastStep = pinned || folded ? '' : null;
+      const place = (item, p) => {
+        const inFold = pastIds.has(item.id);
+        const parent = inFold ? fold._list : view.preview;
+        const position = parent.children[inFold ? pastIndex++ : presentIndex++];
+        if (position !== p) parent.insertBefore(p, position || null);
+        const step = stepOf(item.id);
+        p.classList.toggle('is-step-start', !inFold && lastStep !== null && step !== lastStep);
+        if (!inFold) lastStep = step;
+      };
+      for (const item of showPreview ? paragraphs : []) {
+        previewIds.add(item.id);
+        let p = view.previewNodes.get(item.id);
+        if (!p) {
+          p = item.kind === 'vm' ? stepView('agent-vm', item.item) : item.kind === 'hold' ? holdView('agent-hold-step')
+            : item.kind === 'user' ? userNote('agent-user-note', item.text)
+            : document.createElement(item.kind === 'progress' ? 'p' : 'div');
+          view.previewNodes.set(item.id, p);
+          if (item.kind === 'review') {
+            const jump = document.createElement('button');
+            jump.type = 'button'; jump.className = 'agent-progress-review-jump';
+            jump.textContent = item.text;
+            jump.addEventListener('click', () => App.agentChat?.revealPendingReview?.());
+            p.className = 'agent-progress-review';
+            p.append(jump);
+          }
+          view.preview.appendChild(p);
+          previewChanged = true;
+          if (!view.details.open) reveal(p);
+        }
+        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user' || item.kind === 'hold') {
+          if (item.kind === 'vm') updateVm(p, item.item);
+          if (item.kind === 'hold') updateHold(p, item.item);
+          place(item, p);
+          continue;
+        }
+        if (item.quiet && p.getAttribute('aria-hidden') !== 'true') p.setAttribute('aria-hidden', 'true');
+        // The agent's note beside a call: a few lines here, whole in the timeline.
+        p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
+        p.classList.toggle('agent-progress-step', item.kind === 'step');
+        p.classList.toggle('agent-current-status', Boolean(item.current));
+        if (item.current) { if (p.getAttribute('role') !== 'status') p.setAttribute('role', 'status'); }
+        else if (p.hasAttribute('role')) p.removeAttribute('role');
+        if (item.status && p.dataset.status !== item.status) p.dataset.status = item.status;
+        // A reasoning line that changes in place (a comparison model's quote,
+        // the chat model's thinking) cross-fades; a step only brightens.
+        if (item.kind === 'progress') crossfade(p, item.text, view);
+        else if (p.textContent !== window.App.t(item.text)) {
+          const previous = p.textContent;
+          p.textContent = item.text;
+          if (previous) motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
+        }
+        // A fallback Thinking/Writing row moves after a newly received insight.
+        place(item, p);
+      }
+      if (showPreview) {
+        for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) {
+          node.remove(); view.previewNodes.delete(id); previewChanged = true;
+        }
+      }
+    };
     if (showPreview) {
-      if (view.previewExit) { cancelMotion(view.previewMotion); view.previewExit = false; }
+      if (view.previewExit) {
+        cancelMotion(view.previewMotion);
+        view.previewMotion = null;
+        view.previewExit = false;
+        endHandoff(view);
+      }
+      // A hidden or still empty preview is 0 tall without asking the layout (a
+      // new run's first render happens inside the click on Send, Apple-Audit D3).
+      const appearing = view.preview.hidden || !view.preview.childElementCount;
       view.preview.hidden = false;
       view.preview.removeAttribute('aria-hidden');
       view.preview.inert = false;
-    }
-    const previewIds = new Set();
-    const pinned = showPreview && plan ? 1 : 0;
-    if (pinned) {
-      previewIds.add('plan');
-      let node = view.previewNodes.get('plan');
-      if (!node) { node = planView('agent-plan'); view.previewNodes.set('plan', node); previewChanged = true; }
-      updatePlan(node, plan, true);
-      if (view.preview.firstElementChild !== node) view.preview.insertBefore(node, view.preview.firstElementChild);
-    }
-    const folded = showPreview ? foldPast(paragraphs) : null;
-    const pastIds = new Set(folded?.past.map(item => item.id) || []);
-    let fold = view.previewNodes.get('vm-fold');
-    if (folded) {
-      previewIds.add('vm-fold');
-      if (!fold) { fold = foldView(); view.previewNodes.set('vm-fold', fold); }
-      if (fold._label.textContent !== window.App.t(folded.label)) fold._label.textContent = folded.label;
-      if (fold.dataset.count !== String(pastIds.size)) { fold.dataset.count = String(pastIds.size); previewChanged = true; }
-      if (view.preview.children[pinned] !== fold) view.preview.insertBefore(fold, view.preview.children[pinned] || null);
-    }
-    let pastIndex = 0, presentIndex = pinned + (folded ? 1 : 0);
-    const place = (item, p) => {
-      const inFold = pastIds.has(item.id);
-      const parent = inFold ? fold._list : view.preview;
-      const position = parent.children[inFold ? pastIndex++ : presentIndex++];
-      if (position !== p) parent.insertBefore(p, position || null);
-    };
-    for (const item of showPreview ? paragraphs : []) {
-      previewIds.add(item.id);
-      let p = view.previewNodes.get(item.id);
-      if (!p) {
-        p = item.kind === 'vm' ? stepView('agent-vm', item.item) : item.kind === 'hold' ? holdView('agent-hold-step')
-          : item.kind === 'user' ? userNote('agent-user-note', item.text)
-          : document.createElement(item.kind === 'progress' ? 'p' : 'div');
-        view.previewNodes.set(item.id, p);
-        if (item.kind === 'review') {
-          const jump = document.createElement('button');
-          jump.type = 'button'; jump.className = 'agent-progress-review-jump';
-          jump.textContent = item.text;
-          jump.addEventListener('click', () => App.agentChat?.revealPendingReview?.());
-          p.className = 'agent-progress-review';
-          p.append(jump);
+      if (!appearing) settle(view, update);
+      else {
+        update();
+        if (previewChanged && !view.details.open) {
+          cancelMotion(view.previewMotion);
+          const height = view.preview.getBoundingClientRect().height;
+          if (height) view.previewMotion = motion(view.preview, [
+            { height: '0px', overflow: 'clip' }, { height: `${height}px`, overflow: 'clip' },
+          ], () => {}, SETTLE_MS);
         }
-        view.preview.appendChild(p);
-        previewChanged = true;
-        if (!view.details.open) reveal(p);
       }
-      if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user' || item.kind === 'hold') {
-        if (item.kind === 'vm') updateVm(p, item.item);
-        if (item.kind === 'hold') updateHold(p, item.item);
-        place(item, p);
-        continue;
-      }
-      if (item.quiet && p.getAttribute('aria-hidden') !== 'true') p.setAttribute('aria-hidden', 'true');
-      // The agent's note beside a call: a few lines here, whole in the timeline.
-      p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
-      p.classList.toggle('agent-progress-step', item.kind === 'step');
-      p.classList.toggle('agent-current-status', Boolean(item.current));
-      if (item.current) { if (p.getAttribute('role') !== 'status') p.setAttribute('role', 'status'); }
-      else if (p.hasAttribute('role')) p.removeAttribute('role');
-      if (item.status && p.dataset.status !== item.status) p.dataset.status = item.status;
-      // A reasoning line that changes in place (a comparison model's quote,
-      // the chat model's thinking) cross-fades; a step only brightens.
-      if (item.kind === 'progress') crossfade(p, item.text);
-      else if (p.textContent !== window.App.t(item.text)) {
-        const previous = p.textContent;
-        p.textContent = item.text;
-        if (previous) motion(p, [{opacity:.65}, {opacity:1}], () => {}, 160);
-      }
-      // A fallback Thinking/Writing row moves after a newly received insight.
-      place(item, p);
-    }
-    if (showPreview) {
-      for (const [id, node] of view.previewNodes) if (!previewIds.has(id)) {
-        node.remove(); view.previewNodes.delete(id); previewChanged = true;
-      }
-      if (previewChanged && !view.details.open) {
-        cancelMotion(view.previewMotion);
-        const height = view.preview.getBoundingClientRect().height;
-        if (height !== previewHeight) view.previewMotion = motion(view.preview, [
-          { height: `${previewHeight}px`, overflow: 'clip' }, { height: `${height}px`, overflow: 'clip' },
-        ]);
-      }
-    } else hidePreview(view, answering);
+    } else if (answering) handoff(view, host.nextElementSibling);
+    else hidePreview(view);
     const ids = new Set();
     // The plan stands once in the history, where it was first made, with its
     // latest state (UX audit A5): every change of the checklist was an entry

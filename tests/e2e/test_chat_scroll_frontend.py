@@ -313,7 +313,7 @@ def test_a_live_short_turn_keeps_the_page_height_still(browser, phase4_server, h
         page.wait_for_timeout(800)
         samples = page.evaluate("""() => new Promise(resolve => {
           const out = [];
-          const tick = () => { out.push([document.scrollingElement.scrollHeight, document.querySelector('.chat-scroll-reserve')?.style.height]);
+          const tick = () => { out.push([document.scrollingElement.scrollHeight, document.querySelector('.container').style.minHeight]);
             out.length < 60 ? requestAnimationFrame(tick) : resolve(out); };
           requestAnimationFrame(tick);
         })""")

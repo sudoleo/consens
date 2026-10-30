@@ -878,6 +878,63 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // 2026-10-30: the lines vanished in the frame of the answer's first words,
+  // and those stood where the lines had begun. Now the lines fade out first
+  // and the answer, written meanwhile, appears where they stood.
+  it('lets the progress lines fade out before the answer appears in their place', async () => {
+    const { window, document, dom } = boot();
+    window.Element.prototype.animate = function (frames) {
+      return { effect: { target: this, getKeyframes: () => frames }, playState: 'running',
+        cancel() { this.playState = 'idle'; }, finish() {} };
+    };
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const body = document.getElementById('agentAnswerBody');
+    const events = [];
+    activity.receive(events, {version:1, id:'p1', kind:'progress', text:'Comparing the plans.'});
+    activity.render(host, {events, running:true});
+    activity.receive(events, {version:1, id:'writing', kind:'status', status:'responding'});
+    activity.render(host, {events, running:true, answerText:'The answer begins'});
+    const preview = host.querySelector('.agent-progress');
+    expect(preview.hidden).toBe(false);
+    expect(preview.getAttribute('aria-hidden')).toBe('true');
+    expect(body.classList.contains('is-awaiting-trace')).toBe(true);
+    await new Promise(resolve => window.setTimeout(resolve, 220));
+    expect(preview.hidden).toBe(true);
+    expect(preview.childElementCount).toBe(0);
+    expect(body.classList.contains('is-awaiting-trace')).toBe(false);
+    dom.window.close();
+  });
+
+  // 2026-10-30: a line that left the live lines vanished in one frame and
+  // everything under it jumped up; now it fades where it stood.
+  it('fades a line that leaves the live lines where it stood, out of the log', () => {
+    const { window, document, dom } = boot();
+    const fades = [];
+    window.Element.prototype.animate = function (frames) {
+      const animation = { effect: { target: this, getKeyframes: () => frames }, playState: 'running',
+        cancel() { this.playState = 'idle'; }, finish() {} };
+      if (frames[0]?.opacity === 1 && frames[1]?.opacity === 0) fades.push(animation);
+      return animation;
+    };
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [];
+    activity.receive(events, {version:1, id:'p1', kind:'progress', text:'Comparing the plans.'});
+    activity.render(host, {events, running:true});
+    const preview = host.querySelector('.agent-progress');
+    expect(preview.querySelector('.agent-current-status').textContent).toBe('Thinking…');
+    activity.receive(events, {version:1, id:'search', kind:'tool', name:'web_search', status:'running'});
+    activity.render(host, {events, running:true});
+    const ghost = preview.querySelector('.agent-progress-ghost');
+    expect(ghost.textContent).toBe('Thinking…');
+    expect(ghost.getAttribute('aria-hidden')).toBe('true');
+    expect(ghost.inert).toBe(true);
+    fades.find(animation => animation.effect.target === ghost).onfinish();
+    expect(preview.querySelector('.agent-progress-ghost')).toBeNull();
+    dom.window.close();
+  });
+
   it('keeps the progress lines gone while the app checks the written answer', () => {
     // 2026-10-12: the lines left when the answer began, came back for
     // "Checking the answer" and left again: two collapses instead of one.

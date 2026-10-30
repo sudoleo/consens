@@ -998,8 +998,24 @@
     resetOwner();
     // A new message of a chat whose panel is open: the panel waits for the
     // new turn's calls instead of closing and opening again (Apple audit A9).
-    if (spec?.chatId && !spec.turnId && spec.running && owner && chatPanelStaysOpen(spec.chatId)
-        && sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving")) {
+    // In audit mode, where reviewers always follow and the panel stands
+    // beside the column, it opens with the message itself (2026-10-30):
+    // opened with the turn's first call, it narrowed the column a moment
+    // after Send, and the new question broke onto another line under the eye.
+    const open = sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving");
+    if (!spec?.turnId && spec?.running && owner && chatPanelStaysOpen(spec.chatId)
+        && (spec.chatId && open || (wide() && App.agentPreferences?.auditing?.()))) {
+      if (!open) {
+        ensure();
+        setPanelVisible(true);
+        sidebar.setAttribute('role', 'complementary');
+        sidebar.removeAttribute('aria-modal');
+        // The column takes its new width in the frame the question appears,
+        // not in a glide: a question that breaks onto a new line half-way
+        // through the glide jumps (agent-chat.css .agent-panel-instant).
+        document.body.classList.add("agent-sidebar-open", "agent-panel-instant");
+        requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove("agent-panel-instant")));
+      }
       if (current) prefs(current);
       current = null; inline?.remove(); inline = null;
       clearRows();
