@@ -1876,6 +1876,46 @@ describe("single-model agent chat", () => {
   // their turn in the browser, which handing it back answers on the server;
   // their yes or no to a step in their name; a call that waits while they
   // took the browser over on their own. The agent's words are data.
+  it("lets the user pick one of the agent's answers on a choice card", async () => {
+    // 2026-10-30, chess.com: "against a person or a bot?" on a card that
+    // only said Allow or Don't allow, and the agent guessed from "allowed".
+    const { window, document } = boot({ setup(w) {
+      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
+        auditing: () => true };
+    } });
+    await selectAgent(window);
+    const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
+    document.body.append(host);
+    window.App.workspaceView = { holder: () => "agent", open: vi.fn(), handBack: vi.fn(), agentWaits: vi.fn() };
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    const decisions = [];
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => {
+      if (!String(url).endsWith("/hold")) return catalogFetch(url, options);
+      decisions.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ status: "decided" }) };
+    });
+    handlers.hold.receive({ hold: { kind: "ask", reviewer: "", provider: "", reason: "", entry: null,
+      at: new Date().toISOString(), timeout_seconds: 1800, id: "c0ffee123456", ask: "choice",
+      request: "Gegen einen Menschen oder gegen einen Bot?", choices: ["Gegen einen Menschen", "Gegen einen Bot"] } });
+    expect(host.querySelector(".agent-ask-card.is-choice")).not.toBeNull();
+    expect(host.querySelector(".agent-hold-title").textContent).toBe("The agent asks you to choose");
+    const buttons = [...host.querySelectorAll(".agent-hold-actions > button")];
+    // The agent's words, untranslated, each equal to the others.
+    expect(buttons.map(b => [b.textContent, b.className, b.hasAttribute("data-i18n-skip")])).toEqual([
+      ["Gegen einen Menschen", "agent-ask-choice", true], ["Gegen einen Bot", "agent-ask-choice", true]]);
+    buttons[1].click();
+    expect(buttons.every(b => b.disabled)).toBe(true);
+    await vi.waitFor(() => expect(decisions).toEqual([{ id: "c0ffee123456", action: "choose", text: "", choice: 1 }]));
+    expect(host.hidden).toBe(true);
+  });
+
   it("hands the user the browser, asks before a step and waits while they have the browser", async () => {
     const { window, document, dom } = boot({ setup(w) {
       w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),

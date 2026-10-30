@@ -1668,13 +1668,15 @@
   function refusal(data, fallback) {
     return DECISION_REFUSALS.has(data.code) && typeof data.error === "string" && data.error ? data.error : fallback;
   }
-  async function decideHold(context, action, text = "") {
+  // "choose" carries the place of the answer picked on a choice card.
+  async function decideHold(context, action, text = "", choice = null) {
     const hold = openHold(context);
     if (!hold || hold.deciding) return false;
     hold.deciding = action;
     hold.failed = "";
     renderHold();
-    const { response, data } = await postDecision(context, "hold", { id: hold.id, action, text });
+    const { response, data } = await postDecision(context, "hold",
+      { id: hold.id, action, text, ...(choice === null ? {} : { choice }) });
     // Decided, or the response or the pause is over (decided in another tab,
     // A-B5): the card goes, the activity keeps the record.
     if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
@@ -1954,7 +1956,7 @@
     domain: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.6 5.4 3.6 8.5s-1 6.1-3.6 8.5c-2.6-2.4-3.6-5.4-3.6-8.5s1-6.1 3.6-8.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
     // A pointer: the user's hand in the browser.
     browser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5l11 6.6-4.8 1.3 2.8 5.3-2.2 1.2-2.8-5.4-4 3.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>',
-    // A question.
+    // A question: before a step, and the choice card's.
     confirm: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9.2a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.1-1.4 2v.6M12 17.6v.1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path></svg>',
     // A key.
     secret: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15.5" r="3.6" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M10.6 12.9l7.4-7.4M15.2 8.3l2.3 2.3M17.4 6.1l1.9 1.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>',
@@ -2026,6 +2028,7 @@
   // 2026-10-29): "browser", their turn in the workspace's browser, which
   // handing it back answers (the run sees it on the server); "confirm", their
   // yes or no to a step in their name; "secret", a key for its commands;
+  // "choice", one of two to four answers the agent named (since 2026-10-30);
   // "takeover", the user took the browser over on their own and the agent's
   // next call waits for it. The agent's request is data (untranslated). The
   // one button follows who has the browser in this window
@@ -2033,13 +2036,14 @@
   // re-draws the card). The colour only on the glyph: the house green for
   // the user's turn, the pause tone before a step in their name.
   const askTitles = { browser: "The agent needs you in the browser", confirm: "The agent asks before it goes on",
-    secret: "The agent needs a key from you", takeover: "You have the browser" };
+    secret: "The agent needs a key from you", choice: "The agent asks you to choose", takeover: "You have the browser" };
   // Per question: "offered" (the open view took the browser for the user),
   // "user" (the user had it in this window, so a hand-back here answers it).
   const askSeen = new Map();
   function askCard(context, hold) {
     const kind = askTitles[hold.ask] ? hold.ask : "confirm";
-    const { card, body, alert, title } = cardShell(`agent-ask-card is-${kind}`, holdGlyphs[kind] || holdGlyphs.browser);
+    const { card, body, alert, title } = cardShell(`agent-ask-card is-${kind}`,
+      holdGlyphs[kind === "choice" ? "confirm" : kind] || holdGlyphs.browser);
     title.textContent = askTitles[kind];
     const what = document.createElement("p");
     what.className = "agent-ask-request";
@@ -2055,6 +2059,16 @@
       actions = cardActions(
         holdButton("Allow", "btn agent-hold-continue", () => decideHold(context, "continue")),
         holdButton("Don’t allow", "text-link agent-hold-deny", () => decideHold(context, "deny")));
+    } else if (kind === "choice") {
+      // The agent's answers are data (untranslated), all equal: none wears
+      // the one filled button. Each is the decision "choose" with its
+      // place; words in the field below answer as well (steer).
+      const choices = (Array.isArray(hold.choices) ? hold.choices : []).slice(0, 4);
+      actions = cardActions(...choices.map((choice, index) => {
+        const button = holdButton(String(choice), "agent-ask-choice", () => decideHold(context, "choose", "", index));
+        button.dataset.i18nSkip = "";
+        return button;
+      }));
     } else if (kind === "secret") {
       // The field below takes no words for the agent while this card is
       // open (steer, A-S7): what it holds moves into the key field. "Not

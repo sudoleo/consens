@@ -640,9 +640,152 @@ def test_drag_presses_the_mouse_along_each_stroke_and_click_takes_a_place():
             browser.drag(page, strokes)
     assert moves == []
     assert browser.act(None, page, "click", {"x": 640, "y": 300}) == "Clicked at 640,300."
-    assert moves == [("click", 640, 300)]
+    # The mouse there first, as the click would move it (look_at).
+    assert moves == [("move", 640, 300, 1), ("click", 640, 300)]
     with pytest.raises(browser.Refused, match="x and y"):
         browser.act(None, page, "click", {"x": 640})
+
+
+PIECE = {"tag": "div.piece.wn.square-21", "name": "", "ref": "", "box": [300, 585, 375, 660], "drawn": False,
+         "in": {"tag": "wc-chess-board#board-single.board", "name": "", "ref": "", "box": [0, 60, 600, 660],
+                "drawn": False}}
+
+
+class BoardPage:
+    """A page as look_at and hit_report see it: the mouse, HIT_JS's two
+    answers (the script itself runs in tests/js/workspace-browser-refs.test.mjs)
+    and the pictures of drawn content around a point."""
+
+    def __init__(self, browser, hits, changes, url="https://www.chess.com/play/computer", pictures=()):
+        self.browser, self.hits, self.changes, self.url = browser, hits, changes, url
+        self.pictures, self.done = list(pictures), []
+        page = self
+
+        class Mouse:
+            def move(self, x, y, steps=1):
+                page.done.append(("move", x, y))
+
+            def down(self):
+                page.done.append(("down",))
+
+            def up(self):
+                page.done.append(("up",))
+
+            def click(self, x, y):
+                page.done.append(("click", x, y))
+        self.mouse = Mouse()
+
+    def evaluate(self, script, arg=None):
+        assert script == self.browser.HIT_JS
+        self.done.append((arg["mode"], [tuple(point) for point in arg["points"]]))
+        if arg["mode"] == "before":
+            return {"view": [1280, 720], "at": self.hits}
+        return self.changes
+
+    def screenshot(self, type, clip, caret):
+        # The caret as it is: hiding it sets every field's style, a change.
+        assert caret == "initial"
+        self.done.append(("picture", clip["x"], clip["y"], clip["width"], clip["height"]))
+        return self.pictures.pop(0)
+
+
+def test_a_click_or_drag_at_a_place_says_what_lay_there_and_what_changed():
+    """2026-10-30, chess.com: "Clicked at 337,623." and nothing more, and
+    DeepSeek V4.1 Flash spent 20 steps on one move, guessing the squares
+    from screenshots. Now the answer says what lay at each point (looked at
+    with the mouse there, before the press) with its box and the board's,
+    and what changed after it, nearest first."""
+    browser = load("browser")
+    changes = {"count": 4, "changed": [
+        {"tag": "div.piece.wn.square-33", "name": "", "ref": "", "box": [150, 435, 225, 510], "how": "class"},
+        {"tag": "div.highlight.square-21", "name": "", "ref": "", "box": [300, 585, 375, 660], "how": "new"},
+        {"tag": "span.clock-time", "name": "6:31", "ref": "e40", "box": [700, 60, 760, 80], "how": "text"}],
+        "removed": [{"tag": "div.piece.bp.square-33", "name": "", "ref": "", "box": [0, 0, 0, 0]}]}
+    page = BoardPage(browser, [PIECE, {**PIECE, "tag": "wc-chess-board#board-single.board", "in": None,
+                                       "box": [0, 60, 600, 660]}], changes)
+    seen = []
+    assert browser.act(None, page, "drag", {"strokes": [[[337, 623], [187, 473]]]}, seen) == \
+        "Dragged 1 stroke (2 points)."
+    assert page.done[:3] == [("move", 337, 623), ("before", [(337, 623), (187, 473)]), ("down",)]
+    assert browser.hit_report(seen[0], page) == (
+        "Pressed at 337,623: div.piece.wn.square-21 (box x 300-375, y 585-660), in "
+        "wc-chess-board#board-single.board (box x 0-600, y 60-660).\n"
+        "Released at 187,473: wc-chess-board#board-single.board (box x 0-600, y 60-660).\n"
+        "Changed after it: 4 elements, nearest first: div.piece.wn.square-33 (box x 150-225, y 435-510) class "
+        "changed; div.highlight.square-21 (box x 300-375, y 585-660) new; span.clock-time \"6:31\" [e40] "
+        "(box x 700-760, y 60-80) text changed; removed: div.piece.bp.square-33.")
+    assert page.done[-1] == ("after", [(337, 623), (187, 473)])
+
+    # A click: the same, its point named "At"; nothing changed, or the page went.
+    page = BoardPage(browser, [PIECE], {"count": 0, "changed": [], "removed": []})
+    seen = []
+    assert browser.act(None, page, "click", {"x": 337, "y": 623}, seen) == "Clicked at 337,623."
+    assert page.done == [("move", 337, 623), ("before", [(337, 623)]), ("click", 337, 623)]
+    assert browser.hit_report(seen[0], page).splitlines()[1:] == ["No element of the page changed after it."]
+    page.changes = None
+    assert browser.hit_report(seen[0], page).endswith("\nThe page loaded anew after it.")
+    # A link that opened another tab: the page in front is another.
+    assert browser.hit_report(seen[0], object()).endswith("\nAnother tab is in front now.")
+
+    # Outside the view, and a page that answers nonsense.
+    page = BoardPage(browser, [None], {"count": "many", "changed": ["x", {"box": "no", "how": ["?"]}],
+                                       "removed": None})
+    seen = []
+    browser.act(None, page, "click", {"x": 1500, "y": 300}, seen)
+    assert browser.hit_report(seen[0], page) == (
+        "At 1500,300: nothing, it lies outside the page's view (1280x720).\n"
+        "Changed after it: 1 element: element changed.")
+    # Infinity and NaN come as floats, lists as anything: never a failed click
+    # (review 2026-10-30: the click ran, and the agent heard "failed").
+    endless = {**PIECE, "box": [float("inf"), 0, 10, float("nan")], "in": {"tag": 5, "box": None}}
+    page = BoardPage(browser, [endless], {"count": float("inf"), "changed": 5, "removed": True})
+    seen = []
+    browser.act(None, page, "click", {"x": 1, "y": 1}, seen)
+    assert browser.hit_report(seen[0], page) == (
+        "At 1,1: div.piece.wn.square-21, in element.\nNo element of the page changed after it.")
+
+
+def test_on_a_canvas_a_click_compares_the_picture_around_its_point():
+    """What a canvas, a frame or a video shows is no element: its picture
+    around the point, before the press and after the page settled."""
+    browser = load("browser")
+    canvas = {"tag": "canvas#game", "name": "", "ref": "", "box": [0, 0, 600, 600], "drawn": True, "in": None}
+    page = BoardPage(browser, [canvas], {"count": 0, "changed": [], "removed": []}, pictures=[b"before", b"after"])
+    seen = []
+    browser.act(None, page, "click", {"x": 20, "y": 300}, seen)
+    assert page.done[2] == ("picture", 0, 260, 60, 80)
+    assert browser.hit_report(seen[0], page) == (
+        "At 20,300: canvas#game (box x 0-600, y 0-600).\n"
+        "No element of the page changed after it.\n"
+        "The picture around 20,300 changed.")
+    page = BoardPage(browser, [canvas], {"count": 0, "changed": [], "removed": []}, pictures=[b"same", b"same"])
+    seen = []
+    browser.act(None, page, "click", {"x": 300, "y": 300}, seen)
+    assert browser.hit_report(seen[0], page).endswith("\nThe picture around 300,300 did not change.")
+
+
+def test_a_click_on_the_browsers_own_computer_looks_at_nothing():
+    """A page the agent does not read (own_computer) is not described either."""
+    browser = load("browser")
+    page = BoardPage(browser, [PIECE], None, url="file:///etc/passwd")
+    seen = []
+    assert browser.act(None, page, "click", {"x": 5, "y": 5}, seen) == "Clicked at 5,5."
+    assert seen == [None] and browser.hit_report(None, page) == ""
+    assert page.done == [("move", 5, 5), ("click", 5, 5)]
+    # A click that led there: what lay at its point, nothing of the page after it.
+    page = BoardPage(browser, [PIECE], {"count": 9, "changed": [], "removed": []})
+    seen = []
+    browser.act(None, page, "click", {"x": 337, "y": 623}, seen)
+    page.url = "http://192.168.0.1/"
+    assert browser.hit_report(seen[0], page) == (
+        "At 337,623: div.piece.wn.square-21 (box x 300-375, y 585-660), in "
+        "wc-chess-board#board-single.board (box x 0-600, y 60-660).")
+    assert page.done[-1] == ("click", 337, 623)
+    # Inside the view, yet nothing there (Chrome found no element).
+    page = BoardPage(browser, [None], {"count": 0, "changed": [], "removed": []})
+    seen = []
+    browser.act(None, page, "click", {"x": 10, "y": 10}, seen)
+    assert browser.hit_report(seen[0], page).splitlines()[0] == "At 10,10: nothing, no element there."
 
 
 def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():

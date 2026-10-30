@@ -472,7 +472,7 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
   display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
   background: var(--partial-bg); color: var(--partial);
 }
-.agent-ask-card:is(.is-browser, .is-secret, .is-takeover) .agent-hold-glyph { background: color-mix(in srgb, var(--agree) 14%, transparent); color: var(--agree); }
+.agent-ask-card:is(.is-browser, .is-secret, .is-choice, .is-takeover) .agent-hold-glyph { background: color-mix(in srgb, var(--agree) 14%, transparent); color: var(--agree); }
 .agent-hold-glyph svg { width: 16px; height: 16px; }
 .agent-hold-body { display: grid; min-width: 0; }
 .agent-hold-alert { display: grid; gap: var(--space-1); }
@@ -511,6 +511,23 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
    whole, never word by word (C6). */
 .agent-hold-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin-top: var(--space-3); }
 .agent-hold-actions > * { white-space: nowrap; }
+/* A choice card's answers (ask_user with choices, since 2026-10-30): the
+   agent's words, equal to each other, so none wears the one filled button.
+   Tinted, borderless; a long one wraps inside its button, never past the card. */
+.agent-ask-choice {
+  display: inline-flex; align-items: center; box-sizing: border-box; min-height: 36px; max-width: 100%;
+  padding: var(--space-2) 14px; border: 0; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink);
+  font: inherit; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); line-height: var(--line-height-tight);
+  text-align: start; cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard);
+}
+.agent-hold-actions > .agent-ask-choice { white-space: normal; overflow-wrap: anywhere; }
+/* Equal buttons, equal gaps, also between two rows. */
+.agent-hold-actions:has(> .agent-ask-choice) { gap: var(--space-2); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-ask-choice:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+}
+@media (pointer: coarse) { .agent-ask-choice { min-height: 44px; } }
 .agent-hold-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .agent-hold-card button:disabled { opacity: .5; cursor: default; }
 /* The pressed button says the decision is on its way, in its place (C13:

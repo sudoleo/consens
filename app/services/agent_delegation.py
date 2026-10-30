@@ -382,6 +382,9 @@ class DelegationLoop(AgentLoop):
         # its next step or call, and its time stands still meanwhile. Nothing
         # of it enters the agent's conversation.
         self.hold = self.hold_decision = None
+        # The answer the user picked on a choice card (its index, agent_ask.py),
+        # with "choose" as hold_decision; for the tool, the picked answer.
+        self.hold_choice = self.ask_choice = None
         # A reviewer's halt that came while the user's own card was open
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
@@ -2079,6 +2082,7 @@ class DelegationLoop(AgentLoop):
                                   **({"domain": hold["domain"]} if hold.get("domain") else {}),
                                   **({"ask": hold["ask"], "request": hold.get("request", "")}
                                      if hold.get("ask") else {}),
+                                  **({"choices": hold["choices"]} if hold.get("choices") else {}),
                                   "halt": hold["kind"], "state": "waiting"}), f"hold-{hold['id']}")
         if self.work_log is not None:
             before = " before its calls ran" if details.get("gate") else ""
@@ -2088,6 +2092,8 @@ class DelegationLoop(AgentLoop):
                 f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
                 else f"The agent asks the user for the key {details.get('secret', '')}: {details.get('request', '')}"
                 if asked == "secret"
+                else f"The agent asks the user to choose: {details.get('request', '')} "
+                     f"({' / '.join(details.get('choices') or [])})" if asked == "choice"
                 else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
                 f"The agent asks to reach {details['domain']} (entry {details['entry']}): the user decides."
                 if details.get("domain") else
@@ -2145,23 +2151,23 @@ class DelegationLoop(AgentLoop):
                 return None
             return dict(self.hold)
 
-    def decide_unsaved(self, hold_id, action, text=""):
+    def decide_unsaved(self, hold_id, action, text="", choice=None):
         """The user's decision on that hold, from the decision endpoint of
         this process (POST .../hold, .../secret): True when taken. A message
         ("steer") is the user's note, as decide_hold would have saved it."""
-        from app.services.agent_sessions import HOLD_NOT_DENIABLE, USER_NOTE_CHARS, HoldActionRefused, deniable
+        from app.services.agent_sessions import USER_NOTE_CHARS, check_answer
         with self.condition:
             hold = self.unsaved_hold()
             if hold is None or hold["id"] != hold_id:
                 return False
-            if action == "deny" and not deniable(hold):
-                raise HoldActionRefused(HOLD_NOT_DENIABLE)
+            check_answer(hold, action, choice)
             if action == "steer":
                 note = {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
                         "at": datetime.now(timezone.utc).isoformat()}
                 self.notes_seen.add(note["id"])
                 self.notes.append(note)
             self.hold_decision = action
+            self.hold_choice = choice if action == "choose" else None
             self.condition.notify_all()
         return True
 
@@ -2309,6 +2315,7 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             if self.hold is not None and self.hold_decision is None and decision.get("id") == self.hold["id"]:
                 self.hold_decision = decision.get("action")
+                self.hold_choice = decision.get("choice")
                 self.condition.notify_all()
 
     def receive(self, saved):
@@ -2330,11 +2337,12 @@ class DelegationLoop(AgentLoop):
         asked = agent_ask.requested(call)
         if asked is None:
             return "run"
-        request, browser, secret = asked
-        kind = "browser" if browser else "secret" if secret else "confirm"
-        decision = yield from self._user_hold(agent_ask.hold(kind, request, secret),
+        request, browser, secret, choices = asked
+        kind = "browser" if browser else "secret" if secret else "choice" if choices else "confirm"
+        self.ask_choice = None
+        decision = yield from self._user_hold(agent_ask.hold(kind, request, secret, choices),
                                               self._handed_back(had=False) if browser else None)
-        self.ask_answer = agent_ask.answer(kind, decision, secret)
+        self.ask_answer = agent_ask.answer(kind, decision, secret, self.ask_choice)
         return decision
 
     def _takeover_wait(self):
@@ -2401,11 +2409,12 @@ class DelegationLoop(AgentLoop):
             return "handed_back" if state["had"] or returned >= state["since"] else None
         return poll
 
-    def _end_hold(self, hold, decision, seconds):
+    def _end_hold(self, hold, decision, seconds, picked=None):
         """A hold that is over (``decision``, after ``seconds``) leaves the
         run's root (only while it is the stored one) and the page: its card
-        closes, its activity says how it ended. The turn keeps what it was
-        and how it ended, never its reasons (``holds``, agent_holds)."""
+        closes, its activity says how it ended, with the answer ``picked`` on
+        a choice card. The turn keeps what it was and how it ended, never its
+        reasons nor that answer (``holds``, agent_holds)."""
         if len(self.holds) < HOLDS_KEPT:
             self.holds.append({"kind": hold.get("kind"), "gate": bool(hold.get("gate")), "ask": hold.get("ask"),
                                "domain": hold.get("domain"), "reviewer": hold.get("reviewer") or None,
@@ -2416,7 +2425,8 @@ class DelegationLoop(AgentLoop):
             logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
         self._send({"type": "hold", "hold": None, "id": hold["id"], "decision": decision}, "hold")
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
-                                  "state": decision}), f"hold-{hold['id']}")
+                                  "state": decision, **({"choice": picked} if picked is not None else {})}),
+                   f"hold-{hold['id']}")
 
     def _hold_wait(self, poll=None):
         """Wait while a reviewer's halt is open; events keep flowing and Stop
@@ -2439,6 +2449,7 @@ class DelegationLoop(AgentLoop):
                 if decision is not None:
                     waited = self.clock() - self.hold_started
                     self.paused_seconds += waited
+                    choice, self.hold_choice = self.hold_choice, None
                     self.hold = self.hold_decision = None
                     break
                 self.condition.wait(.2)
@@ -2446,12 +2457,18 @@ class DelegationLoop(AgentLoop):
                 raise self.watch_error
             self.cancellation.raise_if_cancelled()
             yield from self._events()
+        from app.services.agent_ask import chosen
         from app.services.agent_sessions import deniable
-        if decision == "deny" and not deniable(hold):
+        picked = chosen(hold, choice) if decision == "choose" else None
+        if ((decision == "deny" and not deniable(hold)) or (decision == "choose" and picked is None)
+                or (decision == "continue" and hold.get("ask") == "choice")):
             # No answer to this hold (decide_hold refuses it): never a
             # "continue", as before 2026-10-29, but a stop.
             decision = "stop"
-        self._end_hold(hold, decision, waited)
+        if picked is not None:
+            # For ask_user's result (_ask_wait).
+            self.ask_choice = picked
+        self._end_hold(hold, decision, waited, picked)
         asked = hold.get("ask")
         if self.work_log is not None:
             said = {"continue": "The user let the work go on.",
@@ -2459,7 +2476,8 @@ class DelegationLoop(AgentLoop):
                     "steer": "The user let the work go on with a message.",
                     "stop": "The user stopped the work.",
                     "timeout": "No decision in 30 minutes: the response stopped.",
-                    "handed_back": "The user handed the browser back."}
+                    "handed_back": "The user handed the browser back.",
+                    "choose": f"The user chose: {picked}"}
             if asked:
                 said.update(timeout="No answer in 30 minutes: the agent goes on without one.",
                             **({"continue": "The user allowed it."} if asked == "confirm" else

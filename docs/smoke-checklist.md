@@ -173,6 +173,18 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       neu; `cat` zeigt weiter die Maske. Im Chat-Verlauf, im Netzwerk-Tab außer
       dem einen POST `/secret` und in den Render-Logs taucht der Wert nicht
       auf. „Nicht jetzt“ → er macht ohne weiter.
+      Auswahl (seit 2026-10-30): „Spiel auf <Seite> eine Partie, frag mich
+      vorher, ob gegen einen Menschen oder einen Bot“ → Karte „Der Agent lässt
+      dich wählen“ mit zwei getönten Knöpfen in seinen Worten (nicht übersetzt),
+      lange Antworten brechen im Knopf um, auch am Handy; ein Klick → beide
+      Knöpfe gesperrt, die Karte geht, der Agent nimmt genau diese Wahl,
+      Aktivität „Deine Wahl: …“. Eine Nachricht im Feld statt eines Klicks ist
+      ebenfalls eine Antwort.
+- [ ] Klick an x,y (2026-10-30): auf chess.com „spiel gegen den Computer“ →
+      im Arbeitsprotokoll nennt jede Antwort von `click`/`drag` das getroffene
+      Element mit Box (`div.piece.wn.square-21 … box x …`) und das Brett,
+      danach was sich geändert hat; ein Zug braucht keinen Kontroll-Screenshot
+      mehr. Auf einer Canvas-Seite steht „The picture around x,y changed.“
       Automatisiert: `test_agent_ask.py`, `workspace-view.test.mjs`,
       `agent-chat.test.mjs`.
 - [ ] Audit produktionsreif (2026-10-29, Pro- oder Admin-Konto, Audit an,

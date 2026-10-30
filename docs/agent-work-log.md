@@ -350,7 +350,8 @@ Agent-Panel.
    Median 3,9 s je Klick, vier Halts, alle Fehlalarm), und einen Schritt im
    Namen des Nutzers legt der Agent ihm selbst vor (`ask_user`, App-Einträge
    `paused` „The agent asks the user …“ / „The user has the browser …“ und
-   `decision`, z. B. „The user handed the browser back.“). Ergebnisse von
+   `decision`, z. B. „The user handed the browser back.“, seit 2026-10-30 auch
+   „The user chose: …“). Ergebnisse von
    `browser` tragen die Herkunft `web`, `vm_install_packages` die Herkunft
    `vm`. Ablauf: [agent-mode.md](agent-mode.md), „Vorab-Prüfung“ und „Der
    Agent fragt den Nutzer“.

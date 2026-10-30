@@ -1216,6 +1216,29 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   16 Klicks. `screenshot_after` an Aktionen, die die Seite ändern, und an `wait`
   (`PICTURE_AFTER`) bringt das Bild danach im selben Aufruf (Helfer
   `with_picture`, nur für Bildmodelle; sonst `NO_PICTURES`).
+- **Was ein Klick an x,y traf** (seit 2026-10-30). Prod 2026-10-29, Schach auf
+  chess.com mit DeepSeek V4.1 Flash: nach zwei Zügen 20 Modellschritte ohne
+  weiteren Zug. Das Modell schätzte die Felder aus Screenshots mal auf 58, mal
+  auf 86 px und machte nach jedem Versuch einen neuen Screenshot, denn `click`
+  und `drag` meldeten nur „Clicked at 337,623.“. Jetzt sagt die Antwort von
+  `click` an x,y und `drag` (Druck- und Loslasspunkt des ersten Strichs), was
+  dort lag: das Element, das ein Druck dort erreicht (`elementFromPoint`, auch
+  in offene Shadow Roots), mit Tag, Id, Klassen, Namen, Ref und Box in
+  Screenshot-Pixeln, dazu das Element darum mit eigener Box (ein Brett, dessen
+  Box jedes Feld ergibt). Danach folgt, was sich geändert hat, die nächsten
+  zuerst (`CHANGES_SHOWN`, ein `MutationObserver` vom Druck bis nach `settle`,
+  die eigenen `data-consens-ref` zählen nicht), oder „No element of the page
+  changed after it.“ bzw. „The page loaded anew after it.“. Für eine Canvas,
+  einen Frame oder ein Video vergleicht der Helfer das Bild um den Punkt
+  (`PICTURE_AROUND` px, PNG vorher und nachher). Die Maus steht dafür schon
+  vor dem Blick am Punkt, wie der Klick sie bewegen würde. Seiten der eigenen
+  VM (`own_computer`) beschreibt er nicht (`HIT_JS`, `look_at`,
+  `hit_report` in `browser.py`). Die Antwort schreibt die Seite mit, also
+  nimmt der Helfer nur passende Typen (Infinity und NaN ergeben keine Box)
+  und lässt eine Aktion, die lief, nie wegen des Berichts scheitern: Sonst
+  hätte der Agent einen Senden-Knopf ein zweites Mal gedrückt. Die Bilder
+  um den Punkt entstehen mit `caret="initial"`, denn beim Ausblenden des
+  Cursors setzt Playwright den Stil jedes Felds, und das zählte als Änderung.
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
   `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
   `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,
@@ -1549,6 +1572,18 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   back to you N min ago: what it shows may have changed …“) in ihren
   App-Kontext. Die Seite selbst liest der Agent mit dem Browser; der Server
   weckt dafür nicht vorab die Browser-VM.
+- **Auswahl** (`ask_user` mit `choices`, seit 2026-10-30): Zwei bis vier
+  kurze, verschiedene Antworten (je bis 80 Zeichen, nicht mit `browser` oder
+  `secret`) werden Knöpfe der Karte „The agent asks you to choose“. Sie sind
+  getönt statt gefüllt (`.agent-ask-choice`), weil keine Antwort die
+  empfohlene ist, und stehen als Daten ohne Übersetzung da. Ein Klick ist die
+  Entscheidung `choose` mit `choice` (Index), die der Server gegen die
+  Antworten der Karte prüft (`agent_sessions.check_answer`; `continue` und
+  `deny` sind dort 422). Der Agent hört `{"status": "chosen", "choice": …}`,
+  die Aktivität zeigt „You chose: …“, und `holds` am Turn behält nur, dass
+  gewählt wurde. Anlass: Prod 2026-10-29 fragte DeepSeek „gegen einen
+  Menschen oder einen Bot?“ auf der Bestätigungskarte, die nur „Allow“ und
+  „Don’t allow“ kannte, und schloss aus „allowed“ auf den Menschen.
 - **Ein Key vom Nutzer** (`ask_user` mit `secret`, `agent_secrets.py`, seit
   2026-10-29, Max: Geheimnis-Dialog wie in T3 Code): Braucht die Arbeit einen
   API-Key oder ein Token des Nutzers, fragt der Agent mit dem Namen

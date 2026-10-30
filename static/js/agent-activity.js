@@ -863,14 +863,17 @@
   // 2026-10-29): their turn in the browser, their yes to a step, or a call
   // that waited while they had the browser. Its request is data.
   const askHeads = { browser: 'The agent asked you to take over the browser', confirm: 'The agent asked before a step',
-    secret: 'The agent asked you for a key', takeover: 'The agent waited while you had the browser' };
+    secret: 'The agent asked you for a key', choice: 'The agent asked you to choose',
+    takeover: 'The agent waited while you had the browser' };
   // While it still waits, in the present (C14: "The agent asked …" stood over "Waiting for you").
   const askHeadsNow = { browser: 'The agent asks you to take over the browser', confirm: 'The agent asks before a step',
-    secret: 'The agent asks you for a key', takeover: 'You have the browser' };
+    secret: 'The agent asks you for a key', choice: 'The agent asks you to choose', takeover: 'You have the browser' };
   const askStates = { ...holdStates, waiting: 'Waiting for you', handed_back: 'You handed the browser back',
     timeout: 'No answer within 30 minutes' };
   const confirmStates = { ...askStates, continue: 'You allowed it' };
   const secretStates = { ...askStates, continue: 'You saved it in the workspace', deny: 'You did not give it' };
+  // A choice card (since 2026-10-30): the answer picked is the agent's words.
+  const choiceStates = { ...askStates, choose: 'You chose: {choice}' };
   function holdView(className) {
     const node = document.createElement('div');
     node.className = className;
@@ -886,9 +889,10 @@
   }
   function updateHold(node, item) {
     if (item.ask) {
-      const states = item.ask === 'confirm' ? confirmStates : item.ask === 'secret' ? secretStates : askStates;
+      const states = item.ask === 'confirm' ? confirmStates : item.ask === 'secret' ? secretStates
+        : item.ask === 'choice' ? choiceStates : askStates;
       const state = states[item.state] ? item.state : 'waiting';
-      const signature = JSON.stringify([item.ask, item.request, state]);
+      const signature = JSON.stringify([item.ask, item.request, state, item.choice]);
       if (node.dataset.signature === signature) return;
       node.dataset.signature = signature;
       node.dataset.state = state;
@@ -896,7 +900,8 @@
       node._head.textContent = heads[item.ask] || heads.confirm;
       node._reason.textContent = String(item.request || '').slice(0, 400);
       node._reason.hidden = state === 'waiting' || !item.request;
-      node._state.textContent = states[state];
+      node._state.textContent = state === 'choose' ? App.t(states.choose, { choice: String(item.choice || '') })
+        : states[state];
       return;
     }
     const state = holdStates[item.state] ? item.state : 'waiting';

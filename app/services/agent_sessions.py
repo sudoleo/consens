@@ -37,6 +37,7 @@ TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent t
 USER_NOTES_MAX = 10
 USER_NOTE_CHARS = 4000
 HOLD_NOT_DENIABLE = "This pause cannot be declined. Let it continue, write to the agent or stop it."
+HOLD_CHOOSE = "Choose one of the answers, write to the agent or stop it."
 # Updates of a store's time under the account lock (lock_time).
 _LOCK_TIMES = threading.Lock()
 
@@ -57,6 +58,20 @@ def deniable(hold):
     "continue", and a gated update_memory ran."""
     hold = hold or {}
     return bool(hold.get("domain")) or hold.get("ask") in {"confirm", "secret"}
+
+
+def check_answer(hold, action, choice=None):
+    """HoldActionRefused when ``action`` is no answer to ``hold``: "deny"
+    where it does not decline (deniable), "choose" without one of a choice
+    card's answers, and on a choice card (agent_ask.py) anything but a pick,
+    a message or Stop."""
+    from app.services.agent_ask import chosen
+    if action == "deny" and not deniable(hold):
+        raise HoldActionRefused(HOLD_CHOOSE if (hold or {}).get("ask") == "choice" else HOLD_NOT_DENIABLE)
+    if action == "choose" and chosen(hold, choice) is None:
+        raise HoldActionRefused(HOLD_CHOOSE if (hold or {}).get("ask") == "choice" else HOLD_NOT_DENIABLE)
+    if action == "continue" and (hold or {}).get("ask") == "choice":
+        raise HoldActionRefused(HOLD_CHOOSE)
 
 
 def root_usage(root):
@@ -557,9 +572,11 @@ class AgentSessionStore:
             return None
         return hold
 
-    def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text=""):
+    def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text="", choice=None):
         """The user's decision on an open hold: "continue", "stop" or "steer"
-        (continue with ``text`` as their message into the run, like a note).
+        (continue with ``text`` as their message into the run, like a note),
+        "deny" where it declines, "choose" with the ``choice`` (an index) on a
+        choice card (check_answer).
         The run's watcher reads it from the root (DelegationLoop._receive_hold);
         returns the fields saved, for a run in this process (DelegationLoop.receive)."""
         from uuid import uuid4
@@ -572,9 +589,9 @@ class AgentSessionStore:
                 raise TurnStatusConflict("This response is no longer running.")
             if (data.get("hold") or {}).get("id") != hold_id or (data.get("hold_decision") or {}).get("id") == hold_id:
                 raise TurnStatusConflict("This pause is already over.")
-            if action == "deny" and not deniable(data.get("hold")):
-                raise HoldActionRefused(HOLD_NOT_DENIABLE)
-            update = {"hold_decision": {"id": hold_id, "action": action}}
+            check_answer(data.get("hold"), action, choice)
+            update = {"hold_decision": {"id": hold_id, "action": action,
+                                        **({"choice": choice} if action == "choose" else {})}}
             if action == "steer":
                 notes = list(data.get("user_notes") or [])
                 if len(notes) >= USER_NOTES_MAX:

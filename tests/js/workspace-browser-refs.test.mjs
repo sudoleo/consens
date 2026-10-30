@@ -190,3 +190,95 @@ describe("workspace browser find", () => {
     expect(read(0).lines).toEqual(['[e1] link "Menu"', '[e2] link "Body"']);
   });
 });
+
+// HIT_JS (since 2026-10-30): what a click or drag at x,y met and what changed
+// after it. jsdom lays nothing out: each element's box and what lies at a
+// point are given here, as Chrome would measure them.
+const HIT_JS = SOURCE.match(/HIT_JS = r"""\n([\s\S]*?)\n"""/)[1];
+
+function board(body, boxes, at) {
+  const { window, document, read } = page(body);
+  window.Element.prototype.getBoundingClientRect = function () {
+    const [left, top, right, bottom] = boxes.get(this) || [0, 0, 0, 0];
+    return { left, top, right, bottom, width: right - left, height: bottom - top };
+  };
+  document.elementFromPoint = (x, y) => at(x, y);
+  return { window, document, read, hit: window.eval(`(${HIT_JS})`) };
+}
+
+describe("workspace browser hits", () => {
+  const body =
+    '<div id="board" class="board"><div class="piece wn square-21"></div><div class="piece bp square-33"></div>' +
+    '<div class="square-11"></div></div><div class="clock"><span class="clock-time">9:41</span></div>' +
+    '<button aria-label="Resign">x</button>';
+
+  function setUp() {
+    const boxes = new Map();
+    const { window, document, read, hit } = board(body, boxes, (x, y) =>
+      x < 600 && y < 600 ? document.querySelector(".square-21") : document.querySelector("button"));
+    const [boardEl, knight, pawn, square] = document.querySelectorAll("#board, .piece, .square-11");
+    boxes.set(boardEl, [0, 0, 600, 600]).set(knight, [75, 525, 150, 600]).set(pawn, [150, 375, 225, 450])
+      .set(square, [0, 525, 75, 600]).set(document.querySelector(".clock-time"), [700, 0, 760, 20])
+      .set(document.querySelector("button"), [700, 650, 740, 690]);
+    return { window, document, read, hit, boxes, knight, pawn };
+  }
+
+  it("says what lies at each point, its box and the element around it with a box of its own", () => {
+    const { read, hit } = setUp();
+    read(0);
+    const { view, at } = hit({ mode: "before", points: [[100, 550], [720, 670], [5000, 10]], limit: 5 });
+    expect(view).toEqual([1024, 768]);
+    expect(at[0]).toEqual({ tag: "div.piece.wn.square-21", name: "", ref: "", box: [75, 525, 150, 600],
+      drawn: false, in: { tag: "div#board.board", name: "", ref: "", box: [0, 0, 600, 600], drawn: false } });
+    // An element read listed comes with its ref; a point outside the view meets nothing.
+    expect(at[1]).toMatchObject({ tag: "button", name: "Resign", ref: "e1", box: [700, 650, 740, 690] });
+    expect(at[2]).toBeNull();
+  });
+
+  it("lists what changed after it, nearest to its points first, and only that", () => {
+    const { window, document, read, hit, boxes, knight, pawn } = setUp();
+    hit({ mode: "before", points: [[100, 550], [180, 400]], limit: 5 });
+    pawn.remove();
+    knight.className = "piece wn square-33";
+    boxes.set(knight, [150, 375, 225, 450]);
+    const mark = document.createElement("div");
+    mark.className = "highlight square-21";
+    boxes.set(mark, [75, 525, 150, 600]);
+    document.getElementById("board").append(mark);
+    document.querySelector(".clock-time").textContent = "9:40";
+    // Not a change of the page: read's own mark, and what came and went again.
+    read(0);
+    const flash = document.createElement("div");
+    document.body.append(flash);
+    flash.remove();
+    const report = hit({ mode: "after", points: [[100, 550], [180, 400]], limit: 5 });
+    expect(report.count).toBe(4);
+    expect(report.changed.map((item) => [item.tag, item.how])).toEqual([
+      ["div.piece.wn.square-33", "class"], ["div.highlight.square-21", "new"], ["span.clock-time", "text"]]);
+    expect(report.removed.map((item) => item.tag)).toEqual(["div.piece.bp.square-33"]);
+    // Asked once: the watch is gone with it, as after the page loaded anew.
+    expect(hit({ mode: "after", points: [[100, 550]], limit: 5 })).toBeNull();
+    expect(window.__consensHit).toBeUndefined();
+  });
+
+  it("names an element whose properties a form's fields shadow, never failing the look", () => {
+    const boxes = new Map();
+    const { document, hit } = board('<form id="f"><input name="tagName"><input name="getAttribute"></form>', boxes,
+      () => document.getElementById("f"));
+    boxes.set(document.getElementById("f"), [0, 0, 300, 100]);
+    const { at } = hit({ mode: "before", points: [[10, 10]], limit: 5 });
+    // Chrome lets the fields shadow the form's own; jsdom does not.
+    expect(["form#f", "element"]).toContain(at[0].tag);
+    expect(hit({ mode: "after", points: [[10, 10]], limit: 5 }).count).toBe(0);
+  });
+
+  it("counts every changed element once on a busy page and lists only the limit", () => {
+    const { document, hit } = setUp();
+    const many = Array.from({ length: 600 }, () => document.body.appendChild(document.createElement("i")));
+    hit({ mode: "before", points: [[100, 550]], limit: 2 });
+    for (let round = 0; round < 3; round += 1) for (const item of many) item.dataset.tick = String(round);
+    const report = hit({ mode: "after", points: [[100, 550]], limit: 2 });
+    expect(report.count).toBe(600);
+    expect(report.changed).toHaveLength(2);
+  });
+});

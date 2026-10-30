@@ -16,8 +16,11 @@ the user made there. Pages are read as text: ``read`` lists the page's
 headings and the elements one can act on, each with a ref (e12) that click,
 type, select and upload take; ``find`` looks up a text in what the page shows
 and names the ref of the element it lies in; every action prints the page
-again, so the agent sees what changed in the same step. The page's head says
-whether the browser holds cookies for its address (yes or no, never which).
+again, so the agent sees what changed in the same step. A click or drag at
+x,y also says what lay at its points, with their boxes in the screenshot's
+pixels, and which elements changed after it (HIT_JS, since 2026-10-30). The
+page's head says whether the browser holds cookies for its address (yes or
+no, never which).
 
 Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
@@ -43,6 +46,7 @@ The live view keeps it awake anyway (its exec session).
 """
 import base64
 import json
+import math
 import os
 import re
 import subprocess
@@ -96,6 +100,12 @@ MAX_STROKES = 50
 MAX_STROKE_POINTS = 500
 MAX_POINTS = 2_000
 DRAG_STEP_PIXELS = 8
+# What a click or drag at x,y says after it (HIT_JS, look_at): the changed
+# elements nearest to its points, the removed ones, and how far around a
+# point on a canvas, a frame or a video its picture is compared.
+CHANGES_SHOWN = 5
+REMOVED_SHOWN = 3
+PICTURE_AROUND = 40
 # Files a page downloaded (a click, Enter, an address that downloads, the
 # action download) until the server copies them to the workbench and deletes
 # them here (agent_browser.py, since 2026-10-28). What the user downloads in
@@ -279,6 +289,170 @@ FIND_JS = r"""
 
 IS_SECRET_JS = r"""el => el.type === 'password' || /password/i.test(el.autocomplete || '') ||
   /one-time-code/i.test(el.autocomplete || '')"""
+
+# What a click or drag at x,y met (since 2026-10-30). Its answer was only
+# "Clicked at 337,623.": on chess.com DeepSeek V4.1 Flash then spent 20
+# steps on one move, guessing the board's squares from screenshots at 58
+# and then 86 pixels, with a screenshot after every try. "before" (once the
+# mouse is at the first point) says what lies at each point, the element a
+# press there reaches, with its box in the screenshot's pixels, the ref it
+# lies in and the element around it with a box of its own (a board, whose
+# box gives every square's), and watches the page; "after" lists what
+# changed since, nearest to the points first. A change inside a shadow root
+# or a frame is no change here: what a canvas, a frame or a video shows is
+# compared as a picture (look_at).
+HIT_JS = r"""
+({mode, points, limit}) => {
+  const KEY = '__consensHit';
+  if (mode === 'after') {
+    const state = window[KEY];
+    delete window[KEY];
+    return state && typeof state.report === 'function' ? state.report(points, limit) : null;
+  }
+  const clean = text => (text || '').replace(/\s+/g, ' ').trim();
+  const clip = (text, size) => text.length > size ? text.slice(0, size - 1) + '…' : text;
+  const DRAWN = new Set(['CANVAS', 'IFRAME', 'VIDEO', 'EMBED', 'OBJECT']);
+  const up = node => node.parentElement || (node.getRootNode && node.getRootNode().host) || null;
+  // A form's fields shadow its properties (a field named getAttribute or
+  // tagName): its box and attributes come through Element's own methods,
+  // and what still fails makes it "element", never a failed look.
+  const box = el => {
+    const rect = Element.prototype.getBoundingClientRect.call(el);
+    return [Math.round(rect.left), Math.round(rect.top), Math.round(rect.right), Math.round(rect.bottom)];
+  };
+  const attr = (el, name) => Element.prototype.getAttribute.call(el, name);
+  const label = el => clean(attr(el, 'aria-label')) || clean(attr(el, 'title')) || clean(attr(el, 'alt')) ||
+    clean(attr(el, 'placeholder'));
+  const refOf = el => {
+    for (let node = el; node; node = up(node)) {
+      const ref = node instanceof Element ? attr(node, 'data-consens-ref') : '';
+      if (/^e\d+$/.test(ref || '')) return ref;
+    }
+    return '';
+  };
+  const describe = el => {
+    try {
+      let tag = String(el.localName || 'element');
+      const id = attr(el, 'id');
+      if (id) tag += '#' + clip(id, 40);
+      const classes = clean(attr(el, 'class')).split(' ').filter(Boolean).slice(0, 4).map(name => clip(name, 30));
+      if (classes.length) tag += '.' + classes.join('.');
+      // Only a short text names it (a square's piece, a button): a board's would be all of it.
+      const raw = typeof el.textContent === 'string' ? el.textContent : '';
+      const text = raw.length <= 200 ? clean(raw) : '';
+      return {tag, name: clip(label(el) || (text.length <= 40 ? text : ''), 60), ref: refOf(el), box: box(el),
+              drawn: DRAWN.has(String(el.localName).toUpperCase())};
+    } catch (error) {
+      let shown = [0, 0, 0, 0];
+      try { shown = box(el); } catch (inner) {}
+      return {tag: 'element', name: '', ref: '', box: shown, drawn: false};
+    }
+  };
+  const container = el => {
+    try {
+      const own = box(el).join();
+      for (let node = up(el); node && node !== document.body && node !== document.documentElement; node = up(node)) {
+        if ((attr(node, 'id') || clean(attr(node, 'class')) || attr(node, 'role') || label(node))
+            && box(node).join() !== own) {
+          return describe(node);
+        }
+      }
+    } catch (error) {}
+    return null;
+  };
+  const at = ([x, y]) => {
+    let el = x < innerWidth && y < innerHeight ? document.elementFromPoint(x, y) : null;
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el ? {...describe(el), in: container(el)} : null;
+  };
+  const old = window[KEY];
+  if (old && old.observer) old.observer.disconnect();
+  // Element -> how it changed; a busy page counts the rest without them,
+  // each once.
+  const changed = new Map(), beyond = new WeakSet();
+  let more = 0;
+  const note = (el, kind, what) => {
+    let entry = changed.get(el);
+    if (!entry) {
+      if (changed.size >= 500) {
+        if (!beyond.has(el)) {
+          beyond.add(el);
+          more += 1;
+        }
+        return;
+      }
+      entry = {kinds: new Set(), what: new Set(), gone: null};
+      changed.set(el, entry);
+    }
+    entry.kinds.add(kind);
+    if (what) entry.what.add(what);
+    // As it was: its box went with it.
+    if (kind === 'removed' && !entry.gone) entry.gone = describe(el);
+  };
+  const inPage = node => !!document.body && document.body.contains(node);
+  const take = records => {
+    for (const record of records) {
+      const target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+      if (!target || !inPage(target)) continue;
+      if (record.type === 'attributes') {
+        // read's own mark on an element is no change of the page.
+        if (record.attributeName !== 'data-consens-ref') note(target, 'changed', record.attributeName);
+      } else if (record.type === 'characterData') {
+        note(target, 'changed', 'text');
+      } else {
+        let text = false;
+        for (const node of record.addedNodes) {
+          if (node.nodeType === 1) note(node, 'added');
+          else if (node.nodeType === 3) text = true;
+        }
+        for (const node of record.removedNodes) {
+          if (node.nodeType === 1) note(node, 'removed');
+          else if (node.nodeType === 3) text = true;
+        }
+        if (text) note(target, 'changed', 'text');
+      }
+    }
+  };
+  const observer = new MutationObserver(take);
+  // A call that never asks again leaves no watch behind.
+  const timer = setTimeout(() => observer.disconnect(), 120000);
+  const report = (near, size) => {
+    take(observer.takeRecords());
+    observer.disconnect();
+    clearTimeout(timer);
+    const distance = ([left, top, right, bottom]) => Math.min(...near.map(([x, y]) =>
+      Math.hypot(Math.max(left - x, 0, x - right), Math.max(top - y, 0, y - bottom))));
+    const shown = [], gone = [];
+    let count = more;
+    for (const [el, entry] of changed) {
+      const added = entry.kinds.has('added'), removed = entry.kinds.has('removed');
+      if (!el.isConnected) {
+        // What came and went again counts for nothing.
+        if (removed && !added) {
+          count += 1;
+          gone.push(entry.gone);
+        }
+        continue;
+      }
+      count += 1;
+      const item = describe(el);
+      item.how = removed ? 'moved' : added ? 'new' : [...entry.what].slice(0, 3).join(', ');
+      const [left, top, right, bottom] = item.box;
+      item.distance = right > left && bottom > top ? distance(item.box) : Infinity;
+      shown.push(item);
+    }
+    shown.sort((a, b) => a.distance - b.distance);
+    return {count, changed: shown.slice(0, size).map(({distance, ...item}) => item), removed: gone.slice(0, size)};
+  };
+  observer.observe(document, {subtree: true, childList: true, attributes: true, characterData: true});
+  window[KEY] = {observer, report};
+  return {view: [innerWidth, innerHeight], at: points.map(at)};
+}
+"""
 
 
 class Refused(Exception):
@@ -579,11 +753,12 @@ def point(x, y):
     return x, y
 
 
-def drag(page, strokes):
+def drag(page, strokes, seen=None):
     """Each stroke: press the mouse at its first point, move through the
     others, release at the last (drawing, a slider, drag and drop). Between
     two points the mouse moves in small steps, as a hand would, so a canvas
-    gets a line and not two dots."""
+    gets a line and not two dots. ``seen`` takes what lay at the first
+    stroke's press and release points (look_at)."""
     if not isinstance(strokes, list) or not 1 <= len(strokes) <= MAX_STROKES:
         raise Refused(f"drag needs strokes: 1 to {MAX_STROKES}, each a list of x,y points of the screenshot.")
     total = 0
@@ -596,8 +771,10 @@ def drag(page, strokes):
         total += len(stroke)
     if total > MAX_POINTS:
         raise Refused(f"At most {MAX_POINTS} points in one drag.")
-    for path in paths:
+    for number, path in enumerate(paths):
         page.mouse.move(*path[0])
+        if number == 0 and seen is not None:
+            seen.append(look_at(page, [path[0], path[-1]], first_of=len(paths)))
         page.mouse.down()
         last = path[0]
         for x, y in path[1:]:
@@ -607,6 +784,145 @@ def drag(page, strokes):
         page.mouse.up()
     count = "1 stroke" if len(paths) == 1 else f"{len(paths)} strokes"
     return f"Dragged {count} ({total} points)."
+
+
+def look_at(page, points, first_of=1):
+    """Before a click or drag at x,y (the mouse at its first point): what
+    lies at each point and a watch on the page (HIT_JS), and where a point
+    lies on a canvas, a frame or a video, the picture around it. For
+    hit_report once the action settled; None for a page the agent does not
+    read or one that cannot tell, and the action goes on all the same."""
+    if hidden(page):
+        return None
+    points = [tuple(pair) for pair in points]
+    try:
+        found = page.evaluate(HIT_JS, {"mode": "before", "points": [list(pair) for pair in points],
+                                       "limit": CHANGES_SHOWN})
+        view = (_whole(found["view"][0]), _whole(found["view"][1]))
+        hits = list(found["at"])[:len(points)] if isinstance(found["at"], list) else []
+    except Exception:
+        return None
+    if None in view:
+        return None
+    hits += [None] * (len(points) - len(hits))
+    pictures = [around(page, x, y, view) if isinstance(hit, dict) and hit.get("drawn") is True else None
+                for (x, y), hit in zip(points, hits)]
+    return {"page": page, "points": points, "hits": hits, "view": view, "pictures": pictures, "strokes": first_of}
+
+
+def around(page, x, y, view):
+    """The PNG of the view PICTURE_AROUND pixels around x,y, or None."""
+    left, top = max(0, x - PICTURE_AROUND), max(0, y - PICTURE_AROUND)
+    width, height = min(view[0], x + PICTURE_AROUND) - left, min(view[1], y + PICTURE_AROUND) - top
+    if width <= 0 or height <= 0:
+        return None
+    try:
+        # The caret as it is: hiding it, Playwright sets every field's style,
+        # which the watch on the page (HIT_JS) counted as a change.
+        return page.screenshot(type="png", clip={"x": left, "y": top, "width": width, "height": height},
+                               caret="initial")
+    except Exception:
+        return None
+
+
+def _said(value, size):
+    """A string of HIT_JS's answer, at most ``size`` characters: the page
+    answers it, so nothing of another type gets through."""
+    return " ".join(value.split())[:size] if isinstance(value, str) else ""
+
+
+def _whole(value):
+    """A whole number of HIT_JS's answer, or None: Playwright brings the
+    page's Infinity and NaN as floats, which int() refuses."""
+    if type(value) is int:
+        return value
+    if type(value) is float and math.isfinite(value):
+        return int(value)
+    return None
+
+
+def _items(value, size):
+    """The first ``size`` objects of a list in HIT_JS's answer."""
+    return [item for item in value if isinstance(item, dict)][:size] if isinstance(value, list) else []
+
+
+def hit_words(item, with_box=True):
+    """An element as HIT_JS describes it: div#board.piece.wn "name" [e12]
+    (box x 300-375, y 585-660), its box in the screenshot's pixels."""
+    words = _said(item.get("tag"), 200) or "element"
+    name, ref = _said(item.get("name"), 60), _said(item.get("ref"), 12)
+    if name:
+        words += f' "{name}"'
+    if re.fullmatch(r"e\d{1,8}", ref):
+        words += f" [{ref}]"
+    box = [_whole(value) for value in item.get("box")] if isinstance(item.get("box"), list) else []
+    if with_box and len(box) == 4 and None not in box:
+        left, top, right, bottom = box
+        words += f" (box x {left}-{right}, y {top}-{bottom})" if right > left and bottom > top else " (not shown)"
+    return words
+
+
+def change_words(how):
+    """How HIT_JS saw an element change: new, moved, or what of it changed
+    (its attributes' names, "text")."""
+    return how if how in {"new", "moved"} else f"{how} changed" if how else "changed"
+
+
+def hit_report(seen, page):
+    """What a click or drag at x,y met (look_at) and what changed after it,
+    once the page settled: lines for the action's answer, or ""."""
+    if not seen:
+        return ""
+    lines = []
+    width, height = seen["view"]
+    names = ["At"] if len(seen["points"]) == 1 else ["Pressed at", "Released at"]
+    of = " (the first stroke)" if seen["strokes"] > 1 else ""
+    for name, (x, y), hit in zip(names, seen["points"], seen["hits"]):
+        if not isinstance(hit, dict):
+            lines.append(f"{name} {x},{y}{of}: nothing, " + (
+                f"it lies outside the page's view ({width}x{height})." if x >= width or y >= height
+                else "no element there."))
+            continue
+        line = f"{name} {x},{y}{of}: {hit_words(hit)}"
+        if isinstance(hit.get("in"), dict):
+            line += f", in {hit_words(hit['in'])}"
+        lines.append(line + ".")
+    acted = seen["page"]
+    if page is not acted:
+        lines.append("Another tab is in front now.")
+        return "\n".join(lines)
+    if hidden(acted):
+        # It led to the browser's own computer: nothing of it, as in read.
+        return "\n".join(lines)
+    try:
+        changes = acted.evaluate(HIT_JS, {"mode": "after", "points": [list(pair) for pair in seen["points"]],
+                                          "limit": CHANGES_SHOWN})
+    except Exception:
+        return "\n".join(lines)
+    if not isinstance(changes, dict):
+        lines.append("The page loaded anew after it.")
+        return "\n".join(lines)
+    listed = _items(changes.get("changed"), CHANGES_SHOWN)
+    removed = _items(changes.get("removed"), REMOVED_SHOWN)
+    count = _whole(changes.get("count"))
+    count = len(listed) + len(removed) if count is None else count
+    if count <= 0:
+        lines.append("No element of the page changed after it.")
+    else:
+        said = f"Changed after it: {'1 element' if count == 1 else f'{count} elements'}"
+        if listed:
+            said += (", nearest first: " if len(listed) > 1 else ": ") + "; ".join(
+                f"{hit_words(item)} {change_words(_said(item.get('how'), 60))}" for item in listed)
+        if removed:
+            said += ("; removed: " if listed else ", removed: ") + "; ".join(hit_words(item, with_box=False)
+                                                                           for item in removed)
+        lines.append(said + ".")
+    for (x, y), before in zip(seen["points"], seen["pictures"]):
+        if before is not None:
+            after = around(acted, x, y, seen["view"])
+            if after is not None:
+                lines.append(f"The picture around {x},{y} {'did not change' if after == before else 'changed'}.")
+    return "\n".join(lines)
 
 
 def safe_name(name):
@@ -817,9 +1133,18 @@ def run(request):
             page = current_page(context)
             settle(page)
             return with_picture(page, request, {"text": said + read_text(page, 0, AFTER_ACTION_CHARS)})
-        done = act(context, page, action, request)
+        seen = []
+        done = act(context, page, action, request, seen)
         page = current_page(context)
         settle(page)
+        if seen:
+            # The action ran: what the page answers about it never fails
+            # its answer (the agent would take it again, a send twice).
+            try:
+                report = hit_report(seen[0], page)
+            except Exception:
+                report = ""
+            done = "\n".join(filter(None, (done, report)))
         saved = keep_downloads(caught)
         if saved:
             done += "\nDownloaded: " + ", ".join(saved) + "."
@@ -867,8 +1192,9 @@ def with_picture(page, request, answer):
     return {**answer, "text": answer["text"] + "\n" + line, "png": png}
 
 
-def act(context, page, action, request):
-    """One action that changes the page; returns what it did."""
+def act(context, page, action, request, seen=None):
+    """One action that changes the page; returns what it did. A click or
+    drag at x,y puts what lay at its points into ``seen`` (look_at)."""
     if action == "open":
         target = str(request.get("url") or "")
         if not target:
@@ -901,10 +1227,15 @@ def act(context, page, action, request):
         # viewport): for what read lists no element of, such as a canvas,
         # a map or an app drawn in one (since 2026-10-28).
         x, y = point(request.get("x"), request.get("y"))
+        # The mouse there first, as the click would move it: what lies at
+        # the point is then what the click reaches, hovered as for it.
+        page.mouse.move(x, y)
+        if seen is not None:
+            seen.append(look_at(page, [(x, y)]))
         page.mouse.click(x, y)
         return f"Clicked at {x},{y}."
     if action == "drag":
-        return drag(page, request.get("strokes"))
+        return drag(page, request.get("strokes"), seen)
     if action == "type":
         ref, text = request.get("ref"), str(request.get("text") or "")
         target = element(page, ref)

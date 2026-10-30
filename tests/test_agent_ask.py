@@ -185,6 +185,88 @@ def test_without_an_answer_the_agent_finishes_instead_of_stopping(store, monkeyp
     assert [e["state"] for e in events if e.get("type") == "activity" and e.get("kind") == "hold"][-1] == "timeout"
 
 
+CHOICE = "Gegen einen Menschen oder gegen einen Bot?"
+
+
+def test_a_choice_card_returns_the_answer_the_user_picked(store, monkeypatch):
+    """2026-10-30, chess.com: DeepSeek asked "against a person or a bot?"
+    on a card that said Allow or Don't allow, and guessed the person from
+    "allowed". Now its answers are the card's buttons, and it hears the pick."""
+    browser = Browser(monkeypatch)
+    script, loop, ran = asking(store, args={"request": CHOICE, "choices": ["Mensch", " Bot "]})
+
+    def pick():
+        while loop.hold is None:
+            time.sleep(.01)
+        time.sleep(.1)
+        store.decide_hold(UID, loop.chat_id, loop.turn_id, loop.hold["id"], "choose", "", 1)
+        loop._receive_hold(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict())
+    waiter = threading.Thread(target=pick, daemon=True)
+    waiter.start()
+    events = list(loop.run())
+    waiter.join(5)
+    [card] = holds(events)
+    assert card["ask"] == "choice" and card["request"] == CHOICE and card["choices"] == ["Mensch", "Bot"]
+    assert results(loop) == [{"status": "chosen", "note": "The user chose: Bot", "choice": "Bot"}]
+    assert browser.reads == 0
+    shown = [e for e in events if e.get("type") == "activity" and e.get("kind") == "hold"]
+    assert shown[0]["choices"] == ["Mensch", "Bot"] and shown[-1]["state"] == "choose" and shown[-1]["choice"] == "Bot"
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert f"The agent asks the user to choose: {CHOICE} (Mensch / Bot)" in said and "The user chose: Bot" in said
+    turn = saved(store, loop)
+    assert turn["status"] == "completed"
+    # The turn keeps that the user chose, never what (the agent's words).
+    assert "Bot" not in json.dumps(turn.get("holds") or [])
+
+
+@pytest.mark.parametrize("args", [{"choices": ["Ja"]}, {"choices": ["Ja", "ja "]}, {"choices": ["A", "B", "C", "D", "E"]},
+                                  {"choices": ["A", "B"], "browser": True}, {"choices": ["A", "B"], "secret": "KEY"},
+                                  {"choices": ["A", "x" * 81]}])
+def test_choices_are_two_to_four_different_answers_alone(args):
+    with pytest.raises(ValueError):
+        agent_ask.AskUserArgs(request=CHOICE, **args)
+
+
+def test_the_route_takes_one_of_a_choice_cards_answers_and_nothing_else(api):
+    client, store, _ = api
+    chat_id, turn = pending(store)
+    url = f"/agent/chats/{chat_id}/requests/{turn['client_request_id']}/hold"
+    ref = store.receipt_ref(UID, chat_id, turn["id"])
+    ref.set({**(ref.get().to_dict() or {}), "run_status": "running"}, merge=True)
+    store.set_hold(UID, chat_id, turn["id"], {**agent_ask.hold("choice", CHOICE, choices=["Mensch", "Bot"]),
+                                               "id": "a1b2c3d4e5f6"})
+    for body in ({"action": "continue"}, {"action": "deny"}, {"action": "choose"}, {"action": "choose", "choice": 2}):
+        refused = client.post(url, json={"id": "a1b2c3d4e5f6", **body}, headers=AUTH)
+        assert refused.status_code == 422 and refused.json()["code"] == "invalid_action", body
+    assert client.post(url, json={"id": "a1b2c3d4e5f6", "action": "choose", "choice": 10}, headers=AUTH).status_code == 422
+    assert client.post(url, json={"id": "a1b2c3d4e5f6", "action": "choose", "choice": 0}, headers=AUTH).status_code == 200
+    assert ref.get().to_dict()["hold_decision"] == {"id": "a1b2c3d4e5f6", "action": "choose", "choice": 0}
+    # A pick is no answer to any other card.
+    store.set_hold(UID, chat_id, turn["id"], {**agent_ask.hold("confirm", "Senden?"), "id": "b1b2c3d4e5f6"})
+    refused = client.post(url, json={"id": "b1b2c3d4e5f6", "action": "choose", "choice": 0}, headers=AUTH)
+    assert refused.status_code == 422 and refused.json()["code"] == "invalid_action"
+
+
+def test_a_choice_card_that_could_not_be_saved_still_takes_the_pick(api, monkeypatch):
+    """Its save failed for good: the run of this process takes the pick (decide_unsaved)."""
+    from test_agent_audit import in_background, open_hold, unsaved_holds
+    client, store, _ = api
+    Browser(monkeypatch)
+    unsaved_holds(store, monkeypatch)
+    script, loop, ran = asking(store, args={"request": CHOICE, "choices": ["Mensch", "Bot"]})
+    events, ended = in_background(loop)
+    hold = open_hold(loop)
+    deadline = time.monotonic() + 5
+    while not loop.hold_unsaved and time.monotonic() < deadline:
+        time.sleep(.01)
+    url = f"/agent/chats/{loop.chat_id}/requests/one/hold"
+    assert client.post(url, json={"id": hold["id"], "action": "continue"}, headers=AUTH).status_code == 422
+    response = client.post(url, json={"id": hold["id"], "action": "choose", "choice": 0}, headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert ended.wait(10)
+    assert results(loop)[0] == {"status": "chosen", "note": "The user chose: Mensch", "choice": "Mensch"}
+
+
 def test_an_ask_with_invalid_arguments_needs_no_card(store, monkeypatch):
     Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": "x"})
