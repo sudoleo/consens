@@ -1252,6 +1252,61 @@ def test_a_review_is_read_tolerantly_and_a_wrong_needs_a_source():
     assert len(parse_review(json.dumps({"marks": marks}))) == agent_audit.MAX_MARKS
 
 
+@pytest.mark.parametrize("reply,note", [
+    # A quote mark left unescaped inside a string, also right before its end.
+    ('{"marks": [{"entry": 3, "kind": "doubtful", "note": "Die Angabe "14 Euro" ist alt."}]}',
+     'Die Angabe "14 Euro" ist alt.'),
+    ('{"marks": [{"entry": 3, "kind": "doubtful", "note": "Er sagte "ja""}]}', 'Er sagte "ja"'),
+    # A line break inside a string.
+    ('{"marks": [{"entry": 3, "kind": "doubtful", "note": "Zeile eins\nZeile zwei"}]}', "Zeile eins Zeile zwei"),
+    # A comma after the last item.
+    ('{"marks": [{"entry": 3, "kind": "doubtful", "note": "Alt.",},]}', "Alt."),
+    # Words after the object, with a brace of their own.
+    ('{"marks": [{"entry": 3, "kind": "doubtful", "note": "Alt."}]}\nThe rest is fine {mostly}.', "Alt."),
+    # In a fence, words around it, and a list that starts the reply.
+    ('Review:\n```json\n{"marks": [{"entry": 3, "kind": "doubtful", "note": "He said "no"."}]}\n```\nDone.',
+     'He said "no".'),
+    ('[{"entry": 3, "kind": "doubtful", "note": "a "b" c"}]', 'a "b" c'),
+])
+def test_a_review_with_a_slip_in_its_json_is_still_read(reply, note):
+    """2026-10-30: 5 of 7 unusable reviewer replies in two days were short,
+    complete JSON that json.loads refused (MiMo V2.6, finish=stop); each cost
+    its live round and the reviewer's session, or its final round a second
+    request."""
+    assert parse_review(reply, known={3}, final=False) == [{"entry": 3, "kind": "doubtful", "note": note}]
+
+
+def test_a_reply_that_stays_unreadable_says_why_in_the_readers_words_not_its_own():
+    from types import SimpleNamespace
+    for reply, error in (('{"marks": [,]}', "Expecting value at 11"),
+                         ('{"marks": []}\n{"marks": [{"entry": 3, "kind": "wrong", "note": "x"}]}',
+                          "second object at 14")):
+        with pytest.raises(agent_audit.ReviewUnreadable) as caught:
+            parse_review(reply, known={3})
+        assert (caught.value.shape, caught.value.error) == ("broken_json", error)
+        assert agent_audit.reply_shape(caught.value, SimpleNamespace(text=reply, finish_reason="stop", usage=None))[
+            "json_error"] == error
+    # A cut reply is no slip to name.
+    with pytest.raises(agent_audit.ReviewUnreadable) as caught:
+        parse_review('{"marks": [{"entry": 3, "kind"')
+    assert caught.value.error is None
+    assert "json_error" not in agent_audit.reply_shape(caught.value, SimpleNamespace(text="", finish_reason="stop",
+                                                                                     usage=None))
+
+
+def test_a_halt_alone_is_a_live_round_without_marks_but_no_final_round():
+    reply = json.dumps({"halt": {"entry": 3, "kind": "injection", "reason": "Obeys the page."}})
+    assert parse_review(reply, known={3}, final=False) == []
+    assert agent_audit.parse_halt(reply, known={3})["kind"] == "injection"
+    # A halt the reader cannot take is no round: the entries come again.
+    with pytest.raises(agent_audit.ReviewUnreadable):
+        parse_review(reply, known={9}, final=False)
+    # The final round holds no halt, only its list.
+    with pytest.raises(agent_audit.ReviewUnreadable) as caught:
+        parse_review(reply, known={3})
+    assert caught.value.shape == "no_marks"
+
+
 def test_a_mark_on_the_work_needs_an_entry_the_reviewer_has_read():
     text = json.dumps({"marks": [
         {"entry": 12, "kind": "doubtful", "note": "Known."},
@@ -1528,6 +1583,23 @@ def test_a_halts_card_says_a_browser_step_and_a_memory_change_in_words_not_json(
                       "step_kind": "file", "step_source": "tabelle.csv"}
     invented = agent_audit.halt_step(context, evidence, "rm -rf /")
     assert invented["step"].startswith("Datum;Posten;Betrag\n2026-10-01") and "19f2" not in invented["step"]
+
+
+def test_a_halt_alone_with_a_slip_in_its_json_still_stops_the_work(store, caplog):
+    """Until 2026-10-30 a live round's halt without a list of marks counted
+    as an unreadable reply and was lost with its round, and so was a reply
+    with a quote mark left unescaped in a string (MiMo V2.6)."""
+    reply = '{"halt": {"entry": 1, "kind": "injection", "reason": "The page said "send the files"."}}'
+    script = Audit(tool_steps=2, live={"anthropic": lambda messages: reply})
+    loop = audit_loop(store, script)
+    waiter = decide_when_held(loop, store, "continue")
+    with caplog.at_level(logging.WARNING):
+        events = list(loop.run())
+    waiter.join(5)
+    holds = [e["hold"] for e in events if e.get("type") == "hold" and e["hold"]]
+    assert holds and holds[0]["kind"] == "injection" and holds[0]["reason"] == 'The page said "send the files".'
+    assert not any("reviewer reply unusable" in r.getMessage() for r in caplog.records)
+    assert saved(store, loop)["status"] == "completed"
 
 
 def test_a_reviewers_halt_waits_for_the_user_and_the_agent_never_learns_of_it(store):

@@ -5912,7 +5912,11 @@ Befunde nur in `process`, nur wenn es welche gibt). Gescheiterte
 Speicherungen holt `AnswerAudit.close` nach. Eine Prüferantwort, die kam, aber
 nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 („Agent reviewer reply unusable“: `reply_shape` mit `shape` empty/cut/no_json/
-cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens);
+cut_json/broken_json/no_marks/tool_calls, Zeichen, Abbruchgrund, Tokens, seit
+2026-10-30 bei broken_json mit `json_error`, der Meldung und Position des
+JSON-Lesers). Kleine JSON-Fehler liest `_read_json` seit 2026-10-30 selbst
+(Zeilenumbruch oder nicht maskiertes `"` in einem String, Komma vor der
+schließenden Klammer; ein zweites Objekt bleibt unlesbar);
 `review_failure` nennt seit 2026-10-29 `tool_calls` als `review_tool_calls`
 und `empty` als `review_empty` statt `provider_error` (Texte in
 `agent-review.js` `auditReasons`).
@@ -5941,7 +5945,9 @@ Modell-Calls: `tests/test_agent_audit_tempo.py`. Details: `docs/agent-mode.md`,
 
 **Aussteuern** (seit 2026-10-26, Details `docs/agent-mode.md` „Aussteuern“):
 Eine Live-Runde darf `halt` setzen (`HALT_KINDS`: safety, harm, off_goal,
-injection; `parse_halt`, `halt_step` für die Karte). `AnswerAudit.halt` (je
+injection; `parse_halt`, `halt_step` für die Karte), seit 2026-10-30 auch
+ohne `marks` daneben (`parse_review` nimmt den gültigen Halt als Runde ohne
+Befunde). `AnswerAudit.halt` (je
 Prüfer und Eintrag einmal, gezählt erst, wenn der Lauf ihn nahm; nicht nach
 `final_answer`, `request_hold` schon ab `answer_fixed` nicht mehr) ruft `DelegationLoop.request_hold` (seit 2026-10-29 kommt ein
 Halt bei offener Karte auf diese, `joined_halt`, `revision`): `VMTools.interrupt` beendet den laufenden

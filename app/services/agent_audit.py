@@ -515,11 +515,14 @@ class ReviewUnreadable(ValueError):
     """The reviewer's reply holds no review in the asked form. ``shape`` says
     how, never with its words (reply_shape): ``empty``, ``no_json``,
     ``cut_json`` (an object that never closes), ``broken_json`` or
-    ``no_marks`` (JSON without a list of marks)."""
+    ``no_marks`` (JSON without a list of marks). ``error``: for
+    ``broken_json``, the JSON reader's own message and position, which hold
+    none of the reply's words either."""
 
-    def __init__(self, message, shape="no_marks"):
+    def __init__(self, message, shape="no_marks", error=None):
         super().__init__(message)
         self.shape = shape
+        self.error = error
 
 
 def _text(value, limit):
@@ -579,19 +582,94 @@ def source_url(value):
 
 
 _FENCE = re.compile(r"^```[A-Za-z]*\s*|\s*```\s*$")
+_LENIENT = json.JSONDecoder(strict=False)
 
 
-def _review_json(text):
-    """The reply's JSON value, tolerant of a code fence or words around it, or None."""
+# What follows a double quote that ends a string: the end, a closing
+# bracket, a colon, or a comma before the next key or item. Anything else (a
+# word, a full stop) makes it a quote mark left unescaped inside the string.
+_STRING_END = re.compile(r'\s*(?:[}\]:]|,\s*(?:["{\[}\]\d-]|\Z)|\Z)')
+_TRAILING_COMMA = re.compile(r",\s*[}\]]")
+
+
+def _mended(text):
+    """``text`` with two slips models make in JSON undone: a double quote
+    left unescaped inside a string, and a comma after the last item before
+    a closing bracket. Nothing is added or closed: a reply that stops
+    halfway stays unreadable."""
+    out, in_string, escaped, last = [], False, False, ""
+    for at, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                if _STRING_END.match(text, at + 1):
+                    in_string = False
+                else:
+                    out.append("\\")
+        elif char == '"':
+            in_string = True
+        elif char == "," and last not in ("", "[", "{", ",", ":") and _TRAILING_COMMA.match(text, at):
+            continue
+        out.append(char)
+        if not char.isspace():
+            last = char
+    return "".join(out)
+
+
+def _single_value(text):
+    """(value, None) for the JSON value at the start of ``text``, line breaks
+    in its strings allowed and words after it ignored, or (None, the
+    reader's message). A second object after it is no answer either: which
+    of the two counts is unclear, and in a gate round the second could hold
+    the halt."""
+    try:
+        value, end = _LENIENT.raw_decode(text)
+    except json.JSONDecodeError as exc:
+        return None, f"{exc.msg} at {exc.pos}"
+    rest = text[end:]
+    at = rest.find("{")
+    while at != -1:
+        try:
+            _LENIENT.raw_decode(rest, at)
+        except ValueError:
+            at = rest.find("{", at + 1)
+            continue
+        return None, f"second object at {end + at}"
+    return value, None
+
+
+def _read_json(text):
+    """(value, error): the reply's JSON value, or None and why the JSON
+    reader could not take it (ReviewUnreadable.error). Tolerant of a code
+    fence or words around the value, and since 2026-10-30 of line breaks in
+    strings (_LENIENT), a quote mark left unescaped in a string and a comma
+    before a closing bracket (_mended): in two days of Prod (10-28/29), 5 of 7
+    unusable reviewer replies were short, complete JSON the reader refused
+    (MiMo V2.6 Pro and Flash, finish=stop, 400 to 900 characters), and each
+    one cost its live round and the reviewer's session, or its final round
+    a second request."""
     raw = _FENCE.sub("", str(text or "").strip())
     for candidate in (raw, raw[raw.find("{"):raw.rfind("}") + 1] if "{" in raw else ""):
         if not candidate:
             continue
         try:
-            return json.loads(candidate)
+            return json.loads(candidate), None
         except ValueError:
             continue
-    return None
+    # A list of marks starts the reply; an object may follow words.
+    starts = ([0] if raw.startswith("[") else []) + ([raw.find("{")] if "{" in raw else [])
+    error = None
+    for start in starts:
+        value, failed = _single_value(raw[start:])
+        if value is None:
+            value = _single_value(_mended(raw[start:]))[0]
+        if value is not None:
+            return value, None
+        error = error or failed
+    return None, error
 
 
 def parse_halt(text, *, known=()):
@@ -599,7 +677,11 @@ def parse_halt(text, *, known=()):
     one of HALT_KINDS, a reason and the number of an entry the reviewer has
     seen; ``quote``, the entry's words that show it, is checked against the
     entry later (halt_step)."""
-    data = _review_json(text)
+    return _halt(_read_json(text)[0], known)
+
+
+def _halt(data, known):
+    """parse_halt on the reply's JSON value."""
     halt = data.get("halt") if isinstance(data, dict) else None
     if not isinstance(halt, dict):
         return None
@@ -620,13 +702,13 @@ def parse_gate(text, *, known=()):
     """A gate round's reply: ("go", None, marks) or ("halt", halt, marks).
     Marks are optional here; a reply with neither a halt nor "gate": "go"
     raises ReviewUnreadable (the reviewer's verdict is missing)."""
-    data = _review_json(text)
+    data, error = _read_json(text)
     if not isinstance(data, dict):
         raw = str(text or "").strip()
         raise ReviewUnreadable("The gate reply could not be read.",
-                               "empty" if not raw else "no_json" if "{" not in raw else "broken_json")
-    marks = parse_review(text, known=known, final=False) if isinstance(data.get("marks"), list) else []
-    halt = parse_halt(text, known=known)
+                               "empty" if not raw else "no_json" if "{" not in raw else "broken_json", error)
+    marks = _marks(data["marks"], known, final=False) if isinstance(data.get("marks"), list) else []
+    halt = _halt(data, known)
     if halt:
         return "halt", halt, marks
     if str(data.get("gate") or "").strip().strip("\"'").lower() in GATE_GO:
@@ -850,23 +932,24 @@ def parse_review(text, *, known=(), final=True):
     about: a quote of the answer (final round only) or the number of a log
     entry the reviewer has seen (``known``); others are dropped. A "wrong"
     without an http(s) source becomes "doubtful". Raises ReviewUnreadable
-    when the reply holds no list of marks at all."""
+    when the reply holds no list of marks at all; while the agent works, a
+    valid halt alone (parse_halt) is a round without marks, else that halt
+    was lost with the round (until 2026-10-30)."""
     raw = _FENCE.sub("", str(text or "").strip())
-    data = None
-    for candidate in (raw, raw[raw.find("{"):raw.rfind("}") + 1] if "{" in raw else ""):
-        if not candidate:
-            continue
-        try:
-            data = json.loads(candidate)
-            break
-        except ValueError:
-            continue
+    data, error = _read_json(text)
     marks = data if isinstance(data, list) else data.get("marks") if isinstance(data, dict) else None
+    if not isinstance(marks, list) and not final and _halt(data, known):
+        marks = []
     if not isinstance(marks, list):
         shape = ("empty" if not raw else "no_marks" if data is not None
                  else "no_json" if "{" not in raw and not raw.startswith("[")
                  else "cut_json" if raw.count("{") > raw.count("}") else "broken_json")
-        raise ReviewUnreadable("The review could not be read.", shape)
+        raise ReviewUnreadable("The review could not be read.", shape, error if shape == "broken_json" else None)
+    return _marks(marks, known, final)
+
+
+def _marks(marks, known, final):
+    """parse_review on the reply's list of marks."""
     known = set(known)
     result = []
     for item in marks:
@@ -921,8 +1004,9 @@ class ReviewTooLong(ValueError):
 
 def reply_shape(error, reply=None):
     """How a reviewer's reply failed, for the log, never with its words
-    (2026-10-26): {shape, chars, finish, output_tokens, reasoning_tokens}, or
-    None for a failure without a reply (provider, stop, deadline)."""
+    (2026-10-26): {shape, chars, finish, output_tokens, reasoning_tokens}, for
+    ``broken_json`` with the JSON reader's message (``json_error``), or None
+    for a failure without a reply (provider, stop, deadline)."""
     from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
     reply = reply if reply is not None else getattr(error, "reply", None)
     if isinstance(error, ReviewUnreadable):
@@ -940,9 +1024,10 @@ def reply_shape(error, reply=None):
     else:
         shape = "incomplete"
     usage = getattr(reply, "usage", None) or {}
+    json_error = getattr(error, "error", None) if isinstance(error, ReviewUnreadable) else None
     return {"shape": shape, "chars": len(str(getattr(reply, "text", "") or "")) if reply is not None else None,
             "finish": getattr(reply, "finish_reason", None), "output_tokens": usage.get("output_tokens"),
-            "reasoning_tokens": usage.get("reasoning_tokens")}
+            "reasoning_tokens": usage.get("reasoning_tokens"), **({"json_error": json_error} if json_error else {})}
 
 
 def review_failure(error, cancellation=None):
@@ -1570,8 +1655,9 @@ class ReviewerSession:
         """A reply came and could not be used: how, never its words."""
         if shape:
             logging.warning("Agent reviewer reply unusable model=%s round=%s shape=%s chars=%s finish=%s "
-                            "output_tokens=%s reasoning_tokens=%s again=%s", self.model.model, label, shape["shape"],
-                            shape["chars"], shape["finish"], shape["output_tokens"], shape["reasoning_tokens"], again)
+                            "output_tokens=%s reasoning_tokens=%s again=%s%s", self.model.model, label, shape["shape"],
+                            shape["chars"], shape["finish"], shape["output_tokens"], shape["reasoning_tokens"], again,
+                            f" json_error={shape['json_error']}" if shape.get("json_error") else "")
 
     def _final_request(self, message, known):
         """The final round's requests (A-T2): (value, marks) of the first

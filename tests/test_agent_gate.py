@@ -74,6 +74,13 @@ def test_a_gate_reply_is_go_or_a_halt():
     for reply in ('{"marks": []}', "no json", '{"gate": "maybe"}', ""):
         with pytest.raises(agent_audit.ReviewUnreadable):
             agent_audit.parse_gate(reply, known=known)
+    # A slip in the JSON (2026-10-30) does not cost the halt; a second object
+    # after a "go" could hold one, so neither counts.
+    assert agent_audit.parse_gate('{"gate": "go", "halt": {"entry": 3, "kind": "harm", "reason": "Sends "notes" out."}}',
+                                  known=known)[:2] == ("halt", {"entry": 3, "kind": "harm", "reason": 'Sends "notes" out.'})
+    with pytest.raises(agent_audit.ReviewUnreadable) as caught:
+        agent_audit.parse_gate('{"gate": "go"}\n{"halt": {"entry": 3, "kind": "harm", "reason": "Sends it."}}', known=known)
+    assert caught.value.shape == "broken_json"
 
 
 # --- The run ------------------------------------------------------------------------

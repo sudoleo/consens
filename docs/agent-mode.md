@@ -370,8 +370,16 @@ Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
 note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
 aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer
 eines gelesenen Eintrags, die Anmerkung in der Sprache der Nachricht.
-`parse_review` liest tolerant (Fence, Text drumherum, Synonyme, „#12“),
-höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde; `wrong`
+`parse_review` liest tolerant (Fence, Text drumherum, Synonyme, „#12“,
+seit 2026-10-30 über `_read_json` auch Zeilenumbrüche in Strings, ein nicht
+maskiertes `"` in einem String und ein Komma vor der schließenden Klammer;
+Anlass: 5 von 7 unbrauchbaren Prüferantworten am 28./29.10. waren kurzes,
+vollständiges JSON von MiMo V2.6, das `json.loads` ablehnte). Ein zweites
+Objekt nach dem ersten bleibt unlesbar, weil in einer Gate-Runde das zweite
+den Halt tragen könnte. Ein gültiger Halt ohne `marks` ist in einer
+Live-Runde eine Runde ohne Befunde (vorher ging er mit der als unlesbar
+gezählten Runde verloren), in der Schlussrunde weiter unlesbar.
+Höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde; `wrong`
 braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt, Max'
 Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
 Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
