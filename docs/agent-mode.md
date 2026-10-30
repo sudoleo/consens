@@ -1216,6 +1216,44 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   16 Klicks. `screenshot_after` an Aktionen, die die Seite ändern, und an `wait`
   (`PICTURE_AFTER`) bringt das Bild danach im selben Aufruf (Helfer
   `with_picture`, nur für Bildmodelle; sonst `NO_PICTURES`).
+- **Residenter Helfer** (seit 2026-10-30, `browser.py --serve`). Jeder
+  Aufruf startete einen Prozess, Playwrights Treiber und eine neue
+  Verbindung zu Chrome: In Prod dauerte ein `read` im Median 1,5 s, ein
+  Browser-Aufruf 1,9 s, ein Schritt von DeepSeek V4.1 Flash nur 2,7 s
+  (19 Läufe vom 28./29.10.). Lokal gemessen kostet der Start 0,9 s, davon
+  0,6 s Pythons Import und Playwrights Treiber. Jetzt startet ein Aufruf, der
+  keinen Helfer findet, einen für den nächsten Aufruf (eigene Session wie
+  Chrome aus `display.sh`) und läuft selbst wie bisher. Jeder weitere Aufruf
+  gibt seine Anfrage über `~/.consens/browser/serve.sock` weiter, einen
+  Unix-Socket mit Modus 0600 nur für den Nutzer des Servers, nie ein TCP-Port,
+  den eine Seite erreichen könnte. Der Helfer führt dasselbe `run()` aus und
+  hält nur den Treiber; mit Chrome verbindet er sich je Aufruf (`ready`) und
+  trennt danach (`disconnect`). Eine gehaltene Verbindung (erster Entwurf)
+  hätte Chrome verändert, solange sie besteht: Playwright lässt Chrome
+  Downloads in seinen eigenen Ordner legen (die des Nutzers in der
+  Live-Ansicht kämen nie in `~/Downloads` an) und schließt jeden Dialog, auch
+  den des Nutzers (unabhängige Prüfung 2026-10-30). Lokal gegen Chromium: ein
+  Aufruf samt Verbinden und Trennen 28–156 ms statt rund 900 ms; Chrome
+  behält seine Seiten, die Listener eines Aufrufs gehen mit ihm. **Nie
+  doppelt:** Der Helfer macht den Browser bereit (`display.sh`, Verbindung),
+  sagt `took` und handelt erst auf das `go` des Aufrufs. Kommt kein `took`
+  (der Aufruf wartet bis `READY_SECONDS`), ein `declined` (Browser oder
+  Treiber kaputt: der Helfer endet, der Aufruf heilt den Browser selbst) oder
+  `stale`, läuft der Aufruf selbst; ein Helfer, dem das `go` fehlt, tut
+  nichts. Nach `go` und ohne Antwort scheitert eine Aktion (`NOT_FINISHED`,
+  der Helfer wird beendet), nur ein reiner Lesezugriff liest dann selbst.
+  Der Helfer endet nach `SERVE_IDLE` (10 min) ohne Aufruf, bei einer Anfrage
+  einer anderen Version der Datei (`VERSION` = Hash von `browser.py`) und mit
+  dem Watchdog, dessen Antwort an den Aufruf geht, der lief. Es läuft immer
+  nur einer (`serve.lock` mit seiner PID). Jede
+  Antwort trägt `seconds` und `served`; der Server loggt je Aufruf
+  `Agent browser call … first= seconds= before= exec= helper= served=`, und die
+  Vorbereitung der Werkbank loggt ihre Schritte (`Agent VM ready seconds=…
+  lease= rules= tools= folder= checkpoint= …`). Bewusst noch nicht
+  umgesetzt: Der erste Browser-Aufruf einer Nachricht wartet weiter auf diese
+  Vorbereitung, in Prod 2–4 s, einmal 10 s. Sie zu entkoppeln greift in Lease,
+  Lock und Checkpoint der VM-Sitzung ein; erst zeigt das Log, welcher Schritt
+  teuer ist.
 - **Was ein Klick an x,y traf** (seit 2026-10-30). Prod 2026-10-29, Schach auf
   chess.com mit DeepSeek V4.1 Flash: nach zwei Zügen 20 Modellschritte ohne
   weiteren Zug. Das Modell schätzte die Felder aus Screenshots mal auf 58, mal

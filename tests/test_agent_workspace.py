@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import httpx
@@ -243,11 +244,17 @@ def test_the_takeover_expires_unless_the_view_refreshes_it(tmp_path, monkeypatch
 
 
 def run_helper(browser, monkeypatch, capsys, request, awake=None):
+    """One call of browser.py in this process (no resident helper runs)."""
     import io
     monkeypatch.setattr(browser.sys, "stdin", type("In", (), {"buffer": io.BytesIO(json.dumps(request).encode())})())
     monkeypatch.setattr(browser, "stay_awake", lambda: (awake if awake is not None else []).append(True))
+    monkeypatch.setattr(browser, "through_server", lambda request: None)
     assert browser.main() == 0
-    return json.loads(capsys.readouterr().out)
+    answer = json.loads(capsys.readouterr().out)
+    # For the server's log: the helper's own seconds, and not the resident helper's answer.
+    seconds, served = answer.pop("seconds", None), answer.pop("served", None)
+    assert (isinstance(seconds, float) and served is False) or answer["status"] == "failed"
+    return answer
 
 
 def test_every_call_holds_the_browser_vm_awake_for_ten_minutes(monkeypatch, capsys):
@@ -786,6 +793,175 @@ def test_a_click_on_the_browsers_own_computer_looks_at_nothing():
     seen = []
     browser.act(None, page, "click", {"x": 10, "y": 10}, seen)
     assert browser.hit_report(seen[0], page).splitlines()[0] == "At 10,10: nothing, no element there."
+
+
+# --- The resident helper (browser.py --serve, since 2026-10-30) ---------------
+
+def helper_end(browser, said, answer=b""):
+    """A resident helper on the other end of a socket pair: it reads one
+    request line and says ``said``; after TOOK it waits for the call's GO
+    and then sends ``answer``. Returns the call's end and what it got."""
+    import socket
+    import threading
+    ours, theirs = socket.socketpair()
+    got = []
+
+    def helper():
+        with theirs:
+            line, _ = browser.read_line(theirs, browser.REQUEST_BYTES)
+            got.append(json.loads(line))
+            if said:
+                theirs.sendall(said)
+            if said == browser.TOOK:
+                go, _ = browser.read_line(theirs, 16)
+                got.append(go)
+                if answer:
+                    theirs.sendall(answer)
+    threading.Thread(target=helper, daemon=True).start()
+    return ours, got
+
+
+def test_a_call_hands_its_request_to_the_resident_helper_and_never_runs_it_twice(monkeypatch):
+    """A call started a process and Playwright's driver every time: about
+    1 s of a read's 1.5 s in Prod. The resident helper keeps the driver; it
+    acts only on the call's GO after its TOOK, so a request runs here only
+    when it was not taken, and one that was taken never runs here again."""
+    browser = load("browser")
+    started, stopped = [], []
+    monkeypatch.setattr(browser, "start_server", lambda: started.append(True))
+    monkeypatch.setattr(browser, "stop_server", lambda: stopped.append(True))
+    click = {"action": "click", "ref": "e3"}
+    answer = {"status": "ok", "text": "Clicked e3.", "downloads": []}
+    conn, got = helper_end(browser, browser.TOOK, json.dumps(answer).encode())
+    with conn:
+        assert browser.exchange(conn, click) == answer
+    assert got == [{"version": browser.VERSION, "request": click}, b"go"] and started == stopped == []
+    # Not taken (it ended first, declined, or is of another version): the
+    # call runs here, and a helper starts for the next one.
+    for said in (b"", browser.DECLINED, browser.STALE):
+        conn, got = helper_end(browser, said)
+        with conn:
+            assert browser.exchange(conn, click) is None
+        assert len(got) == 1
+    assert len(started) == 3 and stopped == []
+    # Taken and never answered: an action fails, never a second click; a read reads here.
+    conn, _ = helper_end(browser, browser.TOOK)
+    with conn:
+        assert browser.exchange(conn, click) == {"status": "failed", "text": browser.NOT_FINISHED}
+    conn, _ = helper_end(browser, browser.TOOK, b'{"half": ')
+    with conn:
+        assert browser.exchange(conn, {"action": "read"}) is None
+    assert len(stopped) == 2
+
+
+def test_the_resident_helper_acts_only_on_the_calls_go(monkeypatch):
+    """Of its own version, with the browser ready; a call that gave up
+    waiting (no GO) runs itself, and nothing happens here."""
+    import socket
+    browser = load("browser")
+    ran, readied, left = [], [], []
+    monkeypatch.setattr(browser, "answer_for", lambda request: ran.append(request) or {"status": "ok", "text": "read"})
+    monkeypatch.setattr(browser, "ready", lambda request: readied.append(request) or True)
+    monkeypatch.setattr(browser, "disconnect", lambda: left.append(True))
+    request = {"action": "read"}
+    line = json.dumps({"version": browser.VERSION, "request": request}).encode() + b"\n"
+
+    def ask(message, go=True):
+        ours, theirs = socket.socketpair()
+        with ours, theirs:
+            ours.sendall(message)
+            if go:
+                ours.sendall(browser.GO)
+            else:
+                ours.shutdown(socket.SHUT_WR)
+            go_on = browser.serve_one(theirs)
+            theirs.close()
+            data = bytearray()
+            while chunk := ours.recv(65536):
+                data.extend(chunk)
+        return go_on, bytes(data)
+    assert ask(line) == (True, browser.TOOK + b'{"status": "ok", "text": "read"}')
+    assert ran == readied == [request] and left == [True] and browser._sink is browser._to_stdout
+    assert ask(line, go=False) == (True, browser.TOOK) and ran == [request] and len(left) == 2
+    # Another version of this file: it ends, the call starts the new one.
+    assert ask(json.dumps({"version": "old", "request": request}).encode() + b"\n") == (False, browser.STALE)
+    # Anything else is no request.
+    assert ask(b"GET / HTTP/1.1\r\n\r\n", go=False) == (True, b"")
+    # The browser not ready (Chrome or the helper's Playwright broke): it
+    # declines and ends; the call runs itself and heals the browser.
+    monkeypatch.setattr(browser, "ready", lambda request: False)
+    assert ask(line) == (False, browser.DECLINED)
+    assert ran == [request]
+
+
+def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeypatch):
+    """Connected, Playwright makes Chrome save downloads into its own folder
+    and closes every dialog, also the user's in the live view (review
+    2026-10-30): the helper keeps only the driver and holds Chrome for a
+    call; what run refuses before a page needs no connection."""
+    browser = load("browser")
+    made, closed = [], []
+
+    class Chromium:
+        def connect_over_cdp(self, endpoint, timeout):
+            if fail:
+                raise RuntimeError("Connection closed")
+            made.append(endpoint)
+            return type("Browser", (), {"close": lambda self: closed.append(True)})()
+    monkeypatch.setitem(browser.KEPT, "playwright", type("Playwright", (), {"chromium": Chromium()})())
+    monkeypatch.setattr(browser, "ensure_browser", lambda: None)
+    monkeypatch.setattr(browser, "user_control", lambda: False)
+    fail = False
+    assert browser.ready({"action": "read"}) is True and made == [browser.CDP] and browser.KEPT["prepared"]
+    with browser.chrome() as kept:
+        assert kept is browser.KEPT["browser"]
+    browser.disconnect()
+    assert closed == [True] and "browser" not in browser.KEPT and "prepared" not in browser.KEPT
+    # The server's warm-up and an action while the user has the browser look at no page.
+    assert browser.ready({"action": "warm"}) is True and len(made) == 1
+    browser.disconnect()
+    monkeypatch.setattr(browser, "user_control", lambda: True)
+    assert browser.ready({"action": "click", "ref": "e1"}) is True and len(made) == 1
+    browser.disconnect()
+    # Handed back between ready and the action: the helper's own driver connects, never a second one.
+    with browser.chrome() as late:
+        assert late is browser.KEPT["browser"] and len(made) == 2
+    browser.disconnect()
+    fail = True
+    assert browser.ready({"action": "read"}) is False and "browser" not in browser.KEPT and "prepared" not in browser.KEPT
+
+
+def test_the_resident_helper_answers_over_its_socket(tmp_path, monkeypatch):
+    """The whole way on a real unix socket (Linux, as on the browser VM): it
+    starts, answers its own version and ends at another one."""
+    import socket
+    import threading
+    if not hasattr(socket, "AF_UNIX"):
+        pytest.skip("no unix sockets here")
+    browser = load("browser")
+    monkeypatch.setattr(browser, "STATE", str(tmp_path))
+    monkeypatch.setattr(browser, "SERVE_SOCKET", str(tmp_path / "serve.sock"))
+    monkeypatch.setattr(browser, "SERVE_LOCK", str(tmp_path / "serve.lock"))
+    stopped = []
+    playwright = type("Playwright", (), {"stop": lambda self: stopped.append(True)})()
+    monkeypatch.setattr(browser, "load_playwright", lambda: lambda: type("Start", (), {"start": lambda self: playwright})())
+    monkeypatch.setattr(browser, "ready", lambda request: True)
+    monkeypatch.setattr(browser, "answer_for", lambda request: {"status": "ok", "text": request["action"]})
+    monkeypatch.setattr(browser, "start_server", lambda: None)
+    helper = threading.Thread(target=browser.serve, daemon=True)
+    helper.start()
+    deadline = time.time() + 5
+    while not (tmp_path / "serve.sock").exists() and time.time() < deadline:
+        time.sleep(0.02)
+    assert oct((tmp_path / "serve.sock").stat().st_mode & 0o777) == "0o600"
+    assert (tmp_path / "serve.lock").read_text() == str(os.getpid())
+    assert browser.through_server({"action": "read"}) == {"status": "ok", "text": "read"}
+    monkeypatch.setattr(browser, "VERSION", "next")
+    assert browser.through_server({"action": "read"}) is None
+    helper.join(5)
+    assert not helper.is_alive() and stopped == [True] and not (tmp_path / "serve.sock").exists()
+    # None runs: the call runs itself.
+    assert browser.through_server({"action": "read"}) is None
 
 
 def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():

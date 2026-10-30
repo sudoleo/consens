@@ -45,6 +45,7 @@ import logging
 import posixpath
 import re
 import threading
+import time
 from typing import Literal, Optional
 from urllib.parse import urlsplit
 
@@ -364,6 +365,8 @@ class BrowserTools:
             if outcome.timed_out:
                 raise ValueError("The browser did not answer in time. Read the page again before you go on.")
             raise agent_vm.VMUnavailable(f"browser: exit {outcome.exit_code}")
+        # For the log line of the call (call): the command's time on the VM.
+        answer["exec_seconds"] = outcome.seconds
         return answer
 
     def _db(self):
@@ -461,8 +464,10 @@ class BrowserTools:
             request.update(x=args.x, y=args.y)
         if args.action == "drag":
             request["strokes"] = args.strokes
+        started, first = time.monotonic(), not self.ready
         warming = self._warm(cancellation) if not self.ready else None
         self.vm._start(cancellation)
+        prepared = time.monotonic()
         session = self.vm.session
         upload = None
         timeout = CALL_SECONDS + (args.seconds if args.action == "wait" else 0)
@@ -504,6 +509,13 @@ class BrowserTools:
                 except Exception as exc:
                     logging.info("Agent browser upload not removed category=%s", safe_exception(exc))
         status, text = answer.get("status"), str(answer.get("text") or "")
+        # Where a call's time goes (since 2026-10-30): before the browser
+        # (the workbench, the first call's start of the browser VM), the
+        # command on the VM, the helper inside it, and whether the resident
+        # helper answered (browser.py serve).
+        logging.info("Agent browser call action=%s first=%s seconds=%.2f before=%.2f exec=%.2f helper=%s served=%s "
+                     "status=%s", args.action, first, time.monotonic() - started, prepared - started,
+                     float(answer.get("exec_seconds") or 0), answer.get("seconds"), answer.get("served"), status)
         seen = re.search(r"^URL: (\S+)", text, re.M)
         if seen:
             self.page_url = seen.group(1)

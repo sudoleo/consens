@@ -43,8 +43,16 @@ call therefore holds the VM awake for AWAKE_FOR after it, through the Sprites
 Tasks API like the workbench's background processes (agent_vm_processes): an
 expiring hold, renewed by the next call, gone by itself after the last one.
 The live view keeps it awake anyway (its exec session).
+
+A resident helper keeps Playwright's driver running between calls (since
+2026-10-30, serve) and connects to Chrome for each call only: a call that
+finds none runs as before and starts one for the next; one it reaches gets
+the request over a unix socket of the server's user and runs the same
+run() (see "The resident helper" below).
 """
 import base64
+import contextlib
+import hashlib
 import json
 import math
 import os
@@ -87,6 +95,15 @@ LOADED_SECONDS = 10
 # The Tasks API hold that keeps the VM awake after a call (stay_awake).
 AWAKE_TASK = "consens-browser-awake"
 AWAKE_FOR = "10m"
+# The resident helper (serve, since 2026-10-30): its socket, the lock one
+# of them holds while it runs, how long it waits for a call (as long as a
+# call keeps the VM awake), and how long a call waits to hand it its
+# request and then for the start of its answer.
+SERVE_SOCKET = os.path.join(STATE, "serve.sock")
+SERVE_LOCK = os.path.join(STATE, "serve.lock")
+SERVE_IDLE = 600
+SERVE_CONNECT_SECONDS = 2
+SERVE_REQUEST_SECONDS = 10
 API_SOCKET = "/.sprite/api.sock"
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
@@ -527,12 +544,57 @@ def connect(playwright):
         return playwright.chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
 
 
-# The call's one answer on stdout: from main, or from the watchdog when the
-# browser stopped answering (then main writes nothing).
+def load_playwright():
+    """Playwright's sync_playwright. A first setup installed it into the
+    user's site folder, which Python only looks at when it exists at its
+    start."""
+    import importlib
+    import site
+    site.addsitedir(site.getusersitepackages())
+    importlib.invalidate_caches()
+    from playwright.sync_api import sync_playwright
+    return sync_playwright
+
+
+# The resident helper's Playwright and, for one call, its connection to
+# Chrome (serve_one). The connection never outlives the call: while
+# Playwright is connected, Chrome saves downloads into Playwright's own
+# folder (not ~/Downloads, where the user's downloads in the live view are
+# taken from) and closes every dialog no handler takes, also the user's
+# (the review of 2026-10-30). A call of its own (``with`` below) ends it the
+# same way.
+KEPT = {}
+
+
+@contextlib.contextmanager
+def chrome():
+    """The running Chrome over CDP: the resident helper's connection of this
+    call (made here when ready made none: the user handed the browser back
+    meanwhile), else one of the call's own."""
+    if "playwright" in KEPT:
+        if KEPT.get("browser") is None:
+            KEPT["browser"] = connect(KEPT["playwright"])
+        yield KEPT["browser"]
+        return
+    with load_playwright()() as playwright:
+        yield connect(playwright)
+
+
+# The call's one answer: from main (or the resident helper, serve_one), or
+# from the watchdog when the browser stopped answering (then main writes
+# nothing). On stdout, or to the call that asked the resident helper.
 _ANSWER_LOCK = threading.Lock()
 _answered = False
 _watchdog_done = threading.Event()
 _timer = None
+
+
+def _to_stdout(data):
+    sys.stdout.write(data.decode("utf-8"))
+    sys.stdout.flush()
+
+
+_sink = _to_stdout
 
 
 def answer_once(answer):
@@ -541,14 +603,16 @@ def answer_once(answer):
         if _answered:
             return False
         _answered = True
-    sys.stdout.write(json.dumps(answer))
-    sys.stdout.flush()
+    _sink(json.dumps(answer).encode("utf-8"))
     return True
 
 
 def watchdog(seconds):
     """Ends the call after ``seconds`` when the browser did not answer, and
-    restarts Chrome so that the next call finds one that does."""
+    restarts Chrome so that the next call finds one that does. Its answer
+    goes where the call's would have gone (the sink when it started)."""
+    sink = _sink
+
     def expire():
         global _answered
         with _ANSWER_LOCK:
@@ -561,10 +625,14 @@ def watchdog(seconds):
         except Exception:
             said = "the next call starts it again"
         stay_awake()
-        sys.stdout.write(json.dumps({"status": "failed", "text": (
-            f"The browser did not answer within {seconds} s; {said}. Read the page again, or open it anew.")}))
-        sys.stdout.flush()
+        try:
+            sink(json.dumps({"status": "failed", "text": (
+                f"The browser did not answer within {seconds} s; {said}. Read the page again, or open it "
+                "anew.")}).encode("utf-8"))
+        except OSError:
+            pass
         _watchdog_done.set()
+        # Also the resident helper ends: its next call starts a fresh one.
         os._exit(0)
     global _timer
     _timer = threading.Timer(seconds, expire)
@@ -1065,26 +1133,18 @@ def run(request):
     query = find_query(request) if action == "find" else ""
     LOCAL_PORTS.clear()
     LOCAL_PORTS.update(port for port in request.get("local_ports") or () if type(port) is int)
-    ensure_browser()
+    if not KEPT.get("prepared"):
+        # The resident helper did it before it took the call (ready).
+        ensure_browser()
     if action == "warm":
         # The server's own start of the browser while the workbench gets
         # ready (agent_browser.BrowserTools._warm, since 2026-10-29): it
         # reads nothing of the pages, and the agent never asks for it.
         return {"text": ""}
-    # A first setup installed Playwright into the user's site folder, which
-    # Python only looks at when it exists at its start.
-    import importlib
-    import site
-    site.addsitedir(site.getusersitepackages())
-    importlib.invalidate_caches()
-    from playwright.sync_api import sync_playwright
-    with sync_playwright() as playwright:
-        browser = connect(playwright)
-        watchdog(CALL_LIMIT + (min(WAIT_MAX, max(1, int(request.get("seconds") or 30))) if action == "wait" else 0)
-                 + (DOWNLOAD_SECONDS if action == "download" else 0))
+    with chrome() as browser:
+        watchdog(call_seconds(request))
         context = browser.contexts[0] if browser.contexts else browser.new_context()
         page = current_page(context)
-        offset = int(request.get("offset") or 0)
         # A download this action starts, in any tab, also one it opens.
         # A function of its own: Playwright marks each handler, which a
         # builtin like list.append does not allow (every action failed).
@@ -1098,60 +1158,86 @@ def run(request):
         for tab in context.pages:
             watch(tab)
         context.on("page", watch)
-        if action == "read":
-            return {"text": read_text(page, offset)}
-        if action == "text":
-            return {"text": page_text(page, offset)}
-        if action == "find":
-            if hidden(page):
-                return {"text": hidden_text(page)}
-            return {"text": find_text(page, query)}
-        if action == "tabs":
-            lines = []
-            for number, tab in enumerate(context.pages, 1):
+        try:
+            return on_page(context, page, action, request, query, caught)
+        finally:
+            # The resident helper keeps the connection: this call's
+            # listeners end with the call.
+            for tab in context.pages:
                 try:
-                    title = "" if hidden(tab) else tab.title()
+                    tab.remove_listener("download", catch)
                 except Exception:
-                    title = ""
-                lines.append(f"{'*' if tab == page else ' '}{number}. \"{title[:80]}\" {tab.url[:160]}")
-            lines.append("(* = the tab in front; switch with the action tab)")
-            return {"text": "\n".join(lines)}
-        if action == "screenshot":
-            if hidden(page):
-                raise Refused(OWN_COMPUTER)
-            line, png = picture(page)
-            return {"text": header(page) + "\n" + line, "png": png}
-        if action == "wait":
-            seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
-            deadline, held = time.time() + seconds, user_control()
-            while time.time() < deadline:
-                time.sleep(1)
-                if held and not user_control():
-                    break
-            said = ("The user still has the browser.\n" if user_control() else
-                    "The user handed the browser back.\n" if held else "")
-            page = current_page(context)
-            settle(page)
-            return with_picture(page, request, {"text": said + read_text(page, 0, AFTER_ACTION_CHARS)})
-        seen = []
-        done = act(context, page, action, request, seen)
+                    pass
+            try:
+                context.remove_listener("page", watch)
+            except Exception:
+                pass
+
+
+def call_seconds(request):
+    """How long the browser may take for ``request`` before the watchdog."""
+    action = request.get("action")
+    return (CALL_LIMIT + (min(WAIT_MAX, max(1, int(request.get("seconds") or 30))) if action == "wait" else 0)
+            + (DOWNLOAD_SECONDS if action == "download" else 0))
+
+
+def on_page(context, page, action, request, query, caught):
+    """``action`` on ``page`` (the tab in front) once the browser is connected."""
+    offset = int(request.get("offset") or 0)
+    if action == "read":
+        return {"text": read_text(page, offset)}
+    if action == "text":
+        return {"text": page_text(page, offset)}
+    if action == "find":
+        if hidden(page):
+            return {"text": hidden_text(page)}
+        return {"text": find_text(page, query)}
+    if action == "tabs":
+        lines = []
+        for number, tab in enumerate(context.pages, 1):
+            try:
+                title = "" if hidden(tab) else tab.title()
+            except Exception:
+                title = ""
+            lines.append(f"{'*' if tab == page else ' '}{number}. \"{title[:80]}\" {tab.url[:160]}")
+        lines.append("(* = the tab in front; switch with the action tab)")
+        return {"text": "\n".join(lines)}
+    if action == "screenshot":
+        if hidden(page):
+            raise Refused(OWN_COMPUTER)
+        line, png = picture(page)
+        return {"text": header(page) + "\n" + line, "png": png}
+    if action == "wait":
+        seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
+        deadline, held = time.time() + seconds, user_control()
+        while time.time() < deadline:
+            time.sleep(1)
+            if held and not user_control():
+                break
+        said = ("The user still has the browser.\n" if user_control() else
+                "The user handed the browser back.\n" if held else "")
         page = current_page(context)
         settle(page)
-        if seen:
-            # The action ran: what the page answers about it never fails
-            # its answer (the agent would take it again, a send twice).
-            try:
-                report = hit_report(seen[0], page)
-            except Exception:
-                report = ""
-            done = "\n".join(filter(None, (done, report)))
-        saved = keep_downloads(caught)
-        if saved:
-            done += "\nDownloaded: " + ", ".join(saved) + "."
-        answer = with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
-        if action == "open" and not hidden(page):
-            answer["preview"] = preview(page)
-        return answer
+        return with_picture(page, request, {"text": said + read_text(page, 0, AFTER_ACTION_CHARS)})
+    seen = []
+    done = act(context, page, action, request, seen)
+    page = current_page(context)
+    settle(page)
+    if seen:
+        # The action ran: what the page answers about it never fails
+        # its answer (the agent would take it again, a send twice).
+        try:
+            report = hit_report(seen[0], page)
+        except Exception:
+            report = ""
+        done = "\n".join(filter(None, (done, report)))
+    saved = keep_downloads(caught)
+    if saved:
+        done += "\nDownloaded: " + ", ".join(saved) + "."
+    answer = with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
+    if action == "open" and not hidden(page):
+        answer["preview"] = preview(page)
+    return answer
 
 
 def picture(page):
@@ -1291,14 +1377,14 @@ def act(context, page, action, request, seen=None):
     raise Refused(f"Unknown action {action}.")
 
 
-def main():
-    global _answered
-    # One call per process on the VM; tests call main again in one process.
-    with _ANSWER_LOCK:
-        _answered = False
-    _watchdog_done.clear()
+def failed(exc):
+    message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+    return {"status": "failed", "text": message[:400]}
+
+
+def answer_for(request):
+    """The answer to one request, from run, with the finished downloads."""
     try:
-        request = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
         if not isinstance(request, dict):
             raise Refused("The request is no JSON object.")
         answer = {"status": "ok", **run(request)}
@@ -1306,10 +1392,291 @@ def main():
     except (Refused, UserHasControl, SettingUp) as exc:
         answer = {"status": exc.status, "text": str(exc)}
     except Exception as exc:
-        message = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-        answer = {"status": "failed", "text": message[:400]}
+        answer = failed(exc)
     if _timer is not None:
         _timer.cancel()
+    return answer
+
+
+# The resident helper (since 2026-10-30). Every call started a process and
+# Playwright's driver: in Prod a read took a median 1.5 s, about 1 s of it
+# for the start (0.9 s on a laptop, of it 0.6 s for Python's import and the
+# driver). Now a call that finds no helper runs as before and starts one for
+# the next call (``--serve``): it keeps Playwright's driver and runs the
+# requests it gets over SERVE_SOCKET, a socket only the server's user on
+# this VM reaches (never a TCP port: a page reaches those), with the same
+# run(). It connects to Chrome for each call and lets go after it (KEPT):
+# connected, Playwright makes Chrome save downloads into its own folder and
+# closes every dialog, also the user's in the live view.
+#
+# Never twice: the helper first gets the browser ready for the call (ready)
+# and says TOOK; only the call's GO makes it act. A call that gets no TOOK
+# in time, or a DECLINED (the browser or the helper's Playwright broke: the
+# helper ends), runs here as before; one that said GO never runs the request
+# here: unanswered, it fails like a call the browser did not finish, unless
+# it only reads (the call reads here). The helper ends after SERVE_IDLE
+# without a call, at a request of another version of this file (VERSION,
+# STALE: the call starts the new one) and with the watchdog.
+VERSION = hashlib.sha256(open(os.path.abspath(__file__), "rb").read()).hexdigest()[:16]
+TOOK = b"took\n"
+GO = b"go\n"
+STALE = b"stale\n"
+DECLINED = b"declined\n"
+# How long a call waits for TOOK: the browser's start (display.sh) and a
+# connection to Chrome (CONNECT_SECONDS), within the server's limit.
+READY_SECONDS = 60
+# A request: a few kilobytes, up to a drag's 2000 points or 20,000 characters
+# of text; an answer, up to a screenshot (agent_browser.ANSWER_BYTES).
+REQUEST_BYTES = 1024 * 1024
+ANSWER_BYTES = 12 * 1024 * 1024
+NOT_FINISHED = ("The browser did not finish this action, and whether it took effect is unknown. Read the page "
+                "before you go on.")
+
+
+def read_line(conn, limit, start=b""):
+    """``(line, rest)`` from ``conn`` after the bytes ``start`` it sent
+    before: the bytes up to its first newline and what came after it in the
+    same reads; ``(None, b"")`` when it ends before one or sends more than
+    ``limit``."""
+    data = bytearray(start)
+    while b"\n" not in data:
+        chunk = conn.recv(65536)
+        if not chunk or len(data) + len(chunk) > limit:
+            return None, b""
+        data.extend(chunk)
+    end = data.index(b"\n")
+    return bytes(data[:end]), bytes(data[end + 1:])
+
+
+def exchange(conn, request):
+    """``request`` through the resident helper on ``conn`` (connected):
+    its answer, or None when the call is to run here instead (not taken, or
+    a request that only reads broke off)."""
+    try:
+        conn.sendall(json.dumps({"version": VERSION, "request": request}).encode("utf-8") + b"\n")
+        conn.settimeout(READY_SECONDS)
+        said, rest = read_line(conn, 64)
+        if said is not None and said + b"\n" == TOOK:
+            conn.sendall(GO)
+    except OSError:
+        said, rest = None, b""
+    if said is None or said + b"\n" != TOOK:
+        # Not taken: it ended, declined or is of another version.
+        start_server()
+        return None
+    conn.settimeout(call_seconds(request) + RESTART_SECONDS + 15)
+    data = bytearray(rest)
+    try:
+        while chunk := conn.recv(65536):
+            data.extend(chunk)
+    except OSError:
+        pass
+    try:
+        answer = json.loads(bytes(data).decode("utf-8"))
+    except ValueError:
+        answer = None
+    if isinstance(answer, dict) and answer.get("status"):
+        return answer
+    # Taken and never answered: never a second time.
+    stop_server()
+    if request.get("action") in ACTING:
+        return {"status": "failed", "text": NOT_FINISHED}
+    return None
+
+
+def through_server(request):
+    """``request`` through the resident helper, or None (exchange): also
+    when none runs, and then one is started for the next call."""
+    import socket
+    if not hasattr(socket, "AF_UNIX"):
+        return None
+    conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    conn.settimeout(SERVE_CONNECT_SECONDS)
+    try:
+        conn.connect(SERVE_SOCKET)
+    except OSError:
+        conn.close()
+        start_server()
+        return None
+    with conn:
+        return exchange(conn, request)
+
+
+def start_server():
+    """The resident helper for the next call, in a session of its own (it
+    outlives this call, as display.sh's Chrome does); only once the browser
+    is set up, since it needs Playwright."""
+    if not os.path.exists(SETUP_MARKER):
+        return
+    try:
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--serve"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, cwd=HOME)
+    except OSError:
+        pass
+
+
+def stop_server():
+    """Ends the resident helper (its pid is in SERVE_LOCK)."""
+    import signal
+    try:
+        with open(SERVE_LOCK, encoding="utf-8") as handle:
+            pid = int(handle.read().strip() or 0)
+        with open(f"/proc/{pid}/cmdline", "rb") as handle:
+            argv = handle.read().split(b"\0")
+    except (OSError, ValueError):
+        return
+    if pid != os.getpid() and b"--serve" in argv and any(arg.endswith(b"browser.py") for arg in argv):
+        with contextlib.suppress(OSError):
+            os.kill(pid, signal.SIGKILL)
+
+
+def ready(request):
+    """Before the resident helper takes a call: the browser running and,
+    for an action on the pages, this call's connection to Chrome. False
+    when either fails: the call then runs itself, which heals the browser
+    (a restart), and this helper ends, since its Playwright may be what
+    broke."""
+    action = request.get("action") if isinstance(request, dict) else None
+    try:
+        ensure_browser()
+        KEPT["prepared"] = True
+        # What run refuses before it looks at a page needs no connection.
+        if action in ACTIONS and action != "warm" and not (action in ACTING and user_control()):
+            KEPT["browser"] = KEPT["playwright"].chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
+        return True
+    except Exception:
+        disconnect()
+        return False
+
+
+def disconnect():
+    """The end of the resident helper's call: it lets go of Chrome, which
+    then saves downloads and shows dialogs as without Playwright (KEPT)."""
+    KEPT.pop("prepared", None)
+    browser = KEPT.pop("browser", None)
+    if browser is not None:
+        with contextlib.suppress(Exception):
+            browser.close()
+
+
+def serve_one(conn):
+    """One call on ``conn``: the browser ready, TOOK, and on the call's GO
+    the answer as main gives it. False when this helper is to end (another
+    version asked, or the browser was not ready)."""
+    global _answered, _sink
+    conn.settimeout(SERVE_REQUEST_SECONDS)
+    try:
+        line, rest = read_line(conn, REQUEST_BYTES)
+        message = json.loads(line.decode("utf-8")) if line is not None else None
+    except (OSError, ValueError):
+        message, rest = None, b""
+    if not isinstance(message, dict):
+        return True
+    if message.get("version") != VERSION:
+        with contextlib.suppress(OSError):
+            conn.sendall(STALE)
+        return False
+    request = message.get("request")
+    if not ready(request):
+        with contextlib.suppress(OSError):
+            conn.sendall(DECLINED)
+        return False
+    try:
+        conn.sendall(TOOK)
+        go, _ = read_line(conn, 16, rest)
+    except OSError:
+        go = None
+    if go is None or go + b"\n" != GO:
+        # The call gave up waiting and runs itself: nothing happens here.
+        disconnect()
+        return True
+    conn.settimeout(None)
+    with _ANSWER_LOCK:
+        _answered = False
+    _watchdog_done.clear()
+    _sink = conn.sendall
+    try:
+        if not answer_once(answer_for(request)):
+            # The watchdog answered: it ends this helper once Chrome restarted.
+            _watchdog_done.wait(RESTART_SECONDS + 10)
+    except OSError:
+        pass
+    finally:
+        _sink = _to_stdout
+        disconnect()
+    return True
+
+
+def serve():
+    """The resident helper (``browser.py --serve``): one at a time, holding
+    SERVE_LOCK with its pid, the socket only its user can open."""
+    import fcntl
+    import socket
+    os.makedirs(STATE, exist_ok=True)
+    lock = open(SERVE_LOCK, "a+", encoding="utf-8")
+    deadline = time.time() + 5
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            # Another one runs; one that is ending (another version) lets go soon.
+            if time.time() > deadline:
+                return 0
+            time.sleep(0.2)
+    lock.seek(0)
+    lock.truncate()
+    lock.write(str(os.getpid()))
+    lock.flush()
+    KEPT["playwright"] = load_playwright()().start()
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    with contextlib.suppress(FileNotFoundError):
+        os.unlink(SERVE_SOCKET)
+    mask = os.umask(0o177)
+    try:
+        listener.bind(SERVE_SOCKET)
+    finally:
+        os.umask(mask)
+    listener.listen(4)
+    listener.settimeout(SERVE_IDLE)
+    try:
+        while True:
+            try:
+                conn, _ = listener.accept()
+            except socket.timeout:
+                return 0
+            with conn:
+                if not serve_one(conn):
+                    return 0
+    finally:
+        # A call that connects now finds no helper and runs itself.
+        listener.close()
+        with contextlib.suppress(OSError):
+            os.unlink(SERVE_SOCKET)
+        with contextlib.suppress(Exception):
+            KEPT.pop("playwright").stop()
+
+
+def main():
+    global _answered
+    if sys.argv[1:] == ["--serve"]:
+        return serve()
+    # One call per process on the VM; tests call main again in one process.
+    with _ANSWER_LOCK:
+        _answered = False
+    _watchdog_done.clear()
+    started = time.monotonic()
+    try:
+        request = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
+    except Exception as exc:
+        answer = failed(exc)
+    else:
+        answer = through_server(request) if isinstance(request, dict) else None
+        served = answer is not None
+        if answer is None:
+            answer = answer_for(request)
+        # For the server's log: the helper's own time, and whether the resident one answered.
+        answer.update(seconds=round(time.monotonic() - started, 3), served=served)
     stay_awake()
     if not answer_once(answer):
         # The watchdog answered: it ends the process once Chrome restarted.

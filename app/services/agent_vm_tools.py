@@ -390,34 +390,49 @@ class VMSession:
                 raise _VMOff(agent_workspace.VM_BUSY)
             if self.state == "ready":
                 return
+            # How long each step takes, in the log (since 2026-10-30): a
+            # message's first browser call waits for all of them, 2 to 4 s
+            # in Prod on top of the call, before the browser runs.
+            phases, mark = {}, [time.monotonic()]
+
+            def took(phase):
+                now = time.monotonic()
+                phases[phase], mark[0] = now - mark[0], now
             try:
                 self.backend = self._factory()
                 if self.backend is None:
                     raise agent_vm.VMUnavailable("no provider configured")
                 from app.services import agent_domains
                 self._record()
+                took("lease")
                 cancellation.raise_if_cancelled()
                 self.domains = list(self.claim.domains)
                 self.backend.ensure(self.name, agent_domains.rules(self.domains))
+                took("rules")
                 agent_workspace.prepare(self.backend, self.name, cancellation)
+                took("tools")
                 folder = agent_workspace.make_chat_dir(self.backend, self.name, self.loop.chat_id,
                                                        self.claim.title, self.claim.started, self.claim.folder)
                 self.dir = agent_vm.chat_dir(self.loop.chat_id, folder or None)
                 if folder != self.claim.folder:
                     agent_workspace.record_folder(self.loop.store, self.loop.uid, self.loop.chat_id, folder)
                 self._still_active()
+                took("folder")
                 try:
                     self.checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
                     self.checkpoint_at = _now()
                 except agent_vm.VMUnavailable:
                     # Works on without it: the checkpoint only marks a state to return to.
                     logging.warning("Agent VM checkpoint unavailable")
+                took("checkpoint")
                 self._copy_inputs(cancellation)
+                took("inputs")
                 try:
                     self.notes = agent_workspace.read_notes(self.backend, self.name)
                 except agent_vm.VMUnavailable:
                     # Works on without them, like without a checkpoint.
                     logging.warning("Agent workspace notes unavailable")
+                took("notes")
                 if self.claim.secrets:
                     # The keys the user gave, so this message masks them (agent_secrets.scrub).
                     from app.services import agent_secrets
@@ -426,8 +441,11 @@ class VMSession:
                                                            self.claim.secrets, cancellation)
                     except agent_vm.VMUnavailable:
                         logging.warning("Agent workspace keys unavailable")
+                    took("keys")
                 self.state = "ready"
                 self.started = True
+                logging.info("Agent VM ready seconds=%.1f %s", sum(phases.values()),
+                             " ".join(f"{phase}={seconds:.1f}" for phase, seconds in phases.items()))
             except ProviderCancelled:
                 raise
             except agent_workspace.WorkspaceBusy:
