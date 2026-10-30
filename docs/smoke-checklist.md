@@ -277,6 +277,28 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Browser übernehmen: das Terminal tippt weiter.
       Automatisiert: `test_agent_workspace.py`, `test_agent_workspace_view.py`,
       `workspace-view.test.mjs`.
+- [ ] Arbeitsplatz nach dem Laufzeit-Audit (2026-10-30,
+      `docs/agent-workspace-runtime-audit-2026-10-30.md`; Pro- oder
+      Admin-Konto mit Audit, echter Provider, nur an echter Sprite und echtem
+      Gerät prüfbar):
+      **Handy (iPhone und Android):** Live-Ansicht öffnen, übernehmen: Knopf
+      „Tastatur“ öffnet die Bildschirmtastatur, Buchstaben, Löschen und Enter
+      kommen an; „100 %“ zeigt die Seite in echter Größe und lässt sich
+      ziehen. Während der Übernahme in eine andere App wechseln (z. B. die
+      2FA-App) und zurück: Die Ansicht verbindet sich selbst neu, „Zurückgeben“
+      und der grüne Rand bleiben. Beim Zuschauen nennt die Statuszeile den
+      laufenden Schritt des Agenten, der Kopf die Restzeit des Tages.
+      **Desktop:** Ansicht offen lassen, Tab 2 min wechseln, während der Agent
+      den Browser hat: Die Ansicht trennt; zurück im Tab verbindet sie neu.
+      **Lauf:** „Öffne example.com und lies die Startseite“: Der erste
+      Browser-Schritt zeigt kurz „Arbeitsplatz startet …“, dann „Läuft · N s“;
+      nach einem Klick nennt das Ergebnis, was sich änderte, nicht die ganze
+      Seite. Render-Log: `Agent VM ready … turn=… step=…` mit Phasen,
+      `Agent browser call …`; am Nachrichtenende hält die Browser-VM nur noch
+      ~2 min wach (Sprites `GET /v1/tasks` auf der Browser-VM: Hold
+      `consens-browser-awake` mit Ablauf ~2 min nach dem Lauf). Ein Lauf mit
+      localhost-Seite: Nach dem Lauf und geschlossener Ansicht endet der Tunnel
+      nach ~2 min („Agent tunnel ended“).
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,
