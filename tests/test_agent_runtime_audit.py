@@ -8,7 +8,9 @@ in fewer round trips (T3). Fakes only: no model, no VM, no Firestore.
 from dataclasses import replace
 from datetime import datetime, timezone
 import json
+import re
 
+from pydantic import BaseModel, ConfigDict
 import pytest
 
 from app.services import agent_delegation
@@ -31,7 +33,7 @@ class Steps(Agent):
 
         class Completion(base):
             def stream(self, *, model, messages, **kwargs):
-                script.parallel.append(getattr(self, "parallel_tool_calls", None))
+                script.parallel.append(self.parallel_tool_calls)
                 script.requests.append(json.loads(json.dumps(messages, default=str)))
                 if kwargs.get("allow_tool_calls") is False:
                     self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
@@ -39,6 +41,12 @@ class Steps(Agent):
                     yield {"type": "delta", "text": self.text}
                     return
                 yield from super().stream(model=model, messages=messages, **kwargs)
+                # As AgentCompletion keeps them (keep_over_limit): past the
+                # step's limit, without arguments, by id.
+                if self.keep_over_limit and len(self.tool_calls) > self.tool_call_limit:
+                    for call in self.tool_calls[self.tool_call_limit:]:
+                        call["function"]["arguments"] = "{}"
+                        self.over_limit_ids.add(call["id"])
         return Completion()
 
 
@@ -225,3 +233,261 @@ def test_every_other_browser_call_gets_its_round(arguments):
     assert work_goes_on([_step(("browser", arguments))])
     # Also beside a quiet read in the same step.
     assert work_goes_on([_step(("browser", {"action": "read"}), ("browser", arguments))])
+
+
+# --- T2: several calls per step while the workspace is open ---------------------------
+
+def tool_results(loop):
+    """Every tool result by its call's id, in order (each id at most once)."""
+    found = {}
+    for message in loop.messages:
+        if message.get("role") == "tool":
+            assert message["tool_call_id"] not in found
+            found[message["tool_call_id"]] = json.loads(message["content"])
+    return found
+
+
+def every_call_answered(loop):
+    calls = [call["id"] for m in loop.messages if m.get("role") == "assistant" for call in m.get("tool_calls") or []]
+    return sorted(calls) == sorted(tool_results(loop))
+
+
+def ran(fake_vm, command):
+    return any(call[0] == "exec" and call[2] == command for call in fake_vm.calls)
+
+
+def test_several_calls_per_step_only_while_the_workspace_is_open(store, fake_vm):
+    script = Steps([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]])
+    list(vm_loop(store, script).run())
+    assert script.parallel == [True, True]
+    # Closed: one call per step until open_workspace ran, from the next step
+    # on several, together with its tools (one cache break), never back.
+    script = Steps([[("open_workspace", {"task": "Run the script"})], [("vm_exec", {"command": "ls"})]])
+    list(vm_loop(store, script, request_id="two", workspace_closed=True).run())
+    assert script.parallel == [False, True, True]
+    # Without the workspace: one call per step, as before.
+    script = Steps([[("no_such_tool", {})]])
+    list(vm_loop(store, script, request_id="three", vm="off").run())
+    assert script.parallel and set(script.parallel) == {False}
+
+
+def test_the_calls_of_a_step_run_in_order_and_a_fifth_gets_a_result(store, fake_vm):
+    from app.services.prompt_defaults import AGENT_VM_PROMPT
+    commands = ["ls", "pwd", "whoami", "date", "uptime"]
+    script = Steps([[("vm_exec", {"command": command}) for command in commands]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    found = tool_results(loop)
+    assert [found[f"call_0_{n}"].get("exit_code") for n in range(4)] == [0, 0, 0, 0]
+    assert found["call_0_4"] == {"error": agent_delegation.CALL_OVER_LIMIT}
+    assert [ran(fake_vm, command) for command in commands] == [True, True, True, True, False]
+    assert every_call_answered(loop)
+    # The prompt says what holds, as a fact.
+    words = ["", "one", "two", "three", "four"]
+    assert f"up to {words[agent_delegation.TOOL_CALLS_PER_STEP]}." in AGENT_VM_PROMPT
+
+
+def test_the_client_keeps_a_call_past_the_limit_without_its_arguments():
+    value = AgentCompletion()
+    value.tool_call_limit, value.keep_over_limit = 2, True
+    value._tool_delta([{"index": n, "id": f"c{n}", "type": "function",
+                        "function": {"name": "vm_exec", "arguments": '{"command": "ls"}'}} for n in range(3)])
+    calls = value._completed_tool_calls()
+    assert [call["function"]["arguments"] for call in calls] == ['{"command": "ls"}', '{"command": "ls"}', "{}"]
+    assert value.over_limit_ids == {"c2"} and value.skipped_tool_parts == 0
+    # Off (other loops, workers): skipped as before.
+    value = AgentCompletion()
+    value.tool_call_limit = 2
+    value._tool_delta([{"index": n, "id": f"c{n}", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+                       for n in range(3)])
+    assert [call["id"] for call in value._completed_tool_calls()] == ["c0", "c1"] and value.skipped_tool_parts == 1
+
+
+def test_the_request_asks_for_several_calls_only_when_the_loop_does(monkeypatch):
+    sent = []
+
+    def lines(url, **kwargs):
+        sent.append(kwargs["json"])
+        yield "data: " + json.dumps({"choices": [{"delta": {"content": "Hi"}, "finish_reason": "stop"}],
+                                     "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+        yield ""
+    monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
+    tools = [{"type": "function", "function": {"name": "x", "description": "x", "parameters": {"type": "object"}}}]
+    for parallel in (False, True):
+        completion = AgentCompletion()
+        completion.parallel_tool_calls = parallel
+        list(completion.stream(model=AgentModel(), messages=[{"role": "user", "content": "Hi"}], api_key="k",
+                               tools=tools, allow_tool_calls=True))
+    assert [body["parallel_tool_calls"] for body in sent] == [False, True]
+
+
+class ProbeArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+def probing(store, steps, action):
+    """A workspace turn with a tool ``probe`` that runs ``action(loop)``."""
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+    loop = vm_loop(store, Steps(steps))
+
+    def probe(args, *, cancellation):
+        action(loop)
+        return {"status": "done"}
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("probe", "Probe.", ProbeArgs, probe)],
+                                 argument_limit=loop.registry.argument_limit)
+    return loop
+
+
+HALT = {"reviewer": "Claude Haiku 4.5", "provider": "anthropic", "kind": "harm", "reason": "Sends the notes out.",
+        "entry": 1}
+
+
+@pytest.mark.parametrize("decision, expected", [("continue", agent_delegation.CALL_AFTER_PAUSE),
+                                                ("steer", agent_delegation.HOLD_STEERED)])
+def test_a_halt_between_calls_ends_the_steps_later_calls(store, fake_vm, decision, expected):
+    from test_agent_audit import decide_when_held
+    loop = probing(store, [[("probe", {}), ("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]],
+                   lambda loop: loop.request_hold(dict(HALT)))
+    waiter = decide_when_held(loop, store, decision, "Not that file.")
+    list(loop.run())
+    waiter.join(5)
+    found = tool_results(loop)
+    assert found["call_0_0"] == {"status": "done"}
+    assert found["call_0_1"] == found["call_0_2"] == {"error": expected}
+    assert not ran(fake_vm, "ls") and not ran(fake_vm, "pwd") and every_call_answered(loop)
+    # The reviewer's words never reach the agent.
+    assert HALT["reason"] not in json.dumps(loop.messages)
+
+
+def test_a_halt_before_the_first_call_lets_the_step_run_on_the_users_go(store, fake_vm):
+    from test_agent_audit import decide_when_held
+    loop = vm_loop(store, Steps([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]]))
+    halts = [dict(HALT)]
+
+    def halt_after_the_step(value):
+        # Once the step is settled, before its first call (the reviewers
+        # follow its log entry, which lists the calls).
+        if halts:
+            loop.request_hold(halts.pop())
+    loop._open_gate = halt_after_the_step
+    waiter = decide_when_held(loop, store, "continue")
+    list(loop.run())
+    waiter.join(5)
+    assert ran(fake_vm, "ls") and ran(fake_vm, "pwd")
+
+
+def test_asking_the_user_ends_the_steps_later_calls(store, fake_vm):
+    from app.services import agent_ask
+    from test_agent_audit import decide_when_held
+    loop = vm_loop(store, Steps([[("ask_user", {"request": "May I delete the file?"}),
+                                  ("vm_exec", {"command": "rm notes.txt"})]]))
+    waiter = decide_when_held(loop, store, "continue")
+    list(loop.run())
+    waiter.join(5)
+    found = tool_results(loop)
+    assert found["call_0_0"] == agent_ask.ANSWERS[("confirm", "continue")]
+    assert found["call_0_1"] == {"error": agent_delegation.CALL_AFTER_ASK}
+    assert not ran(fake_vm, "rm notes.txt") and every_call_answered(loop)
+
+
+def test_an_ask_without_a_card_leaves_the_steps_later_calls_running(store, fake_vm):
+    # Arguments ask_user refuses: no card, nothing asked, the step goes on.
+    loop = vm_loop(store, Steps([[("ask_user", {"request": "?"}), ("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    found = tool_results(loop)
+    assert "error" in found["call_0_0"] and found["call_0_1"]["exit_code"] == 0 and ran(fake_vm, "ls")
+
+
+def test_the_users_turn_in_the_browser_ends_the_steps_later_calls(store, fake_vm):
+    loop = vm_loop(store, Steps([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"}),
+                                  ("vm_exec", {"command": "whoami"})]]))
+    answers = iter([None, "handed_back"])
+
+    def takeover():
+        return next(answers)
+        yield
+    loop._takeover_wait = takeover
+    list(loop.run())
+    found = tool_results(loop)
+    assert found["call_0_0"]["exit_code"] == 0
+    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_delegation.CALL_AFTER_TAKEOVER}
+    assert not ran(fake_vm, "pwd") and every_call_answered(loop)
+
+
+def test_a_refused_domain_ends_the_steps_later_calls(store, fake_vm):
+    from app.services.agent_domains import DOMAIN_DENIED
+    from test_agent_audit import decide_when_held
+    loop = vm_loop(store, Steps([[("request_domain", {"domain": "api.example.com", "reason": "Its API."}),
+                                  ("vm_exec", {"command": "curl https://api.example.com"})]]))
+    waiter = decide_when_held(loop, store, "deny")
+    list(loop.run())
+    waiter.join(5)
+    found = tool_results(loop)
+    assert found["call_0_0"] == {"error": DOMAIN_DENIED.format(domain="api.example.com")}
+    assert found["call_0_1"] == {"error": agent_delegation.CALL_AFTER_DENIAL.format(domain="api.example.com")}
+    assert every_call_answered(loop)
+
+
+# --- L3: a line of facts after each batch ---------------------------------------------
+
+def test_each_batch_ends_with_the_steps_and_minutes_of_the_message(store, fake_vm):
+    script = Steps([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    first, second, third = script.requests
+    line = re.compile(r"\[consens\.io, written by the app: step (\d) of at most (\d+), \d+\.\d of (\d+) minutes "
+                      r"in this message\.\]")
+    assert [line.fullmatch(request[-1]["content"]).group(1) for request in (second, third)] == ["1", "2"]
+    steps, minutes = line.fullmatch(third[-1]["content"]).group(2, 3)
+    assert (int(steps), int(minutes)) == (loop._turn_steps(), loop._turn_seconds() // 60)
+    # New content at the end only: each request continues the one before.
+    assert second[:len(first)] == first and third[:len(second)] == second
+    # A message without the workspace has no such line.
+    script = Steps([[("no_such_tool", {})]])
+    list(vm_loop(store, script, request_id="two", vm="off").run())
+    assert not any(str(m.get("content")).startswith(agent_delegation.PROGRESS_OPEN)
+                   for request in script.requests for m in request)
+
+
+# --- L1, L6: pictures of the batch stay, older ones leave together ----------------------
+
+def test_pictures_of_this_batch_stay_and_older_ones_leave_together(store, fake_vm):
+    from app.services import agent_compaction
+    from app.services.agent_browser import SCREENSHOT_INTRO
+    from app.services.agent_vm_tools import PICTURE_INTRO
+    from app.services.agent_web_images import INTRO
+    png = b"\x89PNG\r\n\x1a\n" + b"x" * 64
+    loop = vm_loop(store, Steps())
+
+    class Pictures:
+        batch = []
+
+        def take_pictures(self):
+            batch, self.batch = self.batch, []
+            return batch
+    loop.image_tools = pictures = Pictures()
+
+    def batch(*intros):
+        loop.messages.append({"role": "assistant", "content": ""})
+        pictures.batch = [("p", "image/webp", png, intro) for intro in intros]
+        before = list(loop.messages)
+        loop._show_pictures()
+        return before
+
+    def shown():
+        return [m["content"][1].get("text") or "image" for m in loop.messages[loop.turn_start:]
+                if agent_compaction.is_picture(m)]
+    web = [INTRO.format(id=f"p{n}", url="https://example.com") for n in range(1, 7)]
+    # find_pictures' six pictures all reach the agent (before: three left at once).
+    batch(*web)
+    assert shown() == ["image"] * 6
+    # Up to PICTURES_SHOWN nothing earlier changes: the cached prefix stays.
+    screenshot = SCREENSHOT_INTRO.format(url="https://example.com")
+    before = batch(screenshot, PICTURE_INTRO.format(path="/home/agent/chart.png"))
+    assert loop.messages[:len(before)] == before
+    # Past it, every seen picture but the newest PICTURES_KEPT leaves at once,
+    # never one of this batch; each says the way back by where it came from.
+    batch(*web[:3])
+    assert shown() == ([agent_compaction.WEB_PICTURE_GONE] * 6 + [agent_compaction.SCREENSHOT_GONE,
+                       agent_compaction.PICTURE_GONE] + ["image"] * 3)
+    assert agent_compaction.PICTURES_KEPT == 3

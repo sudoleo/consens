@@ -205,12 +205,10 @@ def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
     assert len(saved["agent_review"]["comparisons"]) == 2
     error = tool_result(loop, "same_2")["error"]
     assert "identical compare_models call already ran 2 times" in error
-    if fail_model:
-        assert not any(m.get("tool_call_id") == "same_3" for m in loop.messages)
-    else:
-        # Never run; closed with a result before the last step writes the
-        # answer (providers reject a tool call without one).
-        assert tool_result(loop, "same_3") == {"error": "Not run: this message reached its limit."}
+    # Never run; closed with a result in its batch, also without a last step
+    # that writes the answer (every call gets one, T2; providers reject a
+    # tool call without one).
+    assert tool_result(loop, "same_3") == {"error": "Not run: this message reached its limit."}
     assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 4 + (0 if fail_model else 1)
 
 

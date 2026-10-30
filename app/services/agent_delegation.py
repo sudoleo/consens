@@ -149,6 +149,21 @@ WATCH_PAUSED_SECONDS = 10
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
 HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
+# The calls of one step run one after another, at most this many (T2). What
+# a call that does not run reads instead, by why (the batch in run()): every
+# call of a step gets exactly one result, or the provider refuses the next
+# request. A pause, the user's own card, their turn in the browser or a
+# domain they refused ends the step's later calls: they were planned before.
+TOOL_CALLS_PER_STEP = 4
+CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
+CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
+CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
+CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
+                       "may have changed.")
+CALL_AFTER_DENIAL = "Not run: the user did not allow {domain} earlier in this step."
+CALL_AT_LIMIT = "Not run: this message reached its limit."
+# The line of facts after each batch of a message with the workspace (_note_progress).
+PROGRESS_OPEN = "[consens.io, written by the app:"
 NOTES_UNREAD = ("Your message arrived after the answer was written. Send it again as a new message.")
 # The run's end waits this long in all for its journal and its work log to
 # save what they hold (A-R3, since 2026-10-29); what they have not saved by
@@ -790,6 +805,16 @@ class DelegationLoop(AgentLoop):
         self.workspace_closed, self.workspace_opened = False, True
         logging.info("Agent workspace opened step=%s", self.routing_steps)
 
+    def _parallel_calls(self):
+        """Whether the agent's steps ask for several calls at once: while
+        its workspace is open (audit T2: plan and action, write and run,
+        three form fields were a step each, with the whole context every
+        time). The switch comes with open_workspace, whose tools rewrite the
+        prompt cache once anyway: Anthropic's tool_choice carries it, and a
+        change of it rewrites the cached messages. The workspace never
+        closes within a message, so it never switches back."""
+        return self.vm_tools is not None and not self.workspace_closed
+
     def _turn_seconds(self):
         if self.policy.vm_turn_seconds and self._long_run():
             return self.policy.vm_turn_seconds
@@ -891,6 +916,22 @@ class DelegationLoop(AgentLoop):
             self.messages.append(picture_message(path, mime, raw, *intro))
         for index, message in agent_compaction.older_pictures(self.messages, self.turn_start):
             self.messages[index] = message
+
+    def _note_progress(self):
+        """In a message with the workspace, a line of facts at the end of
+        each batch of results: the step and the minutes of this message, with
+        their limits (audit L3). The limits stood only in open_workspace's
+        result; a message that began with the workspace open never learned
+        them, and a run whose answer stood after 30 s went on looking for
+        pictures for five minutes. New content at the end only: the cached
+        prefix stays. A fact, never a rule (docs/agent-mode.md)."""
+        if self.vm_tools is None or not self.policy.account_budget_only:
+            return
+        steps, seconds = self._turn_steps(), self._turn_seconds()
+        minutes = max(0.0, self._turn_elapsed()) / 60
+        step = f"step {self.routing_steps}" + (f" of at most {steps}" if steps else "")
+        time_used = f"{minutes:.1f}" + (f" of {seconds // 60}" if seconds else "") + " minutes"
+        self.messages.append({"role": "user", "content": f"{PROGRESS_OPEN} {step}, {time_used} in this message.]"})
 
     def _compact(self):
         """Older VM output of a long run leaves the conversation once it is
@@ -1537,7 +1578,11 @@ class DelegationLoop(AgentLoop):
         if not worker:
             value.history_end = self.history_end
         value.published = ""
-        value.tool_call_limit = 4
+        value.tool_call_limit = TOOL_CALLS_PER_STEP
+        if worker is None:
+            # The agent's own steps: several calls while the workspace is
+            # open, and a call past the limit gets its result (T2).
+            value.parallel_tool_calls, value.keep_over_limit = self._parallel_calls(), True
         # A comparison answer's line is quoted live in the chat while the main
         # model waits (agent-activity.js highlight): it keeps updating, paced,
         # instead of freezing after the first few sentences.
@@ -2214,7 +2259,10 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_gate import outward
         # The step's own search counts already: it came back with the step.
         exposed = self.outside_in_view or _searched(value)
-        calls = [call for call in value.tool_calls if outward(call, memory_exposed=exposed)]
+        # A call past the step's limit never runs (CALL_OVER_LIMIT): nothing to check.
+        over_limit = getattr(value, "over_limit_ids", None) or set()
+        calls = [call for call in value.tool_calls
+                 if call["id"] not in over_limit and outward(call, memory_exposed=exposed)]
         return auditor.open_gate(calls, value.step_id) if calls else None
 
     def _gate_wait(self, gate):
@@ -2876,13 +2924,15 @@ class DelegationLoop(AgentLoop):
                 return False
         return True
 
-    def _brought_outside_content(self, value, results):
+    def _brought_outside_content(self, value, results, unrun=()):
         """Whether a call of this batch returned a result that may hold
         outside content: any tool but MEMORY_KEEPING_TOOLS, unless the app
         refused the call before it ran ("refused", whose reason is the
-        app's own; a refused call comes again with its decision)."""
+        app's own; a refused call comes again with its decision) or did not
+        run it (``unrun``: the batch's own texts, CALL_*)."""
         for call in value.tool_calls:
-            if call["id"] not in results or (call.get("function") or {}).get("name") in MEMORY_KEEPING_TOOLS:
+            if (call["id"] not in results or call["id"] in unrun
+                    or (call.get("function") or {}).get("name") in MEMORY_KEEPING_TOOLS):
                 continue
             try:
                 content = json.loads(results[call["id"]]["content"])
@@ -3038,7 +3088,7 @@ class DelegationLoop(AgentLoop):
         for call in self.messages[last].get("tool_calls") or []:
             if call["id"] not in answered:
                 self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
-                    {"error": "Not run: this message reached its limit."})})
+                    {"error": CALL_AT_LIMIT})})
 
     def _can_wrap_up(self):
         """Whether a merged turn holds what its closing answer is written
@@ -3261,19 +3311,37 @@ class DelegationLoop(AgentLoop):
                         # A comparison of this step returned answers to write
                         # from: AGENT_WRITE_NOTE follows them.
                         compared = False
-                        steered = False
-                        for call in value.tool_calls:
+                        # Why the step's later calls do not run (T2): the
+                        # user wrote to the agent (HOLD_STEERED), or the step
+                        # was interrupted (CALL_AFTER_*). Each such call gets
+                        # that as its result, the app's own text (``unrun``).
+                        stopped, unrun = None, set()
+                        over_limit = getattr(value, "over_limit_ids", None) or set()
+
+                        def not_run(call, text):
+                            unrun.add(call["id"])
+                            results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
+                                                   "content": json.dumps({"error": text})}
+
+                        for position, call in enumerate(value.tool_calls):
                             name = (call.get("function") or {}).get("name")
+                            if call["id"] in over_limit:
+                                not_run(call, CALL_OVER_LIMIT)
+                                continue
+                            if stopped is not None:
+                                not_run(call, stopped)
+                                continue
                             # The chat's next message starts with the workspace open.
                             self.workspace_used = self.workspace_used or name in self.workspace_names
                             # Between the calls of a batch too: after a halt
                             # the next call waits for the user. Once the user
                             # wrote to the agent, the rest of the batch waits
-                            # for the agent's next step instead.
-                            steered = steered or (yield from self._hold_wait()) == "steer"
-                            if steered:
-                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
-                                                       "content": json.dumps({"error": HOLD_STEERED})}
+                            # for the agent's next step instead; so does a
+                            # pause that came after a call of this step ran.
+                            paused = yield from self._hold_wait()
+                            if paused == "steer" or (paused is not None and position):
+                                stopped = HOLD_STEERED if paused == "steer" else CALL_AFTER_PAUSE
+                                not_run(call, stopped)
                                 continue
                             repeat = self._identical_call(call)
                             if repeat == "stop":
@@ -3291,23 +3359,24 @@ class DelegationLoop(AgentLoop):
                                 # The user decides every domain (_domain_wait).
                                 decision = yield from self._domain_wait(gate, call)
                                 if decision == "steer":
-                                    steered = True
-                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
-                                                           "content": json.dumps({"error": HOLD_STEERED})}
+                                    stopped = HOLD_STEERED
+                                    not_run(call, stopped)
                                     continue
                                 if decision == "deny":
                                     from app.services.agent_domains import DOMAIN_DENIED, requested
+                                    domain = requested(call)[0]
                                     results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
                                                            "content": json.dumps({"error": DOMAIN_DENIED.format(
-                                                               domain=requested(call)[0])})}
+                                                               domain=domain)})}
+                                    # The step's later calls counted on it.
+                                    stopped = CALL_AFTER_DENIAL.format(domain=domain)
                                     last_accepted = False
                                     continue
                             elif gate is not None and call["id"] in gate.call_ids \
                                     and (yield from self._gate_wait(gate)) == "steer":
                                 # Not run: the user wrote to the agent instead.
-                                steered = True
-                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
-                                                       "content": json.dumps({"error": HOLD_STEERED})}
+                                stopped = HOLD_STEERED
+                                not_run(call, stopped)
                                 continue
                             elif name == "update_memory" and self.outside_in_view and self._memory_reviewed() \
                                     and (gate is None or call["id"] not in gate.call_ids):
@@ -3325,18 +3394,27 @@ class DelegationLoop(AgentLoop):
                             if name == ASK_TOOL:
                                 # The user's card (agent_ask.py); the tool then
                                 # returns their answer. A message on it is that
-                                # answer: the rest of the batch waits.
-                                steered = (yield from self._ask_wait(call)) == "steer"
+                                # answer: the rest of the batch waits, and so it
+                                # does after any answer (T2).
+                                asked = yield from self._ask_wait(call)
+                                if asked != "run":
+                                    # "run": arguments the tool refuses, no card.
+                                    stopped = HOLD_STEERED if asked == "steer" else CALL_AFTER_ASK
                             elif name in self.workspace_tools:
                                 taken = yield from self._takeover_wait()
                                 if taken in {"steer", "timeout"}:
                                     # Not run: nothing of the agent's reached the
                                     # workspace while the user had the browser.
                                     from app.services.agent_ask import TAKEOVER_TIMEOUT
-                                    steered = steered or taken == "steer"
-                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
-                                        {"error": HOLD_STEERED if taken == "steer" else TAKEOVER_TIMEOUT})}
+                                    stopped = HOLD_STEERED if taken == "steer" else TAKEOVER_TIMEOUT
+                                    not_run(call, stopped)
                                     last_accepted = False
+                                    continue
+                                if taken is not None and position:
+                                    # The user had the browser after a call of
+                                    # this step ran: the page is theirs now.
+                                    stopped = CALL_AFTER_TAKEOVER
+                                    not_run(call, stopped)
                                     continue
                             result = yield from self._execute_stream(value, call)
                             results[call["id"]] = result
@@ -3350,13 +3428,20 @@ class DelegationLoop(AgentLoop):
                                 # Ignore speculative extra calls in the same batch
                                 # once all required checks have reached an end state.
                                 break
+                        if limit:
+                            # The repeat guard stopped the batch: the rest gets
+                            # its result, as _close_open_calls would give it.
+                            for call in value.tool_calls:
+                                if call["id"] not in results:
+                                    not_run(call, CALL_AT_LIMIT)
                         self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
                         if self.workspace_closed and self.workspace_task is not None:
                             # open_workspace ran in this batch: its tools from the next step on.
                             self._open_workspace()
                         self._show_pictures()
+                        self._note_progress()
                         yield from self._events()
-                        if self._brought_outside_content(value, results):
+                        if self._brought_outside_content(value, results, unrun):
                             self._lock_memory("outside_content", value.step_id)
                         if answered_with_tools and not self._side_results_accepted(value, results):
                             # The text may say what a refused tool did not do (a
