@@ -956,8 +956,13 @@ def test_the_resident_helper_answers_over_its_socket(tmp_path, monkeypatch):
     assert oct((tmp_path / "serve.sock").stat().st_mode & 0o777) == "0o600"
     assert (tmp_path / "serve.lock").read_text() == str(os.getpid())
     assert browser.through_server({"action": "read"}) == {"status": "ok", "text": "read"}
-    monkeypatch.setattr(browser, "VERSION", "next")
-    assert browser.through_server({"action": "read"}) is None
+    # A call of another version of the file (here the helper shares this
+    # process's VERSION, so the call is written by hand): stale, and it ends.
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as other:
+        other.settimeout(5)
+        other.connect(str(tmp_path / "serve.sock"))
+        other.sendall(json.dumps({"version": "next", "request": {"action": "read"}}).encode() + b"\n")
+        assert other.recv(64) == browser.STALE
     helper.join(5)
     assert not helper.is_alive() and stopped == [True] and not (tmp_path / "serve.sock").exists()
     # None runs: the call runs itself.
