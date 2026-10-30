@@ -226,6 +226,9 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-tools {
   flex: 1;
   min-width: 0;
+  /* As tall as its buttons also without them (a dropped connection, the
+     terminal): the picture below never moves when they come and go. */
+  min-height: 28px;
   display: flex;
   align-items: center;
   gap: var(--space-3);
