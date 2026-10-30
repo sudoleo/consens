@@ -380,10 +380,7 @@ def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(vie
         refused.send_text(json.dumps({"id_token": "verified"}))
         with pytest.raises(WebSocketDisconnect):
             refused.receive_text()
-    # Counted after the close, as the end above.
-    deadline = clock.monotonic() + 5
-    while ("view", "refused_forbidden", False) not in counted and clock.monotonic() < deadline:
-        clock.sleep(0.02)
+    # Counted before the close (_refuse): once the client has its close, the count is there.
     assert ("view", "refused_forbidden", False) in counted
     assert any("Agent workspace view refused code=4403" in record.getMessage() for record in caplog.records)
 

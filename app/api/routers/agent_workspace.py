@@ -339,10 +339,13 @@ async def _end(websocket, code):
 
 
 async def _refuse(websocket, kind, code):
-    """Closes a view or terminal before it opened, with its reason, logged and counted."""
+    """Closes a view or terminal before it opened, with its reason, logged and
+    counted. Counted first: once the socket is closed, nothing guarantees the
+    task runs on (a test client ends it at once; the count went missing in 1
+    of 6 runs, 2026-10-31)."""
     logging.info("Agent workspace %s refused code=%d", kind, code)
-    await _end(websocket, code)
     await asyncio.to_thread(_count, kind, "refused_" + CLOSE_REASONS[code])
+    await _end(websocket, code)
 
 
 async def _admit(websocket, kind):
