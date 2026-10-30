@@ -10,7 +10,9 @@ for its card in the chat (base64), and so does another action whose request
 asks for it (since 2026-10-30). Status "ok", "refused" (the action cannot be
 done, the text says why), "user" (the user has the browser), "setup" (the
 browser is being installed) or "failed". No code of the agent runs here: it
-only chooses among these actions and their typed arguments.
+only chooses among these actions and their typed arguments. Two actions are
+the server's own and never the agent's: "warm" starts the browser, "rest"
+lets the VM sleep soon after the message (since 2026-10-30).
 
 The same Chrome the user sees and steers in the live view, with the sign-ins
 the user made there. Pages are read as text: ``read`` lists the page's
@@ -43,7 +45,9 @@ went "offline" between two moves, and so do consens.io's live updates. Each
 call therefore holds the VM awake for AWAKE_FOR after it, through the Sprites
 Tasks API like the workbench's background processes (agent_vm_processes): an
 expiring hold, renewed by the next call, gone by itself after the last one.
-The live view keeps it awake anyway (its exec session).
+The live view keeps it awake anyway (its exec session). At the end of a
+message the server shortens it to REST_FOR (the action rest, since
+2026-10-30): before, the VM stayed awake 10 minutes after every run.
 
 A resident helper keeps Playwright's driver running between calls (since
 2026-10-30, serve) and connects to Chrome for each call only: a call that
@@ -93,9 +97,11 @@ CONNECT_SECONDS = 15
 RESTART_SECONDS = 30
 OPEN_SECONDS = 30
 LOADED_SECONDS = 10
-# The Tasks API hold that keeps the VM awake after a call (stay_awake).
+# The Tasks API hold that keeps the VM awake after a call (stay_awake), and
+# what the server's rest leaves of it at the end of a message.
 AWAKE_TASK = "consens-browser-awake"
 AWAKE_FOR = "10m"
+REST_FOR = "2m"
 # The resident helper (serve, since 2026-10-30): its socket, the lock one
 # of them holds while it runs, how long it waits for a call (as long as a
 # call keeps the VM awake), how long a call waits to connect and then for
@@ -111,7 +117,9 @@ API_SOCKET = "/.sprite/api.sock"
 KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "ArrowUp", "ArrowDown", "ArrowLeft",
         "ArrowRight", "PageUp", "PageDown", "Home", "End", "Shift+Tab"}
 ACTIONS = {"open", "read", "text", "find", "click", "drag", "type", "select", "key", "scroll", "back", "forward",
-           "tabs", "tab", "screenshot", "upload", "download", "wait", "warm"}
+           "tabs", "tab", "screenshot", "upload", "download", "wait", "warm", "rest"}
+# The server's own (agent_browser.py), never the agent's: they look at no page.
+SERVER_ACTIONS = {"warm", "rest"}
 # What changes the page or sends something: never while the user has the browser.
 ACTING = {"open", "click", "drag", "type", "select", "upload", "download", "key", "scroll", "back", "forward", "tab"}
 # A place on the page and drag's strokes (agent_browser.py checks the same).
@@ -556,16 +564,24 @@ def ensure_browser():
         raise RuntimeError("The browser did not start: " + (started.stderr.strip() or "no reason given"))
 
 
-def stay_awake():
-    """The VM awake for AWAKE_FOR from now (an expiring Tasks API hold; the
-    next call renews it). A failure only costs the hold."""
+def stay_awake(expire=AWAKE_FOR):
+    """The VM awake for ``expire`` from now (an expiring Tasks API hold; the
+    next call renews it, rest shortens it to REST_FOR). A failure only costs
+    the hold."""
     try:
         subprocess.run(["curl", "-s", "--max-time", "5", "--unix-socket", API_SOCKET,
                         "-H", "Content-Type: application/json", "-X", "PUT",
-                        f"http://sprite/v1/tasks/{AWAKE_TASK}", "-d", json.dumps({"expire": AWAKE_FOR})],
+                        f"http://sprite/v1/tasks/{AWAKE_TASK}", "-d", json.dumps({"expire": expire})],
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
     except Exception:
         pass
+
+
+# rest's answer: the server ends a message with it (agent_browser.py) and
+# only logs it. A browser.py before 2026-10-30 refuses rest as an unknown
+# action (and holds the VM its 10 minutes once more).
+RESTED = (f"The hold that keeps the browser VM awake ends in {REST_FOR} now; then the VM sleeps unless a call or "
+          "the live view keeps it awake.")
 
 
 def restart_browser():
@@ -1323,6 +1339,10 @@ def run(request):
     if action in ACTING and user_control():
         raise UserHasControl("The user has taken over the browser in the workspace view. Do not act in it now: "
                              "your next call waits until they hand it back, or answer with what you have.")
+    if action == "rest":
+        # The server's end of a message (main shortens the hold): no
+        # browser to start, no page to look at.
+        return {"text": RESTED}
     query = find_query(request) if action == "find" else ""
     LOCAL_PORTS.clear()
     LOCAL_PORTS.update(port for port in request.get("local_ports") or () if type(port) is int)
@@ -1754,11 +1774,15 @@ def ready(request):
     (a restart), and this helper ends, since its Playwright may be what
     broke."""
     action = request.get("action") if isinstance(request, dict) else None
+    if action == "rest":
+        # It lets the VM sleep (main answers it without a helper): no browser to start.
+        return True
     try:
         ensure_browser()
         KEPT["prepared"] = True
-        # What run refuses before it looks at a page needs no connection.
-        if action in ACTIONS and action != "warm" and not (action in ACTING and user_control()):
+        # What run refuses before it looks at a page needs no connection,
+        # nor do the server's own actions.
+        if action in ACTIONS and action not in SERVER_ACTIONS and not (action in ACTING and user_control()):
             KEPT["browser"] = KEPT["playwright"].chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
         return True
     except Exception:
@@ -1898,19 +1922,25 @@ def main():
     with _ANSWER_LOCK:
         _answered = False
     _watchdog_done.clear()
-    started, served = time.monotonic(), False
+    started, served, resting = time.monotonic(), False, False
     try:
         request = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
     except Exception as exc:
         answer = failed(exc)
     else:
-        answer = through_server(request) if isinstance(request, dict) else None
-        served = answer is not None
+        # rest only shortens the hold: no helper, no browser, nothing else.
+        resting = isinstance(request, dict) and request.get("action") == "rest"
+        answer = {"status": "ok", "text": RESTED} if resting else (
+            through_server(request) if isinstance(request, dict) else None)
+        served = answer is not None and not resting
         if answer is None:
             answer = answer_for(request)
     # For the server's log: the helper's own time, and whether the resident one answered.
     answer.update(seconds=round(time.monotonic() - started, 3), served=served)
-    stay_awake()
+    if resting:
+        stay_awake(REST_FOR)
+    else:
+        stay_awake()
     if not answer_once(answer):
         # The watchdog answered: it ends the process once Chrome restarted.
         _watchdog_done.wait(RESTART_SECONDS + 10)

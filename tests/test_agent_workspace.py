@@ -365,9 +365,11 @@ def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_ha
     assert started == []
     assert run_helper(browser, monkeypatch, capsys, {"action": "rm -rf /"}) == {
         "status": "refused", "text": "Unknown action rm -rf /."}
-    # "warm" is the server's own start of the browser (agent_browser._warm):
-    # never one of the agent's actions, and it reads nothing of the pages.
-    assert browser.ACTIONS == set(agent_browser.ACTIONS) | {"warm"} and "warm" not in browser.ACTING
+    # "warm" is the server's own start of the browser (agent_browser._warm),
+    # "rest" its end of a message (since 2026-10-30): never one of the
+    # agent's actions, and neither reads anything of the pages.
+    assert browser.ACTIONS == set(agent_browser.ACTIONS) | {"warm", "rest"} and "warm" not in browser.ACTING
+    assert browser.SERVER_ACTIONS == {"warm", "rest"} and not browser.SERVER_ACTIONS & browser.ACTING
     assert run_helper(browser, monkeypatch, capsys, {"action": "warm"})["text"] == ""
     assert started == [True]
     assert set(browser.KEYS) == set(agent_browser.KEYS)
