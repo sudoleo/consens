@@ -536,7 +536,7 @@ class GitHubTools:
         2026-10-29): before, an installation without it offered a tool that
         could only answer NOT_SET_UP, one more choice for nothing."""
         app = configured()
-        tools = [ReadOnlyTool("github_import", f"Copy a GitHub repository into {REPOS_DIR} in your VM, as a git "
+        tools = [ReadOnlyTool("github_import", f"Copy a GitHub repository into {REPOS_DIR} in your workspace, as a git "
                               "repository with one commit of its state: any public one"
                               + (", and private ones the user connected" if app else "")
                               + ". Returns the folder and the commit.", GithubImportArgs, self.import_repo,
