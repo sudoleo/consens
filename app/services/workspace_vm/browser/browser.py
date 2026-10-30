@@ -18,12 +18,15 @@ The same Chrome the user sees and steers in the live view, with the sign-ins
 the user made there. Pages are read as text: ``read`` lists the page's
 headings and the elements one can act on, each with a ref (e12) that click,
 type, select and upload take; ``find`` looks up a text in what the page shows
-and names the ref of the element it lies in; every action prints the page
-again, so the agent sees what changed in the same step. A click or drag at
-x,y also says what lay at its points, with their boxes in the screenshot's
-pixels, and which elements changed after it (HIT_JS, since 2026-10-30). The
-page's head says whether the browser holds cookies for its address (yes or
-no, never which).
+and names the ref of the element it lies in. Every action on a page says
+which elements changed after it, the nearest first (HIT_JS; a click or drag
+at x,y also what lay at its points, with their boxes in the screenshot's
+pixels), and then the page: the whole list after a navigation, else only the
+lines that changed since the agent's last look, after a scroll first what is
+in view (after_text, since 2026-10-30). Its answer comes once the page
+rests, not the network (quiet). A failure names its cause from Playwright's
+log and the page in front (on_failure). The page's head says whether the
+browser holds cookies for its address (yes or no, never which).
 
 Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
@@ -79,6 +82,13 @@ UPLOADS = os.path.join(STATE, "uploads")
 CDP = "http://127.0.0.1:9222"
 READ_CHARS = 6000
 AFTER_ACTION_CHARS = 4000
+# The page as the agent last looked at it (after_text, since 2026-10-30):
+# its address, when, and read's lines, for the next action's answer. Older
+# than LOOK_SECONDS it no longer counts; a list up to WHOLE_BELOW_CHARS
+# comes whole, a diff would save nothing.
+LOOKED = os.path.join(STATE, "last-look.json")
+LOOK_SECONDS = 600
+WHOLE_BELOW_CHARS = 600
 TEXT_CHARS = 12000
 # find: the text to look for, how many places it lists, and the characters
 # of the page it shows on either side of one.
@@ -1073,15 +1083,192 @@ def paged(lines, offset, limit_chars):
     return shown, rest
 
 
-def read_text(page, offset=0, limit=READ_CHARS, frames="front"):
+def read_text(page, offset=0, limit=READ_CHARS, frames="front", keep=False):
+    """The page's head and read's lines from ``offset`` (``frames``: see
+    page_lines); with ``keep`` the agent's look at it, for the next action's
+    answer (after_text)."""
     if hidden(page):
         return hidden_text(page)
     lines = page_lines(page, frames)
+    if keep:
+        remember(page, lines)
+    return listed_text(page, lines, offset, limit)
+
+
+def listed_text(page, lines, offset, limit):
     shown, rest = paged(lines, offset, limit)
     out = [header(page), "\n".join(shown) if shown else
            "(no headings or elements to act on; read the page with the action text)"]
     if rest > 0:
         out.append(f"(… {rest} more lines: read with offset {offset + len(shown)})")
+    return "\n".join(out)
+
+
+# The page after an action (since 2026-10-30, audit L2): until then every
+# action brought read's list again, up to 4,000 characters, also after a
+# type without Enter, a key or a scroll (about 950 tokens of repetition per
+# step), and a menu that opened past them took a read with an offset. Now
+# the whole list comes after a navigation (another address, another tab,
+# FULL_AFTER), the first time and when the last look is older than
+# LOOK_SECONDS; on the page the agent looked at last only the lines that
+# changed since (+ new, ~ changed, - gone, by their refs: a ref names its
+# element or none, see SNAPSHOT_JS), the whole list again when more than half
+# of it changed (another document at the same address). After a scroll the
+# elements in view come first: read's list does not depend on the view.
+FULL_AFTER = frozenset({"open", "back", "forward", "tab"})
+REF_LINE = re.compile(r"\s*\[(e\d+)\] ")
+
+
+def remember(page, lines):
+    """The agent's look at ``page`` (read's ``lines``), kept in LOOKED: the
+    resident helper and a call of its own both answer from it."""
+    try:
+        os.makedirs(os.path.dirname(LOOKED), exist_ok=True)
+        with open(LOOKED + ".new", "w", encoding="utf-8") as handle:
+            json.dump({"url": str(page.url), "at": time.time(), "lines": list(lines)}, handle)
+        os.replace(LOOKED + ".new", LOOKED)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def remembered(page):
+    """read's lines at the agent's last look, when it was at ``page``'s
+    address within LOOK_SECONDS; else None."""
+    try:
+        with open(LOOKED, encoding="utf-8") as handle:
+            look = json.load(handle)
+        at = float(look["at"])
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if look.get("url") != str(page.url) or not 0 <= time.time() - at <= LOOK_SECONDS:
+        return None
+    lines = look.get("lines")
+    return [line for line in lines if isinstance(line, str)] if isinstance(lines, list) else None
+
+
+def changes(before, after):
+    """What changed from read's lines ``before`` to ``after``: ``[(mark,
+    line)]``, new (+) and changed (~) in the page's order, then the gone
+    (-) as they were. An element's line goes by its ref, a heading's and the
+    like by its text."""
+    old_refs, old_plain = {}, {}
+    for line in before:
+        found = REF_LINE.match(line)
+        if found:
+            old_refs[found.group(1)] = line
+        else:
+            old_plain[line] = old_plain.get(line, 0) + 1
+    marked, kept = [], set()
+    for line in after:
+        found = REF_LINE.match(line)
+        if found:
+            kept.add(found.group(1))
+            old = old_refs.get(found.group(1))
+            if old is None:
+                marked.append(("+", line))
+            elif old != line:
+                marked.append(("~", line))
+        elif old_plain.get(line):
+            old_plain[line] -= 1
+        else:
+            marked.append(("+", line))
+    for line in before:
+        found = REF_LINE.match(line)
+        if found and found.group(1) not in kept:
+            marked.append(("-", line))
+        elif not found and old_plain.get(line):
+            old_plain[line] -= 1
+            marked.append(("-", line))
+    return marked
+
+
+def counted(lines):
+    return "1 line" if len(lines) == 1 else f"{len(lines)} lines"
+
+
+# What of read's list is in view: the refs of the elements and the
+# headings as read words them (SNAPSHOT_JS).
+IN_VIEW_JS = r"""
+() => {
+  const clean = text => (text || '').replace(/\s+/g, ' ').trim();
+  const clip = (text, size) => text.length > size ? text.slice(0, size - 1) + '…' : text;
+  const seen = el => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight &&
+      box.left < innerWidth;
+  };
+  const refs = [], headings = [];
+  for (const el of document.querySelectorAll('[data-consens-ref]')) {
+    if (seen(el)) refs.push(el.getAttribute('data-consens-ref'));
+  }
+  for (const el of document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role=heading]')) {
+    if (seen(el) && clean(el.innerText)) headings.push('heading "' + clip(clean(el.innerText), 200) + '"');
+  }
+  return {refs, headings};
+}
+"""
+
+
+def in_view(page, lines):
+    """read's ``lines`` that are in view now, or None when the page cannot tell."""
+    try:
+        seen = page.evaluate(IN_VIEW_JS)
+        refs = {ref for ref in seen["refs"] if isinstance(ref, str)}
+        headings = {heading for heading in seen["headings"] if isinstance(heading, str)}
+    except Exception:
+        return None
+    return [line for line in lines if ((found := REF_LINE.match(line)) and found.group(1) in refs)
+            or line.strip() in headings]
+
+
+def after_text(page, action):
+    """The page after ``action``: its head, then the whole list or what
+    changed since the agent's last look (see FULL_AFTER), and this look kept
+    for the next."""
+    if hidden(page):
+        return hidden_text(page)
+    lines = page_lines(page)
+    before = None if action in FULL_AFTER else remembered(page)
+    remember(page, lines)
+    marked = None if before is None else changes(before, lines)
+    most = marked is not None and len(marked) * 2 > len(lines)
+    if action == "scroll":
+        shown = in_view(page, lines)
+        if shown is not None:
+            return scrolled_text(page, lines, shown, None if most else marked, most)
+    if marked is None or most or sum(len(line) + 1 for line in lines) <= WHOLE_BELOW_CHARS:
+        return listed_text(page, lines, 0, AFTER_ACTION_CHARS)
+    if not marked:
+        return (f"{header(page)}\nThe page's headings and elements are as at your last look "
+                f"({counted(lines)}; read lists them).")
+    shown, rest = paged([f"{mark} {line}" for mark, line in marked], 0, AFTER_ACTION_CHARS)
+    out = [header(page), f"Changed since your last look at this page (+ new, ~ changed, - gone; read lists all "
+                         f"{counted(lines)}):", *shown]
+    if rest > 0:
+        out.append(f"(… {rest} more changed lines; read lists the page)")
+    return "\n".join(out)
+
+
+def scrolled_text(page, lines, shown, marked, most):
+    """After a scroll: what is in view now, then what changed elsewhere."""
+    out = [header(page)]
+    if shown:
+        part, rest = paged(shown, 0, AFTER_ACTION_CHARS)
+        out += [f"In view now ({len(shown)} of {counted(lines)}; read lists all):", *part]
+        if rest > 0:
+            out.append(f"(… {rest} more in view; read lists the page)")
+    else:
+        out.append(f"No heading or element of the page is in view now ({counted(lines)}; read lists them).")
+    if most:
+        out.append("Most of the page changed since your last look; read lists it.")
+    elif marked:
+        visible = set(shown)
+        rest = [f"{mark} {line}" for mark, line in marked if mark == "-" or line not in visible]
+        if rest:
+            part, more = paged(rest, 0, AFTER_ACTION_CHARS // 2)
+            out += ["Changed elsewhere since your last look (+ new, ~ changed, - gone):", *part]
+            if more > 0:
+                out.append(f"(… {more} more changed lines; read lists the page)")
     return "\n".join(out)
 
 
@@ -1576,7 +1763,7 @@ def on_page(context, page, action, request, query, caught):
     """``action`` on ``page`` (the tab in front) once the browser is connected."""
     offset = int(request.get("offset") or 0)
     if action == "read":
-        return {"text": read_text(page, offset, frames="all")}
+        return {"text": read_text(page, offset, frames="all", keep=True)}
     if action == "text":
         return {"text": page_text(page, offset)}
     if action == "find":
@@ -1612,8 +1799,7 @@ def on_page(context, page, action, request, query, caught):
                 "The user handed the browser back.\n" if held else "")
         page = current_page(context)
         loaded(page, idle=False)
-        return with_preview(page, request, with_picture(page, request, {
-            "text": said + read_text(page, 0, AFTER_ACTION_CHARS)}))
+        return with_preview(page, request, with_picture(page, request, {"text": said + after_text(page, action)}))
     # An action on the page in front: its watch (look_at, in act) and the
     # tab's requests (Traffic) until its effect is there (quiet). One that
     # loads a page (open, back, forward), brings another tab to the front, or
@@ -1642,8 +1828,23 @@ def on_page(context, page, action, request, query, caught):
     saved = keep_downloads(caught)
     if saved:
         done += "\nDownloaded: " + ", ".join(saved) + "."
-    answer = with_picture(page, request, {"text": done + "\n" + read_text(page, 0, AFTER_ACTION_CHARS)})
+    answer = with_picture(page, request, {"text": done + "\n" + settled_text(page, action)})
     return with_preview(page, request, answer)
+
+
+def settled_text(page, action):
+    """after_text once the action ran: a page that cannot be read now (it
+    is going away) is read again once it loaded, and one that still cannot
+    costs the page, never the answer of an action that ran (the agent would
+    take it again)."""
+    try:
+        return after_text(page, action)
+    except Exception:
+        loaded(page, idle=False)
+    try:
+        return after_text(page, action)
+    except Exception as exc:
+        return f"URL: {page.url}\n(the page could not be read after it: {failure_text(exc, log=False)})"
 
 
 def picture(page):
@@ -1794,8 +1995,8 @@ def act(context, page, action, request, seen=None):
     if action == "scroll":
         direction = -1 if request.get("direction") == "up" else 1
         watch()
-        page.evaluate("d => window.scrollBy(0, d * window.innerHeight * 0.8)", direction)
-        return "Scrolled " + ("up." if direction < 0 else "down.")
+        moved = page.evaluate(SCROLL_JS, direction)
+        return scrolled(direction, moved)
     if action in {"back", "forward"}:
         (page.go_back if action == "back" else page.go_forward)(wait_until="domcontentloaded", timeout=15_000)
         return f"Went {action}."
@@ -1860,7 +2061,7 @@ def on_failure(context, page, action, exc):
         elif hidden(now):
             where = f"URL: {now.url}"
         elif isinstance(exc, StaleRef):
-            where = read_text(now, 0, AFTER_ACTION_CHARS)
+            where = read_text(now, 0, AFTER_ACTION_CHARS, keep=True)
         else:
             where = header(now)
     except Exception:
@@ -1871,6 +2072,38 @@ def on_failure(context, page, action, exc):
 
 def failed(exc):
     return {"status": "failed", "text": failure_text(exc)}
+
+
+# scroll: the page by 80 % of its view, at once (a page's smooth scrolling
+# would still be under way when the view is read), and where its view is
+# before and after, in CSS pixels of the page (since 2026-10-30: "Scrolled
+# down." alone also when the page did not move, a page that scrolls in a
+# box of its own).
+SCROLL_JS = r"""
+direction => {
+  const root = document.scrollingElement || document.documentElement;
+  const before = Math.round(scrollY);
+  scrollBy({top: direction * innerHeight * 0.8, behavior: 'instant'});
+  return [before, Math.round(scrollY), innerHeight, root ? root.scrollHeight : 0];
+}
+"""
+
+
+def scrolled(direction, moved):
+    """What a scroll did, from SCROLL_JS's answer."""
+    way = "up" if direction < 0 else "down"
+    values = [_whole(value) for value in moved] if isinstance(moved, list) and len(moved) == 4 else []
+    if len(values) != 4 or None in values:
+        return f"Scrolled {way}."
+    before, top, view, height = values
+    where = f"the view shows {top}-{top + view} of {max(height, top + view)} px"
+    if top == before:
+        return f"The page did not move: {where}."
+    if top + view >= height - 1:
+        where += ", the end of the page"
+    elif top <= 0:
+        where += ", the top of the page"
+    return f"Scrolled {way}: {where}."
 
 
 def answer_for(request):

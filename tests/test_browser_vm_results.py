@@ -287,6 +287,7 @@ def test_a_ref_no_element_has_any_more_brings_the_page_as_it_is_now(tmp_path, mo
     browser = load()
     monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
     monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    monkeypatch.setattr(browser, "LOOKED", str(tmp_path / "last-look.json"))
     page = Tab(browser, lines=['heading "Cart"', '[e40] button "Pay now"'])
     with pytest.raises(browser.StaleRef) as stale:
         browser.act(None, page, "click", {"ref": "e12"})
@@ -295,6 +296,8 @@ def test_a_ref_no_element_has_any_more_brings_the_page_as_it_is_now(tmp_path, mo
         "e12 is not on the page any more (it changed). The page as it is now:\n"
         "Page: \"Shop\"\nURL: https://shop.example/cart\nCookies saved for this site: no\n"
         "heading \"Cart\"\n[e40] button \"Pay now\"")
+    # It is the agent's look at the page now: the next action's answer goes from it.
+    assert browser.remembered(page) == page.lines
     # To the server a refusal and a failure as before, now with the page.
     for error in (refused, browser.on_failure(tabs(page), page, "click", RuntimeError(INTERCEPTED))):
         monkeypatch.setattr(browser, "run", lambda request, error=error: (_ for _ in ()).throw(error))
@@ -440,6 +443,252 @@ def test_a_navigation_loads_as_before(monkeypatch):
     page = Settling(browser, clock, changes=[0.1])
     page.events = [(0.1, "framenavigated", page.main_frame)]
     assert settle(browser, clock, page) == 0.4 and page.waited == []
+
+
+# --- L2: after an action, what changed --------------------------------------------
+
+PRODUCTS = [f'[e{n}] link "Product number {n} with a longer name"' for n in range(10, 40)]
+CART = ['heading "Cart"', '[e1] button "Account" collapsed', '[e2] textbox "Search" (empty)', *PRODUCTS,
+        '[e5] button "Pay"']
+
+
+class Shop:
+    """A tab for on_page as browser.py sees it through Playwright: read's
+    lines (an action may change them), HIT_JS's two answers, a page that
+    rests at once (QUIET_JS), what is in view, a locator for each listed ref,
+    and its load states. The scripts themselves run in
+    tests/js/workspace-browser-settle.test.mjs."""
+
+    def __init__(self, browser, lines=CART, url="https://shop.example/cart"):
+        self.browser, self.lines, self.url, self.name = browser, list(lines), url, "Shop"
+        self.changes = {"count": 0, "changed": [], "removed": []}
+        self.effect, self.in_view, self.waited, self.handlers = None, ([], []), [], {}
+        self.context = type("Context", (), {"cookies": lambda self, urls: []})()
+        page = self
+
+        class Locator:
+            def __init__(self, ref):
+                self.ref, self.first = ref, self
+
+            def count(self):
+                return int(any(line.lstrip().startswith(f"[{self.ref}] ") for line in page.lines))
+
+            def evaluate(self, script):
+                return False
+
+            def click(self, timeout):
+                page.act()
+
+            def fill(self, text, timeout):
+                page.act()
+        self.Locator = Locator
+        self.keyboard = type("Keyboard", (), {"press": lambda self, key: page.act()})()
+        # The page's own frame, with no frame in it (read's frames: test_agent_workspace.py).
+        self.main_frame = type("Frame", (), {"child_frames": [], "locator": lambda self, selector: page.locator(
+            selector)})()
+        self.frames = [self.main_frame]
+
+    def act(self):
+        if self.effect:
+            self.effect(self)
+
+    def locator(self, selector):
+        return self.Locator(selector.split('"')[1])
+
+    def is_closed(self):
+        return False
+
+    def title(self):
+        return self.name
+
+    def on(self, event, handler):
+        self.handlers.setdefault(event, []).append(handler)
+
+    def remove_listener(self, event, handler):
+        self.handlers[event].remove(handler)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def wait_for_load_state(self, state, timeout):
+        self.waited.append(state)
+
+    def go_back(self, wait_until, timeout):
+        self.waited.append("back")
+
+    def evaluate(self, script, arg=None):
+        browser = self.browser
+        if script == "document.visibilityState":
+            return "visible"
+        if script == browser.SNAPSHOT_JS:
+            return {"lines": self.lines, "count": arg}
+        if script == browser.HIT_JS:
+            return {"view": [1280, 720], "at": []} if arg["mode"] == "before" else self.changes
+        if script == browser.QUIET_JS:
+            # It rests at once: the count starts at the action's end, then 300 ms went by.
+            return 0 if arg else 10_000
+        if script == browser.IN_VIEW_JS:
+            return {"refs": self.in_view[0], "headings": self.in_view[1]}
+        if script == browser.SCROLL_JS:
+            self.act()
+            return [0, 648, 720, 4000]
+        raise AssertionError(script)
+
+
+def acting(browser, page, action, **request):
+    context = type("Context", (), {"pages": [page], "on": lambda *a: None, "remove_listener": lambda *a: None})()
+    return browser.on_page(context, page, action, {"action": action, **request}, "", [])["text"]
+
+
+@pytest.fixture
+def browser(tmp_path, monkeypatch):
+    module = load()
+    monkeypatch.setattr(module, "REF_COUNTER", str(tmp_path / "ref-count"))
+    monkeypatch.setattr(module, "LOOKED", str(tmp_path / "last-look.json"))
+    return module
+
+
+def test_after_an_action_on_the_same_page_only_what_changed_comes(browser):
+    """Audit L2: every action brought read's list again (~950 tokens a
+    step), also after a type without Enter or a key, and a click on a ref
+    said only "Clicked e12.". Now the head of the page, what changed after
+    the action (HIT_JS), and of read's list only the lines that changed
+    since the agent's last look; the whole list after a navigation or a read."""
+    page = Shop(browser)
+    # The first look: the whole list.
+    first = acting(browser, page, "key", key="Escape")
+    assert first.splitlines()[:3] == ["Pressed Escape.", "No element of the page changed after it.", 'Page: "Shop"']
+    assert '[e5] button "Pay"' in first and "Changed since" not in first
+
+    # A click on a ref opens a menu: the change after it, nearest first, and the changed lines.
+    def menu(tab):
+        tab.lines[1] = '[e1] button "Account" expanded'
+        tab.lines.append('[e46] link "Settings"')
+        tab.changes = {"count": 2, "removed": [], "changed": [
+            {"tag": "button#menu", "name": "Account", "ref": "e1", "box": [8, 66, 72, 87], "how": "aria-expanded"},
+            {"tag": "div.menu", "name": "Settings", "ref": "", "box": [8, 90, 200, 120], "how": "new"}]}
+    page.effect = menu
+    clicked = acting(browser, page, "click", ref="e1")
+    assert clicked == (
+        "Clicked e1.\n"
+        "Changed after it: 2 elements, nearest first: button#menu \"Account\" [e1] (box x 8-72, y 66-87) "
+        "aria-expanded changed; div.menu \"Settings\" (box x 8-200, y 90-120) new.\n"
+        "Page: \"Shop\"\nURL: https://shop.example/cart\nCookies saved for this site: no\n"
+        "Changed since your last look at this page (+ new, ~ changed, - gone; read lists all 35 lines):\n"
+        "~ [e1] button \"Account\" expanded\n"
+        "+ [e46] link \"Settings\"")
+    # The server reads the page's title and address from it as before (agent_browser._activity).
+    shown = agent_browser.BrowserTools._activity(
+        type("Tools", (), {"vm": type("VM", (), {"_outcome": lambda self, result: {}})()})(),
+        agent_browser.BrowserArgs(action="click", ref="e1"), {"action": "click", "page": clicked})
+    assert shown["page_title"] == "Shop" and shown["page_url"] == "https://shop.example/cart"
+
+    # Typing changes its field's line; nothing else came.
+    def typed(tab):
+        tab.lines[2] = '[e2] textbox "Search" value="Paris"'
+        tab.changes = {"count": 0, "changed": [], "removed": []}
+    page.effect = typed
+    assert acting(browser, page, "type", ref="e2", text="Paris").splitlines()[-2:] == [
+        "Changed since your last look at this page (+ new, ~ changed, - gone; read lists all 35 lines):",
+        "~ [e2] textbox \"Search\" value=\"Paris\""]
+    # Nothing changed: said so.
+    page.effect = None
+    assert acting(browser, page, "key", key="Tab").endswith(
+        "The page's headings and elements are as at your last look (35 lines; read lists them).")
+    # A menu item that went: its line as it was.
+    page.effect = lambda tab: tab.lines.remove('[e46] link "Settings"')
+    assert acting(browser, page, "key", key="Escape").endswith('- [e46] link "Settings"')
+    # wait answers the same way.
+    page.effect = None
+    assert acting(browser, page, "wait", seconds=1).endswith("(34 lines; read lists them).")
+    # read and open always bring the whole list.
+    assert '[e39] link "Product number 39' in browser.on_page(None, page, "read", {"action": "read"}, "", [])["text"]
+    page.effect = None
+    opened = acting(browser, page, "back")
+    assert opened.startswith("Went back.\nPage: \"Shop\"") and "Changed since" not in opened and "[e39]" in opened
+
+
+def test_the_whole_list_comes_when_the_page_is_another_or_the_look_is_old(browser, monkeypatch):
+    page = Shop(browser)
+    browser.on_page(None, page, "read", {"action": "read"}, "", [])
+    # Another document at the same address (a reload, a takeover): most of it is new.
+    page.lines = ['heading "Cart"', *[f'[e{n}] link "Other product {n} with a longer name"' for n in range(50, 80)]]
+    reloaded = acting(browser, page, "key", key="Enter")
+    assert "Changed since" not in reloaded and "[e79]" in reloaded
+    # Another address: the whole list.
+    page.url = "https://shop.example/checkout"
+    assert "Changed since" not in acting(browser, page, "key", key="Escape")
+    # A look older than LOOK_SECONDS (a new message after a pause): the whole list.
+    browser.on_page(None, page, "read", {"action": "read"}, "", [])
+    real = browser.time.time
+    monkeypatch.setattr(browser.time, "time", lambda: real() + browser.LOOK_SECONDS + 1)
+    assert "[e79]" in acting(browser, page, "key", key="Escape")
+    monkeypatch.setattr(browser.time, "time", real)
+    # A short page comes whole: a diff would save nothing.
+    short = Shop(browser, lines=['heading "Done"', '[e90] link "Home"'], url="https://shop.example/done")
+    browser.on_page(None, short, "read", {"action": "read"}, "", [])
+    assert acting(browser, short, "key", key="Escape").endswith('heading "Done"\n[e90] link "Home"')
+    # A page of the browser's own computer: its address, nothing of it.
+    own = Shop(browser, url="file:///etc/passwd")
+    assert acting(browser, own, "key", key="Escape").endswith(f"URL: file:///etc/passwd\n{browser.OWN_COMPUTER}")
+
+
+def test_a_scroll_brings_what_is_in_view_first(browser):
+    """read's list does not depend on the view: after a scroll it came the
+    same as before, and the agent took a screenshot to see where it was."""
+    page = Shop(browser)
+    browser.on_page(None, page, "read", {"action": "read"}, "", [])
+    page.in_view = (["e20", "e21", "e22"], ['heading "Cart"'])
+
+    def more(tab):
+        tab.lines.append('[e47] link "Product 47, loaded on scrolling"')
+    page.effect = more
+    scrolled = acting(browser, page, "scroll", direction="down")
+    assert scrolled.splitlines() == [
+        "Scrolled down: the view shows 648-1368 of 4000 px.",
+        "No element of the page changed after it.",
+        'Page: "Shop"', "URL: https://shop.example/cart", "Cookies saved for this site: no",
+        "In view now (4 of 35 lines; read lists all):",
+        'heading "Cart"', *PRODUCTS[10:13],
+        "Changed elsewhere since your last look (+ new, ~ changed, - gone):",
+        '+ [e47] link "Product 47, loaded on scrolling"']
+    assert browser.scrolled(1, [0, 0, 720, 720]) == "The page did not move: the view shows 0-720 of 720 px."
+    assert browser.scrolled(1, [2000, 3280, 720, 4000]) == (
+        "Scrolled down: the view shows 3280-4000 of 4000 px, the end of the page.")
+    assert browser.scrolled(-1, [500, 0, 720, 4000]) == "Scrolled up: the view shows 0-720 of 4000 px, the top of the page."
+    assert browser.scrolled(-1, None) == "Scrolled up."
+
+
+def test_lines_change_by_their_refs():
+    browser = load()
+    before = ['heading "A"', '[e1] button "Open" collapsed', '[e2] link "Gone"', "(outside the main content: x)",
+              '  [e3] button "In a frame"']
+    after = ['heading "A"', 'heading "B"', '[e1] button "Open" expanded', "(outside the main content: x)",
+             '  [e3] button "In a frame"', '[e4] link "New"']
+    assert browser.changes(before, after) == [("+", 'heading "B"'), ("~", '[e1] button "Open" expanded'),
+                                              ("+", '[e4] link "New"'), ("-", '[e2] link "Gone"')]
+    assert browser.changes(after, after) == []
+    assert browser.changes(['heading "A"', 'heading "A"'], ['heading "A"']) == [("-", 'heading "A"')]
+
+
+def test_an_action_that_ran_never_fails_because_the_page_cannot_be_read(browser):
+    """The click ran; reading the page after it failed (it was going away):
+    read again once it loaded, else the address and why."""
+    page = Shop(browser)
+    reads = []
+    real = page.evaluate
+
+    def evaluate(script, arg=None):
+        if script == browser.SNAPSHOT_JS:
+            reads.append(True)
+            raise RuntimeError("Execution context was destroyed, most likely because of a navigation")
+        return real(script, arg)
+    page.evaluate = evaluate
+    said = acting(browser, page, "click", ref="e1")
+    assert said.startswith("Clicked e1.\n") and said.endswith(
+        "URL: https://shop.example/cart\n(the page could not be read after it: Execution context was destroyed, "
+        "most likely because of a navigation)")
+    assert len(reads) == 2
 
 
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
