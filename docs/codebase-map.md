@@ -11463,10 +11463,10 @@ ihrer alten Lage (Transform), neue blenden ein, gehende (gefaltet oder
 entfernt) blenden als `.agent-progress-ghost` an ihrer Stelle aus (nur Wörter
 und Schrift der Zeile, ohne Klasse, Rolle oder Status); auch eine
 Denkzeile, die beim Überblenden (`crossfade`) die Zeilenzahl ändert. Vorher
-sprangen Faltung, Kürzung und Entfernen in einem Frame. Die Zeilen eines
-Modellschritts (`completion:N`: Gedanke, Notiz, Aufruf) stehen `--space-2`
-auseinander, ein neuer Schritt `--space-4` (`.is-step-start`), statt alle im
-selben Abstand. Eine vom Leser geöffnete Aktivitäts-Historie bleibt
+sprangen Faltung, Kürzung und Entfernen in einem Frame. Alle Zeilen stehen
+`--trace-gap` (16 px) auseinander wie in der geöffneten Zeitleiste; ein paar
+Stunden lang standen die Zeilen eines Modellschritts enger als die Schritte,
+und ohne weiteres Zeichen für einen Schritt wirkten die Abstände ungleich (Max). Eine vom Leser geöffnete Aktivitäts-Historie bleibt
 am Laufende offen, solange sie im Bild ist (oberhalb des Viewports klappt sie mit
 `preserveAbove`-Korrektur zu). Der Antwortbeginn blendet nur ein
 (`reveal(body, {lift:false})`). Laden: `app-bootstrap.js` setzt per

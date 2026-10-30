@@ -128,7 +128,7 @@ describe("VM calls in the activity", () => {
     expect([...fold.querySelectorAll(".agent-vm-target")].map(el => el.textContent)).toEqual(["ls -la", "file chart.png"]);
     expect(fold.textContent).toContain("Let me check the file.");
     // In view: the fold, the note leading into the command at work, the command.
-    expect([...preview.children].map(el => el.className.split(" ")[0])).toEqual(["agent-vm-fold", "is-step-start", "agent-vm"]);
+    expect([...preview.children].map(el => el.className.split(" ")[0])).toEqual(["agent-vm-fold", "", "agent-vm"]);
     expect(preview.children[1].textContent).toBe("Let me rebuild the chart.");
     expect(preview.children[2].querySelector(".agent-vm-target").textContent).toBe("python3 chart.py");
     // A read among them makes them steps; the reader's open fold stays open.

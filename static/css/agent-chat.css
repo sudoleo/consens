@@ -883,18 +883,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-reasoning { color: var(--agent-trace-ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--trace-lh); font-size: var(--font-size-ui); }
 .agent-activity-tool, .agent-activity-current { color: var(--agent-ink); overflow-wrap: anywhere; font-size: var(--font-size-ui); line-height: var(--trace-lh); }
 .agent-activity-current > strong { display: block; font-weight: 500; }
-/* -8px: the head's 36px row already holds air under its words. The lines of
-   one model step (its thought, the note beside its call, the call) stand
-   --space-2 apart, the next step --space-4 (agent-activity.js .is-step-start,
-   2026-10-30): one even gap made thoughts, notes and steps one undivided
-   list. Relative: a line that leaves fades where it stood
+/* -8px: the head's 36px row already holds air under its words. Every line
+   stands --trace-gap from the next, as in the opened timeline: for a few
+   hours on 2026-10-30 the lines of one model step stood closer together
+   than the steps, and with nothing else marking a step the gaps read as
+   uneven (Max). Relative: a line that leaves fades where it stood
    (.agent-progress-ghost, agent-activity.js settle). */
 .agent-progress {
-  --trace-gap: var(--space-2);
   position: relative; display: flow-root; margin: calc(-1 * var(--space-2)) 0 var(--space-5);
   color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh);
 }
-.agent-progress > .is-step-start:not(.agent-progress-ghost) { margin-top: var(--space-4); }
 .agent-progress > .agent-progress-ghost { position: absolute; left: 0; right: 0; margin: 0; pointer-events: none; }
 /* The answer waits, written but unseen, while the live lines fade out above
    it (agent-activity.js handoff): it appears where they stood. */

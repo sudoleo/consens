@@ -1510,11 +1510,6 @@
     const pinned = showPreview && plan ? 1 : 0;
     const folded = showPreview ? foldPast(paragraphs) : null;
     const pastIds = new Set(folded?.past.map(item => item.id) || []);
-    // The lines of one model step (a thought, the note beside its call, the
-    // call) stand close together, the next step a line apart (2026-10-30):
-    // before, every line stood as far from the next, and thoughts, notes and
-    // steps read as one undivided list.
-    const stepOf = id => String(id).match(/completion:\d+/)?.[0] || String(id);
     const update = () => {
       if (pinned) {
         previewIds.add('plan');
@@ -1531,15 +1526,12 @@
         if (fold.dataset.count !== String(pastIds.size)) { fold.dataset.count = String(pastIds.size); previewChanged = true; }
         if (view.preview.children[pinned] !== fold) view.preview.insertBefore(fold, view.preview.children[pinned] || null);
       }
-      let pastIndex = 0, presentIndex = pinned + (folded ? 1 : 0), lastStep = pinned || folded ? '' : null;
+      let pastIndex = 0, presentIndex = pinned + (folded ? 1 : 0);
       const place = (item, p) => {
         const inFold = pastIds.has(item.id);
         const parent = inFold ? fold._list : view.preview;
         const position = parent.children[inFold ? pastIndex++ : presentIndex++];
         if (position !== p) parent.insertBefore(p, position || null);
-        const step = stepOf(item.id);
-        p.classList.toggle('is-step-start', !inFold && lastStep !== null && step !== lastStep);
-        if (!inFold) lastStep = step;
       };
       for (const item of showPreview ? paragraphs : []) {
         previewIds.add(item.id);
