@@ -801,6 +801,8 @@
       return;
     }
     view = build();
+    // The account it shows (onAuthState closes it for any other).
+    view.uid = window.auth?.currentUser?.uid || null;
     view.wantControl = Boolean(take);
     // The chat's card for the agent's question steps aside while the view is open (agent-chat.js renderHold).
     announceHolder(view.holder);
@@ -838,8 +840,11 @@
     clearInterval(closing.refresh);
     clearTimeout(closing.slow);
     clearTimeout(closing.idle);
-    // The agent may go on at once; an unsent hand-back expires by itself.
-    if (closing.holder === 'user') post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
+    // The agent may go on at once; an unsent hand-back expires by itself
+    // (also after a logout: never with another account's token).
+    if (closing.holder === 'user' && closing.uid === (window.auth?.currentUser?.uid || null)) {
+      post('/agent/workspace/control', { holder: 'agent' }).catch(() => {});
+    }
     rememberHolder('agent');
     announceHolder('agent');
     try { closing.rfb?.disconnect(); } catch (error) { /* already gone */ }
@@ -925,6 +930,13 @@
   document.addEventListener('visibilitychange', onVisible);
   // The account is known (auth-session-state.js): a takeover from before a
   // reload is taken up again, also when that was said before this script ran.
-  window.addEventListener('consensio:auth-state', returnToHolder);
+  // A logout does not reload the page: the view of an account that is no
+  // longer signed in here closes, with its sockets (until 2026-10-30 its
+  // Chrome stayed in the next person's hands, and its refresh claimed the
+  // browser of whoever signed in next).
+  window.addEventListener('consensio:auth-state', (event) => {
+    if (view && view.uid !== (event.detail?.uid || null)) close();
+    returnToHolder();
+  });
   if (window.__consensioAuthState?.known) returnToHolder();
 })();

@@ -395,6 +395,45 @@ describe("the workspace view", () => {
     }
   });
 
+  // A logout does not reload the page: until 2026-10-30 the view of the
+  // account that left stayed open, its Chrome in the next person's hands,
+  // and its refresh claimed the browser of whoever signed in next.
+  it("closes when its account logs out or another signs in, not when the same one refreshes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      env.document.querySelector(".workspace-view-cover").click();
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
+      // The same account again (a token refresh): the view stays.
+      env.window.dispatchEvent(new env.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u1" } }));
+      expect(env.workspace.isOpen()).toBe(true);
+      env.window.auth.currentUser = null;
+      env.window.dispatchEvent(new env.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: null } }));
+      expect(env.workspace.isOpen()).toBe(false);
+      expect(FakeRFB.made[0].disconnected).toBe(true);
+      expect(socket.closed).toBe(true);
+      expect(env.window.sessionStorage.getItem("workspace_view_holder")).toBe(null);
+      // Someone else signs in on this page: nothing claims their browser.
+      env.window.auth.currentUser = { uid: "u2", getIdToken: async () => "token-u2" };
+      env.window.dispatchEvent(new env.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u2" } }));
+      await vi.advanceTimersByTimeAsync(65_000);
+      expect(controls(env.window)).toEqual(["user"]);
+      expect(env.workspace.isOpen()).toBe(false);
+
+      const other = setup();
+      const second = await opened(other);
+      second.deliver(JSON.stringify({ state: "ready" }));
+      other.window.auth.currentUser = { uid: "u2", getIdToken: async () => "token-u2" };
+      other.window.dispatchEvent(new other.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "u2" } }));
+      expect(other.workspace.isOpen()).toBe(false);
+      expect(second.closed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("gives the browser back when it closes while the user has it", async () => {
     const env = setup();
     let handbacks = 0;
