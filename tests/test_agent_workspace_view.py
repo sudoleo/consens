@@ -363,10 +363,12 @@ def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(vie
     ws.__exit__(None, None, None)
     import time as clock
     deadline = clock.monotonic() + 5
-    # The very line asserted below: another one with "closed" in it (the
-    # relay's own end) came first now and then, and the wait ended before the
-    # view's line was written (CI 2026-10-30).
-    while not any("Agent workspace view closed" in record.getMessage() for record in caplog.records)             and clock.monotonic() < deadline:
+    # Until everything asserted below happened: the view's own line (a line of
+    # another kind with "closed" in it ended the wait too early) and its end
+    # counter, which the server writes after the line (CI 2026-10-30, twice).
+    def ended():
+        return any("Agent workspace view closed" in record.getMessage() for record in caplog.records)             and any(outcome.startswith("end_") for _, outcome, _ in counted)
+    while not ended() and clock.monotonic() < deadline:
         clock.sleep(0.02)
     [line] = [record.getMessage() for record in caplog.records if "Agent workspace view closed" in record.getMessage()]
     assert "code=1000 by=browser browser_code=1001" in line and UID not in line
@@ -378,6 +380,10 @@ def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(vie
         refused.send_text(json.dumps({"id_token": "verified"}))
         with pytest.raises(WebSocketDisconnect):
             refused.receive_text()
+    # Counted after the close, as the end above.
+    deadline = clock.monotonic() + 5
+    while ("view", "refused_forbidden", False) not in counted and clock.monotonic() < deadline:
+        clock.sleep(0.02)
     assert ("view", "refused_forbidden", False) in counted
     assert any("Agent workspace view refused code=4403" in record.getMessage() for record in caplog.records)
 
