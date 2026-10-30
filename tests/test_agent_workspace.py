@@ -421,6 +421,9 @@ class FakePage:
     def __init__(self, browser, url="https://shop.example/cart", cookies=(), lines=(), found=None):
         self.browser, self.url, self.lines, self.found = browser, url, list(lines), found
         self.scripts, self.asked = [], []
+        # The page is its own main frame here, without frames of its own.
+        self.main_frame, self.child_frames = self, []
+        self.frames = [self]
         page = self
 
         class Context:
@@ -470,6 +473,14 @@ def test_typing_with_enter_presses_it_on_the_keyboard_not_on_the_field():
 
     class Page:
         keyboard = type("Keyboard", (), {"press": staticmethod(lambda key: done.append(("key", key)))})()
+
+        @property
+        def main_frame(self):
+            return self
+
+        @property
+        def frames(self):
+            return [self]
 
         def locator(self, selector):
             return Field()
@@ -526,6 +537,118 @@ def test_find_lists_the_places_of_a_text_with_reads_refs(tmp_path, monkeypatch):
     # No place: it says so.
     none = browser.find_text(FakePage(browser, found={"total": 0, "matches": []}), "checkout")
     assert none.endswith('"checkout" is neither in the text the page shows nor in the name of an element.')
+
+
+class FakeFrame:
+    """A frame as with_frames sees it: its address, its frame element's mark,
+    its own frames, and read's answer for it."""
+
+    def __init__(self, browser, url, mark, lines, children=()):
+        self.browser, self.url, self.mark, self.lines = browser, url, mark, list(lines)
+        self.child_frames, self.asked = list(children), []
+        frame = self
+
+        class Element:
+            def get_attribute(self, name):
+                assert name == "data-consens-frame"
+                return frame.mark
+        self.element = Element()
+
+    def frame_element(self):
+        return self.element
+
+    def evaluate(self, script, start):
+        assert script == self.browser.SNAPSHOT_JS
+        self.asked.append(start)
+        given = sum(1 for line in self.lines if line.startswith("[e"))
+        return {"lines": self.lines, "count": start + given}
+
+
+def test_read_lists_the_elements_of_a_frame_with_refs_of_their_own(tmp_path, monkeypatch):
+    """2026-10-30, bild.de: the consent dialog was a frame, read said only
+    "open its address" (which leaves the page), and three clicks at x,y
+    missed its button. Now its elements come under its line, numbered on;
+    a tracking pixel, a frame of the browser's own computer and frames past
+    FRAMES_READ are not read. The action read reads every frame; the read
+    after an action only one over the page, as a frame that hangs would hold
+    every action (Playwright gives an evaluate no limit)."""
+    browser = load("browser")
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    inner = FakeFrame(browser, "https://cmp.example/inner", "f1", ['[e9] link "Details"'])
+    consent = FakeFrame(browser, "https://cmp.example/", "f1",
+                        ['heading "Datenschutz"', '[e9] button "Alle akzeptieren"', "frame f1 300x200 https://cmp.example/inner"],
+                        children=[inner])
+    pixel = FakeFrame(browser, "https://ads.example/", "f2", ['[e9] link "ad"'])
+    own = FakeFrame(browser, "http://192.168.0.1/", "f3", ['[e9] link "router"'])
+    video = FakeFrame(browser, "https://video.example/", "f4", ['[e9] button "Play"'])
+    page = FakePage(browser, lines=["(over the page:)", "frame f1 600x400 https://cmp.example/", "(the page under it:)",
+                                    '[e1] link "Story"', "frame f2 1x1 https://ads.example/",
+                                    "frame f3 300x300 http://192.168.0.1/", "frame f4 640x360 https://video.example/"])
+    page.child_frames = [consent, pixel, own, video]
+    lines = browser.page_lines(page, "all")
+    assert lines == ["(over the page:)", "frame https://cmp.example/, its elements:", '  heading "Datenschutz"',
+                     '  [e9] button "Alle akzeptieren"', "  frame https://cmp.example/inner, its elements:",
+                     '    [e9] link "Details"', "(the page under it:)", '[e1] link "Story"', "frame https://ads.example/",
+                     "frame http://192.168.0.1/ (the browser's own computer, which you do not read)",
+                     "frame https://video.example/, its elements:", '  [e9] button "Play"']
+    # Numbered on: the page's one ref, then the consent frame's, the inner frame's, the video's.
+    assert consent.asked == [1] and inner.asked == [2] and video.asked == [3] and pixel.asked == own.asked == []
+    assert (tmp_path / "ref-count").read_text() == "4"
+    # After an action: only what lies over the page.
+    video.asked.clear()
+    after = browser.page_lines(page)
+    assert "frame https://video.example/ (read lists its elements)" in after and video.asked == []
+    assert '  [e9] button "Alle akzeptieren"' in after
+    # find reads none of them.
+    consent.asked.clear()
+    browser.page_lines(page, "none")
+    assert consent.asked == []
+    # At most FRAMES_READ frames of one page.
+    monkeypatch.setattr(browser, "FRAMES_READ", 1)
+    assert "frame https://cmp.example/inner (not read)" in "\n".join(browser.page_lines(page, "all"))
+
+
+def test_a_frames_ref_is_looked_for_in_its_frame_only(tmp_path, monkeypatch):
+    """element finds a ref read in a frame in that frame, by its address:
+    the page or another frame holding the same mark never gets the text,
+    and frames read never listed (an ad that may hang) are not asked; a
+    frame of the browser's own computer, or one inside it, never."""
+    browser = load("browser")
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    browser.remember_frames({"e9": "https://cmp.example/", "e7": "about:srcdoc"})
+    asked = []
+
+    class Locator:
+        def __init__(self, frame):
+            self.frame, self.first = frame, f"element in {frame.url}"
+
+        def count(self):
+            asked.append(self.frame.url)
+            return 1
+
+    class Frame:
+        def __init__(self, url, parent=None):
+            self.url, self.parent_frame = url, parent
+
+        def locator(self, selector):
+            return Locator(self)
+    main = Frame("https://www.bild.de/")
+    router = Frame("http://192.168.0.1/", main)
+    inside = Frame("about:srcdoc", router)
+    ad, cmp = Frame("https://ads.example/", main), Frame("https://cmp.example/", main)
+    page = type("Page", (), {"main_frame": main, "frames": [main, router, inside, ad, cmp]})()
+    assert browser.element(page, "e9") == "element in https://cmp.example/" and asked == ["https://cmp.example/"]
+    # A ref of the page itself: the page alone.
+    asked.clear()
+    assert browser.element(page, "e3") == "element in https://www.bild.de/" and asked == ["https://www.bild.de/"]
+    # A frame inside one of the browser's own computer is not looked in.
+    with pytest.raises(browser.Refused, match="not on the page any more"):
+        browser.element(page, "e7")
+    # The map keeps the newest FRAME_REFS_KEPT refs.
+    monkeypatch.setattr(browser, "FRAME_REFS_KEPT", 2)
+    browser.remember_frames({"e10": "https://cmp.example/"})
+    assert list(browser.frame_refs()) == ["e7", "e10"]
 
 
 def test_find_names_elements_whose_name_holds_the_text(tmp_path, monkeypatch):

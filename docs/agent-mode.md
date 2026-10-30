@@ -1269,6 +1269,46 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   Vorbereitung, in Prod 2–4 s, einmal 10 s. Sie zu entkoppeln greift in Lease,
   Lock und Checkpoint der VM-Sitzung ein; erst zeigt das Log, welcher Schritt
   teuer ist.
+- **Was über der Seite liegt, und Frames** (seit 2026-10-30). Prod, bild.de
+  mit DeepSeek V4.1 Flash: Der Cookie-Dialog ist ein Frame, `read` sagte nur
+  „open its address“ (was die Seite verlässt), drei Klicks an x,y trafen
+  „Alle akzeptieren“ nicht, und der Agent gab die Seite auf. Jetzt markiert
+  `SNAPSHOT_JS` jeden sichtbaren Frame mit Größe (`data-consens-frame`), und
+  `page_lines` → `with_frames` setzt die Elemente eines Frames ab
+  `FRAME_MIN_PIXELS` (40 px je Richtung) eingerückt unter seine Zeile, mit
+  Refs wie die der Seite, höchstens
+  `FRAMES_READ` (8) Frames je Seite, `FRAME_LINES` (80) Zeilen je Frame,
+  `FRAME_DEPTH` (2) tief; ein Frame der eigenen VM bleibt ungelesen. Was über
+  der Seite liegt (ein Dialog oder eine fixe Ebene in der Mitte der Ansicht,
+  auch als Frame), steht zuerst (`(over the page:)` … `(the page under it:)`):
+  auf bild.de stand „Alle akzeptieren“ sonst 600 Zeilen tief. Ein Frame,
+  der hängt, hält sein Lesen auf (Playwright gibt `evaluate` kein Zeitlimit;
+  unabhängige Prüfung: ein Werbe-Frame mit Endlosschleife blockierte 43 s):
+  Deshalb liest nur die Aktion `read` alle Frames, das Lesen nach jeder
+  Aktion nur Frames über der Seite, `find` keine (es sucht auch nicht in
+  Frames). Aus welchem Frame ein Ref stammt, merkt sich `remember_frames`
+  (`frame-refs.json`, Adresse des Frames, die letzten 2000): `element` sucht
+  dort und sonst nirgends, sodass weder die Seite noch ein anderer Frame mit
+  derselben Marke den Text bekommt und ein unbeteiligter Frame nie gefragt
+  wird; ein Frame in einem der eigenen VM bleibt außen vor (`frame_hidden`).
+  Die Frame-Marken werden vor jedem Lesen gelöscht, die Adresse eines Frames
+  kommt ohne Zeilenumbrüche, und eine fixe Hülle, die die Seite selbst ist
+  (über 80 % ihrer Elemente), gilt nicht als Ebene darüber. Lokal gegen
+  bild.de: `read` samt Frames 108–122 ms, „Alle akzeptieren“ per Ref
+  geklickt, der Dialog war weg.
+- **Screenshot für den Nutzer** (`show`, seit 2026-10-30). Im selben Lauf
+  fragte Max „kann ich das sehen?“, und der Agent baute 9 Minuten lang in der
+  Werkbank selbst ein Bild (drei Domains freigegeben, Headless Chrome im
+  Zeitlimit, Playwright, Bilds Adblock-Sperre), weil seine Screenshots nur
+  ihn erreichten. `screenshot` (oder `screenshot_after`) mit `show` legt das
+  Bild jetzt unter die Antwort wie ein Bild aus dem Web (`BrowserTools._show`:
+  WebP über `agent_web_images.encode`, Ablage `kind: web_image`, Herkunft
+  `browser` mit der Seite als Quelle und ihrem Titel als Unterschrift,
+  höchstens `SHOWN_PER_MESSAGE` je Nachricht, dasselbe Bild nur einmal); auch
+  ein Modell ohne Bildeingang kann so zeigen, sieht es dann selbst nicht. Ist
+  die Grenze erreicht, lehnt der Aufruf ab, bevor die Aktion läuft; scheitert
+  das Ablegen (Speicher voll), gilt nur das Bild als nicht gezeigt, nie der
+  Schritt, dessen Klick schon lief.
 - **Was ein Klick an x,y traf** (seit 2026-10-30). Prod 2026-10-29, Schach auf
   chess.com mit DeepSeek V4.1 Flash: nach zwei Zügen 20 Modellschritte ohne
   weiteren Zug. Das Modell schätzte die Felder aus Screenshots mal auf 58, mal
@@ -1494,7 +1534,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   seit 2026-10-29 mit dem Bild der Seite, Titel und Website; vorher „Live
   ansehen“ an jedem `browser`-Schritt; seit 2026-10-30 zeigt die angeheftete
   Karte die Seite, wie sie jetzt ist: Aktionen, die die Seite ändern können,
-  bringen höchstens alle `PREVIEW_SECONDS` (8 s) ein neues Bild, und die
+  bringen höchstens alle `PREVIEW_SECONDS` (12 s) ein neues Bild, und die
   Karte ist so groß wie in der Zeitleiste statt einer Zeile mit 64-px-Bild;
   die Werkzeugbeschreibung sagt dem Agenten, dass der Nutzer die Seite dort
   sieht), über das

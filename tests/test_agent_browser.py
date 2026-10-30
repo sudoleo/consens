@@ -379,6 +379,54 @@ def test_an_opened_page_brings_its_picture_to_the_card_never_to_the_agent(store,
     assert all("preview" not in json.dumps(result) and "/9j/" not in json.dumps(result) for result in results(loop))
 
 
+def test_a_screenshot_the_agent_shows_lands_under_its_answer_with_the_page_as_its_source(
+        store, fake_vm, tmp_path, monkeypatch):
+    """Prod 2026-10-30: asked "can I see it?", DeepSeek tried for 9 minutes to
+    make a picture of bild.de in its workbench, as its screenshots reached
+    only itself. With show the screenshot goes under the answer, as a
+    picture from the web does (kind web_image, its page as the source)."""
+    import io
+    from PIL import Image
+    from app.services.agent_files import AgentFiles, FileContext
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    buffer = io.BytesIO()
+    Image.new("RGB", (128, 72), (200, 20, 20)).save(buffer, "PNG")
+    picture = buffer.getvalue()
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    loop = vm_loop(store, Agent(), chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    browser = BrowserTools(loop.vm_tools)
+    fake_vm.browser = lambda request: {"status": "ok", "png": base64.b64encode(picture).decode(),
+                                       "text": 'Page: "Aktuelle Nachrichten | BILD.de"\nURL: https://www.bild.de/'}
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: True)
+    result = call(browser, action="screenshot", show=True)
+    assert result["shown"] == "shown" and "under your answer by itself" in result["note"]
+    assert "follows as an image" in result["note"] and len(loop.vm_tools.take_pictures()) == 1
+    [saved] = files.list(UID, chat_id)
+    assert saved["kind"] == "web_image" and saved["turn_id"] == loop.turn_id and saved["mime"] == "image/webp"
+    assert saved["origin"] == {"source": "browser", "url": "https://www.bild.de/", "page": "https://www.bild.de/",
+                               "host": "bild.de", "caption": "Aktuelle Nachrichten | BILD.de"}
+    events = []
+    while not loop.outgoing.empty():
+        events.append(loop.outgoing.get_nowait())
+    assert [file["id"] for event in events if event.get("type") == "resources" for file in event["files"]] == [
+        saved["id"]]
+    # The same picture again is the one under the answer already.
+    assert call(browser, action="screenshot", show=True)["shown"] == "already" and len(files.list(UID, chat_id)) == 1
+    assert len(loop.vm_tools.take_pictures()) == 1
+    # A model that takes no pictures can still show one; it sees none itself.
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: False)
+    Image.new("RGB", (128, 72), (20, 200, 20)).save(buffer := io.BytesIO(), "PNG")
+    picture = buffer.getvalue()
+    unseen = call(browser, action="screenshot", show=True)
+    assert unseen["shown"] == "shown" and "follows as an image" not in unseen["note"]
+    assert loop.vm_tools.take_pictures() == [] and len(files.list(UID, chat_id)) == 2
+    with pytest.raises(ValueError, match="cannot look at pictures"):
+        call(browser, action="screenshot")
+    with pytest.raises(ValueError, match="show goes with"):
+        call(browser, action="read", show=True)
+
+
 def test_the_pages_card_gets_a_new_picture_now_and_then_as_the_agent_works(store, fake_vm, monkeypatch):
     """2026-10-30, Max: the card kept the page as it opened, so nobody saw
     where the agent was. An action that can change the page asks for a new

@@ -189,6 +189,25 @@ describe("workspace browser find", () => {
     const { read } = page('<nav><a href="/a">Menu</a></nav><a href="/b">Body</a>');
     expect(read(0).lines).toEqual(['[e1] link "Menu"', '[e2] link "Body"']);
   });
+
+  // 2026-10-30, bild.de: the consent dialog's "Alle akzeptieren" stood 600
+  // lines down, after the page it covered, and it was a frame read said only
+  // "open its address" of.
+  it("lists what lies over the page first, and marks each frame with its size for page_lines", () => {
+    const { window, document, read } = page(
+      '<main><h1>News</h1><a href="/a">Story</a></main>' +
+      '<div id="layer" style="position: fixed"><button>Alle akzeptieren</button>' +
+      '<iframe src="https://cmp.example/consent"></iframe></div>');
+    document.elementFromPoint = () => document.querySelector("#layer button");
+    window.getComputedStyle = new Proxy(window.getComputedStyle, {
+      apply: (target, self, [el]) => el.id === "layer" ? { position: "fixed", visibility: "visible", display: "block" }
+        : Reflect.apply(target, window, [el]),
+    });
+    const { lines } = read(0);
+    expect(lines).toEqual(["(over the page:)", '[e2] button "Alle akzeptieren"',
+      "frame f1 10x10 https://cmp.example/consent", "(the page under it:)", 'heading "News"', '[e1] link "Story"']);
+    expect(document.querySelector("iframe").getAttribute("data-consens-frame")).toBe("f1");
+  });
 });
 
 // HIT_JS (since 2026-10-30): what a click or drag at x,y met and what changed

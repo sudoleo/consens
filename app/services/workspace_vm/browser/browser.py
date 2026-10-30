@@ -171,10 +171,32 @@ start => {
     ({A: 'link', BUTTON: 'button', SELECT: 'list', TEXTAREA: 'textbox', SUMMARY: 'button'})[el.tagName] ||
     (el.tagName === 'INPUT' ? (TYPES[el.type] || 'textbox') : el.isContentEditable ? 'textbox' : 'element');
   // The page's main content first, the rest (header, navigation, footer)
-  // after it, so the first page of a read is what the page is about.
+  // after it, so the first page of a read is what the page is about. Before
+  // both, what lies over the page (since 2026-10-30): a dialog or a fixed
+  // layer at the middle of the view, such as a consent dialog, also one in a
+  // frame. On bild.de its "Alle akzeptieren" stood 600 lines down, after the
+  // page it covered.
   const main = document.querySelector('main, [role=main]');
-  const lines = [], outside = [];
-  let count = start;
+  const lines = [], outside = [], front = [];
+  const cover = (() => {
+    if (typeof document.elementFromPoint !== 'function') return null;
+    let dialog = null, fixed = null;
+    for (let node = document.elementFromPoint(innerWidth / 2, innerHeight / 2); node && node !== document.body &&
+         node !== document.documentElement; node = node.parentElement) {
+      const role = node.getAttribute('role');
+      if (!dialog && (role === 'dialog' || role === 'alertdialog' || node.getAttribute('aria-modal') === 'true' ||
+          node.tagName === 'DIALOG')) dialog = node;
+      if (getComputedStyle(node).position === 'fixed') fixed = node;
+    }
+    const found = dialog || fixed;
+    if (!found || (main && found.contains(main))) return null;
+    // A fixed shell that holds the page is the page, not a layer over it.
+    const all = (document.body || document.documentElement).querySelectorAll(ACT).length;
+    return all && found.querySelectorAll(ACT).length > all * 0.8 ? null : found;
+  })();
+  // This read's marks only: an iframe hidden since an earlier read keeps none.
+  for (const old of document.querySelectorAll('[data-consens-frame]')) old.removeAttribute('data-consens-frame');
+  let count = start, frames = 0;
   // The element listed last: what lies inside it is part of it. Listed
   // elements never nest, and the walk is in document order.
   let listed = null;
@@ -182,13 +204,19 @@ start => {
   const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_ELEMENT);
   for (let el = walker.currentNode; el; el = walker.nextNode()) {
     if (listed && listed !== el && listed.contains(el)) continue;
-    const into = main && !main.contains(el) ? outside : lines;
+    const into = cover && cover.contains(el) ? front : main && !main.contains(el) ? outside : lines;
     if (/^H[1-6]$/.test(el.tagName) || el.getAttribute('role') === 'heading') {
       if (shown(el) && clean(el.innerText)) into.push('heading "' + clip(clean(el.innerText), 200) + '"');
       continue;
     }
     if (el.tagName === 'IFRAME' && shown(el)) {
-      into.push('frame ' + clip(el.src || '(inline)', 100) + ' (its content: open its address with the action open)');
+      // Marked for this read (page_lines puts the frame's elements here),
+      // with its size: a tracking pixel is not read.
+      const id = 'f' + (++frames);
+      el.setAttribute('data-consens-frame', id);
+      const box = el.getBoundingClientRect();
+      into.push('frame ' + id + ' ' + Math.round(box.width) + 'x' + Math.round(box.height) + ' ' +
+        clip(clean(el.src) || '(inline)', 100));
       continue;
     }
     if (!el.matches(ACT) || !shown(el)) continue;
@@ -220,7 +248,8 @@ start => {
     into.push(line);
   }
   if (outside.length && lines.length) lines.push('(outside the main content: header, navigation, footer)');
-  return {lines: lines.concat(outside), count};
+  if (front.length) front.push('(the page under it:)');
+  return {lines: front.length ? ['(over the page:)', ...front, ...lines, ...outside] : lines.concat(outside), count};
 }
 """
 
@@ -430,8 +459,8 @@ HIT_JS = r"""
       const target = typeOf.call(record.target) === 1 ? record.target : parentOf.call(record.target);
       if (!target || !inPage(target)) continue;
       if (record.type === 'attributes') {
-        // read's own mark on an element is no change of the page.
-        if (record.attributeName !== 'data-consens-ref') note(target, 'changed', record.attributeName);
+        // read's own marks on an element are no change of the page.
+        if (!/^data-consens-(ref|frame)$/.test(record.attributeName)) note(target, 'changed', record.attributeName);
       } else if (record.type === 'characterData') {
         note(target, 'changed', 'text');
       } else {
@@ -706,18 +735,157 @@ def header(page):
     return "\n".join(lines)
 
 
-def page_lines(page):
+def page_lines(page, frames="front"):
+    """read's lines of the page; ``frames``: "all" reads the elements of
+    every frame (the action read), "front" only of a frame over the page (a
+    consent dialog; after every action), "none" of none (find)."""
     try:
         with open(REF_COUNTER, encoding="utf-8") as handle:
             start = int(handle.read().strip() or 0)
     except (OSError, ValueError):
         start = 0
     result = page.evaluate(SNAPSHOT_JS, start)
-    if result["count"] != start:
+    lines, count = result["lines"], result["count"]
+    if frames != "none":
+        allowed = None if frames == "all" else front_frames(lines)
+        refs = {}
+        lines, count = with_frames(page.main_frame, lines, count, allowed=allowed, refs=refs)
+        if refs:
+            remember_frames(refs)
+    if count != start:
         os.makedirs(os.path.dirname(REF_COUNTER), exist_ok=True)
         with open(REF_COUNTER, "w", encoding="utf-8") as handle:
-            handle.write(str(result["count"]))
-    return result["lines"]
+            handle.write(str(count))
+    return lines
+
+
+def front_frames(lines):
+    """The marks of the frames read lists over the page."""
+    keys, over = set(), False
+    for line in lines:
+        if line == OVER_PAGE:
+            over = True
+        elif line == UNDER_IT:
+            over = False
+        elif over and (found := FRAME_LINE.match(line)):
+            keys.add(found.group(1))
+    return keys
+
+
+def remember_frames(refs):
+    """Which frame each ref of a frame was read in (its address), so that
+    element looks there and nowhere else: another frame or the page holding
+    the same mark never gets the text, and a frame that hangs is not asked."""
+    known = frame_refs()
+    known.update(refs)
+    keep = dict(list(known.items())[-FRAME_REFS_KEPT:])
+    os.makedirs(os.path.dirname(FRAME_REFS), exist_ok=True)
+    with open(FRAME_REFS, "w", encoding="utf-8") as handle:
+        json.dump(keep, handle)
+
+
+def frame_refs():
+    try:
+        with open(FRAME_REFS, encoding="utf-8") as handle:
+            known = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return {str(ref): str(url) for ref, url in known.items()} if isinstance(known, dict) else {}
+
+
+def frame_hidden(frame):
+    """Whether ``frame`` or a frame it lies in is the browser's own computer."""
+    for _ in range(FRAME_DEPTH + 8):
+        if frame is None:
+            return False
+        if own_computer(str(getattr(frame, "url", "") or ""), LOCAL_PORTS):
+            return True
+        frame = getattr(frame, "parent_frame", None)
+    return True
+
+
+# A frame's elements in read (since 2026-10-30): the consent dialog of many
+# sites is a frame, and read said only "open its address", which leaves the
+# page. Prod the same day on bild.de: three clicks at x,y missed its "Alle
+# akzeptieren", and the agent gave up on the page. The elements of a frame
+# of at least FRAME_MIN_PIXELS each way now come under its line with refs
+# like the page's own (element finds them in any frame), at most
+# FRAMES_READ frames of one page, FRAME_LINES lines each, FRAME_DEPTH deep.
+# A frame that hangs holds its read (Playwright gives an evaluate no time
+# limit), so only the action read reads every frame; the read after an
+# action reads a frame only over the page. FRAME_REFS keeps which frame
+# each such ref came from (element).
+FRAME_LINE = re.compile(r"frame (f\d+) (\d+)x(\d+) (.*)$")
+FRAME_MIN_PIXELS = 40
+FRAMES_READ = 8
+FRAME_LINES = 80
+FRAME_DEPTH = 2
+FRAME_REFS = os.path.join(STATE, "frame-refs.json")
+FRAME_REFS_KEPT = 2000
+OUTSIDE_MAIN = "(outside the main content: header, navigation, footer)"
+OVER_PAGE = "(over the page:)"
+UNDER_IT = "(the page under it:)"
+REF_AT_START = re.compile(r"\s*\[(e\d+)\] ")
+
+
+def with_frames(frame, lines, count, depth=1, budget=None, allowed=None, refs=None):
+    """``(lines, count)``: read's lines of ``frame`` with each frame's line
+    followed by that frame's own elements, numbered on from ``count``;
+    ``allowed``: the marks of the frames to read (None: all), ``refs`` gets
+    each ref read in a frame with its frame's address."""
+    budget = budget if budget is not None else [FRAMES_READ]
+    refs = refs if refs is not None else {}
+    children = {}
+    for child in frame.child_frames:
+        try:
+            marked = child.frame_element().get_attribute("data-consens-frame")
+        except Exception:
+            continue
+        if marked:
+            children[marked] = child
+    out = []
+    for line in lines:
+        found = FRAME_LINE.match(line)
+        if not found:
+            out.append(line)
+            continue
+        key, width, height, src = found.group(1), int(found.group(2)), int(found.group(3)), found.group(4)
+        child = children.get(key)
+        if min(width, height) < FRAME_MIN_PIXELS:
+            out.append(f"frame {src}")
+            continue
+        if allowed is not None and key not in allowed:
+            out.append(f"frame {src} (read lists its elements)")
+            continue
+        if child is None or budget[0] <= 0:
+            out.append(f"frame {src} (not read)")
+            continue
+        if frame_hidden(child):
+            out.append(f"frame {src} (the browser's own computer, which you do not read)")
+            continue
+        budget[0] -= 1
+        try:
+            inner = child.evaluate(SNAPSHOT_JS, count)
+        except Exception:
+            out.append(f"frame {src} (its content could not be read)")
+            continue
+        count = inner["count"]
+        inner_lines = [item for item in inner["lines"] if item not in (OUTSIDE_MAIN, OVER_PAGE, UNDER_IT)]
+        for item in inner_lines:
+            if found_ref := REF_AT_START.match(item):
+                refs[found_ref.group(1)] = str(child.url or "")
+        if depth < FRAME_DEPTH:
+            inner_lines, count = with_frames(child, inner_lines, count, depth + 1, budget, refs=refs)
+        else:
+            inner_lines = [item for item in inner_lines if not FRAME_LINE.match(item)]
+        if not inner_lines:
+            out.append(f"frame {src} (nothing to act on in it)")
+            continue
+        out.append(f"frame {src}, its elements:")
+        out.extend("  " + item for item in inner_lines[:FRAME_LINES])
+        if len(inner_lines) > FRAME_LINES:
+            out.append(f"  (… {len(inner_lines) - FRAME_LINES} more in this frame)")
+    return out, count
 
 
 def paged(lines, offset, limit_chars):
@@ -732,10 +900,10 @@ def paged(lines, offset, limit_chars):
     return shown, rest
 
 
-def read_text(page, offset=0, limit=READ_CHARS):
+def read_text(page, offset=0, limit=READ_CHARS, frames="front"):
     if hidden(page):
         return hidden_text(page)
-    lines = page_lines(page)
+    lines = page_lines(page, frames)
     shown, rest = paged(lines, offset, limit)
     out = [header(page), "\n".join(shown) if shown else
            "(no headings or elements to act on; read the page with the action text)"]
@@ -794,7 +962,7 @@ def find_text(page, query):
     FIND_MATCHES places, each with the page around it and the ref of the
     element it lies in when read lists one. The refs come from read itself,
     so they are the ones read gives."""
-    lines = page_lines(page)
+    lines = page_lines(page, frames="none")
     found = page.evaluate(FIND_JS, {"query": query, "refs": listed_refs(lines), "limit": FIND_MATCHES,
                                     "around": FIND_AROUND})
     total, matches = int(found.get("total") or 0), found.get("matches") or []
@@ -820,12 +988,21 @@ def find_text(page, query):
 
 
 def element(page, ref):
+    """The element read gave ``ref``: on the page, or in the frame read
+    found it in (remember_frames), never in one of the browser's own computer."""
     if not isinstance(ref, str) or not ref.startswith("e") or not ref[1:].isdigit():
         raise Refused(f"{ref} is no ref: take one from read (like e12).")
-    locator = page.locator(f'[data-consens-ref="{ref}"]')
-    if locator.count() == 0:
-        raise Refused(f"{ref} is not on the page any more (it changed). Call read for the current refs.")
-    return locator.first
+    address = frame_refs().get(ref)
+    if address is None:
+        frames = [page.main_frame]
+    else:
+        frames = [frame for frame in page.frames
+                  if frame != page.main_frame and str(frame.url or "") == address and not frame_hidden(frame)]
+    for frame in frames:
+        locator = frame.locator(f'[data-consens-ref="{ref}"]')
+        if locator.count():
+            return locator.first
+    raise Refused(f"{ref} is not on the page any more (it changed). Call read for the current refs.")
 
 
 def point(x, y):
@@ -1201,7 +1378,7 @@ def on_page(context, page, action, request, query, caught):
     """``action`` on ``page`` (the tab in front) once the browser is connected."""
     offset = int(request.get("offset") or 0)
     if action == "read":
-        return {"text": read_text(page, offset)}
+        return {"text": read_text(page, offset, frames="all")}
     if action == "text":
         return {"text": page_text(page, offset)}
     if action == "find":
