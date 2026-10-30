@@ -789,8 +789,14 @@ class DelegationLoop(AgentLoop):
         (_open_workspace, on the run's own thread). Its result says what the
         message may take from then on. Its start begins now, beside the
         model's next step (VMTools.prewarm, runtime audit 2026-10-30 T1):
-        the first call waits only for what is left of it."""
+        the first call waits only for what is left of it. Not while the
+        server's safety rules have closed the workspace (workspace_guard.py):
+        the agent learns that it is closed, and answers without it."""
+        from app.services import workspace_guard
         from app.services.agent_vm_tools import WORKSPACE_OPENED
+        guard = workspace_guard.status(self.uid)
+        if guard.closed:
+            raise ValueError(workspace_guard.agent_text(guard))
         with self.condition:
             first = self.workspace_task is None
             self.workspace_task = " ".join(args.task.split())

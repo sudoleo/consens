@@ -38,6 +38,7 @@ def _cleanup_steps():
     from app.services.memory_edit import cleanup_memory_edit_records
     from app.services.agent_memory import cleanup_memory_change_logs
     from app.services.notification_outbox import cleanup as cleanup_outbox
+    from app.services.workspace_guard import cleanup_expired_trails
     return (
         ("expired_pending_deleted", cleanup_expired_pending),
         ("expired_answer_receipts_deleted", cleanup_answer_receipts),
@@ -50,6 +51,7 @@ def _cleanup_steps():
         ("memory_edit_records", cleanup_memory_edit_records),
         ("memory_change_logs", cleanup_memory_change_logs),
         ("notification_outbox_deleted", cleanup_outbox),
+        ("workspace_trails_deleted", cleanup_expired_trails),
     )
 
 

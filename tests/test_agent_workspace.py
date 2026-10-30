@@ -97,7 +97,8 @@ def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():
     assert workbench["tunnel.py"] == browser["tunnel.py"]
     assert f'install -D -m 0644 "$(dirname -- "$0")/tunnel.py" {agent_workspace.WORKBENCH_TUNNEL}' in (
         workbench["setup.sh"].decode())
-    assert set(browser) == {"browser.py", "display.sh", "relay.py", "setup.sh", "tunnel.py"}
+    assert set(browser) == {"browser.py", "display.sh", "harden.sh", "openbox-menu.xml", "openbox-rc.xml",
+                            "policy.json", "relay.py", "setup.sh", "tunnel.py"}
     assert all(b"\r\n" not in data for data in [*workbench.values(), *browser.values()])
     assert agent_workspace.VERSION == agent_workspace._version("workbench") and len(agent_workspace.VERSION) == 16
     assert agent_workspace.BROWSER_VERSION == agent_workspace._version("browser")
@@ -254,6 +255,10 @@ def run_helper(browser, monkeypatch, capsys, request, awake=None):
     # For the server's log: the helper's own seconds, and not the resident helper's answer.
     seconds, served = answer.pop("seconds", None), answer.pop("served", None)
     assert (isinstance(seconds, float) and served is False) or answer["status"] == "failed"
+    # For the server's safety rules (workspace_guard.py): the VM's network
+    # counters (None without /proc, as here) and its Chrome policy's fingerprint.
+    assert "net" in answer and isinstance(answer.pop("policy"), str)
+    answer.pop("net")
     return answer
 
 
@@ -1347,13 +1352,18 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
             self.buffer = type("Buffer", (), {"raw": raw})()
     monkeypatch.setattr(relay.sys, "stdin", Stream(stdin))
     monkeypatch.setattr(relay.sys, "stdout", Stream(stdout))
+    # The safety rules' watch (test_workspace_guard.py) has its own test.
+    monkeypatch.setattr(relay, "watch", lambda done: None)
     assert relay.main() == 0
     # The relay returns once it has sent everything; the VNC side may still be
     # reading it (CI read 65536 of 70000 bytes before this join).
     server_thread.join(10)
     server.close()
-    states = [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()]
+    lines = [json.loads(line) for line in capfd.readouterr().err.splitlines()]
+    states = [line["state"] for line in lines if "state" in line]
     assert states == ["setup", "starting", "ready"] and scripts == ["setup.sh", "display.sh"]
+    # Besides the states only the network counters at the end (None here without /proc).
+    assert all("state" in line or "net" in line for line in lines)
     assert stdout.getvalue().startswith(b"RFB 003.008\n") or stdout.getvalue() == b""
     assert sum(len(chunk) for chunk in received) == 70_000
 

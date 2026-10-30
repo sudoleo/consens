@@ -33,6 +33,15 @@ size ({"id_token", "cols", "rows"}); then the browser's binary frames are
 keystrokes and {"type": "resize", "cols", "rows"} resizes it; the server's
 binary frames are the terminal's output. The reviewers never see it: it is
 the user's work, not the agent's.
+
+The server's safety rules (workspace_guard.py, since 2026-10-30) see both:
+the relay's stderr also names the host of every page a tab shows
+({"visit"}), the VM's network counters ({"net"}) and its Chrome policy
+({"policy"}), each page with who steered then (_steering: the user from
+their takeover on, else the agent they watch); the view's bytes count, the
+terminal's do not; a workspace the rules closed refuses a new view,
+terminal or takeover (CLOSE_GUARDED, CLOSE_LOCKED) and ends an open one
+within workspace_guard.CHECK_SECONDS.
 """
 from __future__ import annotations
 
@@ -51,7 +60,7 @@ from app.api.routers.chat_history import _chat_uid
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import db_firestore, verify_user_token
-from app.services import agent_tunnel, agent_vm, agent_vm_time, agent_workspace
+from app.services import agent_tunnel, agent_vm, agent_vm_time, agent_workspace, workspace_guard
 from app.services.agent_documents import Strict
 
 router = APIRouter()
@@ -109,8 +118,12 @@ def workspace_status(request: Request):
     require_agent_access(uid)
     if not allowed(uid):
         return JSONResponse({"available": False}, headers=NO_STORE)
-    return JSONResponse({"available": True, "in_use": bool(agent_workspace.held_by(db_firestore, uid))},
-                        headers=NO_STORE)
+    body = {"available": True, "in_use": bool(agent_workspace.held_by(db_firestore, uid))}
+    guard = workspace_guard.status(uid)
+    if guard.closed:
+        # Closed by the server's safety rules: until when (None: until consens.io looked at it).
+        body["guard"] = {"state": guard.state, "until": guard.until.isoformat() if guard.until else None}
+    return JSONResponse(body, headers=NO_STORE)
 
 
 @router.post("/agent/workspace/control")
@@ -122,6 +135,9 @@ def workspace_control(request: Request, payload: Control):
     browser, the localhost tunnel neither ends as idle nor stays ended: they
     may be trying the agent's app (agent_tunnel.py)."""
     uid = owner(request)
+    guard = workspace_guard.status(uid)
+    if payload.holder == "user" and guard.closed:
+        raise HTTPException(status_code=403, detail=workspace_guard.user_text(guard))
     record = agent_workspace.record(db_firestore, uid)
     if not record.get("name"):
         raise HTTPException(status_code=404, detail="Open the workspace first.")
@@ -138,6 +154,7 @@ def workspace_control(request: Request, payload: Control):
     except agent_vm.VMUnavailable as exc:
         logging.warning("Agent workspace control unavailable category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="The workspace is not reachable right now. Try again.") from None
+    _note_takeover(uid, payload.holder)
     return JSONResponse({"holder": payload.holder, "seconds": agent_workspace.CONTROL_SECONDS}, headers=NO_STORE)
 
 
@@ -303,8 +320,15 @@ def _charge(uid, seconds):
 # the code. The view tries again by itself only after a close without one.
 CLOSE_ENDED, CLOSE_REPLACED, CLOSE_NO_TIME, CLOSE_TOO_MANY = 4410, 4409, 4402, 4429
 CLOSE_FORBIDDEN = 4403
+# The server's safety rules closed the workspace: until the next UTC day, or until consens.io looked at it.
+CLOSE_GUARDED, CLOSE_LOCKED = 4423, 4424
 CLOSE_REASONS = {CLOSE_ENDED: "ended", CLOSE_REPLACED: "replaced", CLOSE_NO_TIME: "no_time",
-                 CLOSE_TOO_MANY: "too_many", CLOSE_FORBIDDEN: "forbidden"}
+                 CLOSE_TOO_MANY: "too_many", CLOSE_FORBIDDEN: "forbidden", CLOSE_GUARDED: "guarded",
+                 CLOSE_LOCKED: "locked"}
+
+
+def _guard_code(guard):
+    return CLOSE_LOCKED if guard.state == "locked" else CLOSE_GUARDED
 
 
 async def _end(websocket, code):
@@ -342,6 +366,10 @@ async def _admit(websocket, kind):
     except ApiUidRateLimitExceeded:
         await _refuse(websocket, kind, CLOSE_TOO_MANY)
         return None
+    guard = await asyncio.to_thread(workspace_guard.status, uid)
+    if guard.closed:
+        await _refuse(websocket, kind, _guard_code(guard))
+        return None
     seconds, day_left = await asyncio.to_thread(_time_left, uid)
     if seconds < 1:
         await _refuse(websocket, kind, CLOSE_NO_TIME)
@@ -349,11 +377,28 @@ async def _admit(websocket, kind):
     return uid, seconds, hello, day_left
 
 
-async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_vm, to_browser, ending=None):
-    """Carries both ways until one side ends, the time is up or a newer
-    one of this kind took over; then counts the open time as VM time and
-    closes with the reason (CLOSE_*). ``ending`` is what the two ways noted
-    about their end (who, and the numbers they got), for the log."""
+class Meter:
+    """The bytes a view or terminal carried (both ways) since the guard last took them."""
+
+    def __init__(self):
+        self.bytes = 0
+
+    def add(self, data):
+        self.bytes += len(data)
+
+    def take(self):
+        taken, self.bytes = self.bytes, 0
+        return taken
+
+
+async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_vm, to_browser, ending=None,
+                 meter=None):
+    """Carries both ways until one side ends, the time is up, a newer one
+    of this kind took over or the server's safety rules closed the
+    workspace; then counts the open time as VM time and closes with the
+    reason (CLOSE_*). ``ending`` is what the two ways noted about their end
+    (who, and the numbers they got), for the log; ``meter`` what they
+    carried, which the safety rules count (the view's, not the terminal's)."""
     ending = ending if ending is not None else {}
     async def replaced():
         # A newer view (or terminal) of the account took over: this one ends.
@@ -365,15 +410,36 @@ async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_v
             except Exception as exc:
                 logging.info("Agent workspace %s check failed category=%s", kind, safe_exception(exc))
 
+    async def guarded():
+        # The bytes so far go to the safety rules now and then (each hand-over
+        # is a count in Firestore); a workspace they closed (also by another
+        # way, the agent's calls) ends this one.
+        handed = time.monotonic()
+        while True:
+            await asyncio.sleep(workspace_guard.CHECK_SECONDS)
+            if meter is not None and time.monotonic() - handed >= workspace_guard.VIEW_BYTES_SECONDS:
+                handed = time.monotonic()
+                workspace_guard.note_view_bytes(uid, meter.take())
+            try:
+                found = await asyncio.to_thread(workspace_guard.status, uid)
+            except Exception as exc:
+                logging.info("Agent workspace %s guard check failed category=%s", kind, safe_exception(exc))
+                continue
+            if found.closed:
+                return found
+
     watcher = asyncio.ensure_future(replaced())
-    tasks = [asyncio.ensure_future(to_vm()), asyncio.ensure_future(to_browser()), watcher]
+    guard = asyncio.ensure_future(guarded())
+    tasks = [asyncio.ensure_future(to_vm()), asyncio.ensure_future(to_browser()), watcher, guard]
     done, _ = await asyncio.wait(tasks, timeout=seconds, return_when=asyncio.FIRST_COMPLETED)
     for task in tasks:
         task.cancel()
+    if meter is not None:
+        workspace_guard.note_view_bytes(uid, meter.take())
     # A way that broke (the provider's socket dropped, a send into a closed
     # socket): its kind of error, never its words.
     for task in done:
-        if task is not watcher and not task.cancelled() and task.exception() is not None:
+        if task not in {watcher, guard} and not task.cancelled() and task.exception() is not None:
             ending.setdefault("by", "error")
             logging.warning("Agent workspace %s carry failed category=%s", kind, safe_exception(task.exception()))
     try:
@@ -389,9 +455,11 @@ async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_v
     # Open views keep the VM awake: their time counts as VM time.
     elapsed = time.monotonic() - started
     await asyncio.to_thread(_charge, uid, elapsed)
-    # Its hour, or today's VM time, is over; or a newer one took over.
+    # Its hour, or today's VM time, is over; a newer one took over; or the
+    # safety rules closed the workspace.
+    closed = guard.result() if guard in done and not guard.cancelled() and guard.exception() is None else None
     code = (CLOSE_ENDED if seconds >= VIEW_SECONDS else CLOSE_NO_TIME) if not done \
-        else CLOSE_REPLACED if watcher in done else 1000
+        else _guard_code(closed) if closed is not None else CLOSE_REPLACED if watcher in done else 1000
     by = CLOSE_REASONS.get(code) or ending.get("by") or "unknown"
     details = "".join(f" {key}={ending[key]}" for key in ("browser_code", "upstream_code", "exit")
                       if isinstance(ending.get(key), int))
@@ -420,6 +488,7 @@ async def workspace_view(websocket: WebSocket):
         return
     await asyncio.to_thread(_count, "view", "opened")
     ending = {}
+    meter = Meter()
 
     async def to_vm():
         # The view's bytes go to the relay's stdin (exec frames 0x00).
@@ -430,30 +499,33 @@ async def workspace_view(websocket: WebSocket):
                 ending.setdefault("browser_code", message.get("code"))
                 return
             if message.get("bytes") is not None:
+                meter.add(message["bytes"])
                 await upstream.send(b"\x00" + message["bytes"])
 
     async def to_browser():
         # stdout (0x01) is VNC once the relay said "ready"; its states come
-        # as JSON lines on stderr (0x02) before; the exit (0x03) ends it.
+        # as JSON lines on stderr (0x02) before, and the whole time what the
+        # safety rules count (relay_line); the exit (0x03) ends it.
         pending = b""
         async for message in upstream:
             if not isinstance(message, bytes) or not message:
                 continue
             stream, payload = message[0], message[1:]
             if stream == 1 and payload:
+                meter.add(payload)
                 await websocket.send_bytes(payload)
-            elif stream == 2 and len(pending) < STATE_LINE_BYTES:
+            elif stream == 2:
                 pending += payload
                 while b"\n" in pending:
                     line, pending = pending.split(b"\n", 1)
-                    try:
-                        state = (json.loads(line) or {}).get("state")
-                    except ValueError:
-                        continue
+                    state = relay_line(uid, line)
                     if state == "error":
                         logging.warning("Agent workspace view relay error")
                     if state in {"setup", "starting", "ready", "error"}:
                         await _state(websocket, state)
+                # A line longer than any the relay writes is dropped, never kept growing.
+                if len(pending) > STATE_LINE_BYTES:
+                    pending = b""
             elif stream == 3:
                 ending.setdefault("by", "relay")
                 ending.setdefault("exit", payload[0] if payload else None)
@@ -461,7 +533,47 @@ async def workspace_view(websocket: WebSocket):
         ending.setdefault("by", "upstream")
         ending.setdefault("upstream_code", getattr(upstream, "close_code", None))
 
-    await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser, ending)
+    await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser, ending, meter)
+
+
+# Who steers the browser, for the safety rules: until when each account's
+# user holds it, as its takeover said here (workspace_control; the open view
+# renews it every CONTROL_REFRESH_SECONDS). In this process, no Firestore
+# read per page.
+_takeovers: dict[str, float] = {}
+
+
+def _note_takeover(uid, holder):
+    if holder == "user":
+        _takeovers[uid] = time.monotonic() + agent_workspace.CONTROL_SECONDS
+    else:
+        _takeovers.pop(uid, None)
+
+
+def _steering(uid):
+    """"user" while the account's user holds the browser, else "view"."""
+    return "user" if _takeovers.get(uid, 0) > time.monotonic() else "view"
+
+
+def relay_line(uid, line):
+    """One JSON line of the relay's stderr: its state, which the caller
+    passes on, or what the safety rules count (a page's host with who
+    steered then, the VM's network counters, its Chrome policy). Anything
+    else is dropped: the browser VM is not trusted."""
+    try:
+        data = json.loads(line) if len(line) <= STATE_LINE_BYTES else None
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    if isinstance(data.get("visit"), str):
+        workspace_guard.note_visit(uid, data["visit"], _steering(uid))
+    elif isinstance(data.get("net"), dict):
+        workspace_guard.note_net(uid, data["net"])
+    elif isinstance(data.get("policy"), str):
+        workspace_guard.note_policy(uid, data["policy"])
+    state = data.get("state")
+    return state if isinstance(state, str) else None
 
 
 @router.websocket("/agent/workspace/terminal")
@@ -527,4 +639,6 @@ async def workspace_terminal(websocket: WebSocket):
         ending.setdefault("by", "upstream")
         ending.setdefault("upstream_code", getattr(upstream, "close_code", None))
 
+    # The terminal's bytes do not count: its output is the user's own work (a runaway
+    # loop prints gigabytes), and its machine reaches only package registries.
     await _carry(websocket, upstream, uid, "terminal", terminal_id, seconds, started, to_vm, to_browser, ending)

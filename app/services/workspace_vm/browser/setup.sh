@@ -22,11 +22,7 @@ if ! command -v google-chrome >/dev/null || ! command -v Xvfb >/dev/null || ! co
   rm -f /tmp/consens-chrome.deb
 fi
 python3 -c "import playwright" 2>/dev/null || pip3 install -q --disable-pip-version-check playwright==1.64.1
-# Chrome keeps no passwords, cards or addresses: sign-ins stay what the user
-# typed in the view, and the agent reads pages only through browser.py,
-# which never shows a password field's value.
-sudo mkdir -p /etc/opt/chrome/policies/managed
-echo '{"PasswordManagerEnabled": false, "AutofillCreditCardEnabled": false, "AutofillAddressEnabled": false,
- "BrowserSignin": 0, "SyncDisabled": true, "MetricsReportingEnabled": false, "PromotionsEnabled": false}' \
-  | sudo tee /etc/opt/chrome/policies/managed/consens.json >/dev/null
+# Chrome's policy (no passwords, cards or addresses; since 2026-10-30 also
+# the safety rules) is harden.sh's, which display.sh runs before every start
+# of Chrome when it changed.
 touch "$marker"

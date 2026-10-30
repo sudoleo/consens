@@ -299,6 +299,29 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `consens-browser-awake` mit Ablauf ~2 min nach dem Lauf). Ein Lauf mit
       localhost-Seite: Nach dem Lauf und geschlossener Ansicht endet der Tunnel
       nach ~2 min („Agent tunnel ended“).
+- [ ] Sicherheitsregeln des Arbeitsplatzes (2026-10-30, `docs/agent-mode.md`
+      „Sicherheitsregeln des Arbeitsplatzes“; echte Sprite, ein NICHT-Admin-Konto
+      für das Schließen, Admins werden nur gemeldet):
+      **Chrome:** Live-Ansicht öffnen und übernehmen: `file:///etc/hostname`,
+      `http://127.0.0.1:9222/json`, `chrome://flags` und eine Erwachsenenseite
+      zeigen „vom Administrator blockiert“; Strg+S, Strg+O, Strg+Umschalt+I und
+      Strg+Umschalt+N tun nichts; Rechtsklick auf den Desktop (Chrome per
+      Doppelklick auf die Titelleiste verkleinern) zeigt kein Menü. Der Agent
+      öffnet, liest, tippt, lädt hoch und herunter wie vorher. Nach Deploy
+      startet Chrome einmal neu (`chrome.log`: „restarted: new flags“).
+      **Server:** Mit dem Nicht-Admin-Konto in der Übernahme fünf verschiedene
+      Websites öffnen, die Cloudflares Family-Resolver sperrt (fünf
+      verschiedene Domains: Subdomains einer Domain zählen einmal, alle
+      `*.testcategory.com` zusammen also als eine): Die Ansicht
+      schließt binnen Sekunden mit dem Satz „bis morgen geschlossen“, Terminal
+      und Übernehmen ebenso, der Agent sagt im Chat, dass der Arbeitsplatz
+      geschlossen ist; Telegram meldet „workspace closed for today“ ohne Konto.
+      `scripts/workspace_guard.py list` nennt das Konto, `status <kürzel>` die
+      Hosts, `unlock <kürzel>` öffnet es wieder (binnen 20 s). Render-Log:
+      `Workspace guard closed account=<kürzel> rule=flagged_sites_by_user`.
+      Gegenprobe: Dieselben Seiten lässt der Agent öffnen (ohne Übernahme):
+      Der Arbeitsplatz schließt bis morgen, sperrt aber nie.
+      Automatisiert: `test_workspace_guard.py`.
 - [ ] Answer check aus (2026-10-17, echter Provider): Settings › Agent · Beta ›
       Answer check auf Off, dann eine Frage, die einen Vergleich braucht. Keine
       Zeile „Checked the answer“, kein Schimmer über der fixierten Antwort,

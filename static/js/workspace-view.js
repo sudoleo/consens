@@ -122,6 +122,9 @@
     no_time: 'The workspace’s time for today is used up. It is back tomorrow.',
     too_many: 'The workspace was opened many times in a row. Try again in a minute.',
     forbidden: 'The workspace is not available on your account.',
+    // The server's safety rules closed it (routers/agent_workspace.py CLOSE_GUARDED, CLOSE_LOCKED).
+    guarded: 'The workspace is closed on this account until tomorrow: it was used in a way consens.io’s safety rules do not allow.',
+    locked: 'The workspace is closed on this account by consens.io’s safety rules until we have looked at it.',
     reconnecting: 'Reconnecting…',
     lost: 'The connection to the workspace ended. Reconnect to go on.',
     paused: 'Paused while this tab was in the background, to save your workspace time.',
@@ -129,12 +132,13 @@
   };
   // Why the server closed the view, by close code: noVNC owns the socket's
   // messages once it is ready, so these come as codes, not states.
-  const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many' };
+  const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many', 4423: 'guarded',
+    4424: 'locked' };
   // Closes the view does not try again by itself: the server said why
   // (4403 before it opened, 1011 after "error").
   const FINAL = { ...CLOSED, 4403: 'forbidden', 1011: 'error' };
   // Nothing to try again: "Reconnect" would only hear the same.
-  const NO_RETRY = new Set(['no_time', 'forbidden']);
+  const NO_RETRY = new Set(['no_time', 'forbidden', 'guarded', 'locked']);
   const TERMINAL = {
     connecting: 'Opening a terminal in the workspace…',
     ready: 'Your terminal in the workspace, with the agent’s rights.',

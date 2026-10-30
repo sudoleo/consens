@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- consens.io browser VM: openbox's menus, empty (openbox-rc.xml binds none
+     to a click or a key either). openbox's own root menu offered a terminal. -->
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="consens.io"/>
+  <menu id="client-list-combined-menu" label="consens.io"/>
+</openbox_menu>

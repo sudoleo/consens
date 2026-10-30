@@ -2522,6 +2522,39 @@ def serve():
             KEPT.pop("playwright").stop()
 
 
+POLICY = "/etc/opt/chrome/policies/managed/consens.json"
+
+
+def net_counters():
+    """The bytes the VM received and sent on its network (all interfaces but
+    loopback) and the boot they count from, or None (relay.py the same)."""
+    try:
+        with open("/proc/net/dev", encoding="utf-8") as handle:
+            lines = handle.read().splitlines()[2:]
+        with open("/proc/sys/kernel/random/boot_id", encoding="utf-8") as handle:
+            boot = handle.read().strip()[:36]
+    except OSError:
+        return None
+    rx = tx = 0
+    for line in lines:
+        name, _, numbers = line.partition(":")
+        fields = numbers.split()
+        if name.strip() == "lo" or len(fields) < 9:
+            continue
+        rx += int(fields[0])
+        tx += int(fields[8])
+    return {"rx": rx, "tx": tx, "boot": boot}
+
+
+def policy_print():
+    """The fingerprint of Chrome's policy on this VM ("" without one)."""
+    try:
+        with open(POLICY, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()[:16]
+    except OSError:
+        return ""
+
+
 def main():
     global _answered
     if sys.argv[1:] == ["--serve"]:
@@ -2545,6 +2578,9 @@ def main():
             answer = answer_for(request)
     # For the server's log: the helper's own time, and whether the resident one answered.
     answer.update(seconds=round(time.monotonic() - started, 3), served=served)
+    # For the server's safety rules (workspace_guard.py, since 2026-10-30):
+    # the VM's network counters and the fingerprint of Chrome's policy.
+    answer.update(net=net_counters(), policy=policy_print())
     if resting:
         stay_awake(REST_FOR)
     else:

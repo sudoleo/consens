@@ -492,6 +492,21 @@ describe("the workspace view", () => {
       .toBe("The workspace’s time for today is used up. It is back tomorrow.");
   });
 
+  it("says the server's safety rules closed the workspace, with nothing to try again", async () => {
+    // routers/agent_workspace.py CLOSE_GUARDED (until tomorrow) and CLOSE_LOCKED (until looked at), 2026-10-30.
+    for (const [code, text] of [
+      [4423, "The workspace is closed on this account until tomorrow: it was used in a way consens.io’s safety rules do not allow."],
+      [4424, "The workspace is closed on this account by consens.io’s safety rules until we have looked at it."],
+    ]) {
+      const env = setup();
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      socket.closedBy(code);
+      expect(env.document.querySelector(".workspace-view-status").textContent).toBe(text);
+      expect(env.document.querySelector(".workspace-view-reconnect").hidden).toBe(true);
+    }
+  });
+
   it("logs the browser out everywhere only after asking", async () => {
     const env = setup();
     env.window.App.confirm = vi.fn(async () => false);

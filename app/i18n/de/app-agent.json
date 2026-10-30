@@ -830,6 +830,8 @@
   "The workspace opened in another window, so this view closed.": "Der Arbeitsplatz ist in einem anderen Fenster offen, deshalb hat sich diese Ansicht geschlossen.",
   "The workspace’s time for today is used up. It is back tomorrow.": "Die Zeit des Arbeitsplatzes für heute ist aufgebraucht. Morgen geht es weiter.",
   "The workspace was opened many times in a row. Try again in a minute.": "Der Arbeitsplatz wurde viele Male hintereinander geöffnet. Versuch es in einer Minute noch einmal.",
+  "The workspace is closed on this account until tomorrow: it was used in a way consens.io’s safety rules do not allow.": "Der Arbeitsplatz ist für dieses Konto bis morgen geschlossen: Er wurde auf eine Weise genutzt, die die Sicherheitsregeln von consens.io nicht erlauben.",
+  "The workspace is closed on this account by consens.io’s safety rules until we have looked at it.": "Der Arbeitsplatz ist für dieses Konto durch die Sicherheitsregeln von consens.io geschlossen, bis wir es uns angesehen haben.",
   "Take over": "Übernehmen",
   "Hand back": "Zurückgeben",
   "Close workspace": "Arbeitsplatz schließen",

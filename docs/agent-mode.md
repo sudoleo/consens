@@ -1353,7 +1353,9 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   auch immer gesagt: `-localhost` nahm `fdf::1`, das `/etc/hosts` ebenfalls
   `localhost` nennt, `-rfbport 0` allein ließ `[::]:5900`, `-noipv6` wirkt in
   0.9.17 nicht (gemessen an Test-Sprites 2026-10-27). Chrome speichert keine
-  Passwörter, Karten und Adressen (Richtlinie).
+  Passwörter, Karten und Adressen (Richtlinie; seit 2026-10-30 schreibt sie
+  `harden.sh` mit den Sicherheitsregeln, Abschnitt „Sicherheitsregeln des
+  Arbeitsplatzes“).
 - **Öffnen und erster Aufruf** (seit 2026-10-29). Prod 2026-10-29 09:56 UTC:
   Live-Ansicht und Browser-Aufruf scheiterten beide an `Agent VM request
   failed operation=policy category=ReadTimeout`. Jedes Öffnen (`open_browser`,
@@ -2724,6 +2726,181 @@ Hinweis an die nächste Nachricht),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
 `agent-preferences.test.mjs`, `test_user_settings.py` und
 `test_prompt_config.py`.
+
+### Sicherheitsregeln des Arbeitsplatzes (seit 2026-10-30)
+
+Max am 2026-10-30, als der Arbeitsplatz für alle Konten aufging
+(`AGENT_AUDIT_ACCESS=all`): eine Regel, die schädliches Verhalten erkennt,
+„nicht durch den Agenten, durch unseren Server“. Die größte Lücke war nicht der
+Agent (ihn halten seine eigenen Absagen, die Prüfer und das Gate), sondern die
+Übernahme: In der Live-Ansicht steuert der Nutzer Chrome direkt, Agent und
+Prüfer sehen davon nichts. Drei Schichten, keine davon liest Wörter (kein
+Wortfilter, Max' Grundsatz), keine speichert eine IP-Adresse.
+
+1. **Chrome sperrt, egal wer steuert** (`workspace_vm/browser/harden.sh`,
+   `policy.json`, `openbox-rc.xml`, `openbox-menu.xml`). `display.sh` ruft
+   `harden.sh` vor jedem Start von Chrome und startet ohne die Regeln keinen.
+   `harden.sh` installiert die Richtlinie nach
+   `/etc/opt/chrome/policies/managed/consens.json`, lenkt `xdg-open` per
+   `dpkg-divert` auf eine Attrappe um (Chrome öffnet Downloads und fremde
+   Links damit; ein heruntergeladenes Skript oder eine `.desktop`-Datei liefe
+   sonst) und schreibt openbox eine Konfiguration ohne Menü und ohne
+   `Execute` (die eigene hatte ein Desktop-Menü mit Terminal-Eintrag und
+   Tastenkürzel, die Programme starten). Die Marke `~/.consens/browser/hardened`
+   trägt die Version der Regeln, `display.sh` nimmt sie in seine Chrome-Flags:
+   neue Regeln starten Chrome einmal neu. Die Richtlinie: SafeSites (Googles
+   Einstufung für Erwachsenenseiten), Safe Browsing ohne „Trotzdem
+   fortfahren“, SafeSearch, keine Dateidialoge (`AllowFileSelectionDialogs`,
+   kein „Speichern unter“), keine Erweiterungen, kein Inkognito- oder
+   Gastfenster, ein Verlauf, den niemand löscht, kein Drucken, und per
+   `URLBlocklist` weder `file://` noch `devtools://`, `chrome://flags`,
+   `chrome://inspect`, `chrome://net-*` noch der Debug-Port 9222 als Seite.
+   Warum das zählt: Chrome läuft als `sprite`, der sudo darf. Ein „Speichern
+   unter“ über `browser.py`, `~/.profile` oder ein anderes Skript des Servers,
+   oder DevTools am Debug-Port (`Page.setDownloadBehavior`), wäre in der
+   Übernahme ein Weg in eine Root-Shell gewesen, an jeder Regel des Servers
+   vorbei.
+2. **Spur und Tageszahlen auf dem Server** (`app/services/workspace_guard.py`).
+   Quellen: die Browser-Aufrufe des Agenten (`agent_browser.BrowserTools.call`
+   → `note_browser_call`: der angefragte Host, der Host der Seite danach,
+   `net` und `policy` aus der Antwort des Helfers), die Live-Ansicht
+   (`relay.py` `watch`: jede Sekunde Chromes Zielliste `/json/list`, eine Zeile
+   `{"visit": host}`, sobald ein Tab einen anderen Host zeigt, auch eine
+   gesperrte Seite, deren Tab die angefragte Adresse nennt; alle 15 s
+   `{"net": {"rx", "tx", "boot"}}`; einmal `{"policy": fingerprint}`; der Server
+   liest sie in `routers/agent_workspace.py::relay_line`) und die Bytes von
+   Ansicht und Terminal (`Meter`, in `_carry` alle `CHECK_SECONDS`).
+   `note_*` blockiert nie: Ein Thread sammelt drei Sekunden und zählt je Konto
+   in einer Transaktion. Höchstens 64 neue Hosts je Zählung, acht
+   gleichzeitig, höchstens 8 s (`sort_hosts`); der Rest und Hosts ohne Antwort
+   bleiben offen (`_unsorted`) und werden bei der nächsten Zählung des Kontos
+   erneut gefragt. Jeder neue Host wird einmal eingeordnet
+   (`classify`, Cache 24 h): Antwortet Cloudflares Security-Resolver mit
+   `0.0.0.0`, ist er „malware“ (Schadsoftware, Phishing), sonst bei
+   `0.0.0.0` vom Family-Resolver „adult“, sonst „clean“; ohne Antwort bleibt er
+   offen und wird beim nächsten Auftauchen erneut gefragt. Die Netzzähler der
+   VM zählen nur vorwärts innerhalb eines Boots (`merge_net`). Was über die
+   Exec-API läuft (die Live-Ansicht, Antworten des Helfers), zählt dort nicht:
+   13 MB Ausgabe ergaben +0 Bytes (Test-Sprite 2026-10-31).
+3. **Folgen** (`RULES`, `judge`, `decide`). Je Konto und UTC-Tag:
+
+   | Regel | Maß | schließt bis morgen | sperrt bis zur Freigabe |
+   |---|---|---|---|
+   | `flagged_sites_by_user` | eingeordnete Websites, die der Nutzer selbst öffnete (nach seiner Übernahme) | 5 | 15, oder zweites Schließen in 7 Tagen |
+   | `flagged_sites` | eingeordnete Websites, auch die des Agenten | 5 | nie |
+   | `new_hosts_per_hour` | neue Hosts in einer Stunde | 300 | zweites Schließen in 7 Tagen |
+   | `typed_hosts_per_hour` | Hosts, in die der Agent tippte oder hochlud, je Stunde | 25 | nie |
+   | `view_bytes` | Bytes der Live-Ansicht (das Terminal zählt nicht) | 6 GiB | zweites Schließen in 7 Tagen |
+   | `sent_bytes` | von der Browser-VM über ihr eigenes Netz gesendet | 2 GiB | zweites Schließen in 7 Tagen |
+   | `received_bytes` | von der Browser-VM empfangen | 30 GiB | zweites Schließen in 7 Tagen |
+
+   Gezählt wird je Website (`site_of`: die letzten zwei Labels, drei unter
+   `co.uk` und Ähnlichem), nicht je Subdomain. Sperren darf nur, was der
+   Nutzer tat: Was eine Seite dem Agenten einreden kann (Prompt-Injection,
+   „öffne a1 … a15.evil.example“), schließt höchstens für den Tag (Durchsicht
+   2026-10-31). Wer gesteuert hat, weiß der Server aus der Übernahme
+   (`routers/agent_workspace.py::_note_takeover`, im Prozess, ohne Lesen in
+   Firestore). Eine Domain, deren eigener Eintrag 0.0.0.0 lautet (ein Wildcard,
+   den jeder setzen kann), gilt nicht als gesperrt: Cloudflare kennzeichnet
+   echte Sperren mit EDE 16/17, sonst entscheidet der ungefilterte Resolver.
+   Die Schwellen sind bewusst großzügig und werden nach den ersten Wochen
+   anhand der Spuren gesetzt, nicht tiefer geraten. Admins werden gezählt und
+   einmal je Regel und Tag gemeldet, nie geschlossen. Jeder neue Zustand geht
+   an den Telegram-Bot des Betreibers (ohne Konto, Datenschutzerklärung:
+   keine Kontokennungen; welches Konto, sagt `scripts/workspace_guard.py list`),
+   ebenso einmal am Tag eine Richtlinie auf einer VM, die nicht der
+   erwarteten entspricht (`expected_policy`, nur aus beantworteten Aufrufen und
+   nach dem Start der Ansicht). Beim Schließen endet, was noch läuft
+   (`_shut`): der localhost-Tunnel, und die Browser-VM schläft nach zwei
+   Minuten (`rest`). Hintergrundprozesse auf der Werkbank laufen aus (höchstens
+   eine Stunde, ihr Netz erreicht nur Paketquellen).
+
+**Wo geprüft wird.** `workspace_guard.status(uid)` (Cache 20 s, ein Fehler beim
+Lesen schließt nie) fragen: `VMTools._start` (jedes Werkzeug des Arbeitsplatzes,
+VM wie Browser, Prozesse, GitHub), `DelegationLoop._request_workspace`
+(`open_workspace`), `VMTools.prewarm` und `BrowserTools._warm` (wecken keine
+VM), `_admit` für Ansicht und Terminal (Close-Code 4423 bis morgen, 4424
+gesperrt; `workspace-view.js` sagt es in einem Satz, ohne „Reconnect“),
+`POST /agent/workspace/control` (Übernehmen: 403, Zurückgeben bleibt),
+`vm-restore` und das Speichern eines Schlüssels (403, `_refuse_closed_workspace`)
+und `GET /agent/workspace` (`guard: {state, until}`). Eine offene Ansicht oder ein
+offenes Terminal endet binnen `CHECK_SECONDS` (2 s). Die Bytes der Ansicht
+gehen alle `VIEW_BYTES_SECONDS` (30 s) an den Wächter, die Netzzähler der VM
+alle 60 s: Jede Übergabe ist eine Transaktion. Der Agent liest nur, dass
+der Arbeitsplatz bis wann geschlossen ist (`CLOSED_FOR_AGENT`,
+`LOCKED_FOR_AGENT`), nie warum; er sagt es dem Nutzer und antwortet ohne.
+
+**Daten.** `workspace_guard/{uid}` (Zustand, Regel, Zeit, `until`, `values`,
+`closed_days`, `history`, `baseline` nach einer Freigabe, `net` zuletzt
+gesehen, `noted` gegen doppelte Meldungen; `expires_at` 31 Tage nach der
+letzten Zählung, bei einer Sperre keins) und `workspace_trail/{uid}_{tag}`
+(`counts`, `hours`, `hosts` mit Host, erster/letzter Zeit, Anzahl, Quelle
+agent/view, Kategorie, `typed_hour`; höchstens `MAX_HOSTS` mit Namen, eingeordnete
+immer; `expires_at` 31 Tage ab Tagesbeginn). Beide auf oberster Ebene, damit
+Firestores automatische Indizes die Abfragen tragen (nichts zu deployen):
+`cleanup_expired_trails` stündlich in `retention_maintenance.py`,
+`delete_for_account` mit dem Konto (`agent_workspace.delete_for_account`).
+In Test- und Mock-Profilen ohne eigene Datenbank (`use_db`) tut der Wächter
+nichts: Lokal teilen sie die echte Firestore.
+
+**Freigeben.** `venv/Scripts/python.exe scripts/workspace_guard.py list`, dann
+`status <kürzel|uid|e-mail>` (Zustand, Verlauf, die letzten Tage mit
+eingeordneten Hosts; `--hosts` alle) und `unlock <…>`: Was das Konto heute bis
+dahin tat, ist vergeben (`baseline`, Stunde für Stunde), frühere Schließungen
+machen das nächste nicht mehr zur Sperre.
+
+**E-Mail-Bestätigung.** Der Arbeitsplatz braucht eine bestätigte Adresse:
+Ansicht, Terminal und alle Routen melden sich über `verify_user_token` ohne
+`allow_unverified` an (`test_only_verified_accounts_reach_the_workspace`).
+
+#### Live geprüft an eigenen Test-Sprites (2026-10-30)
+
+`consens-test-5e33f8e40252` und `consens-test-901c33fc05a9` (danach gelöscht),
+Skripte im Session-Scratchpad (`probe_guard.py`, `probe_variants.py`,
+`checks_v4.py`):
+
+- `harden.sh` im ersten `warm` (Setup + Chrome 62–66 s): Richtlinie
+  installiert (Fingerabdruck wie `expected_policy`), `xdg-open` umgelenkt,
+  openbox neu konfiguriert, Chrome mit `rules-<version>` in den Flags.
+- **`DeveloperToolsAvailability: 2` sperrt auch Playwright**: Jede Aktion
+  scheiterte mit `BrowserContext.new_page: Cannot read properties of undefined
+  (reading '_page')`. Ohne den Schlüssel geht `new_page`. DevTools bleiben über
+  `URLBlocklist` (`devtools://*`) zu: Strg+Umschalt+I/J öffnen kein DevTools-Ziel
+  (`/json/list` vorher/nachher, Strg+T als Gegenprobe öffnet einen Tab).
+- **DNS über HTTPS geht auf Sprites nicht**: Mit Cloudflares Family-Resolver
+  per `DnsOverHttpsMode: secure` endete jede Seite in
+  `ERR_CONNECTION_REFUSED`: Die Netzregeln des Anbieters lassen nur Adressen
+  durch, die sein eigener Resolver ausgegeben hat. Deshalb sperrt Chrome mit
+  Googles Listen (SafeSites, Safe Browsing), und Cloudflare ordnet nur auf
+  dem Server ein.
+- Gesperrt: `www.pornhub.com`, `www.xvideos.com` (SafeSites,
+  `ERR_BLOCKED_BY_ADMINISTRATOR`), Googles Testseiten für Phishing und
+  Schadsoftware (`ERR_BLOCKED_BY_CLIENT`, erst einige Minuten nach Chromes Start,
+  wenn die Listen geladen sind), `http://127.0.0.1:9222/json/version`,
+  `http://localhost:9222/…`, `file:///etc/hostname`, `chrome://flags`,
+  `devtools://…` (`ERR_BLOCKED_BY_ADMINISTRATOR`); eine rohe IP
+  (`http://1.1.1.1/`) lässt der Anbieter ohnehin nicht durch
+  (`ERR_CONNECTION_REFUSED`).
+- Strg+S und Strg+O öffnen keinen Dateidialog, Strg+Umschalt+N kein
+  Inkognitofenster. Ein `x-terminal-emulator` gibt es auf der Browser-VM nicht;
+  openbox' eigenes Menü bot ihn trotzdem an.
+- Weiter funktionierend: `upload` (`set_input_files`, ohne Dialog), ein
+  Download per Navigation und die Aktion `download`, Wikipedia und
+  example.com.
+- `relay.watch` meldete `example.com`, `www.xvideos.com` (die gesperrte
+  Seite) und `www.wikipedia.org`, dazu `policy` und `net`.
+
+**Grenzen.** Google sperrt, Cloudflare ordnet ein: Ein Host, den nur einer
+von beiden führt, wird gezählt, aber nicht gesperrt oder umgekehrt. Nach einem
+Neustart von Chrome greift Safe Browsing erst nach einigen Minuten. Die Zeilen
+der VM (Besuche, Zähler, Richtlinie) sind Selbstauskünfte: Wer aus Chrome
+ausbräche, könnte sie fälschen; dagegen stehen Schicht 1 und, unabhängig von
+der VM, die Bytes der Ansicht auf unserem Server. Klicks des Agenten auf
+„Absenden“ zählen nicht als Tippen, nur `type` und `upload`. Mehrere Konten
+einer Person sieht die Regel nicht (ohne IP-Speicherung bewusst): Sie hält
+jedes Konto für sich in Schach.
+
+Tests: `tests/test_workspace_guard.py`.
 
 ### Agent freedom: geführt oder frei
 

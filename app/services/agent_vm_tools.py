@@ -1058,13 +1058,14 @@ class VMTools:
         the browser (nothing else is known to be needed). Nothing when the
         day's VM time is used up or the workspace is off; Stop ends it."""
         def run():
+            from app.services import workspace_guard
             from app.services.agent_browser import BrowserTools
             cancellation = self.loop.cancellation
             try:
                 left = self.session.left()
                 if cancellation.cancelled or (left is not None and left < 1):
                     return
-                if self.session.state in {"unavailable", "busy"}:
+                if self.session.state in {"unavailable", "busy"} or workspace_guard.status(self.loop.uid).closed:
                     return
                 self._browser_tools(BrowserTools).prewarm(cancellation)
                 if bench:
@@ -1096,7 +1097,13 @@ class VMTools:
     def _start(self, cancellation, *, bench=True, change=True):
         """Before a call of the workspace: the day's VM time, the user's
         takeover, the lease, and with ``bench`` the workbench; a call that
-        ``change``s the workbench waits for the message's checkpoint."""
+        ``change``s the workbench waits for the message's checkpoint. Not
+        while the server's safety rules have closed the workspace
+        (workspace_guard.py): every tool of the workspace starts here."""
+        from app.services import workspace_guard
+        guard = workspace_guard.status(self.loop.uid)
+        if guard.closed:
+            raise ValueError(workspace_guard.agent_text(guard))
         left = self.session.left()
         if left is not None and left < 1:
             raise ValueError(VM_DAY_LIMIT)

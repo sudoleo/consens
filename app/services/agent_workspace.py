@@ -93,7 +93,10 @@ OLD_GATEWAY_SERVICE = "view"
 CONTROL_SECONDS = 90
 CONTROL_REFRESH_SECONDS = 30
 WORKBENCH_FILES = ("agent-run", "setup.sh", "tunnel.py")
-BROWSER_FILES = ("browser.py", "display.sh", "relay.py", "setup.sh", "tunnel.py")
+# harden.sh with policy.json and openbox's two files: the rules that hold
+# whoever steers Chrome (since 2026-10-30, workspace_guard.py).
+BROWSER_FILES = ("browser.py", "display.sh", "harden.sh", "openbox-menu.xml", "openbox-rc.xml", "policy.json",
+                 "relay.py", "setup.sh", "tunnel.py")
 SETUP_SECONDS = 180
 # setup.sh installs headless Chrome from Google's own server, which the
 # workbench's policy closes (agent_vm.WORKBENCH_RULES): prepare opens it
@@ -737,13 +740,15 @@ def delete_for_account(db, uid, *, factory=None):
     missing record ended this, and a later area of the deletion removed the
     record after one failed provider call: the VM stayed for good. Only a
     server without a provider skips an account without a record (it never
-    made one there)."""
-    from app.services import agent_tunnel
+    made one there). The safety rules' guard and trail go with it
+    (workspace_guard.py, since 2026-10-30)."""
+    from app.services import agent_tunnel, workspace_guard
     workspace = ref(db, uid)
     agent_tunnel.close(uid)
     if agent_vm.configured() or factory is not None or workspace.get().exists:
         agent_vm.delete_workspace(uid, factory=factory)
     workspace.delete()
+    workspace_guard.delete_for_account(db, uid)
 
 
 # A message's checkpoint of the workbench (VMSession.ready; the browser VM has

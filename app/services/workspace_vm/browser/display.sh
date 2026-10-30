@@ -61,6 +61,14 @@ if ! runs "^Xvfb :1 "; then
   setsid nohup Xvfb :1 -screen 0 1280x800x24 -nolisten tcp >"$dir/xvfb.log" 2>&1 </dev/null 8>&- &
   for _ in $(seq 50); do [ -e /tmp/.X11-unix/X1 ] && break; sleep 0.1; done
 fi
+# The rules that hold whoever steers Chrome (harden.sh, since 2026-10-30):
+# Chrome's policy, openbox without menus, an xdg-open that opens nothing.
+# Without them no Chrome starts, and one that runs (under older rules) ends.
+if ! bash "$(dirname "$0")/harden.sh" >"$dir/harden.log" 2>&1 </dev/null; then
+  stop_chrome
+  echo "The browser's rules could not be set." >&2
+  exit 1
+fi
 if ! runs "^openbox"; then
   setsid nohup openbox >"$dir/openbox.log" 2>&1 </dev/null 8>&- &
 fi
@@ -70,8 +78,9 @@ fi
 # sign-ins and the session its tabs. Which flags it has says the marker this
 # script writes when it starts Chrome: Chrome rewrites its command line, so
 # a search for a flag in it never matched, and Chrome restarted on every call
-# (test Sprite 2026-10-28).
-flags="webgl-1"
+# (test Sprite 2026-10-28). The rules' version counts as a flag: new rules
+# restart Chrome once, so that it starts under them.
+flags="webgl-1 rules-$(cat "$dir/hardened" 2>/dev/null)"
 pid="$(browser_pid)"
 why=""
 if [ -n "$pid" ] && [ "$mode" != "--keep" ]; then

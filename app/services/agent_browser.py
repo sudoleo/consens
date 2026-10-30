@@ -366,12 +366,14 @@ class BrowserTools:
         (the call then does not ask the same VM again: Prod 2026-10-29, a VM
         that did not start answered 502 after 40 s, twice), or None when the
         workspace cannot be used now."""
-        from app.services import agent_workspace
+        from app.services import agent_workspace, workspace_guard
         session = self.vm.session
         left = session.left()
         if session.state in {"unavailable", "busy"} or (left is not None and left < 1):
             return None
         uid = self.vm.loop.uid
+        if workspace_guard.status(uid).closed:
+            return None
         # Used in this message: it rests at the end (K2).
         session.on_close(self._rest)
 
@@ -662,6 +664,11 @@ class BrowserTools:
         if seen:
             self.page_url = seen.group(1)
             agent_tunnel.note_page(self.vm.loop.uid, local_port(self.page_url) is not None)
+        # The server's safety rules count what the browser was asked for and
+        # what it shows, a refused or blocked page too (workspace_guard.py).
+        from app.services import workspace_guard
+        workspace_guard.note_browser_call(self.vm.loop.uid, action=args.action, asked_url=request.get("url", ""),
+                                          page_url=seen.group(1) if seen else "", answer=answer)
         report({"page": text[:VIEW_CHARS]})
         if status in {"refused", "setup", "failed"}:
             raise ValueError(text or "The browser could not do that.")

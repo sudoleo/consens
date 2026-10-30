@@ -824,6 +824,15 @@ def _vm_restore_told(store, uid, chat_id):
         logging.warning("Agent VM restore note not marked category=%s", safe_exception(exc))
 
 
+def _refuse_closed_workspace(uid):
+    """403 while the server's safety rules have closed the account's
+    workspace (workspace_guard.py): nothing wakes or writes its VMs then."""
+    from app.services import workspace_guard
+    guard = workspace_guard.status(uid)
+    if guard.closed:
+        raise HTTPException(status_code=403, detail=workspace_guard.user_text(guard))
+
+
 @router.post("/agent/chats/{chat_id}/turns/{turn_id}/vm-restore")
 @limiter.limit("10/minute")
 def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
@@ -834,6 +843,7 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     require_agent_access(uid)
     if not vm_allowed(uid):
         raise HTTPException(status_code=403, detail="The workspace is not available on your account.")
+    _refuse_closed_workspace(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", turn_id):
         raise HTTPException(status_code=404, detail="Message not found")
     store = AgentRunStore(db_firestore)
@@ -1023,6 +1033,7 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
         raise HTTPException(status_code=404, detail="Request not found")
     if not payload.value.strip():
         raise HTTPException(status_code=422, detail="Paste the key first.")
+    _refuse_closed_workspace(uid)
     try:
         store = AgentRunStore(db_firestore)
         turn_id = _idempotent_turn_id(chat_id, request_id)

@@ -157,6 +157,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "memory_edits_recovered": 7,
         "memory_change_logs": 9,
         "notification_outbox_deleted": 8,
+        "workspace_trails_deleted": 0,
     }
 
 
