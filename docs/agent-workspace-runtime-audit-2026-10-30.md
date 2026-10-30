@@ -60,6 +60,11 @@ Abruf“, „Arbeitsplatz“, „Browser-VM“; [codebase-map.md](codebase-map.m
   gelöschten Chats, ihre Details sind weg. Warum ein Lauf mit Wrap-up endete
   oder die VM ausfiel, wird nirgends gespeichert (I1–I6).
 
+**Stand am Abend des 2026-10-30:** Alle Pakete sind umgesetzt (Max: „Setz
+alle Punkte um“, K6 eingeschlossen), auf `main`, aber noch nicht live. Was
+nur teilweise umgesetzt ist und was nach dem Deploy zu messen bleibt, steht
+in Abschnitt 7.
+
 Reihenfolge: Paket 1 (Messbarkeit und Abbrüche) zuerst, weil es billig ist
 und die Grundlage für alles Weitere liefert. Dann Tempo (Paket 2) und
 Modell-Ergebnisse (Paket 3), die zusammen die Schrittzahl senken. Danach
@@ -731,3 +736,69 @@ geprüft“.
   Methode ist in den Abschnitten oben beschrieben und lässt sich aus
   Firestore (`llm_calls`, `turns`, `work_log`), Render-Logs (`GET /v1/logs`)
   und OpenRouter `/api/v1/generation` wiederholen.
+
+## 7. Umsetzungsstand (2026-10-30)
+
+Vier parallele Stränge in eigenen Worktrees (`vmaudit/vm`, `vmaudit/loop`,
+`vmaudit/browser`, `vmaudit/front`), zusammengeführt auf
+`vmaudit/integration`, darauf das gebaute Frontend. Basis ist `main` mit
+4c8c2b8d (Browser-Helfer, Frames, Screenshot unter der Antwort), der vorher
+live ging.
+
+**Erledigt:** A1–A7, T1, T2, T4–T7, L1–L7, V1–V4, V6, V7, P2, P3, K1, K2,
+K5–K7, I1–I9.
+
+**Teilweise, mit Grund:**
+- **T3:** Die Messpunkte stehen (I7: `request_started_at`, `first_token_at`,
+  `stream_ended_at` am Beleg; `scripts/audit_report.py` teilt jeden Schritt in
+  Vorlauf, Anbieter und Nachlauf). Einen Rundgang spart `settle` (Tagesdokument im
+  selben `get_all`). Nicht umgebaut: Settlement erst nach der Nutzung des
+  Ergebnisses (gleichzeitige Zulassungen sähen die Reservierung länger, nicht
+  nachweislich abrechnungsneutral) und Anlage der Sitzung im Claim
+  (`agent_sessions.py`). Beides erst, wenn die neuen Messpunkte zeigen, wo die
+  0,8 s liegen.
+- **K4:** Die Sprites-REST-API hat kein DELETE für Checkpoints (OpenAPI
+  geprüft). Neue Checkpoints entstehen nur noch, wenn die Nachricht die
+  Werkbank nutzt (T5).
+- **P1:** Antwort-Deltas zeichnen die Aktivität nicht mehr, Revisionen statt
+  JSON-Signaturen, `Set`s, Zwischenspeicher für `compactReasoning`, Attribute
+  nur bei Änderung. Gemessen bei 150 Schritten: Desktop 19,3 → 5,9 ms je
+  Bild, 4× gedrosselt 112 → 43 ms (p95 302 → 66 ms). Zeitleiste und
+  Faltliste werden weiter sofort gebaut: Zugeklappt kosten sie jetzt kaum
+  noch, und ein Lazy-Bau bräche die Browsersuche in `<details>` und rund
+  50 Tests.
+- **V5:** Bild oben, „100 %“ bei Übernahme unter 1024 px. Die Bildschirmgröße
+  der VM an das Handy anzupassen, braucht Xvnc statt x11vnc (`display.sh`) und
+  ein festes Zurück auf 1280×800 beim Zurückgeben. Das bleibt ein eigener
+  Schritt.
+
+**Abweichungen vom Vorschlag:**
+- T5: Eine erfolgreiche Browser-Antwort setzt weiter die langen Grenzen.
+  Sonst hätte dieselbe Browser-Aufgabe andere Grenzen, je nachdem, ob die
+  Nachricht offen begann oder `open_workspace` rief.
+- L6: Ältere Bilder gehen gesammelt, sobald mehr als 10 sichtbar sind (auf
+  3 gekürzt), und bei jeder Kompaktierung. Bilder des aktuellen Batches
+  bleiben immer.
+- A6: Bei der Integration nachgeschärft (9dfdf9c2): Ist der Stand der
+  Netzregeln am Nachrichtenende unbekannt (ein Setup, das sie kurz weitete und
+  scheiterte), gehen sie trotzdem auf die Grundliste zurück.
+
+**Restrisiken, nach dem Deploy prüfen** (Smoke-Liste „Arbeitsplatz nach dem
+Laufzeit-Audit“):
+- Nichts davon lief an einer echten Sprite oder einem echten Handy: `rest`
+  (verkürzt `PUT {"expire":"2m"}` einen laufenden Hold?), die Ruhezeiten nach
+  Aktionen unter SwiftShader, der Chrome-Neustart im Helfer, Tastatur und
+  Neuverbinden auf iOS/Android.
+- T2 mit signiertem Claude-Reasoning und mehreren `tool_use` in einem
+  Schritt ist nur mit Fakes geprüft.
+- Der Retry nach `InvalidMessage`/`OSError` beim Exec-Handshake bleibt (die
+  fünf Prod-Fälle). Startet Sprites den Befehl schon vor der 101-Antwort,
+  liefe er dann doppelt. Das klärt nur eine Test-Sprite.
+- Eine Nachricht, die mit offenem Arbeitsplatz beginnt, wärmt die Browser-VM
+  vor, auch wenn sie ihn dann nicht nutzt (danach ~2 min wach).
+
+**Nach dem Deploy messen:** die Ziele aus Abschnitt 3 mit
+`scripts/audit_report.py` (neue Felder `ws_*`, Schrittaufteilung aus I7), die
+Logzeilen `Agent VM ready … turn= step=` (Phasen) und
+`Agent workspace view closed … code=`, die Zähler
+`ops_metrics/workspace-view-{tag}`.
