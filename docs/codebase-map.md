@@ -2315,6 +2315,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `- [ ]` steht sofort als Kästchen. Optik in `shell.css` (im Spiegelstrich-
   Listen steht das Kästchen an der Stelle des Punkts, die Wörter behalten ihre
   Spalte; nummerierte Listen behalten die Zahl), öffentlich `.share-md`.
+  Die Agent-Prompts (`prompt_defaults.py`, mit und ohne Audit) nennen das als
+  Fakt mit Bedeutung: ein Kästchen ist ein Schritt, den der Nutzer tut, keine
+  Liste von Fakten oder Optionen (seit 2026-10-30; vorher „erscheinen als
+  abhakbare Kästchen“ in einer Aufzählung von Formaten, und DeepSeek V4.1 Flash
+  setzte im Audit-Modus in 8 von 23 Antworten mit Listen Kästchen, Terra,
+  Sonnet und MiMo in 33 keine).
 - **`task-checks.js`** — `App.taskChecks` (`scope`, `apply`, `flush`), lädt nach
   `markdown-stream.js`. Abhaken geht nur in der Antwort eines **gespeicherten,
   fertigen Turns**: die Render-Stelle nennt ihn vor dem Schreiben per
@@ -11441,10 +11447,16 @@ zählt nicht); die App-Prüfungen der fertigen Antwort
 (`judge_answer`, `answerChecks`) holen sie nicht zurück –
 bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Seit 2026-10-30
 (Max: „das Bild springt die ganze Zeit, wenn das Reasoning erscheint“) übergeben
-sie an die Antwort (`handoff`): Sie blenden in `HANDOFF_MS` (160 ms) aus, die
-schon geschriebene Antwort steht derweil unsichtbar (`#agentAnswerBody.is-awaiting-trace`,
-`visibility: hidden`, ein Timer hebt das sicher auf) und erscheint dann dort,
-wo sie standen; vorher verschwanden sie im Frame der ersten Antwortwörter.
+sie an die Antwort (`handoff`): Sie blenden in `HANDOFF_MS` (160 ms) aus, und
+die Antwort erscheint dort, wo sie standen; vorher verschwanden sie im Frame
+der ersten Antwortwörter. Mit getaktetem Text wartet dafür ihr erster
+Buchstabe (`App.streamReveal.hold(body, ms)`: `advance` steht bis `holdUntil`,
+der Takt beginnt danach), ohne ihn steht sie derweil unsichtbar
+(`#agentAnswerBody.is-awaiting-trace`, `visibility: hidden`, ein Timer hebt das
+sicher auf). Nur die ersten Wörter warten (`view.answerShown`): eine schon
+sichtbare Vorrede bleibt im Bild. Am selben Tag verbarg die erste Fassung die
+Antwort auch mit Takt, und ihr erster Brocken (`ANSWER_HOLD_CHARS`, 300
+Zeichen) lief in 0,15 s ungesehen ein: das Licht schien zu fehlen.
 Jede andere Änderung der Live-Zeilen läuft durch `settle(view, change)`
 (FLIP): Höhe gleitet in `SETTLE_MS` (220 ms), bleibende Zeilen gleiten von
 ihrer alten Lage (Transform), neue blenden ein, gehende (gefaltet oder

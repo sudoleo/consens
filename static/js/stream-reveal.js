@@ -17,7 +17,7 @@
 // Without that API, with reduced motion or with Letter animations switched
 // off in Settings, active() is false and the caller paints the answer as it
 // arrives.
-// Exports: App.streamReveal { active, stream, settle }.
+// Exports: App.streamReveal { active, stream, settle, hold }.
 // =====================================================================
 (() => {
   const App = window.App = window.App || {};
@@ -262,6 +262,8 @@
   }
 
   function advance(state, now) {
+    // Held (hold()): nothing comes in, and the pace starts when it ends.
+    if (now < state.holdUntil) { state.last = 0; return; }
     const elapsed = state.last ? Math.min(50, now - state.last) : 16;
     state.last = now;
     const backlog = state.target.length - state.shown;
@@ -338,7 +340,7 @@
       state = body._streamReveal = {
         body, target: text, paint, cut: 0, shown: 0, speed: 0, last: 0, grewAt: now, gap: 0,
         paintAfter: 0, nextLetterAt: 0, text: "", nodes: [], starts: [], spans: [],
-        writes: body._markdownWrites, settled: false, finish: null,
+        writes: body._markdownWrites, settled: false, finish: null, holdUntil: body._revealHold || 0,
       };
       body.classList.add(REVEALING);
       show(state, keep, now, false);
@@ -389,5 +391,16 @@
     schedule();
   }
 
-  App.streamReveal = { active, stream, settle };
+  // The answer's first letter waits `ms` (agent-activity.js handoff): the
+  // live lines above it fade out first, and the words then come in where
+  // they stood. Until 2026-10-30 the answer was hidden meanwhile, and the
+  // first bundle of an answer (300 characters and more) came in unseen.
+  function hold(body, ms) {
+    const until = performance.now() + ms;
+    body._revealHold = until;
+    const state = body._streamReveal;
+    if (state && !state.settled && !state.cut) state.holdUntil = until;
+  }
+
+  App.streamReveal = { active, stream, settle, hold };
 })();

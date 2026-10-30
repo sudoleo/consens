@@ -63,6 +63,21 @@ describe("stream-reveal: the pace of a streamed answer", () => {
     expect(app.reveal.active()).toBe(true);
   });
 
+  // 2026-10-30: the answer was hidden while the live lines above it faded
+  // out, and its first bundle came in unseen. Now its letters wait instead.
+  it("holds the first letter while the lines above fade, then comes in word by word", () => {
+    const { reveal, el, painted, paint, run } = boot();
+    reveal.stream(el, ANSWER, paint);
+    reveal.hold(el, 160);
+    run(144);
+    expect(painted.every(shown => shown === "")).toBe(true);
+    run(48);
+    expect(painted.at(-1).length).toBeGreaterThan(0);
+    expect(painted.at(-1).length).toBeLessThan(ANSWER.length);
+    run(3000);
+    expect(painted.at(-1)).toBe(ANSWER);
+  });
+
   it("paints a bundle that arrived at once word by word, never half a word", () => {
     const { reveal, el, painted, paint, run } = boot();
     reveal.stream(el, ANSWER, paint);

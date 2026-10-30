@@ -329,6 +329,8 @@
   }
   function clearPreview(view) {
     endHandoff(view);
+    // The hand-over's fade keeps its end (opacity 0) until it is let go.
+    cancelMotion(view.previewMotion);
     view.preview.hidden = true;
     view.preview.replaceChildren();
     view.previewNodes.clear();
@@ -407,9 +409,11 @@
     return true;
   }
   // The answer takes the place of the live lines (2026-10-30): they fade out
-  // first, and the answer, written meanwhile but not yet shown, appears where
-  // they stood once they are gone. Before, the lines vanished in the frame of
-  // the answer's first words and those stood where the lines had begun.
+  // first, and the answer appears where they stood once they are gone: its
+  // letters wait for them (stream-reveal.js hold), or without the letters'
+  // pace the answer stands hidden meanwhile. Before, the lines vanished in
+  // the frame of the answer's first words and those stood where the lines
+  // had begun.
   const HANDOFF_MS = 160;
   function handoff(view, answer) {
     if (view.previewExit) return;
@@ -423,8 +427,11 @@
     view.previewExit = true;
     preview.setAttribute('aria-hidden', 'true');
     preview.inert = true;
-    view.handoffAnswer = answer || null;
-    view.handoffAnswer?.classList.add('is-awaiting-trace');
+    if (answer && App.streamReveal?.active()) App.streamReveal.hold(answer, HANDOFF_MS);
+    else {
+      view.handoffAnswer = answer || null;
+      view.handoffAnswer?.classList.add('is-awaiting-trace');
+    }
     view.previewMotion = motion(preview, [{ opacity: 1 }, { opacity: 0 }], () => false, HANDOFF_MS);
     // A timer, not the animation's end: a cancelled motion must never leave
     // the answer hidden.
@@ -1494,6 +1501,10 @@
     const answering = running && (!activeTool || answerChecks.has(activeTool.name))
       && Boolean(String(answerText || '').trim());
     const showPreview = running && paragraphs.length && !answering;
+    // Only an answer's first words wait for the lines (handoff); text that
+    // stood already (a preamble before a step) stays in view.
+    const firstWords = !view.answerShown;
+    view.answerShown = Boolean(String(answerText || '').trim());
     let previewChanged = false;
     const previewIds = new Set();
     const pinned = showPreview && plan ? 1 : 0;
@@ -1605,7 +1616,7 @@
           ], () => {}, SETTLE_MS);
         }
       }
-    } else if (answering) handoff(view, host.nextElementSibling);
+    } else if (answering) handoff(view, firstWords ? host.nextElementSibling : null);
     else hidePreview(view);
     const ids = new Set();
     // The plan stands once in the history, where it was first made, with its
