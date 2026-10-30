@@ -1322,8 +1322,10 @@ body:has(.sidebar.active) .brand-float {
   0%, 100% { opacity: 1; }
   50% { opacity: .62; }
 }
+/* Its body went missing with the spinner's move to motion.css (2026-10-20),
+   and the dangling selector left the pulse on for reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .sidebar .bookmark.is-pending p,
+  .sidebar .bookmark.is-pending p { animation: none; }
 }
 
 /* Bookmarks: schlichte einzeilige Textzeilen mit Ellipsis (kein Card-Look) */
