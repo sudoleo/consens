@@ -844,9 +844,19 @@ def configured():
 
 def open_to_pro():
     """AGENT_VM_ACCESS=pro: the VM comes with every account's audit (Pro and
-    admins). Otherwise, the default since the workspace's security audit of
-    2026-10-27, only admins get it; Pro's audit runs without a VM."""
+    admins, with audit_for_all every account). Otherwise, the default since
+    the workspace's security audit of 2026-10-27, only admins get it; the
+    audit of everyone else runs without a VM."""
     return os.getenv("AGENT_VM_ACCESS", "").strip().lower() == "pro"
+
+
+def audit_for_all():
+    """AGENT_AUDIT_ACCESS=all (since 2026-10-30, Max): Audit, and with
+    AGENT_VM_ACCESS=pro its VM and browser, for every account, held in check
+    by the token account (every browser action is a step of the agent's
+    model) and the day's VM time (agent_vm_time.daily_limit). Otherwise Pro
+    and admins only (routers/agent.py audit_allowed)."""
+    return os.getenv("AGENT_AUDIT_ACCESS", "").strip().lower() == "all"
 
 
 def on_demand():

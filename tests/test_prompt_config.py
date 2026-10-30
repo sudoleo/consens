@@ -170,7 +170,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "comparison", "agent_audit", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_plan",
+        "agent", "comparison", "agent_audit", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_vm_no_domains",
+        "agent_plan",
         "agent_github", "agent_workspace_closed", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
@@ -208,6 +209,10 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # Agent VM: its own section, appended for admins who switched it on.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert texts["agent_vm"] == AGENT_VM_PROMPT and "vm_exec" in texts["agent_vm"]
+    # Without Pro (2026-10-30) the same without request_domain.
+    from app.services.prompt_defaults import AGENT_VM_NO_DOMAINS_PROMPT, VM_DOMAIN_CLAUSE
+    assert AGENT_VM_PROMPT.count(VM_DOMAIN_CLAUSE) == 1 and texts["agent_vm_no_domains"] == AGENT_VM_NO_DOMAINS_PROMPT
+    assert "request_domain" not in AGENT_VM_NO_DOMAINS_PROMPT and "nothing else on the internet. GitHub" in AGENT_VM_NO_DOMAINS_PROMPT
     from app.services.prompt_defaults import AGENT_PLAN_PROMPT
     assert texts["agent_plan"] == AGENT_PLAN_PROMPT and "update_plan" in texts["agent_plan"]
     # GitHub: only with credentials in the backend (agent_github.py).

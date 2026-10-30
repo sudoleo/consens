@@ -5856,7 +5856,7 @@ fehlende Calls, Abbruch, UTC-Wechsel und atomare Kontingente. Ergänzend bestehe
 Agent-/Consensus-Tests, agent-review.test.mjs sowie die gebaute Desktop-/Mobil-
 Ansicht in test_agent_comparison_frontend.py; siehe [testing.md](testing.md).
 
-### Audit statt Vergleich (Agent, Pro und Admins, seit 2026-10-25)
+### Audit statt Vergleich (Agent, Pro und Admins, seit 2026-10-25; mit `AGENT_AUDIT_ACCESS=all` alle)
 
 Einstellung `agent_preferences.audit` (`off`/`on`, auf der Einstellungsseite
 „Way of working: Comparison/Audit“), seit 2026-10-26 für Pro-Konten und Admins
@@ -5865,7 +5865,16 @@ Body-Klasse `viewer-can-audit`, `.audit-only`; vorher nur Admins).
 `effective_preferences` setzt sie sonst vor der Request-Identität auf `off`,
 und mit `on` immer `judges: on` und `vm: on`, wo das Konto die VM hat
 (`vm_allowed`: seit 2026-10-27 nur Admins, `AGENT_VM_ACCESS=pro` öffnet sie
-wieder für jedes Konto mit Audit; ohne Audit keine VM). Die Seite zeigt dann nur, was gilt
+wieder für jedes Konto mit Audit; ohne Audit keine VM). Seit 2026-10-30 öffnet
+`AGENT_AUDIT_ACCESS=all` Audit (und damit VM und Browser) für jedes Konto
+(`agent_vm.audit_for_all`, auch in `/user_status`), gehalten vom Tokenkonto (jede
+Browser-Aktion ist ein Modellschritt) und der VM-Zeit (`agent_vm_time.daily_limit`:
+Pro 2 h, sonst `BASE_DAILY_SECONDS` = 20 min, Admins ohne Grenze). Domains über die
+Paketquellen hinaus (`request_domain`) bleiben Pro und Admins (`domains_allowed`,
+`DelegationLoop(domains=…)`, sonst ohne `DomainTools` und mit
+`AGENT_VM_NO_DOMAINS_PROMPT`, Admin-Katalog `agent_vm_no_domains`): ein Skript auf der
+Werkbank erreicht sie ohne Modellschritt, das hält kein Tokenkonto auf. Der
+Prüfer-Brief nennt `request_domain` nur, wo es das Werkzeug gibt. Die Seite zeigt dann nur, was gilt
 (`#agentSettingsSection.is-audit`: Vergleichszeilen weg, GitHub da). Mit `on` schickt die Route
 `AGENT_AUDIT_SYSTEM_PROMPT` (`DEFAULT_PROMPTS["agent_audit"]`) statt des
 Agent-Prompts (seit 2026-10-28 schlank: nur App-Fakten, App-Verträge, Sicherheit
@@ -9547,6 +9556,10 @@ alte Gemini-ADC-JSON ist entfernt.
   VM); ohne ihn melden die VM-Werkzeuge „not available“ (`agent_vm.backend`).
   `AGENT_VM_ACCESS`: leer = VM nur für Admins (seit 2026-10-27), `pro` = für
   jedes Konto mit Audit (`agent_vm.open_to_pro`, `routers/agent.py::vm_allowed`).
+  `AGENT_AUDIT_ACCESS`: leer = Audit für Pro und Admins, `all` = für jedes
+  Konto (seit 2026-10-30, `agent_vm.audit_for_all`, `routers/agent.py::audit_allowed`,
+  `/user_status` `audit_access`); mit `AGENT_VM_ACCESS=pro` bekommt dann jedes
+  Konto VM und Browser.
   `AGENT_WORKSPACE_ON_DEMAND`: leer (Standard) = jede Nachricht mit VM
   beginnt ohne die Werkzeuge des Arbeitsplatzes und öffnet ihn mit
   `open_workspace`; `off` = Notaus, alle von Anfang an (`agent_vm.on_demand`,

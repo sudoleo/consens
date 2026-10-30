@@ -94,11 +94,12 @@ def require_reasoning_access(uid, reasoning_effort):
 
 
 # Audit instead of comparison (agent_audit.py), since 2026-10-26 for Pro
-# accounts and admins (before: admins only). It always brings its own Linux
-# VM (agent_vm_tools.py) and its reviewers: the settings page offers no
-# separate VM or answer-check choice for it any more.
+# accounts and admins (before: admins only), with AGENT_AUDIT_ACCESS=all for
+# every account (agent_vm.audit_for_all, 2026-10-30). It always brings its
+# own Linux VM (agent_vm_tools.py) and its reviewers: the settings page
+# offers no separate VM or answer-check choice for it any more.
 def audit_allowed(uid):
-    return _premium_allowed(uid)
+    return agent_vm.audit_for_all() or _premium_allowed(uid)
 
 
 # The VM (workspace, live view, restore) only for admins since the
@@ -114,6 +115,14 @@ def vm_allowed(uid):
         raise HTTPException(
             status_code=503, detail="Account tier is temporarily unavailable. Please retry."
         ) from None
+
+
+# Domains beyond the package registries for the workbench (request_domain):
+# Pro and admins only (2026-10-30). A script there reaches them without a
+# model step, thousands of requests in one command, which no token account
+# holds back; the browser's actions are each a step.
+def domains_allowed(uid):
+    return vm_allowed(uid) and _premium_allowed(uid)
 
 
 # The user handed the workspace's browser back this recently: they just
@@ -495,6 +504,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources,
+                         domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).

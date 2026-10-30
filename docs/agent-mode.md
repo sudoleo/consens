@@ -236,6 +236,16 @@ Marken, kein Model-Pulse-Pick und keine `differences_stats`.
 
 ### Audit statt Vergleich (seit 2026-10-25; seit 2026-10-26 für Pro und Admins)
 
+**Für alle Konten per Schalter (seit 2026-10-30, Max).** `AGENT_AUDIT_ACCESS=all`
+öffnet Audit für jedes Konto, wie zuvor `AGENT_VM_ACCESS=pro` die VM für Pro; mit
+beiden bekommt jedes Konto VM und Browser. Kosten hält das Tokenkonto (jede
+Browser-Aktion ist ein Modellschritt) und die VM-Zeit: ohne Pro 20 Minuten am Tag
+(`agent_vm_time.BASE_DAILY_SECONDS`), Pro 2 Stunden. Nur `request_domain` bleibt
+Pro und Admins (`routers/agent.py::domains_allowed`, `AGENT_VM_NO_DOMAINS_PROMPT`):
+Ein Skript auf der Werkbank erreicht freigegebene Domains ohne Modellschritt, tausende
+Anfragen in einem Befehl, die kein Tokenkonto bremst. Der Rest dieses Abschnitts
+beschreibt den Stand davor, wo er nur von Admins oder Pro spricht.
+
 Einstellungen → Agent · Beta → **Audit instead of comparison**
 (`AgentPreferences.audit`: `off` = Standard, `on`; Zeile `.admin-only`,
 `#agentAuditSelect`). Der Server nimmt `on` nur von Admin-Konten an
@@ -2359,7 +2369,8 @@ Tasks-Sperre am Tageskonto vorbei.
 zwischen zwei Schritten des Agenten pausiert sie nach Sekunden. Deshalb zählt
 `agent_vm_time.py` je Konto und UTC-Tag die Befehlszeit plus Hintergrundprozesse
 mit ihrem ganzen Zeitlimit (beim Start abgebucht, sie überdauern die Nachricht):
-Pro `PRO_DAILY_SECONDS` = 2 Stunden, Admins ohne Grenze. Seit dem
+Pro `PRO_DAILY_SECONDS` = 2 Stunden, jedes andere Konto seit 2026-10-30
+`BASE_DAILY_SECONDS` = 20 Minuten, Admins ohne Grenze. Seit dem
 Sicherheitsaudit 2026-10-27 zählt jeder Befehl, den der Server für die Arbeit
 des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
 `vm_process_output` (gedeckelt auf den Rest), das Entpacken von

@@ -327,8 +327,9 @@ BRIEF_TOOLS = (
                       "only the ones it shows with show_image, under the answer with their page."),
     ("prepare_", "A prepare_ tool changes nothing by itself: the user confirms or dismisses it on a card."),
     ("vm_", "The VM is the agent's own Linux workbench, as a user without sudo: installing packages there is "
-            "normal work. It reaches package registries only, another domain after the user allowed it "
-            "(request_domain); the user's own systems are not in it."),
+            "normal work. It reaches package registries only; the user's own systems are not in it."),
+    # Only with the desktop (routers/agent.py desktop_allowed).
+    ("request_domain", "Another domain only after the user allowed it for the chat (request_domain)."),
     ("browser", "browser acts in the user's Chrome on a computer of its own, signed in where the user signed in. "
                 "Sign-ins, passwords and payments are the user's: ask_user hands the browser to them, and a step "
                 "in their name (sending, posting, buying, deleting) waits for their yes through ask_user. "

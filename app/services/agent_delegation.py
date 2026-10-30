@@ -339,8 +339,12 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=False, chat_sources=None, workspace_closed=False,
-                 **kwargs):
+                 domains=True, **kwargs):
         super().__init__(**kwargs)
+        # Domains beyond the package registries for the workbench
+        # (request_domain): Pro and admins, routers/agent.py domains_allowed,
+        # which the route passes (AGENT_VM_NO_DOMAINS_PROMPT without).
+        self.domains = domains
         # With comparison tools the agent writes the answer itself as its last
         # step (agent_answer_mode); a delegation-only run ends with plain text.
         self.merged = comparison_models is not None
@@ -756,12 +760,13 @@ class DelegationLoop(AgentLoop):
         """The workspace's blocks of the system prompt, each after a blank line."""
         from app.services import agent_github
         from app.services.prompt_defaults import (AGENT_GITHUB_IMPORT_PROMPT, AGENT_GITHUB_PROMPT, AGENT_PLAN_PROMPT,
-                                                  AGENT_VM_PROMPT)
+                                                  AGENT_VM_NO_DOMAINS_PROMPT, AGENT_VM_PROMPT)
         # GitHub (agent_github.py): the tools come with the VM, so the prompt does too;
         # without the app only the import of public repositories. The plan of
         # a long task (agent_plan.py) comes with the VM, where tasks run long.
         github = AGENT_GITHUB_PROMPT if agent_github.configured() else AGENT_GITHUB_IMPORT_PROMPT
-        return "".join("\n\n" + block for block in (AGENT_VM_PROMPT, github, AGENT_PLAN_PROMPT))
+        vm = AGENT_VM_PROMPT if self.domains else AGENT_VM_NO_DOMAINS_PROMPT
+        return "".join("\n\n" + block for block in (vm, github, AGENT_PLAN_PROMPT))
 
     def _workspace_tool_list(self):
         """The workspace's tools: the VM's, the browser and GitHub among them, and the plan."""

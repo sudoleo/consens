@@ -98,7 +98,8 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             account_language.record, uid, request_language(request), db=db_firestore,
         )
 
-        audit_access = entitlements.tier == "pro" or is_user_admin(uid)
+        # Every account with AGENT_AUDIT_ACCESS=all (routers/agent.py audit_allowed).
+        audit_access = agent_vm.audit_for_all() or entitlements.tier == "pro" or is_user_admin(uid)
         # Its VM: admins only unless AGENT_VM_ACCESS=pro (routers/agent.py vm_allowed).
         vm_access = audit_access if agent_vm.open_to_pro() else is_user_admin(uid)
         return {
@@ -117,7 +118,7 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # Only the operator's own browsers switch analytics off with it
             # (analytics-opt-out.js); same cached flags as the tier above.
             "is_admin": is_user_admin(uid),
-            # Audit (routers/agent.py audit_allowed): Pro and admins.
+            # Audit (routers/agent.py audit_allowed): Pro and admins, every account with AGENT_AUDIT_ACCESS=all.
             "audit_access": audit_access,
             # Its VM time today (agent_vm_time.py), for the settings; only
             # where the account's audit has a VM, which the settings then promise.

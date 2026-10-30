@@ -42,6 +42,11 @@ def _vm():
     return AGENT_VM_PROMPT
 
 
+def _vm_no_domains():
+    from app.services.prompt_defaults import AGENT_VM_NO_DOMAINS_PROMPT
+    return AGENT_VM_NO_DOMAINS_PROMPT
+
+
 def _plan():
     from app.services.prompt_defaults import AGENT_PLAN_PROMPT
     return AGENT_PLAN_PROMPT
@@ -105,6 +110,11 @@ _ENTRIES = (
      "an admin switched on Agent VM (agent_vm_tools.py) and the chat has no Google data: the agent's own VM with "
      "vm_exec, vm_read_file, vm_write_file, vm_edit_file and vm_share_file.",
      "prompt_defaults.py:AGENT_VM_PROMPT", _vm),
+    ("agent_vm_no_domains", "Agent: Linux VM without request_domain",
+     "In place of \"Agent: Linux VM\" for an account without Pro (routers/agent.py domains_allowed, since "
+     "2026-10-30): the same without its clause on request_domain, so the workspace reaches the package "
+     "registries alone.",
+     "prompt_defaults.py:AGENT_VM_NO_DOMAINS_PROMPT", _vm_no_domains),
     ("agent_plan", "Agent: plan",
      "Appended after \"Agent: Linux VM\" with the VM (agent_plan.py): update_plan keeps the agent's plan as a "
      "checklist in the activity and the work log, where the reviewers hold it against the work.",

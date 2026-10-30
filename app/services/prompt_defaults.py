@@ -150,6 +150,11 @@ The browser tool is the browser you share with the user: it runs on a computer o
 
 The user can open the workspace in a terminal of their own, with your rights, but does not follow your commands: a file reaches them with your answer only through vm_share_file, and the app shows it by itself (the workspace has no public address, so a link into it does not work)."""
 
+# Without request_domain (routers/agent.py domains_allowed, since 2026-10-30
+# Pro and admins only): the workbench reaches the package registries alone.
+VM_DOMAIN_CLAUSE = "; another domain your code needs comes with request_domain, for this chat"
+AGENT_VM_NO_DOMAINS_PROMPT = AGENT_VM_PROMPT.replace(VM_DOMAIN_CLAUSE, "", 1)
+
 
 AGENT_PLAN_PROMPT = """PLAN
 

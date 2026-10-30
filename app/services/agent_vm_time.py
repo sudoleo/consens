@@ -6,8 +6,11 @@ nothing while it is warm or cold), and between two of the agent's steps it
 pauses within seconds. What an account's VM costs is therefore about the time
 its commands run, plus its background processes, which hold it awake
 (agent_vm_processes.py). Per UTC day, the token account's day
-(agent_quota.day_key), a Pro account gets PRO_DAILY_SECONDS of that; admins
-have no cap.
+(agent_quota.day_key), a Pro account gets PRO_DAILY_SECONDS of that, every
+other account BASE_DAILY_SECONDS (since 2026-10-30, when Audit and its VM
+opened to all of them); admins have no cap. The browser's actions do not
+count here: each is a step of the agent's model, which the token account
+holds in check.
 
 A command never runs past what is left (agent_vm_tools.VMTools._timeout); a
 background process counts with its whole time limit when it starts, because
@@ -31,6 +34,9 @@ from app.core.observability import safe_exception
 # memory (about $0.04 to $0.09 at 1 to 2 GB); a command that waits on the
 # network or a dev server at rest uses a small part of that.
 PRO_DAILY_SECONDS = 2 * 60 * 60
+# Twenty minutes without Pro (Max, 2026-10-30): computing, a file's analysis,
+# a chart. Used up, that is about $0.10 at full load.
+BASE_DAILY_SECONDS = 20 * 60
 
 
 def day_key():
@@ -38,10 +44,13 @@ def day_key():
 
 
 def daily_limit(uid):
-    """Seconds an account's VM may run today, or None (no cap). The admin
-    role is read like the token account's (agent_quota._admin_role)."""
+    """Seconds an account's VM may run today, or None (no cap). The tier is
+    read like the token account's (agent_quota.account_tier)."""
     from app.services import agent_quota
-    return None if agent_quota._admin_role(uid) else PRO_DAILY_SECONDS
+    tier = agent_quota.account_tier(uid)
+    if tier == "admin":
+        return None
+    return PRO_DAILY_SECONDS if tier == "pro" else BASE_DAILY_SECONDS
 
 
 def ref(db, uid, day=None):

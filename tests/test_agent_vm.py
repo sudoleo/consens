@@ -260,7 +260,7 @@ ANSWER = "The script printed 42: the mean of the column is 42."
 
 
 def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on", file_context=None,
-            google_data=False, workspace_closed=False):
+            google_data=False, workspace_closed=False, domains=True):
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -270,7 +270,7 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(audit=audit, judges="off", vm=vm), file_context=file_context,
-        google_data=google_data, workspace_closed=workspace_closed)
+        google_data=google_data, workspace_closed=workspace_closed, domains=domains)
 
 
 @pytest.fixture
@@ -1030,6 +1030,7 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, audit, is_
     client, store, calls = api
     monkeypatch.setattr(agent, "audit_allowed", lambda uid: audit)
     monkeypatch.setattr(agent, "is_user_admin", lambda uid: is_admin)
+    monkeypatch.setattr(agent, "_premium_allowed", lambda uid: is_admin)
     monkeypatch.setenv("AGENT_VM_ACCESS", access)
     monkeypatch.setattr(agent_vm, "configured", lambda: True)
     alone = store.create_chat(UID, execution_mode="agent")["id"]
@@ -1062,9 +1063,15 @@ def test_only_an_allowed_accounts_audit_gets_the_vm(api, monkeypatch, audit, is_
 # available" (2026-10-26).
 # The settings promise the VM only with its time (agent-preferences.js
 # renderVmTime): a Pro account's audit without VM gets none.
-@pytest.mark.parametrize("tier,is_admin,access,shown", [
-    ("pro", False, "", False), ("free", True, "", True), ("pro", False, "pro", True), ("free", False, "pro", False)])
-def test_the_account_status_names_vm_time_only_where_audit_has_the_vm(monkeypatch, tier, is_admin, access, shown):
+# With AGENT_AUDIT_ACCESS=all (2026-10-30) every account has audit and, with
+# AGENT_VM_ACCESS=pro, its VM.
+@pytest.mark.parametrize("tier,is_admin,access,shown,everyone", [
+    ("pro", False, "", False, False), ("free", True, "", True, False), ("pro", False, "pro", True, False),
+    ("free", False, "pro", False, False), ("free", False, "pro", True, True), ("plus", False, "pro", True, True),
+    ("free", False, "", False, True)])
+def test_the_account_status_names_vm_time_only_where_audit_has_the_vm(monkeypatch, tier, is_admin, access, shown,
+                                                                     everyone):
+    monkeypatch.setenv("AGENT_AUDIT_ACCESS", "all" if everyone else "")
     from unittest.mock import patch
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -1080,7 +1087,7 @@ def test_the_account_status_names_vm_time_only_where_audit_has_the_vm(monkeypatc
           patch.object(users_router, "_vm_time", return_value={"used_seconds": 0}),
           patch.object(users_router.account_language, "record")):
         status = TestClient(app).get("/user_status", headers={"Authorization": "Bearer token"}).json()
-    assert status["audit_access"] is (tier == "pro" or is_admin)
+    assert status["audit_access"] is (everyone or tier == "pro" or is_admin)
     assert ("vm_time" in status) is shown
 
 
@@ -1677,3 +1684,41 @@ def test_notes_that_cannot_be_read_cost_nothing_else(store, fake_vm, monkeypatch
     list(loop.run())
     first = results(loop)[0]
     assert first["exit_code"] == 0 and first["workspace_notes"]["text"] == ""
+
+
+# --- Every account (2026-10-30) --------------------------------------------------------
+
+def test_one_switch_opens_audit_to_every_account(monkeypatch):
+    """AGENT_AUDIT_ACCESS=all, like AGENT_VM_ACCESS=pro before it: audit,
+    and with the VM switch its VM and browser, for every account."""
+    from app.api.routers import agent
+    monkeypatch.setattr(agent, "_premium_allowed", lambda uid: False)
+    monkeypatch.setattr(agent, "is_user_admin", lambda uid: False)
+    monkeypatch.setenv("AGENT_VM_ACCESS", "pro")
+    monkeypatch.delenv("AGENT_AUDIT_ACCESS", raising=False)
+    assert agent.audit_allowed("free") is False and agent.vm_allowed("free") is False
+    monkeypatch.setenv("AGENT_AUDIT_ACCESS", "all")
+    assert agent.audit_allowed("free") is True and agent.vm_allowed("free") is True
+    # Domains beyond the package registries stay Pro's: a script there needs no model step.
+    assert agent.domains_allowed("free") is False
+    monkeypatch.setattr(agent, "_premium_allowed", lambda uid: True)
+    assert agent.domains_allowed("pro") is True
+
+
+def test_without_pro_the_workspace_has_the_browser_but_no_request_domain(store, fake_vm):
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), domains=False)
+    names = set(loop.registry.tools)
+    assert {"vm_exec", "browser", "ask_user"} <= names and "request_domain" not in names
+    system = loop.messages[0]["content"]
+    assert prompt_defaults.AGENT_VM_NO_DOMAINS_PROMPT in system and "request_domain" not in system
+    list(loop.run())
+    assert results(loop)[0]["exit_code"] == 0
+    pro = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="two")
+    assert "request_domain" in pro.registry.tools and prompt_defaults.AGENT_VM_PROMPT in pro.messages[0]["content"]
+
+
+@pytest.mark.parametrize("tier,limit", [("admin", None), ("pro", 2 * 60 * 60), ("plus", 20 * 60), ("free", 20 * 60)])
+def test_the_daily_vm_time_follows_the_tier(monkeypatch, tier, limit):
+    from app.services import agent_quota, agent_vm_time
+    monkeypatch.setattr(agent_quota, "account_tier", lambda uid, tier_=None: tier)
+    assert agent_vm_time.daily_limit(UID) == limit

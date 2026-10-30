@@ -1022,7 +1022,8 @@ class VMTools:
             *self._browser_tools(BrowserTools).tools(),
             # The user's part: their turn in the browser, their yes to a step (agent_ask.py).
             *AskTools(self).tools(),
-            *DomainTools(self).tools(),
+            # Domains beyond the package registries: Pro and admins (routers/agent.py domains_allowed).
+            *(DomainTools(self).tools() if getattr(self.loop, "domains", True) else []),
             *github,
         ]]
 
