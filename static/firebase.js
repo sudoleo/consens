@@ -88,6 +88,23 @@ async function refreshVerificationState() {
   return true;
 }
 
+// The recheck under way ({ uid, done }). reload() fires onIdTokenChanged
+// again (Firebase, User.reload): until 2026-10-30 that run rechecked once
+// more, without end, and each time cleared the composer, drew the strip anew
+// and dropped the server session. A run that comes while the account's
+// recheck is under way leaves the page to the run that started it.
+let verificationRecheck = null;
+function recheckVerification() {
+  const uid = auth.currentUser?.uid || "";
+  if (verificationRecheck?.uid !== uid) {
+    const done = refreshVerificationState().finally(() => {
+      if (verificationRecheck?.done === done) verificationRecheck = null;
+    });
+    verificationRecheck = { uid, done };
+  }
+  return verificationRecheck.done;
+}
+
 // Logging out asks first, with the app's own question (App.confirm,
 // confirm-dialog.js); the "Log out" entry of the account menu only calls
 // openLogoutConfirm().
@@ -493,9 +510,12 @@ onIdTokenChanged(auth, async (user) => {
       // Kann sein, dass der Link gerade geklickt wurde und nur das lokale
       // Objekt veraltet ist. Ergibt der frische Stand "bestaetigt", laeuft
       // dieser Handler gleich noch einmal — dann durch den verifizierten Ast.
+      // Das reload() dieser Nachpruefung loest ihn auch unbestaetigt neu aus:
+      // dann richtet der Lauf, der sie gestartet hat, die Seite ein.
+      if (verificationRecheck?.uid === user.uid) return;
       let becameVerified = false;
       try {
-        becameVerified = await refreshVerificationState();
+        becameVerified = await recheckVerification();
       } catch (_) {
         // Offline oder gedrosselt: dann eben der Streifen.
       }
@@ -521,7 +541,7 @@ onIdTokenChanged(auth, async (user) => {
           return sendVerificationMail(auth.currentUser || user);
         },
         onRecheck: async () => {
-          const verified = await refreshVerificationState();
+          const verified = await recheckVerification();
           trackAppEvent("auth_verification_recheck", { verified });
           return verified;
         },
