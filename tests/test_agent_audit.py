@@ -1191,6 +1191,35 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     assert len(calls) == 1
 
 
+def test_a_reviewers_search_results_are_no_search_of_the_agent(store, monkeypatch):
+    """Bug hunt 2026-10-28: the reviewers' rounds run through the same step,
+    and their search results went into search_sources, which read_source
+    opens in audit mode as "your search in this message". Only the agent's
+    own steps count."""
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    reviewer_page = "https://reviewer-find.example/page"
+    script = Audit(tool_steps=1)
+    make = script.factory
+
+    def factory():
+        completion = make()
+        stream = completion.stream
+
+        def searched(**kwargs):
+            if not completion.step_id.startswith("completion:"):
+                completion.sources = [{"url": reviewer_page, "title": "A reviewer's find"}]
+            yield from stream(**kwargs)
+        completion.stream = searched
+        return completion
+    script.factory = factory
+    loop = audit_loop(store, script)
+    list(loop.run())
+    assert any(not step.startswith("completion:") for step, _ in script.calls)
+    urls = [source["url"] for source in loop.search_sources]
+    assert "https://www.toureiffel.paris/en" in urls
+    assert reviewer_page not in urls
+
+
 def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     """Since 2026-10-28 audit mode has its own short blocks (Max: fewer rules
     for how models behave). What protects the user stays in them."""

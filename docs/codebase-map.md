@@ -4773,7 +4773,8 @@ Kontomodus, nicht bei Google-Daten) öffnet vor der Antwort, seit 2026-10-11 auc
 Vergleichsantwort zitierte URL, eine gespeicherte Quelle früherer Nachrichten
 (`AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`), im
 Audit-Modus seit 2026-10-27 einen eigenen Suchtreffer dieser Nachricht
-(`DelegationLoop.search_sources`, `LABEL_SEARCH`, `AuditReadSourceArgs`) oder eine
+(`DelegationLoop.search_sources`, nur Schritte des Agenten, nie Prüferrunden,
+`LABEL_SEARCH`, `AuditReadSourceArgs`) oder eine
 URL aus den Nachrichten des Nutzers (`user_urls` über `agent_memory.user_words`; nie
 Links nur aus Antworttext, seit 2026-10-12 auch nicht aus einem per „Ask about
 this“ zitierten Antwortabsatz),

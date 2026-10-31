@@ -1882,7 +1882,9 @@ class DelegationLoop(AgentLoop):
                 # Persist the partial answer the user saw, only after the
                 # mandatory settlement.
                 self.comparison.capture(value.published)
-        if value.sources:
+        # A reviewer's round runs through this step too; what it found is no
+        # search of the agent's, which read_source may open (audit mode).
+        if value.sources and getattr(worker, "kind", None) != "audit":
             self.search_sources.extend(value.sources)
         self.costs.check()
         if not worker:
