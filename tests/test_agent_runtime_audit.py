@@ -560,8 +560,10 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    # A day that is never today: until 2026-10-31 this read "2026-10-31", and
+    # at midnight UTC that day was the claim's own (CI 2026-10-31, 00:0x UTC).
     monkeypatch.setattr(AgentRunStore, "_expected_daily",
-                        lambda self, uid: agent_quota.quota_ref(store.db, uid, "2026-10-31"))
+                        lambda self, uid: agent_quota.quota_ref(store.db, uid, "1999-12-31"))
     del trips[:]
     store.settle(*args, completion=receipt(), status="succeeded", final=False)
     assert [kind for kind, _ in trips] == ["get_all", "get"]
