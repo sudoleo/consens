@@ -556,6 +556,22 @@ Prüfungen und bewusst angeforderte vollständige Regressionen:
 | „Run workflow“ → einzelne Suite | Nur `backend`, `frontend`, `browser-and-rules`, `windows-entry-points` oder `dependency-audit` |
 | „Run workflow“ → `full` | Alle vier Testgruppen und `dependency-audit` |
 
+Der `backend`-Job verteilt die Suite mit `pytest-xdist` auf alle Kerne des
+Runners (`-n auto --dist loadfile`): jede Testdatei läuft ganz auf einem Worker,
+Modulzustand und Reihenfolge innerhalb einer Datei bleiben also wie bisher.
+Seriell dauerte der Job 11 min. Tests mit dem Marker `tempo` messen Zeit (wie lange
+der Server zu den Modellzeiten addiert) und schlugen neben drei ausgelasteten
+Workern fehl. Sie laufen deshalb gleichzeitig im eigenen Job `backend-tempo`
+(`-m tempo`), der `backend`-Job lässt sie aus (`-m "not tempo"`). Neue Tests, die
+Zeiten oder Zeitverhältnisse prüfen, bekommen den Marker. Tests dürfen sich über
+Dateigrenzen hinweg keine Dateien, festen Ports oder Prozesszustände teilen.
+`.\dev.ps1 check backend` läuft lokal weiter seriell; parallel lokal (belegt
+alle 4 Kerne, nur ohne laufende Peer-Sessions):
+
+```powershell
+$env:UNIT_TEST_MODE = "1"; venv\Scripts\python.exe -m pytest tests -q -n 4 --dist loadfile -m "not tempo"; Remove-Item Env:UNIT_TEST_MODE
+```
+
 Alle Jobs nehmen die Python-Version aus `.python-version`. `dependency-audit`
 prüft mit `pip-audit --strict` die voll gepinnte `requirements.txt` und die
 aufgelösten Test-/Browser-Abhängigkeiten aus `requirements-e2e.txt`. Er ist ein

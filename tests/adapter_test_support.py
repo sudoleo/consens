@@ -23,6 +23,11 @@ def http_adapter(monkeypatch):
 
     monkeypatch.setattr(db, "collection", collection)
     monkeypatch.setattr(security, "db_firestore", db)
+    # /user_status records the page language after the response
+    # (account_language). On the real client that write retried against the
+    # closed unit-test endpoint for about 50 s per request.
+    from app.api.routers import users
+    monkeypatch.setattr(users, "db_firestore", db)
     security._tier_cache.clear()
     security._auth_tombstone_cache.clear()
 

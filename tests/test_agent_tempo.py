@@ -35,6 +35,9 @@ from test_agent_comparison import REVIEWER
 from test_agent_runs import Database, UID, pending
 from test_chat_history import FakeTransaction
 
+# Wall-clock limits: the CI runs them away from the parallel suite (pytest.ini).
+pytestmark = pytest.mark.tempo
+
 # One Firestore round trip. Production 2026-10-21: a transaction of six single
 # reads took 0.4-0.5 s, a commit about as long as one read more (eur3).
 ROUND_TRIP = 0.01

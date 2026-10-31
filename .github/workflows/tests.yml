@@ -65,8 +65,10 @@ jobs:
             requirements.txt
             requirements-test.txt
       - run: python -m pip install -r requirements-test.txt
-      - name: All backend regressions (empty discovery fails)
-        run: python -m pytest tests -q --junitxml=test-results/backend.xml
+      # One worker per core, each test file whole on one worker (module state
+      # and order inside a file stay as they were). Serial it took 11 min.
+      - name: All backend regressions but tempo (empty discovery fails)
+        run: python -m pytest tests -q -n auto --dist loadfile -m "not tempo" --junitxml=test-results/backend.xml
       # Job logs need a GitHub login; annotations do not. Failed tests show up
       # there, so a failure can be read (and fixed) without signing in.
       - name: Failed tests as annotations
@@ -76,6 +78,37 @@ jobs:
         if: always()
         with:
           name: backend-results
+          path: test-results/
+          if-no-files-found: error
+
+  backend-tempo:
+    # Wall-clock ratios (marker tempo): next to the parallel suite's workers
+    # they failed, so they get a runner of their own, at the same time.
+    if: github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.suite == 'quick' || inputs.suite == 'backend' || inputs.suite == 'full')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      UNIT_TEST_MODE: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+      - run: python -m pip install -r requirements-test.txt
+      - name: Tempo regressions (empty discovery fails)
+        run: python -m pytest tests -q -m tempo --junitxml=test-results/backend-tempo.xml
+      - name: Failed tests as annotations
+        if: failure()
+        run: python scripts/ci_annotate_failures.py test-results/backend-tempo.xml
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-tempo-results
           path: test-results/
           if-no-files-found: error
 

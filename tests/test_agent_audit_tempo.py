@@ -46,6 +46,10 @@ from app.services.agent_runs import AgentRunStore
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_vm_tools import MODEL_STREAM_CHARS
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
+
+# Ratios of wall-clock times: next to three busy test workers they failed
+# (2026-10-31), so the CI runs them in a job of their own (pytest.ini).
+pytestmark = pytest.mark.tempo
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_audit import ANSWER, LookupArgs, earlier_marks, entry_of
 from test_agent_gate import MemoryArgs
