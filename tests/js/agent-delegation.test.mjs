@@ -82,10 +82,9 @@ describe("Agent sidebar", () => {
   });
   // 2026-10-31, Max: it opened by itself a moment after Send (from Send on
   // in audit mode) and should open only when the reader clicks its icon.
-  it('never opens by itself: not on Send, not when the turn arrives, not in audit mode', () => {
+  it('never opens by itself: not on Send, not when the turn arrives', () => {
     const {window:w,document:d,dom} = boot();
-    w.App.agentPreferences = { auditing: () => true };
-    w.App.agentDelegation.project({chatId,running:true});
+    w.App.agentDelegation.project({chatId,running:true,workLog:true});
     expect(d.getElementById('agentSidebar')?.hidden ?? true).toBe(true);
     expect(d.body.classList.contains('agent-sidebar-open')).toBe(false);
     receive(w, agent());
@@ -320,9 +319,10 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it('opens judge details immediately from live snapshots without detail reads', async () => {
+  // The comparison mode's answer check of a saved turn (before 2026-10-31).
+  it('opens judge details immediately from the snapshot without detail reads', async () => {
     const {window: w, document: d, dom} = boot(async () => ({ok:true, json:async () => ({agents:[],status:'succeeded'})}));
-    const judge = {...agent(1, 'completed'), kind:'judge', title:'Coverage judge', progress_text:'Checking each statement.'};
+    const judge = {...agent(1, 'completed'), kind:'judge', title:'Coverage judge'};
     receive(w, judge); w.App.agentDelegation.project({chatId, turnId});
     d.querySelector('.agent-sidebar-toggle').click();
     const row = d.querySelector('.agent-session'); row.open = true; row.dispatchEvent(new w.Event('toggle'));
@@ -502,13 +502,13 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it("keeps calling the row Answer check while the answer's own checks follow a failed text check", async () => {
+  it("keeps calling the row Answer check when the answer's own checks followed a failed text check", async () => {
     const answer = { ...agent(1, "completed"), kind: "comparison", title: "Comparison 1 · Haiku" };
     const text = { ...agent(2, "failed", "b".repeat(32)), kind: "judge", title: "Text check",
       model: { model: "m/2", label: "Judge 2" }, usage: null };
-    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, text], status: "running" }) }));
+    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [answer, text], status: "succeeded" }) }));
     for (const item of [answer, text]) receive(w, item);
-    w.App.agentDelegation.project({ chatId, turnId, running: true });
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
     const check = [...d.querySelectorAll(".agent-session")][1];
     expect(check.querySelector("strong").textContent).toBe("Answer check");
     expect(check.textContent).toContain("Differences and coverage");
@@ -539,16 +539,6 @@ describe("Agent sidebar", () => {
     check.open = true; check.dispatchEvent(new w.Event("toggle"));
     expect(check.querySelector(".agent-judge-note").textContent).toBe("Results are marked in the answer and listed under Review.");
     expect(w.fetch.mock.calls.every(([url]) => url.endsWith("/agents"))).toBe(true);
-    dom.window.close();
-  });
-
-  it("keeps the Answer check working while early Coverage windows finish before the answer is done", () => {
-    const window1 = { ...agent(1, "completed"), kind: "judge", title: "Coverage judge", usage: null };
-    const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [window1], status: "running" }) }));
-    receive(w, window1);
-    w.App.agentDelegation.project({ chatId, turnId, running: true });
-    d.querySelector(".agent-sidebar-toggle").click();
-    expect(d.querySelector(".agent-session .agent-session-state").textContent).not.toMatch(/^Completed/);
     dom.window.close();
   });
 
@@ -830,6 +820,28 @@ describe("Agent sidebar", () => {
     w.App.agentDelegation.demo(null);
     expect(d.querySelector(".agent-inline-models")).toBeNull();
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    dom.window.close();
+  });
+  // The demo still plays the comparison mode's answer check (demo.js): its
+  // judges work in one row until they are through.
+  it("shows the demo's answer check working, then done", () => {
+    const { window: w, document: d, dom } = boot();
+    d.getElementById("agentAnswerActivity").innerHTML = "<details><summary></summary></details>";
+    const judge = (id, title, status) => ({ id, kind: "judge", title, status, model: { label: "Answer check", model: "" },
+      usage: status === "completed" ? { input_tokens: 4200, output_tokens: 640, complete: true } : null });
+    const answer = { id: "demo-OpenAI", kind: "comparison", title: "GPT", status: "completed", text: "Send it.",
+      model: { label: "GPT", model: "" }, usage: null };
+    w.App.agentDelegation.demo({ turnId: "demo-2", running: true,
+      agents: [answer, judge("demo-differences", "Differences judge", "working"), judge("demo-coverage", "Coverage judge", "working")] });
+    d.querySelector(".agent-sidebar-toggle").click();
+    const check = () => [...d.querySelectorAll(".agent-session")].at(-1);
+    expect(check().querySelector("strong").textContent).toBe("Answer check");
+    check().open = true; check().dispatchEvent(new w.Event("toggle"));
+    expect(check().querySelector(".agent-judge-note").textContent).toBe("Check in progress.");
+    w.App.agentDelegation.demo({ turnId: "demo-2", running: false,
+      agents: [answer, judge("demo-differences", "Differences judge", "completed"), judge("demo-coverage", "Coverage judge", "completed")] });
+    expect(check().querySelector(".agent-session-state").textContent).toMatch(/^Completed/);
+    expect(check().querySelector(".agent-judge-note").textContent).toBe("Results are marked in the answer and listed under Review.");
     dom.window.close();
   });
 });

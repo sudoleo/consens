@@ -1271,8 +1271,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Files, attachments and document versions: agent-workspace.css. */
 /* Google connection, consent and action cards: agent-google.css. */
 
-/* Answer check: a quiet light band passes over the fixed answer while the
-   judges run, in the rhythm of the Thinking header. It is an overlay in the
+/* Answer review: a quiet light band passes over the fixed answer while the
+   reviewers work, in the rhythm of the Thinking header. It is an overlay in the
    page colour, not a text gradient, so tables, code and links stay readable.
    It fades out as the marks arrive.
    The band is a stripe that moves by transform alone and never leaves the
@@ -1282,19 +1282,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    reader reads (Apple audit D1). Each pass grows in and shrinks out
    (scaleX), which leaves opacity to the fade at the end. */
 #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
-/* "Checking the answer…" where the evidence row will stand (agent-chat.js
+/* "Reviewing the answer…" where the evidence row will stand (agent-chat.js
    setAnswerChecking): that row's margins and height, so the row takes its
-   place without a jump, its quiet ink and size, no motion of its own. The
-   text sits in the row's first line: the agreement score and the links on
-   one row, on phones the score above the grid of links. */
+   place without a jump, its quiet ink and size, no motion of its own. On
+   phones the review's row is one line of cells. */
 .agent-check-status { min-height: 36px; margin: var(--space-4) 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 36px; }
 @media (pointer: coarse) {
   .agent-check-status { min-height: 44px; line-height: 44px; }
 }
 @media (max-width: 640px) {
-  .agent-check-status { min-height: 92px; line-height: 36px; }
-  /* No score above a review's cells: the row is one line of cells. */
-  body.agreement-verdict-hidden .agent-check-status, .agent-check-status.is-audit { min-height: 56px; line-height: 56px; }
+  .agent-check-status { min-height: 56px; line-height: 56px; }
 }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
@@ -1323,23 +1320,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered) {
     animation: agent-mark-badge var(--dur-layer) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
-  /* Provisional marks (Coverage windows that are done while Differences
-     still runs, agent-review.js preview): each neutral line fades in once. */
-  body:not(.consensus-markers-hidden) #agentAnswerBody .cx-claim.is-provisional.is-mark-arriving {
-    animation: agent-provisional-in var(--dur-layer) var(--ease-out) backwards;
-  }
-  /* The hand-over to the final marks happens in one frame, without a gap: a
-     sentence keeps its provisional line until its own colour strokes on
-     (its --cx-reveal-delay), then the line fades as the colour comes; a
-     sentence the result leaves unmarked lets it fade at once. */
-  body:not(.consensus-markers-hidden) #agentAnswerBody .cx-claim.was-provisional {
-    animation: agent-provisional-out var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
-  }
-  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim.was-provisional:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot) {
-    animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards,
-      agent-provisional-out var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
-  }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
 #agentAnswerBody.is-marks-settling :is(.cx-claim, .cx-spot) { transition: none; }
@@ -1360,11 +1340,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
-@keyframes agent-provisional-in { from { text-decoration-color: transparent; } }
-@keyframes agent-provisional-out {
-  from { text-decoration-color: var(--cx-provisional-line); }
-  to { text-decoration-color: transparent; }
-}
 
 /* ---- Progress at the models ------------------------------------------------
    While the agent works, each comparison model's icon in the summary row
@@ -1673,7 +1648,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .passage-check-text { white-space: pre-line; overflow-wrap: anywhere; }
 .passage-check-foot { margin-top: 14px; }
-.passage-check[data-state="running"] .passage-check-foot { margin-top: 4px; }
 .passage-check-note {
   color: var(--ink-3);
   font-size: var(--font-size-xs);
@@ -1725,9 +1699,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .cx-claim.pc-claim.is-quiet:focus-visible { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
 @media (hover: hover) and (pointer: fine) {
   .cx-claim.pc-claim.is-quiet:hover { --cx-paint: color-mix(in srgb, var(--ink) 8%, transparent); }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .passage-check[data-state="running"] .passage-check-status { animation: agent-segment-breathe var(--dur-beat) var(--ease-standard) infinite; }
 }
 @media (pointer: coarse) {
   /* A larger target for a finger without moving the line; wrapped rows

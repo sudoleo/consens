@@ -92,12 +92,6 @@
     return Number(window.App.maxRunFamilies) > 0 ? Number(window.App.maxRunFamilies) : 6;
   }
 
-  // Neben einer Agent-Antwort im Audit-Modus pruefen die Vergleichsmodelle
-  // die Arbeit, dafuer reicht eines (agent-preferences.js auditing).
-  function comparisonMinimum() {
-    return window.App.agentPreferences?.auditing?.() ? 1 : 2;
-  }
-
   function selectedFamilyCount(exceptPref) {
     return window.App.modelPrefs.filter(pref => (
       pref !== exceptPref && document.getElementById(pref.checkId)?.checked
@@ -535,9 +529,9 @@
         : `${countLabel} answer side by side`;
     }
 
-    // One chip for two choices (Agent). It says what the comparison models
-    // do ("6 AIs cross-check", App.words); the chat model that writes is
-    // named in its tooltip and menu.
+    // One chip for two choices (Agent): the chat model that writes, and in
+    // its tooltip and menu the reviewers ("6 AIs cross-check" stand under the
+    // field, agent-mode.js renderReviewers).
     // Translated part by part: "{picker}: {label}" has no entry of its own.
     let ariaLabel = `${window.App.t(select.getAttribute("aria-label") || "Choose model")}: ${window.App.t(displayLabel)}`;
     // A companion still being enhanced is already this chip's word: it
@@ -547,21 +541,16 @@
     const pending = pendingLinks.get(select);
     if ((state.companion || pending?.companion) && select.dataset.catalog !== "failed") {
       const count = window.App.getSelectedModelCount?.() || 0;
-      const minimum = comparisonMinimum();
       const linked = state.linkedAriaLabel || pending?.options?.ariaLabel || select.getAttribute("aria-label");
-      // In audit mode the reviewers have their own control under the field
-      // (agent-mode.js renderComposerMode), so the chip names the chat model
-      // that does the work; while its list loads, the name the first frame
-      // painted (app-bootstrap.js).
-      displayLabel = window.App.agentPreferences?.auditing?.() === true
-        ? (select.dataset.catalog === "ready" ? selectedLabel : window.App.firstFrame?.agentModel?.() || selectedLabel)
-        : window.App.words.crossCheck(count, minimum);
-      displayTitle = count < minimum
-        ? (minimum === 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
-          : `${selectedLabel} writes the answer. Choose at least 2 models to cross-check it.`)
+      // The reviewers have their own control under the field (agent-mode.js
+      // renderComposerMode), so the chip names the chat model that does the
+      // work; while its list loads, the name the first frame painted
+      // (app-bootstrap.js).
+      displayLabel = select.dataset.catalog === "ready" ? selectedLabel : window.App.firstFrame?.agentModel?.() || selectedLabel;
+      displayTitle = count < 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
         : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
           : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
-      ariaLabel = count < minimum
+      ariaLabel = count < 1
         ? `${linked}: ${selectedLabel} writes the answer, no cross-check`
         : count === 1 ? `${linked}: ${selectedLabel} writes the answer, 1 AI cross-checks it`
           : `${linked}: ${selectedLabel} writes the answer, ${count} AIs cross-check it`;
@@ -938,8 +927,7 @@
     const models = count === 1 ? "1 model" : `${count} models`;
     renderLevelRow(state, {
       name: `${window.App.t(models)} · ${window.App.t(preset ? preset.label : "Custom")}`,
-      hint: count < comparisonMinimum() ? (comparisonMinimum() === 1 ? "Choose at least 1" : "Choose at least 2")
-        : families.join(", "),
+      hint: count < 1 ? "Choose at least 1" : families.join(", "),
       level: "companion",
       disabled: state.companion.disabled,
       onEnter: () => enterCompanion(state)
@@ -1038,13 +1026,14 @@
   function renderCustomOverview(select, state) {
     renderBackRow(select, state, "Presets", "presets");
 
-    // Next to an Agent answer these models compare, they do not answer.
+    // Next to an Agent answer these models review, they do not answer: one is
+    // enough (Compare needs two).
     const comparisonOnly = select.dataset.comparisonOnly === "true";
     // The count stands in the label's line from the start. A requirement
     // that appeared above the rows only below the minimum moved every row
     // under the pointer, one click before the last (2026-10-26).
     const selectedCount = window.App.getSelectedModelCount?.() || 0;
-    const minimum = comparisonOnly ? comparisonMinimum() : 2;
+    const minimum = comparisonOnly ? 1 : 2;
     const requirement = document.createElement("span");
     requirement.className = "model-picker-requirement";
     requirement.setAttribute("role", "status");

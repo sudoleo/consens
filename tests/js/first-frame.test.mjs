@@ -77,17 +77,18 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.body.classList.contains("is-guest")).toBe(true);
     expect(document.getElementById("authTopActions").hidden).toBe(false);
     // What an account sees by default (Max, Apple-Audit H3): Agent's chip
-    // with what the comparison models do, its greeting and Reasoning; no
-    // Compare chip, no account placeholders.
+    // with the default chat model, what the reviewers do, its greeting and
+    // Reasoning; no Compare chip, no account placeholders.
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
-    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("3 AIs cross-check");
+    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
     expect(chip(document).querySelector(".model-picker-display-count")).toBeNull();
+    expect(document.getElementById("composerModelLabel").textContent).toBe("3 AIs cross-check");
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
     expect(document.getElementById("composerReasoningState").textContent).toBe("Auto");
-    expect(document.getElementById("questionInput").placeholder).toBe("Ask anything, or paste an AI answer to check it");
+    expect(document.getElementById("questionInput").placeholder).toBe("Ask anything");
     expect(document.querySelector(".demo-chip").hidden).toBe(false);
     expect(document.querySelectorAll("#bookmarksContainer .skeleton-bookmark")).toHaveLength(0);
   });
@@ -140,43 +141,35 @@ describe("the session a first frame expects (B4)", () => {
 });
 
 describe("the composer's first frame (B1, B2, B13)", () => {
-  it("draws Agent's chip with the remembered words, the count and Reasoning, and no Compare chip", () => {
+  // The chip names the chat model, the reviewers say their words next to
+  // their marks under the field (agent-mode.js; Max, 2026-10-27).
+  it("draws Agent's chip with the remembered chat model, the reviewers' words and Reasoning, and no Compare chip", () => {
     const look = JSON.stringify({ uid: "u1", agentModel: "Claude Opus 5.5", agentEffort: "High" });
     const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": look,
       pref_check_Grok: "false" } });
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
     expect(document.querySelector(".agent-effort-control").hidden).toBe(true);
     expect(chip(document).dataset.seeded).toBe("true");
-    expect(chip(document).getAttribute("aria-label")).toBe("2 AIs cross-check");
+    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Opus 5.5");
+    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5");
     expect(document.getElementById("agentModelDropdown").classList.contains("native-model-picker")).toBe(true);
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
     expect(document.getElementById("composerReasoningState").textContent).toBe("High");
     // Grok left the comparison (the account's stored choice): two marks,
     // "2 AIs cross-check".
     expect(document.getElementById("grokCheck").checked).toBe(false);
-    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("2 AIs cross-check");
+    const label = document.getElementById("composerModelLabel");
+    expect(label.hidden).toBe(false);
+    expect(label.textContent).toBe("2 AIs cross-check");
+    expect(label.dataset.short).toBe("2 AIs");
+    expect(document.getElementById("composerModelPicker").getAttribute("aria-label")).toBe("2 AIs cross-check");
     const marks = [...document.querySelectorAll("#composerModelIcons .composer-model-icon")];
     expect(marks.map(mark => mark.dataset.provider)).toEqual(["openai", "gemini"]);
     expect(marks[0].querySelector("img").getAttribute("src")).toBe("/static/openai.svg");
     expect(marks[0].querySelector("img").classList.contains("chatgpt-logo")).toBe(true);
-  });
-
-  // Audit (Max, 2026-10-27): the chip names the chat model, the reviewers
-  // say their words next to their marks under the field (agent-mode.js).
-  it("draws the chat model on the chip and the reviewers' words in the bar in audit mode", () => {
-    const look = JSON.stringify({ uid: "u1", agentModel: "Claude Opus 5.5", agentEffort: "High", audit: true });
-    const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": look,
-      pref_check_Grok: "false" } });
-    expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Opus 5.5");
-    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5");
-    const label = document.getElementById("composerModelLabel");
-    expect(label.hidden).toBe(false);
-    expect(label.textContent).toBe("2 AIs cross-check");
-    expect(document.getElementById("composerModelPicker").getAttribute("aria-label")).toBe("2 AIs cross-check");
-    // Without audit the bar keeps only its marks.
-    const plain = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": JSON.stringify({ uid: "u1" }) } }).document;
-    expect(plain.getElementById("composerModelLabel").hidden).toBe(true);
-    expect(chip(plain).querySelector(".model-picker-display-text").textContent).toBe("3 AIs cross-check");
+    // Compare keeps its bar of marks without the reviewers' words.
+    const compare = paint({ storage: { id_token: token("u1"), agentShellExpected: "0" } }).document;
+    expect(compare.getElementById("composerModelLabel").hidden).toBe(true);
   });
 
   it("names the default model without a remembered look, and never another account's words", () => {

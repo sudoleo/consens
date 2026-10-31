@@ -177,9 +177,7 @@
           }
 
           function matchesHighlightFilter(mark) {
-            // A provisional mark carries no verdict a filter could pick by:
-            // it shows under every setting except "No highlights".
-            if (highlightMode === "all" || mark.classList.contains("is-provisional")) return true;
+            if (highlightMode === "all") return true;
             // A reviewer's mark (Agent audit) is a concern; only "wrong" is a
             // contradiction, and the critical one (red).
             if (mark.classList.contains("is-audit")) return highlightMode === "concerns" || mark.classList.contains("is-major");
@@ -1431,9 +1429,8 @@
             }) || group.controls[0] || null;
           }
 
-          // `interactive: false`: hover only. A provisional mark opens nothing,
-          // and a checked sentence of the user's text has its own click
-          // (passage-check.js).
+          // `interactive: false`: hover only. A checked sentence of the user's
+          // text has its own click (passage-check.js).
           function passageGroup(spans, interactive = true) {
             if (spans[0].cxGroup) return spans[0].cxGroup;
             const group = { spans: spans, controls: [], hover: false };
@@ -2153,20 +2150,6 @@
             return card;
           }
 
-          // A provisional mark (agent-review.js preview) says only that its
-          // sentence was compared, never how it came out: the verdict and its
-          // colour arrive together with the finished check.
-          function provisionalCard(modelsCompared) {
-            const card = cardNode("div", "cx-card");
-            const count = Array.isArray(modelsCompared) ? modelsCompared.length : 0;
-            card.append(
-              cardNode("div", "cx-card-title", count
-                ? (count === 1 ? "Compared with 1 model answer" : "Compared with " + count + " model answers")
-                : "Compared with the model answers"),
-              cardNote("The result appears once the whole answer is checked"));
-            return card;
-          }
-
           // Haengt das Steuerelement hinter die Passage und verbindet beide.
           function attachControl(result, control, activate, preview) {
             insertAfterMark(result, control);
@@ -2286,24 +2269,6 @@
               return markSentence(
                 body, anchor, severityClass, marksFor(probe.block), occurrence
               );
-            }
-
-            // Vorlaeufig (agent-review.js preview, seit 2026-10-21 neutral):
-            // jeder schon verglichene Satz traegt dieselbe leise Marke, ohne
-            // Farbe, Quote, Stelle oder Liste und mit einer Vorschau ohne
-            // Urteil. Was die Pruefung ergibt, kommt erst mit der fertigen
-            // Pruefung (Max 2026-10-21: erst ein gelber Satz, dann keiner, dann
-            // ein ganz anderer roter).
-            if (options.provisional) {
-              let anchored = 0;
-              claims.forEach(function (claim) {
-                const result = mark(claim.anchor, "is-provisional", claim.anchor_occurrence);
-                if (!result) return;
-                anchored += 1;
-                attachPreviewOnly(result.spans, function () { return provisionalCard(modelsCompared); });
-              });
-              applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
-              return { claims_anchored: anchored, claims_unanchored: claims.length - anchored };
             }
 
             // Wenn Claim und Difference denselben Satz meinen, steht dort nur
@@ -2532,8 +2497,7 @@
               // Ein archivierter Turn hat seine eigenen Quellen; die globale
               // Liste gehoert bereits dem naechsten Lauf.
               sources: Array.isArray(sources) ? sources : [],
-              answerNavigation: options.answerNavigation || storedAnswerNavigation(body),
-              provisional: options.provisional === true
+              answerNavigation: options.answerNavigation || storedAnswerNavigation(body)
             });
             return claims.length > 0;
           }

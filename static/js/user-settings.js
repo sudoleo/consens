@@ -155,57 +155,6 @@
     normalize: value => (RUN_MODES.includes(value) ? value : undefined),
   });
 
-  // agent_preferences ------------------------------------------------------
-  // Only the fields the user chose, so a later change of a default reaches
-  // everyone who never touched that field.
-  const AGENT_PREFERENCES_KEY = "consensio.agentPreferences.v2";
-  // v1 stored every field whenever one changed; values equal to its
-  // defaults were never chosen.
-  const AGENT_PREFERENCES_LEGACY_KEY = "consensio.agentPreferences.v1";
-  const AGENT_PREFERENCES_LEGACY_DEFAULTS = { depth: "auto", quorum: "balanced", autonomy: "guided" };
-  // audit (Audit instead of comparison) and vm (Agent VM) are for admin accounts only (agent-preferences.js).
-  const AGENT_CHOICES = {
-    depth: ["auto", "quick", "full"],
-    quorum: ["balanced", "fast", "all"],
-    autonomy: ["guided", "free"],
-    judges: ["on", "off"],
-    audit: ["off", "on"],
-    vm: ["off", "on"],
-  };
-
-  function chosenAgentPreferences(value, unchosen) {
-    if (!isPlainObject(value)) return null;
-    const chosen = {};
-    Object.keys(AGENT_CHOICES).forEach(field => {
-      if (AGENT_CHOICES[field].includes(value[field]) && value[field] !== unchosen?.[field]) chosen[field] = value[field];
-    });
-    return Object.keys(chosen).length ? chosen : null;
-  }
-
-  const agentPreferences = keyed([AGENT_PREFERENCES_KEY, AGENT_PREFERENCES_LEGACY_KEY], {
-    read() {
-      const current = readKey(AGENT_PREFERENCES_KEY);
-      if (current !== null) return chosenAgentPreferences(parseJson(current)) || undefined;
-      const legacy = readKey(AGENT_PREFERENCES_LEGACY_KEY);
-      if (legacy === null) return undefined;
-      const chosen = chosenAgentPreferences(parseJson(legacy), AGENT_PREFERENCES_LEGACY_DEFAULTS);
-      if (chosen) writeKey(AGENT_PREFERENCES_KEY, JSON.stringify(chosen));
-      writeKey(AGENT_PREFERENCES_LEGACY_KEY, null);
-      return chosen || undefined;
-    },
-    write(value) { writeKey(AGENT_PREFERENCES_KEY, value === null ? null : JSON.stringify(value)); },
-    // A field this version does not know (a newer one from the account) is
-    // left out alone, the others stay: the account keeps it, because a
-    // change merges into agent_preferences field by field (user_settings.py
-    // FIELDWISE_SETTINGS). Until 2026-10-17 one unknown field dropped all.
-    normalize(value) {
-      if (!isPlainObject(value)) return undefined;
-      const invalid = Object.keys(AGENT_CHOICES).some(field => value[field] !== null && value[field] !== undefined
-        && !AGENT_CHOICES[field].includes(value[field]));
-      return invalid ? undefined : chosenAgentPreferences(value);
-    },
-  });
-
   // agent_model ------------------------------------------------------------
   const AGENT_MODEL_KEY = "consensio.agentModel.v1";
   // Until 2026-10-12 the pick was kept per account: agent_settings_<uid>.
@@ -378,7 +327,6 @@
   const DEFINITIONS = Object.freeze({
     run_mode: runMode,
     agent_model: agentModel,
-    agent_preferences: agentPreferences,
     compare_models: compareModels,
     consensus_model: patternSetting(CONSENSUS_MODEL_KEY, MODEL_ID),
     consensus_preset: patternSetting(CONSENSUS_PRESET_KEY, PRESET_ID),
@@ -434,6 +382,18 @@
     writeKey(RESET_KEY, RESET_MARK);
   }
 
+  // ---- Retired settings ----------------------------------------------------
+  // A setting that no longer exists leaves nothing behind in this browser:
+  // agent_preferences (the Agent's way of working and its comparison
+  // options) went on 2026-10-31, when the Agent got one mode for every
+  // account. The account's copy is the server's to drop (user_settings.py);
+  // a value it still sends is not a setting here and is ignored.
+  const RETIRED_KEYS = ["consensio.agentPreferences.v2", "consensio.agentPreferences.v1"];
+
+  function dropRetired() {
+    storedKeys().forEach(key => { if (RETIRED_KEYS.includes(key)) writeKey(key, null); });
+  }
+
   // Nothing here may stop the head bundle: every later module needs
   // App.userSettings. A setting that cannot be read starts as unknown.
   function readSafely(name) {
@@ -443,6 +403,7 @@
     }
   }
   try { resetOnce(); } catch (error) { console.error("Settings reset failed:", error); }
+  try { dropRetired(); } catch (error) { console.error("Retired settings could not be removed:", error); }
 
   // ---- What this page last saw, and change events --------------------------
   // Reading every setting once here also runs the legacy migrations before

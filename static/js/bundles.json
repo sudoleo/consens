@@ -203,7 +203,6 @@
           "file": "static/js/passage-check.js",
           "note": "App.passageCheck: the result card of a pasted text the Agent checked, above the answer. Uses App.claimPopover (consensus-insights.js) and App.agentReview.contextFor; called by agent-chat.js, run-view.js and thread-history.js at runtime."
         },
-        "static/js/agent-preferences.js",
         "static/js/agent-memory.js",
         {
           "file": "static/js/agent-watch.js",
@@ -215,11 +214,11 @@
         },
         {
           "file": "static/js/workspace-view.js",
-          "note": "App.workspaceView: the account's workspace live (noVNC from static/vendor/novnc, imported when it first opens), takeover and Settings row. Uses App.confirm and App.t at runtime; the composer's Workspace button opens it."
+          "note": "App.workspaceView: the account's workspace live (noVNC from static/vendor/novnc, imported when it first opens), takeover, Settings row and the Agent · Beta settings tab (syncSettings, from firebase.js and agent-chat.js). Uses App.confirm, App.t, App.settingsTabs and App.agentChat at runtime; the composer's Workspace button opens it."
         },
         {
           "file": "static/js/agent-settings.js",
-          "note": "App.agentSettings: the settings-change card under an Agent answer. Uses App.userSettings, App.agentPreferences, App.agentChat and App.activeConsensusPresetId (model-picker.js) at runtime; agent-chat.js renders it."
+          "note": "App.agentSettings: the settings-change card under an Agent answer. Uses App.userSettings, App.agentChat and App.activeConsensusPresetId (model-picker.js) at runtime; agent-chat.js renders it."
         },
         {
           "file": "static/js/thread-history.js",

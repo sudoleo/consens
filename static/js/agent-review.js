@@ -2,8 +2,10 @@
 (function () {
   "use strict";
   const App = window.App = window.App || {};
-  // "off": the user switched the answer check off (Settings › Agent · Beta),
-  // so no judge ran; the line says why the answer has no marks.
+  // The comparison mode's answer check, for turns saved before 2026-10-31
+  // (the Agent has one mode since: its reviewers review, renderAudit below).
+  // "off": the answer check was switched off then, so no judge ran; the line
+  // says why the answer has no marks.
   // One word per state of the answer check, the same everywhere (App.words,
   // Apple-Audit H9).
   const W = App.words || {};
@@ -15,7 +17,7 @@
   // since then it is judged like any answer.
   const PASSAGE_CHECKED = "passage_checked";
   const PASSAGE_NOTE = "Your text was checked sentence by sentence; the result is shown above the answer.";
-  const OFF_NOTE = "The answer check is off in Settings › Agent · Beta, so this answer was not checked against the model answers.";
+  const OFF_NOTE = "The answer check was switched off when this answer was written, so it was not checked against the model answers.";
   // Short, calm reasons for one model call that ended without a result. The
   // provider's own error text never reaches the page (see provider_failure).
   const reasons = { provider_rate_limited: 'the provider was busy', provider_timeout: 'the provider stopped responding',
@@ -485,8 +487,7 @@
   }
   // The first time a live answer receives its marks they stroke on in reading
   // order, like a marker pen going over the text (the landing page's gesture).
-  // Later re-renders of the same answer show them at once. Provisional marks
-  // carry no colour (preview()), so every coloured mark is new to the reader.
+  // Later re-renders of the same answer show them at once.
   const MARKS = '.cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major)';
   // A re-render during the reveal (a fresh DOM when the run ends) continues
   // the stroke where it was, through negative delays, instead of restarting.
@@ -522,7 +523,6 @@
       // background must not run the marks' hover transition: every mark
       // blinked out and faded in again at once, like a second, faster reveal.
       body.classList.add('is-marks-settling');
-      settleHandOver(body);
       body.classList.remove('is-marks-revealing');
       for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
       void body.offsetWidth;
@@ -554,84 +554,7 @@
     };
     return window.keepTextSelection ? window.keepTextSelection(body, apply) : apply();
   }
-  // Provisional marks (since 2026-10-18): while the judges check the fixed
-  // answer, the Coverage windows that are done send their verdicts
-  // (coverage_preview, never saved). Since 2026-10-21 they show only THAT a
-  // sentence was compared: one quiet neutral line under every such sentence,
-  // no colour, no count, a hover card without a verdict (Max: a sentence
-  // turned amber, the amber went, then another one turned red). They appear
-  // only on the exact answer they were checked on and fade in, each once.
-  // The final review replaces them in the same frame (render, context.mark):
-  // each sentence keeps its line until its colour strokes on (handOver).
-  // Anything else (no preview, another answer, a check that ended without a
-  // result) takes them off again. `previews` holds the newest preview of
-  // each comparison; the marks belong to the comparison the evidence row
-  // will show.
-  const PROVISIONAL = '.cx-claim.is-provisional';
-  // The hand-over takes at most the reveal (900 ms plus the stroke of the
-  // last mark); afterwards the class leaves no trace.
-  const HAND_OVER_MS = 2400;
-  function handOver(body, texts) {
-    if (!texts?.size) return;
-    for (const el of body.querySelectorAll('.cx-claim')) {
-      if (texts.has(el.textContent)) el.classList.add('was-provisional');
-    }
-    clearTimeout(body._handOverTimer);
-    body._handOverTimer = setTimeout(() => settleHandOver(body), HAND_OVER_MS);
-  }
-  function settleHandOver(body) {
-    clearTimeout(body._handOverTimer);
-    for (const el of body.querySelectorAll('.was-provisional')) el.classList.remove('was-provisional');
-  }
-  function preview(body, review, previews, evidence = {}) {
-    if (!body?.parentElement) return;
-    const applied = body._previewMarks;
-    // A render since took the marks with it: a morphed one keeps the first
-    // node but counts as a write (markdown-stream.js), any other replaces it.
-    const intact = Boolean(applied) && applied.writes === body._markdownWrites && body.firstChild === applied.first;
-    const version = review?.versions?.find(v => v.id === review.answer_version);
-    const raw = body.dataset.markdown;
-    const comparisons = review?.comparisons || [];
-    const comparison = comparisons.find(c => `agent-evidence:${c.id}` === body._agentReview?._selectedBasis) || comparisons[0];
-    const data = comparison && previews?.[comparison.id];
-    const claims = (Array.isArray(data?.claims) ? data.claims : [])
-      .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
-    const usable = claims.length > 0 && typeof raw === 'string' && Boolean(version) && raw === version.text
-      && version.hash === review.answer_hash && data.answer_hash === review.answer_hash
-      && ['required', 'running'].includes(review.status);
-    if (!usable) {
-      if (intact) {
-        const sources = sourcesOf(body, review, evidence, raw);
-        overText(body, raw, () => window.linkifyAgentSources?.(body, sources));
-      }
-      if (applied) { body._previewMarks = null; body.classList.remove('has-provisional-marks'); }
-      return;
-    }
-    const signature = JSON.stringify([review.answer_hash, comparison.id, claims, data.models_compared]);
-    if (intact && applied.signature === signature) return;
-    const sources = sourcesOf(body, review, evidence, raw);
-    overText(body, raw, () => {
-      // Coverage only: no contradictions and no score yet, and no "Key claims"
-      // list for sentences without an anchor while the check is incomplete.
-      window.renderStoredConsensusClaims?.(body, { claims, differences: [],
-        models_compared: Array.isArray(data.models_compared) ? data.models_compared : [] },
-      document.createElement('div'), sources, { answerNavigation: { canOpen: () => false, open() {} }, focusDifference() {},
-        provisional: true });
-      window.linkifyAgentSources?.(body, sources);
-    });
-    // The sentences the reader has seen marked; one not seen before fades in, once.
-    const shown = review.answer_hash && body._shownMarks?.hash === review.answer_hash ? body._shownMarks.keys : new Set();
-    for (const el of body.querySelectorAll(PROVISIONAL)) {
-      el.classList.toggle('is-mark-arriving', !shown.has(el.textContent));
-      shown.add(el.textContent);
-    }
-    body._shownMarks = { hash: review.answer_hash, keys: shown };
-    // The final review draws its marks anew (context.mark).
-    body._markSignature = null;
-    body._previewMarks = { signature, writes: body._markdownWrites, first: body.firstChild };
-    body.classList.add('has-provisional-marks');
-  }
-  // --- Audit instead of comparison (admins, since 2026-10-25) ----------------
+  // --- The reviewers (since 2026-10-25; the one mode since 2026-10-31) -------
   // The reviewers followed the agent's work log and reviewed the fixed
   // answer (agent_audit.py): their marks show once every reviewer is done,
   // through the shared markers (renderStoredAuditMarks), and "Notes" opens
@@ -1211,10 +1134,6 @@
         body._markSignature = markSignature;
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
-        // The sentences that carry a provisional line now hand it over to
-        // their final mark, in this same frame (no moment without marks).
-        const provisional = body._previewMarks
-          ? new Set([...body.querySelectorAll(PROVISIONAL)].map(el => el.textContent)) : null;
         // A body that already shows exactly this text, unmarked (a saved turn
         // just rendered), is marked as it is: rendering it a second time cost
         // every opened chat a second Markdown pass per turn (Apple audit D5).
@@ -1225,9 +1144,6 @@
           });
           window.linkifyAgentSources?.(body, sources);
         });
-        // Provisional marks went with the old render.
-        body._previewMarks = null; body.classList.remove('has-provisional-marks');
-        handOver(body, provisional);
         body._markedWrites = body._markdownWrites;
         body._markedFirst = body.firstChild;
       };
@@ -1312,5 +1228,5 @@
     // review object; the last built context of the comparison still opens.
     return (review && activityContexts.get(review) || []).find(c => c.key === key) || contextsByKey.get(key) || null;
   }
-  App.agentReview = { render, preview, renderActivity, failureNote, failureReason, contextFor };
+  App.agentReview = { render, renderActivity, failureNote, failureReason, contextFor };
 })();

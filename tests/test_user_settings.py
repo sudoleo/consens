@@ -356,9 +356,5 @@ def test_the_browser_keeps_and_checks_the_settings_the_server_stores():
     assert sorted(json.loads(const("RUN_MODES"))) == choices(fields["run_mode"].annotation)
     assert sorted(json.loads(const("AGREEMENT_DISPLAY_MODES"))) == choices(fields["agreement_display"].annotation)
     assert sorted(json.loads(const("HIGHLIGHT_FILTERS")) + ["none"]) == choices(fields["consensus_highlights"].annotation)
-    agent_choices = json.loads(re.sub(r"(\w+):", r'"\1":', const("AGENT_CHOICES")).replace(",\n  }", "\n  }"))
-    assert set(agent_choices) == set(user_settings.AgentPreferencesSetting.model_fields)
-    for field, values in agent_choices.items():
-        assert sorted(values) == choices(user_settings.AgentPreferencesSetting.model_fields[field].annotation)
     definitions = re.search(r"const DEFINITIONS = Object\.freeze\(\{(.+?)\}\);", source, re.DOTALL).group(1)
     assert re.findall(r"^    (\w+):", definitions, re.MULTILINE) == list(user_settings.SETTING_NAMES)

@@ -5,9 +5,11 @@
   const views = new Map();
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
-  // Judge calls are plumbing: retries and backup models are routine and say
-  // nothing about the answer. The panel shows them as ONE row, "Answer check",
-  // whose state is the outcome of the checks, not of individual attempts.
+  // Judge calls of the comparison mode's answer check (turns saved before
+  // 2026-10-31, and the scripted turn of demo.js) are plumbing: retries and
+  // backup models are routine and say nothing about the answer. The panel
+  // shows them as ONE row, "Answer check", whose state is the outcome of the
+  // checks, not of individual attempts.
   const ended = new Set(["failed", "stopped"]);
   const CHECK_ID = "answer-check";
   const checkNames = { "Differences judge": "differences", "Coverage judge": "coverage", "Text check": "text" };
@@ -20,12 +22,13 @@
     const titles = [...new Set(judges.map(agent => agent.title))];
     const done = new Set(titles.filter(title => judges.some(agent => agent.title === title && agent.status === "completed")));
     const busy = judges.filter(agent => activeStates.has(agent.status));
-    // Coverage windows start while the answer is still being written
-    // (agent_coverage_prefetch); the answer's check is done only after its
-    // Differences judge, so finished early windows never read as done, not
-    // even when the run ended before the check (then it did not finish).
+    // Coverage windows started while the answer was still being written
+    // (agent_coverage_prefetch); the answer's check was done only after its
+    // Differences judge, so finished early windows never read as done: the
+    // run ended before the check, which did not finish.
     const answerCheckOpen = titles.includes("Coverage judge") && !titles.includes("Differences judge");
-    const status = view.running && (busy.length || done.size < titles.length || answerCheckOpen) ? "working"
+    // Only the demo's judges still work while the row is on screen.
+    const status = view.running && busy.length ? "working"
       : done.size === titles.length && !answerCheckOpen ? "completed" : "failed";
     const metered = judges.filter(agent => measured(agent.usage));
     const usage = metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),
@@ -36,13 +39,12 @@
     // from its first start to its last end (summing only without start times).
     const duration = Math.max(...titles.map(title => span(view, judges.filter(a => a.title === title))));
     // A pasted text was checked: its result is the card above the answer.
-    // Alone and running or done, the answer's own checks have not started yet
-    // (or never ran: turns saved before they followed it, 2026-10-09). After
-    // a failed one the answer's checks follow as usual.
-    const textOnly = titles.length === 1 && titles[0] === "Text check" && (done.size === 1 || busy.length > 0);
+    // Alone and done, the answer's own checks never ran (turns saved before
+    // they followed it, 2026-10-09). After a failed one the answer's checks
+    // followed as usual.
+    const textOnly = titles.length === 1 && titles[0] === "Text check" && done.size === 1;
     return { id: CHECK_ID, kind: "check", title: textOnly ? "Text check" : "Answer check", status, usage, duration_ms: duration,
       checkedText: titles.includes("Text check"), textOnly,
-      progress_text: busy.find(agent => agent.progress_text)?.progress_text || "",
       missing: status === "failed" ? [...titles.filter(title => !done.has(title)).map(title => checkNames[title] || "answer"),
         ...(answerCheckOpen ? ["differences"] : [])] : [] };
   }
@@ -615,14 +617,13 @@
   }
   function renderDetail(row, view, agent) {
     if (agent.kind === 'check') {
-      const signature = JSON.stringify([agent.status, agent.usage, agent.progress_text, agent.missing]);
+      const signature = JSON.stringify([agent.status, agent.usage, agent.missing]);
       if (row.body.dataset.signature === signature) return;
       row.body.dataset.signature = signature;
       row.body.setAttribute('aria-busy', 'false');
       row.body.replaceChildren(node('p', 'agent-judge-purpose', agent.textOnly
         ? 'Checks each sentence of your text against the independent answers.'
         : 'Checks which statements are supported by the comparison answers and where those answers disagree.'));
-      if (agent.progress_text) row.body.append(node('p', 'agent-session-progress', agent.progress_text));
       if (measured(agent.usage)) {
         const usage = node('dl', 'agent-token-breakdown admin-only'); usage.title = tokenDescription(agent.usage);
         for (const [label, count] of [['Input', agent.usage.input_tokens], ['Output', agent.usage.output_tokens]]) {

@@ -59,7 +59,9 @@ it('marks pages read for an answer without a comparison in its sources', () => {
   expect(panel.textContent).toContain('Read by the agent');
   dom.window.close();
 });
-it('shows the live comparison purpose while its answers and checks are still pending', () => {
+// Only the demo's scripted turn (demo.js) still shows a comparison of the
+// comparison mode while it runs; saved turns end finished.
+it('shows the comparison purpose while its answers and checks are still pending', () => {
   const {window: w, document: d, dom} = setup();
   const host = d.createElement('div');
   w.App.agentReview.renderActivity(host, {status:'required',comparisons:[{id:'c1',status:'running',
@@ -368,7 +370,8 @@ it('shows a model stopped mid-answer as a marked, readable incomplete answer, an
   expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was finished.');
   dom.window.close();
 });
-it('strokes the marks on once, in reading order, when a live answer is first checked', () => {
+// The demo's answer check (demo.js) and the reviewers' marks share the reveal.
+it('strokes the marks on once, in reading order, when an answer is first checked', () => {
   vi.useFakeTimers();
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer');
@@ -453,117 +456,10 @@ it('leaves marks hidden by the highlight setting out of the reveal', () => {
   dom.window.close();
 });
 
-// Provisional marks: Coverage windows that are done while Differences still runs.
-function previewSetup() {
-  const setupResult = setup();
-  const {window: w, document: d} = setupResult;
-  const body = d.getElementById('answer');
-  body.dataset.markdown = 'Exact answer.';
-  w.matchMedia = () => ({ matches: false });
-  // The real marker sets one span per anchored claim and a badge behind it;
-  // provisional marks are one neutral span each (consensus-insights.js).
-  w.renderStoredConsensusClaims = vi.fn((el, data, _fallback, _sources, options = {}) => {
-    el.innerHTML = data.claims.map(c => options.provisional ? `<span class="cx-claim is-provisional">${c.anchor}</span>`
-      : `<span class="cx-claim is-${c.major ? 'major' : c.coverage === 'split' ? 'split' : 'unanimous'}">${c.anchor}</span>`
-      + ' <span class="claim-badge">2/2</span>').join(' ');
-  });
-  const running = { ...snapshot(), status: 'running' };
-  delete running.checks;
-  return { ...setupResult, body, running };
-}
 const claim = (anchor, extra = {}) => ({ anchor, agree: ['GPT'], dissent: [], coverage: 'supported', ...extra });
-it('marks the exact answer quietly with the Coverage windows that are done, and takes the marks off without a check', () => {
-  const {window: w, dom, body, running} = previewSetup();
-  const previews = { c1: { answer_hash: 'answer-hash', comparison_id: 'c1', claims: [claim('One.')], models_compared: ['GPT'] } };
-  w.App.agentReview.preview(body, running, previews);
-  // Coverage only: no contradictions, no "Key claims" list, no score row,
-  // and neutral marks without a verdict (provisional).
-  const [marked, data, fallback, sources, options] = w.renderStoredConsensusClaims.mock.lastCall;
-  expect(marked).toBe(body);
-  expect(JSON.parse(JSON.stringify(data))).toEqual({ claims: [claim('One.')], differences: [], models_compared: ['GPT'] });
-  expect(fallback.isConnected).toBe(false);
-  expect(Array.isArray(sources)).toBe(true);
-  expect(options.provisional).toBe(true);
-  expect(body._agentReview).toBeUndefined();
-  expect(body.classList.contains('has-provisional-marks')).toBe(true);
-  // No marker stroke: the neutral line fades in once.
-  expect(body.classList.contains('is-marks-revealing')).toBe(false);
-  expect([...body.querySelectorAll('.cx-claim')].every(el => el.classList.contains('is-mark-arriving'))).toBe(true);
-  // An unchanged preview keeps the DOM (the page projects every 100 ms).
-  const first = body.querySelector('.cx-claim');
-  w.App.agentReview.preview(body, structuredClone(running), structuredClone(previews));
-  expect(body.querySelector('.cx-claim')).toBe(first);
-  // The next window: what the reader saw stays still, only the new mark fades in.
-  previews.c1 = { ...previews.c1, claims: [claim('One.'), claim('Two.', { coverage: 'split' })] };
-  w.App.agentReview.preview(body, running, previews);
-  const [one, two] = body.querySelectorAll('.cx-claim');
-  expect(one.classList.contains('is-mark-arriving')).toBe(false);
-  expect(two.classList.contains('is-mark-arriving')).toBe(true);
-  // A preview of another answer, another text on the page, a finished or
-  // stopped review, or no review: the marks come off, and only once.
-  for (const [review, list, raw] of [[running, { c1: { ...previews.c1, answer_hash: 'other-hash' } }, 'Exact answer.'],
-    [running, previews, 'Changed answer.'], [{ ...running, status: 'cancelled' }, previews, 'Exact answer.'],
-    [running, { c2: previews.c1 }, 'Exact answer.'], [null, previews, 'Exact answer.']]) {
-    w.App.agentReview.preview(body, running, previews);
-    expect(body.querySelectorAll('.cx-claim')).toHaveLength(2);
-    body.dataset.markdown = raw;
-    w.injectMarkdown.mockClear();
-    w.App.agentReview.preview(body, review, list);
-    expect(body.querySelectorAll('.cx-claim')).toHaveLength(0);
-    expect(body.classList.contains('has-provisional-marks')).toBe(false);
-    w.App.agentReview.preview(body, review, list);
-    expect(w.injectMarkdown).toHaveBeenCalledTimes(1);
-    body.dataset.markdown = 'Exact answer.';
-  }
-  dom.window.close();
-});
-it('hands the provisional lines over to the final marks in the same frame, each until its colour strokes on', () => {
-  vi.useFakeTimers();
-  const {window: w, dom, body, running} = previewSetup();
-  w.performance.now = () => 1000;
-  w.App.agentReview.preview(body, running, { c1: { answer_hash: 'answer-hash', comparison_id: 'c1',
-    claims: [claim('One.'), claim('Two.')], models_compared: ['GPT'] } });
-  expect(body.querySelectorAll('.cx-claim.is-provisional')).toHaveLength(2);
-  const review = snapshot();
-  // Two. turned out to be contested, Three. was checked last.
-  review.checks[0].differences_data.claims = [claim('One.'), claim('Two.', { major: true }), claim('Three.')];
-  w.App.agentReview.render(body, review, { reveal: true });
-  // No moment without marks: the final ones stand in place of the provisional ones.
-  expect(body.classList.contains('has-provisional-marks')).toBe(false);
-  expect(body.querySelectorAll('.cx-claim.is-provisional')).toHaveLength(0);
-  expect(body.classList.contains('is-marks-revealing')).toBe(true);
-  const [one, two, three] = body.querySelectorAll('.cx-claim');
-  const delay = el => el.style.getPropertyValue('--cx-reveal-delay');
-  // The provisional marks had no colour: every coloured mark strokes on, in
-  // reading order, and the sentences that had a line keep it until then.
-  expect(delay(one)).toBe('0ms');
-  expect(parseInt(delay(two))).toBeGreaterThan(0);
-  expect(parseInt(delay(three))).toBeGreaterThan(parseInt(delay(two)));
-  expect([one, two, three].map(el => el.classList.contains('was-provisional'))).toEqual([true, true, false]);
-  vi.runAllTimers();
-  // The hand-over leaves no trace.
-  expect(body.classList.contains('is-marks-revealing')).toBe(false);
-  expect(body.querySelectorAll('.was-provisional')).toHaveLength(0);
-  // Without a reveal (reduced motion) the colours stand at once, the lines go.
-  w.matchMedia = () => ({ matches: true });
-  const same = snapshot();
-  same.answer_hash = same.versions[0].hash = 'same-hash';
-  same.checks.forEach(c => { c.answer_hash = 'same-hash'; });
-  same.checks[0].differences_data.claims = [claim('One.')];
-  w.App.agentReview.preview(body, { ...running, answer_hash: 'same-hash', versions: same.versions },
-    { c1: { answer_hash: 'same-hash', comparison_id: 'c1', claims: [claim('One.')], models_compared: ['GPT'] } });
-  w.App.agentReview.render(body, same, { reveal: true });
-  expect(body.querySelector('.cx-claim').className).toBe('cx-claim is-unanimous was-provisional');
-  expect(body.classList.contains('is-marks-revealing')).toBe(false);
-  vi.runAllTimers();
-  expect(body.querySelectorAll('.was-provisional')).toHaveLength(0);
-  vi.useRealTimers();
-  dom.window.close();
-});
-
 // Marks are laid over the text on screen (Apple audit A6): the real
 // Markdown renderer, and a marker that wraps its anchor where it stands.
-it('keeps the text, and a selection in it, while provisional and final marks arrive', () => {
+it('keeps the text, and a selection in it, while the marks arrive', () => {
   const text = 'The first paragraph stays plain.\n\nThe tower is 330 m tall. A ticket costs 29 euros.';
   const { window: w, document: d, dom } = loadScripts([
     "static/vendor/marked/12.0.2/marked.min.js", "static/vendor/dompurify/3.4.17/dist/purify.min.js",
@@ -597,15 +493,6 @@ it('keeps the text, and a selection in it, while provisional and final marks arr
   const chosen = selection.toString();
   expect(chosen).toBe('tower is 330');
   const version = { id: 1, text, hash: 'h' };
-  const running = { ...snapshot(), status: 'running', answer_hash: 'h', versions: [version] };
-  delete running.checks;
-  w.App.agentReview.preview(body, running, { c1: { answer_hash: 'h', comparison_id: 'c1',
-    claims: [claim('A ticket costs 29 euros.')], models_compared: ['GPT'] } });
-  expect(body.querySelectorAll('.cx-claim')).toHaveLength(1);
-  expect(body.querySelector('p')).toBe(first);
-  expect(plain.isConnected).toBe(true);
-  expect(selection.toString()).toBe(chosen);
-  // The final review replaces the provisional marks in the same text.
   const review = { ...snapshot(), answer_hash: 'h', versions: [version] };
   review.checks.forEach(check => { check.answer_hash = 'h'; check.differences_data.claims = [claim('The tower is 330 m tall.')]; });
   w.App.agentReview.render(body, review);
@@ -763,7 +650,7 @@ it('puts the inline model row of an earlier turn beside its "Thought for" line',
   expect(activity.querySelectorAll('.agent-history-models').length).toBe(1);
   dom.window.close();
 });
-it('says calmly that the answer check is off and offers answers and sources, no review', () => {
+it('says calmly that the answer check was off for a saved answer and offers answers and sources, no review', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   const review = snapshot();
@@ -916,6 +803,23 @@ it('names a reviewer that called a tool or replied empty, never as a provider fa
   expect(panel.textContent).toContain('No review from Claude: its reply was empty.');
   expect(panel.textContent).toContain('No review from Gemini: it called a tool instead of giving its review.');
   expect(panel.textContent).toContain('No review from Grok: the run was interrupted.');
+  dom.window.close();
+});
+// The live run asks for the reveal while its reviewers work (agent-chat.js
+// revealMarks): their marks stroke on once they are in.
+it('strokes the reviewers\' marks on when a live answer is first reviewed', () => {
+  vi.useFakeTimers();
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  w.matchMedia = () => ({ matches: false });
+  w.renderStoredAuditMarks = vi.fn(el => { el.innerHTML = '<span class="cx-claim is-audit is-major">Exact answer.</span>'; });
+  w.App.agentReview.render(body, auditReview('running'), { reveal: true });
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  w.App.agentReview.render(body, auditReview('succeeded'), { reveal: true });
+  expect(body.classList.contains('is-marks-revealing')).toBe(true);
+  vi.runAllTimers();
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  vi.useRealTimers();
   dom.window.close();
 });
 it('waits with the marks until every reviewer is done, and never marks another text', () => {

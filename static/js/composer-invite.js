@@ -172,13 +172,6 @@
       if (button) useStarter(button);
     });
     trackStartersRoom();
-    // The placeholder has a length per width (App.askPlaceholder); a rotated
-    // phone gets the right one. Accounts: agent-chat.js syncComposer.
-    for (const query of ["(max-width: 360px)", "(max-width: 640px)"]) {
-      window.matchMedia?.(query)?.addEventListener?.("change", () => {
-        if (App.isGuestComposer?.()) window.updateQuestionInputAccess?.();
-      });
-    }
   }
 
   App.composerInvite = { sendAsGuest, afterAccessUpdate, takeAskContext };
