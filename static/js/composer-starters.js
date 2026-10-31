@@ -147,11 +147,27 @@
     timer = setTimeout(run, REFRESH_DELAY_MS);
   }
 
+  // The chats newest first, as the server reads them (by their time).
+  // Pinned chats stand first in bookmarksData whatever their age (firebase.js
+  // loadBookmarks); here they go back to their place in time, or a reload
+  // that brings the pins first would ask again, and twelve pins would hide
+  // every new chat from the basis.
+  function newestFirst(chats) {
+    const time = item => App.chatList?.toTime?.(item.timestamp) ?? (Date.parse(item.timestamp) || null);
+    const rest = chats.filter(item => item.pinned !== true);
+    chats.filter(item => item.pinned === true).forEach(item => {
+      const at = time(item) ?? 0;
+      const index = rest.findIndex(other => (time(other) ?? Infinity) < at);
+      rest.splice(index < 0 ? rest.length : index, 0, item);
+    });
+    return rest;
+  }
+
   async function run() {
     timer = null;
     const user = window.auth?.currentUser;
     if (!user) return;
-    const chats = (window.bookmarksData || []).filter(item => item && item.id);
+    const chats = newestFirst((window.bookmarksData || []).filter(item => item && item.id));
     const record = read();
     const own = record?.uid === user.uid ? record : null;
     if (chats.length < MIN_CHATS) {

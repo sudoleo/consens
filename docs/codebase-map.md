@@ -3802,7 +3802,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `refresh()` (von `firebase.js` nach der ersten Listenseite, nach jedem
   bestätigten Save und nach einem Löschen; 1,5 s entprellt) fragt
   `POST /api/my/starter-questions`, sobald das Konto ≥ 3 Chats hat und sich die
-  IDs der neuesten 12 (`basis`) geändert haben; unter 3 Chats wird die
+  IDs der neuesten 12 (`basis`, nach `timestamp` wie der Server; angeheftete
+  Chats stehen dafür seit 2026-10-31 an ihrem Platz in der Zeit, nicht vorn,
+  `newestFirst`) geändert haben; unter 3 Chats wird die
   Vorhersage vergessen. „skipped“ oder ein Fehler lässt stehen, was da ist.
   Vorhergesagte Knöpfe stehen vor „Check an AI answer“, die kuratierten bleiben
   `hidden` im DOM und kommen zurück; unter Zeiger oder Fokus wird nie

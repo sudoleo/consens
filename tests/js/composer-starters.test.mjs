@@ -114,6 +114,30 @@ describe("asking for a prediction", () => {
     expect(ctx.calls.fetches).toHaveLength(2);
   });
 
+  it("reads the newest chats by time, with a pinned chat at its own place", async () => {
+    // Bug hunt 2026-10-23: pinned chats come first in bookmarksData, so the
+    // basis changed with the order the pins arrived in and twelve pins hid
+    // every new chat.
+    vi.useFakeTimers();
+    const at = day => `2026-10-${String(day).padStart(2, "0")}T08:00:00Z`;
+    const bookmarks = [
+      { id: "pin_old", pinned: true, timestamp: at(1) },
+      { id: "pin_mid", pinned: true, timestamp: at(20) },
+      ...[30, 29, 25, 10].map(day => ({ id: `chat_${day}`, timestamp: at(day) })),
+    ];
+    const ctx = boot({ bookmarks });
+    ctx.App.composerStarters.refresh();
+    await settle(ctx);
+    expect(ctx.stored().basis).toBe("chat_30,chat_29,chat_25,pin_mid,chat_10,pin_old");
+
+    // The same chats after a reload that brought the pins in another order:
+    // nothing to ask.
+    ctx.window.bookmarksData = [bookmarks[1], bookmarks[0], ...bookmarks.slice(2)];
+    ctx.App.composerStarters.refresh();
+    await settle(ctx);
+    expect(ctx.calls.fetches).toHaveLength(1);
+  });
+
   it("never asks with fewer than three chats and forgets a prediction once they are deleted", async () => {
     vi.useFakeTimers();
     const record = JSON.stringify({ uid: "uid-1", basis: "chat_0,chat_1,chat_2", at: Date.now(), questions: PREDICTED });
