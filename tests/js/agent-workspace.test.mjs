@@ -41,9 +41,14 @@ describe('private Agent workspace', () => {
     expect(cards).toHaveLength(1);
     const card = cards[0];
     expect(card.querySelector('.agent-doc-title > span').textContent).toBe('Decision brief');
-    expect(card.textContent).toContain('Version 2 · revised from version 1');
-    expect(card.querySelector('.agent-files-badge.is-new').textContent).toBe('Updated in this answer');
-    expect(card.textContent).toContain('Ask for changes in the chat to create version 3.');
+    // One quiet row (Max, 2026-10-31): a later version says its number, no
+    // badge, no hint; size and expiry are the download's tooltip.
+    expect(card.querySelector('.agent-doc-meta').textContent).toBe('Version 2');
+    expect(card.querySelector('.agent-files-badge')).toBeNull();
+    expect(card.textContent).not.toContain('Ask for changes');
+    expect(card.querySelector('.agent-doc-head > .agent-doc-downloads')).not.toBeNull();
+    expect(card.querySelector('.agent-doc-head').textContent).not.toMatch(/KB|Expires/);
+    expect(card.querySelector('.agent-doc-downloads > .agent-files-chip').title).toMatch(/^Download Decision brief-v2\.docx( · \d+ KB)?( · Expires .+)?$/);
     expect(card.textContent).not.toContain(DOC);
     expect(card.querySelector('.agent-doc-earlier summary').textContent).toBe('Earlier versions (1)');
     expect(card.querySelector('.agent-doc-earlier').open).toBe(false);
@@ -62,7 +67,9 @@ describe('private Agent workspace', () => {
     const { window, document, dom } = boot({ files: DOCS, turn: TURN_ONE });
     await window.App.agentWorkspace.refresh(CHAT);
     const card = document.querySelector('#agentAnswerResources .agent-doc-card');
-    expect(card.textContent).toContain('Version 1');
+    // A first version says nothing under its title; its name says it.
+    expect(card.getAttribute('aria-label')).toBe('Decision brief, version 1');
+    expect(card.querySelector('.agent-doc-meta')).toBeNull();
     expect(card.textContent).not.toContain('Version 2');
     expect(card.querySelector('.agent-doc-earlier')).toBeNull();
     const other = boot({ files: DOCS, turn: 'f'.repeat(32) });
@@ -318,7 +325,7 @@ describe('private Agent workspace', () => {
     window.App.agentWorkspace.renderTurnResources(row, TURN_ONE);
     await window.App.agentWorkspace.refresh(CHAT);
     expect(row.hidden).toBe(false);
-    expect(row.querySelector('.agent-doc-card').textContent).toContain('Version 1');
+    expect(row.querySelector('.agent-doc-card').getAttribute('aria-label')).toBe('Decision brief, version 1');
     expect(row.textContent).not.toContain('Version 2');
     expect(row.querySelector('.agent-files-badge')).toBeNull();
     const live = document.querySelector('#agentAnswerResources .agent-doc-card');

@@ -11262,9 +11262,14 @@ Dateiliste unter der Antwort mehr:
   (`NATIVE_PDF_MAX_BYTES`), weil das Modell solche PDFs selbst als Datei liest; übrige Scan-Seiten
   heißen „Pages 2 and 5 are scanned images and were not read.“ (alte OCR-Formulierung wird umgeschrieben),
   Dateiauswahl über `agent_settings.file_ids`; dazu je `document_id` eine
-  Dokumentkarte der angezeigten Turn (`turn_id`): Titel, aktuelle Version,
-  DOCX/PDF-Download, Badge „New/Updated in this answer“, frühere Versionen
-  eingeklappt, ein Revisionshinweis. Dazu die in dieser Turn geholten
+  Dokumentzeile der angezeigten Turn (`turn_id`), seit 2026-10-31 ohne Kasten,
+  Badge und Revisionshinweis (Max: „Apple-Niveau“, in der Antwort statt
+  daneben): Symbol · Titel auf einer Zeile · rechts DOCX/PDF als stille
+  Wörter, die beim Hover einen Ton bekommen; darunter nur „Version n“ ab
+  Version 2 oder „Expired“. Größe und Ablaufdatum stehen im Tooltip der
+  Downloads, mehrere Dokumente trennt eine Haarlinie, frühere Versionen
+  bleiben eingeklappt; am Handy (≤420 px) rücken die Formate unter den
+  Titel. Live- und archivierte Turns sehen gleich aus (`documentCard`). Dazu die in dieser Turn geholten
   Mail-Anhänge („From email: Betreff (Absender)“, Fallback
   `App.agentGoogle?.evidenceFor`) und die Dateien, die der Agent aus seiner VM
   geteilt hat (`kind: "vm_file"`): andere als Dateizeile; Bilder stehen nicht

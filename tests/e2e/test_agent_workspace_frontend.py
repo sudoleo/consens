@@ -169,7 +169,10 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         card = page.locator('#agentAnswerResources .agent-doc-card')
         expect(card).to_have_count(1)
         expect(card).to_contain_text('Decision brief')
-        expect(card).to_contain_text('Version 2 · revised from version 1')
+        # One quiet row in the answer (Max, 2026-10-31): no badge, no hint.
+        expect(card.locator('.agent-doc-meta')).to_have_text('Version 2')
+        expect(card.locator('.agent-files-badge')).to_have_count(0)
+        assert card.evaluate("el => getComputedStyle(el).borderTopWidth === '0px' && getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)'")
         expect(card).not_to_contain_text(DOC)
         expect(page.locator('#agentAnswerResources')).to_contain_text("couldn’t be read")
         # The answer starts right away; the card follows it.

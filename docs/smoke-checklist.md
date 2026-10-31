@@ -611,7 +611,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Fehler vor dem Senden und mobile Collapse-Zustände verlieren keine Dateien.
 - [ ] Agent-Dateien/Dokumente bei 1440/390 px, Hell/Dunkel: Upload zeigt je Datei
       eine Fortschrittszeile, ein abgelehnter Upload bleibt mit Grund am Chip.
-      Dokumentkarte (Titel, Version, DOCX/PDF) steht NACH der Antwort und nur bei
+      Dokumentzeile (Titel, DOCX/PDF rechts, kein Kasten, kein grüner Badge,
+      „Version n“ erst ab Version 2) steht NACH der Antwort und nur bei
       der Turn, die sie erzeugt hat (auch bei archivierten Turns im Verlauf);
       frühere Versionen eingeklappt; keine chatweite Dateiliste unter der
       Antwort. Hochgeladene Dateien stehen als Chip an ihrer Nachricht; Klick

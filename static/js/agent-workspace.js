@@ -288,12 +288,11 @@
   function downloadChip(chatId, file, context, withLabel) {
     const control = node('button', withLabel ? 'agent-files-chip' : 'agent-files-icon-btn'); control.type = 'button';
     control.setAttribute('aria-label', `Download ${file.name}${context}`);
-    control.title = `Download ${file.name}`;
+    // Size and expiry are details for the pointer, not for the row (Max,
+    // 2026-10-31: "viel zu viel Infos"). Part by part (docs/i18n.md).
+    control.title = [App.t(`Download ${file.name}`), size(file.size), App.t(expiry(file))].filter(Boolean).join(' · ');
     control.append(icon('download'));
-    if (withLabel) {
-      control.append(node('span', 'agent-files-chip-type', extension(file)));
-      if (file.size) control.append(node('span', 'agent-files-chip-size', size(file.size)));
-    }
+    if (withLabel) control.append(node('span', 'agent-files-chip-type', extension(file)));
     const available = ['ready', 'partial'].includes(file.status) && expiry(file) !== 'Expired';
     control.disabled = !available;
     if (!available) control.title = file.status === 'processing' ? 'Still processing' : 'No longer available';
@@ -307,12 +306,16 @@
   function versionMeta(version) {
     return version.parent ? `Version ${version.number} · revised from version ${version.parent}` : `Version ${version.number}`;
   }
-  function documentCard(chatId, group, { upTo = Infinity, turnId = '', compact = false, scope }) {
+  // A document is one quiet row in the flow of its answer (Max, 2026-10-31:
+  // no box, no green badge, no hint, "Apple-Niveau"): its mark, its title
+  // and, on the right, the formats to download. Under the title only what
+  // changes a decision: a later version's number, or that it expired.
+  function documentCard(chatId, group, { upTo = Infinity, scope }) {
     const versions = group.list.filter(version => version.number <= upTo);
     const current = versions[0];
     if (!current) return null;
     const key = `${scope}:doc:${group.id}:${current.number}`;
-    const card = node('article', `agent-doc-card${compact ? ' is-compact' : ''}`);
+    const card = node('article', 'agent-doc-card');
     card.dataset.filesKey = key; card.dataset.documentId = group.id;
     card.setAttribute('aria-label', `${group.title}, version ${current.number}`);
     const head = node('div', 'agent-doc-head');
@@ -320,25 +323,21 @@
     const titles = node('div', 'agent-doc-titles');
     const title = node('h3', 'agent-doc-title');
     title.append(node('span', '', group.title));
-    if (!compact && turnId && current.turn === turnId) {
-      title.append(node('span', 'agent-files-badge is-new', current.number > 1 ? 'Updated in this answer' : 'New in this answer'));
-    }
-    const meta = node('p', 'agent-doc-meta', [versionMeta(current), expiry(current.files[0] || {})].filter(Boolean).join(' · '));
-    titles.append(title, meta);
-    head.append(mark, titles);
+    title.title = group.title;
+    titles.append(title);
+    const expired = expiry(current.files[0] || {}) === 'Expired';
+    const note = [current.number > 1 ? `Version ${current.number}` : '', expired ? 'Expired' : ''].filter(Boolean);
+    if (note.length) titles.append(node('p', 'agent-doc-meta', note.map(part => App.t(part)).join(' · ')));
+    const chips = node('div', 'agent-doc-downloads');
+    for (const file of current.files) chips.append(downloadChip(chatId, file, `, version ${current.number}`, true));
+    head.append(mark, titles, chips);
     const removeLabel = `Remove version ${current.number}…`;
     head.append(overflow(key, `More actions for ${group.title}, version ${current.number}`, [{ label: removeLabel, danger: true,
       run: () => askToRemove(key) }]));
     card.append(head);
-    const chips = node('div', 'agent-doc-downloads');
-    for (const file of current.files) chips.append(downloadChip(chatId, file, `, version ${current.number}`, true));
-    card.append(chips);
     if (confirmKey === key) {
       card.append(confirmation(key, `Remove ${group.title} version ${current.number} (${current.files.map(extension).join(' and ')})? The agent can no longer use or revise it.`,
         'Remove version', current.files));
-    }
-    if (!compact && current.number === group.list[0].number) {
-      card.append(node('p', 'agent-doc-hint', `Ask for changes in the chat to create version ${current.number + 1}.`));
     }
     const earlier = versions.slice(1);
     if (earlier.length) {
@@ -377,14 +376,17 @@
     const name = node('span', 'agent-file-name', file.name);
     main.append(name);
     const origin = mailOrigin(file);
-    const status = file.status === 'processing' ? 'Processing…' : file.status === 'deleting' ? 'Removing…' : '';
-    const meta = node('span', 'agent-file-meta', [status, extension(file), size(file.size), expiry(file)].filter(Boolean).join(' · '));
+    // As the document row: the name says the type; size and expiry are the
+    // download's tooltip. Under the name only a state worth reading.
+    const status = file.status === 'processing' ? 'Processing…' : file.status === 'deleting' ? 'Removing…'
+      : expiry(file) === 'Expired' ? 'Expired' : '';
+    const meta = node('span', 'agent-file-meta', status);
     if (partial(file)) {
       const badge = node('span', 'agent-files-badge is-warning');
       badge.append(icon('warning'), node('span', '', 'Partly read'));
       meta.prepend(badge);
     }
-    main.append(meta);
+    if (meta.childNodes.length) main.append(meta);
     if (origin) main.append(node('span', 'agent-file-origin', origin));
     for (const warning of file.warnings || []) main.append(node('span', 'agent-file-warning', warning));
     const actions = node('div', 'agent-file-actions');
@@ -611,7 +613,7 @@
     for (const group of groupDocuments(files)) {
       const mine = group.list.filter(version => version.turn === turnId);
       if (!mine.length) continue;
-      const card = documentCard(chatId, group, { upTo: mine[0].number, turnId: live ? turnId : '', compact: !live, scope });
+      const card = documentCard(chatId, group, { upTo: mine[0].number, scope });
       if (card) box.append(card);
     }
     const shared = files.filter(file => ['vm_file', 'web_image'].includes(file.kind) && file.turn_id === turnId);

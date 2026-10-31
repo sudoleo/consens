@@ -18,46 +18,50 @@
 .agent-resources { display: grid; gap: 10px; margin: 16px 0 4px; min-width: 0; }
 .agent-resources[hidden], .agent-resources:empty { display: none; }
 
-.agent-doc-card {
-  position: relative; box-sizing: border-box; min-width: 0; padding: 14px 16px;
-  border: 1px solid var(--line-soft); border-radius: var(--radius-md, 14px); background: var(--raise); color: var(--ink);
-}
-.agent-doc-head { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+/* A document is one quiet row in the flow of its answer (Max, 2026-10-31:
+   the grey box, the green badge and the hint read as foreign matter): no
+   rectangle, no fill. Its mark, its title on one line and, on the right,
+   the formats to download as plain words that take a tone on hover. Rows
+   of several documents part with a hairline (design: tone and hairlines,
+   never a box around content). */
+.agent-doc-card { position: relative; box-sizing: border-box; min-width: 0; padding: 6px 0; color: var(--ink); }
+.agent-doc-card + .agent-doc-card { border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.agent-doc-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .agent-doc-mark {
-  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px;
-  border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink-2);
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px;
+  border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-2);
 }
-.agent-doc-mark .agent-files-icon { width: 18px; height: 18px; }
+.agent-doc-mark .agent-files-icon { width: 17px; height: 17px; }
 .agent-doc-titles { flex: 1; min-width: 0; }
-.agent-doc-title { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0; color: var(--ink); font-size: var(--font-size-sm); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
-.agent-doc-meta { margin: 2px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
-.agent-doc-downloads { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 46px; }
-.agent-doc-hint { margin: 10px 0 0 46px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
+.agent-doc-title { display: flex; margin: 0; color: var(--ink); font-size: var(--font-size-ui); font-weight: 500; line-height: 1.4; }
+.agent-doc-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-doc-meta { margin: 1px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.4; }
+.agent-doc-downloads { display: flex; flex: none; align-items: center; gap: 2px; }
 
 .agent-files-chip {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px 6px 10px;
-  border: 1px solid var(--line); border-radius: var(--radius-pill, 999px); background: var(--well); color: var(--ink);
+  display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 4px 9px 4px 7px;
+  border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--ink-2);
   font: inherit; font-size: var(--font-size-xs); line-height: 1; cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
+.agent-files-chip .agent-files-icon { width: 15px; height: 15px; }
 @media (hover: hover) and (pointer: fine) {
-  .agent-files-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--well), var(--ink) var(--hover-mix)); border-color: color-mix(in srgb, var(--ink) 28%, transparent); }
+  .agent-files-chip:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 }
 .agent-files-chip-type { font-weight: 600; letter-spacing: .02em; }
-.agent-files-chip-size { color: var(--ink-3); }
 .agent-files-chip:disabled, .agent-files-icon-btn:disabled { opacity: .55; cursor: default; }
 
 .agent-files-badge {
   display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 8px; border-radius: var(--radius-pill, 999px);
   font-size: var(--font-size-xs); font-weight: 600; line-height: 1.5; white-space: nowrap;
 }
-.agent-files-badge.is-new { background: var(--agree-bg); color: color-mix(in srgb, var(--agree) 78%, var(--ink)); }
 .agent-files-badge.is-warning { padding: 0 7px 0 5px; background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); }
 .agent-files-badge .agent-files-icon { width: 12px; height: 12px; }
 
-/* Earlier versions stay one click away and never grow the card by default. */
-.agent-doc-earlier { margin: 12px 0 0 46px; font-size: var(--font-size-xs); }
+/* Earlier versions stay one click away and never grow the row by default. */
+.agent-doc-earlier { margin: 2px 0 0 44px; font-size: var(--font-size-xs); }
 .agent-doc-earlier > summary {
-  display: inline-flex; align-items: center; min-height: 32px; padding: 0 2px; color: var(--ink-2);
+  display: inline-flex; align-items: center; min-height: 32px; padding: 0 2px; color: var(--ink-3);
   cursor: pointer; list-style: none; border-radius: var(--radius-2xs);
 }
 .agent-doc-earlier > summary::-webkit-details-marker { display: none; }
@@ -72,17 +76,10 @@
 .agent-doc-version .agent-doc-downloads { margin: 0; }
 .agent-doc-version .agent-files-chip { min-height: 32px; padding-block: 4px; }
 
-/* Compact document rows inside "Files in this chat". */
-.agent-doc-card.is-compact { padding: 12px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
-.agent-doc-card.is-compact .agent-doc-mark { width: 30px; height: 30px; }
-.agent-doc-card.is-compact .agent-doc-title { font-size: var(--font-size-ui); }
-.agent-doc-card.is-compact :is(.agent-doc-downloads, .agent-doc-earlier) { margin-left: 42px; }
-.agent-doc-card.is-compact .agent-doc-downloads { margin-top: 8px; }
-
 /* Overflow menu: Remove lives here, never next to Download. */
 .agent-files-menu-wrap { position: relative; flex: none; margin: -4px -6px 0 auto; }
-.agent-doc-card.is-compact .agent-files-menu-wrap { margin-right: 0; }
-.agent-doc-version .agent-files-menu-wrap, .agent-file-actions .agent-files-menu-wrap { margin: 0; }
+.agent-doc-head .agent-files-menu-wrap, .agent-doc-version .agent-files-menu-wrap, .agent-file-actions .agent-files-menu-wrap { margin: 0; }
+.agent-doc-head .agent-files-more { color: var(--ink-3); }
 .agent-files-more, .agent-files-icon-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
   border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--ink-2); cursor: pointer;
@@ -110,7 +107,7 @@
   margin: 12px 0 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--dispute) 45%, var(--line));
   border-radius: var(--radius-sm); background: var(--dispute-bg); color: var(--ink); font-size: var(--font-size-ui);
 }
-.agent-doc-card:not(.is-compact) > .agent-files-confirm { margin-left: 46px; }
+.agent-doc-card > .agent-files-confirm { margin-left: 44px; }
 .agent-files-confirm p { margin: 0 0 10px; line-height: 1.5; }
 .agent-files-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .agent-files-danger, .agent-files-ghost {
@@ -126,13 +123,13 @@
 }
 
 /* Uploads wait on the message itself (shell.css .is-uploading). */
-.agent-file-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.agent-file-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 /* The file's type is a document glyph, not an 8-px "PDF" (Apple-Audit
    G10): the name beside it already ends in the extension. The label stays
    in the markup for scripts; it is not drawn. A mail origin keeps its icon. */
 .agent-file-type {
-  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px;
-  border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink-2);
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px;
+  border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-2);
   font-size: 0; overflow: hidden;
 }
 .agent-file-type:not(:has(svg))::before {
@@ -230,9 +227,14 @@
 .consensus-answer-body:has(.md-picture:not(:empty)) :is(.blocked-remote-image.is-local-ref, .local-ref-line) { display: none; }
 
 /* ---- Mail attachments of a turn ---- */
-.agent-files-list { border-top: 1px solid var(--line-soft); }
-.agent-file-item { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
-.agent-file-actions { display: flex; align-items: center; gap: 2px; flex: none; margin: -3px 0 0; }
+/* The same quiet rows as the documents: a hairline only between rows,
+   none around the list. */
+.agent-file-item { padding: 6px 0; }
+.agent-file-item + .agent-file-item,
+.agent-resources > :is(.agent-doc-card, .agent-files-list) + .agent-files-list,
+.agent-resources > .agent-files-list + .agent-doc-card { border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.agent-file-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.agent-file-actions .agent-files-icon-btn, .agent-file-actions .agent-files-more { color: var(--ink-3); }
 
 /* This answer's own files could not load (agent-workspace.js): one quiet
    line in the row's ink, Retry as the text link (UX audit B13). */
@@ -258,10 +260,14 @@
   outline: var(--focus-ring); outline-offset: 2px;
 }
 
-@media (max-width: 540px) {
-  .agent-doc-card { padding: 12px; }
-  .agent-doc-downloads, .agent-doc-hint, .agent-doc-earlier, .agent-doc-card:not(.is-compact) > .agent-files-confirm { margin-left: 0; }
-  .agent-doc-card.is-compact :is(.agent-doc-downloads, .agent-doc-earlier) { margin-left: 0; }
+/* A narrow phone gives the title its own line: the formats go under it,
+   level with the title, so the name is never cut to a few letters. */
+@media (max-width: 420px) {
+  .agent-doc-head { flex-wrap: wrap; row-gap: 0; }
+  .agent-doc-head .agent-files-menu-wrap { order: 3; }
+  .agent-doc-downloads { order: 4; flex-basis: calc(100% - 37px); margin: 2px 0 0 37px; }
+  .agent-doc-title > span { display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .agent-doc-card > .agent-files-confirm { margin-left: 0; }
 }
 @media (pointer: coarse) {
   .agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost,
@@ -273,6 +279,6 @@
   .agent-doc-earlier > summary::before { transition: none; }
 }
 @media (forced-colors: active) {
-  .agent-doc-card, .agent-files-chip, .agent-files-menu, .agent-files-confirm, .agent-resource-notice { border: 1px solid CanvasText; }
+  .agent-files-chip, .agent-files-menu, .agent-files-confirm, .agent-resource-notice { border: 1px solid CanvasText; }
   .agent-files-badge { border: 1px solid CanvasText; }
 }
