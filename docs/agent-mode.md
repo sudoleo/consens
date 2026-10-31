@@ -2229,8 +2229,10 @@ mit `audit_access`). Die
   Fokus hat, klickt ein Tipp ins Bild, ohne die Tastatur zu schließen
   (`focusOnClick`). Ist der Tab 60 s verborgen, während der Agent den
   Browser hat, trennt die Ansicht (ihre Zeit zählt als VM-Zeit) und verbindet
-  bei Rückkehr neu; der Kopf nennt beim Zuschauen die VM-Zeit des Tages
-  (`left_seconds` im Zustand `connecting`, lokal heruntergezählt). Das Bild
+  bei Rückkehr neu; der Kopf nennt die VM-Zeit des Tages
+  (`left_seconds` im Zustand `connecting`, lokal heruntergezählt), seit
+  2026-10-31 auch während der Übernahme (vorher schloss die Ansicht mitten
+  im Login ohne Vorwarnung). Das Bild
   steht oben statt mittig; bei Übernahme auf einem Panel unter 1024 px
   zeigt „100%“ die Seite in echter Größe zum Verschieben (`clipViewport`,
   `dragViewport`), Zurückgeben passt sie wieder ein. Beim Zuschauen nennt
@@ -2438,9 +2440,20 @@ des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
 `github_import` und die offene Live-Ansicht. Endet ein Hintergrundprozess vor
 seinem Zeitlimit, kommt seit 2026-10-30 die ungenutzte Zeit zurück (K5,
 `agent_vm_time.refund`, siehe „Hintergrundprozesse“). Ein Befehl läuft nie
-über den Rest (`VMTools._timeout`), ein Prozess höchstens so lange; ist nichts
-mehr übrig, bekommt der Agent `VM_DAY_LIMIT` und arbeitet ohne VM weiter, die
-Aktivität sagt „Skipped · workspace time for today used up“. Gebucht wird beim Ende der
+über den Rest (`VMTools._timeout`); stoppt ihn das, sagt sein Ergebnis das
+(`VM_DAY_CUT`, seit 2026-10-31, vorher las es sich wie sein eigenes Limit).
+Ein Hintergrundprozess reserviert seit 2026-10-31 höchstens die Hälfte des
+Rests (`agent_vm_processes.DAY_SHARE`): vorher nahm ein Dev-Server mit seinem
+Standardlimit (30 min) einem Konto ohne Pro alle 20 Minuten, und sein Agent
+konnte ihn danach weder lesen noch stoppen. Ist nichts mehr übrig, bekommt
+der Agent für Befehle, Installationen und neue Prozesse `VM_DAY_LIMIT`
+(`VMTools._start` mit `spends`); Dateien, Ausgabe und Stopp eines Prozesses
+und der Browser laufen weiter, sie zählen nicht (vorher sperrte das Limit den
+ganzen Arbeitsplatz). Liegt der Rest unter `DAY_NOTE_SECONDS` (30 min),
+nennt ihn das erste Ergebnis einer Nachricht (`vm_time_left_today`,
+`VMSession.announce`), damit der Agent seine Befehle danach plant. Die
+Aktivität sagt bei einer Ablehnung „Skipped · workspace time for today used
+up“. Gebucht wird beim Ende der
 Nachricht (`VMSession.close`, `users/{uid}/chat_state/agent_vm_time_<Tag>`);
 `/user_status` liefert `vm_time`, die Einstellungen zeigen „VM time today“. Die App selbst nutzt ihn nur für Hintergrundprozesse,
 gedeckelt (siehe unten).

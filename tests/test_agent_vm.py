@@ -1017,13 +1017,36 @@ def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(sto
     assert [e.get("outcome") for e in tool_events(events, "vm_start_process") if e["status"] != "running"] == ["day_limit"]
     assert listing["exit_code"] == 0
     assert agent_vm_time.used(store.db, UID) == 70 + 20 + .5
-    # Used up: the next message works on without the VM.
+    # Used up: the next message works on without commands. Files count
+    # nothing and go on (since 2026-10-31: before, every call of the
+    # workspace was refused, the browser's too).
     agent_vm_time.charge(store, UID, 20)
-    script = Agent([[("vm_exec", {"command": "ls"})]])
+    script = Agent([[("vm_exec", {"command": "ls"})], [("vm_write_file", {"path": "notes.txt", "content": "a\n"})],
+                    [("vm_read_file", {"path": "notes.txt"})]])
     loop = vm_loop(store, script, request_id="two")
     list(loop.run())
-    assert results(loop) == [{"error": agent_vm_tools.VM_DAY_LIMIT}]
+    refused, written, read = results(loop)
+    assert refused == {"error": agent_vm_tools.VM_DAY_LIMIT}
+    assert written["bytes"] == 2 and read["content"] == "a\n"
+    # Nothing is left: the first result says so.
+    assert written["vm_time_left_today"] == {"minutes": 0, "counts": "commands, installations and background processes"}
     assert loop.completion.text == ANSWER
+
+
+def test_a_command_stopped_by_the_days_vm_time_says_so(store, fake_vm, monkeypatch):
+    """Until 2026-10-31 a command cut at the day's VM time read as stopped at
+    its own limit: the agent tried again with a longer one."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 70)
+    fake_vm.commands["make build"] = ([("stdout", b"compiling\n")], None, 30)
+    fake_vm.commands["make quick"] = ([("stdout", b"x\n")], None, 5)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "make quick", "timeout_seconds": 5})],
+                                 [("vm_exec", {"command": "make build", "timeout_seconds": 300})]]))
+    list(loop.run())
+    own, cut = results(loop)
+    assert own["timed_out"] and own["note"] == "The command was stopped after its time limit of 5 seconds."
+    assert cut["timed_out"] and cut["note"] == agent_vm_tools.VM_DAY_CUT.format(what="command", seconds=25)
 
 
 # --- Admins only ------------------------------------------------------------------

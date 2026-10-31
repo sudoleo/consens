@@ -12,13 +12,19 @@ opened to all of them); admins have no cap. The browser's actions do not
 count here: each is a step of the agent's model, which the token account
 holds in check.
 
-A command never runs past what is left (agent_vm_tools.VMTools._timeout); a
-background process counts with its whole time limit when it starts, because
-it outlives its message and nobody watches it end; what it did not run comes
-back once a look at it finds it ended (refund, since 2026-10-30). Reads, writes and shares
-take seconds and do not count. A message charges its time once, when it ends
-(VMSession.close); messages running at the same time can overshoot the cap by
-what they started with, which stays small.
+A command never runs past what is left (agent_vm_tools.VMTools._timeout,
+which then tells the agent why it stopped); a background process counts with
+its whole time limit when it starts, because it outlives its message and
+nobody watches it end, and takes at most half of what is left
+(agent_vm_processes.DAY_SHARE); what it did not run comes back once a look at
+it finds it ended (refund, since 2026-10-30). Reads, writes and shares take
+seconds and do not count. Once the day's time is used up, only what counts
+is refused (commands, installations, new processes; VMTools._start
+``spends``): files, a process's output and stop and the browser go on (since
+2026-10-31). Below agent_vm_tools.DAY_NOTE_SECONDS the first result of a
+message tells the agent how much is left. A message charges its time once,
+when it ends (VMSession.close); messages running at the same time can
+overshoot the cap by what they started with, which stays small.
 """
 from __future__ import annotations
 

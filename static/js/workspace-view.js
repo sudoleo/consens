@@ -662,7 +662,9 @@
     if (agentLine) say(agentLine, 'browser', { raw: true });
     else say(STATES.watching);
   }
-  // What is left of today's VM time (V4), counted down while the view is open.
+  // What is left of today's VM time (V4), counted down while the view is open,
+  // also in the user's hands (since 2026-10-31): their own time in the view
+  // counts too, and the view closed mid-login without a word before.
   function showTime() {
     if (!view) return;
     const left = view.dayLeft;
@@ -670,7 +672,7 @@
     const text = seconds === null ? '' : App.t('{time} left today',
       { time: App.format?.duration?.(Math.max(0, seconds) * 1000, { minutes: true }) || '' });
     if (view.time.textContent !== text) view.time.textContent = text;
-    view.time.hidden = !text || view.holder === 'user' || view.tab !== 'browser';
+    view.time.hidden = !text || view.tab !== 'browser';
   }
   function setDayLeft(seconds) {
     if (!view) return;

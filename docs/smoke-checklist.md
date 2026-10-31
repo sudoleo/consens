@@ -325,6 +325,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `consens-browser-awake` mit Ablauf ~2 min nach dem Lauf). Ein Lauf mit
       localhost-Seite: Nach dem Lauf und geschlossener Ansicht endet der Tunnel
       nach ~2 min („Agent tunnel ended“).
+- [ ] VM-Zeit am Tageslimit (2026-10-31, Konto ohne Pro mit Arbeitsplatz,
+      echte Sprite): „Bau mir eine kleine Web-App und zeig sie mir im
+      Browser“: Der Dev-Server bekommt höchstens die Hälfte der Restzeit
+      (Ergebnis `max_seconds` ≤ 600 bei frischem Tag), der Agent liest seine
+      Ausgabe, öffnet die Seite und stoppt ihn. Übernimmt man den Browser,
+      zeigt der Kopf weiter „… left today“. Ist die Zeit aufgebraucht (Zähler
+      in Einstellungen → Agent · Beta): Ein Befehl wird mit „Skipped ·
+      workspace time for today used up“ abgelehnt, der Browser und das Lesen
+      von Dateien laufen weiter. Automatisiert: `test_agent_vm_processes.py`,
+      `test_agent_vm.py`, `test_agent_browser.py`, `workspace-view.test.mjs`.
 - [ ] Sicherheitsregeln des Arbeitsplatzes (2026-10-30, `docs/agent-mode.md`
       „Sicherheitsregeln des Arbeitsplatzes“; echte Sprite, ein NICHT-Admin-Konto
       für das Schließen, Admins werden nur gemeldet):

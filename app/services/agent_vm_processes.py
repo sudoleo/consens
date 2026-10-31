@@ -22,11 +22,13 @@ what the VM can cost after the message is done to MAX_RUNNING x MAX_SECONDS
 of awake time. A process outlives its message: the next one finds it by its
 id (the work record names it, agent_compaction.work_record).
 
-Its whole limit counts as VM time when it starts (agent_vm_time.py). Once a
-look at it (vm_process_output, vm_stop_process) finds it ended, the time it
-did not run is given back, once (``refunded``): to the message that started
-it, or to the day it was charged on (since 2026-10-30; before, four dev
-server starts used up a Pro account's two hours, runtime audit K5).
+Its whole limit counts as VM time when it starts (agent_vm_time.py), at
+most DAY_SHARE of what is left today (since 2026-10-31). Once a look at it
+(vm_process_output, vm_stop_process, both also once today's VM time is used
+up) finds it ended, the time it did not run is given back, once
+(``refunded``): to the message that started it, or to the day it was charged
+on (since 2026-10-30; before, four dev server starts used up a Pro account's
+two hours, runtime audit K5).
 
 Everything lives in PROCESSES_DIR/<id>: the command, its combined output
 (``output.log``), the supervisor's pid file, its start and, once it ended,
@@ -51,6 +53,10 @@ PROCESSES_DIR = agent_vm.SERVER_HOME + "/.consens/processes"
 DEFAULT_SECONDS = 1800
 MAX_SECONDS = 3600
 MAX_RUNNING = 3
+# A process reserves at most this share of what is left of today's VM time
+# (since 2026-10-31): the commands around it still run. Before, a dev server
+# at its default limit reserved all 20 minutes of an account without Pro.
+DAY_SHARE = 0.5
 HEARTBEAT_SECONDS = 60
 HOLD_EXPIRE = "5m"
 OUTPUT_CHARS = 12_000
@@ -290,14 +296,14 @@ class ProcessTools:
         cwd = vm_path(args.cwd, self.vm.session.dir) if args.cwd.strip() else self.vm.session.dir
         session = self.vm.session
         # It holds the VM awake for up to its time limit, after the message
-        # too: that whole limit counts against today's VM time, and it never
-        # runs past what is left (agent_vm_time.py).
+        # too: that whole limit counts against today's VM time, and it
+        # reserves at most DAY_SHARE of what is left (agent_vm_time.py).
         seconds = args.max_seconds
         left = session.left()
         if left is not None:
             if left < 60:
                 raise ValueError(VM_DAY_LIMIT)
-            seconds = min(seconds, int(left))
+            seconds = min(seconds, max(60, int(left * DAY_SHARE)))
         from app.services import agent_vm_time
         process_id = new_id()
         directory = process_dir(process_id)
@@ -322,13 +328,17 @@ class ProcessTools:
             session.reserved += seconds
         self.started.add(process_id)
         self._refund(process_id, text)
-        result = self._result(process_id, text, {"max_seconds": seconds, "note": PROCESSES_NOTE})
+        note = PROCESSES_NOTE + (" Its limit is shorter than asked: a process takes at most half of what is left "
+                                 "of today's VM time." if seconds < args.max_seconds else "")
+        result = self._result(process_id, text, {"max_seconds": seconds, "note": note})
         report({"output": result.pop("_view"), "process": process_id})
         return self.vm.session.announce(result)
 
     def output(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self.vm._start(cancellation, change=False)
+        # Reading it costs at most its wait, which stays within today's VM
+        # time below: also once that is used up (VMTools._start).
+        self.vm._start(cancellation, change=False, spends=False)
         if not args.id:
             code, text = self._run(list_command(), cancellation, 30, idempotent=True)
             processes = []
@@ -360,7 +370,8 @@ class ProcessTools:
 
     def stop(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self.vm._start(cancellation)
+        # Stopping gives VM time back: also once today's is used up.
+        self.vm._start(cancellation, spends=False)
         code, text = self._run(stop_command(process_dir(args.id), task_name(args.id)), cancellation,
                                STOP_GRACE_SECONDS + 30)
         if code == 5:

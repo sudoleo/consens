@@ -898,7 +898,7 @@ describe("the workspace view after the runtime audit", () => {
     }
   });
 
-  it("says what is left of today's VM time while the agent has the browser", async () => {
+  it("says what is left of today's VM time while the view is open, also in the user's hands", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       // The window's clock is jsdom's own: it follows the test's.
@@ -914,8 +914,12 @@ describe("the workspace view after the runtime audit", () => {
       // The open view counts as VM time: it counts down.
       await vi.advanceTimersByTimeAsync(150_500);
       expect(time.textContent).toBe("1h 10m left today");
+      // Taking over keeps it: the user's own time in the view counts as
+      // well (until 2026-10-31 it hid, and the view closed mid-login unannounced).
       env.document.querySelector(".workspace-view-cover").click();
-      await vi.waitFor(() => expect(time.hidden).toBe(true));
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
+      expect(time.hidden).toBe(false);
+      expect(time.textContent).toBe("1h 10m left today");
     } finally {
       vi.useRealTimers();
     }

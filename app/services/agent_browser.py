@@ -587,8 +587,11 @@ class BrowserTools:
         if not self.ready:
             warming, self.warming = self.warming or self._warm(cancellation), None
         # The lease is all the browser needs; the workbench only what reaches
-        # it: a localhost address (its port) and an upload (its file).
-        self.vm._start(cancellation, bench=port is not None or args.action == "upload", change=False)
+        # it: a localhost address (its port) and an upload (its file). Its
+        # actions are steps of the agent's model, not VM time: the browser
+        # goes on once today's is used up (since 2026-10-31).
+        self.vm._start(cancellation, bench=port is not None or args.action == "upload", change=False,
+                       spends=False)
         prepared = time.monotonic()
         session = self.vm.session
         upload = None

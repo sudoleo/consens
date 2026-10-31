@@ -35,6 +35,20 @@ def call(browser, **arguments):
     return browser.call(BrowserArgs(**arguments), cancellation=ProviderCancellation())
 
 
+def test_the_browser_goes_on_once_the_days_vm_time_is_used_up(store, fake_vm, monkeypatch):
+    """Its actions are steps of the agent's model, not VM time: until
+    2026-10-31 a used-up day (a dev server's reserve, the user watching the
+    view) turned the browser off with the commands."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 100)
+    loop = vm_loop(store, Agent([[("browser", {"action": "read"})], [("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    read, refused = results(loop)
+    assert read["action"] == "read" and read["page"].startswith('Page: "Example"')
+    assert refused == {"error": agent_vm_tools.VM_DAY_LIMIT}
+
+
 def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, fake_vm):
     script = Agent([[("browser", {"action": "read"})], [("browser", {"action": "text", "offset": 40})],
                     [("browser", {"action": "scroll", "direction": "down"})]])

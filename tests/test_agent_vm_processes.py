@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from app.services import agent_vm, agent_vm_processes
+from app.services import agent_vm, agent_vm_processes, agent_vm_tools
 from app.services.agent_compaction import describe
 from app.services.agent_vm_processes import (MAX_RUNNING, RUNNER, launch_script, list_command, parse_status,
                                              process_dir, start_command, status_command, stop_command, task_name)
@@ -84,7 +84,8 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
 
 def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(store, fake_vm, fixed_id, monkeypatch):
     """It holds the VM awake up to its limit, after the message too: that limit
-    is charged, and it never runs past what is left today (agent_vm_time.py)."""
+    is charged, at most half of what is left today (DAY_SHARE, since
+    2026-10-31), so the commands around it still run (agent_vm_time.py)."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 1000)
     directory = process_dir(PID)
@@ -92,10 +93,56 @@ def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(sto
     loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev", "max_seconds": 1800})]]))
     list(loop.run())
     started = results(loop)[0]
-    assert started["status"] == "running" and started["max_seconds"] == 1000
+    assert started["status"] == "running" and started["max_seconds"] == 500
+    assert "at most half of what is left of today's VM time" in started["note"]
     # Its limit, and the start's own 2 s: every command the server runs for
     # the agent counts (VMTools._exec, security audit 2026-10-27).
-    assert agent_vm_time.used(store.db, UID) == 1002
+    assert agent_vm_time.used(store.db, UID) == 502
+
+
+def test_a_dev_server_leaves_an_account_without_pro_its_commands_output_and_stop(store, fake_vm, fixed_id,
+                                                                               monkeypatch):
+    """Bug 2026-10-31: at its default limit (30 minutes) a dev server reserved
+    all 20 minutes of an account without Pro, and its own agent could then
+    neither read its output, nor stop it, nor run a command."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: agent_vm_time.BASE_DAILY_SECONDS)
+    directory = process_dir(PID)
+    fake_vm.commands[start_command(directory, task_name(PID))] = (status("running", "Listening on :3000\n"), 0, 2.0)
+    fake_vm.commands[status_command(directory, wait=5)] = (status("running", "GET / 200\n"), 0, 5.0)
+    fake_vm.commands["curl -s localhost:3000"] = ([("stdout", b"<html>\n")], 0, 1.0)
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (status("stopped", "bye\n"), 0, 1.0)
+    loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev"})],
+                                 [("vm_process_output", {"id": PID, "wait_seconds": 5})],
+                                 [("vm_exec", {"command": "curl -s localhost:3000"})],
+                                 [("vm_stop_process", {"id": PID})]]))
+    list(loop.run())
+    started, read, fetched, stopped = results(loop)
+    assert started["max_seconds"] == 600
+    # Twenty minutes, less than the note's threshold: the first result says what is left.
+    assert started["vm_time_left_today"]["minutes"] == 9
+    assert read["output"] == "GET / 200\n" and fetched["exit_code"] == 0 and stopped["status"] == "stopped"
+
+
+def test_a_process_can_be_read_and_stopped_once_the_days_vm_time_is_used_up(store, fake_vm, fixed_id, monkeypatch):
+    """Reading a process's output and stopping it count nothing worth
+    refusing (stopping gives time back): they go on when the day's VM time is
+    used up, a new process does not (VMTools._start ``spends``)."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 100)
+    directory = process_dir(PID)
+    fake_vm.commands[status_command(directory)] = (status("running", "GET / 200\n"), 0, .1)
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (status("stopped", "bye\n"), 0, 1.0)
+    loop = vm_loop(store, Agent([[("vm_process_output", {"id": PID, "wait_seconds": 30})],
+                                 [("vm_stop_process", {"id": PID})],
+                                 [("vm_start_process", {"command": "npm run dev"})]]))
+    list(loop.run())
+    read, stopped, started = results(loop)
+    assert read["output"] == "GET / 200\n" and stopped["status"] == "stopped"
+    assert started == {"error": agent_vm_tools.VM_DAY_LIMIT}
+    # The wait went down to nothing: it would have run in the VM.
+    assert ("exec", NAME, status_command(directory, wait=30)) not in [call[:3] for call in fake_vm.calls]
 
 
 def test_waiting_for_a_process_counts_and_never_runs_past_the_days_vm_time(store, fake_vm, fixed_id, monkeypatch):

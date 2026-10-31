@@ -5825,7 +5825,13 @@ Turns und offener Tabs fallen still weg), `vm` ist `on`, wo das Konto den Arbeit
 (`vm_allowed`, siehe „Agent VM“), `AgentRequest.agent_preferences` wird
 angenommen und ignoriert und ist kein Teil der Request-Identität.
 VM-Zeit (`agent_vm_time.daily_limit`): Pro 2 h, sonst `BASE_DAILY_SECONDS` =
-20 min, Admins ohne Grenze. Domains über die Paketquellen hinaus
+20 min, Admins ohne Grenze. Aufgebraucht sperrt sie seit 2026-10-31 nur, was
+zählt (Befehle, Installationen, neue Hintergrundprozesse; `VMTools._start`
+`spends`), nicht Dateien, Prozess-Ausgabe/-Stopp und Browser; ein
+Hintergrundprozess reserviert höchstens die Hälfte des Rests
+(`agent_vm_processes.DAY_SHARE`), der Agent erfährt einen Rest unter 30 min
+(`vm_time_left_today`) und warum ein Befehl stoppte (`VM_DAY_CUT`); Details
+`docs/agent-mode.md` „VM-Zeit pro Tag“. Domains über die Paketquellen hinaus
 (`request_domain`) bleiben Pro und Admins (`domains_allowed`,
 `DelegationLoop(domains=…)`, sonst ohne `DomainTools` und mit
 `AGENT_VM_NO_DOMAINS_PROMPT`, Admin-Katalog `agent_vm_no_domains`): ein Skript

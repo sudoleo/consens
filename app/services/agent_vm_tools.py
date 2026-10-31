@@ -138,8 +138,17 @@ LEASE_KEEP_MAX_SECONDS = 6 * 3600
 CLOSE_WAIT_SECONDS = 2.0
 CHECKPOINT_WAIT_SECONDS = agent_vm.CHECKPOINT_SECONDS + 10
 VM_NO_TIME = ("Not enough time is left in this message for a command. Write the answer from what you have.")
-VM_DAY_LIMIT = ("The VM time of this account for today is used up. Continue without the VM for this message and "
-                "tell the user that the VM is available again tomorrow (the day starts at midnight UTC).")
+VM_DAY_LIMIT = ("The VM time of this account for today is used up: commands, installations and new background "
+                "processes run again tomorrow (the day starts at midnight UTC). Files, the output and stop of "
+                "background processes and the browser still work. Continue without commands and tell the user "
+                "when one was needed.")
+# A command or installation whose time limit today's VM time set, stopped
+# there (VMTools.exec, install): until 2026-10-31 it read like its own limit.
+VM_DAY_CUT = ("The {what} was stopped after {seconds} seconds, when the VM time of this account for today ran "
+              "out: commands run again tomorrow (the day starts at midnight UTC).")
+# Below this much of today's VM time, the first result of a message says how
+# much is left (VMSession.announce): the agent plans its commands with it.
+DAY_NOTE_SECONDS = 30 * 60
 # While the user has the workspace's browser (their takeover in the view), a
 # VM call waits until they hand it back, looking every USER_POLL_SECONDS, at
 # most USER_WAIT_SECONDS (agent_workspace.user_has_browser).
@@ -856,6 +865,10 @@ class VMSession:
                                        "note": agent_secrets.KEYS_NOTE}
         if self.claim is not None and self.claim.restored:
             extra["workspace_note"] = agent_workspace.RESTORED_NOTE
+        left = self.left()
+        if left is not None and left < DAY_NOTE_SECONDS:
+            extra["vm_time_left_today"] = {"minutes": max(0, int(left // 60)),
+                                           "counts": "commands, installations and background processes"}
         return {**result, **extra}
 
     def summary(self):
@@ -1099,18 +1112,24 @@ class VMTools:
                 self._files = AgentFiles(self.loop.store.db)
         return self._files
 
-    def _start(self, cancellation, *, bench=True, change=True):
+    def _start(self, cancellation, *, bench=True, change=True, spends=True):
         """Before a call of the workspace: the day's VM time, the user's
         takeover, the lease, and with ``bench`` the workbench; a call that
         ``change``s the workbench waits for the message's checkpoint. Not
         while the server's safety rules have closed the workspace
-        (workspace_guard.py): every tool of the workspace starts here."""
+        (workspace_guard.py): every tool of the workspace starts here.
+        ``spends``: the call runs a command, which counts as VM time
+        (agent_vm_time.py), and is refused once today's is used up. Files,
+        a background process's output and stop and the browser count
+        nothing and go on (since 2026-10-31: before, a background process
+        that reserved the rest of a Free account's 20 minutes left its own
+        agent unable to read or stop it)."""
         from app.services import workspace_guard
         guard = workspace_guard.status(self.loop.uid)
         if guard.closed:
             raise ValueError(workspace_guard.agent_text(guard))
         left = self.session.left()
-        if left is not None and left < 1:
+        if spends and left is not None and left < 1:
             raise ValueError(VM_DAY_LIMIT)
         with self.session._lock:
             self.session.calls += 1
@@ -1191,6 +1210,8 @@ class VMTools:
         report = report or (lambda fields: None)
         self._start(cancellation)
         timeout = self._timeout(args.timeout_seconds)
+        # Today's VM time as the command starts: whether it set the limit.
+        day = self.session.left()
         cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
         output = _Output()
         reported = [self.session.clock()]
@@ -1244,7 +1265,9 @@ class VMTools:
                   "duration_ms": int(outcome.seconds * 1000), "cwd": cwd,
                   "stdout": output.for_model("stdout"), "stderr": output.for_model("stderr")}
         if outcome.timed_out:
-            result["note"] = f"The command was stopped after its time limit of {timeout} seconds."
+            result["note"] = (VM_DAY_CUT.format(what="command", seconds=timeout)
+                              if day is not None and timeout >= int(day)
+                              else f"The command was stopped after its time limit of {timeout} seconds.")
         report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                 "duration_ms": result["duration_ms"]})
         return self.session.announce(result)
@@ -1263,6 +1286,7 @@ class VMTools:
                 packages.append(name)
         self._start(cancellation)
         timeout = self._timeout(INSTALL_TIMEOUT)
+        day = self.session.left()
         output = _Output()
         reported = [self.session.clock()]
 
@@ -1282,14 +1306,16 @@ class VMTools:
                   "duration_ms": int(outcome.seconds * 1000), "output": output.for_model("stdout"),
                   "stderr": output.for_model("stderr")}
         if outcome.timed_out:
-            result["note"] = f"The installation was stopped after {timeout} seconds."
+            result["note"] = (VM_DAY_CUT.format(what="installation", seconds=timeout)
+                              if day is not None and timeout >= int(day)
+                              else f"The installation was stopped after {timeout} seconds.")
         report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                 "duration_ms": result["duration_ms"]})
         return self.session.announce(result)
 
     def read(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation, change=False)
+        self._start(cancellation, change=False, spends=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("read", lambda: self.session.backend.read_file(
@@ -1333,7 +1359,7 @@ class VMTools:
 
     def write(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation)
+        self._start(cancellation, spends=False)
         path = vm_path(args.path, self.session.dir)
         size = self._provider("write", lambda: self.session.backend.write_file(
             self.session.name, path, args.content.encode("utf-8")))
@@ -1346,7 +1372,7 @@ class VMTools:
         report = report or (lambda fields: None)
         if args.old_string == args.new_string:
             raise ValueError("old_string and new_string are the same: there is nothing to change.")
-        self._start(cancellation)
+        self._start(cancellation, spends=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("edit", lambda: self.session.backend.read_file(
@@ -1376,7 +1402,7 @@ class VMTools:
 
     def view(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation, change=False)
+        self._start(cancellation, change=False, spends=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("view", lambda: self.session.backend.read_file(
@@ -1404,7 +1430,7 @@ class VMTools:
 
     def share(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
-        self._start(cancellation, change=False)
+        self._start(cancellation, change=False, spends=False)
         path = vm_path(args.path, self.session.dir)
         try:
             raw, complete = self._provider("share", lambda: self.session.backend.read_file(
