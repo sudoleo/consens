@@ -71,8 +71,7 @@ def open_audit_page(browser, server, width, dark, events, *, hang_live=False):
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_viewport_size({"width": width, "height": 900})
-    page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True,
-                                                     "audit_access": True, "limit": 500}))
+    page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True, "limit": 500}))
     page.route("**/usage", lambda r: _json(r, {"tier": "pro", "is_pro": True, "remaining": 0, "total_limit": 500}))
     page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
     page.route("**/chats", lambda r: _json(r, {"chat": {"id": CHAT, "execution_mode": "agent"}}))

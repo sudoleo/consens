@@ -320,7 +320,7 @@ def test_landing_field_arrives_with_the_caret_in_the_composer(browser, phase4_se
         expect(page.locator("#questionInput")).to_be_enabled()
         expect(page.locator("#questionInput")).to_be_focused()
         expect(page.locator("#questionInput")).to_have_attribute(
-            "placeholder", "Ask anything, or paste an AI answer to check it")
+            "placeholder", "Ask anything")
         assert "focus=" not in page.url
         expect(page.locator("#loginModal")).to_be_hidden()
     finally:

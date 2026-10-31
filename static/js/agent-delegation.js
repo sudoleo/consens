@@ -860,7 +860,7 @@
     // A running turn of a chat whose panel is open shows it before its first
     // call arrives ("Starting…"), so a follow-up never closes it in between.
     // A turn with a work log keeps its panel also without any model call
-    // (audit mode with the answer check off).
+    // (its reviewers never ran).
     const panelVisible = !view.closed && (view.agents.size > 0 || view.running || shownLog(view));
     setPanelVisible(panelVisible);
     const sheet = panelVisible && !wide();
@@ -1003,7 +1003,7 @@
     }
     mergeUsage(view, spec.usage);
     if (Array.isArray(spec.models)) view.seed = spec.models;
-    // The turn has a work log (admins, audit mode): once known, it stays.
+    // The turn has a work log (admins; every run since 2026-10-31): once known, it stays.
     if (spec.workLog) view.workLog = true;
     if (wasRunning && !spec.running) { stopClock(view); view.settling = true; }
     view.running = !!spec.running && !view.ended;

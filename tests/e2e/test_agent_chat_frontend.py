@@ -614,9 +614,10 @@ def test_small_viewport_long_model_and_missing_reasoning(browser, phase4_server)
         assert menu.evaluate("el => el.scrollHeight > el.clientHeight")
         page.locator('.agent-model-picker [data-value="long"]').click()
         expect(trigger).to_have_attribute("title", re.compile(r"^A model with a particularly long display name writes the answer, \d+ AIs cross-check it\.$"))
-        # A long model name stays in the tooltip; the chip's words fit whole.
+        # A long model name on the chip ends in an ellipsis inside the
+        # screen; the tooltip holds it whole.
         assert page.locator(".agent-model-picker .model-picker-display-text").evaluate(
-            "el => el.offsetWidth > 0 && el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().right <= innerWidth")
+            "el => el.offsetWidth > 0 && getComputedStyle(el).textOverflow === 'ellipsis' && el.getBoundingClientRect().right <= innerWidth")
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         _choose_effort(page, "high")
         _snapshot(page, "agent-long-name-320")
@@ -1019,7 +1020,7 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         expect(page.locator("#appToasts .toast")).to_have_count(1)
         expect(page.locator("#agentModelNotice")).to_have_count(0)
         label = page.locator(".agent-model-picker .model-picker-display-text")
-        expect(label).to_have_text(re.compile(r"^\d+ AIs cross-check$"))
+        expect(label).to_have_text("DeepSeek V4.1 Flash")
         expect(page.locator(".agent-model-picker .model-picker-display")).to_have_attribute(
             "title", re.compile(r"^DeepSeek V4\.1 Flash writes the answer"))
         assert label.evaluate("el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth + 1")

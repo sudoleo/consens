@@ -16,8 +16,7 @@ def test_a_second_tab_follows_a_paused_turn_and_shows_its_card(browser, phase4_s
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("request", lambda request: live.append(request.url) if "/live?" in request.url else None)
     try:
-        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True,
-                                                         "audit_access": True, "limit": 500}))
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True, "limit": 500}))
         page.route("**/agent/models", lambda r: _json(r, {**CATALOG, "token_budget": {"remaining": 188878, "limit": 250000}}))
         page.route("**/agent/budget", lambda r: _json(r, {"token_budget": {"limit": 250000, "used": 1000, "remaining": 249000}}))
         done = {"id": DONE, "question": "Find the cheapest train to Munich.", "status": "completed", "position": 1,
@@ -27,8 +26,6 @@ def test_a_second_tab_follows_a_paused_turn_and_shows_its_card(browser, phase4_s
                    "attachments": [], "agent_settings": {
                        "selection": {"model_id": CATALOG["default_model_id"], "reasoning_effort": "default"},
                        "comparison_selection": {"openai": "gpt-5.4-mini"},
-                       "agent_preferences": {"depth": "auto", "quorum": "all", "autonomy": "guided", "judges": "on",
-                                             "audit": "on", "vm": "off"},
                        "file_ids": [], "google_selection": None, "google_data_consent": False}}
         bookmark = {"id": "b_elsewhere", "chat_id": CHAT, "turn_id": DONE, "mode": "Agent", "execution_mode": "agent",
                     "title": done["question"], "query": done["question"], "responses": {"consensus": done["consensus"]}}
