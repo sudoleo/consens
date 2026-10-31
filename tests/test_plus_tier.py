@@ -166,7 +166,7 @@ def test_plus_limits_are_admin_configurable():
     assert "memory_plus_chars" in cfg.get_memory_edit_config()
     # Das Tokenkonto der Stufe ist im eigenen Admin-Dokument bedienbar.
     from app.services import agent_budget_config
-    assert agent_budget_config.snapshot({"tier_limits": {"plus": 1234}})["tier_limits"]["plus"] == 1234
+    assert agent_budget_config.snapshot({"unit": "micro_eur", "tier_limits": {"plus": 1234}})["tier_limits"]["plus"] == 1234
 
 
 def test_memory_plus_chars_is_clamped_between_free_and_pro():

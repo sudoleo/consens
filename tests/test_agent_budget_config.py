@@ -35,13 +35,37 @@ def test_defaults_cover_every_tier_and_mode_and_ignore_the_legacy_agent_limit():
     for tier, modes in budgets.DEFAULT_RUN_ESTIMATES.items():
         assert modes["compare"] < modes["consensus"] <= modes["deep_think"]
     # Missing values default per field; present invalid values fail closed.
-    partial = budgets.snapshot({"tier_limits": {"plus": 5}, "run_estimates": {"pro": {"compare": 7}}})
+    partial = budgets.snapshot({"unit": "micro_eur", "tier_limits": {"plus": 5},
+                                "run_estimates": {"pro": {"compare": 7}}})
     assert partial["tier_limits"]["plus"] == 5 and partial["tier_limits"]["free"] == budgets.DEFAULT_TIER_LIMITS["free"]
     assert partial["run_estimates"]["pro"]["compare"] == 7
     for bad in ({"tier_limits": {"free": 0}}, {"tier_limits": {"gold": 5}}, {"tier_limits": {"free": True}},
                 {"run_estimates": {"free": {"agent": 5}}}, {"run_estimates": {"free": {"compare": 2.5}}}):
         with pytest.raises(ValueError):
-            budgets.snapshot(bad)
+            budgets.snapshot({"unit": "micro_eur", **bad})
+
+
+def test_limits_saved_in_tokens_give_way_to_the_euro_defaults():
+    # Until 2026-10-31 every save and every reset wrote the whole table, in
+    # tokens. Read as micro-euros, Free's 660,000 tokens were 0.66 EUR a day
+    # and Pro's 40,000-token Compare run 0.04 EUR.
+    tokens = {"revision": 3,
+              "tier_limits": {"free": 660_000, "plus": 1_650_000, "pro": 5_000_000, "admin": 5_000_000},
+              "run_estimates": {tier: {"compare": 32_000, "consensus": 55_000, "deep_think": 150_000}
+                                for tier in budgets.TIER_KEYS}}
+    config = budgets.snapshot(tokens)
+    assert config["tier_limits"] == budgets.DEFAULT_TIER_LIMITS
+    assert config["run_estimates"] == budgets.DEFAULT_RUN_ESTIMATES
+    assert config["revision"] == 3 and config["unit"] == "micro_eur"
+    # The next save writes the unit, and what it saved stands.
+    db = Database()
+    db.documents[("app_config", "agent_budget")] = tokens
+    store = budgets.BudgetConfigStore(db)
+    saved = store.save(expected_revision=3, updated_by="admin", tier_limits={"free": 800_000})
+    assert saved["unit"] == "micro_eur"
+    assert saved["tier_limits"] == {**budgets.DEFAULT_TIER_LIMITS, "free": 800_000}
+    assert saved["run_estimates"] == budgets.DEFAULT_RUN_ESTIMATES
+    assert store.read(force=True)["tier_limits"]["free"] == 800_000
 
 
 def test_tier_keys_and_modes():

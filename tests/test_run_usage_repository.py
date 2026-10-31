@@ -194,7 +194,7 @@ def test_consume_is_idempotent_and_changes_no_tokens(usage_repo):
 def test_booking_debits_measured_tokens_once_and_may_overdraw(usage_repo):
     repo, db = usage_repo
     # Bookings report against the tier's current limit from the admin config.
-    db.documents[("app_config", "agent_budget")] = {"tier_limits": {"free": 100_000}}
+    db.documents[("app_config", "agent_budget")] = {"unit": "micro_eur", "tier_limits": {"free": 100_000}}
     consumed(repo, "booker", "run")
 
     first = repo.book_operation("booker", "run", "ask:openai", measured=60_000, estimated=0, now=UTC_NOON)

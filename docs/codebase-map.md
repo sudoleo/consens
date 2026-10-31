@@ -7862,7 +7862,10 @@ Agent.
   behaltene Key der Schätzung eines Laufs mit Reasoning an). Fehlende Felder
   erhalten ihren Default, vorhandene ungültige Werte schlagen geschlossen fehl
   (503). Das alte Einzelfeld `daily_token_limit` wird ignoriert und beim
-  nächsten Speichern entfernt. Admin → Limits zeigt eine Tabelle Stufe ×
+  nächsten Speichern entfernt. Jedes Speichern schreibt `unit: "micro_eur"`;
+  ein Dokument ohne diese Marke stammt aus der Token-Zeit (bis 2026-10-31
+  schrieb jedes Speichern und jeder Reset die ganze Tabelle in Tokens), seine
+  `tier_limits`/`run_estimates` gelten nicht, bis es neu gespeichert wird. Admin → Limits zeigt eine Tabelle Stufe ×
   (Tokens/Tag, Compare-, Consensus-, Reasoning-Lauf); `PUT
   /api/admin/agent-budget` nimmt `{revision, tier_limits?, run_estimates?}`
   (strikt, Teilwerte werden mit dem Stand gemischt), `GET` liefert zusätzlich

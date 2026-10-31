@@ -24,6 +24,8 @@ from app.services import persistence_guard
 CACHE_SECONDS = 30
 # Amounts are whole micro-euros: 1 EUR = 1,000,000.
 MICRO_EUR = 1_000_000
+# Written with every save since 2026-10-31: a document without it holds tokens.
+UNIT = "micro_eur"
 MAX_DAILY_LIMIT = 1_000 * MICRO_EUR
 MAX_RUN_ESTIMATE = 10 * MICRO_EUR
 # A fixed exchange rate, 1 EUR = 1.15 USD (late October 2026: about 1.12 to
@@ -120,9 +122,13 @@ def snapshot(data):
         raise ValueError("Invalid token budget reset")
     # The single pre-2026-10 `daily_token_limit` (Agent only) is not read any
     # more: its value is part of the Pro/Admin default above.
-    return {"tier_limits": normalize_tier_limits(data.get("tier_limits")),
-            "run_estimates": normalize_run_estimates(data.get("run_estimates")),
-            "revision": revision, "reset_epoch": epoch,
+    # Every save and reset before 2026-10-31 wrote the whole table in tokens;
+    # read as micro-euros they would be other limits (Free 0.66 EUR), so a
+    # document without the unit keeps the euro defaults until its next save.
+    euros = data.get("unit") == UNIT
+    return {"tier_limits": normalize_tier_limits(data.get("tier_limits") if euros else None),
+            "run_estimates": normalize_run_estimates(data.get("run_estimates") if euros else None),
+            "unit": UNIT, "revision": revision, "reset_epoch": epoch,
             "updated_at": data.get("updated_at"), "updated_by": data.get("updated_by"),
             "reset_at": data.get("reset_at")}
 
