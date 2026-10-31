@@ -652,14 +652,16 @@
           }
         }
         // Capture: a menu or dialog open above the drawer takes its Escape
-        // first (they stop it); only a plain Escape closes the drawer.
+        // first (they stop it); only a plain Escape closes the drawer. The
+        // rename field and the chat search handle their own Escape (the
+        // search clears and closes itself; the next Escape closes the drawer).
         window.addEventListener("keydown", function (event) {
           if (event.key !== "Escape" || event.isComposing || !drawerOpen) return;
           if (document.querySelector("dialog[open]")) return;
           if (window.App?.popover?.anyOpen?.()) return;
           const sidebar = document.querySelector(".sidebar");
           if (!sidebar?.classList.contains("active")) return;
-          if (event.target?.closest?.(".bookmark-rename-input")) return;
+          if (event.target?.closest?.(".bookmark-rename-input, #chatSearch")) return;
           const hadFocus = sidebar.contains(document.activeElement);
           closeOverlaySidebar();
           if (hadFocus || document.activeElement === document.body) {

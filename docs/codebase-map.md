@@ -1272,7 +1272,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
 - **Handy-Schublade (`app-init.js`, `syncDrawerFocus`):** die offene
   Overlay-Seitenleiste macht die Seite dahinter `inert`, holt den Fokus zu
   sich und gibt ihn beim Schließen an `#toggleSidebarButton`; Escape schließt
-  sie (Capture: ein offener Dialog oder ein Popover bekommt Escape zuerst).
+  sie (Capture: ein offener Dialog oder ein Popover bekommt Escape zuerst,
+  das Umbenennen-Feld und seit 2026-10-31 die Chatsuche behalten ihr eigenes
+  Escape; das nächste schließt die Schublade).
   Seit 2026-10-20 (Apple-Audit F11, `bindDrawerSwipe`) folgt sie einem
   Finger nach links (Pointer-Events `pointerType: "touch"`, auf der Leiste
   oder dem abgedunkelten Rest): die Leiste per Inline-`transform`
