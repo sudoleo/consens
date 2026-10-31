@@ -55,9 +55,9 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
         assert hit == 'heroAskField'
         previews = page.locator('.lp-composer-preview:has(.lp-composer-models)')
-        # The hero and the heat-pump scene show Daily's three reviewers (the
-        # app's default since 2026-10-28, the demo's lineup).
-        for preview, marks in zip(previews.all(), (3, 3), strict=True):
+        # The hero and the heat-pump scene show Daily's two reviewers (Claude
+        # and DeepSeek since 2026-11-01, the app's default and the demo's lineup).
+        for preview, marks in zip(previews.all(), (2, 2), strict=True):
             field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
             # The mode lives in the (+) menu, as in /app.
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
@@ -67,7 +67,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             expect(models.locator('img')).to_have_count(marks)
             assert models.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
             assert models.evaluate('el => el.nextElementSibling.classList.contains("lp-run-chip")')
-            expect(field.locator('.lp-run-chip')).to_have_text('3 AIs cross-check')
+            expect(field.locator('.lp-run-chip')).to_have_text('2 AIs cross-check')
             expect(field.locator('.lp-run-chip i')).to_have_count(0)
             # One field, one row: nothing below the field's own edge.
             assert preview.evaluate("""el => {
@@ -136,20 +136,28 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         expect(page.locator('meta[property="og:image:alt"]')).to_have_attribute(
             'content', 'One AI does the work. Several check it. | consens.io')
         main = page.locator('main')
-        for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs'):
+        for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs', '3 AIs',
+                     'Live from real runs', 'We benchmarked the consensus'):
             expect(main).not_to_contain_text(gone)
+        # The benchmark and the Model Pulse strip left the page on 2026-11-01.
+        expect(page.locator('#benchmark')).to_have_count(0)
+        expect(page.locator('.lp-live-pulse')).to_have_count(0)
         # Scene 02 ends on the reviewers' marks and the row under the answer.
         run = page.locator('[data-run]')
         expect(run.locator('[data-run-clock]')).to_have_text('Thought for 24s')
         expect(run.locator('.cx-claim.is-audit.is-major')).to_have_count(1)
-        expect(run.locator('[data-run-evidence]')).to_contain_text('Notes')
-        expect(run.locator('[data-run-evidence]')).to_contain_text('Answers')
+        expect(run.locator('[data-run-evidence]')).to_contain_text('Notes 3')
+        expect(run.locator('[data-run-evidence]')).to_contain_text('Answers 2')
+        # Daily's two reviewers beside the clock, and the two AIs it asked.
+        expect(run.locator('[data-reviewer]')).to_have_count(2)
+        expect(run.locator('[data-run-count]')).to_have_text('2 answers')
         # Decide: the marked sentence opens the reviewer's note.
         mark = page.locator('[data-diff-open="lpNoteWalls"]')
         mark.scroll_into_view_if_needed()
         mark.click()
         expect(page.locator('#lpNoteWalls')).to_have_attribute('open', '')
         expect(page.locator('#lpNoteWalls')).to_contain_text('The windows are still the original double glazing.')
+        expect(page.locator('#lpNoteWalls')).to_contain_text('Claude · Wrong')
         expect(page.locator('.lp-pause-title')).to_have_text('A reviewer paused before a step')
         output = Path('test-results/landing-one-mode')
         output.mkdir(parents=True, exist_ok=True)

@@ -232,17 +232,18 @@ def test_pulse_api_and_failure_are_honest(client):
     assert http.get("/api/model-pulse").status_code == 503
 
 
-def test_landing_shows_benchmark_before_watch_and_the_live_strip(client, monkeypatch):
+def test_landing_has_neither_the_benchmark_nor_the_pulse_strip(client, monkeypatch):
+    # Since 2026-11-01: the app no longer builds a consensus and the pulse is
+    # an archive, so the landing page shows neither, and it does not read
+    # the ledger either (a broken ledger cannot touch it).
     http, state = client
     import app.services.llm.agent_client as agent_client
     monkeypatch.setattr(agent_client, "agent_model_label", lambda: "Agent")
-    page = http.get("/").text
-    assert page.index('id="benchmark"') < page.index('id="watch"')
-    assert 'class="lp-live-pulse lp-reveal"' in page
-    assert "No model wins every time." in page
-    assert 'class="lp-hero-pulse"' not in page
-    # Too few runs to say anything: the strip stays out, the page renders.
-    state.entries = state.entries[:3]
-    assert 'class="lp-live-pulse' not in http.get("/").text
     state.fail = True
-    assert http.get("/").status_code == 200
+    response = http.get("/")
+    assert response.status_code == 200
+    page = response.text
+    assert 'id="watch"' in page
+    assert 'id="benchmark"' not in page
+    assert "lp-live-pulse" not in page and 'class="lp-hero-pulse"' not in page
+    assert "Live from real runs" not in page

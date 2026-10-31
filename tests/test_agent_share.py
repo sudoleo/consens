@@ -477,6 +477,9 @@ def test_a_reviewed_agent_answer_shows_who_reviewed_and_their_notes(share_app):
     assert "<img src=x" not in body and "javascript:" not in body
     assert "2 more AI models followed the work, reviewed the answer" in text
     assert "Answer model: Claude Sonnet 5.5. Reviewed by: GPT-6 Luna, Gemini 3.5 Flash." in text
+    # The consensus engine did not build it: "how it works" is the product's.
+    assert 'class="share-about-link" href="/#product">How consens.io works' in body
+    assert 'class="share-about-link" href="/consensus-engine"' not in body
     for absent in ("private file", "inbox", "contradiction", "/100"):
         assert absent not in text, absent
     share = database.documents[(share_snapshots.SHARES_COLLECTION, shared["share_id"])]

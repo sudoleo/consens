@@ -401,8 +401,8 @@ def questions_hub(request: Request):
         "url": SITE_URL + "/questions",
         "name": "AI Consensus Library",
         "description": (
-            "Questions answered by multiple AI models independently, "
-            "cross-checked and scored for agreement."
+            "Questions answered by AI and checked by other AI models, "
+            "some tracked over time."
         ),
         "isPartOf": seo_entity.SITE_REF,
         "publisher": seo_entity.ORG_REF,
@@ -527,7 +527,7 @@ def share_page(request: Request, slug_id: str):
     if not snapshots.is_valid_share_id(share_id):
         return _unavailable_response(
             request, 404, "Page not found",
-            "This shared consensus does not exist.",
+            "This shared answer does not exist.",
         )
 
     try:
@@ -539,13 +539,13 @@ def share_page(request: Request, slug_id: str):
     if data is None:
         return _unavailable_response(
             request, 404, "Page not found",
-            "This shared consensus does not exist.",
+            "This shared answer does not exist.",
         )
     if data.get("status") != "active":
         # Widerrufen oder gesperrt: dauerhaft weg (410 Gone).
         return _unavailable_response(
             request, 410, "This page is gone",
-            "This shared consensus has been removed by its creator or by consens.io.",
+            "This shared answer has been removed by its creator or by consens.io.",
         )
 
     is_private = str(data.get("visibility") or "public") == "private"

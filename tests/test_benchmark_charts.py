@@ -52,7 +52,9 @@ def test_each_chart_reads_as_a_table_with_its_own_numbers(title_id):
         assert cells == [f"{value}%", f"{low}–{high}%"], (name, cells)
 
 
-@pytest.mark.parametrize("template,title_id", [("benchmark.html", "benchMiniTitle"), ("landing.html", "lpBenchMiniTitle")])
+# The landing page carried the same small chart until 2026-11-01; the app no
+# longer builds a consensus, so only /benchmark shows it.
+@pytest.mark.parametrize("template,title_id", [("benchmark.html", "benchMiniTitle")])
 def test_the_small_chart_reads_as_a_table_too(template, title_id):
     page = (TEMPLATES / template).read_text(encoding="utf-8")
     start = page.index(f'id="{title_id}"')

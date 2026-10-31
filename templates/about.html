@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "partials/font_preload.html" %}
-  <meta name="description" content="About consens.io - an independent tool for comparing AI model answers.">
+  <meta name="description" content="About consens.io, an independent AI agent whose work other AI models check while it works.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/about">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
   <meta property="og:title" content="About consens.io">
-  <meta property="og:description" content="Learn how consens.io compares AI model answers, surfaces disagreement, and builds a structured consensus.">
+  <meta property="og:description" content="How consens.io works: one AI researches and writes the answer, and other AI models follow its work, mark what they doubt and can pause a risky step.">
   <meta property="og:url" content="https://www.consens.io/about">
   {% include "partials/og_card.html" %}
   <meta name="twitter:title" content="About consens.io">
-  <meta name="twitter:description" content="An independent tool for comparing AI model answers and spotting agreement across providers.">
+  <meta name="twitter:description" content="An independent AI agent whose work other AI models check while it works.">
   <title>About | consens.io</title>
 <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
@@ -32,7 +32,7 @@
         "@id": "https://www.consens.io/about#about",
         "url": "https://www.consens.io/about",
         "name": "About consens.io",
-        "description": "consens.io is an independent tool for comparing AI model answers, spotting agreement, and making disagreements easier to inspect.",
+        "description": "consens.io is an AI agent that other AI models check while it works. One AI researches and writes the answer; the others follow every step and mark in it what they find wrong, doubtful or incomplete.",
         "isPartOf": { "@id": "{{ website_id }}" },
         "mainEntity": { "@id": "{{ organization_id }}" },
         "publisher": { "@id": "{{ organization_id }}" }
@@ -59,8 +59,9 @@
       <p class="eyebrow">Independent AI tooling</p>
       <h1>About consens.io</h1>
       <p class="lead">
-        consens.io is an independent tool for comparing AI model answers, spotting agreement,
-        and making disagreements easier to inspect.
+        consens.io is an AI agent that other AI models check while it works. One AI researches and
+        writes the answer; the others follow every step and mark in it what they find wrong, doubtful
+        or incomplete.
       </p>
     </header>
 
@@ -69,18 +70,19 @@
         <h2>Why not just ask one model?</h2>
         <p>
           Any single model can be confidently wrong, and one answer never tells you which case you're in.
-          consens.io sends your prompt to several models at once, lets you inspect their individual responses, and
-          adds a consensus layer that shows where they agree, and flags where they don't.
+          On consens.io, other models check the work of the one that answers. They are independent, like an
+          auditor: they never steer the agent, and it never sees their notes. Where they object, the sentence
+          in the answer carries their mark.
         </p>
       </section>
 
       <section class="legal-panel notice">
-        <h2>Does the consensus actually work?</h2>
+        <h2>What the benchmark measures</h2>
         <p>
-          We publish an evaluation on <strong>314 closed-book MMLU-Pro questions</strong>, with the tested
-          models, method and limitations on the benchmark page. This is a limited evaluation of a particular
-          configuration, not proof that consensus is generally more accurate. Models can share the same error;
-          agreement scores are not probabilities that an answer is correct.
+          Our evaluation on <strong>314 closed-book MMLU-Pro questions</strong> tests the consensus engine:
+          several models answer, and one writes a combined answer from theirs. That engine still runs Watches,
+          Topics and the API, but it is not how the app answers, so the benchmark says nothing about the
+          reviewers. It is a limited evaluation of one configuration, and models can share the same error.
         </p>
         <div class="links">
           <a href="/benchmark" class="button-secondary">See the benchmark</a>
@@ -90,9 +92,10 @@
       <section class="legal-panel">
         <h2>What it does</h2>
         <p>
-          You enter a single prompt and receive multiple model responses next to each other. The consensus
-          step combines useful contributions, highlights contradictions, and gives you one answer with its
-          caveats. A model can add a useful detail even when the others did not mention it.
+          You ask a question or give a task. One AI, the chat model you pick, searches the web, reads
+          sources and works with your files; for a task it can use a browser in its own workspace. Then it
+          writes the answer. Other AI models check along: they follow every step and mark sentences they find
+          wrong, doubtful or incomplete.
         </p>
         <p class="subtle">
           It is useful for research, learning, drafting, and everyday questions, but it is not a substitute
@@ -103,16 +106,17 @@
       <section class="legal-panel">
         <h2>How it works</h2>
         <ul>
-          <li>You choose which models to query and adjust the available options.</li>
+          <li>You choose the AI that does the work and the AIs that check it, or start from a preset: Daily, Open Models or High Quality.</li>
           <li>The backend sends requests through OpenRouter to model endpoints and may use web-search services.</li>
-          <li>In Agent, one AI researches and writes the answer itself and can ask the other models for their own view; Compare shows their answers side by side without one. Open Answers to read an original response or compare two answers side by side.</li>
-          <li>The other AIs you chose follow every step and review the answer; before a risky step, a reviewer can pause the run until you decide.</li>
+          <li>The reviewers follow a log of every step that the app writes, not the agent's own account of it. Before a step with an effect outside the chat, such as sending, uploading or typing into a website, the agent waits for their go.</li>
+          <li>If a reviewer sees a safety problem or a hidden instruction, it pauses the run and you decide.</li>
+          <li>When independent views help, the agent asks the reviewers' models the same question. Open Answers to read what each said, or compare two answers side by side.</li>
         </ul>
       </section>
 
       <section class="legal-panel">
         <h2>Check a note, then keep the conversation</h2>
-        <p>In Agent mode, a reviewer's note is marked at the sentence it concerns: wrong, doubtful or incomplete. Open it to see who noted it, in what words and with which source. Unmarked text means no reviewer objected, not that it is confirmed.</p>
+        <p>A reviewer's note is marked at the sentence it concerns: wrong, doubtful or incomplete. Open it to see who noted it, in what words and with which source. Unmarked text means no reviewer objected, not that it is confirmed.</p>
         <p>Signed-in chats save automatically. Ask a follow-up in the same conversation, reopen it from the sidebar, and optionally use Memory to carry your preferences into later chats. Memory can be reviewed, edited and switched off.</p>
       </section>
 
@@ -255,7 +259,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 25 October 2026" %}
+  {% set public_footer_note = "Last updated: 1 November 2026" %}
   {% include "partials/public_footer.html" %}
 </body>
 </html>

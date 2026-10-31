@@ -106,7 +106,7 @@
   // One Agent turn in the one mode (2026-10-31), on the surfaces
   // agent-activity.js, agent-delegation.js and agent-review.js draw in
   // /app: the reviewers join beside the clock with the first step, a note
-  // on the plan, the agent asking the three AIs once (their answers land
+  // on the plan, the agent asking the AIs once (their answers land
   // one by one), the answer written in its own step, the reviewers'
   // review of that exact text, then their marks and the evidence row. No
   // score. The comparison owns the longest stretch, as it does in a run.
@@ -119,9 +119,12 @@
   const DONE_AT = 0.91;
   const RUN_SECONDS = 24;
 
-  // Where each AI's answer lands inside the comparison. A comparison is only
-  // as fast as its slowest AI, so the spread is deliberate.
-  const MODEL_FINISH = [0.42, 0.7, 1.0];
+  // Where each AI's answer lands inside the comparison, by how many AIs the
+  // scene asks (Daily's two since 2026-11-01). A comparison is only as fast
+  // as its slowest AI, so the spread is deliberate, and the last one always
+  // lands at the end of the stretch. Any other count spreads evenly.
+  const MODEL_FINISH = { 2: [0.55, 1.0], 3: [0.42, 0.7, 1.0] };
+  const finishOf = (i, count) => (MODEL_FINISH[count] || [])[i] ?? (i + 1) / count;
 
   function buildRunScene(scene) {
     const run = scene.querySelector("[data-run]");
@@ -216,7 +219,7 @@
       const share = span(p, COMPARE_AT, COMPARE_END);
       let answered = 0;
       models.forEach((model, i) => {
-        const landed = share >= MODEL_FINISH[i];
+        const landed = share >= finishOf(i, models.length);
         if (landed) answered += 1;
         model.classList.toggle("is-done", landed);
       });

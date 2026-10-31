@@ -71,9 +71,11 @@
             <p class="lp-eyebrow">Benchmark · MMLU-Pro</p>
             <h1 class="lp-display">We put the consensus to the test.</h1>
             <p class="lp-lead">
-              consens.io sends one question to six leading models and fuses their answers into a single
-              consensus. So we asked the obvious question back: does that consensus actually beat the
-              models it's built from? Here's the run, graded against known-correct answers, nothing hidden.
+              The consensus engine behind consens.io Watches, Topics and the API sends one question to six
+              leading models and fuses their answers into a single consensus. So we asked the obvious
+              question back: does that consensus actually beat the models it's built from? Here's the run,
+              graded against known-correct answers, nothing hidden. Answers in the app come about
+              differently (one AI does the work, others check it), so this test does not measure them.
             </p>
           </div>
           <div class="bench-meta lp-reveal">
@@ -85,7 +87,7 @@
           </div>
           <a class="bench-related-signal lp-reveal" href="/model-pulse" data-umami-event="benchmark_open_model_pulse">
             <span aria-hidden="true"></span>
-            <span><b>Looking for real-run behavior?</b> The live Model pulse tracks which individual answers earn the judge's pick outside this controlled test.</span>
+            <span><b>Looking for real-run behavior?</b> The Model pulse archive shows which individual answers earned the judge's pick in real runs until 31 October 2026.</span>
             <span class="chevron link-chevron" aria-hidden="true"></span>
           </a>
         </div>
@@ -149,7 +151,7 @@
           <article class="lp-card">
             <p class="lp-eyebrow">02 · Fuse</p>
             <h3>The consensus is built</h3>
-            <p>The exact same consensus logic the app uses combines the six answers into one final answer, with <b>Gemini 3.5 Flash</b> as the synthesizing model, the same path a real prompt takes.</p>
+            <p>The production consensus logic, the one Watches, Topics and the API use, combines the six answers into one final answer, with <b>Gemini 3.5 Flash</b> as the synthesizing model.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">03 · Grade</p>
@@ -390,8 +392,8 @@
           <ul>
             <li><b>Dataset:</b> 314 questions from MMLU-Pro, an expert-level multiple-choice benchmark, pooled across three runs from different sampling strategies (disagreement-enriched, category-balanced, and random).</li>
             <li><b>Closed-book:</b> web search, retrieval and tools were disabled for every model. Each answered from its own knowledge only.</li>
-            <li><b>Models:</b> GPT-5.5, Claude Opus 4.8, Gemini 3.5 Flash, Mistral Medium 3.5, DeepSeek V4 Pro and Grok 4.3, the same six the app uses.</li>
-            <li><b>Consensus:</b> built with the app's production consensus logic; the synthesizing model for this run was Gemini 3.5 Flash.</li>
+            <li><b>Models:</b> GPT-5.5, Claude Opus 4.8, Gemini 3.5 Flash, Mistral Medium 3.5, DeepSeek V4 Pro and Grok 4.3, the six answer models of the consensus engine at the time of the run.</li>
+            <li><b>Consensus:</b> built with the production consensus logic, the engine behind Watches, Topics and the API; the synthesizing model for this run was Gemini 3.5 Flash.</li>
             <li><b>Grading:</b> one attempt per question, scored against the dataset's ground-truth option. Majority vote is a simple plurality of the six model answers.</li>
           </ul>
           <h3 style="margin-top: 18px;">Reading the numbers</h3>
@@ -409,7 +411,7 @@
       <div class="lp-shell lp-final">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">Try it yourself</p>
-          <h2 class="lp-h2">Ask once. Compare every answer. Keep the consensus.</h2>
+          <h2 class="lp-h2">Ask the agent, and let other AIs check its work.</h2>
         </div>
         <a href="/app" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="benchmark_open_app">Open app</a>
       </div>

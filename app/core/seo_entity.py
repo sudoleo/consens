@@ -27,8 +27,9 @@ WEBSITE_ID = SITE_URL + "/#website"
 # Wortlaut: dieselben tragenden Begriffe reichen, wenn ein Profilfeld kuerzer ist.
 ORGANIZATION_NAME = "consens.io"
 ORGANIZATION_DESCRIPTION = (
-    "consens.io independently measures where leading AI answers agree, "
-    "contradict one another, and change over time."
+    "consens.io is an AI agent whose work other leading AI models check while "
+    "it works. They mark in its answer what they doubt, and a Watch tells you "
+    "when the answer changes."
 )
 
 # sameAs ist eine Identitaetsbehauptung, keine Linksammlung: nur Profile, die

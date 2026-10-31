@@ -1,9 +1,10 @@
 {# The reviewers' marks before their words, as #composerModelPicker on the
-   /app start screen: Daily's three (the app's default since 2026-10-28), the
-   AIs that check the agent's work and answer when it asks them. The
-   heat-pump example on the landing page has the same three (static/demo.js). #}
+   /app start screen: Daily's two (the app's default preset; Claude and
+   DeepSeek since 2026-11-01), the AIs that check the agent's work and answer
+   when it asks them. The heat-pump example on the landing page has the same
+   two (static/demo.js). #}
 <span class="lp-composer-models" role="group" aria-label="Reviewers">
-  {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
+  {% for name, icon, mono in [('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
   <span class="lp-composer-model" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
   {% endfor %}
 </span>

@@ -318,7 +318,9 @@ def test_every_bar_link_keeps_the_width_of_its_semibold_self():
     nav = read("templates/partials/public_nav.html")
     bar = nav.split('<div class="nav-links', 1)[1].split("<details", 1)[0]
     links = re.findall(r"<a ([^>]*)>([^<]+)</a>", bar)
-    assert len(links) == 5
+    # Product, Watches, Topics, Questions: the Benchmark left the bar for the
+    # footer on 2026-11-01 (it measures the engine, not how the app answers).
+    assert len(links) == 4
     for attributes, text in links:
         assert f'data-label="{text}"' in attributes, text
     tokens = re.sub(r"/\*.*?\*/", "", read("static/css/public-tokens.css"), flags=re.S)

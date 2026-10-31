@@ -165,8 +165,7 @@ def landing(request: Request):
         response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
         return response
     response = templates.TemplateResponse(request=request, name="landing.html",
-                                          context={"pulse": landing_pulse_preview(),
-                                                   "live_watch_path": landing_live_watch()})
+                                          context={"live_watch_path": landing_live_watch()})
     # The same URL answers signed-in entries with a redirect.
     response.headers["Vary"] = "Cookie, Sec-Fetch-Site"
     return response
@@ -244,19 +243,6 @@ def landing_live_watch() -> str:
     except Exception as exc:
         logging.warning("landing live watch unavailable category=%s", safe_exception(exc))
         return ""
-
-
-def landing_pulse_preview() -> dict | None:
-    """The landing page's live strip: the top families of all runs, or None
-    while there are not enough runs to say anything (the strip then hides)."""
-    try:
-        view = model_pulse.public_view(db_firestore)
-    except Exception as exc:
-        logging.warning("landing model pulse unavailable category=%s", safe_exception(exc))
-        return None
-    if len(view["rows"]) < 3 or not view["leader"]:
-        return None
-    return {**view, "rows": view["rows"][:5]}
 
 
 @router.get("/model-pulse", response_class=HTMLResponse)

@@ -44,19 +44,19 @@ def test_the_query_survives_the_redirect():
 
 
 def test_a_click_inside_the_site_still_shows_the_landing(monkeypatch):
-    monkeypatch.setattr(pages, "landing_pulse_preview", lambda: None)
+    monkeypatch.setattr(pages, "landing_live_watch", lambda: "")
     response = _redirects({"Sec-Fetch-Site": "same-origin"})
     assert response.status_code == 200
     assert "Cookie" in response.headers["vary"]
 
 
 def test_without_fetch_metadata_a_same_site_referer_counts_as_a_click(monkeypatch):
-    monkeypatch.setattr(pages, "landing_pulse_preview", lambda: None)
+    monkeypatch.setattr(pages, "landing_live_watch", lambda: "")
     assert _redirects({"Referer": "http://testserver/app"}).status_code == 200
     assert _redirects({"Referer": "https://www.google.com/"}).status_code == 302
 
 
 def test_no_hint_or_an_explicit_home_shows_the_landing(monkeypatch):
-    monkeypatch.setattr(pages, "landing_pulse_preview", lambda: None)
+    monkeypatch.setattr(pages, "landing_live_watch", lambda: "")
     assert _redirects({"Sec-Fetch-Site": "none"}, cookie=False).status_code == 200
     assert _redirects({"Sec-Fetch-Site": "none"}, path="/?home").status_code == 200

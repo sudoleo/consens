@@ -30,10 +30,12 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'id="modelInsights"' not in template
     assert 'class="faq-answer faq-model-insights"' not in template
     assert 'id="leaderboardContent"' not in template
-    # Since 2026-10-03 the pulse sits with the benchmark as live data, not
-    # as a status-line link in the hero.
+    # The Model Pulse is an archive since 2026-10-31 (no judge's pick in the
+    # one mode): the landing page links it neither from the hero nor from a
+    # live strip; /model-pulse and the footer keep it.
     assert 'class="lp-hero-pulse"' not in landing
-    assert 'href="/model-pulse" class="lp-link" data-umami-event="landing_open_model_pulse"' in landing
+    assert "lp-live-pulse" not in landing
+    assert 'data-umami-event="landing_open_model_pulse"' not in landing
     assert ".faq-item > p, .faq-item > .faq-answer" in app_init
     assert 'id="authTopActions"' in template
     assert 'id="loginContainer" class="login-text" hidden></div>' in template

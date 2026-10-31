@@ -385,6 +385,11 @@
           {%- set models_count = scoreboard.model_count -%}
           <span>{% if models_count == 1 and date_display %}1 AI model answered this question independently on {{ date_display }}, and {{ writer }} wrote the answer from what it said.{% elif models_count == 1 %}1 AI model answered this question independently, and {{ writer }} wrote the answer from what it said.{% elif date_display %}{{ models_count }} AI models answered this question independently on {{ date_display }}, and {{ writer }} wrote the answer from what they said.{% else %}{{ models_count }} AI models answered this question independently, and {{ writer }} wrote the answer from what they said.{% endif %}</span>
           {% if has_judge_check %}<span>A judge model then checked every sentence against their answers and flagged where they differ.</span>{% endif %}
+          {#- The reviewers may be the models it asked: no "more" here. -#}
+          {% if review_view %}
+          {%- set reviewers_count = review_view.reviewers | length -%}
+          <span>{% if reviewers_count == 1 %}1 AI model followed the work, reviewed the answer and noted what it found wrong, doubtful or incomplete.{% else %}{{ reviewers_count }} AI models followed the work, reviewed the answer and noted what they found wrong, doubtful or incomplete.{% endif %}</span>
+          {% endif %}
           {% else %}
           <span>{% if date_display %}{{ answer_model or "An AI model" }} answered this question on {{ date_display }}.{% else %}{{ answer_model or "An AI model" }} answered this question.{% endif %}</span>
           {% if review_view %}
@@ -404,7 +409,12 @@
         <p class="share-about-caveat">
           AI models can make mistakes &ndash; verify important information against the sources above.
         </p>
+        {#- An Agent answer is not built by the consensus engine. -#}
+        {% if is_agent %}
+        <a class="share-about-link" href="/#product">How consens.io works &rarr;</a>
+        {% else %}
         <a class="share-about-link" href="/consensus-engine">How consensus works &rarr;</a>
+        {% endif %}
       </section>
 
       {% if not is_private %}<div class="share-report">

@@ -4,18 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "partials/font_preload.html" %}
-  <meta name="description" content="When a model is in a real consens.io run, how often does a judge model pick its answer as the best one? Live best-answer rates per AI model family, compared with chance.">
+  <meta name="description" content="When a model was in a real consens.io run, how often did a judge model pick its answer as the best one? Best-answer rates per AI model family, collected until 31 October 2026 and compared with chance.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/model-pulse">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="Live AI Model Pulse | consens.io">
-  <meta property="og:description" content="Live best-answer rates: how often each AI model family gives the judge's pick in the real runs it takes part in.">
+  <meta property="og:title" content="AI Model Pulse (archive) | consens.io">
+  <meta property="og:description" content="Best-answer rates: how often each AI model family gave the judge's pick in the real runs it took part in, collected until 31 October 2026.">
   <meta property="og:url" content="https://www.consens.io/model-pulse">
   {% include "partials/og_card.html" %}
-  <meta name="twitter:title" content="Live AI Model Pulse | consens.io">
-  <meta name="twitter:description" content="When a model is in the run, how often is its answer the best? Live rates from real consens.io runs.">
-  <title>Live AI Model Pulse | consens.io</title>
+  <meta name="twitter:title" content="AI Model Pulse (archive) | consens.io">
+  <meta name="twitter:description" content="When a model was in the run, how often was its answer the best? Rates from real consens.io runs until 31 October 2026.">
+  <title>AI Model Pulse (archive) | consens.io</title>
   <link rel="stylesheet" href="{{ asset_url('/static/css/landing.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/model-pulse.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
@@ -55,9 +55,9 @@
     <section class="lp-section lp-section--white pulse-hero">
       <div class="lp-shell pulse-hero-grid">
         <div class="lp-head">
-          <p class="lp-eyebrow"><span class="pulse-live-dot" aria-hidden="true"></span> Live model pulse</p>
-          <h1 class="lp-display">When a model is in the run, how often is its answer the best?</h1>
-          <p class="lp-lead">Every consens.io run sends one question to several models. A judge model then picks the strongest single answer. Here you see, for each model family, how often that pick went to it, out of the runs it was actually in.</p>
+          <p class="lp-eyebrow">Model pulse · archive</p>
+          <h1 class="lp-display">When a model was in the run, how often was its answer the best?</h1>
+          <p class="lp-lead">Until 31 October 2026, a consens.io run sent one question to several models, and a judge model picked the strongest single answer. Here you see, for each model family, how often that pick went to it, out of the runs it was actually in. Since then one AI does the work and others check it, with no pick, so this tally is closed.</p>
         </div>
         {% if pulse and pulse.leader %}
         <aside class="pulse-headline" id="modelPulseHeadline" aria-label="Headline result">
@@ -145,7 +145,7 @@
           </div>
           <div class="pulse-explainer-item">
             <span>02</span>
-            <div><h3>The tick is chance</h3><p>With six answers in a run, a blind draw would pick each one about 17% of the time. The tick on every bar marks that fair share for the runs the family was in. "2.8× fair share" means picked 2.8 times as often as chance.</p></div>
+            <div><h3>The tick is chance</h3><p>In a run with six answers, a blind draw would pick each one about 17% of the time. The tick on every bar marks that fair share for the runs the family was in. "2.8× fair share" means picked 2.8 times as often as chance.</p></div>
           </div>
           <div class="pulse-explainer-item">
             <span>03</span>
@@ -167,16 +167,16 @@
       <div class="lp-shell">
         <div class="lp-head">
           <p class="lp-eyebrow">Two different lenses</p>
-          <h2 class="lp-h2">Live behavior and controlled accuracy answer different questions.</h2>
+          <h2 class="lp-h2">Real runs and controlled accuracy answer different questions.</h2>
         </div>
         <div class="pulse-lenses">
           <article>
             <span class="pulse-lens-label">Model pulse</span>
-            <h3>Whose answer stands out in everyday runs?</h3>
+            <h3>Whose answer stood out in everyday runs?</h3>
             <dl>
-              <div><dt>Questions</dt><dd>Real, changing prompts</dd></div>
+              <div><dt>Questions</dt><dd>Real prompts, until 31 October 2026</dd></div>
               <div><dt>Signal</dt><dd>Judge picks per run a family was in</dd></div>
-              <div><dt>Best used for</dt><dd>Product behavior and model momentum</dd></div>
+              <div><dt>Best used for</dt><dd>How the models fared in real use</dd></div>
             </dl>
           </article>
           <article>
@@ -196,8 +196,8 @@
     <section class="lp-section lp-section--grey">
       <div class="lp-shell lp-final">
         <div class="lp-head">
-          <p class="lp-eyebrow">Run your own comparison</p>
-          <h2 class="lp-h2">No model wins every time. So ask several.</h2>
+          <p class="lp-eyebrow">Try it yourself</p>
+          <h2 class="lp-h2">No model wins every time. That is why other AIs check the work.</h2>
         </div>
         <a href="/app" class="lp-btn lp-btn--primary" data-umami-event="pulse_open_app">Open app</a>
       </div>

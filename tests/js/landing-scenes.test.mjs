@@ -56,7 +56,7 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
   // score, no judge.
   it("ends on the reviewers' marks and Notes, without a score", async () => {
     const { document } = await stillFrame();
-    // The template's loops are cut out here: one mark stands for the three.
+    // The template's loops are cut out here: one mark stands for Daily's two.
     const reviewers = [...document.querySelectorAll("[data-reviewer]")];
     expect(reviewers.length).toBeGreaterThan(0);
     expect(reviewers.every((mark) => mark.classList.contains("is-done"))).toBe(true);
@@ -70,7 +70,7 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     expect(kinds).toEqual(["is-major", "is-split", "is-minor"]);
     const row = document.querySelector("[data-run-evidence]");
     expect(row.classList.contains("is-visible")).toBe(true);
-    expect(row.textContent.replace(/\s+/g, " ").trim()).toBe("Notes 3 Answers 3");
+    expect(row.textContent.replace(/\s+/g, " ").trim()).toBe("Notes 3 Answers 2");
     expect(document.querySelector("[data-run-answer]").classList.contains("is-reviewing")).toBe(false);
     expect(SCENE).not.toMatch(/agreement|\/100|judge|claim-badge/i);
   });

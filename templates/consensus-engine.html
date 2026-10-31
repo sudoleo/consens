@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "partials/font_preload.html" %}
-  <meta name="description" content="A clear, technical explanation of how the consens.io Consensus Engine and Differences Engine compare AI model answers, find agreement, and surface disagreement.">
+  <meta name="description" content="A clear, technical explanation of the Consensus Engine and Differences Engine behind consens.io Watches, Topics and the API: how they compare AI model answers, find agreement, and surface disagreement.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/consensus-engine">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
   <meta property="og:title" content="How the Consensus Engine Works | consens.io">
-  <meta property="og:description" content="See how consens.io turns several AI model answers into one transparent consensus and a structured differences analysis.">
+  <meta property="og:description" content="The engine behind consens.io Watches, Topics and the API: how several AI model answers become one transparent consensus and a structured differences analysis.">
   <meta property="og:url" content="https://www.consens.io/consensus-engine">
   {% include "partials/og_card.html" %}
   <meta name="twitter:title" content="How the Consensus Engine Works | consens.io">
-  <meta name="twitter:description" content="A technical but readable explanation of how consens.io builds consensus and differences analysis.">
+  <meta name="twitter:description" content="A technical but readable explanation of the consensus and differences engine behind consens.io Watches, Topics and the API.">
   <title>How the Consensus Engine Works | consens.io</title>
 <link rel="stylesheet" href="{{ asset_url('/static/css/landing.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/consensus-engine.css') }}">
@@ -32,7 +32,7 @@
         "@id": "https://www.consens.io/consensus-engine#webpage",
         "url": "https://www.consens.io/consensus-engine",
         "name": "How the Consensus Engine Works",
-        "description": "A user-friendly but technical explanation of how consens.io compares model answers, builds a consensus, and shows differences.",
+        "description": "A user-friendly but technical explanation of the engine behind consens.io Watches, Topics and the API: how it compares model answers, builds a consensus, and shows differences.",
         "isPartOf": { "@id": "{{ website_id }}" },
         "publisher": { "@id": "{{ organization_id }}" }
       },
@@ -40,6 +40,14 @@
         "@type": "FAQPage",
         "@id": "https://www.consens.io/consensus-engine#faq",
         "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is this how the consens.io app answers?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. In the app, one AI agent does the work and other AI models review it as it goes. This engine runs on the server for Watches, Topics and the API."
+            }
+          },
           {
             "@type": "Question",
             "name": "What does the Consensus Engine do?",
@@ -98,11 +106,12 @@
           <p class="lp-eyebrow">Consensus & Differences Engine</p>
           <h1 class="lp-display">Consensus and Difference Engines explained.</h1>
           <p class="lp-lead">
-            A clear look at how consens.io combines model answers, checks disagreements,
-            and checks the result in a separate judge pass.
+            A clear look at the engine behind Watches, Topics and the API: how it combines model
+            answers, checks disagreements, and checks the result in a separate judge pass. The app
+            answers differently: there, one AI does the work and other AIs check it.
           </p>
           <div class="lp-hero-actions">
-            <a id="ctaButton" href="/app" class="lp-btn lp-btn--primary">Try it in the app</a>
+            <a href="/topics" class="lp-btn lp-btn--primary" data-umami-event="consensus_engine_open_topics">Explore Topics</a>
             <a href="#walkthrough" class="lp-link">See the engines</a>
           </div>
         </div>
@@ -243,8 +252,8 @@
           </article>
           <article class="lp-card ce-role-card">
             <p class="lp-eyebrow">Synthesis layer</p>
-            <h3>The engine chosen in the Consensus picker</h3>
-            <p>This model reads the included source answers and writes the combined response. Pick a preset (Daily, Open Models, High Quality) or choose a specific model via Custom. Standard and Pro engines can both be used.</p>
+            <h3>The engine configured on the server</h3>
+            <p>This model reads the included source answers and writes the combined response. Watches, Topics and the API each use the engine configured for them; standard and Pro engines can both be used.</p>
           </article>
           <article class="lp-card ce-role-card">
             <p class="lp-eyebrow">Analysis layer</p>
@@ -454,6 +463,10 @@
         </div>
         <div class="ce-faq-list">
           <article>
+            <h3>Is this how the consens.io app answers?</h3>
+            <p>No. In the app, one AI agent does the work and other AI models review it as it goes. This engine runs on the server for Watches, Topics and the API.</p>
+          </article>
+          <article>
             <h3>Is the consensus just the majority answer?</h3>
             <p>No. The engine writes a synthesis from the included model responses. Agreement matters, but the output is written as a readable answer with caveats, not as a simple vote.</p>
           </article>
@@ -476,10 +489,10 @@
     <section class="lp-section lp-section--grey">
       <div class="lp-shell lp-final">
         <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">Try the flow</p>
-          <h2 class="lp-h2">Ask once, compare the answers, then read the consensus with its caveats.</h2>
+          <p class="lp-eyebrow">Try it</p>
+          <h2 class="lp-h2">Turn a question into a Watch. This engine re-checks it on your schedule.</h2>
         </div>
-        <a href="/app" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="consensus_engine_open_app">Open app</a>
+        <a href="/app/watches" class="lp-btn lp-btn--primary lp-reveal" data-umami-event="consensus_engine_create_watch">Create a Watch</a>
       </div>
     </section>
   </main>

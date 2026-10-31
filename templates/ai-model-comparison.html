@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "partials/font_preload.html" %}
-  <meta name="description" content="Compare ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok, Kimi, GLM, Meta Muse, Qwen, MiMo, and other AI models side by side with consens.io.">
+  <meta name="description" content="ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok, Kimi, GLM, Meta Muse, Qwen and MiMo on consens.io: pick one AI to do the work and others to check it, and compare their answers side by side.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/ai-model-comparison">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
   <meta property="og:title" content="AI Model Comparison Tool | consens.io">
-  <meta property="og:description" content="Send one prompt to several leading AI models, compare their original answers, and build a structured consensus.">
+  <meta property="og:description" content="Pick the AI that does the work and the AIs that check it, from leading providers, and read their original answers side by side when it helps.">
   <meta property="og:url" content="https://www.consens.io/ai-model-comparison">
   {% include "partials/og_card.html" %}
   <meta name="twitter:title" content="AI Model Comparison Tool | consens.io">
-  <meta name="twitter:description" content="Compare AI model answers side by side and see where they agree or disagree.">
+  <meta name="twitter:description" content="Let one AI model work and others check it, and compare their answers side by side.">
   <title>AI Model Comparison Tool | consens.io</title>
 <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
@@ -32,7 +32,7 @@
         "@id": "https://www.consens.io/ai-model-comparison#webpage",
         "url": "https://www.consens.io/ai-model-comparison",
         "name": "AI Model Comparison Tool",
-        "description": "Compare AI model answers from leading providers side by side and create a structured consensus.",
+        "description": "Leading AI models on consens.io: one does the work, others check it, and their original answers stay comparable side by side.",
         "isPartOf": { "@id": "{{ website_id }}" },
         "publisher": { "@id": "{{ organization_id }}" }
       },
@@ -45,7 +45,7 @@
             "name": "What is an AI model comparison tool?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "An AI model comparison tool sends the same prompt to multiple AI models and lets you compare the original answers side by side."
+              "text": "An AI model comparison tool sends the same prompt to multiple AI models and lets you compare the original answers side by side. On consens.io the agent can ask other models its question, and you read their answers in full or two side by side."
             }
           },
           {
@@ -88,23 +88,22 @@
       <p class="eyebrow">AI model comparison</p>
       <h1>Compare AI models before you trust one answer.</h1>
       <p class="lead">
-        consens.io sends one prompt to several leading AI models, keeps the original responses visible,
-        and combines useful contributions into a consensus with visible disagreements.
+        On consens.io one AI model does the work and others check it. Their original answers stay
+        visible: the agent can ask them the same question, and you read every answer or compare two side by side.
       </p>
       <div class="links">
-        <a href="/app" class="button-secondary">Start comparing</a>
-        <a href="/consensus-engine" class="button-secondary">How consensus works</a>
-        <a href="/" class="button-secondary">Product overview</a>
+        <a href="/app" class="button-secondary">Open app</a>
+        <a href="/#product" class="button-secondary">See how it works</a>
       </div>
     </header>
 
     <div class="page-content">
       <section class="legal-panel notice">
-        <h2>One prompt, several independent answers</h2>
+        <h2>One AI works, others check it</h2>
         <p>
-          Single-model chat can be fast, but it hides uncertainty. consens.io is built for prompts where you
-          want to compare ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok, Kimi, GLM, Meta Muse, Qwen, and MiMo — up to six families per run — before
-          deciding which answer is useful.
+          Single-model chat can be fast, but it hides uncertainty. On consens.io you pick one of ChatGPT,
+          Claude, Gemini, Mistral, DeepSeek, Grok, Kimi, GLM, Meta Muse, Qwen and MiMo to do the work, and
+          others to check it as it goes.
         </p>
       </section>
 
@@ -114,22 +113,22 @@
           <li><strong>Answer quality:</strong> see which model gives the clearest, most useful response.</li>
           <li><strong>Reasoning differences:</strong> inspect where models disagree or make different assumptions.</li>
           <li><strong>Coverage gaps:</strong> catch missing context that one model may skip.</li>
-          <li><strong>Consensus:</strong> combine common ground and useful complementary details while retaining caveats.</li>
+          <li><strong>Doubts in place:</strong> see which sentences of the answer a reviewer finds wrong, doubtful or incomplete.</li>
         </ul>
       </section>
 
       <section class="legal-panel">
         <h2>Choose how much to inspect</h2>
-        <p>Start with Daily, Open Models or High Quality, or choose models through Custom. In Agent, one AI writes the answer and the others review it, marking sentences they find wrong, doubtful or incomplete; Compare keeps the answers separate. Open <strong>Answers</strong> for the originals and a two-answer comparison.</p>
-        <p>Public answers in the Consensus Library carry an agreement score; it measures model agreement, not the probability of being correct.</p>
-        <div class="links"><a href="/consensus-engine#walkthrough" class="button-secondary">See how the consensus is built</a><a href="/model-pulse" class="button-secondary">Explore the Model Pulse</a><a href="/questions" class="button-secondary">Read public answers</a></div>
+        <p>Presets choose the reviewers: Daily (the default, quick), Open Models (open-weight reviewers) or High Quality (Pro, the strongest models), or pick them yourself. The agent writes the answer, and the reviewers mark sentences they find wrong, doubtful or incomplete. Open <strong>Answers</strong> for the answers of the models the agent asked, or compare two side by side; a plain side-by-side comparison waits in the (+) menu.</p>
+        <p>Older public answers in the Consensus Library still show the agreement score of the consensus engine; it measures how far the models agreed, not the probability of being correct.</p>
+        <div class="links"><a href="/#product" class="button-secondary">See how it works</a><a href="/model-pulse" class="button-secondary">Browse the Model Pulse archive</a><a href="/questions" class="button-secondary">Read public answers</a></div>
       </section>
 
       <section class="legal-panel">
         <h2>Supported model families</h2>
         <p>
-          consens.io is designed around direct comparison across major AI providers. Availability can change
-          as model providers update their APIs and model line-ups.
+          consens.io works with models from the major AI providers. Availability can change as model
+          providers update their APIs and model line-ups.
         </p>
         <div class="model-grid" style="margin-top:16px;">
           <article class="model-card"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt=""><span>OpenAI</span><strong>ChatGPT</strong></article>
@@ -160,6 +159,7 @@
         <h3>What is an AI model comparison tool?</h3>
         <p>
           It sends the same prompt to multiple AI models and lets you compare the original answers side by side.
+          On consens.io the agent can ask other models its question, and you read their answers in full or two side by side.
         </p>
         <h3>Which AI models can consens.io compare?</h3>
         <p>

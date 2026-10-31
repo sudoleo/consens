@@ -2641,7 +2641,8 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         # Herkunft steht als benannte Sektion da, nicht als Kleingedrucktes.
         self.assertIn("About this consensus", body)
         self.assertIn("AI models can make mistakes", body)
-        self.assertIn("How consensus works", body)
+        # A consensus answer still links the engine that built it.
+        self.assertIn('class="share-about-link" href="/consensus-engine">How consensus works', body)
 
     def test_date_modified_uses_authoritative_display_version(self):
         doc = self._share_doc()
