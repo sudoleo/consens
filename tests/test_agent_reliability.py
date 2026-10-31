@@ -39,17 +39,16 @@ def test_legacy_receipts_cannot_hide_recoverable_token_reservations(store):
 
 def test_api_comparison_selection_uses_the_same_six_family_cap_as_the_picker():
     choices = {key: next(iter(provider.models)) for key, provider in cfg.PROVIDERS.items()}
-    with pytest.raises(ValueError, match='between two and 6'):
+    with pytest.raises(ValueError, match='between one and 6 reviewers'):
         comparison_selection(choices)
 
 
-def test_one_comparison_model_is_enough_only_as_a_reviewer():
-    one = {'anthropic': 'claude-haiku-4-5'}
-    with pytest.raises(ValueError, match='between two and'):
-        comparison_selection(one)
-    assert list(comparison_selection(one, audit=True)) == ['anthropic']
+def test_one_chosen_model_is_enough():
+    """The models review the agent's work and answer compare_models: one is
+    enough (until 2026-10-31 comparison mode needed two sides)."""
+    assert list(comparison_selection({'anthropic': 'claude-haiku-4-5'})) == ['anthropic']
     with pytest.raises(ValueError, match='between one and'):
-        comparison_selection({}, audit=True)
+        comparison_selection({})
 
 
 def test_admission_cannot_wait_when_even_released_tokens_cannot_fit(store, monkeypatch):
@@ -120,7 +119,7 @@ def test_stop_between_status_event_and_provider_dispatch_is_known_zero(store):
 
 
 @pytest.mark.parametrize("ending", ["length", "timeout", "stop"])
-def test_partial_synthesis_survives_after_comparisons(store, ending):
+def test_partial_answer_survives_after_comparisons(store, ending):
     # The step after the comparison writes the answer; long enough to stream
     # (agent_answer_mode.ANSWER_HOLD_CHARS) before it breaks off.
     partial = "The synthesis available so far. " * 12
@@ -143,9 +142,11 @@ def test_partial_synthesis_survives_after_comparisons(store, ending):
     with pytest.raises((runtime.AnalysisBudgetExceeded, httpx.ReadTimeout, runtime.ProviderCancelled)):
         list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    # The turn keeps what the user saw (agent_runs.finish_run); no version
+    # for the reviewers, and no review of it.
     assert saved["consensus"] == partial
-    assert saved["agent_review"]["versions"][-1]["text"] == saved["consensus"]
-    assert not saved["agent_review"].get("checks") and loop.comparison.judge_calls == 0
+    assert saved["agent_review"]["versions"] == [] and loop.comparison.auditor.final_answer is None
+    assert not saved["agent_review"].get("checks")
     assert saved["status"] == "failed"
     assert agent_quota.snapshot(store.db, UID)["reserved"] == 0
     assert totals(store)["unsettled_calls"] == 0
@@ -183,7 +184,7 @@ def test_comparison_checkpoints_finished_answer_while_peer_is_still_running(stor
     def observe(*args, **kwargs):
         checkpoint(*args, **kwargs)
         comparisons = loop.comparison.comparisons
-        if comparisons and comparisons[0]['status'] == 'running' and len(comparisons[0]['answers']) == 1:
+        if comparisons and comparisons[0].get('pending_models') and len(comparisons[0]['answers']) == 1:
             saved.set()
     loop.comparison.checkpoint = observe
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -247,17 +248,19 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
     assert value.usage["input_tokens"] + value.usage["output_tokens"] == 14
 
 
-@pytest.mark.parametrize("comparison,closing", [("answered", True), ("answered", False), ("unanswered", False),
+@pytest.mark.parametrize("comparison,closing", [("answered", True), ("answered", False), ("unanswered", True),
                                                 (None, False)])
-def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(store, monkeypatch, comparison, closing):
+def test_only_the_closing_answer_after_paid_comparisons_starts_at_once(store, monkeypatch, comparison, closing):
     """Once a comparison holds paid answers, the closing step that writes the
     answer without tools starts at once with its whole allowance (overdraft:
     the next message is refused instead). A routing step does not overdraw
-    (audit 2026-10-28): like a step after a comparison whose answers found no
-    allowance, it starts with what still fits. Without a comparison a step
-    waits for sibling reservations."""
+    (audit 2026-10-28), nor does a closing step after a comparison whose
+    answers found no allowance: like a step without a comparison, they wait
+    for sibling reservations. Until 2026-10-31 comparison mode started a step
+    after a comparison with what still fit; the agent's steps search, and
+    one waits for its search as before."""
     from dataclasses import replace
-    from test_agent_chat_integrity import chat_loop as comparison_chat_loop
+    from test_agent_turn_limits import chat_loop as comparison_chat_loop
     limits = []
     class Capture(Completion):
         def stream(self, *, model, **kwargs):
@@ -282,12 +285,8 @@ def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(s
     if compared and closing:
         exhaust(step)
         assert not waited and limits == [60000]
-    elif comparison:
-        # No overdraft without paid answers, nor for a routing step: it starts
-        # with what still fits (clamp_floor) instead of its whole allowance.
-        exhaust(step)
-        assert not waited and limits and limits[0] < 60000
     else:
+        # No overdraft without paid answers, nor for a routing step.
         with pytest.raises(RuntimeError, match="queued"):
             exhaust(step)
-        assert not limits
+        assert waited and not limits

@@ -1,12 +1,14 @@
 """The agent's work log (agent_work_log.py, docs/agent-work-log.md): written
-live by the app in audit mode, what the agent sees and does, never the
-reviewers; saved in order, long content in the object store; deleted with
-the chat and after its retention."""
+live by the app in every chat run of the agent (since 2026-10-31; before, in
+audit mode only), what the agent sees and does, never the reviewers; saved in
+order, long content in the object store; deleted with the chat and after its
+retention."""
 from datetime import datetime, timedelta, timezone
 import json
 import time
 
 from firebase_admin import firestore
+from pydantic import BaseModel, ConfigDict
 import pytest
 
 from app.services import agent_work_log
@@ -274,17 +276,22 @@ def test_the_log_holds_the_chats_history_as_the_agent_received_it(store):
         ("user", "user", "Paris trip?"), ("assistant", "agent", "Yes, go in spring."), ("user", "user", "And the tower?")]
 
 
-def test_without_audit_mode_no_log_is_kept(store):
-    loop = audit_loop(store, Audit(), audit="off")
-    assert loop.work_log is None
+def test_a_delegation_only_run_keeps_no_log(store):
+    """Only a run with reviewers, every chat run, keeps a log; a run of the
+    delegation scripts without the agent's tools has none."""
+    from test_agent_delegation import make_loop
+    assert audit_loop(store, Audit()).work_log is not None
+    assert make_loop(store).work_log is None
 
 
 def test_tool_results_are_logged_for_the_agent_but_not_for_the_apps_own_review(store):
     loop = audit_loop(store, Audit())
     loop.work_log.store = recorder = LogStore()
     loop.claimed = True
-    from app.services.agent_comparison import JudgeArgs
-    page = ReadOnlyTool("read_source", "Read a page.", JudgeArgs, lambda args, cancellation: {"text": "Page text."})
+
+    class NoArgs(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+    page = ReadOnlyTool("read_source", "Read a page.", NoArgs, lambda args, cancellation: {"text": "Page text."})
     registry = ToolRegistry([page], argument_limit=1000)
     value = AgentCompletion()
     value.step_id = "completion:0"

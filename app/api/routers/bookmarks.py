@@ -954,7 +954,7 @@ def prepare_agent_share_result(uid: str, chat_id: str, turn_id: str, *, answer: 
     payload = share_snapshots.build_agent_pending_result(uid, turn)
     if payload is None:
         raise HTTPException(status_code=409, detail="This answer is empty, so there is nothing to share.")
-    # Agent votes count once per turn (persistence_guard.write_agent_vote).
+    # One vote subject per agent turn, however often it is shared.
     payload["vote_subject_id"] = f"agent:{turn_id}"
     try:
         result_id = share_snapshots.save_pending_result(

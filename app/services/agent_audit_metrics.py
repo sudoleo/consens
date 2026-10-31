@@ -1,8 +1,9 @@
-"""Anonymous daily counters of audit-mode turns (spec A-M1).
+"""Anonymous daily counters of the Agent's turns (spec A-M1).
 
 A deleted chat takes its turn, its sessions and its work log with it; these
 counters stay. One document per UTC day, ``ops_metrics/agent-audit-{day}``,
-counts every audit turn once at its end: by status and review status, by
+counts every chat turn of the agent once at its end (until 2026-10-31 only
+those in audit mode, then one of two): by status and review status, by
 number of reviewers, in histogram buckets of its times (total, until the
 answer was fixed, marks after the last word, each gate's wait, each
 reviewer's final round by model, the reviewers' backlog when the answer was
@@ -21,14 +22,12 @@ logged, never raised. Fields that later packages add (a reviewer's
 ``scripts/audit_report.py`` reads the documents back.
 
 Since 2026-10-30 (audit I6) every turn that used the workspace counts there
-too, in audit mode or not, because 47 % of them lay in chats deleted since
-and took all their details along: in fields of their own (``ws_*``), its
-status, steps, active time (pauses for the user left out), the first call
-into the workspace (browser or VM: how long it took, how far into the
-message it came, whether it failed) and the workspace's outages (VM
-unavailable or busy, browser off). Every turn that ended its work at a limit
-counts its reason (``wrap_up``, I1). A workspace turn outside audit mode
-adds only these fields, never to the audit counters above.
+too, because 47 % of them lay in chats deleted since and took all their
+details along: in fields of their own (``ws_*``), its status, steps, active
+time (pauses for the user left out), the first call into the workspace
+(browser or VM: how long it took, how far into the message it came, whether
+it failed) and the workspace's outages (VM unavailable or busy, browser off).
+Every turn that ended its work at a limit counts its reason (``wrap_up``, I1).
 """
 from __future__ import annotations
 
@@ -111,10 +110,8 @@ def capture(loop):
                 entries.append(kept)
     holds = [{key: item.get(key) for key in ("halt", "gate", "ask", "domain", "state")}
              for item in loop.completion.activity or [] if item.get("kind") == "hold"]
-    auditor = loop.comparison.auditor if loop.comparison is not None else None
-    captured = {"entries": entries, "holds": holds, "reviewers": len(auditor.reviewers) if auditor is not None else 0,
-                "ended_at": datetime.now(timezone.utc),
-                "audit": bool(loop.comparison is not None and loop.comparison.audit_mode)}
+    captured = {"entries": entries, "holds": holds, "reviewers": len(loop.comparison.auditor.reviewers),
+                "ended_at": datetime.now(timezone.utc)}
     wrap_up = getattr(loop.completion, "wrap_up", None)
     if isinstance(wrap_up, dict):
         captured["wrap_up"] = wrap_up.get("reason")
@@ -191,14 +188,11 @@ def workspace_counters(turn, captured, counters):
 
 
 def turn_counters(turn, captured):
-    """The increments one turn adds to its day: {field: {key: n}}, an audit
-    turn's and a workspace turn's (workspace_counters). ``turn``: the saved
-    turn (None once its chat was deleted)."""
+    """The increments one turn adds to its day: {field: {key: n}}, its
+    workspace's among them (workspace_counters). ``turn``: the saved turn
+    (None once its chat was deleted)."""
     counters = {}
     turn = turn or {}
-    if not captured.get("audit", True):
-        # A workspace turn outside audit mode: its own fields only.
-        return workspace_counters(turn, captured, counters)
     workspace_counters(turn, captured, counters)
     status = _status(turn)
     _add(counters, "turns", label(status))
@@ -290,8 +284,8 @@ def _enabled():
 
 
 def record(loop):
-    """At the end of an audit turn or a turn that used the workspace: copy
-    what it holds, count it off this thread."""
+    """At the end of a chat turn of the agent: copy what it holds, count it
+    off this thread."""
     if not _enabled():
         return False
     try:

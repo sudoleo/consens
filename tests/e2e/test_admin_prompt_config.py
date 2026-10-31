@@ -68,7 +68,7 @@ def test_configuration_tab_shows_prompts_read_only_and_saves_settings(browser, p
         assert agent.text_content() == catalog[0]["text"]
         assert agent.evaluate('(element) => getComputedStyle(element).whiteSpace') == 'pre-wrap'
         expect(page.locator('#promptCatalog details[data-prompt-key="agent"]')).to_contain_text(
-            'prompt_defaults.py:AGENT_SYSTEM_PROMPT')
+            'prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT')
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
 
         page.locator('#delegationConfig').evaluate('(element) => { element.closest("details").open = true; }')

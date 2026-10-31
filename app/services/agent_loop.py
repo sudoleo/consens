@@ -28,8 +28,8 @@ class AgentLoop:
         self.completion.step_id = "run"
         self.run_token = uuid4().hex
         # The chat model's steps stay on one endpoint, where their prefix is
-        # cached. Comparison answers and judges keep the fastest endpoint:
-        # they share no prefix with each other.
+        # cached. Comparison answers keep the fastest endpoint: they share
+        # no prefix with each other.
         self.provider_session = provider_session_id(uid, chat_id)
         # The chat's last earlier message (system prompt, history, then this
         # message's question): the chat model's steps mark it as a cache point,

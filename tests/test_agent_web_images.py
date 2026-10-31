@@ -232,6 +232,9 @@ def test_looking_has_a_bound_per_message(store, monkeypatch):
     assert result["pictures"][2]["reason"] == "No more than 2 pictures to look at per message."
 
 
-def test_without_audit_there_is_no_show_image(store):
-    loop = audit_loop(store, Audit(), audit="off")
-    assert "show_image" not in loop.registry.tools
+def test_the_picture_tools_come_only_with_page_reading(store, monkeypatch):
+    # The server fetches a picture as it reads a page, within read_source's
+    # bounds: without page reading (AGENT_READ_SOURCES=0) neither tool.
+    monkeypatch.setenv("AGENT_READ_SOURCES", "0")
+    loop = audit_loop(store, Audit())
+    assert not {"read_source", "find_pictures", "show_image"} & set(loop.registry.tools)

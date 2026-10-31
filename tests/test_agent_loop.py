@@ -768,33 +768,37 @@ def test_text_beyond_the_storage_limit_is_kept_as_truncated_instead_of_failing(m
 
 
 def test_a_container_argument_sent_as_json_text_is_decoded():
-    # Claude Sonnet sent compare_models' memory as "[]": strict validation
-    # rejected every call and the turn ended (2026-10-07).
-    from app.services.agent_comparison import CompareArgs
-    from app.services.agent_memory import memory_field
-    from pydantic import create_model
-    args = create_model("MemoryCompareArgs", __base__=CompareArgs, memory=memory_field())
-    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", args, lambda a, **kw: {})], argument_limit=24_000)
-    def call(memory):
-        return {"function": {"name": "compare_models", "arguments": json.dumps(
-            {"question": "Q", "context": "", "reason": "R", "next_step": "answer", "memory": memory})}}
-    assert registry.validate(call("[]"))[1].memory == []
-    change = '[{"op": "add", "text": "Lives in Berlin.", "evidence": "I live in Berlin"}]'
-    assert registry.validate(call(change))[1].memory[0].text == "Lives in Berlin."
-    # Text of another shape is left for validation to reject. (memory itself
-    # takes any shape since 2026-10-12, test_agent_memory: a strict list here.)
-    strict = create_model("ListCompareArgs", __base__=CompareArgs, items=(list[int], ...))
-    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", strict, lambda a, **kw: {})], argument_limit=24_000)
+    # Claude Sonnet sent compare_models' memory as "[]" (a field until
+    # 2026-10-31): strict validation rejected every call and the turn ended
+    # (2026-10-07). Every list or object argument is decoded alike.
+    from pydantic import BaseModel, ConfigDict
+    from app.services.agent_comparison import AuditCompareArgs
+    from app.services.agent_memory import AuditUpdateMemoryArgs
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", AuditCompareArgs, lambda a, **kw: {}),
+                             ReadOnlyTool("update_memory", "Remember", AuditUpdateMemoryArgs, lambda a, **kw: {})],
+                            argument_limit=24_000)
+    def call(name, args):
+        return {"function": {"name": name, "arguments": json.dumps(args)}}
+    assert registry.validate(call("compare_models", {"question": "Q", "file_ids": "[]"}))[1].file_ids == []
+    change = '[{"op": "add", "text": "Lives in Berlin."}]'
+    assert registry.validate(call("update_memory", {"changes": change}))[1].changes[0].text == "Lives in Berlin."
+
+    # Text of another shape is left for validation to reject.
+    class Listed(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        question: str
+        items: list[int]
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", Listed, lambda a, **kw: {})], argument_limit=24_000)
     def listed(items):
         return {"function": {"name": "compare_models", "arguments": json.dumps({"question": "Q", "items": items})}}
     assert registry.validate(listed("[1, 2]"))[1].items == [1, 2]
     for bad in ("nothing", '{"op": "add"}', "[1, 2"):
         with pytest.raises(ValueError):
             registry.validate(listed(bad))
-    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", args, lambda a, **kw: {})], argument_limit=24_000)
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", AuditCompareArgs, lambda a, **kw: {})],
+                            argument_limit=24_000)
     # A text field keeps text that happens to look like JSON.
-    plain = {"function": {"name": "compare_models", "arguments": json.dumps(
-        {"question": "[]", "context": "", "reason": "R", "next_step": "answer", "memory": []})}}
+    plain = {"function": {"name": "compare_models", "arguments": json.dumps({"question": "[]", "file_ids": []})}}
     assert registry.validate(plain)[1].question == "[]"
 
 
@@ -802,14 +806,14 @@ def test_refused_tool_calls_say_what_to_change(caplog):
     # A bare "Tool is not authorized" and pydantic's input echo + docs URL
     # (cut after two errors) gave Claude nothing to correct: it repeated the
     # call until "repeated invalid tool requests" ended the turn (2026-10-09).
-    from app.services.agent_comparison import CompareArgs
+    from app.services.agent_comparison import AuditCompareArgs
     from app.services.agent_delegation import DelegationLoop
-    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", CompareArgs, lambda a, **kw: {}),
-                             ReadOnlyTool("judge_answer", "Judge", CompareArgs, lambda a, **kw: {})],
+    registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", AuditCompareArgs, lambda a, **kw: {}),
+                             ReadOnlyTool("audit_answer", "Review", AuditCompareArgs, lambda a, **kw: {})],
                             argument_limit=24_000)
     def call(name, arguments):
         return {"function": {"name": name, "arguments": arguments}}
-    with pytest.raises(ValueError, match="Available tools: compare_models, judge_answer") as unknown:
+    with pytest.raises(ValueError, match="Available tools: compare_models, audit_answer") as unknown:
         registry.validate(call("open_url", '{"url": "https://consens.io"}'))
     assert "web pages" in str(unknown.value)
     with pytest.raises(ValueError, match="not valid JSON"):
@@ -828,11 +832,3 @@ def test_refused_tool_calls_say_what_to_change(caplog):
         DelegationLoop._log_rejected_call(call("compare_models", json.dumps({"question": secret})), invalid.value)
     assert "tool=compare_models" in caplog.text and "question:missing" in caplog.text
     assert secret not in caplog.text
-
-
-def test_cosmetic_compare_fields_are_shortened_not_refused():
-    from app.services.agent_comparison import CompareArgs
-    args = CompareArgs.model_validate({"question": "Q", "reason": "R" * 900, "next_step": "answer",
-                                       "status_update": "S" * 900})
-    # status_update is shortened; the retired fields are ignored, not refused.
-    assert (args.context, len(args.status_update), args.reason, args.next_step) == ("", 400, "", "")

@@ -104,12 +104,13 @@ def test_limits_unsupported_glyphs_and_cancellation(setup):
 
 def test_the_answer_is_written_from_the_actual_document_results(setup):
     """The agent writes the answer itself after create_document: the step
-    that writes it reads the real result (title, saved files) and the rule
-    never to invent links to the cards."""
+    that writes it reads the real result (title, saved files) and that the
+    cards come without links."""
     import json
+    from agent_reviewers import without_reviewers
     from test_agent_comparison import Script
     from test_agent_runs import UID, pending
-    from app.services.agent_comparison import comparison_selection, review_is_bound
+    from app.services.agent_comparison import answer_hash, comparison_selection
     from app.services.agent_delegation import DelegationLoop
     from app.services.agent_delegation_config import defaults
     from app.services.agent_policy import AgentPolicy
@@ -141,16 +142,17 @@ def test_the_answer_is_written_from_the_actual_document_results(setup):
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=Workflow, file_context=FileContext(files, UID, chat, []),
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
-    script.loop = loop
+    script.loop = without_reviewers(loop)
     events = list(loop.run())
     saved = store.get_turn(UID, chat, turn["id"])
-    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    # The review belongs to exactly this answer.
+    assert saved["status"] == "completed" and saved["agent_review"]["answer_hash"] == answer_hash(saved["consensus"])
     document = loop.documents.results[-1]
     assert document["title"] == "Decision brief" and len(document["files"]) == 2
     # Compare, create the document, write the answer: no further step.
     assert sorted(steps) == [0, 1, 2] and saved["consensus"] == "The first option costs 100."
     writer = steps[2]
-    assert "never invent links to them" in writer["messages"][0]["content"]
+    assert "saved ones appear as cards below it, without links" in writer["messages"][0]["content"]
     result = json.loads(next(m["content"] for m in writer["messages"] if m.get("tool_call_id") == "doc"))
     assert result["document_id"] == document["document_id"] and result["title"] == "Decision brief"
     assert {f["id"] for f in result["files"]} == {f["id"] for f in document["files"]}
@@ -166,7 +168,7 @@ def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
     from app.services.agent_comparison import comparison_selection
     from app.services.agent_delegation import DelegationLoop
     from app.services.agent_delegation_config import defaults
-    from app.services.agent_files import UNTRUSTED
+    from app.services.agent_files import AUDIT_UNTRUSTED
     from app.services.agent_policy import AgentPolicy
     from app.services.agent_runs import APP_CONTEXT_CLOSE, AgentRunStore, strip_app_context, with_app_context
     from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
@@ -189,7 +191,7 @@ def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
     files.upload(UID, chat, {"name": "second.txt", "data": base64.b64encode(b"Price: 55 EUR").decode()})
     second = loop()
     assert first.messages[0] == second.messages[0]
-    assert UNTRUSTED in first.messages[0]["content"] and "Files available" not in first.messages[0]["content"]
+    assert AUDIT_UNTRUSTED in first.messages[0]["content"] and "Files available" not in first.messages[0]["content"]
     question = second.messages[-1]["content"]
     context = question.split(APP_CONTEXT_CLOSE)[0]
     assert "Current date: today." in context and "Files available in this chat:" in context
@@ -295,15 +297,11 @@ def test_file_list_is_chronological_and_carries_document_titles(setup):
     assert all(f["title"] == "Decision brief" for f in files.list("owner", chat) if f.get("kind") == "document")
 
 
-def test_audit_mode_names_no_model_comparisons_for_a_document():
+def test_create_document_names_no_model_comparisons():
     """Opus in audit mode, 2026-10-28: create_document asked for model
-    comparisons it had no tool for. Only comparison mode names them."""
-    from types import SimpleNamespace
+    comparisons first, a rule it could not follow. The description says what
+    the tool does (comparison mode kept the rule until 2026-10-31)."""
     from app.services.agent_documents import DocumentTools
-
-    def description(audit):
-        tools = object.__new__(DocumentTools)
-        tools.loop = SimpleNamespace(comparison=SimpleNamespace(audit_mode=audit))
-        return next(tool.description for tool in tools.tools() if tool.name == "create_document")
-    assert "comparison" not in description(True).lower() and "Preserve uncertainties" in description(True)
-    assert "Complete model comparisons first" in description(False)
+    tools = object.__new__(DocumentTools)
+    description = next(tool.description for tool in tools.tools() if tool.name == "create_document")
+    assert "comparison" not in description.lower() and "Preserve uncertainties" in description

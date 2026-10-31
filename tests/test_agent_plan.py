@@ -97,7 +97,7 @@ def test_a_note_with_a_plan_update_mid_task_is_no_answer(store, fake_vm):
     script = Saying([("Data is read. Next I fit the model.", [("update_plan", {"items": PLAN})]),
                      ("", [("vm_exec", {"command": "python fit.py"})]),
                      ("The model is fitted: slope 0.4.", [("update_plan", {"items": done})])])
-    loop = vm_loop(store, script, audit="off")
+    loop = vm_loop(store, script)
     list(loop.run())
     assert any(call["arguments"] == '{"command": "python fit.py"}' for m in loop.messages
                for call in (c["function"] for c in m.get("tool_calls") or []))

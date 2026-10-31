@@ -1,4 +1,4 @@
-"""Agent VM (AgentPreferences.vm, with audit): since 2026-10-27 the account's
+"""Agent VM (AgentPreferences.vm): since 2026-10-27 the account's
 workspace, a workbench VM for all of its chats (agent_workspace.py) and a
 browser VM next to it, created at the first VM call and reused across
 messages and chats, each chat in its own folder, with shell commands and
@@ -24,13 +24,14 @@ from app.services.agent_vm_tools import (MODEL_STREAM_CHARS, VIEW_CHARS, VM_NO_T
                                          VmExecArgs, model_text, tail)
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
+from agent_reviewers import without_reviewers
 from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtures)
 
 
 @pytest.fixture(autouse=True)
 def _admin_allowance(monkeypatch):
-    """The VM is for admins, whose daily account (5M tokens) holds audit
-    mode's search rounds; the suites' 250k (conftest) would not."""
+    """The VM is for admins, whose daily account (5M tokens) holds the
+    agent's search rounds; the suites' 250k (conftest) would not."""
     from app.services import agent_budget_config
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
 
@@ -259,18 +260,21 @@ class Agent:
 ANSWER = "The script printed 42: the mean of the column is 42."
 
 
-def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", audit="on", file_context=None,
+def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_context=None,
             google_data=False, workspace_closed=False, domains=True):
+    """A turn with the workspace whose reviewers never start
+    (agent_reviewers.InertAnswerAudit): ``script`` scripts the agent alone."""
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
     config = {**defaults(), "enabled": False, "max_searches": 0}
-    return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences(audit=audit, judges="off", vm=vm), file_context=file_context,
+        agent_preferences=AgentPreferences(vm=vm), file_context=file_context,
         google_data=google_data, workspace_closed=workspace_closed, domains=domains)
+    return without_reviewers(loop)
 
 
 @pytest.fixture
@@ -656,9 +660,9 @@ def test_no_vm_without_the_setting_or_in_chats_with_google_data(store, fake_vm):
         assert prompt_defaults.AGENT_VM_PROMPT not in script.systems[0]
 
 
-def test_the_vm_also_works_with_comparison_tools(store, fake_vm):
+def test_the_vm_comes_beside_compare_models(store, fake_vm):
     script = Agent([[("vm_exec", {"command": "ls"})]])
-    loop = vm_loop(store, script, audit="off")
+    loop = vm_loop(store, script)
     list(loop.run())
     assert {"compare_models", "vm_exec"} <= set(script.offered[0])
     assert results(loop)[0]["stdout"] == "ok\n"
@@ -1116,7 +1120,7 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=Agent().factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences(audit="off", judges="off", vm="on"),
+        agent_preferences=AgentPreferences(vm="on"),
         file_context=FileContext(files, UID, chat_id, [upload["id"]]),
         memory=MemorySnapshot(available=True, enabled=True, auto=True))
     assert {"start_agent", "compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",

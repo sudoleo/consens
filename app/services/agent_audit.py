@@ -1,10 +1,10 @@
-"""Audit instead of comparison: the agent works, the comparison models review.
+"""The agent works, the user's chosen models review its work and its answer.
 
-An Agent setting (AgentPreferences.audit, since 2026-10-25; who may use it:
-routers/agent.py audit_allowed). The agent answers itself, with its own web
-search in every step, and its answer streams at once (compare_models only
-since 2026-10-31, see below). Each of the
-user's comparison models reviews the agent's work while it happens: it
+The Agent's one mode for every account since 2026-10-31 (Max); from
+2026-10-25 an Agent setting ("audit instead of comparison") beside a
+comparison mode with judges, which is gone. The agent answers itself, with
+its own web search in every step, and its answer streams at once. Each of
+the user's chosen models reviews the agent's work while it happens: it
 follows the agent's live work log (agent_work_log.py, docs/agent-work-log.md)
 in rounds, one session per reviewer, and once the answer is fixed it gives
 its final list of marks in a short final round. All reviewers are equal and
@@ -20,21 +20,21 @@ and returns the reviewer's complete list: earlier marks that still matter,
 new ones, a quote for a passage of the answer, an entry number for the work.
 An answer written in one step has only the final round.
 
-The app finds every quote in the answer with the tolerant locator of
-check_text (agent_comparison._search_form), widens it to its sentences and
+The app finds every quote in the answer with a tolerant locator
+(locate_quote, _search_form), widens it to its sentences and
 merges the marks of several reviewers on one sentence into one claim, in the
 shape the page already marks (anchor, anchor_occurrence, dissent[].target).
 Marks about the work go to ``audit.process`` with their entry. Unmarked text
 means "no objection", not "confirmed": no agreement, no score, no
-Differences. The judges do not run in this mode. Whoever calls a statement
+Differences, no judge. Whoever calls a statement
 wrong names a source (any http(s) URL); without one the mark counts as
 doubtful.
 
 Since 2026-10-31 the agent may also ask the user's chosen models its question
-(compare_models, admins first: routers/agent.py audit_compare_allowed): they
-answer as advisers, each in a fresh conversation of its own, never the
-reviewers' sessions, and the reviewers read their answers in the log as
-evidence (review_entry, BRIEF_TOOLS). No judge runs on them.
+(compare_models, agent_comparison.AUDIT_COMPARE): they answer as advisers,
+each in a fresh conversation of its own, never the reviewers' sessions, and
+the reviewers read their answers in the log as evidence (review_entry,
+BRIEF_TOOLS). No judge runs on them.
 
 A failure of the review costs marks, never the answer: a failed round only
 costs its own (the reviewer goes on in a new session, after
@@ -57,6 +57,7 @@ import queue
 import re
 import threading
 import time
+import unicodedata
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -65,9 +66,8 @@ from app.core.observability import record_metric, safe_exception
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
 
-# The agent may search in every step of an audit-mode turn, up to this many
-# rounds each: it researches the whole answer itself (comparison mode: three
-# rounds once, before the first comparison).
+# The agent may search in every step, up to this many rounds each: it
+# researches the whole answer itself.
 AGENT_SEARCH_ROUNDS = 5
 # A reviewer's own research: per live round, and in its final round (as a
 # comparison answer at depth "full").
@@ -86,7 +86,7 @@ FAILURE_PAUSE_SECONDS = 60
 # MIN_ENTRY_CHARS). The whole log stays in the work log.
 SYSTEM_ENTRY_CHARS = 60_000
 ENTRY_CHARS = 12_000
-# A compare_models result (audit mode, since 2026-10-31) holds every answer
+# A compare_models result (since 2026-10-31) holds every answer
 # of the user's chosen models: read as its structure up to this, each answer
 # shortened alike where they do not fit, so the reviewers see all of them.
 COMPARISON_ENTRY_CHARS = 60_000
@@ -1148,6 +1148,100 @@ def review_failure(error, cancellation=None):
 
 # --- Finding the marks in the answer ------------------------------------------
 
+# The tolerant search form of the quote locator (locate_quote). Until
+# 2026-10-31 it located a pasted text for check_text, hence "passage".
+_PASSAGE_CHARACTERS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u201e": '"', "\u00ab": '"', "\u00bb": '"',
+                                     "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2013": "-", "\u2014": "-",
+                                     "\u00a0": " "})
+# Markdown and invisible characters: an answer writes "**Yes**," where a
+# reviewer quotes "Yes,". Neither side counts them.
+_PASSAGE_SKIPPED = set("*`#>_\u200b\u200c\u200d\u2060\ufeff")
+_PASSAGE_BULLETS = set("-+*\u2022")
+_ANCHOR_EDGES = " \t\r\n\"'\u201c\u201d\u201e\u00ab\u00bb\u2018\u2019\u2026"
+# Where a passage usually begins: the text's start, a new line, a colon or an
+# opening quote. Of several places holding the same words, one there wins.
+_PASSAGE_OPENERS = set("\n:\"'\u201c\u201e\u00ab\u2018(")
+
+
+def _search_form(text):
+    """Case-, quote-, markdown- and whitespace-insensitive form of `text` plus,
+    for each of its characters, the index of the original character."""
+    text = str(text or "")
+    chars, origin = [], []
+    line_start = True
+    index = 0
+    while index < len(text):
+        char, start = text[index], index
+        # A character with its combining marks is one unit: NFKC turns it into
+        # what an anchor (normalized as a whole) contains, "CO₂" into "CO2",
+        # "m²" into "m2", "…" into "..." and "é" spelt as e + accent into "é".
+        index += 1
+        while index < len(text) and unicodedata.combining(text[index]):
+            index += 1
+        if char == "\n":
+            line_start = True
+        if char in _PASSAGE_SKIPPED or (line_start and char in _PASSAGE_BULLETS
+                                        and text[index:index + 1].isspace()):
+            continue
+        char = char.translate(_PASSAGE_CHARACTERS)
+        if char.isspace():
+            if chars and chars[-1] != " ":
+                chars.append(" ")
+                origin.append(start)
+            continue
+        line_start = False
+        for folded in unicodedata.normalize("NFKC", char + text[start + 1:index]).casefold():
+            chars.append(folded)
+            origin.append(start)
+    return "".join(chars), origin
+
+
+def _anchor_form(anchor):
+    text = unicodedata.normalize("NFKC", str(anchor or "")).strip(_ANCHOR_EDGES)
+    if text.endswith("..."):
+        text = text[:-3]
+    return _search_form(text.strip(_ANCHOR_EDGES))[0].strip()
+
+
+def _opens_passage(message, index):
+    before = message[:index].rstrip(" \t")
+    return not before or before[-1] in _PASSAGE_OPENERS
+
+
+def _locate_in(message, start, end):
+    """(start index, stop index) of the passage from ``start`` to ``end``
+    (both in search form) in ``message``, or None."""
+    form, origin = _search_form(message)
+    candidates, position = [], form.find(start)
+    while position >= 0:
+        candidates.append(position)
+        position = form.find(start, position + 1)
+    ordered = ([c for c in candidates if _opens_passage(message, origin[c])]
+               + [c for c in candidates if not _opens_passage(message, origin[c])])
+    for first in ordered:
+        last = form.find(end, first)
+        while last >= 0 and last + len(end) < first + len(start):
+            last = form.find(end, last + 1)
+        if last < 0:
+            continue
+        begin, stop = origin[first], origin[last + len(end) - 1] + 1
+        # The last character keeps its combining marks.
+        while stop < len(message) and unicodedata.combining(message[stop]):
+            stop += 1
+        # Anchors cut inside a word take the whole word, and an anchor that
+        # ends just before the sentence's own end ("... run here" or "... run
+        # here...") still takes its full stop and closing quote along.
+        # Markdown around the first and last words ("**Yes**") belongs to them.
+        while begin > 0 and (message[begin - 1].isalnum() or message[begin - 1] in "_*`"):
+            begin -= 1
+        while stop < len(message) and (message[stop].isalnum() or message[stop] in "_*`"):
+            stop += 1
+        while stop < len(message) and message[stop] in ".!?\u2026\"'\u201c\u201d\u00bb\u2019)":
+            stop += 1
+        return begin, stop
+    return None
+
+
 _LINK = re.compile(r"\[([^\]\n]+)\]\((?:https?://|www\.)[^)\s]*\)")
 _ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 
@@ -1170,7 +1264,6 @@ def _visible(text):
 
 def _occurrences(text, needle):
     """How often ``needle`` (search form) occurs in ``text``: 0, 1 or 2 (more)."""
-    from app.services.agent_comparison import _search_form
     form = _search_form(text)[0]
     first = form.find(needle)
     return 0 if first < 0 else 1 if form.find(needle, first + 1) < 0 else 2
@@ -1179,12 +1272,11 @@ def _occurrences(text, needle):
 def locate_quote(answer, quote):
     """(start, stop) of the quoted passage in ``answer``, or None.
 
-    Case, quotation marks, Markdown emphasis and whitespace do not count, as
-    for check_text (agent_comparison._locate_in, which also widens the quote
-    to whole words with their Markdown); a link may be quoted by its label,
+    Case, quotation marks, Markdown emphasis and whitespace do not count
+    (_locate_in also widens the quote to whole words with their Markdown); a
+    link may be quoted by its label,
     and a quote shortened with "..." matches from its first to its last
     part. Words the answer holds more than once name no passage: None."""
-    from app.services.agent_comparison import _anchor_form, _locate_in
     answer = str(answer or "")
     needle = _anchor_form(quote)
     if len(needle) < MIN_QUOTE_CHARS:

@@ -1,26 +1,24 @@
-"""The orchestrator reads a cited source or a page the user linked (read_source).
+"""The agent reads one public web page as text (read_source).
 
-The chat model may open one page: after a comparison to settle a concrete
-contradiction between the answers or to quote a key figure exactly, and also
-without one, to answer what a page the user points to says (then no
-comparison follows: the models must answer independently).
 Why a client tool instead of OpenRouter's ``openrouter:web_fetch`` directly in
-the routing step: over Chat Completions, our transport, the fetched text never
+the agent's step: over Chat Completions, our transport, the fetched text never
 reaches us, only a counter in ``usage.server_tool_use_details`` (live probe
-2026-10-10, artifacts/web-fetch-probe/validation.md). The judges could not see
-what the orchestrator read, the problem the worker delegation failed on. So
-the orchestrator calls read_source, and the server opens the page with
-OpenRouter's fetch in a small Responses API call of the standard judge model
-(the fetched text arrives there as an output item). The text becomes the tool
-result the agent writes from and part of the Coverage judge's basis, and it
-is saved with the review.
+2026-10-10, artifacts/web-fetch-probe/validation.md). The reviewers could not
+see what the agent read. So the agent calls read_source, and the server opens
+the page with OpenRouter's fetch in a small Responses API call of a standard
+judge model (the fetched text arrives there as an output item). The text
+becomes the tool result the agent works from, the reviewers read it in the
+work log, and it is saved with the review.
 
-Bounds: only URLs that a comparison answer of this message cited, that an
-earlier message of the chat saved as a source, or that the user wrote, only
-before the answer, at most READS_PER_MESSAGE pages per message
-and READS_PER_STEP per routing step, READ_CONTENT_TOKENS per page. Never for
-comparison models or the judges, never in chats with Google
-data. On unless AGENT_READ_SOURCES=0. See docs/agent-mode.md, "Quellen nachlesen".
+Bounds: a source a comparison answer of this message cited, a result of this
+message's own web search, a source an earlier message of the chat saved, a
+URL the user wrote, or, while reviewers follow the work, any public page the
+agent chooses; only before the answer, at most READS_PER_MESSAGE pages per
+message and READS_PER_STEP per step, READ_CONTENT_TOKENS per page. Never for
+comparison models or reviewers, never in chats with Google data. On unless
+AGENT_READ_SOURCES=0. See docs/agent-mode.md, "Quellen nachlesen". Until
+2026-10-31 comparison mode read only the answers' sources, with a purpose and
+a point for each read.
 """
 from __future__ import annotations
 
@@ -30,14 +28,12 @@ import logging
 import os
 import re
 import threading
-from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.openrouter_contract import OPENROUTER_BASE_URL, openrouter_headers
-from app.services.agent_comparison import ProgressArgs
 from app.services.agent_costs import FETCH_COST_NANOS
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.llm.agent_client import AgentCompletion, measured_usage
@@ -74,8 +70,6 @@ FETCH_OUTPUT_TOKENS = 512
 # Read pages in the saved review give way first, to this length, before the
 # 600 kB review budget would fail (agent_comparison._checkpoint).
 READ_TRIM_CHARS = 2000
-# All read pages together in one Coverage judge prompt.
-JUDGE_SOURCE_CHARS = 40_000
 RESPONSES_URL = OPENROUTER_BASE_URL + "/responses"
 FETCH_INSTRUCTION = ("Call the web_fetch tool exactly once, for exactly the URL below. Do not fetch any other URL. "
                      "After the tool result, reply with only: OK\n\nURL: {url}")
@@ -120,17 +114,14 @@ _URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
 LABEL_USER = "your message"
 LABEL_EARLIER = "an earlier message's sources"
-# Audit mode (2026-10-27): the agent researches itself, and no comparison
-# answer cites a page. Its own search results are provider citations like
-# the earlier messages' sources, which they become with the next message
-# anyway: no page wrote them. Not in comparison mode, where the answers'
-# sources cover them and a read before the comparison would end it.
-# The web search that runs with every audit-mode step (the provider's own):
-# the agent does not call it, so "your search" read as a search it never made
-# (2026-10-28).
+# The agent researches itself (since 2026-10-27). Its own search results are
+# provider citations like the earlier messages' sources, which they become
+# with the next message anyway: no page wrote them. The web search runs with
+# every step (the provider's own): the agent does not call it, so "your
+# search" read as a search it never made (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
-# Audit mode since 2026-10-28: any public page, which the reviewers follow
-# live (until 2026-10-29 one the message did not hold waited for them first,
+# Since 2026-10-28 any public page, which the reviewers follow live (until
+# 2026-10-29 one the message did not hold waited for them first,
 # agent_gate.py). The provider's search of GPT-6 Luna and GPT-6.1 Terra sends
 # no hits to the app, so they could read nothing they found.
 LABEL_CHOSEN = "a page you chose"
@@ -232,29 +223,11 @@ def resolve_redirect(url):
     return target
 
 
-class ReadSourceArgs(ProgressArgs):
-    url: str = Field(min_length=1, max_length=2048, description=
-        "One URL exactly as it appears in the sources of a comparison answer of this message, in the sources "
-        "of an earlier message of this chat or in the user's messages.")
-    purpose: Literal["user_request", "settle_contradiction", "exact_wording"] = Field(description=
-        "user_request: the user asks what this page says, asks you to read or check it, or limits the answer to "
-        "the source it belongs to (such as only the official site). "
-        "settle_contradiction: the answers disagree on a fact that matters and this source decides it. "
-        "exact_wording: the answer will quote a key figure, definition or official statement from it.")
-    point: str = Field(min_length=1, max_length=300, description=
-        "The concrete point this page should settle or the wording it should supply, in one short sentence.")
-
-    @field_validator("point", mode="before")
-    @classmethod
-    def _clip_point(cls, value):
-        return value[:300] if isinstance(value, str) else value
-
-
-# ReadSourceArgs in audit mode (no docstring: it would become the schema's
+# read_source's arguments (no docstring: it would become the schema's
 # description). Since 2026-10-28 only the address: no purpose and point to
 # justify a read with (a list of when to read, which Max took out of the
 # prompt on 2026-10-28), and no status_update, since text beside a tool call
-# shows the user as a note in audit mode. The description says the rest once.
+# shows the user as a note. The description says the rest once.
 class AuditReadSourceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     url: str = Field(min_length=1, max_length=2048, description="The page's http(s) address.")
@@ -375,24 +348,17 @@ class SourceReader:
         self.lock = threading.Lock()
         self._steps = {}
         self._user_urls = None
-        # Audit mode (agent_audit.py) has no comparison answers that cite sources.
-        audit = getattr(comparison, "audit_mode", False)
-        # Audit mode since 2026-10-28: what it opens, not when to.
+        # Since 2026-10-28: what it opens, not when to.
         description = (
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
-            f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message."
-            if audit else
-            "Open one page: a source that a comparison answer of this message cited, a source of an earlier "
-            "message of this chat or a page the user linked, to answer what it says, to settle a concrete "
-            "contradiction, to check a source the user asks about or to get the exact wording of a key figure, "
-            f"definition or statement. At most {READS_PER_MESSAGE} per message; returns the page text.")
-        self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs if audit else ReadSourceArgs,
-                                 self.read, activity=self.activity)
+            f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message.")
+        self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs, self.read,
+                                 activity=self.activity)
 
     # --- What may be read -------------------------------------------------
     def cited(self):
         """Canonical URL -> {url, title, cited_by}: every source of every
-        answer of this message, in audit mode the agent's own search results
+        comparison answer of this message, the agent's own search results
         (LABEL_SEARCH), then the chat's earlier sources and the user's links
         (see _CHAT_URL)."""
         cited = {}
@@ -408,13 +374,12 @@ class SourceReader:
                           "label": answer.get("provider_label") or answer.get("provider")}
                     if by not in entry["cited_by"]:
                         entry["cited_by"].append(by)
-        if getattr(self.comparison, "audit_mode", False):
-            for source in list(getattr(self.loop, "search_sources", None) or ()):
-                url = source.get("url") if isinstance(source, dict) else None
-                key = url_key(url) if _safe_url(url) else ""
-                if key:
-                    cited.setdefault(key, {"url": url, "title": str(source.get("title") or ""), "cited_by": [
-                        {"comparison_id": None, "provider": "search", "label": LABEL_SEARCH}]})
+        for source in list(getattr(self.loop, "search_sources", None) or ()):
+            url = source.get("url") if isinstance(source, dict) else None
+            key = url_key(url) if _safe_url(url) else ""
+            if key:
+                cited.setdefault(key, {"url": url, "title": str(source.get("title") or ""), "cited_by": [
+                    {"comparison_id": None, "provider": "search", "label": LABEL_SEARCH}]})
         for source in getattr(self.loop, "chat_sources", None) or ():
             url = source.get("url") if isinstance(source, dict) else None
             key = url_key(url) if _safe_url(url) else ""
@@ -429,12 +394,11 @@ class SourceReader:
         return cited
 
     def chosen(self, url):
-        """A page the agent named itself, in audit mode with reviewers (who
-        follow the read live); else None."""
+        """A page the agent named itself, while reviewers follow the work
+        (they follow the read live); else None."""
         auditor = getattr(self.comparison, "auditor", None)
         url = url.strip()
-        if not getattr(self.comparison, "audit_mode", False) or not getattr(auditor, "sessions", None) \
-                or not _safe_url(url) or not url_key(url):
+        if not getattr(auditor, "sessions", None) or not _safe_url(url) or not url_key(url):
             return None
         return {"url": url, "title": "", "cited_by": [{"comparison_id": None, "provider": "agent",
                                                        "label": LABEL_CHOSEN}]}
@@ -460,8 +424,7 @@ class SourceReader:
             return READ_SECONDS
         if left < READ_MIN_SECONDS:
             raise ValueError("There is no time left to read a source before the answer. Write the answer now "
-                             + ("from what you have." if getattr(self.comparison, "audit_mode", False)
-                                else "from what the comparison answers say."))
+                             "from what you have.")
         return min(READ_SECONDS, left - READ_TIME_MARGIN)
 
     def _update(self, record, **fields):
@@ -481,8 +444,8 @@ class SourceReader:
     def read(self, args, *, cancellation):
         """The tool. Refusals and failed pages are results, not tool errors:
         three tool errors in a row end the turn (DelegationLoop.run), and a
-        paywalled page or a mis-copied URL must not cost the paid comparisons
-        their answer."""
+        paywalled page or a mis-copied URL must not cost the paid work its
+        answer."""
         loop = self.loop
         loop._check(cancellation)
         with self.lock:
@@ -490,17 +453,11 @@ class SourceReader:
                 self._refuse(args)
                 budget = self._time_budget()
                 key = url_key(args.url)
-                entry = self.cited().get(key) if key else None
-                if entry is None and getattr(self.comparison, "audit_mode", False):
-                    entry = self.chosen(args.url)
-                    if entry is None:
-                        raise ValueError("read_source opens only a public http(s) address here: a result of this "
-                                         "message's web search, a source of an earlier message of this chat or "
-                                         "one the user wrote, copied exactly.")
+                entry = (self.cited().get(key) if key else None) or self.chosen(args.url)
                 if entry is None:
-                    raise ValueError("read_source opens only a URL listed in the sources of a comparison answer of "
-                                     "this message or of an earlier message of this chat, or one the user wrote, "
-                                     "copied exactly; not URLs from your own search, an answer's text or a page.")
+                    raise ValueError("read_source opens only a public http(s) address here: a result of this "
+                                     "message's web search, a source of an earlier message of this chat or "
+                                     "one the user wrote, copied exactly.")
                 tried = next((r for r in self.reads if r["status"] in {"completed", "failed"}
                               and key in {url_key(r["url"]), url_key(r.get("cited_url"))}), None)
                 if tried is not None and tried["status"] == "failed":
@@ -512,8 +469,7 @@ class SourceReader:
                 return {"status": "already_read", "url": tried["url"],
                         "note": "You already read this source in this message; its text is in that earlier result."}
             record = {"id": len(self.reads) + 1, "url": entry["url"], "host": host_of(entry["url"]),
-                      "title": entry["title"], "status": "running", "purpose": getattr(args, "purpose", ""),
-                      "point": " ".join(getattr(args, "point", "").split()), "cited_by": entry["cited_by"]}
+                      "title": entry["title"], "status": "running", "cited_by": entry["cited_by"]}
             self.reads.append(record)
             self._steps[loop.routing_steps] = self._steps.get(loop.routing_steps, 0) + 1
         self._checkpoint()
@@ -602,8 +558,9 @@ class SourceReader:
         messages = [{"role": "user", "content": FETCH_INSTRUCTION.format(url=record["url"])}]
         worker = Worker(uuid4().hex, model, messages)
         worker.kind, worker.file_ids = "source", []
-        loop._publish(worker, patch={"title": f"Read source · {record['host']}", "kind": "source",
-            "assignment": {"goal": record["point"], "context": record["url"]}, "model": model.settings(),
+        title = f"Read source · {record['host']}"
+        loop._publish(worker, patch={"title": title, "kind": "source",
+            "assignment": {"goal": title, "context": record["url"]}, "model": model.settings(),
             "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
         completion = PageFetch()
         if loop.mock_answer is not None:
@@ -663,13 +620,6 @@ class SourceReader:
 
     # --- Evidence ------------------------------------------------------------
     def snapshot(self):
-        """Saved with the review: what was read, why, from which answers."""
+        """Saved with the review: what was read, from where it came."""
         with self.lock:
             return json.loads(json.dumps(self.reads, ensure_ascii=False))
-
-    def judge_sources(self):
-        """Read pages for the Coverage judge, together at most JUDGE_SOURCE_CHARS."""
-        with self.lock:
-            done = [r for r in self.reads if r["status"] == "completed"]
-        share = JUDGE_SOURCE_CHARS // max(1, len(done))
-        return [{"url": r["url"], "title": r["title"], "text": r["text"][:share]} for r in done]

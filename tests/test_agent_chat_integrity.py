@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from app.services.agent_comparison import review_is_bound
+from app.services.agent_comparison import answer_hash
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage
 from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded
@@ -24,7 +24,7 @@ def tool(name, args, identity):
 
 
 @pytest.mark.parametrize("before", [0, 1])
-def test_comparisons_in_a_batch_finish_before_its_judge_and_synthesis(store, before):
+def test_comparisons_in_a_batch_finish_before_the_answer_and_its_review(store, before):
     script = Script()
     base = type(script.factory())
 
@@ -34,8 +34,8 @@ def test_comparisons_in_a_batch_finish_before_its_judge_and_synthesis(store, bef
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
                 self.text = "INTERNAL_PREVIEW_DO_NOT_PUBLISH"
                 yield {"type": "delta", "text": self.text}
-                self.tool_calls = [tool("compare_models", {"question": "Additional constraint", "context": "Budget is 100", "reason": "Complete evidence", "next_step": "more_work"}, "additional"),
-                                   tool("judge_answer", {}, "review")]
+                self.tool_calls = [tool("compare_models", {"question": "Additional constraint", "context": "Budget is 100"}, "additional"),
+                                   tool("audit_answer", {}, "review")]
                 self.finish_reason = "tool_calls"
                 return
             if self.step_id == f"completion:{before + 1}":
@@ -51,11 +51,11 @@ def test_comparisons_in_a_batch_finish_before_its_judge_and_synthesis(store, bef
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and answer_steps == [f"completion:{before + 1}"]
-    # The judges are the app's: the model's own judge_answer call is refused.
+    # The review is the app's: the model's own audit_answer call is refused.
     review_call = next(json.loads(m["content"]) for m in loop.messages if m.get("tool_call_id") == "review")
     assert "error" in review_call
     assert len(saved["agent_review"]["comparisons"]) == before + 1
-    assert review_is_bound(saved["agent_review"], saved["consensus"])
+    assert saved["agent_review"]["answer_hash"] == answer_hash(saved["consensus"])
     assert "".join(e["text"] for e in events if e["type"] == "delta") == saved["consensus"]
 
 
@@ -152,19 +152,26 @@ def test_valid_comparison_text_is_retained_with_consistent_session_status(store,
     assert all(a["status"] == "completed" for a in agents if a.get("kind") == "comparison")
 
 
-def test_the_app_starts_the_judges_without_more_orchestrator_requests(store):
-    """The written answer ends the steering; the app runs its checks itself."""
+def test_the_app_starts_the_review_without_more_agent_requests(store):
+    """The written answer ends the steering; the app has it reviewed itself."""
     script = Script()
-    loop = chat_loop(store, script)
+    loop = chat_loop(store, script, reviewers=True)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    review = saved["agent_review"]
+    assert saved["status"] == "completed" and review["status"] == "succeeded"
+    assert review["answer_hash"] == answer_hash(saved["consensus"])
     # The comparison step and the step that writes the answer.
     assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 2
-    assert loop.comparison.judge_calls == 2
+    # Each reviewer gave its final round on the fixed answer.
+    assert {model for _, model in script.reviews} == {"anthropic/claude-haiku-4.5", "openai/gpt-5.4-mini"}
 
 
-def test_repeated_invalid_tools_stop_without_exhausting_daily_allowance(store):
+def test_repeated_invalid_tools_end_with_the_answer_without_exhausting_daily_allowance(store):
+    """Three rounds of invalid tool calls end the agent's work: one last step
+    without tools writes the answer from what it has (since 2026-10-31 in
+    every turn; until then a turn without a comparison failed here)."""
+    from app.services import agent_quota
     script = Script()
     base = type(script.factory())
     calls = []
@@ -173,16 +180,22 @@ def test_repeated_invalid_tools_stop_without_exhausting_daily_allowance(store):
         def stream(self, *, model, **kwargs):
             calls.append(self.step_id)
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
+            if kwargs.get("allow_tool_calls") is False:
+                self.text, self.finish_reason = "What I have so far.", "stop"
+                yield {"type": "delta", "text": self.text}
+                return
             self.tool_calls = [tool("compare_models", {"invalid": True}, f"bad_{len(calls)}")]
             self.finish_reason = "tool_calls"
             yield from ()
 
     loop = chat_loop(store, script)
     loop.factory = Invalid
-    with pytest.raises(AnalysisBudgetExceeded, match="without progress"):
-        list(loop.run())
-    assert len(calls) == 3
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "failed"
+    list(loop.run())
+    assert len(calls) == 4
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == "What I have so far."
+    assert loop.completion.wrap_up["reason"] == "invalid" and not loop.comparison.comparisons
+    assert agent_quota.snapshot(store.db, UID)["reserved"] == 0
 
 
 @pytest.mark.parametrize("mode", ["accepted", "rework", "fallback"])
@@ -268,5 +281,5 @@ def test_late_worker_results_reach_the_answer_only_after_review_without_private_
         assert "https://example.org/worker" in context
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["consensus"] == "The first option costs 100."
-    assert review_is_bound(saved["agent_review"], saved["consensus"])
+    assert saved["agent_review"]["answer_hash"] == answer_hash(saved["consensus"])
     assert all(not w.thread.is_alive() for w in loop.workers.values())

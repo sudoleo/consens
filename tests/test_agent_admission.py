@@ -1,7 +1,6 @@
 """Budget-pressure regressions through real admission/receipts, without paid APIs."""
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-import json
 import threading
 
 import pytest
@@ -139,8 +138,10 @@ def test_parallel_comparison_waits_for_receipt_instead_of_failing_or_shrinking(s
             waiting.set()
         return result
     loop._state = state
+    slots = threading.BoundedSemaphore(2)
     def call():
-        return loop.comparison.call(model, messages, title="Compare", kind="comparison")
+        return loop.comparison.call(model, messages, title="Compare", comparison_id=None, slots=slots,
+                                    cancellation=loop.cancellation, partial={})
     with ThreadPoolExecutor(max_workers=2) as pool:
         first = pool.submit(call)
         assert entered.wait(5)
@@ -206,62 +207,53 @@ def test_explicit_reasoning_budget_is_not_shrunk_below_provider_minimum(store):
     assert loop.costs.calls == 0
 
 
-def test_consensus_default_overrides_legacy_prompt_and_disabled_workers_are_not_advertised(store):
+def test_the_code_prompt_is_the_agents_one_mode_and_disabled_workers_are_not_advertised(store):
     script = Script()
     loop = make_loop(store, script)
     system = loop.messages[0]["content"]
-    # The workflow lives in the code-owned steering prompt; the loop appends no
-    # second protocol and no worker catalog while delegation is off.
-    from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
-    assert "COMPARE OR ANSWER DIRECTLY" in AGENT_SYSTEM_PROMPT and "When in doubt, compare." in AGENT_SYSTEM_PROMPT
-    assert "Do not pass on what answers it" in AGENT_SYSTEM_PROMPT
-    assert "orchestrator in consens.io Agent Beta" not in system and "judge_answer once" not in system
+    # The agent's instructions are code-owned, one mode for every account
+    # (since 2026-10-31); a prompt without the app's facts gets them appended,
+    # and the loop adds no second protocol and no worker catalog while
+    # delegation is off.
+    from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT, DEFAULT_PROMPTS
+    assert DEFAULT_PROMPTS["agent"] == AGENT_AUDIT_SYSTEM_PROMPT and "agent_audit" not in DEFAULT_PROMPTS
+    assert system.startswith("Answer.\n\n" + AGENT_AUDIT_ANSWER_SECTION)
+    assert "COMPARE OR ANSWER DIRECTLY" not in system and "check_text" not in system
+    assert "orchestrator in consens.io Agent Beta" not in system and "judge_answer" not in system
     assert "Available worker models" not in system
     list(loop.run())
-    assert all("consens.io's Consensus pipeline" in messages[0]["content"] for messages in script.prompts)
+    assert script.prompts and all("An AI agent working for the user weighs your answer" in messages[0]["content"]
+                                  for messages in script.prompts)
 
 
-def test_server_search_final_answer_resumes_consensus_without_repeating_search(store):
+def test_a_reply_after_the_steps_own_search_stands_and_every_step_may_research(store):
+    """The agent researches itself in every step, up to AGENT_SEARCH_ROUNDS
+    (since 2026-10-31 for every account): a reply written from its own
+    search is the answer, never sent back for a comparison (until then
+    comparison mode handed it back with a note, _consensus_search_handoff)."""
+    from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     script = Script()
     base = type(script.factory())
     root_calls = []
     class Researched(base):
         def stream(self, *, model, messages, **kwargs):
-            if self.step_id.startswith('completion:'):
-                root_calls.append(kwargs['native_searches'])
-            if self.step_id == 'completion:0':
-                self.text, self.finish_reason = 'Research findings.', 'stop'
-                self.sources = [{'url': 'https://example.org/current', 'title': 'Current evidence'}]
-                self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model)
-                yield {'type': 'delta', 'text': self.text}
-                return
-            if self.step_id == 'completion:1':
-                assert kwargs['native_searches'] == 0
-                # The research sharpens the question but never becomes the
-                # answer models' sources.
-                assert 'https://example.org/current' not in messages[-1]['content']
-                assert 'Do not put your findings, source URLs' in messages[-1]['content']
-                self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model)
-                self.tool_calls = [{'id': 'compare', 'type': 'function', 'function': {'name': 'compare_models',
-                    'arguments': json.dumps({'question': 'Evaluate option', 'context': 'The user compares two options.', 'reason': 'Answer the question', 'next_step': 'more_work'})}}]
-                self.finish_reason = 'tool_calls'
-                return
-            yield from super().stream(model=model, messages=messages, **kwargs)
+            root_calls.append(kwargs['native_searches'])
+            self.text, self.finish_reason = 'Research findings.', 'stop'
+            self.sources = [{'url': 'https://example.org/current', 'title': 'Current evidence'}]
+            self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model)
+            yield {'type': 'delta', 'text': self.text}
     from app.services import agent_budget_config
-    # Three research rounds with the routing reasoning headroom need more than
-    # the 250,000 test tokens (the free tier has 660,000).
-    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": 660_000})
+    # Five research rounds with the routing reasoning headroom need more than
+    # the suite's 250,000 test micro-euros.
+    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": 5_000_000})
     loop = make_loop(store, script)
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Researched
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    # The first routing step researches (three rounds); after the handoff no
-    # search, and the step that writes the answer after the comparison may
-    # search once (to settle a conflict between the answers).
-    assert root_calls == [3, 0, 1]
-    assert saved['status'] == 'completed' and saved['agent_review']['status'] == 'succeeded'
-    assert saved['consensus'] != 'Research findings.'
+    assert root_calls == [AGENT_SEARCH_ROUNDS]
+    assert saved['status'] == 'completed' and saved['consensus'] == 'Research findings.'
+    assert not any(m['role'] == 'user' and 'web-search phase' in m['content'] for m in loop.messages)
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 0
 
 
@@ -293,8 +285,10 @@ def test_parallel_comparison_keeps_its_search_instead_of_waiting(store):
             waiting.set()
         return original(worker, status, **patch)
     loop._state = state
+    slots = threading.BoundedSemaphore(2)
     def call():
-        return loop.comparison.call(model, messages, title="Compare", kind="comparison")
+        return loop.comparison.call(model, messages, title="Compare", comparison_id=None, slots=slots,
+                                    cancellation=loop.cancellation, partial={})
     with ThreadPoolExecutor(max_workers=2) as pool:
         first = pool.submit(call)
         assert entered.wait(5)

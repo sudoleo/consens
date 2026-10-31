@@ -403,8 +403,9 @@ def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
 
     Only a checked answer counts: the review succeeded or partly succeeded,
     and the pick comes from the check of the widest comparison (most answers)
-    that names one. One Agent turn can therefore add at most one pick, like a
-    Consensus run.
+    that names one. Until 2026-10-31 such a pick was the turn's one Model
+    Pulse vote (``source: "agent"``); the judges no longer check Agent answers,
+    and scripts/backfill_model_pulse.py reads the saved ones with this.
     """
     from app.core import config as cfg
 
@@ -424,37 +425,6 @@ def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
         return None, []
     best = cfg.LEADERBOARD_MODEL_ALIASES.get(best, best)
     return (best, field) if best in cfg.VALID_LEADERBOARD_MODELS else (None, [])
-
-
-def agent_best_model_pick(review) -> str | None:
-    return agent_best_model_choice(review)[0]
-
-
-def agent_vote_ref(db, *, uid: str, chat_id: str, turn_id: str):
-    """The single BestModel vote of one Agent turn (idempotent by turn)."""
-    key = hashlib.sha256(f"{uid}:agent:{chat_id}:{turn_id}:BestModel".encode("utf-8")).hexdigest()
-    return db.collection(VOTES_COLLECTION).document(key)
-
-
-def write_agent_vote(tx, db, vote_ref, *, uid: str, chat_id: str, turn_id: str, model: str,
-                     participants=(), now: datetime | None = None):
-    """Write an Agent turn's pick inside the caller's transaction. The caller
-    has read ``vote_ref`` first (Firestore: reads before writes) and only
-    calls this when it did not exist."""
-    from app.services import model_pulse
-    now = now or utcnow()
-    _set(tx, vote_ref, {
-        "schema_version": 1,
-        "owner_hash": _hash_uid(uid),
-        "result_id": f"agent:{chat_id}:{turn_id}",
-        "vote_subject_id": f"agent:{turn_id}",
-        "model": model,
-        "vote_type": "BestModel",
-        "source": "agent",
-        "created_at": now,
-        **(model_pulse.participation(participants, model) or {}),
-    })
-    _set(tx, db.collection("leaderboard").document(model), {"BestModel": firestore.Increment(1)}, merge=True)
 
 
 def _hash_uid(uid: str) -> str:

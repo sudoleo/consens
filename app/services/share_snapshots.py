@@ -680,7 +680,8 @@ def _agent_share_basis(review, text):
     The app marks an answer with its first comparison (agent-review.js); the
     share takes the first one whose check of this text found something to
     show, else the first one. A check bound to another text or to other
-    answers (review_is_bound) counts as none.
+    answers (its hashes, below) counts as none. Only turns saved before
+    2026-11 have such checks: the judges of comparison mode.
     """
     review = review if isinstance(review, dict) else {}
     if review.get("mode") == "audit":

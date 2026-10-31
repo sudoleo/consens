@@ -148,21 +148,21 @@ def test_reaped_session_preserves_confirmed_duration_without_growing_after_reloa
     assert first['ended_at'] == again['ended_at']
 
 
-def test_an_audit_reviewers_call_counts_at_half_weight_in_the_allowance(store):
-    """A-K2: a reviewer's reservation, its charge and its receipt take
-    AUDIT_REVIEWER_QUOTA_WEIGHT of its tokens, cache reads at a quarter on
-    top; other sessions count in full. The kind of the session alone is
-    enough, and so is the round of a reviewer call."""
+def test_a_reviewers_call_counts_what_it_cost_like_a_comparison_answer(store):
+    """A reviewer's reservation, its charge and its receipt are those of any
+    other session, a comparison answer's here; its receipt keeps the
+    session's kind. Until 2026-10-31 a reviewer's call counted at half weight
+    (A-K2), cache reads at a quarter."""
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
-    reviewer, judge = 'a' * 32, 'b' * 32
-    for aid, kind in ((reviewer, 'audit'), (judge, 'judge')):
+    reviewer, answer = 'a' * 32, 'b' * 32
+    for aid, kind in ((reviewer, 'audit'), (answer, 'comparison')):
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid, patch={
             'assignment': {'goal': 'Check'}, 'status': 'working', 'kind': kind})
     usage = {'input_tokens': 1000, 'output_tokens': 100, 'cached_input_tokens': 800,
              'estimated_cost_nano_usd': priced(500), 'cost_source': 'provider', 'cost_complete': True}
-    for aid in (reviewer, judge):
+    for aid in (reviewer, answer):
         before = agent_quota.snapshot(store.db, UID)['reserved']
         assert store.claim(*args, loop.model, step=f'agent:{aid}:0', run_token=loop.run_token,
                            policy=loop.policy.snapshot(), reservation=(3001, priced(3001)))
@@ -171,10 +171,8 @@ def test_an_audit_reviewers_call_counts_at_half_weight_in_the_allowance(store):
         value = AgentCompletion()
         value.usage, value.finish_reason = dict(usage), 'stop'
         store.settle(*args, completion=value, status='succeeded', step=f'agent:{aid}:0', final=False)
-    receipts = {aid: store.receipt_ref(*args, f'agent:{aid}:0').get().to_dict() for aid in (reviewer, judge)}
-    # Since 2026-10-31 a reviewer's call counts what it cost, like a judge's
-    # (until then at half weight, A-K2; cache reads at a quarter).
-    assert receipts[judge]['quota_charged'] == 500 and receipts[judge]['session_kind'] == 'judge'
+    receipts = {aid: store.receipt_ref(*args, f'agent:{aid}:0').get().to_dict() for aid in (reviewer, answer)}
+    assert receipts[answer]['quota_charged'] == 500 and receipts[answer]['session_kind'] == 'comparison'
     assert receipts[reviewer]['quota_charged'] == 500 and receipts[reviewer]['session_kind'] == 'audit'
     assert receipts[reviewer]['quota_reserved'] == 3001
     budget = agent_quota.snapshot(store.db, UID)
@@ -184,10 +182,8 @@ def test_an_audit_reviewers_call_counts_at_half_weight_in_the_allowance(store):
     assert agent_quota.unknown_estimate(200, {'provisional': True, 'estimated_cost_nano_usd': priced(70)}) == 100
 
 
-def test_ledger_versions_cover_reservation_settlement_and_released_review_hold():
+def test_ledger_versions_cover_reservation_and_settlement():
     data = agent_quota.reserve({}, 500)
     assert data['revision'] == 1
     data = agent_quota.settle(data, 200, {'input_tokens': 60, 'output_tokens': 40, 'estimated_cost_nano_usd': priced(100)})
     assert data['revision'] == 2 and data['used'] == 100 and data['reserved'] == 300
-    data = agent_quota.release(data, 300)
-    assert data['revision'] == 3 and data['reserved'] == 0

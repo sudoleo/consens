@@ -1,7 +1,7 @@
 """The agent's work log, written live by the app (docs/agent-work-log.md).
 
-Since 2026-10-25 in audit mode, since 2026-10-31 the Agent's one mode: every
-turn of every account (routers/agent.py lets the turn's owner read it). While
+Since 2026-10-25 (in audit mode only until 2026-10-31, then in every chat
+run of every account; routers/agent.py lets the turn's owner read it). While
 the agent works, the app records what it sees and does, never the agent
 itself: the context each model step receives (``context``: the chat's
 history and question, then everything the run adds to the conversation,
@@ -9,9 +9,9 @@ such as the app's hints and workers' messages), the step's readable
 reasoning, text, tool calls and search hits (``step``), every tool result
 (``tool``), the app's own interventions (``app``: a retracted text, the
 memory lock, the fixed answer), and the run's ``start`` and ``end``.
-Delegated workers write into the same log under their own id. The reviewers
-(comparison models), the judges and the app's page fetches are not part of
-it (DelegationLoop._log_actor).
+Delegated workers write into the same log under their own id. The reviewers,
+the comparison answers and the app's page fetches are not part of it
+(DelegationLoop._log_actor).
 
 The log only grows: an entry is never changed, a retraction is a new entry.
 One writer thread saves the entries in order, up to BATCH_LIMIT per
@@ -74,8 +74,8 @@ TOOL_DATA = {
     "browser": "web", "ask_user": "web",
     # Pictures of the web the server fetched (agent_web_images.py).
     "find_pictures": "web", "show_image": "web",
-    # The answers of the user's chosen models with their pages (audit mode,
-    # since 2026-10-31): model output.
+    # The answers of the user's chosen models with their pages (since
+    # 2026-10-31): model output.
     "compare_models": "agent",
 }
 # Measurements an entry may carry beside its content (since 2026-10-30): a

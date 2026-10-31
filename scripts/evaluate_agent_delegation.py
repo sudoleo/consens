@@ -23,7 +23,7 @@ from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation
-from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
+from app.services.prompt_defaults import AGENT_AUDIT_SYSTEM_PROMPT
 
 
 def task_set():
@@ -123,7 +123,7 @@ def run_task(task, mode, orchestrator, worker, key, repeat):
     config = defaults()
     config.update(enabled=True, max_searches=0, seconds=120, max_calls=24)
     common = dict(store=store, uid="evaluation", chat_id="evaluation", turn_id=task["id"],
-                  model=resolve_agent_model(orchestrator), messages=[{"role": "system", "content": AGENT_SYSTEM_PROMPT},
+                  model=resolve_agent_model(orchestrator), messages=[{"role": "system", "content": AGENT_AUDIT_SYSTEM_PROMPT},
                   {"role": "user", "content": task["question"]}], api_key=key, cancellation=ProviderCancellation())
     if mode == "delegation":
         loop = DelegationLoop(**common, policy=AgentPolicy.from_config(config), delegation_config=config,

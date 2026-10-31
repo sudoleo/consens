@@ -351,7 +351,7 @@ def prepared(store, fake_vm, github, *, raw=RAW, args=None, extra=None):
     connected(store, github)
     script = Agent([[("prepare_pull_request", {"path": "repos/app", "title": "Fix  the greeting",
                                                "body": "Says hello.", **(args or {})})]])
-    loop = vm_loop(store, script, audit="off")
+    loop = vm_loop(store, script)
     loop.vm_tools.session.ready(agent_vm_tools_cancellation())
     files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
     files[f"{PATH}/.git/consens-import.json"] = json.dumps({"repo": "maxl/app", "ref": "main", "commit": SHA}).encode()

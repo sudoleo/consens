@@ -143,10 +143,12 @@ def test_ledger_loads_once_then_reads_only_new_votes(monkeypatch):
     assert [e[3] for e in ledger.entries(db)] == ["grok"]
 
 
-# ------------------------------------------------------------------ writes
+# ------------------------------------------------------- saved Agent reviews
 
 
 def test_agent_choice_names_the_widest_compared_field():
+    """Until 2026-10-31 a checked Agent answer added this pick as a vote;
+    scripts/backfill_model_pulse.py still reads it from saved reviews."""
     review = {"status": "succeeded",
               "comparisons": [{"id": "a", "answers": [{"provider_label": "OpenAI"}, {"provider_label": "Grok"}]},
                               {"id": "b", "answers": [{"provider_label": "Gemini"}, {"provider_label": "Kimi"},
@@ -154,6 +156,9 @@ def test_agent_choice_names_the_widest_compared_field():
               "checks": [{"comparison_id": "a", "status": "succeeded", "differences_data": {"best_model": "OpenAI"}},
                          {"comparison_id": "b", "status": "succeeded", "differences_data": {"best_model": "Claude"}}]}
     assert persistence_guard.agent_best_model_choice(review) == ("Anthropic", ["Gemini", "Kimi", "Anthropic"])
+    # A review of the reviewers (the agent's one mode) has no judge's pick.
+    reviewed = {"status": "succeeded", "mode": "audit", "comparisons": review["comparisons"], "checks": []}
+    assert persistence_guard.agent_best_model_choice(reviewed) == (None, [])
 
 
 # ------------------------------------------------------------------ pages

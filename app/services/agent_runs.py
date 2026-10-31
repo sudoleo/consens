@@ -21,9 +21,7 @@ from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_sessions import AgentSessionStore
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX, normalize_turn_sources
 from app.services.llm.agent_client import AgentModel
-from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.llm.base import get_date_context
-from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
 
 
 CONTEXT_CHAR_LIMIT = 120_000
@@ -167,12 +165,6 @@ def get_agent_turn_context(model=None, config=None, device_timezone=None):
     if model is not None:
         context += f"\nSelected model for this response: {model.label} ({model.model})."
     return context
-
-
-def get_agent_system_prompt(model=None, config=None):
-    """Static instructions plus the per-message context as one text."""
-    config = config or prompt_config.get_config()
-    return f"{config['prompts']['agent']}\n\n{get_agent_turn_context(model, config)}"
 
 
 def with_app_context(question, context):
@@ -460,7 +452,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     receipt_patch[field] = getattr(completion, field)
             review_round = getattr(completion, "review_round", None)
             if isinstance(review_round, str) and review_round:
-                # A reviewer's call (audit mode): live, gate, final, repair
+                # A reviewer's call: live, gate, final, repair
                 # or hedge (agent_audit; DelegationLoop.worker_completion).
                 receipt_patch["round"] = review_round
             charged = agent_quota.measured_charge(usage)
@@ -527,29 +519,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if (last.get("status") == "running" or "running" in data.get("step_states", {}).values()
                     or (status == "succeeded" and last.get("status") != "succeeded")):
                 raise TurnStatusConflict("Agent step has not settled")
+            # The review ends below as the reviewers left it (agent_audit.py).
             review = (turn.to_dict() or {}).get("agent_review")
-            # In audit mode no judge checks the comparisons (agent_audit.py):
-            # its review ends below as the reviewers left it.
-            if status == "succeeded" and review and review.get("comparisons") and review.get("mode") != "audit":
-                from app.services.agent_comparison import REVIEW_DONE, review_is_bound
-                if not review_is_bound(review, completion.text) or review.get("status") not in REVIEW_DONE:
-                    raise TurnStatusConflict("The exact answer version has not been reviewed")
-            daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"]) if data.get("quota_day") else None
-            daily = daily_ref.get(transaction=tx).to_dict() or {} if daily_ref else {}
-            # A checked Agent answer adds its judge's best-answer pick to the
-            # Model Pulse, once per turn, like a Consensus run. Mock runs write
-            # nothing: a local MOCK_LLM server talks to the real Firestore.
-            pick = vote_ref = None
-            pick_field = []
-            if status == "succeeded" and not mock_llm_enabled():
-                pick, pick_field = persistence_guard.agent_best_model_choice(review)
-                if pick:
-                    vote_ref = persistence_guard.agent_vote_ref(self.db, uid=uid, chat_id=chat_id, turn_id=turn_id)
-                    if vote_ref.get(transaction=tx).exists:
-                        pick = None
-            if daily_ref:
-                daily = agent_quota.release(daily, data.get("review_hold", 0))
-                tx.set(daily_ref, daily)
             tx.update(root_ref, {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP})
             leases = dict((active.to_dict() or {}).get("leases") or {})
             leases.pop(root_ref.id, None)
@@ -580,26 +551,24 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])
                     if review and review.get("mode") == "audit" and review.get("status") in {"required", "running"}:
-                        # Audit mode (agent_audit.py) whose last review saves
-                        # failed: a finished answer never keeps "reviewing".
+                        # A review (agent_audit.py) whose last saves failed: a
+                        # finished answer never keeps "reviewing".
                         patch["agent_review"] = {**review, "status": "failed"}
                 else:
                     patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
                     patch["agent_failure"] = getattr(completion, "failure", None) or {
                         "code": "cancelled" if status == "cancelled" else "agent_failed",
                         "error": "Response stopped. Available results have been saved." if status == "cancelled" else "The response could not be completed. Available results have been saved."}
-                    # Without a comparison (a direct answer that read pages
-                    # has a review too) the streamed text is all there is; in
-                    # audit mode always, its comparisons only advised.
-                    if completion.text and (not (review or {}).get("comparisons")
-                                            or (review or {}).get("mode") == "audit"):
+                    # The streamed text is all there is: comparisons only
+                    # advise, the answer is the agent's own.
+                    if completion.text:
                         patch["assistant_response"] = completion.text
                     if review:
                         # A crash/stop cannot leave a saved review looking live.
                         # A review that had already finished keeps its result:
                         # a later failure (a final bookkeeping or provider step)
-                        # must not relabel a checked answer as unreviewed,
-                        # nor one whose check the user switched off.
+                        # must not relabel a reviewed answer as unreviewed
+                        # ("off": a check the user switched off, until 2026-10-31).
                         review = dict(review)
                         if review.get("status") not in {"succeeded", "partial", "off"}:
                             review["status"] = ("cancelled" if status == "cancelled" else
@@ -616,6 +585,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                                 {**row, "status": "failed", "failure": {"code": "run_interrupted"}}
                                 if isinstance(row, dict) and row.get("status") in {"waiting", "running"} else row
                                 for row in audit["reviewers"]]}
+                        # A pasted text's check (check_text, until 2026-10-31)
+                        # of a run the reaper ends after the deploy.
                         passage = review.get("passage_check")
                         if isinstance(passage, dict) and passage.get("status") in {"waiting", "running"}:
                             review["passage_check"] = {**passage, "status": "cancelled" if status == "cancelled" else "failed"}
@@ -634,9 +605,6 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # Whether the chat's next message starts with the workspace
                     # open (routers/agent.py, AGENT_WORKSPACE_ON_DEMAND).
                     tx.update(chat_ref, {"agent_workspace_used": completion.workspace_used})
-                if pick:
-                    persistence_guard.write_agent_vote(tx, self.db, vote_ref, uid=uid, chat_id=chat_id,
-                                                       turn_id=turn_id, model=pick, participants=pick_field)
                 if chat_data.get("agent_turn_id") == turn_id:
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP})
             return True

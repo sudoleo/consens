@@ -155,7 +155,7 @@ class ToolRegistry:
     def _unknown_notes(self):
         """What an unknown tool's refusal adds, true of this registry: which
         tool opens web pages (read_source's own description says which ones:
-        cited pages, in audit mode any public page), and that the workspace's
+        any public page), and that the workspace's
         tools come with open_workspace while it is closed (audit L7: a direct
         call of browser did not say so)."""
         notes = []

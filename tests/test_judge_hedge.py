@@ -6,7 +6,9 @@ A stall now costs JUDGE_HEDGE_SECONDS: the duplicate answers, the first one is
 stopped. Fast calls never pay for a duplicate. Since 2026-10-21 a judge that
 hangs for every request (Luna via Azure on 2026-10-17) costs
 JUDGE_FALLBACK_SECONDS instead of the attempt's 90 s: the next family's judge
-checks alongside and the first answer wins.
+checks alongside and the first answer wins. A Differences attempt that stalls
+stops after JUDGE_ATTEMPT_SECONDS and the next family answers, like Coverage
+(prod 2026-10-15: a 243 s judge call).
 """
 import json
 import threading
@@ -16,6 +18,32 @@ from unittest import mock
 
 from app.services.llm import consensus_engine as engine
 from app.services.llm import provider_runtime as runtime
+
+
+ANSWER = ("Paris is the capital of France. Some say the capital is Lyon. "
+          "It rains every second day. Others say rain is rare there.")
+KEYS = {"OpenRouter": "sk-or"}
+
+
+def difference(claim, *quotes):
+    return {"type": "contradiction", "severity": "minor", "claim": claim, "consensus_anchor": "",
+            "positions": [{"stance": quote, "models": [label], "quote": quote}
+                          for quote, label in zip(quotes, ("Model A", "Model B"))]}
+
+
+def differences_payload(*items):
+    return json.dumps({"differences": list(items), "best_model": "Model A"})
+
+
+CAPITAL = difference("Capital", "Paris is the capital", "the capital is Lyon")
+
+
+def query(fake, **patches):
+    """query_differences as the Consensus pipeline calls it, with ``fake`` as
+    every judge request and ``patches`` (timeouts) on the engine."""
+    with mock.patch.object(engine, "_call_engine_text", side_effect=fake), mock.patch.multiple(engine, **patches):
+        return engine.query_differences({"openai": ANSWER, "gemini": ANSWER, "grok": ANSWER},
+                                        "Paris is the capital.", KEYS, differences_model="OpenAI")
 
 
 def stall_until_stopped(stopped=None):
@@ -121,7 +149,7 @@ class HedgedJudgeCallTests(unittest.TestCase):
         context = engine._build_judge_context({"openai": "Paris is the capital.", "gemini": "Paris, yes."},
                                               "Paris is the capital of France. It lies on the Seine.")
         ids = engine.coverage.sentence_ids(context.sentences)
-        labels = engine._coverage_labels(context)
+        labels = context.labels
         payload = json.dumps({"sentences": [{"id": sid, "classification": "claim", "counter_quotes": [],
                                              "models": {label: "supports" for label in labels}} for sid in ids]})
         providers, lock = [], threading.Lock()
@@ -136,7 +164,7 @@ class HedgedJudgeCallTests(unittest.TestCase):
 
         with mock.patch.object(engine, "_call_engine_text", side_effect=fake):
             started = time.monotonic()
-            result, meta = engine._run_coverage_judge(context, {"OpenRouter": "sk-or"}, "OpenAI", chat_mode=True)
+            result, meta = engine._run_coverage_judge(context, KEYS, "OpenAI")
         self.assertLess(time.monotonic() - started, 3.0)
         self.assertEqual(providers, ["openai", "openai"])
         self.assertEqual(meta["provider"], "OpenAI")
@@ -202,7 +230,7 @@ class FallbackFamilyTests(unittest.TestCase):
         context = engine._build_judge_context({"openai": "Paris is the capital.", "gemini": "Paris, yes."},
                                               "Paris is the capital of France. It lies on the Seine.")
         ids = engine.coverage.sentence_ids(context.sentences)
-        labels = engine._coverage_labels(context)
+        labels = context.labels
         payload = json.dumps({"sentences": [{"id": sid, "classification": "claim", "counter_quotes": [],
                                              "models": {label: "supports" for label in labels}} for sid in ids]})
         providers, lock = [], threading.Lock()
@@ -216,16 +244,39 @@ class FallbackFamilyTests(unittest.TestCase):
 
         with mock.patch.object(engine, "_call_engine_text", side_effect=fake):
             started = time.monotonic()
-            result, meta = engine._run_coverage_judge(context, {"OpenRouter": "sk-or"}, "OpenAI", chat_mode=True)
+            result, meta = engine._run_coverage_judge(context, KEYS, "OpenAI")
         self.assertLess(time.monotonic() - started, 3.0)
         self.assertEqual(providers, ["openai", "openai", "gemini"])
         # The record names the judge that answered.
         self.assertEqual(meta["provider"], "Gemini")
         self.assertEqual(sorted(result or {}), sorted(ids))
 
-    def test_a_hanging_differences_judge_falls_back_once_for_both_passes(self):
-        from test_differences_passes import ParallelPassTests, difference
-        capital = difference("Capital", "Paris is the capital", "the capital is Lyon")
+    def test_a_hanging_differences_judge_is_covered_by_the_next_family(self):
+        calls, lock = [], threading.Lock()
+
+        def fake(provider, api_model, model_ref, api_keys, **kwargs):
+            if kwargs.get("json_schema") is not engine.DIFFERENCES_JSON_SCHEMA:
+                return "{}"  # coverage judge: unusable output is tolerated
+            with lock:
+                calls.append(provider)
+            if provider == "openai":
+                stall_until_stopped()
+            return differences_payload(CAPITAL)
+
+        started = time.monotonic()
+        _, data = query(fake, JUDGE_ATTEMPT_SECONDS=1.0)
+        self.assertLess(time.monotonic() - started, 3.0)
+        # Luna, its duplicate, then the next family alongside: it answers.
+        self.assertEqual(calls, ["openai", "openai", "gemini"])
+        self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
+        self.assertEqual([item["claim"] for item in data["differences"]], ["Capital"])
+
+
+class StalledDifferencesJudgeTests(unittest.TestCase):
+    """A stalled Differences attempt stops after JUDGE_ATTEMPT_SECONDS; its
+    retry is skipped and the plan's next family answers."""
+
+    def test_a_stalled_primary_hands_over_to_the_next_family(self):
         calls, lock = [], threading.Lock()
 
         def fake(provider, api_model, model_ref, api_keys, **kwargs):
@@ -235,19 +286,30 @@ class FallbackFamilyTests(unittest.TestCase):
                 calls.append(provider)
             if provider == "openai":
                 stall_until_stopped()
-            return json.dumps(ParallelPassTests.payload(capital))
+            return differences_payload(CAPITAL)
 
-        answer = ParallelPassTests.ANSWER
         started = time.monotonic()
-        with mock.patch.object(engine, "_call_engine_text", side_effect=fake),                 mock.patch.object(engine, "JUDGE_ATTEMPT_SECONDS", 1.0):
-            _, data = engine.query_differences({"openai": answer, "gemini": answer, "grok": answer},
-                                               "Paris is the capital.", {"OpenRouter": "sk-or"},
-                                               differences_model="OpenAI", chat_mode=True, passes=2)
+        _, data = query(fake, JUDGE_ATTEMPT_SECONDS=0.05)
         self.assertLess(time.monotonic() - started, 3.0)
-        # The second pass only ever asks Luna: the fallback judge runs once.
-        self.assertEqual(calls.count("gemini"), 1)
+        self.assertEqual(calls, ["openai", "gemini"])
         self.assertEqual(data["judges"]["differences"]["provider"], "Gemini")
         self.assertEqual([item["claim"] for item in data["differences"]], ["Capital"])
+
+    def test_a_user_stop_is_no_timeout(self):
+        calls = []
+        parent = engine.ProviderCancellation()
+
+        def fake(provider, api_model, model_ref, api_keys, **kwargs):
+            if kwargs.get("json_schema") is not engine.DIFFERENCES_JSON_SCHEMA:
+                return "{}"
+            calls.append(provider)
+            parent.cancel()
+            stall_until_stopped()
+
+        with engine.bind_provider_cancellation(parent):
+            _, data = query(fake, JUDGE_ATTEMPT_SECONDS=30)
+        self.assertEqual(calls, ["openai"])
+        self.assertIsNone(data)
 
 
 if __name__ == "__main__":

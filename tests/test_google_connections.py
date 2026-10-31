@@ -171,8 +171,8 @@ def test_google_chat_request_keeps_zdr_on_top_of_the_fastest_route(google,monkey
                   {'sort':'throughput','data_collection':'deny','zdr':True}]
 
 
-def test_google_routing_reaches_comparison_synthesis_and_judges(google,monkeypatch):
-    from test_agent_comparison import Script, make_loop
+def test_google_routing_reaches_the_agent_the_comparison_and_the_reviewers(google,monkeypatch):
+    from test_agent_comparison import REVIEWER, Script, make_loop
     from app.services.agent_runs import AgentRunStore
     from app.services.llm.agent_client import agent_models
     from test_agent_runs import UID
@@ -187,11 +187,13 @@ def test_google_routing_reaches_comparison_synthesis_and_judges(google,monkeypat
         completion.stream=recorded
         return completion
     script.factory=factory
-    loop=make_loop(AgentRunStore(google.db),script)
+    loop=make_loop(AgentRunStore(google.db),script,reviewers=True)
     loop.google_data_consent=True
     loop.store._chat_ref(UID,loop.chat_id).update({'google_data':True})
     list(loop.run())
-    assert len(calls)>=6
+    # Two steps of the agent, two comparison answers, at least the reviewers' final rounds.
+    reviews=[call for call in calls if call['messages'][0]['content'].startswith(REVIEWER)]
+    assert len(calls)>=6 and len(reviews)>=2
     assert all(call['model'].request_config['provider']['only']==['reviewed-host'] for call in calls)
     assert all(all(tool.get('type')=='function' for tool in call['tools']) for call in calls)
 

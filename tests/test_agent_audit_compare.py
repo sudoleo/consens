@@ -1,19 +1,17 @@
-"""compare_models in audit mode (since 2026-10-31, package 1 of one mode for
-comparison and audit; routers/agent.py audit_compare_allowed): the agent may
-ask the user's chosen models its question. They answer as advisers, each in a
-fresh conversation of its own, never the reviewers' sessions; no judge runs;
-the reviewers read every answer in the work log; and the run goes on after
-the answers, it does not end with them. Without the switch audit mode offers
-no comparison (test_agent_audit).
+"""compare_models (since 2026-10-31, in every chat run of the agent's one
+mode): the agent may ask the user's chosen models its question. They answer
+as advisers, each in a fresh conversation of its own, never the reviewers'
+sessions; no judge runs; the reviewers read every answer in the work log;
+and the run goes on after the answers, it does not end with them.
 """
 import json
 import time
 
 import pytest
 
-from app.services import agent_audit, prompt_defaults
+from app.services import agent_audit
 from app.services.agent_audit import COMPARISON_ENTRY_CHARS, ENTRY_CHARS, review_entry
-from app.services.agent_comparison import AgentPreferences, comparison_selection, review_is_bound
+from app.services.agent_comparison import AgentPreferences, answer_hash, comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
@@ -26,7 +24,7 @@ from test_agent_runs import UID, pending, store  # noqa: F401  (fixtures)
 
 @pytest.fixture(autouse=True)
 def _admin_allowance(monkeypatch):
-    """Audit mode is for admins (5M tokens a day, test_agent_audit)."""
+    """The agent's five search rounds need an admin's 5M tokens a day (test_agent_audit)."""
     from app.services import agent_budget_config
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
 
@@ -39,7 +37,7 @@ ADVICE = {"anthropic": "Claude says 330 metres since the 2022 antenna. " + "C" *
 
 
 class Advised(Audit):
-    """A scripted audit turn whose agent asks the models (compare_models) in
+    """A scripted turn whose agent asks the models (compare_models) in
     its first step: their answers come from ``advice`` by family. Then, by
     ``then``, it calls the tool ``note`` before it answers."""
 
@@ -81,7 +79,7 @@ class Advised(Audit):
         return completion
 
 
-def advised_loop(store, script, *, judges="on", audit_compare=True, on_note=None):
+def advised_loop(store, script, *, on_note=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -89,8 +87,8 @@ def advised_loop(store, script, *, judges="on", audit_compare=True, on_note=None
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Tell me about the Eiffel Tower."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}, audit=True),
-        agent_preferences=AgentPreferences(audit="on", judges=judges), audit_compare=audit_compare)
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        agent_preferences=AgentPreferences())
     notes = []
 
     def note(args, *, cancellation):
@@ -120,8 +118,8 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     review = turn["agent_review"]
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
 
-    # Offered in every step of the agent, without the progress paragraph and
-    # memory of comparison mode, and never check_text.
+    # Offered in every step of the agent, without a progress paragraph or a
+    # memory field (comparison mode's, until 2026-10-31), and no check_text.
     assert script.offered and all("compare_models" in names and "check_text" not in names for names in script.offered)
     schema = loop.registry.tools["compare_models"].schema()["function"]
     assert set(schema["parameters"]["properties"]) == {"question", "context", "file_ids", "depth"}
@@ -144,13 +142,16 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     assert sorted(answer["text"] for answer in result["answers"]) == sorted(ADVICE.values())
     assert "still yours to do" in result["instruction"] and "write the answer" not in result["instruction"]
     assert "the app checks it" not in result["instruction"]
-    assert not any(message.get("content") == prompt_defaults.AGENT_WRITE_NOTE for message in loop.messages)
+    # No note of the app after the answers: the next step is the agent's own.
+    position = next(i for i, m in enumerate(loop.messages) if m.get("role") == "tool")
+    assert loop.messages[position + 1]["role"] == "assistant"
 
     # No judge: the reviewers reviewed the answer, bound to it as a whole.
-    assert loop.comparison.judge_calls == 0
     assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
+    assert [e["status"] for e in events if e.get("kind") == "tool" and e.get("name") == "audit_answer"] == [
+        "running", "succeeded"]
     assert review["mode"] == "audit" and review["status"] == "succeeded" and review["checks"] == []
-    assert review_is_bound(review, ANSWER) and not review_is_bound(review, ANSWER + " changed")
+    assert review["answer_hash"] == answer_hash(ANSWER) != answer_hash(ANSWER + " changed")
     [comparison] = review["comparisons"]
     assert comparison["status"] == "succeeded" and len(comparison["answers"]) == 2
     assert review["versions"][-1]["comparison_ids"] == [comparison["id"]]
@@ -169,29 +170,9 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     assert "compare_models asks the models the user chose" in brief["instructions"]
 
 
-def test_without_the_switch_audit_mode_offers_no_comparison(store):
-    script = Audit()
-    loop = advised_loop(store, script, audit_compare=False)
-    list(loop.run())
-    assert script.offered and all("compare_models" not in names for names in script.offered)
-    assert saved(store, loop)["status"] == "completed"
-
-
-def test_without_reviewers_audit_mode_offers_no_comparison(store):
-    """The answer check off (the route turns it on for audit,
-    effective_preferences): nobody would read the answers, and a stopped
-    answer would lose its text with them (review 2026-10-31)."""
-    script = Audit()
-    loop = advised_loop(store, script, judges="off")
-    list(loop.run())
-    assert loop.comparison.auditor is None
-    assert script.offered and all("compare_models" not in names for names in script.offered)
-    assert saved(store, loop)["status"] == "completed"
-
-
 def test_a_comparison_past_the_answers_time_stops_waiting_even_for_one_model(store):
-    """In comparison mode a comparison waits at its deadline until two models
-    answered (its check needs two); in audit mode nothing needs them, and one
+    """Until 2026-10-31 comparison mode waited at its deadline until two
+    models answered (its check needed two); now nothing needs them, and one
     model may be all the user chose: it stops waiting at once, and the turn
     still ends with its answer instead of running into its hard stop."""
     script = Advised(advice={"anthropic": "wait", "openai": "wait"})
@@ -237,9 +218,9 @@ def test_one_answer_is_said_and_the_work_goes_on(store):
 
 
 def test_the_agent_may_still_compare_after_it_read_a_page(store):
-    """In comparison mode a read page ends comparing (the models must stay
-    independent); in audit mode the agent searches and reads in every step,
-    and the models see only its question."""
+    """Until 2026-10-31 comparison mode ended comparing after a read page
+    (the models had to stay independent); the agent searches and reads in
+    every step, and the models see only its question."""
     script = Advised()
     loop = advised_loop(store, script)
 
@@ -273,7 +254,7 @@ def test_a_failed_save_while_stopping_stragglers_costs_neither_the_review_nor_th
     assert turn["agent_review"]["status"] == "succeeded"
 
 
-def test_the_share_of_an_audit_turn_shows_no_comparison():
+def test_the_share_of_a_turn_with_comparisons_shows_no_comparison():
     """The models the agent asked answered its own question, not the user's:
     a share keeps saying only who answered (share_snapshots, review 2026-10-31)."""
     from app.services import share_snapshots
