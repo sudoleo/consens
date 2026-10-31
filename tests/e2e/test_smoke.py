@@ -745,6 +745,17 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     app_page.evaluate("() => window.App.runMode.set('agent')")
     app_page.wait_for_function("() => document.body.classList.contains('is-hero')")
     _wait_for_composer_width(app_page)
+    # Measured at rest, as for Compare below: for the first frames of the
+    # mode change the page is 866px high (22px too many, also locally), and
+    # the nightly runner measured just then (2026-10-30/31). Only motion in
+    # time settles: the starters' fade runs on their own scroll timeline and
+    # never finishes.
+    app_page.wait_for_function("() => !document.body.classList.contains('agent-mode-transitioning')"
+                               " && !document.body.classList.contains('comparison-layout-changing')"
+                               " && !document.body.classList.contains('composer-gliding')")
+    app_page.evaluate("""() => Promise.all(document.querySelector('.input-section').getAnimations({subtree: true})
+      .filter(a => a.timeline === document.timeline && a.effect.getComputedTiming().iterations !== Infinity)
+      .map(a => a.finished.catch(() => null)))""")
     page_metrics = app_page.evaluate(
         """() => ({
           scrollHeight: document.documentElement.scrollHeight,

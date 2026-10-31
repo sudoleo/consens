@@ -1012,15 +1012,17 @@ body.is-view-settle.is-watch-view .watch-page {
 .watch-consensus-pill.is-watching { color: var(--ink); }
 /* Phones (2026-10-22): Watch and Share are two more cells of the evidence
    row, drawn like its links (glyph over word, no surface), in its fixed
-   columns (agent-chat.css --cell). 44px wide at least, for the finger. */
+   columns (agent-chat.css --cell): a column at most, the word at least,
+   44px wide at least, for the finger. */
 @media (max-width: 640px) {
   .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill),
   .agent-watch-pill-row > :is(.agent-watch-pill, .agent-share-pill) {
     display: grid; grid-template-rows: 16px auto; justify-items: center; align-content: start; gap: 5px;
-    flex: 0 0 var(--cell); width: auto; min-width: 44px; min-height: 56px; height: auto; margin: 0; padding: 6px 0;
+    flex: 1 1 0; width: auto; min-width: max-content; max-width: var(--cell); min-height: 56px; height: auto; margin: 0; padding: 6px 0;
     /* The links' line height, so all five words sit on one baseline. */
     line-height: normal;
   }
+  :is(.agent-review, .agent-watch-pill-row) > :is(.agent-watch-pill, .agent-share-pill) > span { min-width: 44px; text-align: center; }
   .agent-watch-pill-row { margin-left: 0; }
   /* A watched question says "Watching" and fills the eye's pupil. */
   :is(.agent-review, .agent-watch-pill-row) > .agent-watch-pill.is-watching .share-pill-icon circle { fill: currentColor; }

@@ -5394,7 +5394,11 @@ Container-Query auf der Leiste (`container: agent-review`, ≤ 720 px) stellt
 den Score in eine eigene Zeile darüber, damit die Links auch neben der
 offenen Agent-Leiste einzeilig bleiben. Bis 640 px sind die Zellen ein Raster
 fester Spalten (`--cell`: vier, fünf bei einem Vergleich mit Answers), Glyphe
-und Anzahl über dem Wort, links beginnend; die Telefonregeln von
+und Anzahl über dem Wort, links beginnend. Eine Zelle ist höchstens ihre
+Spalte und mindestens ihr Wort (`min-width: max-content`, Wort ≥ 44 px):
+ein breiteres Wort („Contradictions“) behält seine Breite, die Zellen danach
+rücken auf. Unter 375 px ist eine Vergleichszeile ohne Spalten, jede Zelle
+ihr Wort, der Rest `space-between`; die Telefonregeln von
 `shell.css` für `.consensus-footer-tabs`/`.consensus-tab` gelten nicht für
 `.agent-evidence-links`. Der Status einer Prüfung steht als leises Wort am
 Ende der Leiste (`.agent-review > .agent-review-status`). Ohne Antworttext

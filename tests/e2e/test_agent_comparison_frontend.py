@@ -980,6 +980,17 @@ def test_provisional_marks_while_the_answer_is_checked_then_the_final_review(bro
         expect(body).not_to_have_class(re.compile(r"\bis-marks-revealing\b"))
         expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
         # The provisional mark says that it was compared, not how it came out.
+        # The pointer goes there once the composer has landed and the thread
+        # stands still: a move under the resting pointer (the composer gliding
+        # after Send, a scroll) takes the mark from under it and its pending
+        # card away (refreshHoverPreview). The slow nightly runner found no
+        # card on 2026-10-31.
+        page.wait_for_function("""() => {
+          const moving = ['composer-animating', 'composer-gliding'].some(name => document.body.classList.contains(name));
+          const y = window.scrollY, still = !moving && window.__markHoverY === y;
+          window.__markHoverY = y;
+          return still;
+        }""", polling="raf")
         marks.first.hover()
         hover_card = page.locator(".insight-preview")
         expect(hover_card).to_have_text("Compared with 2 model answersThe result appears once the whole answer is checked")

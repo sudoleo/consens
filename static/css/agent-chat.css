@@ -706,23 +706,38 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    steps aside (display: contents) so all share the row; the score keeps
    its own line above, the review's state takes the free columns. Four
    columns (a review: Notes, Sources, Watch, Share), five for a comparison's
-   three links: German words like „Anmerkungen“ need the width at 320px. */
+   three links: German words like „Anmerkungen“ need the width at 320px.
+   A word wider than its column („Contradictions“ is 84px, a fifth of a
+   390px phone 60px) keeps its width and the cells after it move up, never
+   over its edge or off the screen: a cell is its column at most, its word
+   at least (min-width wins), and the cells take the free space before the
+   review's state does. The words stay at least a finger wide (44px). */
 @media (max-width: 640px) {
   .agent-review, .agent-watch-pill-row { --cell: calc((100% - 3 * var(--space-3)) / 4); }
   .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) { --cell: calc((100% - 4 * var(--space-3)) / 5); }
   .agent-review > .agent-agreement { flex: 1 0 100%; }
   .agent-review > .agent-agreement::after { content: none; }
   .agent-review > .agent-evidence-grid { display: contents; }
-  .agent-review > .agent-review-status { flex: 1 0 auto; align-self: flex-end; max-width: 100%; padding: 0 0 6px; line-height: normal; }
+  .agent-review > .agent-review-status { flex: 0 1 auto; align-self: flex-end; max-width: 100%; padding: 0 0 6px; line-height: normal; }
   /* width: Consensus' phone footer gives every .consensus-tab the row (shell.css). */
-  .agent-evidence-grid > .agent-evidence-link { order: 2; flex: 0 0 var(--cell); width: auto; }
+  .agent-evidence-grid > .agent-evidence-link { order: 2; flex: 1 1 0; width: auto; min-width: max-content; max-width: var(--cell); }
   /* All links keep one top and height. */
   .agent-evidence-grid .agent-evidence-link { align-content: start; }
-  .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-width: 44px; min-height: 56px; padding: 6px 0; }
+  .agent-evidence-grid .agent-evidence-link { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 16px auto; gap: 5px; min-height: 56px; padding: 6px 0; }
   .agent-evidence-grid .agent-evidence-icon { grid-row: 1; grid-column: 1; justify-self: end; }
   .agent-evidence-grid .consensus-tab-count { grid-row: 1; grid-column: 2; justify-self: start; line-height: 16px; }
-  .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; min-width: 44px; text-align: center; }
   .agent-evidence-grid .agent-evidence-link:not(:has(.consensus-tab-count)) .agent-evidence-icon { grid-column: 1 / -1; justify-self: center; }
+}
+/* Below 375px a comparison's five words („Contradictions“, „Answers“,
+   „Sources“, Watch, Share) need 269px of a 278px row (a 320px phone), no
+   room for columns and gaps: there each cell is its word and the free space
+   stands between them, instead of the last one falling onto a line of its
+   own. */
+@media (max-width: 374px) {
+  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) { column-gap: 0; justify-content: space-between; }
+  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) .agent-evidence-grid > .agent-evidence-link,
+  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; max-width: none; }
 }
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }
