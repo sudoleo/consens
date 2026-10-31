@@ -363,7 +363,8 @@
   }
   function settle(view, change) {
     const preview = view.preview;
-    const quiet = offscreenUpdate || quietMotion?.matches || view.details.open
+    // Lines on their way out keep their exit: settling them would cancel it.
+    const quiet = view.previewExit || offscreenUpdate || quietMotion?.matches || view.details.open
       || preview.hidden || !preview.isConnected || !preview.childElementCount;
     if (quiet) { change(); return false; }
     const was = shown(preview);

@@ -935,6 +935,55 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // 2026-10-31: a thought that changes in place fades out and back in. When
+  // the run stopped within that fade-out, its end settled the lines and so
+  // cancelled their exit: "Thinking…" and the last thought stayed under the
+  // stopped run.
+  it('lets the live lines leave when the run stops while a thought cross-fades', () => {
+    const { window, document, dom } = boot();
+    const animations = [];
+    window.Element.prototype.animate = function (frames) {
+      const animation = { effect: { target: this, getKeyframes: () => frames }, playState: 'running', frames,
+        cancel() { this.playState = 'idle'; }, finish() { this.onfinish?.(); } };
+      animations.push(animation);
+      return animation;
+    };
+    // The live lines measure 20 px a line (jsdom measures nothing).
+    const measure = window.Element.prototype.getBoundingClientRect;
+    const lines = node => [...node.children].filter(child => !child.classList.contains('agent-progress-ghost'));
+    window.Element.prototype.getBoundingClientRect = function () {
+      if (this.classList.contains('agent-progress')) {
+        const height = lines(this).length * 20;
+        return { top: 100, bottom: 100 + height, height, left: 0, right: 300, width: 300 };
+      }
+      if (this.parentElement?.classList.contains('agent-progress')) {
+        const top = 100 + lines(this.parentElement).indexOf(this) * 20;
+        return { top, bottom: top + 20, height: 20, left: 0, right: 300, width: 300 };
+      }
+      return measure.call(this);
+    };
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [];
+    activity.receive(events, {version:1, id:'r1', kind:'reasoning', format:'text', text:'The first sentence is here.'});
+    activity.render(host, {events, running:true});
+    const preview = host.querySelector('.agent-progress');
+    const line = [...preview.children].find(node => node.textContent.includes('first sentence'));
+    activity.receive(events, {version:1, id:'r1', kind:'reasoning', format:'text', append:true,
+      text:'\nA second thought follows now.'});
+    activity.render(host, {events, running:true});
+    const fadeOut = animations.filter(item => item.effect.target === line && item.frames[1]?.opacity === 0).at(-1);
+    expect(fadeOut).toBeTruthy();
+    activity.render(host, {events, running:false, status:'cancelled'});
+    const exit = animations.filter(item => item.effect.target === preview && item.frames[1]?.height === '0px').at(-1);
+    expect(exit).toBeTruthy();
+    fadeOut.finish();
+    exit.finish();
+    expect(preview.hidden).toBe(true);
+    expect(preview.childElementCount).toBe(0);
+    dom.window.close();
+  });
+
   it('keeps the progress lines gone while the app checks the written answer', () => {
     // 2026-10-12: the lines left when the answer began, came back for
     // "Checking the answer" and left again: two collapses instead of one.
