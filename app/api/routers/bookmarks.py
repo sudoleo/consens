@@ -711,8 +711,9 @@ def predict_starter_questions(request: Request):
     return {"status": "success", "questions": questions} if questions else skipped
 
 
-_RUNNING_SETTINGS = ("selection", "comparison_selection", "agent_preferences", "file_ids",
-                     "google_selection", "google_data_consent")
+# Not agent_preferences: since the Agent's one mode (2026-10-31) the route
+# sets them itself, they are no part of a request (routers/agent.py run_agent).
+_RUNNING_SETTINGS = ("selection", "comparison_selection", "file_ids", "google_selection", "google_data_consent")
 
 
 def _running_agent_turn(turns: list[dict]) -> dict | None:

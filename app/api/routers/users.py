@@ -98,10 +98,8 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             account_language.record, uid, request_language(request), db=db_firestore,
         )
 
-        # Every account with AGENT_AUDIT_ACCESS=all (routers/agent.py audit_allowed).
-        audit_access = agent_vm.audit_for_all() or entitlements.tier == "pro" or is_user_admin(uid)
-        # Its VM: admins only unless AGENT_VM_ACCESS=pro (routers/agent.py vm_allowed).
-        vm_access = audit_access if agent_vm.open_to_pro() else is_user_admin(uid)
+        # The Agent's VM: admins only unless AGENT_VM_ACCESS=all (routers/agent.py vm_allowed).
+        vm_access = agent_vm.open_to_all() or is_user_admin(uid)
         return {
             "uid": uid,
             # is_pro heisst weiterhin "Frontier-Modelle" und ist
@@ -118,10 +116,8 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # Only the operator's own browsers switch analytics off with it
             # (analytics-opt-out.js); same cached flags as the tier above.
             "is_admin": is_user_admin(uid),
-            # Audit (routers/agent.py audit_allowed): Pro and admins, every account with AGENT_AUDIT_ACCESS=all.
-            "audit_access": audit_access,
             # Its VM time today (agent_vm_time.py), for the settings; only
-            # where the account's audit has a VM, which the settings then promise.
+            # where the account's messages have a VM, which the settings then promise.
             **({"vm_time": _vm_time(uid)} if vm_access and agent_vm.configured() else {}),
         }
 

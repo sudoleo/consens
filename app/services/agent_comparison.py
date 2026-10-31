@@ -62,45 +62,26 @@ FAST_GRACE = 1.1
 FAST_MIN_GRACE_SECONDS = 1.0
 
 
-# The choices of each Agent setting; user_settings.py stores the same ones.
-AgentDepth = Literal["auto", "quick", "full"]
-AgentQuorum = Literal["balanced", "fast", "all"]
-AgentAutonomy = Literal["guided", "free"]
-AgentJudges = Literal["on", "off"]
-AgentAudit = Literal["off", "on"]
 AgentVM = Literal["off", "on"]
 
 
 class AgentPreferences(BaseModel):
-    """Per-user Agent Beta settings, frozen with the turn."""
-    model_config = ConfigDict(extra="forbid", strict=True)
-    depth: AgentDepth = "auto"
-    quorum: AgentQuorum = "all"
-    # guided: every comparison asks all selected models. free: the orchestrator
-    # picks the models of each comparison, at least two families (server rule).
-    autonomy: AgentAutonomy = "guided"
-    # Answer check (user setting since 2026-10-17): "off" skips the
-    # Differences and Coverage judges of the agent's own answer
-    # (ComparisonTools.skip_review). A pasted text the user asks to check
-    # (check_text) is still checked: that check is the answer. In audit mode
-    # "off" skips the reviewers too: the agent answers alone.
-    judges: AgentJudges = "on"
-    # Audit instead of comparison (since 2026-10-25; the route turns it off
-    # for accounts without it, routers/agent.py audit_allowed): the agent
-    # answers itself with its own search, and the comparison models follow
-    # its work and review its fixed answer (agent_audit.py). Since 2026-10-31
-    # it may ask them its question too (compare_models, AUDIT_COMPARE), with
-    # every model and every answer, whatever depth, answer start and Agent
-    # freedom say: the settings page does not offer them in this mode.
-    audit: AgentAudit = "off"
-    # Agent VM (since 2026-10-25, admin accounts only; the route turns it off
-    # for everyone else): the agent gets its own Linux VM for the chat, with
-    # shell commands and files (agent_vm_tools.py), in either mode.
+    """What an Agent turn runs with, frozen with it. Since 2026-10-31 the
+    Agent has one mode for every account (the audit, agent_audit.py) and no
+    settings of its own: the route sets the VM, nothing else is left.
+
+    Turns and open pages from before keep depth, quorum, autonomy, judges and
+    audit of the retired comparison mode: they are dropped silently."""
+    model_config = ConfigDict(extra="ignore", strict=True)
+    # Agent VM (since 2026-10-25; routers/agent.py vm_allowed): the agent gets
+    # the account's workspace, a Linux VM with shell commands, files and a
+    # browser (agent_vm_tools.py).
     vm: AgentVM = "off"
 
 
 def stored_preferences(value):
-    """Turns saved before a field existed compare with its default."""
+    """A saved turn's preferences in today's form: a field it predates takes
+    its default, a retired one is dropped."""
     return AgentPreferences.model_validate(value or {}).model_dump()
 
 

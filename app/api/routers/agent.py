@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
-import os
 import re
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException, Request, Query
@@ -21,7 +20,7 @@ from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota, agent_secrets, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository
-from app.services.agent_comparison import AgentPreferences, comparison_selection, stored_preferences
+from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_sessions import HoldActionRefused, NotesFull
 from app.services.agent_policy import AgentPolicy, supports_delegation
@@ -94,41 +93,21 @@ def require_reasoning_access(uid, reasoning_effort):
         raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
 
 
-# Audit instead of comparison (agent_audit.py), since 2026-10-26 for Pro
-# accounts and admins (before: admins only), with AGENT_AUDIT_ACCESS=all for
-# every account (agent_vm.audit_for_all, 2026-10-30). It always brings its
-# own Linux VM (agent_vm_tools.py) and its reviewers: the settings page
-# offers no separate VM or answer-check choice for it any more.
-def audit_allowed(uid):
-    return agent_vm.audit_for_all() or _premium_allowed(uid)
-
-
-# The VM (workspace, live view, restore) only for admins since the
-# workspace's security audit of 2026-10-27, until its fixes are in;
-# AGENT_VM_ACCESS=pro gives it to every account with audit again
-# (agent_vm.open_to_pro).
+# One mode for every account since 2026-10-31 (agent_audit.py): the agent
+# answers itself, the user's comparison models follow its work and review its
+# answer, and it may ask them its question (compare_models). Its workspace,
+# the account's Linux VM (workspace, live view, restore), only for admins
+# since the workspace's security audit of 2026-10-27; AGENT_VM_ACCESS=all
+# gives it to every account (agent_vm.open_to_all).
 def vm_allowed(uid):
-    if agent_vm.open_to_pro():
-        return audit_allowed(uid)
+    if agent_vm.open_to_all():
+        return True
     try:
         return is_user_admin(uid)
     except TierStatusUnavailable:
         raise HTTPException(
             status_code=503, detail="Account tier is temporarily unavailable. Please retry."
         ) from None
-
-
-# compare_models in audit mode (since 2026-10-31, the first of four steps to
-# one mode of comparison and audit): the user's chosen models answer the
-# agent's question, the reviewers read their answers, no judge runs. Admins
-# first; AGENT_AUDIT_COMPARE=all gives it to every account with audit.
-def audit_compare_allowed(uid):
-    if os.getenv("AGENT_AUDIT_COMPARE", "").strip().lower() == "all":
-        return True
-    try:
-        return is_user_admin(uid)
-    except TierStatusUnavailable:
-        return False
 
 
 # Domains beyond the package registries for the workbench (request_domain):
@@ -172,19 +151,6 @@ def workspace_closed(chat_data, browser):
     return agent_vm.on_demand() and not chat_data.get("agent_workspace_used") and browser is None
 
 
-def effective_preferences(uid, preferences):
-    """The Agent settings this message runs with. Audit runs only for an
-    account allowed it (audit_allowed), also when saved settings still say
-    "on" (a former Pro account), and then always with its reviewers, and
-    with its VM where the account has one (vm_allowed); without audit there
-    is no VM."""
-    if preferences.audit != "on":
-        return preferences if preferences.vm == "off" else preferences.model_copy(update={"vm": "off"})
-    if not audit_allowed(uid):
-        return preferences.model_copy(update={"audit": "off", "vm": "off"})
-    return preferences.model_copy(update={"vm": "on" if vm_allowed(uid) else "off", "judges": "on"})
-
-
 def _memory_snapshot(uid):
     """The user's memory for one turn: one batched read, fail-open.
 
@@ -216,7 +182,10 @@ class AgentRequest(BaseModel):
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     google_selection: GoogleSelection | None = None
     google_data_consent: bool = False
-    agent_preferences: AgentPreferences = Field(default_factory=AgentPreferences)
+    # Ignored since the Agent has one mode (2026-10-31): the route sets what
+    # a message runs with (AgentPreferences). Pages still open from before
+    # keep sending depth, quorum, autonomy, judges, audit and vm.
+    agent_preferences: dict | None = None
     # The browser's IANA zone (Intl): the date in the message's app context.
     # A name the server does not know counts as none (the app's zone).
     timezone: str | None = Field(default=None, max_length=64)
@@ -343,8 +312,6 @@ def available_agent_budget(request: Request):
 def run_agent(request: Request, payload: AgentRequest):
     uid = _chat_uid(request)
     require_agent_access(uid)
-    # What the message runs with is also its request identity below.
-    preferences = effective_preferences(uid, payload.agent_preferences)
     store = AgentRunStore(db_firestore)
     turn = None
     lease = None
@@ -371,9 +338,10 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
-            if stored_preferences(existing.get("agent_settings", {}).get("agent_preferences")) \
-                    != preferences.model_dump():
-                raise TurnStatusConflict("Request identity conflicts with different Agent settings")
+            # The turn's agent_preferences are the server's (below), not the
+            # request's: no part of its identity, so a turn from before
+            # 2026-10-31 or from before the account's VM access changed
+            # still recovers.
             if payload.recover_only and existing["status"] == "pending":
                 # A lost producer has no live SSE/poller to close its lease.
                 # Reap only expired runs; this never starts a paid step.
@@ -419,6 +387,9 @@ def run_agent(request: Request, payload: AgentRequest):
         chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
         require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
         require_reasoning_access(uid, payload.reasoning_effort)
+        # What the message runs with: the one mode, with the account's
+        # workspace where it has one.
+        preferences = AgentPreferences(vm="on" if vm_allowed(uid) else "off")
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
@@ -460,17 +431,12 @@ def run_agent(request: Request, payload: AgentRequest):
                 raise HTTPException(403, "Authorize Gmail for the selected account first.")
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
-        if preferences.audit == "on":
-            # Audit instead of comparison: its own instructions, from the
-            # system prompt on (the chat's history follows them unchanged).
-            config = {**config, "prompts": {**config["prompts"], "agent": config["prompts"]["agent_audit"]}}
         delegation_config = config["delegation"]
         # Comparisons always use the shared bounded loop; worker delegation
         # retains its separately configured model/protocol feature gate.
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
-        comparisons = comparison_selection(payload.comparison_models, audit=preferences.audit == "on")
-        audit_compare = preferences.audit == "on" and audit_compare_allowed(uid)
+        comparisons = comparison_selection(payload.comparison_models)
         memory = _memory_snapshot(uid)
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
@@ -496,8 +462,6 @@ def run_agent(request: Request, payload: AgentRequest):
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
                             "agent_preferences": preferences.model_dump(),
-                            # compare_models in audit mode (audit_compare_allowed).
-                            **({"audit_compare": True} if audit_compare else {}),
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
                             "answer_mode": "merged",
@@ -521,7 +485,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources,
-                         domains=preferences.vm == "on" and domains_allowed(uid), audit_compare=audit_compare,
+                         domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).
@@ -739,23 +703,17 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
         _raise_store_error(exc, operation="read agent sessions", uid=uid)
 
 
-def _require_work_log_access(uid):
-    """The work log (agent_work_log.py) is written in audit mode (Pro and
-    admins, audit_allowed); so is its view."""
-    require_agent_access(uid)
-    if not audit_allowed(uid):
-        raise HTTPException(status_code=404, detail="Not found")
-
-
 @router.get("/agent/chats/{chat_id}/turns/{turn_id}/work-log")
 @limiter.limit("120/minute")
 def agent_work_log(request: Request, chat_id: str, turn_id: str,
                    after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)):
-    """The turn's work log in order, after entry ``after`` (live: poll with
-    the last ``seq``). Long contents come shortened (``ref``); the entry
+    """The turn's work log (agent_work_log.py) in order, after entry
+    ``after`` (live: poll with the last ``seq``). Every turn writes one since
+    2026-10-31; only its owner reads it (the turn is looked up under the
+    caller's account). Long contents come shortened (``ref``); the entry
     endpoint below returns one whole."""
     uid = _chat_uid(request)
-    _require_work_log_access(uid)
+    require_agent_access(uid)
     try:
         data = AgentRunStore(db_firestore).read_work_log(uid, chat_id, turn_id, after=after, limit=limit)
         return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
@@ -767,7 +725,7 @@ def agent_work_log(request: Request, chat_id: str, turn_id: str,
 @limiter.limit("120/minute")
 def agent_work_log_entry(request: Request, chat_id: str, turn_id: str, seq: int):
     uid = _chat_uid(request)
-    _require_work_log_access(uid)
+    require_agent_access(uid)
     if not 1 <= seq <= 999_999:
         raise HTTPException(status_code=404, detail="Not found")
     try:

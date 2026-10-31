@@ -1,8 +1,8 @@
 """The agent's VM tools: vm_exec, vm_read_file, vm_write_file, vm_edit_file
 and vm_share_file (agent_vm.py).
 
-With audit (Pro and admins; AgentPreferences.vm, routers/agent.py
-effective_preferences), never in chats with Google data, in turns with
+For accounts with the VM (AgentPreferences.vm, routers/agent.py
+vm_allowed), never in chats with Google data, in turns with
 comparison or audit tools on the account's token ledger (DelegationLoop).
 Since 2026-10-27 the VM is the account's workspace (agent_workspace.py),
 shared by its chats one message at a time, each chat in its own folder
