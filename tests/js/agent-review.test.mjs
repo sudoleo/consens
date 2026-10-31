@@ -928,6 +928,28 @@ it('keeps an audit turn stopped before its answer in the audit row, with the ans
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
   dom.window.close();
 });
+it('never shows the comparison mode\'s check row for an audit turn stopped before any model answered', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = '';
+  const audit = { reviewers: [{ provider: 'openai', provider_label: 'OpenAI', model: { label: 'GPT' }, status: 'cancelled' }],
+    claims: [], unplaced: [], process: [] };
+  for (const [status, comparison] of [
+    // Live, right after Stop: the comparison still says running.
+    ['cancelled', { status: 'running', failed_models: [], pending_models: [{ label: 'GPT' }] }],
+    // Saved: the server ended the comparison and named the stopped models.
+    ['cancelled', { status: 'cancelled', failed_models: [{ model: 'gpt', label: 'GPT', failure: { code: 'stopped' } }] }],
+    ['missing', { status: 'failed', failed_models: [{ model: 'gpt', label: 'GPT', failure: { code: 'provider_timeout' } }] }],
+  ]) {
+    body._agentReview?.remove(); body._agentReview = null;
+    const review = { version: 1, mode: 'audit', status, answer_version: 0, answer_hash: '', versions: [], audit,
+      comparisons: [{ id: 'c1', question: 'Heat pump?', asked: ['openai'], answers: [], ...comparison }] };
+    w.App.agentReview.render(body, review, { sources: [{ url: 'https://example.org', title: 'Source' }], key: 't1', question: 'Q' });
+    const row = d.querySelector('.agent-review');
+    expect(row.textContent).not.toMatch(/Answer check|Not checked/);
+    expect([...row.querySelectorAll('.agent-evidence-link')].map(b => b.dataset.section)).toEqual(['sources']);
+  }
+  dom.window.close();
+});
 it('opens the first comparison that has answers', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';

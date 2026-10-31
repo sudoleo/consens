@@ -1007,7 +1007,9 @@
       renderAudit(body, review, evidence, host, raw, turnSources);
       return;
     }
-    if (!review?.comparisons?.length) {
+    // Otherwise only the sources, also for an audit turn stopped while
+    // compare_models had no answer yet.
+    if (!review?.comparisons?.length || isAudit(review)) {
       const unmark = host?._hasReview && typeof body.dataset.markdown === "string";
       overText(body, unmark ? body.dataset.markdown : null, () => window.linkifyAgentSources?.(body, turnSources));
       body._agentModels?.remove(); body._agentModels = null;
