@@ -343,6 +343,34 @@ def test_the_lease_is_kept_while_the_message_waits(store, fake_vm, monkeypatch):
     assert agent_workspace.record(store.db, UID)["lease"]["turn_id"] == "other"
 
 
+def test_a_message_whose_end_broke_off_lets_the_lease_run_out(store, fake_vm, monkeypatch):
+    # The run's end closes the session late in its cleanup; when a step before
+    # it raised (a receipt of a chat deleted meanwhile), the keeper renewed
+    # the lease for up to LEASE_KEEP_MAX_SECONDS and every other chat of the
+    # account got VM_BUSY. The run's end (DelegationLoop.closed) stops it.
+    monkeypatch.setattr(agent_vm_tools, "LEASE_KEEP_SECONDS", .05)
+    keepers = []
+
+    class Thread(threading.Thread):
+        def __init__(self, *args, target=None, **kwargs):
+            super().__init__(*args, target=target, **kwargs)
+            if getattr(target, "__name__", "") == "_keep_lease":
+                keepers.append(self)
+    monkeypatch.setattr(agent_vm_tools.threading, "Thread", Thread)
+    loop = vm_loop(store, Agent())
+    session = loop.vm_tools.session
+    session.ready(ProviderCancellation(), bench=False)
+    renewed = agent_workspace.record(store.db, UID)["lease"]["until"]
+    assert wait_for(lambda: agent_workspace.record(store.db, UID)["lease"]["until"] > renewed)
+    loop.closed.set()
+    keepers[0].join(5)
+    assert not keepers[0].is_alive()
+    ended = agent_workspace.record(store.db, UID)["lease"]["until"]
+    time.sleep(.2)
+    assert agent_workspace.record(store.db, UID)["lease"]["until"] == ended
+    session.close()
+
+
 def test_a_restore_waits_for_a_running_response_also_past_its_lease(store, fake_vm):
     loop = vm_loop(store, Agent())
     agent_workspace.claim(store, UID, loop.chat_id, loop.turn_id, provider="fake")

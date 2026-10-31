@@ -608,6 +608,11 @@ class VMSession:
             with self._lock:
                 if not self.leased or self._closed:
                     return
+            # The message is over: when its end broke off before close(), the
+            # lease runs out by itself instead of being kept for hours.
+            ended = getattr(self.loop, "closed", None)
+            if ended is not None and ended.is_set():
+                return
             try:
                 held = agent_workspace.renew(self.loop.store, self.loop.uid, self.loop.turn_id)
             except Exception as exc:
