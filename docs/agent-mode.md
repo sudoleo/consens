@@ -1,72 +1,55 @@
 # Agent · Beta
 
-Agent · Beta ist ein eigener Chatmodus für Pro-Nutzer und Admins. Das ausgewählte
-Chatmodell (Orchestrator) entscheidet seit 2026-10-11 je Nachricht, ob es die
-Vergleichsmodelle befragt (Max' Entscheidung nach dem Ironman-Test: „Wenn es
-Mehrwert bietet oder der User das verlangt“):
+Agent · Beta ist der Chatmodus mit einem arbeitenden Agenten, offen für jedes
+angemeldete Konto (Free eingeschlossen; Premium-Modelle und Pro-Denkstufen
+bleiben Pro, siehe codebase-map §4). Seit 2026-10-31 hat er **einen Modus für
+alle Konten** (Max): Das ausgewählte Chatmodell arbeitet selbst, sucht in jedem
+Schritt mit eigener Websuche, liest Seiten, nutzt seine Werkzeuge und, wo das
+Konto ihn hat, den Arbeitsplatz (VM und Browser), und schreibt die Antwort
+selbst. Die Modelle, die der Nutzer im Compare-Picker wählt (eines bis
+`MAX_RUN_FAMILIES` = 6), sind seine **Prüfer**: Sie folgen dem
+Arbeitsprotokoll live, dürfen die Arbeit für den Nutzer anhalten und prüfen die
+fixierte Antwort (`agent_audit.AnswerAudit`). Der Agent kann dieselben Modelle
+mit `compare_models` seine Frage beantworten lassen, jedes in einem frischen
+Gespräch. Kein Judge, kein Score, keine Einstellung, die das umschaltet.
+Einzelheiten unter „Ein Modus: der Agent arbeitet, die gewählten Modelle
+prüfen“.
 
-- **Vergleichen** (`compare_models`): Fakten, die Modelle verschieden kennen oder
-  die sich ändern (Aktuelles, Preise, Regeln, Zahlen), Einschätzung, Rat,
-  Entscheidung, Analyse, hohe Tragweite, Strittiges, alles mit Recherche, und
-  immer, wenn der Nutzer Vergleich, Prüfung oder andere Modelle verlangt.
-  **Im Zweifel vergleichen.** Eigene Recherche führt immer in einen Vergleich.
-- **Jede Nachricht neu entscheiden, auch Folgefragen** (seit 2026-10-22):
-  Konkrete Angaben, nach denen der Nutzer handelt (Namen, Zahlen, Versionen,
-  Preise, wo eine Einstellung in einem bestimmten Produkt sitzt), sind
-  Außenfakten, sobald das Modell sie falsch oder veraltet im Kopf haben kann:
-  vergleichen statt aus dem Gedächtnis. Anlass: In einer Schritt-für-Schritt-
-  Hilfe zum PC nannte der Agent nach mehreren direkten Antworten den Menüpfad
-  der AMD-Software aus dem Gedächtnis, falsch für die Version des Nutzers.
-  Bewusst ein Prinzip mit Beispielen statt einer Liste von Fällen (wie
-  ChatGPTs Web-Regel „Accuracy“: hohe Kosten eines kleinen Fehlers, und
-  Anthropics Rat zur „right altitude“ von System-Prompts). Live-Probe:
-  `scripts/probe_agent_routing.py` Fälle 12 (vergleichen) und 13 (direkt).
-- **Direkt antworten** (ohne Vergleich) nur, wenn der Chat selbst die Antwort
-  festlegt, unabhängige Antworten sich also nicht in der Sache unterscheiden
-  könnten: Fragen zum Chat, zur App oder zu früheren Antworten,
-  Umformulieren/Kürzen/Übersetzen/Erklären von Text aus dem Chat, Gruß, Dank,
-  Rückfrage, Watch vorbereiten oder erklären, eine Seite lesen, auf die der
-  Nutzer zeigt, und daraus antworten.
-- **Urteile werden immer verglichen** (seit 2026-10-22): Meinung, Bewertung,
-  Kritik, Empfehlung, auch wenn ihr Gegenstand eine angehängte Datei, ein Bild
-  oder ein eingefügter Text ist (die Vergleichsmodelle bekommen die Dateien mit),
-  und auch bei „deine Meinung“ oder „dein Hottake“: Der Nutzer fragt consens.io,
-  nicht ein einzelnes Modell. Nur wenn er ausdrücklich keinen Vergleich will,
-  antwortet der Agent allein. Anlass: In 10 Tagen liefen 45 von 102 Agent-Antworten
-  ohne Vergleich. Wo Max den Vergleich danach selbst nachfordern musste, waren es
-  Urteile mit Sonnet 5.5 („was ist deine Meinung zu diesem Plan?“ mit PDF,
-  „wie bewertest du consens.io?“, „Hottake“, „würdest du“), dazu „was ist an
-  dieser UI verbesserungswürdig?“ mit Screenshot. Sonnet
-  erklärte selbst, es habe „deine Meinung“ wörtlich genommen und die Datei wie
-  Text aus dem Chat behandelt. Live-Probe: `scripts/probe_agent_routing.py`
-  Fälle 14–17 (vergleichen) und 18–19 (direkt), Dateien als App-Beleg-Block.
+**Bis 2026-10-31: zwei Modi.** Was jetzt der eine Modus ist, war seit
+2026-10-25 die Agent-Einstellung „Audit instead of comparison“ (zuerst Admins,
+dann Pro, ab 2026-10-30 per `AGENT_AUDIT_ACCESS=all` für alle). Standard war
+der **Vergleichsmodus**: Der Orchestrator entschied je Nachricht, ob er die
+Vergleichsmodelle befragt (seit 2026-10-11 „im Zweifel vergleichen“, Urteile
+seit 2026-10-22 immer; Live-Probe `scripts/probe_agent_routing.py`), schrieb
+aus ihren Antworten die Antwort, und die Judges Differences und Coverage
+prüften sie (Agreement-Score, Widerspruchs- und Satzmarken, Model-Pulse-Stimme,
+`differences_stats`). Dazu gehörten `check_text` für eingefügte Texte,
+Antworttiefe, Antwortstart, Agent-Freiheit, der Schalter „Answer check“, die
+Schreibnotiz nach jedem Vergleich und die Regel, dass eigene Recherche in einen
+Vergleich führt. Max' Entscheidungen vom 2026-10-31 (Konzept-Deck 2026-10-30):
+Die Prüfer prüfen, also fallen die Judges weg; der Lauf darf nach den
+Antworten der Modelle nicht einfach enden; der Score entfällt; Model Pulse und
+der Differences-Datensatz bekommen aus dem Agenten keine neuen Daten (wie sie
+künftig gespeist werden, entscheidet Max später; `model_pulse.py` und
+`differences_stats.py` lesen weiter, was es gibt). Der Code des
+Vergleichsmodus ist entfernt (Git-Stand vor 2026-10-31). **Gespeicherte Turns
+des Vergleichsmodus bleiben lesbar** (Score, Differences- und Coverage-Marken,
+Antworten, die Karte eines geprüften Texts und die Zeile der Antwortprüfung;
+siehe „Antwortversion und Prüfung“).
 
-Das gilt im geführten und im freien Modus gleich. Direkte Antworten sind nicht
-gekennzeichnet (Max); sie haben keinen Score und keine Prüfung, nur gegebenenfalls
-den Sources-Knopf. Die Werkzeuge des Orchestrators: `compare_models` (Frage,
-Kontext, Tiefe; im freien Modus die Familien), `check_text` (eingefügten fremden
-Text prüfen), `read_source`, `prepare_watch` und Memory. Die Antwort schreibt der
-Agent selbst: Klartext in einem Schritt ohne Toolcalls ist die Antwort und beendet
-die Nachricht; nach Vergleichen prüft die App sie (siehe „Die Antwort schreibt der
-Agent selbst“). Bis 2026-10-14 beendete das Tool `answer` die Steuerung, und ein
-eigener Antwortschritt ohne Tools schrieb die Antwort.
-`judge_answer` führt die App selbst aus
-(`ComparisonTools.app_tools`, `DelegationLoop.app_registry`); das Modell sieht sie
-nicht. Nach einem Vergleich bekommt der Orchestrator immer die Antworten zu sehen
-und entscheidet dann: Reichen sie, schreibt er im nächsten Schritt die Antwort,
-sonst vergleicht er, was noch fehlt (`next_step` gibt es seit 2026-10-11 nicht
-mehr: das Vorausplanen vor den Antworten war fehleranfällig). Bei sinnvoll
-lösbaren Unklarheiten arbeitet das Modell mit
-begründeten Annahmen weiter. Alle Antworten werden anhand ihrer Begründung, Belege und
-Aktualität abgewogen, statt nach Modellnamen oder Stimmenmehrheit. Fehlende
-Ergebnisse werden nicht durch unbelegte Erinnerungen ersetzt; verbleibende
-Unsicherheit wird inhaltlich erklärt. Der freigegebene Agent-Systemprompt
-(`AGENT_SYSTEM_PROMPT`: Steuerung plus Schreibregeln `AGENT_ANSWER_SECTION`) steht
-in `prompt_defaults.py` und in der Admin-Konfiguration; der ergänzende
-Tool-Protokollprompt in `agent_comparison.py` konkretisiert denselben Ablauf.
-Der separate Consensus-Modus behält seinen bisherigen Ablauf und seine Run-Limits.
-Agent-Antworten zeigen oberhalb der Nachricht keine Modellüberschrift; dies gilt
-auch für frühere Nachrichten und wieder geöffnete Chats.
+Die Antwort schreibt der Agent selbst: Klartext in einem Schritt ohne
+Toolcalls ist die Antwort und beendet die Nachricht (siehe „Die Antwort
+schreibt der Agent selbst“). Die Prüfung der fixierten Antwort (`audit_answer`)
+führt die App selbst aus (`ComparisonTools.app_tools`,
+`DelegationLoop.app_registry`); das Modell sieht sie nicht. Der Prompt
+(`DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT`: die Verfassung
+`_AGENT_AUDIT_STEERING` und die App-Fakten `AGENT_AUDIT_ANSWER_SECTION`) steht
+in `prompt_defaults.py`; der Admin zeigt ihn lesend als „Agent:
+instructions“ (`prompt_catalog.py`). Den Prompt-Schlüssel `agent_audit` gibt
+es nicht mehr. Die Consensus-Pipeline (Watches, Topics, API) behält ihren
+Ablauf, ihre Judges und Run-Limits. Agent-Antworten zeigen oberhalb der
+Nachricht keine Modellüberschrift; dies gilt auch für frühere Nachrichten und
+wieder geöffnete Chats.
 
 ## Modelle und Bedienung
 
@@ -127,219 +110,109 @@ agent_model_catalog.json als Rückfall verfügbar. Nicht auflösbare Modell-IDs
 bleiben mit einem Hinweis deaktiviert sichtbar; es werden keine Preise erfunden.
 
 Der vorhandene Consensus-Preset-/Model-Picker erscheint daneben als Compare.
-Er wählt die Vergleichsmodelle aus derselben Konfiguration; Agent bietet keine
-zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker an. Manuelle
-Familien-/Modellwahl bleibt möglich. Zwei bis sechs Vergleichsmodelle müssen
-gewählt sein. Bei ungültiger Auswahl ist Senden gesperrt; auch direkte Send-Aufrufe
+Er wählt die Prüfer (die Vergleichsmodelle) aus derselben Konfiguration; Agent
+bietet keine zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker
+an. Manuelle Familien-/Modellwahl bleibt möglich. Eins bis sechs Modelle müssen
+gewählt sein (bis 2026-10-31 im Vergleichsmodus zwei bis sechs; Compare braucht
+weiter zwei). Bei ungültiger Auswahl ist Senden gesperrt („Select between one and
+6 reviewers …“); auch direkte Send-Aufrufe
 werden vor Chat-Erstellung und Leeren des Entwurfs abgefangen. Der Browser sendet
 die konkrete Auswahl, auch eine leere Auswahl wird nicht still durch Defaults
 ersetzt. API-Aufrufe ohne Auswahl behalten das zentrale Standardpreset.
 
 Die gemeinsame Bottom-Bar steht im Beta-Chat nur vor der ersten Frage. Danach
 liegen ihre Optionen im bestehenden (+)-Menü im Input. Der Composer selbst ist
-derselbe wie in Compare und Consensus (`static/css/composer.css`): (+) und Modus
+derselbe wie in Compare (`static/css/composer.css`): (+) und Modus
 links, Chatmodell, Compare-Auswahl und Senden rechts; auf dem Desktop im Chat
 eine Zeile, auf dem Handy eingeklappt (+), Feld und Senden. Ein neuer Chat zeigt
 die Startleiste wieder.
-Der Moduswähler (Compare / Consensus / Agent, `run-mode.js`) tritt in einem
-offenen Agent-Chat zurück: Compare und Consensus brauchen einen neuen Chat,
+Der Moduswähler (Agent / Compare, `run-mode.js`; Consensus bis 2026-10-25) tritt
+in einem offenen Agent-Chat zurück: Compare braucht einen neuen Chat,
 weil die Chat-Familien serverseitig getrennt sind. „Reasoning“
 (`#composerReasoningToggle`, im (+)-Menü `#agentReasoningMenuOption`) öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
 aktuelle Stufe. Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
 dieses Menü. „Attach“ lädt PDF, Word, Text und Bilder in den privaten Chat-Dateispeicher.
 Siehe [Agent integrations](agent-integrations.md) für Limits und Konfiguration.
 
-Das Modell kann eine ganze Frage oder mehrere begründete Teilfragen
-vergleichen. Jede Vergleichsgruppe erhält denselben neutralen Auftrag samt
-notwendigem Kontext. Die Vergleichsmodelle kennen den Chatverlauf nicht. Das
-Chatmodell muss deshalb bei Bedarf Bezüge konkretisieren und relevante frühere
+Fragt der Agent die Modelle (`compare_models`), bekommt jedes denselben
+Auftrag samt notwendigem Kontext. Die Modelle kennen den Chatverlauf nicht. Der
+Agent muss deshalb bei Bedarf Bezüge konkretisieren und relevante frühere
 Anforderungen mitgeben. Wünsche zu Länge und Form der Antwort (kompakt,
-Tabelle, Stichpunkte) gibt es seit 2026-10-13 nicht mehr weiter; die setzt es
+Tabelle, Stichpunkte) gibt er seit 2026-10-13 nicht mehr weiter; die setzt er
 beim Schreiben der Antwort um. Vorher reichte der Steuer-Schritt eine gemerkte Vorliebe für
 kurze Antworten als „kompakt“ an die Vergleichsmodelle weiter, und deren
-Antworten wurden dadurch dünner. Keine Vergleichsantwort beeinflusst die andere. Das
-Chatmodell erhält Antworten, Quellen, Status und Modellmetadaten und schreibt
-die Synthese selbst. Auch bei einem Prüfwunsch wird zuerst eine unabhängige
-Vergleichsgrundlage eingeholt.
+Antworten wurden dadurch dünner. Keine Vergleichsantwort beeinflusst die andere. Der
+Agent erhält die Antworten anonym und gemischt, mit Quellen und Status (fehlende
+Modelle mit Namen und Grund), und schreibt die Antwort selbst.
 
-### Tiefe, Parallelität und Quorum
+### Agent-Einstellungen (bis 2026-10-31)
 
-Einstellungen → **Agent · Beta** (nur für Konten mit Agent-Zugang, gespeichert
-seit 2026-10-12 als Kontoeinstellung `agent_preferences` am Konto, lokale Kopie
-unter `consensio.agentPreferences.v2`, nur ausdrücklich gewählte Werte; v1
-speicherte bei jeder Änderung alle Felder, beim Umzug fallen deren alte
-Standardwerte weg; siehe codebase-map §4 „Kontoeinstellungen“) legt vier Werte fest, die jede
-Nachricht als `agent_preferences` mitschickt und der Turn in `agent_settings`
-einfriert (Teil der Request-Identität bei Recovery; seit 2026-10-25 kommen für
-Admins **Audit instead of comparison** und **Agent VM** dazu, siehe „Audit statt
-Vergleich“ und „Agent VM“): **Answer depth**
-(`auto` lässt das Chatmodell wählen, `quick`/`full` überschreiben seine Wahl; der
-Orchestrierungsprompt nennt die feste Tiefe) und **Answer start**
-(Standard seit 2026-10-07 `all`, „After every model“: wartet auf jedes Modell,
-weil eine späte Antwort weder in den Text noch in die Prüfung kommt;
-`balanced` wie unten beschrieben, Label „Every model on thorough questions“;
-`fast` ab der Hälfte der Antworten mit 1,1-facher
-Nachfrist und mindestens einer Sekunde),
-**Agent freedom** (`autonomy`, siehe unten) und **Answer check** (`judges`,
-siehe „Antwortprüfung ausschalten“).
+Seit 2026-10-31 hat der Agent keine eigenen Einstellungen mehr. Der Reiter
+Einstellungen → **Agent · Beta** hält nur noch den Arbeitsplatz (mit der
+VM-Zeit des Tages, `#agentVmTime`) und GitHub und steht dort, wo das Konto
+Agent nutzen kann und den Arbeitsplatz hat (`workspace-view.js`
+`syncSettings`, aus `/user_status` `vm_time`). Bis dahin legte die
+Kontoeinstellung `agent_preferences` (seit 2026-10-12 am Konto, lokal
+`consensio.agentPreferences.v2`, feldweise zusammengeführt über
+`user_settings.FIELDWISE_SETTINGS`) fest, was jede Nachricht mitschickte und der
+Turn einfror: **Answer depth** (`auto`/`quick`/`full`), **Answer start**
+(`all`, „After every model“, Standard seit 2026-10-07; `balanced`; `fast` ab
+der Hälfte der Antworten), **Agent freedom** (`autonomy` `guided`/`free`,
+siehe „Vergleichsantworten“), **Answer check** (`judges`, seit 2026-10-17:
+`off` schaltete die Judges der Agent-Antwort ab, Review-Status `off` über
+`skip_review`, im Audit auch die Prüfer) und seit 2026-10-25 **Audit instead of
+comparison**, ab 2026-10-26 **Way of working** (`audit`, mit der VM). Heute:
 
-### Antwortprüfung ausschalten (seit 2026-10-17)
+- `user_settings`: `agent_preferences` ist keine Kontoeinstellung mehr
+  (`RETIRED_SETTINGS`). Ein alter Tab, der sie noch sendet, bekommt sie einzeln
+  in `rejected`, die übrigen Einstellungen werden gespeichert; gespeicherte
+  Reste fallen beim Lesen und beim nächsten Schreiben weg. `MAX_PATCH_FIELDS`
+  zählt die ausgemusterte mit, damit der Erst-Upload eines alten Tabs nicht als
+  Ganzes abgelehnt wird; `FIELDWISE_SETTINGS` ist entfernt. Die alten
+  localStorage-Schlüssel räumt `user-settings.js` `dropRetired` ab;
+  `static/js/agent-preferences.js` ist gelöscht.
+- `POST /agent` nimmt `agent_preferences` an und ignoriert es; die Route setzt
+  selbst, womit eine Nachricht läuft. `AgentPreferences` hält nur noch `vm`
+  (`extra="ignore"`: `depth`, `quorum`, `autonomy`, `judges` und `audit` alter
+  Turns und offener Tabs fallen still weg, `stored_preferences`). Die
+  Präferenzen sind kein Teil der Request-Identität mehr: Ein Turn von vor dem
+  Umbau oder von vor einer Änderung des VM-Zugangs lässt sich weiter
+  wiederherstellen. Der Browser schickt sie nicht mehr (auch nicht beim Folgen,
+  Fortsetzen oder Wiederherstellen), und der laufende Turn eines Bookmarks
+  liefert sie nicht mehr mit (`bookmarks._RUNNING_SETTINGS`).
+- `prepare_settings_change` kennt nur noch Chatmodell, Reasoning,
+  Vergleichs-Lineup und Anzeige (siehe „Einstellungen umstellen“).
 
-**Answer check** (`AgentPreferences.judges`: `on` = Standard, `off`) schaltet
-die beiden Judges (Differences und Coverage) für die eigene Antwort des Agenten
-ab, auf Wunsch von Max. Die Vergleiche laufen unverändert; ist die Antwort
-fixiert, ruft `DelegationLoop._finish_review` statt `judge_answer`
-`ComparisonTools.skip_review()` auf: Nachzügler stoppen wie vor den Judges
-(`finish_comparisons`), und jeder Vergleich bekommt einen Check mit Status
-`off`, der an genau diesen Text und diese Grundlage gebunden ist
-(`answer_hash`, `basis_hash`, `differences_data: null`). Die Review hat
-Status `off`; `review_is_bound` und `finish_run` zählen ihn zu den fertigen
-Prüfungen (`REVIEW_DONE`), und ein späterer Fehler im Lauf schreibt ihn nicht in
-`failed` um. Kein Judge-Aufruf, keine Kosten dafür, kein Agreement-Score, keine
-Marken, kein Model-Pulse-Pick und keine `differences_stats`.
+### Ein Modus: der Agent arbeitet, die gewählten Modelle prüfen (seit 2026-10-31)
 
-- **Prompt:** `preference_prompt` hängt `JUDGES_OFF_PROMPT` an (keine Prüfung,
-  kein Score, keine Highlights, auch wenn ein Toolergebnis „the app checks it“
-  sagt, auch die Anweisungen davor und App-Notizen; „Compare as usual“, ein
-  eingefügter Text wird weiter geprüft); `FREE_PROMPT` nennt die Prüfung nur
-  noch als Nutzer-Einstellung („while the answer check is on (a user
-  setting)“) und lässt den Satz bei `off` weg.
-- **Kein Schimmer:** `agent-chat.js` zeigt den Prüf-Zustand nicht, wenn der
-  Lauf mit `judges: off` startete (die fixierte Antwort ist kurz `required`,
-  bevor `skip_review` `off` speichert). Der Reader öffnet bei einem
-  Abschnitt, den der Kontext nicht anbietet, den ersten angebotenen
-  (`openContext`).
-- **Nachzügler:** ein beim Fixieren gestopptes Modell heißt in beiden Modi
-  „It was still writing when the answer was finished.“; die Notiz nennt die
-  Prüfung nur, wenn sie läuft.
-- **Fehler beim Abschluss:** scheitert das Speichern in `skip_review`
-  (`ValueError`, z. B. das 600-kB-Budget der Review), endet der Turn mit
-  `AnalysisBudgetExceeded` („The answer could not be finalized. The answer
-  itself has been saved.“), nie als Providerfehler.
-- **Version-Skew:** `agent_preferences` wird am Konto feldweise
-  zusammengeführt (`user_settings.FIELDWISE_SETTINGS`); ein offener Tab mit
-  altem Code löscht `judges` deshalb nicht.
-- **Eingefügter Text:** `check_text` prüft weiter. Bittet der Nutzer, einen
-  fremden Text zu prüfen, ist diese Prüfung die Antwort selbst; nur die Judges
-  der Agent-Antwort entfallen.
-- **Anzeige** (`agent-review.js`): keine Marken, kein Score und seit
-  2026-10-18 auch keine Statuszeile unter der Antwort (`summaryText` ist für
-  `off` leer; „off“ unter jeder Antwort las sich wie eine Warnung). Den Grund
-  nennen die Aktivität („Answer check off“) und der Reader. Die Evidenzzeile
-  und der Reader bieten nur Answers und Sources (`context.sections`), die
-  Vergleichskarte „Explore sources“.
-  `failureNote` behandelt eine fixierte Antwort mit `off` wie eine geprüfte.
-- **Agent:** `prepare_settings_change` kennt `answer_check` (`on`/`off`), siehe
-  „Einstellungen umstellen“.
-- Consensus, Watches und Topics behalten ihre Prüfung; der Schalter gehört zu
-  Agent · Beta. Ältere Turns ohne `judges` gelten als `on` (`stored_preferences`).
+Für jedes Konto, ohne Schalter (Max, 2026-10-31). Von 2026-10-25 bis
+2026-10-31 war dieser Ablauf die Einstellung „Audit instead of comparison“
+(`AgentPreferences.audit`; erst Admins, seit 2026-10-26 Pro und Admins über
+`routers/agent.py::audit_allowed`/`effective_preferences`, seit 2026-10-30 mit
+`AGENT_AUDIT_ACCESS=all` jedes Konto). Entfernt sind `audit_allowed`,
+`effective_preferences`, `audit_compare_allowed`, `agent_vm.audit_for_all`,
+`AGENT_AUDIT_ACCESS`, `AGENT_AUDIT_COMPARE`, `/user_status` `audit_access` und
+in der Oberfläche `viewer-can-audit` und `.audit-only`. Die Prüfer sind die
+Modelle des Compare-Pickers: `comparison_selection` nimmt eins bis
+`MAX_RUN_FAMILIES` (6), ein Prüfer reicht (Composer, Menü und Senden prüfen
+dasselbe; Compare braucht weiter zwei). Der Chip im Composer nennt immer das
+Chatmodell, „N AIs cross-check“ steht unter dem Feld (`agent-mode.js`
+`renderReviewers`, `App.words.crossCheck`), auch im ersten Frame. Code:
+`agent_audit.py`, `agent_comparison.py` (`ComparisonTools`: `compare_models`
+und `audit_answer`), Prompts in `prompt_defaults.py`.
 
-### Audit statt Vergleich (seit 2026-10-25; seit 2026-10-26 für Pro und Admins)
-
-**Für alle Konten per Schalter (seit 2026-10-30, Max).** `AGENT_AUDIT_ACCESS=all`
-öffnet Audit für jedes Konto, wie zuvor `AGENT_VM_ACCESS=pro` die VM für Pro; mit
-beiden bekommt jedes Konto VM und Browser. Kosten hält das Tageskonto (jede
-Browser-Aktion ist ein Modellschritt) und die VM-Zeit: ohne Pro 20 Minuten am Tag
-(`agent_vm_time.BASE_DAILY_SECONDS`), Pro 2 Stunden. Nur `request_domain` bleibt
-Pro und Admins (`routers/agent.py::domains_allowed`, `AGENT_VM_NO_DOMAINS_PROMPT`):
-Ein Skript auf der Werkbank erreicht freigegebene Domains ohne Modellschritt, tausende
-Anfragen in einem Befehl, die kein Tageskonto bremst. Der Rest dieses Abschnitts
-beschreibt den Stand davor, wo er nur von Admins oder Pro spricht.
-
-#### Vergleich im Audit (seit 2026-10-31, zuerst Admins)
-
-Paket 1 von „ein Modus für Vergleich und Audit“ (Konzept-Deck 2026-10-30, Max'
-Entscheidungen 2026-10-31: die Judges des Vergleichs fallen weg, weil die Prüfer
-prüfen; der Lauf darf nach den Vergleichsantworten nicht einfach enden; der Score
-entfällt; Model Pulse und Differences-Datensatz sind technische Schuld, nach dem
-Umbau umzustellen). Der Audit-Agent bekommt `compare_models`: Die vom Nutzer
-gewählten Modelle beantworten seine Frage, jedes in einem frischen Gespräch mit
-eigener Websuche, und sehen nur Frage und Kontext, nie seine Arbeit, seine Quellen
-oder die Prüfungen. Es sind dieselben Modelle wie die Prüfer, aber nie deren
-Gespräche: Ein Prüfer, der den Lauf kennt, antwortet nicht mehr unabhängig, und
-seine Antwort wäre ein Rückkanal zum Agenten.
-
-- **Freigabe:** `routers/agent.py::audit_compare_allowed`: Admins, mit
-  `AGENT_AUDIT_COMPARE=all` jedes Konto mit Audit. Der Turn trägt
-  `agent_settings.audit_compare`. Rückweg: Variable leeren. Tor laut Deck: 10
-  echte Läufe ohne Fehler, bevor der Schalter für alle aufgeht;
-  `scripts/audit_report.py` zählt sie in der Zeile „Compare in audit“ (angeboten,
-  genutzt, Status der Turns, Vergleiche und Reviews, saubere Läufe gegen
-  `COMPARE_GATE`).
-- **Werkzeug:** `AuditCompareArgs` (`question`, `context`, `file_ids`, `depth`
-  quick/full), ohne `status_update` (im Audit ist der Text neben einem Aufruf die
-  Notiz) und ohne Memory-Feld (Memory geht über `update_memory` und das Gate).
-  Die Beschreibung (`AUDIT_COMPARE`) nennt nur Fakten und die Grenze
-  `turn_comparisons` (4). Jeder Vergleich fragt alle gewählten Modelle und wartet
-  auf alle Antworten; Tiefe, Antwortstart und Freiheit der Einstellungen gelten
-  im Audit nicht (die Seite bietet sie dort nicht an).
-- **Kein Judge:** keine Differences, kein Coverage-Vorlauf (`answer_progress`),
-  kein Score, kein Model-Pulse-Pick, kein `differences_stats`. Die Prüfer prüfen
-  die Antwort wie jede andere; `audit_answer` stoppt vorher Nachzügler
-  (`finish_comparisons`). `review_is_bound` bindet eine Audit-Review an den
-  Antwort-Hash, `finish_run` verlangt keinen Check je Vergleich.
-- **Der Lauf geht weiter:** Das Ergebnis sagt dem Agenten, dass die Antworten nur
-  seine Frage abdecken und der Rest der Aufgabe seine bleibt, dass der Nutzer sie
-  unter der Antwort lesen kann und die Prüfer sie lesen. Kein `AGENT_WRITE_NOTE`
-  („die nächste Nachricht ist die Antwort“) im Audit. Ein gelesener Text
-  (`read_source`) sperrt den Vergleich im Audit nicht: Der Agent liest dort in
-  jedem Schritt, die Modelle sehen nur seine Frage, und die Prüfer lesen sie im
-  Protokoll.
-- **Prüfer:** Das Ergebnis steht im Arbeitsprotokoll als `tool`-Eintrag
-  `compare_models` (`data: agent`). Bis 2026-10-31 las ein Prüfer jedes
-  Werkzeug-Ergebnis als einen Text, abgeschnitten bei `ENTRY_CHARS` (12.000
-  Zeichen): Von drei Antworten sah er oft nur die erste. Jetzt liest er es als
-  Struktur bis `COMPARISON_ENTRY_CHARS` (60.000), jede Antwort gleich gekürzt, wo
-  nicht alles passt. Die Kurzfassung (`BRIEF_TOOLS`) erklärt das Werkzeug: Ein
-  verschwiegener Widerspruch der Antworten, der für den Nutzer zählt, macht die
-  Antwort unvollständig.
-- **Nur mit Prüfern:** `compare_models` gibt es im Audit nur, wenn Prüfer laufen
-  (`ComparisonTools.auditor`; die Route schaltet die Antwortprüfung im Audit
-  ohnehin an). Ohne Prüfer läse niemand die Antworten, und ein abgebrochener
-  Text ginge mit ihnen verloren (Gegenprüfung 2026-10-31).
-- **Zeit:** Läuft die Zeit bis zur Antwort ab (`answer_time_left`), hört ein
-  Vergleich im Audit sofort auf zu warten, auch ohne zwei Antworten (im
-  Vergleichsmodus erst ab zwei, weil die Prüfung zwei braucht). Ein Modell, das
-  noch schreibt, stoppt mit der fixierten Antwort (`late_cutoff`). Schritte nach
-  einem Vergleich werden im Audit zugelassen wie davor (kein `clamp_floor`).
-- **Lesen der Prüfer:** Passt eine Runde nicht ins Gespräch, geben zuerst die
-  übrigen Einträge nach (`agent_audit.ROUND_TIERS`), dann die Auszüge der Seiten
-  (die Liste bleibt mit Adresse und Zahl der Antworten, die sie nennen, oder
-  wird zur Zahl), zuletzt die Antworten selbst, jede gleich gekürzt. Vorher fiel
-  eine solche Runde für alle Einträge auf 1.500 Zeichen, und vom Vergleich blieb
-  der Anfang der ersten Antwort. Die Modelle bekommen neben Frage und Kontext die
-  Dateien (`file_ids`, sonst die der Nachricht und die geöffneten); das sagen
-  Beschreibung und Kurzfassung.
-- **Anzeige:** Unter der Antwort neben „Anmerkungen“ (bzw. „Keine Einwände“) die
-  Zelle „Antworten“ (ein Leser-Kontext je Vergleich, Antworten und Quellen, keine
-  Prüfung; es öffnet der erste Vergleich mit Antworten); in der Aktivität die
-  Karten der Vergleiche vor der Prüferkarte, nur mit „Modellantworten lesen“.
-  Ein Lauf, der vor der Antwort endet, behält die Audit-Zeile mit „Antworten“,
-  nie die Prüfzeile des Vergleichsmodus; seine Prüfer stehen dann auf
-  „gestoppt“. Das Seitenpanel öffnet eine Antwort wie im Vergleichsmodus. Geteilte
-  Audit-Antworten zeigen keine Vergleiche (`share_snapshots._agent_share_basis`),
-  bis ein Share für Audit entworfen ist.
-- **Tempo:** `tests/test_agent_audit_tempo.py`
-  `test_three_advisers_beside_three_reviewers_keep_their_tempo`: Daily (drei
-  Modelle) als Berater und Prüfer zugleich, Server-Anteil je Beraterantwort
-  median 0,03 s (Prod-Skala ~1,2 s), je Live-Runde 0,03–0,05 s, Konto-Lock
-  44–49 % des Laufs gehalten (vorher 60 % mit drei Prüfern bei 40 Schritten).
-  Nach dem Livegang an echten Läufen nachmessen (`scripts/audit_report.py`).
-- **Noch nicht (Pakete 2–4):** Satzurteil der Prüfer, ein Modus für alle,
-  `check_text` und die Judges des Agenten entfernen. Model Pulse und
-  Differences-Datensatz bekommen aus Audit-Antworten keine Daten.
-
-Einstellungen → Agent · Beta → **Audit instead of comparison**
-(`AgentPreferences.audit`: `off` = Standard, `on`; Zeile `.admin-only`,
-`#agentAuditSelect`). Der Server nimmt `on` nur von Admin-Konten an
-(`routers/agent.py::effective_preferences`, vor der Request-Identität); jedes
-andere Konto läuft wie bisher, auch wenn seine gespeicherte Einstellung noch
-`on` sagt. Der Turn friert den wirksamen Wert ein. Ohne Einstellung läuft
-alles exakt wie zuvor. Code: `agent_audit.py`, Prompts in `prompt_defaults.py`.
+Kosten hält das Tageskonto (jede Browser-Aktion ist ein Modellschritt), den
+Arbeitsplatz zusätzlich die VM-Zeit: ohne Pro 20 Minuten am Tag
+(`agent_vm_time.BASE_DAILY_SECONDS`), Pro 2 Stunden. Wer die VM bekommt, regelt
+`AGENT_VM_ACCESS` (siehe „Agent VM“). Nur `request_domain` bleibt Pro und
+Admins (`routers/agent.py::domains_allowed`, `AGENT_VM_NO_DOMAINS_PROMPT`): Ein
+Skript auf der Werkbank erreicht freigegebene Domains ohne Modellschritt,
+tausende Anfragen in einem Befehl, die kein Tageskonto bremst.
 
 **Verfassung statt Regeln (seit 2026-10-28 abends).** Max: dem Modell keine
 Befehle und festen Wege geben, es entscheidet mit eigener Intelligenz. Der
-Audit-Prompt beginnt mit einer Verfassung in einem Absatz
+Prompt des Agenten (bis 2026-10-31 der des Audits) beginnt mit einer Verfassung
+in einem Absatz
 (`_AGENT_AUDIT_STEERING`): eigenes Urteil, wie zu helfen ist (suchen, lesen,
 planen, Arbeitsplatz oder einfach antworten), und vier Grundsätze: wahrhaftig
 sein (Unsicheres kennzeichnen, nie eine Aktion, ein Ergebnis, eine Datei oder
@@ -362,18 +235,18 @@ sagen nur noch, was die App tut; ihre einzelnen Verbote stehen in der
 Verfassung. Werkzeugbeschreibungen ohne Wann-Listen (`read_source`), und
 `update_memory` sagt nicht mehr „call it first“ (seit Paket 1 falsch). Was
 gelten muss, setzt die App durch (Vorab-Prüfung, geschlossenes Netz, Karten).
-Memory im Audit-Modus ohne Belegzitat (`AuditMemoryChange`,
-`MemoryTools._audit`): Das Modell entscheidet, was es sich merkt, auch
+Memory ohne Belegzitat (`AuditMemoryChange`, ein mitgeschicktes Zitat wird
+ignoriert): Das Modell entscheidet, was es sich merkt, auch
 Vorlieben, die der Nutzer nie wörtlich gesagt hat; der Nutzer sieht und löscht
 jede Änderung, mit Fremdinhalt im Blick prüfen die Prüfer (`GATE_MEMORY_NOTE`:
 passt die Änderung zu dem, was der Nutzer sagte), ohne Prüfer sperrt Memory.
-Sensible Kategorien nur auf Bitte (DSGVO Art. 9). Der Vergleichsmodus bleibt
-unverändert, Zitatpflicht eingeschlossen. Anlass: Terra 6.1 und Opus klagten
+Sensible Kategorien nur auf Bitte (DSGVO Art. 9). Der Vergleichsmodus behielt
+bis 2026-10-31 seine Zitatpflicht. Anlass: Terra 6.1 und Opus klagten
 über zu viele Regeln (Terra beschrieb dabei auch Regeln, die schon gestrichen
 waren: Selbstauskünfte über den eigenen Prompt sind unzuverlässig).
 
 **Schlanke Anweisungen (seit 2026-10-28).** Max: weniger Vorgaben, wie sich
-Modelle verhalten sollen. Die Audit-Texte sagen nur noch, was das Modell nicht
+Modelle verhalten sollen. Die Texte des Agenten sagen nur noch, was das Modell nicht
 selbst wissen kann (die App, ihre Werkzeuge, was der Nutzer sieht), welche
 Verträge die App braucht (Text ohne Werkzeugaufruf ist die Antwort, Quellen als
 Links, Karten, Belegzitate) und was Sicherheit und Wahrheit verlangen (Fremdes
@@ -381,12 +254,12 @@ ist keine Anweisung, keine Passwörter, Außenwirkung nur auf Wunsch, nichts
 behaupten, was nicht passiert ist, besondere Datenkategorien im Memory). Keine
 Rezepte mehr, wann gesucht, gelesen oder nachgefragt wird, keine
 Schreibratschläge und keine Beispiele; Grenzen, die zählen, setzen die
-Werkzeuge durch (Leseadressen und -anzahl, Belegzitate, Memory-Sperre). Der
-Audit-Modus hat dafür eigene, kurze Fassungen der Blöcke zu Quellen, Watches,
-Einstellungen, Memory, Dateien, Dokumenten und Google
-(`agent_watch.AUDIT_PROMPT`, `agent_settings.AUDIT_PROMPT`,
-`agent_memory.AUDIT_MEMORY_*`, `agent_files.AUDIT_UNTRUSTED`; im Admin als
-„Agent audit: tool blocks“); keiner nennt einen Vergleich. Seit 2026-10-28
+Werkzeuge durch (Leseadressen und -anzahl, Belegzitate, Memory-Sperre). Die
+Blöcke zu Watches, Einstellungen, Memory, Dateien, Dokumenten und Google sind
+kurz (`agent_watch.AUDIT_PROMPT`, `agent_settings.AUDIT_PROMPT`,
+`agent_memory.AUDIT_MEMORY_*`, `agent_files.AUDIT_UNTRUSTED`; im Admin „Agent:
+tool blocks“, bis 2026-10-31 „Agent audit: tool blocks“ neben den längeren
+Fassungen des Vergleichsmodus). Seit 2026-10-28
 (abends, Max: „go for it“ nach dem Harness-Check) steht jeder Fakt an genau
 einer Stelle: `read_source` und `show_image` haben keinen eigenen Block mehr
 (vorher `AGENT_AUDIT_READ_SOURCE_PROMPT` und `AGENT_AUDIT_IMAGE_PROMPT`, die ihre
@@ -398,7 +271,7 @@ Notizen, vier Wege ins Web, Browser auf eigenem Rechner, Terminal); die Liste
 der VM-Werkzeuge und die Aktionen des Browsers standen dort ein zweites Mal.
 Der Rechner heißt überall „workspace“ (die Werkzeuge sagten „your VM“, ein
 Absatz „workbench“), und `vm_exec` sagte fälschlich, es starte im Home statt im
-Ordner des Chats. `read_source` nimmt im Audit-Modus nur noch `url`
+Ordner des Chats. `read_source` nimmt nur noch `url`
 (`AuditReadSourceArgs`: ohne `purpose`/`point`, die einen Lesegrund aus einer
 Liste verlangten, und ohne `status_update`, weil Text neben dem Aufruf als
 Notiz erscheint), `show_image` nur `url` und `caption` (seit 2026-10-29
@@ -411,45 +284,116 @@ klügere Modelle aus den Beschreibungen selbst ableiten. Die Prüfer werden nur 
 Nutzer sieht ihre Marken, der Agent nicht), damit der Agent consens.io erklären
 und nicht fälschlich von einer Prüfung sprechen kann. Gemessen: rund 9.500
 statt zuvor 20.100 Zeichen für Kern, Quellen, Arbeitsplatz, GitHub, Plan,
-Watches, Einstellungen, Memory und Dateien. Der Vergleichsmodus behält seine
-Texte; wie sich das Verhalten verschiebt, zeigen echte Audit-Chats nach einem
-Deploy.
+Watches, Einstellungen, Memory und Dateien. Die längeren Texte des
+Vergleichsmodus gingen am 2026-10-31 mit ihm.
 
-**Der Agent antwortet selbst.** Die Route schickt `AGENT_AUDIT_SYSTEM_PROMPT`
-statt `AGENT_SYSTEM_PROMPT` (`config["prompts"]["agent_audit"]`, im Admin
-lesbar als „Agent: audit mode instructions“). `ComparisonTools` bietet weder
-`compare_models` noch `check_text` an (`audit_mode`, `tools = []`); was nur zum
-Vergleich gehört, entfällt: Vergleichslimit im Prompt, `FREE_PROMPT`,
-Tiefe, Answer start, `_consensus_search_handoff` und `_tool_reminder`
-(eigene Recherche führt nicht mehr in einen Vergleich), das Memory-Feld an
-den Vergleichen (eigene Memory-Regeln `agent_memory.AUDIT_MEMORY_*`:
-Entscheidung über `update_memory` zuerst) und `AGENT_READ_SOURCE_REPLACEMENTS`
-(ohne eigenen Lese-Block, die Beschreibung von `read_source` sagt es; lesbar
-sind Seiten, die der Nutzer verlinkt, Quellen früherer Nachrichten und seit
-2026-10-27 die eigenen Suchtreffer dieser Nachricht: `DelegationLoop.search_sources`
+**Der Agent antwortet selbst.** Die Route schickt `DEFAULT_PROMPTS["agent"]`
+(`AGENT_AUDIT_SYSTEM_PROMPT`, im Admin „Agent: instructions“; bis 2026-10-31
+tauschte sie ihn nur im Audit gegen den Vergleichs-Prompt, Schlüssel
+`agent_audit`). Dazu kommen die Blöcke zu Watches, Einstellungen, Memory,
+Dateien, Dokumenten und Google (`agent_watch.AUDIT_PROMPT`,
+`agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
+`agent_files.AUDIT_UNTRUSTED`; im Admin „Agent: tool blocks“) und mit dem
+Arbeitsplatz VM, GitHub und Plan. Der Agent sucht in jedem Schritt mit bis zu
+`AGENT_SEARCH_ROUNDS` (5) Runden; passt die Reservierung nicht, geht
+`smaller_search` 5 → 3 → 1 → 0. Sein Text streamt wie jede Antwort, auch nach
+eigenen Suchtreffern. `read_source` liest Seiten, die der Nutzer verlinkt,
+Quellen früherer Nachrichten, die Quellen der Antworten von `compare_models`,
+die eigenen Suchtreffer dieser Nachricht (`DelegationLoop.search_sources`
 sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
-`LABEL_SEARCH` auf („a web search result of this message“, seit 2026-10-28;
-vorher „your search in this message“, was nach einer Suche klang, die der
-Agent nie selbst aufgerufen hat). Sie hätte keine Seite schreiben können, und mit der
-nächsten Nachricht wären sie als frühere Quellen ohnehin lesbar).
-Der Agent sucht in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS` (5) Runden;
-passt die Reservierung nicht, geht `smaller_search` 5 → 3 → 1 → 0. Sein Text
-streamt wie jede Antwort (`research=False`), auch nach eigenen Suchtreffern.
-Watch, Einstellungen, Dateien, Dokumente, Google und Memory bleiben. Sobald
-ein Schritt eigene Suchtreffer hat (`_searched`), ist Fremdinhalt im Blick
-(`outside_in_view`, auch für die Aufrufe desselben Schritts), wie nach
-`read_source`: Seiten könnten sonst `update_memory` steuern. Seit 2026-10-28
-sperrt das Memory im Audit-Modus nicht mehr, solange Prüfer mitlaufen: eine
-Änderung wartet dann wie ein Aufruf mit Außenwirkung auf die Vorab-Prüfung
-(`agent_gate.outward` „memory“, Prüferhinweis `GATE_MEMORY_NOTE`; alle sagen
-go, sonst entscheidet der Nutzer auf der Karte); ein Belegzitat braucht sie
-im Audit-Modus seit dem Abend des 2026-10-28 nicht mehr (siehe „Verfassung
-statt Regeln“). Ohne Prüfer (Antwortprüfung aus) und im Vergleichsmodus bleibt die
-Sperre (`memory_locked`). Der Audit-Prompt sagt das als Fakt, nicht mehr
-„call it first … before you search“ (Max: Spielraum statt Mikromanagement).
+`LABEL_SEARCH` auf, „a web search result of this message“) und, solange Prüfer
+folgen, jede öffentliche Seite (siehe „Quellen nachlesen“). Watch,
+Einstellungen, Chatsuche, Dateien, Dokumente, Google, Bilder und Memory gibt es
+in jedem Chat-Lauf im Kontomodus (Watch, Lesen und Bilder nicht in Chats mit
+Google-Daten). Sobald ein Schritt eigene Suchtreffer hat (`_searched`), ist
+Fremdinhalt im Blick (`outside_in_view`, auch für die Aufrufe desselben
+Schritts), wie nach `read_source`: Seiten könnten sonst `update_memory`
+steuern. Seit 2026-10-28 sperrt das Memory dann nicht, solange Prüfer
+mitlaufen: Eine Änderung wartet wie ein Aufruf mit Außenwirkung auf die
+Vorab-Prüfung (`agent_gate.outward` „memory“, Prüferhinweis
+`GATE_MEMORY_NOTE`; alle sagen go, sonst entscheidet der Nutzer auf der Karte).
+Ohne Prüfer bleibt die Sperre (`memory_locked`, siehe „Ohne Prüfer“). Der
+Prompt sagt das als Fakt, nicht mehr „call it first … before you search“ (Max:
+Spielraum statt Mikromanagement). Was bis 2026-10-31 nur zum Vergleichsmodus
+gehörte (Vergleichslimit im Prompt, `FREE_PROMPT`, Tiefe, Antwortstart,
+`_consensus_search_handoff`, `_tool_reminder`, das Memory-Feld an den
+Vergleichen, `AGENT_READ_SOURCE_PROMPT` mit `AGENT_READ_SOURCE_REPLACEMENTS`),
+ist ganz entfernt.
 
-**Die Vergleichsmodelle prüfen, während der Agent arbeitet.** Ab dem Start
-des Laufs folgt jedes gewählte Vergleichsmodell dem Arbeitsprotokoll
+**Die gewählten Modelle fragen** (`compare_models`, seit 2026-10-31; am selben
+Tag zuerst als „Vergleich im Audit“ für Admins, Paket 1 des Decks „ein Modus
+für Vergleich und Audit“). Der Agent kann die vom Nutzer gewählten Modelle
+seine Frage beantworten lassen, jedes in einem frischen Gespräch mit eigener
+Websuche; sie sehen nur Frage, Kontext und Dateien, nie seine Arbeit, seine
+Quellen oder die Prüfungen. Es sind dieselben Modelle wie die Prüfer, aber nie
+deren Gespräche (Max, 2026-10-30): Ein Prüfer, der den Lauf kennt, antwortet
+nicht mehr unabhängig, und seine Antwort wäre ein Rückkanal zum Agenten. Das
+Werkzeug steht in jedem Chat-Lauf; ein Tor gibt es nicht mehr (bis zum einen
+Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
+
+- **Werkzeug:** `AuditCompareArgs` (`question` bis 2.000 Zeichen, `context` bis
+  8.000, `file_ids`, `depth` quick/full, Standard `full`; `extra="forbid"`),
+  ohne `status_update` (der Text neben einem Aufruf ist die Notiz) und ohne
+  Memory-Feld (Memory geht über `update_memory` und das Gate). Die Beschreibung
+  (`agent_comparison.AUDIT_COMPARE`) nennt nur Fakten und im Kontomodus die
+  Grenze `turn_comparisons` („At most 4 times per message.“); ein Aufruf
+  darüber startet nichts Bezahltes und sagt, dass die Nachricht ihr Maximum
+  hat, der letzte erlaubte sagt es im Ergebnis. Jeder Vergleich fragt alle
+  gewählten Modelle und wartet auf alle Antworten (siehe
+  „Vergleichsantworten“). `quick` gibt jedem Modell eine Suchrunde und eine
+  Längenvorgabe (etwa 1.500 Zeichen), `full` bis zu drei Runden ohne Vorgabe
+  (`SEARCH_ROUNDS`, `comparison_system_prompt`, im Admin „Agent: comparison
+  models“). Die Modelle bekommen die Dateien (`file_ids`, sonst die der
+  Nachricht und die geöffneten); das sagen Beschreibung und Kurzfassung.
+- **Kein Judge:** keine Differences, keine Coverage, kein Score, kein
+  Model-Pulse-Pick, kein `differences_stats`. Die Prüfer prüfen die Antwort wie
+  jede andere; `audit_answer` stoppt vorher Nachzügler (`finish_comparisons`).
+- **Der Lauf geht weiter:** Das Ergebnis (`_merged_result`) sagt dem Agenten,
+  dass die Antworten nur seine Frage abdecken und der Rest der Aufgabe seine
+  bleibt, dass der Nutzer sie unter der Antwort lesen kann und die Prüfer sie
+  lesen. Eine Schreibnotiz („die nächste Nachricht ist die Antwort“,
+  `AGENT_WRITE_NOTE`) gab es nur im Vergleichsmodus. Ein gelesener Text
+  (`read_source`) sperrt den Vergleich nicht (im Vergleichsmodus schon): Die
+  Modelle sehen nur die Frage des Agenten, und die Prüfer lesen sie im
+  Protokoll. Ein Vergleich mit nur einem Teil der Antworten heißt `partial`
+  (bis 2026-10-31 scheiterte einer mit weniger als zwei, weil die Judges zwei
+  Seiten brauchten); mit einer einzigen sagt das Ergebnis „Only one model
+  answered.“.
+- **Prüfer:** Das Ergebnis steht im Arbeitsprotokoll als `tool`-Eintrag
+  `compare_models` (`data: agent`). Bis 2026-10-31 las ein Prüfer jedes
+  Werkzeug-Ergebnis als einen Text, abgeschnitten bei `ENTRY_CHARS` (12.000
+  Zeichen): Von drei Antworten sah er oft nur die erste. Jetzt liest er es als
+  Struktur bis `COMPARISON_ENTRY_CHARS` (60.000), jede Antwort gleich gekürzt,
+  wo nicht alles passt. Passt eine Runde nicht ins Gespräch, geben zuerst die
+  übrigen Einträge nach (`agent_audit.ROUND_TIERS`), dann die Auszüge der
+  Seiten (die Liste bleibt mit Adresse und Zahl der Antworten, die sie nennen,
+  oder wird zur Zahl), zuletzt die Antworten selbst, jede gleich gekürzt; vorher
+  fiel eine solche Runde für alle Einträge auf 1.500 Zeichen, und vom Vergleich
+  blieb der Anfang der ersten Antwort. Die Kurzfassung (`BRIEF_TOOLS`) erklärt
+  das Werkzeug: Ein verschwiegener Widerspruch der Antworten, der für den
+  Nutzer zählt, macht die Antwort unvollständig.
+- **Zeit:** Läuft die Zeit bis zur Antwort ab (`answer_time_left`), hört ein
+  Vergleich sofort auf zu warten, auch ohne Antwort. Ein Modell, das noch
+  schreibt, stoppt mit der fixierten Antwort (`late_cutoff`).
+- **Anzeige:** Unter der Antwort neben „Notes“ (bzw. „No objections“) die Zelle
+  „Answers“ (ein Leser-Kontext je Vergleich, Antworten und Quellen, keine
+  Prüfung; es öffnet der erste Vergleich mit Antworten); in der Aktivität die
+  Karten der Vergleiche vor der Prüferkarte, nur mit „Read model answers“. Ein
+  Lauf, der vor der Antwort endet, behält die Leiste mit „Answers“; seine Prüfer
+  stehen dann auf „stopped“. Das Seitenpanel öffnet eine Antwort wie jede
+  Modellantwort. Geteilte Antworten zeigen keine Vergleiche
+  (`share_snapshots._agent_share_basis`), bis ein Share dafür entworfen ist.
+- **Tempo:** `tests/test_agent_audit_tempo.py`
+  `test_three_advisers_beside_three_reviewers_keep_their_tempo`: Daily (drei
+  Modelle) als Berater und Prüfer zugleich, Server-Anteil je Beraterantwort
+  median 0,03 s (Prod-Skala ~1,2 s), je Live-Runde 0,03–0,05 s, Konto-Lock
+  44–49 % des Laufs gehalten (vorher 60 % mit drei Prüfern bei 40 Schritten).
+  An echten Läufen: `scripts/audit_report.py`, Zeile „compare_models“ (Turns,
+  die die Modelle fragten, ihr Status, Vergleiche, Reviews, saubere Läufe; bis
+  2026-10-31 dazu die Schranke `COMPARE_GATE` für `AGENT_AUDIT_COMPARE`).
+
+**Die gewählten Modelle prüfen, während der Agent arbeitet.** Ab dem Start
+des Laufs folgt jedes gewählte Modell dem Arbeitsprotokoll
 (`AnswerAudit.follow`, `ReviewerSession`, ein Thread und eine Sitzung je
 Prüfer; Einzelheiten in [agent-work-log.md](agent-work-log.md)). Hat das
 Protokoll einen neuen Schritt mit Tool-Aufrufen, beginnt eine Live-Runde mit
@@ -497,8 +441,9 @@ hängt am Kontextfenster seines Modells (`session_budget`, `fitted_round`). Die 
 Auftrag nur `REVIEW_ASSIGNMENT`; im Agent-Panel steht je Runde eine Nachricht
 (`round`, dann `result`).
 
-**Zitate finden.** `place_marks` sucht jedes Zitat mit dem Locator von
-`check_text` (`_search_form`/`_anchor_form`/`_locate_in`: Groß/klein,
+**Zitate finden.** `place_marks` sucht jedes Zitat mit einem toleranten
+Locator (`locate_quote` mit `_search_form`/`_anchor_form`/`_locate_in`, bis
+2026-10-31 der von `check_text` in `agent_comparison.py`: Groß/klein,
 Anführungszeichen, Markdown und Leerraum zählen nicht, ganze Wörter samt
 Satzzeichen am Ende), auch über den sichtbaren Text eines Links und über „…“
 gekürzt, weitet es auf seine Sätze (`_enumerate_consensus_sentences`) und
@@ -536,7 +481,7 @@ Scheitert die Prüfung als Ganzes (Fehler, Speicherbudget auch nach
 `trim_marks`, das erst die zitierten Worte und lange Anmerkungen kürzt),
 endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem
 `completed`. Scheitert nur ein Speichern, bleibt der Stand im Speicher und
-`AnswerAudit.close` speichert am Laufende erneut; eine Audit-Review, die beim
+`AnswerAudit.close` speichert am Laufende erneut; eine Review, die beim
 erfolgreichen Ende noch `required`/`running` sagt, setzt
 `agent_runs.finish_run` auf `failed`; nach Crash oder Reap setzt es seit
 2026-10-29 auch jede Prüferzeile in `waiting`/`running` auf `failed`
@@ -555,12 +500,12 @@ ohne Entscheidung): Haben die Prüfer Live-Befunde, speichert `close`
 (`_stopped_early`) eine Review `cancelled` ohne Version, die Befunde in
 `process` (ohne Antwort keine `claims`), die Zeilen der Prüfer `stopped` mit
 ihren Zählern; ohne Befunde gibt es wie bisher keine Review. Vorher standen
-sie nur in den Sitzungen der Prüfer. Die
-Judges laufen in diesem Modus nicht: kein Score, keine Unterschiedskarten,
-keine `differences_stats`, kein Model-Pulse-Pick.
+sie nur in den Sitzungen der Prüfer. Kein Judge läuft: kein Score, keine
+Unterschiedskarten, keine `differences_stats`, kein Model-Pulse-Pick.
 
 **Messen** (seit 2026-10-29, Spezifikation A-M1/A-M8): Am Ende jedes
-Audit-Turns zählt `agent_audit_metrics.record` ihn anonym in
+Chat-Turns des Agenten (bis 2026-10-31 nur der Audit-Turns) zählt
+`agent_audit_metrics.record` ihn anonym in
 `ops_metrics/agent-audit-{UTC-Tag}`: Status, Review-Status, Prüferzahl,
 Buckets für Gesamtzeit, Zeit bis zur fixierten Antwort, Marken nach dem
 letzten Wort, Gate-Wartezeit, Schlussrunde je Modell und Rückstand beim
@@ -570,14 +515,26 @@ Aktivität); ein Daemon-Thread liest den gespeicherten Turn einmal und schreibt
 einen Merge aus Increments. Ohne UID, Chat oder Text, die Zähler überstehen
 das Löschen der Chats. Felder späterer Pakete (`final_ms`, `backlog`,
 `agent_holds`, `gate_ms`) zählen, sobald es sie gibt. Auswertung samt Zielen
-Z1–Z8: `scripts/audit_report.py --days 5` (nur lesend). Seit 2026-10-30
-zählt dort auch jeder Turn, der den Arbeitsplatz nutzte, mit oder ohne
-Audit, in eigenen Feldern (`ws_*`, siehe „Arbeitsplatz: Schritte, Zeit und
-Bilder“), dazu der Grund jedes Wrap-ups (`wrap_up`).
+Z1–Z8: `scripts/audit_report.py --days 5` (nur lesend; seit 2026-10-31 zählt
+es Turns, deren eingefrorene Präferenzen nur noch `vm` halten, als Audit, alte
+nach `audit` bzw. `agent_review`). Seit 2026-10-30 zählt dort auch jeder Turn,
+der den Arbeitsplatz nutzte, in eigenen Feldern (`ws_*`, siehe „Arbeitsplatz:
+Schritte, Zeit und Bilder“), dazu der Grund jedes Wrap-ups (`wrap_up`).
 
-**Answer check aus** schaltet auch die Prüfer ab (`auditor` ist `None`): Der
-Agent antwortet allein, ohne Review, und der Prompt sagt es
-(`AUDIT_OFF_PROMPT`).
+**Ohne Prüfer.** Einen Schalter dafür gibt es nicht mehr (bis 2026-10-31
+schaltete „Answer check off“ im Audit auch die Prüfer ab: `auditor` war
+`None`, der Prompt sagte es mit `AUDIT_OFF_PROMPT`). Jeder Chat-Lauf hat einen
+`AnswerAudit`; ohne Prüfer ist nur ein Lauf, dessen Prüfer nie starten (keine
+Sitzung folgt dem Protokoll, `auditor.sessions` leer): kein Gate vor einer
+Außenwirkung, Memory sperrt bei Fremdinhalt (`DelegationLoop.memory_locked`),
+`read_source` liest keine frei gewählte Seite, keine Zeit für Schlussrunden
+reserviert (`answer_time_left`), kein Überziehen für die Antwort nach einem
+bezahlten Schritt (`_paid_audit`), und die Review der fixierten Antwort endet
+`failed` mit `audit_unavailable` ohne Marken. Tests spielen genau diesen
+Zustand mit `tests/agent_reviewers.py` (`InertAnswerAudit`,
+`without_reviewers`, Fixture `inert_reviewers`), wo ein Skript nur die Schritte
+des Agenten liefert; Tests der Prüfung selbst skripten die Prüfer
+(`test_agent_audit.Audit`).
 
 **Anzeige** (`agent-review.js` `renderAudit`, `consensus-insights.js`
 `renderStoredAuditMarks`): Während die Prüfer arbeiten, läuft der bekannte
@@ -587,7 +544,8 @@ deaktiviert), „Sources“ mit der Zahl aus der Aktivität, am Ende der Zeile
 „Reviewing the answer…“, wo später Watch und Teilen stehen
 (`agent-chat.js` rendert die Leiste dafür auch während des Laufs, sobald die
 Review die Antwort als Version hält; die Prüfzeile `.agent-check-status`
-von `setAnswerChecking(…, { audit })` gilt nur bis dahin, auf dem Handy
+von `setAnswerChecking` („Reviewing the answer…“; die Zeile „Checking the
+answer…“ des Vergleichsmodus ist seit 2026-10-31 weg) gilt nur bis dahin, auf dem Handy
 56 px hoch wie die Leiste). Am Ende tauscht nur ein Wort. Die Marken erscheinen erst, wenn alle
 fertig sind, und nur auf genau diesem Text: falsch `is-major` (rot),
 zweifelhaft `is-split` (gelb), unvollständig `is-minor` (das kräftigere Grau
@@ -639,14 +597,15 @@ its review“) und `review_empty` (A-M6); ein Turn mit `hold_timeout` sagt
 Retry; „Check saved answer“ seit dem UX-Audit 2026-10-29, C15, nur mit einer
 Antwort, die es zu prüfen gibt). Rot und „Failed“ in Kopf und Seitenleiste
 bleiben bis zum Paket E des Audits.
-Eine fixierte Audit-Antwort gilt als vollständig, was immer aus ihrer Prüfung
+Eine fixierte Antwort gilt als vollständig, was immer aus ihrer Prüfung
 wurde: kein „may be incomplete“ darunter (`reviewedAnswer`).
 
-**Arbeitsprotokoll** (seit 2026-10-25): Im Audit-Modus schreibt die App live
-mit, was der Agent sieht und tut (`agent_work_log.py`), Admins sehen es in der
-Seitenleiste unter „Work log“, und die Prüfer folgen ihm
-([agent-work-log.md](agent-work-log.md)). Befunde gehen noch nicht an den
-Agenten.
+**Arbeitsprotokoll** (seit 2026-10-25, seit 2026-10-31 in jedem Chat-Lauf):
+Die App schreibt live mit, was der Agent sieht und tut (`agent_work_log.py`),
+und die Prüfer folgen ihm ([agent-work-log.md](agent-work-log.md)). Lesen darf
+es der Besitzer des Turns (`GET /agent/chats/{chat}/turns/{turn}/work-log`, bis
+2026-10-31 nur Admins); die Seitenleiste zeigt es unter „Work log“ nur Admins
+(`agent-delegation.js` `shownLog`). Befunde gehen nicht an den Agenten.
 
 **Aussteuern** (seit 2026-10-26): Ein Prüfer darf in einer Live-Runde neben
 seinen Marken `"halt": {"entry", "kind", "reason"}` setzen, wenn ein Schritt
@@ -892,23 +851,24 @@ Entscheidung des Nutzers: `continue` lässt die Aufrufe des Schritts laufen,
 stoppt. Die Entscheidung gilt für die gelisteten Aufrufe dieses einen
 Schritts (`Gate.decision`), nicht für spätere gleicher Art. Ein Halt der
 Gate-Runde zählt in `AnswerAudit.halts`, eine spätere Runde hält denselben
-Eintrag nicht noch einmal an. Ohne Prüfer (Answer check aus) gibt es kein Gate.
+Eintrag nicht noch einmal an. Ohne Prüfer (siehe „Ohne Prüfer“) gibt es kein Gate.
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
-Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken des Audits;
-`prepare_settings_change` kennt die Einstellung nicht.
+Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken der Prüfer.
 
 Tests: `tests/test_agent_audit.py` (Turn, Live-Runden, Schlussrunde,
 Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
-Prompts, Route, Aussteuern), `tests/test_agent_audit_tempo.py` (seit
+Prompts, Route, Aussteuern), `tests/test_agent_audit_compare.py`
+(`compare_models`), `tests/test_agent_audit_tempo.py` (seit
 2026-10-29: Tempo mit drei und sechs Prüfern, 200-Schritte-Lauf, drei Turns
 gleichzeitig; Ergebnisse in der Spezifikation unten, Paket 5),
 `tests/js/audit-marks.test.mjs`, die Halt-Fälle
 in `agent-chat.test.mjs`, `agent-vm-activity.test.mjs` und
 `tab-status.test.mjs`, die Audit-Fälle in
-`tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs`,
-`model-answer-reader.test.mjs` und `agent-preferences.test.mjs`; die gebaute
+`tests/js/agent-review.test.mjs`, `agent-delegation.test.mjs` und
+`model-answer-reader.test.mjs`; Prüfer, die nie starten, für Tests über
+anderes in `tests/agent_reviewers.py`; die gebaute
 Ansicht (Marken, Notes, Aktivität, Prüfer-Zeitleiste, Prüfung läuft,
 Pause-Karte auf Desktop und Handy) ohne Modellkosten in
 `tests/e2e/test_agent_audit_frontend.py` (Bilder mit `AGENT_SCREENSHOTS`); ein
@@ -924,23 +884,25 @@ Laufzeit des Arbeitsplatzes (Prod-Messung 26.–30.10.; Tempo, Abbrüche,
 Modell-Interaktion, Ansicht, App-Tempo, Kosten, Messbarkeit in sechs Paketen):
 [agent-workspace-runtime-audit-2026-10-30.md](agent-workspace-runtime-audit-2026-10-30.md).
 
-### Agent VM (seit 2026-10-25; seit 2026-10-26 Teil von Audit)
+### Agent VM (seit 2026-10-25)
 
-Seit 2026-10-26 gibt es keine eigene VM-Einstellung mehr: Einstellungen →
-Agent · Beta → **Way of working** = Audit bringt die VM mit
-(`AgentPreferences.vm` folgt `audit`, `routers/agent.py::effective_preferences`);
-ohne Audit keine VM. Der Turn friert den wirksamen Wert ein. Die Prüfer
-verfolgen jeden VM-Schritt live im Arbeitsprotokoll.
+Die VM kommt mit jeder Nachricht eines Kontos, das sie hat
+(`routers/agent.py::vm_allowed`; die Route setzt `AgentPreferences.vm` selbst,
+der Turn friert den Wert ein). Eine eigene Einstellung gibt es seit 2026-10-26
+nicht; bis 2026-10-31 brachte „Way of working“ = Audit die VM mit
+(`effective_preferences`), ohne Audit gab es keine. Die Prüfer verfolgen jeden
+VM-Schritt live im Arbeitsprotokoll.
 
-**Nur Admins (seit 2026-10-27).** Nach dem Sicherheitsaudit des Arbeitsplatzes
-bekommen nur Admins die VM (`routers/agent.py::vm_allowed`): Audit-Läufe von
-Pro-Konten laufen mit Prüfern, aber ohne VM, und Arbeitsplatz, Live-Ansicht,
-VM-Restore, VM-Zeit (`/user_status` `vm_time`, Body-Klasse
-`viewer-has-workspace`) und die GitHub-Zeile (`.workspace-only`) entfallen für
-sie. `AGENT_VM_ACCESS=pro` öffnet die VM wieder für jedes Konto mit Audit
-(`agent_vm.open_to_pro`); erst setzen, wenn die Fixes aus dem Audit live sind. In Prod gesetzt
-seit 2026-10-28 (Max: Pro haben nur er und zwei Freunde), mit dem Deploy nach dem
-zweiten Live-Test.
+**Wer sie hat.** Seit dem Sicherheitsaudit des Arbeitsplatzes (2026-10-27)
+nur Admins, außer `AGENT_VM_ACCESS=all` gibt sie jedem Konto
+(`agent_vm.open_to_all`, bis 2026-10-31 `open_to_pro`). Der frühere Wert `pro`
+(Pro-Konten, mit `AGENT_AUDIT_ACCESS=all` jedes Konto mit Audit) bedeutet
+seitdem dasselbe wie `all`. In Prod steht seit 2026-10-28 `pro` (Max: Pro haben
+nur er und zwei Freunde): Mit dem Deploy des einen Modus hat dort jedes Konto
+die VM, Free mit 20 Minuten VM-Zeit am Tag. Ohne VM entfallen Arbeitsplatz,
+Live-Ansicht, VM-Restore, VM-Zeit (`/user_status` `vm_time`, Body-Klasse
+`viewer-has-workspace`), der Reiter Agent · Beta und die GitHub-Zeile
+(`.workspace-only`).
 
 **Was der Agent bekommt.** Seit 2026-10-27 die Werkbank des Arbeitsplatzes
 (Fly.io Sprites, Ubuntu, bash) als eigener Unix-Nutzer `agent` ohne sudo
@@ -1073,8 +1035,8 @@ zum Arbeitsplatz (gemessen im Testaufbau ohne Memory und Dateien). Max' Wunsch:
 Chat und Arbeit am Rechner bleiben ein Chat, das Modell bekommt die Werkzeuge
 aber erst, wenn die Aufgabe sie braucht.
 
-Seit 2026-10-29 Standard für jedes Konto mit VM, also Pro und Admins (Max nach
-der Probe unten). `AGENT_WORKSPACE_ON_DEMAND=off` ist der Notaus: Dann hat jede
+Seit 2026-10-29 Standard für jedes Konto mit VM (`vm_allowed`; Max nach der
+Probe unten). `AGENT_WORKSPACE_ON_DEMAND=off` ist der Notaus: Dann hat jede
 Nachricht alles von Anfang an, wie zuvor. Eine Nachricht beginnt in **Stufe 1**. Im Systemprompt steht an der Stelle von VM-, GitHub- und
 Plan-Block `AGENT_WORKSPACE_CLOSED_PROMPT` (vor dem Memory-Block). Statt der
 Werkzeuge des Arbeitsplatzes (VM, `browser`, `ask_user`, `request_domain`,
@@ -1113,8 +1075,8 @@ Chat) oder der Nutzer gerade den Browser hat (`agent_workspace.user_has_browser`
 sonst geschlossen. Ist der Zustand des Browsers nicht lesbar, beginnt sie
 geschlossen. Eine offen begonnene Nachricht, die den Arbeitsplatz nicht nutzt,
 lässt die nächste wieder geschlossen beginnen; so bricht der Cache höchstens
-einmal pro Wechsel. Die Tageszähler des Audit-Modus zählen `workspace`: `open`
-(von Anfang an), `opened`, `closed` (`agent_audit_metrics`).
+einmal pro Wechsel. Die Tageszähler (`agent_audit_metrics`) zählen `workspace`: `open`
+(von Anfang an), `opened`, `closed`.
 
 **Probe 2026-10-29** (rund 0,20 $; je 12 Fragen nur im ersten Schritt, im
 Audit-Modus mit geschlossenem Arbeitsplatz, eine Suchrunde): DeepSeek V4.1
@@ -1890,7 +1852,8 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   (`localStorage` `consens.workspaceWidth`). Der Chat behält immer mindestens
   520 px, ein kleineres Fenster nimmt die Breite dem Arbeitsplatz. Darunter
   deckt es den Bildschirm ganz ab. Alles `.workspace-only`: Körperklasse
-  `viewer-has-workspace` aus `/user_status`, `audit_access` und `vm_time`. Die
+  `viewer-has-workspace` aus `/user_status` `vm_time` (bis 2026-10-31 zusammen
+mit `audit_access`). Die
   erste Nachricht des WebSockets meldet an (`{"id_token"}`, nie in der URL),
   dann legt der Server die Browser-VM bei Bedarf an (`record_for_view`, ohne
   Sperre: es ist der Rechner des Nutzers). Der Browser lädt noVNC 1.7.0
@@ -2617,11 +2580,11 @@ App: `docs/github-app-setup.md`). Konfiguration: `GITHUB_APP_ID`,
 `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`,
 `GITHUB_APP_SLUG`; fehlt eine, sagen die Werkzeuge ruhig „GitHub is not set
 up“. Die Werkzeuge und der Prompt `AGENT_GITHUB_PROMPT` (Admin „Agent: GitHub“)
-kommen mit der VM (`vm_allowed`, seit 2026-10-27 nur Admins); die Verbindung
+kommen mit der VM (`vm_allowed`: Admins, mit `AGENT_VM_ACCESS=all` jedes Konto); die Verbindung
 selbst ist für jedes Konto mit Agent gebaut.
 
 *Verbinden* (Einstellungen → Agent · Beta → GitHub, Zeile `#agentGithubSettings`,
-`.workspace-only`, nur sichtbar, wo Audit die VM hat): wie bei Google ein Popup.
+`.workspace-only`, nur sichtbar, wo das Konto die VM hat): wie bei Google ein Popup.
 `POST /agent/github/connect` legt einen einmaligen `state` an
 (`users/{uid}/github_oauth_states/{sha(state)}`, 10 min) und setzt das
 HttpOnly-Cookie `consens_github_oauth` (Pfad `/agent/github`) mit dem
@@ -2737,8 +2700,8 @@ Werkzeugs (live und mit `agent_activity` gespeichert): beim Start `command`/
 `output_truncated`; `ReadOnlyTool.reports`, `DelegationLoop._execute`
 übergibt `report`), am Ende `exit_code`, `duration_ms`, `timed_out` oder
 `outcome` (`unavailable`, `no_time`). Die Updates eines Events ergänzen sich
-(Server `completion.event`, Browser `receive`). Im Audit-Modus steht das
-Ergebnis, das das Modell bekam, als `tool`-Eintrag mit Herkunft `vm` im
+(Server `completion.event`, Browser `receive`). Das Ergebnis, das das Modell
+bekam, steht als `tool`-Eintrag mit Herkunft `vm` im
 Arbeitsprotokoll (Fremdinhalt, `UNTRUSTED_DATA`); die Prüfer lesen es live
 mit, ihr Prompt nennt `vm` und Befehlsergebnisse, und der `end`-Eintrag
 trägt die Summe. `agent-activity.js` zeigt jeden Aufruf kompakt wie ein
@@ -2814,7 +2777,8 @@ Hinweis an die nächste Nachricht),
 ### Sicherheitsregeln des Arbeitsplatzes (seit 2026-10-30)
 
 Max am 2026-10-30, als der Arbeitsplatz für alle Konten aufging
-(`AGENT_AUDIT_ACCESS=all`): eine Regel, die schädliches Verhalten erkennt,
+(damals `AGENT_AUDIT_ACCESS=all`, seit 2026-10-31 `AGENT_VM_ACCESS=all`): eine
+Regel, die schädliches Verhalten erkennt,
 „nicht durch den Agenten, durch unseren Server“. Die größte Lücke war nicht der
 Agent (ihn halten seine eigenen Absagen, die Prüfer und das Gate), sondern die
 Übernahme: In der Live-Ansicht steuert der Nutzer Chrome direkt, Agent und
@@ -2986,88 +2950,56 @@ jedes Konto für sich in Schach.
 
 Tests: `tests/test_workspace_guard.py`.
 
-### Agent freedom: geführt oder frei
+### Vergleichsantworten: parallel, Budget und Nachzügler
 
-`guided` (Standard) ist der bisherige Ablauf: jeder Vergleich fragt alle gewählten
-Vergleichsmodelle. `free` (Opt-in) gibt dem Chatmodell als einziges Ziel die
-bestmögliche Antwort und lässt es den Weg wählen: `compare_models` bekommt das
-Pflichtfeld `models` (`free_compare_args`: das Schema zählt genau die Familien der
-Compare-Auswahl dieses Turns samt Modellnamen als Enum auf, mindestens zwei), der
-Orchestrierungsprompt den Zusatz `FREE_PROMPT`. Das Chatmodell entscheidet so pro
-Vergleich, welche Familien es fragt, und wie viele Runden es braucht (im Chat ohnehin
-nur durch das Tageskonto begrenzt). Die Auswahl im Compare-Picker bleibt der Pool:
-der Nutzer bestimmt, welche Modelle infrage kommen, der Agent, welche er wann fragt.
-Jeder Vergleich speichert die gefragten Familien als `asked` (im geführten Modus die
-ganze Auswahl); Quorum, `failed_models`, `pending_models` und `status` beziehen
-sich auf sie. Welcher Modus lief, steht im Turn unter
-`agent_settings.agent_preferences.autonomy` – die Grundlage für den Vergleich
-free gegen guided.
+Jeder Aufruf von `compare_models` fragt alle gewählten Modelle (`asked`); die
+Auswahl im Compare-Picker wird nicht still verkleinert. Sie laufen gleichzeitig
+(eigener Semaphore je Vergleich, unabhängig von `max_parallel` der
+Worker-Delegation). Damit gleichzeitige Reservierungen sich nicht gegenseitig
+blockieren, erhält jede Antwort als Output-Grenze einen fairen Anteil
+(`_output_shares`: `COMPARISON_BUDGET_SHARE` = 60 % des freien Tageskontos
+geteilt durch die Modellanzahl, umgerechnet mit dem Ausgabepreis des Modells),
+höchstens die Completion-Grenze des Modells (`COMPARISON_OUTPUT_CEILING` =
+65.536). Weil die gespeicherte Review (600 kB) alle Antworttexte enthält,
+teilen sich die Antworten eines Turns zusätzlich `REVIEW_ANSWER_CHARS`
+(300.000 Zeichen, etwa vier je Token); die Grenze fällt nie unter
+`MAX_TOKENS`. Der Agent erhält jede Antwort vollständig im Toolergebnis.
+Vergleichsantworten und Prüferrunden starten bei Konkurrenz mit einer
+kleineren, noch passenden Grenze (mindestens `MAX_TOKENS`, `clamp_floor`),
+statt auf das Settlement anderer Aufrufe zu warten. Eine am Output-Limit
+abgeschnittene Antwort bleibt Evidenz (`answers[].truncated`); endet eine nach
+dem Denken ohne ein Wort (`empty_answer`), versucht die App sie einmal neu.
 
-Zwei Regeln setzt der Server durch, nicht der Prompt:
+**Auf jede Antwort warten** (`_await_answers`; Max, 2026-10-07: das
+sorgfältigste Modell recherchiert oft am längsten), aber nie in die Zeit, die
+Antwort und Prüfung vor dem harten Stopp brauchen (`answer_time_left`: Reserve
+der Denkstufe `ANSWER_RESERVE_SECONDS` plus, mit Prüfern,
+`REVIEW_RESERVE_SECONDS`; Prod: DeepSeek V4 Flash brauchte bis zu 299 s). Dann
+gibt der Vergleich die vorhandenen Antworten an den Agenten und ist fixiert
+(`synthesis_providers`, `_freeze`); laufende Modelle stehen bis dahin als
+`pending_models` in der Review. Eine Antwort, die danach eintrifft, heißt
+`late: true`: Der Agent hat sie nie gelesen, Nutzer und Prüfer sehen sie unter
+Answers. Wer beim Start der Prüfung noch schreibt, wird gestoppt und als
+fehlend mit `late_cutoff` geführt („It was still writing when the answer was
+finished.“). Was ein so gestopptes (oder mitten in der Antwort ausgefallenes)
+Modell schon geschrieben hatte, bleibt als `failed_models[].partial_text`
+gespeichert und steht unter Answers als „Incomplete“, nie im Ergebnis für den
+Agenten; über dem Speicherbudget der Review fällt es zuerst weg.
 
-- **Mindestens zwei Familien je Vergleich.** Unbekannte Familien und weniger als
-  zwei Einträge scheitern schon an der Schema-Validierung, eine doppelt genannte
-  Familie an `ComparisonTools._choose` – jeweils als Toolfehler vor jedem bezahlten
-  Aufruf. Damit hat jeder Vergleich etwas, das Differences und Coverage
-  gegeneinander prüfen können.
-- **Eigene Recherche führt in einen Vergleich.** Hat der Agent für diese
-  Nachricht selbst gesucht und weder verglichen noch eine Seite gelesen, hält der
-  Server eine Antwort, die länger als `DIRECT_REPLY_CHARS` (800) oder am Limit
-  abgeschnitten ist, einmal zurück (`DelegationLoop._tool_reminder`, beide Modi):
-  erst `compare_models` (oder `read_source` für eine Seite, nach der der Nutzer
-  fragt). Kommt sie danach noch einmal, steht sie. Bis 2026-10-14 hielt
-  `_direct_reply_reminder` jeden langen Klartext ohne Vergleich einmal zurück und
-  verlangte `answer`; bis 2026-10-11 verlangte `_free_floor` im freien Modus für
-  jede direkte Antwort einen Vergleich.
-
-Danach laufen Synthese und Judges unverändert; der Judge kommt in beiden Modi
-am Ende, solange der Nutzer die Antwortprüfung nicht ausgeschaltet hat. Ältere Turns ohne `autonomy` gelten bei der Recovery-Identität als
-`guided` (`stored_preferences`).
-
-`compare_models` hat ein Entscheidungsfeld: `depth` (Standard `full`) steuert
-die Längenvorgabe der Vergleichsmodelle: `quick` für kurze Sachfragen, kleine
-Folgefragen und Alltagsrat (etwa 1500 Zeichen, falls die Aufgabe nicht mehr
-braucht), `full` für Analysen, Entscheidungen, Gesundheit, Recht, Geld und
-ausführliche Ausgaben (keine Längenvorgabe). Im geführten Modus antworten alle
-gewählten Vergleichsmodelle in beiden Stufen; die Auswahl im Compare-Picker wird nicht
-still verkleinert. Im freien Modus wählt das Chatmodell sie pro Vergleich (`models`).
-Die Zeile unter „Comparison n“ ist das `status_update` des Aufrufs. Die Felder
-`reason` und `next_step` (bis 2026-10-11) nimmt das Schema noch versteckt an und
-ignoriert sie, damit ein Modell, das sie aus Gewohnheit schickt, keinen Toolfehler
-bekommt.
-
-Alle Vergleichsmodelle laufen gleichzeitig (eigener Semaphore je Vergleich,
-unabhängig von `max_parallel` der Worker-Delegation); Differences und Coverage
-haben eigene Plätze. Damit gleichzeitige Reservierungen sich nicht gegenseitig
-blockieren, erhält jede Vergleichsantwort als Output-Grenze einen fairen Anteil
-(60 % des freien Tageskontingents geteilt durch die Modellanzahl), höchstens die
-Completion-Grenze des Modells. Weil der gespeicherte Review (600 kB) alle
-Antworttexte enthält, teilen sich die Vergleichsantworten eines Turns zusätzlich
-300000 Zeichen (etwa vier Zeichen je Token); die Grenze fällt nie unter
-`MAX_TOKENS`. Das Chatmodell erhält jede Antwort vollständig im Toolergebnis
-(bis 2026-10-14 bekam die Steuerung je Antwort höchstens `result_chars` Zeichen,
-nur der Antwortschritt den vollen Text). Vergleichsantworten und die Schritte des
-Chatmodells nach einem Vergleich starten bei Konkurrenz mit einer kleineren, noch
-passenden Grenze (mindestens `MAX_TOKENS`), statt auf das Settlement anderer
-Aufrufe zu warten.
-
-Im Standard `all` (seit 2026-10-07) wartet die Synthese auf jedes Modell, seit
-2026-10-08 aber nur so lange, wie danach noch Zeit für Antwort und Prüfung bleibt:
-Liegen mindestens zwei Antworten vor und ist bis zum harten Stopp des Turns nur
-noch die Reserve der Denkstufe übrig (`ANSWER_RESERVE_SECONDS`, bei „max“ 10 min),
-beginnt die Synthese, und Nachzügler gelten wie unten als spät (Prod: DeepSeek V4
-Flash brauchte bis zu 299 s).
-
-Prod-Zeiten (llm_calls-Receipts, 2026-10-09 bis 10-14, 34 Läufe mit Vergleich,
-alle erfolgreich): gesamt Median 100 s, p90 181 s; davon Steuer-Schritt bis zum
-Vergleich ≈ 9 s (keine messbare Vorab-Suche), Vergleich Median 40 s/p90 121 s,
-Antwortschritt ≈ 7–10 s, Judges ≈ 12 s. Die Spitze bestimmt der Nachzügler:
-Auswahlen mit DeepSeek V4 Flash (über den Free-Default der Familie oder
-gespeicherte Auswahlen; die Presets hatten schon V4.1) brauchten im Median 124 s
-statt 62 s mit V4.1 Flash, deshalb migriert V4 Flash seit 2026-10-15 auf V4.1
-Flash (`cfg.DEEPSEEK_MODEL_MIGRATIONS`). Die Zeiten des Messskripts (unten, Median
-231 s, Lücken um 300 s) lagen deutlich darüber; in Prod trat keine Lücke über
-60 s nach dem Vergleich auf.
+**Bis 2026-10-31 (Vergleichsmodus).** **Agent freedom** `free` (Opt-in) ließ
+das Chatmodell je Vergleich die Familien wählen (Pflichtfeld `models`,
+mindestens zwei, `free_compare_args`, `FREE_PROMPT`, Turn-Feld `autonomy`),
+`guided` fragte alle. **Answer start** `balanced`/`fast` wartete bei `quick`
+nur auf ein Quorum (die Hälfte, mindestens zwei) plus Nachfrist; seit
+2026-10-07 war `all` Standard. Eigene Recherche führte in einen Vergleich
+(`_tool_reminder`, `DIRECT_REPLY_CHARS` = 800; davor `_direct_reply_reminder`
+und `_free_floor`). Eine späte Antwort gehörte weder zum Antworttext noch zur
+Prüfbasis der Judges. Prod-Zeiten mit Vergleich (llm_calls, 2026-10-09 bis
+10-14, 34 Läufe): gesamt Median 100 s, p90 181 s; Steuer-Schritt bis zum
+Vergleich ≈ 9 s, Vergleich Median 40 s/p90 121 s, Antwortschritt ≈ 7–10 s,
+Judges ≈ 12 s. Die Spitze bestimmte der Nachzügler: Auswahlen mit DeepSeek V4
+Flash brauchten im Median 124 s statt 62 s mit V4.1 Flash, deshalb migriert V4
+Flash seit 2026-10-15 auf V4.1 Flash (`cfg.DEEPSEEK_MODEL_MIGRATIONS`).
 
 #### Wartezeit im Server (seit 2026-10-21)
 
@@ -3095,10 +3027,11 @@ Transaktion (sechs startende Antworten: eine statt sechs, die Live-Zeilen aller
 Modelle zusammen). Jede Transaktion liest ihre Dokumente in einem Rundgang
 (`get_all`). Streams und die SSE-Weitergabe brauchen die Lauf-Condition nicht
 mehr. Review-Speicherungen schreiben außerhalb des Vergleichs-Locks, und wer
-als Nächster schreibt, nimmt den neuesten Stand mit; überholte entfallen. Hängt
-ein Prüfer trotzdem, fragt `_hedged_judge_call` nach 15 s dasselbe Modell noch
-einmal und nach 30 s die nächste Familie (Chat: Gemini); die erste Antwort
-gewinnt, statt 90 s bis zum Familienwechsel.
+als Nächster schreibt, nimmt den neuesten Stand mit; überholte entfallen. Hing
+ein Judge des Vergleichsmodus trotzdem, fragte `_hedged_judge_call` nach 15 s
+dasselbe Modell noch einmal und nach 30 s die nächste Familie; die erste
+Antwort gewann (heute nur noch in der Consensus-Pipeline). Die Schlussrunde der
+Prüfer hat ihr eigenes Hedging (siehe „Ein Fehler kostet Markierungen“).
 
 `tests/test_agent_tempo.py` spielt einen Lauf mit sechs Modellen gegen eine
 Datenbank mit Latenz je Rundgang und einem Konto-Lock; er schlägt an, sobald ein
@@ -3109,141 +3042,58 @@ Rundgangszeit; mit dem gebündelten Journal (2026-10-22) bei 10 ms je Rundgang
 1,7 → 1,15 s, bei 20 ms 3,6 → 2,3 s, die Journal-Transaktionen je Lauf 28 → 16,
 Review-Speicherungen 12 → 9. Zeiten immer gegen OpenRouters eigene Zeiten
 legen, bevor ein Modell oder Anbieter als langsam gilt.
-Mit `balanced` wartet sie seit 2026-10-06 bei `full` auf
-jedes Modell: Das sorgfältigste Modell recherchiert oft am längsten und darf
-nicht wegfallen; wer schneller will, wählt `fast`. Bei `quick` gilt das Quorum
-(die Hälfte, mindestens zwei). Danach bekommen Nachzügler noch das 1,25-fache
-der Zeit bis zum Quorum, mindestens zwei Sekunden. Dann gibt der Vergleich die
-vorhandenen Antworten an den Agenten und ist damit fixiert (`synthesis_providers`,
-`ComparisonTools._freeze`). Laufende Modelle stehen bis dahin als
-`pending_models` im Review. Eine Antwort, die danach eintrifft,
-wird mit `late: true` markiert: Seit 2026-10-07 gehört sie weder zum
-Antworttext noch zur Prüfbasis von Differences und Coverage (der Text konnte sie
-nicht kennen; sonst entstünde „not addressed“-Rauschen) und steht nur unter
-Answers. Wer beim Start der Judges noch schreibt, wird
-gestoppt und als fehlend mit `late_cutoff` geführt; die Prüfung nutzt die
-übrigen Antworten. Der Antworttext bleibt in jedem Fall unverändert. Was ein so
-gestopptes (oder mitten in der Antwort ausgefallenes) Modell schon geschrieben
-hatte, bleibt als `failed_models[].partial_text` gespeichert und steht unter
-Answers als „Incomplete“ — lesbar, aber weder in der Antwort noch in ihrer
-Prüfung, weil ein halber Text beim Differences-Judge falsche Auslassungen
-erzeugen würde (wie unterbrochene Antworten im Consensus-Modus).
 
-## Antwortversionen und Prüfungen
+## Antwortversion und Prüfung
 
-Nach den Vergleichen schreibt das Chatmodell die Antwort selbst, als Klartext in
-einem Schritt ohne Toolcalls (Ablauf unter „Die Antwort schreibt der Agent
-selbst“). Vorherige Tools werden zuerst ausgeführt, ebenso die Prüfung aller
-unterstützenden Agenten. Erst wenn dieser Schritt vollständig endet, prüfen
-Differences und Coverage genau den sichtbaren Text. Text neben einem Toolcall ist
-eine Einleitung und zählt nicht als Antwort. Der Schritt wird wie jeder
-Modellaufruf abgerechnet. Bei Abbruch oder Tokenlimit bleibt der Teiltext
-ungeprüft erhalten; die Judges starten nicht.
-Die Satzprüfung (Coverage) läuft seit 2026-10-17 schon beim Schreiben mit:
-Sobald 16 Sätze fest stehen (ihre Zeile und die folgende sind vollständig),
-prüft ein Coverage-Fenster sie gegen die Modellantworten. Nach dem letzten
-Wort übernimmt die Prüfung diese Ergebnisse für jeden wortgleichen Satz und
-prüft nur den Rest, in parallelen Fenstern zu 16 Sätzen; Differences läuft wie
-bisher erst am fertigen Text. Grund: Für echte Nutzer kam die Prüfung im Median
-25 s, in jedem zehnten Lauf über 99 s nach dem letzten Wort. Wird der gezeigte
-Text zurückgezogen (Toolcall danach), stoppen seine Fenster. Ein Fenster mehr
-kostet etwa 0,25 Cent. Mit ausgeschalteter Antwortprüfung (`judges: off`)
-startet kein Fenster (`CoveragePrefetch._enabled`) und es gibt keine Vorschau.
-Seit 2026-10-18 sieht der Nutzer die Fenster auch früher: Sobald die Antwort
-fest steht, gehen die schon fertigen Fenster und danach jedes weitere, sobald
-es fertig ist, als vorläufige Satzmarken an die offene Seite (Event
-`coverage_preview`), während Differences noch läuft. Es sind nur
-Coverage-Stimmen für Sätze, die ein Fenster schon beantwortet hat (ein noch
-laufender Satz bleibt unmarkiert statt grau), gebunden an den Hash genau
-dieses Antworttexts; kein Score, keine Widersprüche, nichts davon wird
-gespeichert. Die fertige Prüfung ersetzt sie. Gespeicherte Chats und der
-Review-Snapshot bleiben unverändert. Ein zurückgezogener Text bekommt nie
-welche: Vorschauen gibt es erst nach dem Festschreiben, und der Browser
-verwirft sie bei einem Rückzug, einem anderen Text oder einer Prüfung, die
-ohne Ergebnis endet.
-Die Schreibregeln stehen im Agent-Prompt (`AGENT_ANSWER_SECTION`, „WRITING THE
-ANSWER“) mit der eigenen beratenden Stimme des Chatmodells. Es schreibt aus seinem
-eigenen Kontext: Gesprächsverlauf, Toolergebnisse mit den vollständigen
-Vergleichsantworten und Quellen mit Auszügen (siehe „Quellenauszüge für die
-Antwort“), gelesene Seiten und Ergebnisse unterstützender Agenten, die vorher
-geprüft sein müssen. Überarbeitung entzieht alten Ergebnissen die Freigabe. Bis
-2026-10-14 schrieb ein eigener Antwortschritt ohne Tools und Suche die Antwort aus
-einer Evidenznachricht (`AGENT_ANSWER_PROMPT`, ab 2026-10-11 mit App-Fakten, ab
-2026-10-13 mit einer Zusammenfassung der Nachricht aus `turn_summary`), weil er
-Steuer-Prompt und frühere Schritte nicht sah.
+Der Agent schreibt die Antwort selbst, als Klartext in einem Schritt ohne
+Toolcalls (Ablauf unter „Die Antwort schreibt der Agent selbst“). Vorherige
+Tools werden zuerst ausgeführt, ebenso die Prüfung aller unterstützenden
+Agenten. Erst wenn dieser Schritt vollständig endet, zeigt
+`DelegationLoop._finish_merged` den Text ganz, fixiert ihn als Version
+(`capture`: `versions[]` mit Hash und den Vergleichen davor; App-Eintrag
+`answer_fixed` im Protokoll; ab hier nimmt `request_hold` keinen Prüfer-Halt
+mehr an), und die App ruft `audit_answer` über `app_registry`
+(`_finish_review`; Aktivität „Reviewing the answer…“ / „Reviewed the answer“):
+Die Prüfer geben ihre Schlussrunde (siehe „Ein Modus“). Das gilt für jede
+Antwort, auch eine ohne Vergleich und eine aus dem Wrap-up an einer
+Turn-Grenze; bis 2026-10-31 prüften nur nach einem Vergleich die Judges, eine
+direkte Antwort blieb ungeprüft (Review `direct`, nur mit gelesenen Seiten
+gespeichert). Danach lehnen `compare_models` und `read_source` ab; die erste
+fixierte Antwort bleibt für diesen Turn unverändert, eine Überarbeitung gibt es
+erst mit einer neuen Nachricht. Text neben einem Toolcall ist eine Notiz und
+zählt nicht als Antwort. Der Schritt wird wie jeder Modellaufruf abgerechnet.
+Bei Abbruch oder Tokenlimit bleibt Antworttext, der schon zu sehen war, als
+ungeprüfte Teilantwort gespeichert und lesbar, auch in Recovery
+(`finish_run` nutzt `completion.text`); zurückgehaltener Text wird nicht zur
+Antwort, und die Prüfer starten nicht. Eine fixierte Antwort gilt als
+vollständig, was immer aus ihrer Prüfung wurde: kein „may be incomplete“
+darunter (`agent-review.js` `reviewedAnswer`). Der sichtbare Antworttext wird
+nicht nachträglich durch Stichwortfilter verändert. Text eines Schritts
+erscheint erst ab 300 Zeichen und nur, solange kein Toolcall begonnen hat;
+kürzere Antworten wie Begrüßungen kommen am Schrittende auf einmal
+(Einzelheiten unter „Was der Nutzer sieht“).
 
 Seit 2026-10-07 zeigt der Schritt, der die Antwort schreiben kann (seit
-2026-10-14 jeder Schritt mit Vergleichstools), während des Denkens kurze Auszüge
+2026-10-14 jeder Schritt des Agenten), während des Denkens kurze Auszüge
 aus dem Provider-Reasoning als eine laufend ersetzte Fortschrittszeile (sonst
 wirkten Minuten bei hoher Denkstufe wie ein hängender Lauf); in Antwort und
 Kontext gelangt davon nichts. Seit 2026-10-08 laufen die Auszüge auch nach
-32.000 Reasoning-Zeichen weiter (gespeichert wird nur bis dahin). Denkende Modelle
-bekommen zusätzlichen Platz im Ausgabebudget; Modelle, deren Reasoning
+32.000 Reasoning-Zeichen weiter (gespeichert wird nur bis dahin). Denkende
+Modelle bekommen zusätzlichen Platz im Ausgabebudget; Modelle, deren Reasoning
 abgeschaltet ist (Effort `none`, Kimi K2.6), nicht. Zugelassen wird ein Schritt
-mit dem Steuer-Budget (`AGENT_MAX_OUTPUT_TOKENS` plus 12.288 Tokens Denk-Reserve),
-das Antwortbudget darüber reserviert er einmal (siehe Ablauf und Grenzen-Tabelle).
-Verbraucht ein Schritt trotzdem alles fürs Denken, ohne Text oder vollständigen
-Toolcall (oder hört nach dem Denken ohne Text auf), wiederholt die App ihn einmal
-mit leichterer Denkstufe: bewusst zuerst `low` (live in 15 s bei gleicher
-Qualität), nur ohne diese Stufe `minimal` oder `none`, nie höher als die
-gewählte. Die leichtere Stufe bleibt für den Rest des Turns, auch für die Antwort
-(bis 2026-10-14 begann der Antwortschritt wieder mit der gewählten Stufe).
-Scheitert auch das, meldet sie `output_limit` statt eines Provider-Fehlers und
-rät zu einer niedrigeren Denkstufe oder einem anderen Chatmodell. Lehnt der
-Provider einen Schritt nach bezahlten Vergleichen mit 429 ab, bevor er etwas
-erzeugt (kostenlos; OpenAI unter ZDR häufig), versucht die App es nach
-Retry-After (ohne Angabe 3 s, höchstens 10 s, nie kurz vor dem harten Stopp)
-genau einmal erneut (`_answer_attempt`), statt die bezahlten Vergleiche ohne
-Antwort zu beenden. Der sichtbare Antworttext wird nicht nachträglich durch
-Stichwortfilter verändert.
-Nach der Antwort führt der Server die Prüf-Tools einschließlich ihrer
-Fallback-Judges selbst aus; das Modell ruft sie nicht. Zusätzliche
-Erinnerungsrunden entfallen. Das Backend lässt nach Vergleichen keinen stillen
-ungeprüften Abschluss zu. Text eines Schritts erscheint erst ab 300 Zeichen und
-nur, solange kein Toolcall begonnen hat; kürzere Antworten wie Begrüßungen kommen
-am Schrittende auf einmal (Einzelheiten unter „Was der Nutzer sieht“). Bei Abbruch
-bleibt Antworttext, der schon zu sehen war, gespeichert und ungeprüft lesbar, auch
-in Recovery; zurückgehaltener Text wird nicht zur Antwort.
-
-Differences und Coverage verwenden im Beta-Chat ausschließlich die
-Standard-Judges aus `app_config/models.judge_models`, auch bei einem teuren
-Chatmodell. Seit 2026-10-04 gilt die Prioritätsliste ohne Fremd-Familien-Zwang
-(standardmäßig Luna, auch bei OpenAI-Chats); seit 2026-10-07 laufen zwei
-Differences-Durchläufe mit Luna parallel, ihre Funde werden zusammengeführt.
-Nach dem begrenzten Retry folgt der konfigurierte
-Gemini-Standard-Judge, aktuell Gemini 3.5 Flash-Lite, ausdrücklich auch bei
-Gemini als Chatmodell. Ist Gemini bereits der primäre Judge, übernimmt der
-OpenAI-Standard-Judge. Beide Prüfungen behalten die niedrige Judge-Denkstufe;
-die Pro-Tabelle und weitere Modellfamilien werden nicht als Ausweichstufen genutzt.
-
-**Nach der Antwort.** Ein Schritt ohne Toolcalls beendet die Steuerung.
-`DelegationLoop._finish_merged` zeigt den Text vollständig, fixiert ihn
-(`capture`) und prüft ihn nach Vergleichen mit `judge_answer` über `app_registry` (`_finish_review`);
-die Prüfung bleibt eine eigene sichtbare Zeile („Checked the answer“). Mit
-ausgeschalteter Antwortprüfung (`judges: off`) schließt `skip_review` die
-Antwort ohne Judges ab, siehe „Antwortprüfung ausschalten“. Danach
-lehnen `compare_models` und `read_source` ab. Bis 2026-10-14 beendete das Tool
-`answer` die Steuerung, lief nach allen anderen Aufrufen seines Schritts, und
-erst danach schrieb ein eigener Schritt die Antwort.
-
-**Antwort ohne Vergleich (seit 2026-10-11).** Schreibt der Agent ohne jeden
-Vergleich, ist das die direkte Antwort (`ComparisonTools.direct`): gestreamt wie
-jede Antwort, volles Antwortbudget, keine Judges, und keine Review wird
-„succeeded“. Eine Review wird nur gespeichert, wenn Seiten gelesen wurden (Status
-`direct`, `capture()` fixiert den Text ohne Version). Nach eigener Websuche ohne
-Vergleich und ohne gelesene Seite hält die App eine lange Antwort einmal zurück
-(siehe „Eigene Recherche“): Recherche ist Sache eines Vergleichs. Nach einem Read
-ist kein Vergleich mehr möglich, also trägt die gelesene Seite die Antwort. Das
-Antwortbudget über dem Steuer-Budget darf das Tageslimit überziehen
-(`_admit_chat_step`), damit eine direkte Antwort kurz vor dem Limit nicht gekürzt
-wird. Bricht der Schritt ab, bleibt der gestreamte Teiltext als Antwort
-(`finish_run` nutzt `completion.text`, solange die Review keine Vergleiche hat).
-Bis 2026-10-14 rief der Orchestrator dafür `answer`, der Antwortschritt schrieb
-mit `AGENT_DIRECT_ANSWER_PROMPT`, und `answer` lehnte nach eigener Suche ohne
-gelesene Seite ab und ebenso, wenn ein Vergleich desselben Batches scheiterte
-oder weniger als zwei Antworten bekam (`compare_failed`): Der Orchestrator hätte
-das Ergebnis sonst nie gesehen. Heute ist die Antwort ein eigener Schritt ohne
-Toolcalls, also liegt jedes Toolergebnis vor, bevor er schreibt.
+mit dem Steuer-Budget (`AGENT_MAX_OUTPUT_TOKENS` plus 12.288 Tokens
+Denk-Reserve), das Antwortbudget darüber reserviert er einmal (siehe Ablauf und
+Grenzen-Tabelle). Verbraucht ein Schritt trotzdem alles fürs Denken, ohne Text
+oder vollständigen Toolcall (oder hört nach dem Denken ohne Text auf),
+wiederholt die App ihn einmal mit leichterer Denkstufe: bewusst zuerst `low`
+(live in 15 s bei gleicher Qualität), nur ohne diese Stufe `minimal` oder
+`none`, nie höher als die gewählte. Die leichtere Stufe bleibt für den Rest des
+Turns, auch für die Antwort. Scheitert auch das, meldet sie `output_limit`
+statt eines Provider-Fehlers und rät zu einer niedrigeren Denkstufe oder einem
+anderen Chatmodell. Lehnt der Provider einen Schritt nach einem Vergleich mit
+429 ab, bevor er etwas erzeugt (kostenlos; OpenAI unter ZDR häufig), versucht
+die App es nach Retry-After (ohne Angabe 3 s, höchstens 10 s, nie kurz vor dem
+harten Stopp) genau einmal erneut (`_answer_attempt`).
 
 Bis 2026-10-15 prüfte `check_contradictions` danach große faktische
 Widersprüche als Hintergrundjob gegen die von den Modellen zitierten Quellen.
@@ -3251,30 +3101,6 @@ Die Prüfung ist entfernt: Sie lief erst nach der fertigen Antwort, änderte sie
 nie, der Agent sah ihr Ergebnis nicht, und sie kam meist ohne Urteil zurück.
 Einen Faktenstreit klärt der Agent vor dem Schreiben selbst mit `read_source`
 (siehe „Quellen nachlesen“).
-
-Die Anzeige unterscheidet vollständig, teilweise, fehlgeschlagen, fehlend,
-abgebrochen und aus („Answer check off“, vom Nutzer ausgeschaltet; nur in
-Aktivität und Reader, nicht als Zeile unter der Antwort). Vollständig bedeutet, dass beide Judges ihre Aufgabe abgeschlossen
-haben und die Vergleichsgrundlage vollständig ist. Modellübereinstimmung ist
-keine unabhängige Faktenprüfung. Ohne Vergleich läuft keine automatische Prüfung.
-
-Die Prüfung bindet den SHA-256 der Antwort und den Hash der konkret verwendeten
-Modellantworten samt Quellen. Nach der Prüfung wird der Text nicht umgeschrieben.
-Die erste fertige Synthese bleibt für diesen Turn unverändert. Auch
-`finalize=false` öffnet keine weitere Schreib-/Prüfrunde; das Feld bleibt nur zur
-Kompatibilität akzeptiert. Weitere Vergleiche sind nur vor der Synthese möglich.
-Überarbeitungen erfolgen erst auf eine neue Nutzernachricht. Ankündigungen weiterer
-Tool-Aufrufe zählen noch nicht als Syntheseversion. Jeder Teilvergleich behält
-seine eigene Prüfung: dieselben Modelle zählen nicht mehrfach als unabhängige
-Stimmen. Nicht abgedeckte Aussagen bleiben in der Coverage sichtbar.
-
-Die Synthese spricht als beratender Assistent und begründet Empfehlungen anhand
-der Nutzerkriterien und der verglichenen Aussagen. Persönliche Präferenzen oder
-Erlebnisse der Vergleichsmodelle werden nicht übernommen. Bedingungen und
-Unsicherheit bleiben an der jeweiligen Aussage; Fakten und daraus abgeleitete
-Empfehlung werden klar formuliert. Unbelegte Superlative und eine künstliche
-Einstimmigkeit sind nicht vorgesehen. Die Judges prüfen weiterhin auch
-Empfehlungen; tatsächliche Unterschiede bleiben sichtbar.
 
 Aktivitäten verwenden die bestehende Agent-Seitenleiste mit Status, Usage und
 aufklappbaren Details. Oberhalb der Antwort steht ein überlappender Modellstapel
@@ -3287,70 +3113,59 @@ zeigt sie die gemessene Summe aus Input und Output. Es werden keine Tokens aus
 Zeichen geschätzt. Nach Abschluss/Abbruch endet die Animation; gespeicherte
 Ansichten bleiben statisch. Reduced Motion und Forced Colors deaktivieren den
 Schimmer.
-Während Differences und Coverage die feste Antwort prüfen, läuft ein leichter
-Lichtschimmer im Takt der Thinking-Überschrift über die Antwort (Overlay in
-Seitenfarbe, kein Textverlauf, damit Tabellen, Code und Links lesbar bleiben);
-er blendet aus, sobald die Prüfung endet. Seit 2026-10-20 ist er ein schmaler
-Streifen, der sich nur per `transform` innerhalb der Antwort bewegt: Der Browser
-schiebt ihn über einmal gemalten Text. Das frühere Overlay in Antwortgröße mit
-wanderndem Hintergrund malte die ganze Antwort in jedem Bild neu (gemessen
-126 Malvorgänge in 3 s, p95-Bildzeit 50 ms; jetzt keiner, 16,7 ms; Apple-Audit D1). Schon unter dem Schimmer erscheinen
-die vorläufigen Marken fertiger Coverage-Fenster (seit 2026-10-18): leise, jede
-neue Marke blendet einmal ein, ohne Textmarker-Strich und ohne Score. Seit
-2026-10-21 sind sie neutral: eine gepunktete Linie in Tinte unter jedem schon
-verglichenen Satz, ohne Farbe, Quote oder Urteil, auch nicht im Hover („The
-result appears once the whole answer is checked“). Farbe kommt erst mit dem
-Ergebnis (Max: vorher wurde ein Satz gelb, das Gelb verschwand, dann wurde ein
-anderer rot).
-Mit der fertigen Prüfung ersetzen die endgültigen Markierungen die vorläufigen
-im selben Moment und streichen sich beim ersten Mal in
-Lesereihenfolge an wie ein Textmarker (höchstens etwa 0,9 s Versatz, Badges
-folgen); ein vorläufig markierter Satz behält seine Linie, bis seine Farbe
-kommt, sonst blendet sie weich aus. Erneutes Rendern derselben
-Antwort und gespeicherte Chats zeigen sie ohne
-Animation; Reduced Motion und Forced Colors verzichten auf beides.
+Während die Prüfer die feste Antwort prüfen, läuft ein leichter Lichtschimmer
+im Takt der Thinking-Überschrift über die Antwort (Overlay in Seitenfarbe, kein
+Textverlauf, damit Tabellen, Code und Links lesbar bleiben); er blendet aus,
+sobald die Prüfung endet. Seit 2026-10-20 ist er ein schmaler Streifen, der
+sich nur per `transform` innerhalb der Antwort bewegt: Der Browser schiebt ihn
+über einmal gemalten Text. Das frühere Overlay in Antwortgröße mit wanderndem
+Hintergrund malte die ganze Antwort in jedem Bild neu (gemessen 126
+Malvorgänge in 3 s, p95-Bildzeit 50 ms; jetzt keiner, 16,7 ms; Apple-Audit D1).
+Die Marken der Prüfer erscheinen erst, wenn alle fertig sind (siehe „Anzeige“
+unter „Ein Modus“). Vorläufige Satzmarken fertiger Coverage-Fenster
+(`coverage_preview`, 2026-10-18 bis 2026-10-31, seit 2026-10-21 als neutrale
+gepunktete Linie) gibt es mit den Judges nicht mehr.
 Rund um die Antwort gilt ein Farbsystem: Antworttext `--ink`; Thinking samt
 Verlauf und Tools, Aktionen und Evidenzlinks `--ink-2` (Hover `--ink`, Aktionen
 einheitlich Gewicht 500); Zähler und Metatext `--ink-3`. Es gibt kein separates
 Schwarz mehr.
-Unter der Antwort stehen ein kompakter Prüfstatus und Links zu Widersprüchen,
-Einzelantworten und Quellen. Rote Textmarkierungen öffnen unmittelbar die
-passende Widerspruchskarte im gemeinsamen Consensus-Antwortleser. Modelllinks
-zeigen dort die formatierte Originalantwort. Bei mehreren Teilvergleichen wählt
-ein beschriftetes Auswahlfeld die konkrete Markierungsgrundlage. Kontext und
-frühere Antwortversionen stehen in den Details des Lesers. Live-Ansicht und
-gespeicherter Verlauf verwenden denselben Review-Snapshot.
-Fehlt nur eine Modellantwort, während Differences und Coverage vollständig
-vorliegen, bleibt die Zeile unter der Antwort leer; der Leser nennt das Modell
-und den Grund. Unter der Antwort steht nur etwas, wenn die Prüfung selbst
-eingeschränkt ist (weniger als zwei Antworten, fehlender Differences- oder
-Coverage-Judge).
-Der Review bleibt technisch `partial`; fehlende Stimmen werden nicht als
-Zustimmung gezählt. `Answers` zählt nur vollständige Antworten, der Leser zeigt
-auch die ausgefallenen Modelle und bei neuen Runs deren sicheren Fehlergrund
-(z. B. Provider-Rate-Limit). Fehlende Prüfer und ungeprüfte Sätze werden separat
-erklärt. Alte gespeicherte Runs nutzen dafür
-ihre vorhandenen Judge-Metadaten; sie werden nicht erneut kostenpflichtig geprüft.
-Grüne Markierungen zeigen die Zustimmung per Mausvorschau oder Tastaturfokus.
-Ein nachlaufendes Scroll-/Resize-Ereignis positioniert die Vorschau neu, wenn der
-Zeiger noch auf der Passage steht; auch nachträglich angeschlossene Mäuse werden
-erkannt. Klick/Tap öffnet weiterhin die vollständigen Details.
-Die Quellenansicht vereinigt Quellen aus der Chat-Recherche, allen
-Vergleichsgrundlagen und expliziten Links in den Antwortversionen. Sie ist auch ohne
-Vergleich verfügbar. Provider-/Suchquellen werden auf dem Turn gespeichert;
-alte Turns können sie weiterhin aus ihrem Aktivitätsjournal darstellen.
-Im Antworttext erscheinen Quellen als hochgestellte Nummern mit der gemeinsamen
-Quellenvorschau bei Hover oder Tastaturfokus. Ausgeschriebene URLs werden durch
-diese Verweise ersetzt; Namen wie „Self-Consistency“ bleiben lesbar. Dieselbe
-Darstellung gilt für gespeicherte und unvollständige Antworten, frühere Versionen
-und Vergleichsantworten. Die Nummerierung folgt der jeweiligen Quellenliste;
-der gemeinsame Turn-Katalog bleibt beim Grundlagenwechsel gleich. Originaltext
-und Judge-Bindung bleiben unverändert. Code und Zahlennotation wie `[1]` werden
-nicht als Quellen interpretiert.
 
-Der Composer zeigt Chatmodell und Compare-Auswahl. Reasoning ist eine zweite
-Ebene im Chatmodellmenü; der während einer Unterhaltung gesperrte Modusschalter
-belegt dort keinen Platz. Der Modellstapel verwendet dezente 15-px-Icons.
+**Gespeicherte Turns des Vergleichsmodus** (bis 2026-10-31) bleiben lesbar,
+ohne neuen Modellaufruf: Der Server liefert ihre Review unverändert
+(`turn_detail`), `agent-review.js` rendert sie über den Vergleichspfad (Review
+ohne `mode: "audit"`): kompakter Prüfstatus (`states`: „Checked“, „Partly
+checked“, „Answer check failed“ …; „Answer check off“ mit dem Satz, dass die
+Prüfung damals ausgeschaltet war), Agreement-Score, Differences- und
+Coverage-Marken im gemeinsamen Consensus-Antwortleser (rote Markierungen öffnen
+die Widerspruchskarte, grüne zeigen die Zustimmung per Mausvorschau oder
+Tastaturfokus), Einzelantworten mit Ausfallgründen, Quellen und bei mehreren
+Teilvergleichen ein beschriftetes Auswahlfeld der Markierungsgrundlage; die
+Karte eines geprüften eingefügten Texts (`passage-check.js`,
+`review.passage_check`) steht weiter über der Antwort, die Zeile gespeicherter
+Judges in der Aktivität ebenso. Fehlte nur eine Modellantwort, bleibt die Zeile
+unter der Antwort leer, und der Leser nennt Modell und Grund. Alte Runs nutzen
+ihre gespeicherten Judge-Metadaten und werden nie erneut geprüft. Entfernt
+sind nur die Erzeuger (Judges auf der Agent-Antwort, `check_text`,
+Coverage-Vorlauf, `coverage_preview`, die Live-Textprüfung).
+
+Die Quellenansicht vereinigt Quellen aus der eigenen Recherche des Agenten,
+allen Vergleichen, gelesenen Seiten und expliziten Links in den
+Antwortversionen; sie gibt es auch ohne Vergleich. Provider-/Suchquellen werden
+auf dem Turn gespeichert; alte Turns können sie weiterhin aus ihrem
+Aktivitätsjournal darstellen. Im Antworttext erscheinen Quellen als
+hochgestellte Nummern mit der gemeinsamen Quellenvorschau bei Hover oder
+Tastaturfokus. Ausgeschriebene URLs werden durch diese Verweise ersetzt; Namen
+wie „Self-Consistency“ bleiben lesbar. Dieselbe Darstellung gilt für
+gespeicherte und unvollständige Antworten, frühere Versionen und
+Vergleichsantworten. Die Nummerierung folgt der jeweiligen Quellenliste; der
+gemeinsame Turn-Katalog bleibt beim Grundlagenwechsel gleich. Der Originaltext
+und seine Bindung an die Review (Hash) bleiben unverändert. Code und
+Zahlennotation wie `[1]` werden nicht als Quellen interpretiert.
+
+Der Composer zeigt das Chatmodell im Chip und darunter die Prüfer („N AIs
+cross-check“). Reasoning ist eine zweite Ebene im Chatmodellmenü; der während
+einer Unterhaltung gesperrte Modusschalter belegt dort keinen Platz. Der
+Modellstapel verwendet dezente 15-px-Icons.
 
 Die Denkphase zeigt kurze Fortschrittsauszüge: vorhandene Provider-
 Zusammenfassungen haben Vorrang, sonst werden vollständige Sätze aus sichtbarem
@@ -3397,314 +3212,226 @@ danach las ein neuer Aufruf desselben Modells Verlauf und Antworten noch einmal
 von vorn, ohne Prompt-Cache, und schrieb (57 s). Das zweite Lesen kostete rund
 20.000 Tokens. Der neue Aufruf kannte nur, was die App ihm in die Evidenz legte,
 daher das Flickwerk aus App-Fakten, Nachrichtenzusammenfassung und Feldsätzen
-(2026-10-11 bis 10-13). Jetzt schreibt der Aufruf, der die Antworten liest,
+(2026-10-11 bis 10-13). Jetzt schreibt der Aufruf, der die Ergebnisse liest,
 direkt weiter: kein zweites Lesen, Cache für den ganzen Turn, und der Agent kennt
 seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
 (lange vorher bis zu drei).
 
 **Ablauf.**
 
-- Der Systemprompt ist `AGENT_SYSTEM_PROMPT`: die Steuerung (`_AGENT_STEERING`)
-  und dahinter die Schreibregeln (`AGENT_ANSWER_SECTION`, „WRITING THE ANSWER“:
-  Journalist, Treue zur Substanz, Auszüge, `checked_text`, Direktantworten,
-  Format, keine Werkzeug- oder Ablaufsprache). Lesen
-  (`AGENT_READ_SOURCE_PROMPT`), Watch (`agent_watch.ORCHESTRATOR_PROMPT`) und
-  Memory (`agent_memory.orchestrator_prompt`) folgen. Bis 2026-10-14 hieß diese
-  Fassung `AGENT_MERGED_SYSTEM_PROMPT` und lag neben dem Prompt des getrennten
-  Wegs.
+- Der Systemprompt ist `AGENT_AUDIT_SYSTEM_PROMPT`: die Verfassung und
+  `AGENT_AUDIT_ANSWER_SECTION` („HOW CONSENS.IO WORKS“: Text ohne Toolcall ist
+  die Antwort, Text daneben eine Notiz, Markdown mit Links statt Marken,
+  Checklisten, Bilder nur wo gesetzt, Prüfer unsichtbar, Wissensstand). Die
+  Blöcke zu Watches, Einstellungen, Memory, Dateien, Dokumenten, Google und mit
+  dem Arbeitsplatz VM, GitHub und Plan folgen. Bis 2026-10-31 schrieb der
+  Vergleichsmodus nach eigenen Regeln (`AGENT_SYSTEM_PROMPT` =
+  `_AGENT_STEERING` + `AGENT_ANSWER_SECTION` „WRITING THE ANSWER“: Journalist,
+  Treue zur Substanz, Auszüge, `checked_text`; dazu `AGENT_READ_SOURCE_PROMPT`
+  und `agent_watch.ORCHESTRATOR_PROMPT`); bis 2026-10-14 hieß diese Fassung
+  `AGENT_MERGED_SYSTEM_PROMPT`.
 - Ein Werkzeug `answer` gibt es nicht mehr. Text in einem Schritt ohne Toolcalls
   ist die Antwort; jede Nachricht des Agenten ist entweder Toolcalls oder die
   Antwort.
 - Nach jedem Vergleich enthält das Toolergebnis (`ComparisonTools._merged_result`)
-  die vollen Antworten (anonym und gemischt, ohne Familie oder Modellnamen, wie
-  früher der Antwortschritt und die Consensus-Synthese), fehlende Modelle
-  (`missing_answers`, mit Familie), die Quellenliste mit
-  Auszügen (`sources`) und nach `check_text` die Satzurteile (`passage_check`,
-  `checked_text`). Die Antworten dieses Vergleichs sind damit fixiert; spätere
+  die vollen Antworten (anonym und gemischt, ohne Familie oder Modellnamen),
+  fehlende Modelle (`missing_answers`, mit Familie und Grund), die Quellenliste
+  mit Auszügen (`sources`) und eine Anweisung (siehe „Die gewählten Modelle
+  fragen“). Die Antworten dieses Vergleichs sind damit fixiert; spätere
   Nachzügler sind `late`. Die gewählte Tiefe steht nicht darin: Sie steuert nur
-  die Vergleichsmodelle. Mit weniger als zwei Antworten sagt die Anweisung, dass
-  nichts geprüft werden kann (nochmal vergleichen oder sagen, dass die Antwort auf
-  einem Modell beruht), und keine Schreibnotiz folgt.
-- Hat ein Vergleich (`compare_models` oder `check_text`) mindestens zwei Antworten
-  geliefert, hängt die App direkt dahinter eine eigene Nachricht an
-  (`AGENT_WRITE_NOTE`, wie die eingeschobenen Hinweise von Claude Code): Sobald
-  die Antworten reichen, ist die nächste Nachricht die Antwort für den Nutzer,
-  vollständig und aus allen Antworten. So steht der Auftrag dort, wo geschrieben
-  wird, und nicht nur im langen Systemprompt.
-- Anders als nach `read_source` bleiben weitere Vergleiche erlaubt, obwohl jetzt
-  Seitentext (Auszüge) im Kontext steht; sonst gäbe es praktisch nie einen
-  zweiten Vergleich. Die Anweisung im Ergebnis verlangt dafür
-  eine neutrale Frage ohne Befunde aus Antworten oder Auszügen. Bewusst weich:
-  `update_memory` braucht ein wörtliches Nutzerzitat, `prepare_watch` den Start
-  durch den Nutzer und `read_source` zitierte Adressen; der verbleibende Weg wäre
-  eine präparierte Seite, die den zweiten Vergleichsauftrag färbt.
+  die Modelle. Bis 2026-10-31 hängte der Vergleichsmodus an einen Vergleich mit
+  mindestens zwei Antworten eine Schreibnotiz (`AGENT_WRITE_NOTE`: die nächste
+  Nachricht ist die Antwort, vollständig und aus allen Antworten), und nach
+  `check_text` standen im Ergebnis die Satzurteile (`passage_check`,
+  `checked_text`).
 - Jeder Schritt hat das Antwortbudget samt Denk-Reserve, zeigt Denk-Auszüge und
-  läuft mit Prompt-Cache. Nach bezahlten Vergleichen wird ein kostenloser 429
-  einmal wiederholt, ein ausgedachter Schritt einmal leichter.
+  läuft mit Prompt-Cache. Nach einem Vergleich wird ein kostenloser 429 einmal
+  wiederholt, in jedem Turn ein unterwegs abgebrochener Schritt einmal und ein
+  ausgedachter einmal leichter.
 - Zugelassen wird jeder Schritt wie ein Steuer-Schritt (Steuer-Budget je
   Such-Segment, `_routing_model`). Das Antwortbudget darüber (`_answer_output`)
   reserviert er einmal, nicht pro Suchrunde, und dieser Teil darf das
-  Tageslimit überziehen, auch ohne Vergleich
-  (`agent_quota.reserve(..., overdraft=<Tokens>)`); sobald ein Vergleich bezahlte
-  Antworten hat, darf es der ganze Schlussschritt ohne Tools (seit 2026-10-28
-  nicht mehr jeder Steuer-Schritt: Weist das Kontingent einen ab, schreibt der
-  Agent die Antwort, `_closing_index`). Vor dem Fix vom 2026-10-14 (noch hinter
-  dem Schalter) reservierte der erste Schritt mit drei Recherche-Runden rund 470k
+  Tageslimit überziehen (`agent_quota.reserve(..., overdraft=<Tokens>)`);
+  sobald die Nachricht bezahlte Arbeit hat (Vergleichsantworten oder ein
+  Schritt des Agenten, dem Prüfer folgten: `_paid_comparison`, `_paid_audit`),
+  darf es der ganze Schlussschritt ohne Tools (seit 2026-10-28 nicht mehr jeder
+  Steuer-Schritt: Weist das Kontingent einen ab, schreibt der Agent die
+  Antwort, `_closing_index`). Vor dem Fix vom 2026-10-14 (noch hinter dem
+  Schalter) reservierte der erste Schritt mit drei Recherche-Runden rund 470k
   Tokens statt 270k wie im getrennten Weg: Ein Free-Konto (660k) bekam schon ab
-  ≈ 190k Tagesverbrauch nur noch eine statt drei Recherche-Runden, und kurz vor
-  dem Limit wurde eine Direktantwort gekürzt, wo der getrennte Weg überzogen
-  hätte. Jetzt sind es rund 330k, zugelassen ab 270k.
-- Danach prüfen die Judges genau den sichtbaren Text.
+  ≈ 190k Tagesverbrauch nur noch eine statt drei Recherche-Runden.
+- Danach prüfen die Prüfer genau den sichtbaren Text.
 
 **Was der Nutzer sieht.** Text erscheint erst ab 300 Zeichen
 (`ANSWER_HOLD_CHARS`), damit eine kurze Einleitung vor einem Toolcall nie
 aufblitzt; kurze Antworten wie Grüße kommen am Schrittende auf einmal. Beginnt
 ein Toolcall, stoppt das Streaming. Wurde schon Text gezeigt, nimmt die App ihn
-zurück (Status `retract` mit `clear_response`), seit 2026-10-28 sofort, wenn der
-Client den Beginn des Aufrufs meldet (Status `tool_call`, `_move_preamble`;
-nicht bei reinen `SIDE_TOOLS` oder solange ein Aufruf noch keinen Namen hat),
-sonst am Schrittende. Der ganze Text des Schritts steht dann in der Zeitleiste
-als Notiz (`note`, bis `NOTE_CHARS` = 8000 Zeichen, Zeilen bleiben,
-`white-space: pre-line`), auch eine kurze Einleitung, die nie gestreamt wurde;
-vorher eine Zeile von höchstens 400 Zeichen und kurze Einleitungen gar nicht
-(Max: in die Spur, nicht abgeschnitten). Der Audit-Prompt verbietet Text neben
-Werkzeugaufrufen nicht mehr, er sagt nur, dass er als Notiz erscheint. Folgen nur `update_memory`
-oder `prepare_watch`, bleibt der Text die Antwort, wenn diese Werkzeuge geklappt
-haben (`_side_results_accepted`: kein Fehler, Watch-Status `prepared`): Claude
-schreibt manchmal erst die Antwort und speichert dann eine Erinnerung. Hat eines
-nicht geklappt, nimmt die App den Text zurück, und der nächste Schritt schreibt mit
-dem Ergebnis im Blick (bis zur Gegenprüfung vom 2026-10-14 behauptete die Antwort
-sonst ein Speichern oder eine Watch-Karte, die es nicht gab, und an einer
-Turn-Grenze schrieb der Abschluss eine zweite Antwort unter die erste). Nach einem
-Vergleich ist `update_memory` gesperrt (Memory-Sperre unten): Antwort plus
-`update_memory` wird dort also immer zurückgenommen und neu geschrieben. Das gilt auch für kurzen Text,
-der nur wegen der 300 Zeichen zurückgehalten wurde (`short_reply`, z. B. „Alles
-klar, merke ich mir.“ bei einer Merk-Bitte); bis zur Gegenprüfung vom 2026-10-14
-verschwand er, und der nächste Schritt schrieb nur noch „Saved.“. Text nach
-eigenen Suchtreffern zählt nie als gezeigt. Reißt ein Toolcall am Ausgabelimit ab,
-nimmt die App gestreamten Text vor der leichteren Wiederholung zurück. Reißt eine
-kurze Antwort unter 300 Zeichen am Ausgabelimit ab, zeigt und speichert die App
-sie wie eine längere als ungeprüfte Teilantwort (`_keep_cut_answer`); vor der
-Gegenprüfung vom 2026-10-14 ging sie verloren. Ein leerer letzter Schritt startet
-keine Judges, der Turn endet als „did not complete the answer“.
+zurück (Status `retract` mit `clear_response`, App-Eintrag `retract` im
+Protokoll), seit 2026-10-28 sofort, wenn der Client den Beginn des Aufrufs
+meldet (Status `tool_call`, `_move_preamble`; nicht bei reinen `SIDE_TOOLS` oder
+solange ein Aufruf noch keinen Namen hat), sonst am Schrittende. Der ganze Text
+des Schritts steht dann in der Zeitleiste als Notiz (`note`, bis `NOTE_CHARS` =
+8000 Zeichen, Zeilen bleiben, `white-space: pre-line`), auch eine kurze
+Einleitung, die nie gestreamt wurde; vorher eine Zeile von höchstens 400
+Zeichen und kurze Einleitungen gar nicht (Max: in die Spur, nicht
+abgeschnitten). Der Prompt verbietet Text neben Werkzeugaufrufen nicht, er sagt
+nur, dass er als Notiz erscheint. Folgen nur `SIDE_TOOLS` (`update_memory`,
+`prepare_watch`, `prepare_settings_change`, `update_plan`,
+`prepare_pull_request`), bleibt der Text die Antwort, wenn diese Werkzeuge
+geklappt haben (`_side_results_accepted`: kein Fehler, Watch-Status
+`prepared`): Claude schreibt manchmal erst die Antwort und speichert dann eine
+Erinnerung. Hat eines nicht geklappt (auch eine Memory-Änderung, die gesperrt
+war oder an der Vorab-Prüfung scheiterte), nimmt die App den Text zurück, und
+der nächste Schritt schreibt mit dem Ergebnis im Blick (bis zur Gegenprüfung vom
+2026-10-14 behauptete die Antwort sonst ein Speichern oder eine Watch-Karte,
+die es nicht gab, und an einer Turn-Grenze schrieb der Abschluss eine zweite
+Antwort unter die erste). Das gilt auch für kurzen Text, der nur wegen der 300
+Zeichen zurückgehalten wurde (`short_reply`, z. B. „Alles klar, merke ich
+mir.“ bei einer Merk-Bitte); bis zur Gegenprüfung vom 2026-10-14 verschwand er,
+und der nächste Schritt schrieb nur noch „Saved.“. Reißt ein Toolcall am
+Ausgabelimit ab, nimmt die App gestreamten Text vor der leichteren Wiederholung
+zurück. Reißt eine kurze Antwort unter 300 Zeichen am Ausgabelimit ab, zeigt
+und speichert die App sie wie eine längere als ungeprüfte Teilantwort
+(`_keep_cut_answer`); vor der Gegenprüfung vom 2026-10-14 ging sie verloren. Ein
+leerer letzter Schritt startet keine Prüfung, der Turn endet als „did not
+complete the answer“.
 
 **Zitiermarken.** GPT-6 Luna schrieb im zusammengelegten Weg OpenAIs eigene
 Zitiermarken in 5 von 13 Antworten (Live-Vergleich 2026-10-14), sichtbar als
 „citeturn2search0“; im damaligen getrennten Antwortschritt nie, weil dort keine
 Such- und Toolergebnisse im selben Aufruf lagen. Die Marken bestehen aus Private-Use-Zeichen
-(`\ue200cite\ue202turn2search0\ue201`, auch mit URLs oder ohne Schlusszeichen).
+(`citeturn2search0`, auch mit URLs oder ohne Schlusszeichen).
 Luna setzte sie statt Links: In 3 von 8 zusammengelegten Antworten war dort kein
 einziger Quellenlink. `AgentCompletion._visible` macht beim Streamen für jeden
 Agent-Aufruf aus den URLs einer Marke Markdown-Links (`[host](url)`, mehrere mit
 „ · “); andere Verweise (`turn2search0`) und
 Adressen außer http(s) ohne Zugangsdaten fallen weg. Eine über Chunks geteilte
 Marke wartet bis zu ihrem Ende, Zitat-Offsets werden mitverschoben; endet der Stream mit einer offenen Marke, werden ihre URLs dort noch zu Links. Die Links
-stehen nur im Text und werden keine Quellen: Links aus dem Antworttext öffnet
-`read_source` nie, eine präparierte Seite kann so nichts abrufen lassen.
+stehen nur im Text und werden keine Quellen: Ohne Prüfer öffnet `read_source`
+Links aus dem Antworttext nie, eine präparierte Seite kann so nichts abrufen
+lassen; mit Prüfern sehen diese jeden Abruf live (siehe „Quellen nachlesen“).
 
-**Eigene Recherche.** Vor dem ersten Vergleich wird Text nach eigenen
-Suchtreffern nicht gezeigt. Antwortet der Agent aus seiner Recherche, greift
-`_consensus_search_handoff` (siehe „Websuche“). Schreibt er danach erneut eine
-lange Antwort ohne Vergleich und ohne gelesene Seite, hält die App sie einmal
-zurück (`_tool_reminder`, `TOOL_REMINDERS`); beim nächsten Mal steht sie, statt
-den Turn scheitern zu lassen. Kurze Antworten bis `DIRECT_REPLY_CHARS` (800
-Zeichen), etwa Rückfragen, stehen sofort.
+**Eigene Recherche.** Der Agent recherchiert die Antwort selbst; Text nach
+eigenen Suchtreffern streamt wie jeder andere. Bis 2026-10-31 zeigte der
+Vergleichsmodus solchen Text vor dem ersten Vergleich nicht, führte eine
+Rechercheantwort am Suchlimit per `_consensus_search_handoff` in einen
+Vergleich und hielt eine lange Antwort ohne Vergleich und ohne gelesene Seite
+einmal zurück (`_tool_reminder`, `TOOL_REMINDERS`, `DIRECT_REPLY_CHARS` = 800).
 
-**Memory.** Das Pflichtfeld `memory` sitzt an `compare_models` und `check_text`
-(weitere Vergleiche derselben Nachricht: `[]`). Ohne Vergleich nutzt der Agent
-`update_memory` vor der Antwort; dort ist die Entscheidung wieder freiwillig. Das
-betrifft vor allem Grüße, Umformulieren und ausdrückliche Merk-Bitten, für die der
-Prompt `update_memory` ohnehin verlangt (`agent_memory.MEMORY_WRITE_PROMPT`,
-`memory_field`). Bis 2026-10-14 saß das Pflichtfeld an `answer`, und der
-Antwortschritt bekam die Erinnerungen als eigenen Block ohne IDs
-(`synthesis_prompt`); heute stehen sie nur im Systemprompt des Agenten.
+**Memory.** Der Agent ändert Memory nur über `update_memory`
+(`AuditUpdateMemoryArgs`, Änderungen ohne Belegzitat, siehe „Verfassung statt
+Regeln“; Regeln `agent_memory.AUDIT_MEMORY_*` über `orchestrator_prompt`). Bis
+2026-10-31 saß im Vergleichsmodus ein Pflichtfeld `memory` mit wörtlichem
+Nutzerzitat an `compare_models` und `check_text` (`memory_field`,
+`MEMORY_WRITE_PROMPT`); bis 2026-10-14 an `answer`, und der Antwortschritt bekam
+die Erinnerungen als eigenen Block (`synthesis_prompt`).
 
 **Memory-Sperre (seit 2026-10-14, umgekehrt 2026-10-27).** Sobald in einer
-Nachricht ein Werkzeug ein Ergebnis geliefert hat, kann das Memory in dieser
-Nachricht nicht mehr geändert werden (`DelegationLoop.memory_locked`), auch
-nach einem Fehler, dessen Text Ausgaben zitieren kann. Ausgenommen sind nur
-ein Aufruf, den die App vor dem Lauf abgelehnt hat (`status: refused`), und
-die Werkzeuge in `MEMORY_KEEPING_TOOLS`, die nachweislich nur Inhalte des
-Nutzers oder der App liefern (`update_memory`, `read_settings`,
-`prepare_settings_change`, `prepare_watch`, `update_plan`, `create_document`,
-`revise_document`); ein neues Werkzeug sperrt also, bis das Gegenteil belegt
-ist. Vorher zählte eine Liste die sperrenden Werkzeuge auf und übersah
-`vm_write_file`, `vm_share_file`, `github_import` und `prepare_pull_request`,
-deren erstes Ergebnis die Notizen des Arbeitsplatzes trägt (Sicherheitsaudit
-2026-10-27). Die eigene Websuche sperrt in jedem Modus (`_searched`).
-Seit 2026-10-28 merkt sich die Schleife nur noch, dass Fremdinhalt im Blick
-ist (`outside_in_view`); `memory_locked` ist daraus abgeleitet und im
-Audit-Modus mit Prüfern falsch: dort geht `update_memory` durch die
-Vorab-Prüfung (`_open_gate`, `_memory_reviewed`), und ein Aufruf, der an ihr
-vorbeikäme, bekommt `MEMORY_LOCKED`. Ein `memory`-Feld an einem anderen
-Werkzeug läuft durch kein Gate und wird nach Fremdinhalt nie angewandt. Die
-Belegpflicht für Einstellungen (`agent_settings.prepare`) hängt an
-`outside_in_view`, ändert sich also nicht.
-`update_memory` antwortet mit `MEMORY_LOCKED`, ein `memory`-Feld an einem
-späteren Vergleich wird nicht angewandt (Aktivität „blocked“,
-`untrusted_context`). Grund: Die Prüfung, dass die Evidenz ein wörtliches
-Nutzerzitat ist, bindet den Text der Erinnerung nicht an das Zitat; seit volle
-Antworten und Seitenauszüge im Kontext eines Schritts mit Werkzeugen stehen,
-hätte eine präparierte Seite so eine Erinnerung setzen können. Das Feld am
-ersten Vergleich wird vor dessen Ergebnissen entschieden und gilt weiter; ein
-abgelehnter Vergleich sperrt nicht.
+Nachricht ein Werkzeug ein Ergebnis geliefert hat, ist Fremdinhalt im Blick
+(`outside_in_view`), auch nach einem Fehler, dessen Text Ausgaben zitieren kann.
+Ausgenommen sind nur ein Aufruf, den die App vor dem Lauf abgelehnt hat
+(`status: refused`), und die Werkzeuge in `MEMORY_KEEPING_TOOLS`, die
+nachweislich nur Inhalte des Nutzers oder der App liefern (`update_memory`,
+`read_settings`, `prepare_settings_change`, `prepare_watch`, `update_plan`,
+`create_document`, `revise_document`, `open_workspace`); ein neues Werkzeug
+zählt also als Fremdinhalt, bis das Gegenteil belegt ist. Vorher zählte eine
+Liste die sperrenden Werkzeuge auf und übersah `vm_write_file`,
+`vm_share_file`, `github_import` und `prepare_pull_request`, deren erstes
+Ergebnis die Notizen des Arbeitsplatzes trägt (Sicherheitsaudit 2026-10-27).
+Die eigene Websuche zählt mit (`_searched`). Seit 2026-10-28 ist
+`memory_locked` daraus abgeleitet und mit Prüfern falsch: Dann geht
+`update_memory` durch die Vorab-Prüfung (`_open_gate`, `_memory_reviewed`), und
+ein Aufruf, der an ihr vorbeikäme, bekommt `MEMORY_LOCKED`. Ohne Prüfer
+antwortet `update_memory` mit `MEMORY_LOCKED` (Aktivität „blocked“,
+`untrusted_context`). Grund der Sperre (2026-10-14): Seit volle Antworten und
+Seitenauszüge im Kontext eines Schritts mit Werkzeugen stehen, hätte eine
+präparierte Seite sonst eine Erinnerung setzen können. Die Belegpflicht für
+Einstellungen (`agent_settings.prepare`) hängt an `outside_in_view`, ändert
+sich also nicht.
 
 **Turn-Grenzen.** Erreicht ein Turn sein Zeit- oder Schrittlimit, schreibt der
 Agent die Antwort in einem letzten Schritt: dieselben Tools stehen im Request
 (Prompt-Cache), sind aber nicht aufrufbar (`tool_choice: none`), dazu eine
-App-Notiz. Toolcalls ohne Ergebnis (ein vom Wiederholungsschutz gestoppter Batch)
-bekommen vorher eines.
+App-Notiz mit der Grenze (`_limit_fact`). Toolcalls ohne Ergebnis (ein vom
+Wiederholungsschutz gestoppter Batch) bekommen vorher eines. Die Prüfer prüfen
+diese Antwort wie jede.
 
-**Messen.** `scripts/evaluate_agent_answers.py --live --model <id>` stellt
-zehn Fragen je einmal (ein Turn je Frage, gleiche sechs Vergleichsfamilien, echte
-Judges, In-Memory-Store) und misst Zeit gesamt, bis zum ersten Antworttext und ab
-dem letzten Vergleich, Kosten und Tokens der Chatmodell-Schritte, Rücknahmen,
-verdächtige Wörter (`leaks`) und das Urteil der Judges; jede Zeile trägt den
-Antworttext und `mode` `agent`. `--baseline FILE` liest die JSON-Zeilen eines
-früheren Laufs (`--out`), davon die abgeschlossenen mit Antwort und `mode` gleich
-`--baseline-mode` (Standard `separate`: die Antworten des getrennten
-Antwortschritts bis 2026-10-14). Mit `--pairwise <modell>` wählt ein blinder
-Richter je Frage die bessere der beiden Antworten (`agent`, `baseline` oder
-`tie`). Die Antworten des getrennten Wegs aus dem Luna-Lauf vom 2026-10-14 (alle
-zehn Fragen) liegen als Vergleichsbasis in
-`artifacts/agent-answer-baseline/luna-separate-2026-10-14.jsonl`.
-`--only` beschränkt auf einzelne Fragen. Bis 2026-10-14 hieß das Skript
-`scripts/evaluate_agent_answer_mode.py` und stellte jede Frage einmal getrennt
-und einmal zusammengelegt. Weil jeder Lauf eigene
-Vergleichsantworten bekommt, sind die Qualitätszahlen ein Trend, auch die Zeiten:
-Dieselbe Frage brauchte am 2026-10-14 als Pro 181–219 s, andere Fragen als Pro
-bis 672 s mit bis zu 299 s nach dem Vergleich. Das Testkonto rechnet als Pro
-(`--tier`, Standard `pro`); in Firestore nachgeschlagen wäre es Free. Der erste
-Verdacht, das Free-Kontingent habe die EZB-Frage verlangsamt (434–518 s statt
-214 s), bestätigte sich nicht: Jeder Turn bekommt ein frisches Konto, und dort
-wartet auch Free nicht (siehe „Tageskontingent“, Stufe und Parallelität).
+**Messen (bis 2026-10-31).** `scripts/evaluate_agent_answers.py` maß den
+Vergleichsmodus live (zehn Fragen, sechs Vergleichsfamilien, echte Judges;
+Zeit, Kosten, Rücknahmen, verdächtige Wörter, Urteil der Judges, `--baseline`
+und `--pairwise` gegen den getrennten Antwortschritt, Zeitleiste je
+Provider-Aufruf in `phases`/`timeline`/`after_comparison`); es ist mit dem
+Vergleichsmodus entfernt, ebenso `scripts/probe_agent_routing.py`. Den einen
+Modus misst `scripts/audit_report.py` an echten Läufen (siehe „Messen“ unter
+„Ein Modus“). Die Vergleichsbasis
+`artifacts/agent-answer-baseline/luna-separate-2026-10-14.jsonl` bleibt liegen.
 
-**Ergebnis Luna, 2026-10-14** (noch mit Schalter und ohne Schreibnotiz; Pro-Konto,
-9 vollständige Paare, Sonnet 5.5 als blinder Richter; Testmaterial nur im
-Scratchpad):
+**Ergebnis Luna, 2026-10-14** (Vergleichsmodus, noch mit Schalter und ohne
+Schreibnotiz; Pro-Konto, 9 vollständige Paare, Sonnet 5.5 als blinder Richter):
+Qualität 7:2 für den getrennten Weg (die zusammengelegten Antworten waren im
+Median 13 % kürzer, bei drei Fragen 30–52 %; der Richter begründete fast immer
+mit fehlenden Konkreta), Rücknahmen und Werkzeugwörter 0, Direktantwort 2 s
+statt 28 s, nach dem Vergleich im Median 45 s statt 74 s, Kosten gleich.
+Diagnose: Der zusammengelegte Schritt schrieb als Abschluss seiner
+Werkzeug-Schleife (zuletzt ein Toolergebnis mit „write the answer now“) und
+dachte bei den Fragen mit der größten Lücke nur ein Drittel so lange nach; dazu
+sah er die selbst gewählte Tiefe „quick“. Antwort darauf waren damals die
+Schreibnotiz und keine Tiefe im Ergebnis, Vorbild Claude Code, das ebenfalls
+ohne eigenen Schreibschritt arbeitet.
 
-- Qualität: 7:2 für den getrennten Weg. Die zusammengelegten Antworten waren im
-  Median 13 % kürzer, bei drei Fragen 30–52 %; der Richter begründete fast immer
-  mit fehlenden Konkreta (Rechenbeispiel, Modelle, Förderbeträge), zweimal mit
-  Zitiermarken (seitdem entfernt, siehe oben).
-- Rücknahmen 0, Werkzeugwörter 0 in beiden Wegen.
-- Zeit: Direktantwort 2 s statt 28 s. Mit Vergleich gleich (Median 231 s gegen
-  239 s gesamt, erster Antworttext 193 s gegen 183 s); nach dem Vergleich im
-  Median schneller (45 s gegen 74 s), aber mit Ausreißern um 300 s und einem
-  Lauf ins 20-Minuten-Limit.
-- Kosten: gleich (Luna-Schritte kosten 0,1–0,7 Cent, den Rest tragen Vergleich
-  und Judges). Die Ersparnis zählt erst bei teuren Chatmodellen.
-
-Damit blieb der Schalter zunächst aus. Diagnose der Kürze (Code und diese
-Testdaten, kein neuer Lauf): Die Schreibregeln waren fast wortgleich, Denkstufe
-und Limits gleich. Der zusammengelegte Schritt schrieb aber als Abschluss seiner
-Werkzeug-Schleife (zwei Drittel des Prompts Steuerung, zuletzt ein Toolergebnis
-mit „write the answer now“) und dachte bei den drei Fragen mit der größten Lücke
-nur ein Drittel so lange nach (geschätzt 520–805 statt 1.460–2.225 Denk-Tokens).
-Dazu sah er die selbst gewählte Tiefe „quick“; der damalige Antwortschritt nie.
-Antwort darauf: die Schreibnotiz nach dem Vergleich und keine Tiefe im Ergebnis
-(siehe Ablauf), Vorbild Claude Code, das ebenfalls ohne eigenen Schreibschritt
-arbeitet.
-
-**Wohin die Zeit geht (seit 2026-10-14).** Jede Zeile hat zusätzlich `phases`
-(Start und Ende des Vergleichs, erster Antworttext, Start und Ende der Judges,
-Sekunden ab Turnbeginn), `timeline` mit einem Eintrag je Provider-Aufruf
-(Chat-Schritte `completion:N`, Vergleichsantworten, Judges, Seitenabrufe:
-`start`, `claimed`, `request`, `first_progress`, `first_text`, `end`, `settled`,
-daraus `wait` für die Zulassung, `ttft` und `seconds`; dazu `max_silence`,
-Tokens, `refused` für abgelehnte Zulassungen, `error` als HTTP-Status oder
-Ausnahmeklasse und `stalled`) und `after_comparison`, das
-`seconds_after_comparison` in Chat-Schritte, Seitenabrufe und den Rest teilt
-(App-Arbeit, Warten auf Seitenauszüge, Wiederholungspausen). `rate_limits`,
-`stalls`, `retries`, `allowance_refusals` und `longest_silence` zählen je Turn,
-die Zusammenfassung summiert sie. Fortschritt heißt dasselbe wie für den
-Stall-Watchdog (`AGENT_PROVIDER_STALL_SECONDS`, 180 s): Text, Reasoning,
-Toolcall-Teile oder steigende Usage, nicht OpenRouters Keepalive-Kommentare;
-`max_silence` schließt das Warten auf den ersten Token ein. Das Skript hängt
-sich nur von außen ein (Store-Aufrufe, Unterklasse der Completion, Watchdog
-während des Laufs) und speichert weder Prompts noch Antworten der Modelle.
-
-**Befund 2026-10-14: 290–330 s nach dem Vergleich.** Zwischen Vergleichsende und
-Judge-Start kann nur Folgendes minutenlang dauern: der Provider-Aufruf des
-Chatmodells selbst (bis 180 s ohne Fortschritt, danach bricht der Watchdog ab und
-der Turn scheitert), eine Wiederholung nach einem ausgedachten Schritt (ein
-weiterer Schritt, Warnung im Log) und `read_source` (bis 60 s je Abruf,
-nacheinander, höchstens fünf). 429 kostet höchstens 10 s, sonst scheitert der
-Schritt; zugelassen wird nach einem Vergleich der Schlussschritt immer
-(Überziehen erlaubt), ein Steuer-Schritt nur im Kontingent.
-Quorum-Nachfrist und Nachzügler liegen vor dem Vergleichsende, Judge-Plätze und
-Judge-Ausfälle danach. Die zusammengelegten Ausreißer (Wärmepumpe 299 s,
-Eiffelturm 290 s) hatten genau zwei Chat-Schritte, keine Warnung und für beide
-zusammen nur 1.337 bzw. 795 Ausgabetokens samt Reasoning: Die Minuten vergingen
+**Befund 2026-10-14: 290–330 s nach dem Vergleich.** Die Minuten vergingen
 wartend beim Provider von GPT-6 Luna (OpenRouter, unter ZDR Azure), nicht in der
-App. Im selben Lauf hingen Luna-Judges zweimal 180 s bis zum Watchdog, ein
-Coverage-Judge endete mit Timeout, ein Aufruf mit 504, und ein Turn scheiterte an
-„Provider stream made no progress“. Ungeklärt blieb der Free-Fall EZB im
-getrennten Weg (330 s, fünf Chat-Schritte statt drei, ohne Log); diesen Weg gibt
-es nicht mehr.
+App: Die Ausreißer (Wärmepumpe 299 s, Eiffelturm 290 s) hatten genau zwei
+Chat-Schritte, keine Warnung und zusammen nur 1.337 bzw. 795 Ausgabetokens samt
+Reasoning. In der App können nur der Provider-Aufruf selbst (bis 180 s ohne
+Fortschritt, dann bricht der Watchdog ab), eine Wiederholung nach einem
+ausgedachten Schritt und `read_source` (bis 60 s je Abruf) minutenlang dauern;
+429 kostet höchstens 10 s.
 
-**Offene Punkte** (Gegenprüfung und Live-Vergleich 2026-10-14, bewusst nicht
-behoben):
+**Offene Punkte:**
 
-- Qualität: Der Live-Vergleich oben lief ohne Schreibnotiz und noch mit Tiefe im
-  Ergebnis. Ob beides die Lücke schließt, misst `scripts/evaluate_agent_answers.py`
-  mit `--baseline` und `--pairwise` gegen gespeicherte Antworten des getrennten
-  Wegs. Reicht es bei OpenAI-Modellen nicht, bleibt als Rückfall ein
-  Schreibaufruf ohne Werkzeuge im selben, gecachten Kontext.
-- Die 300-s-Pausen nach dem Vergleich (Befund oben: Wartezeit beim Provider) und
-  ein Lauf mit einem Claude-Modell.
-- Denk-Auszüge erscheinen in jedem Schritt, auch in Steuer-Schritten, die
-  Systemprompt und Toolergebnisse sehen; Toolnamen oder Prompt-Regeln können so
-  als Fortschrittszeile auftauchen (gespeichert in `agent_activity`).
+- Denk-Auszüge erscheinen in jedem Schritt, auch in Schritten, die Systemprompt
+  und Toolergebnisse sehen; Toolnamen oder Prompt-Regeln können so als
+  Fortschrittszeile auftauchen (gespeichert in `agent_activity`).
 - An der Turn-Grenze nicht live geprüft: Liefert ein Anbieter trotz
-  `tool_choice: none` einen Toolcall, scheitert der Turn („Unexpected tool call“).
-- Stoppt der Wiederholungs- oder Ungültig-Schutz im selben Schritt wie eine
-  gezeigte Antwort mit `update_memory`, scheitert ein Turn ohne Vergleich, obwohl
-  die Antwort sichtbar war (selten).
+  `tool_choice: none` einen Toolcall, scheitert der Turn („Unexpected tool
+  call“).
+- Bis 2026-10-31 beobachtet, im einen Modus nicht neu geprüft: Stoppt der
+  Wiederholungs- oder Ungültig-Schutz im selben Schritt wie eine gezeigte
+  Antwort mit `update_memory`, konnte der Turn scheitern, obwohl die Antwort
+  sichtbar war (selten).
 
-### Eingefügten Text prüfen (seit 2026-10-09)
+### Eingefügten Text prüfen (2026-10-09 bis 2026-10-31, entfernt)
 
-Fügt der Nutzer eine fremde Antwort ein („Stimmt das?" oder ganz ohne Zusatz),
-ruft der Orchestrator `check_text`: die Felder von `compare_models` plus
-`starts_with`/`ends_with` (erste und letzte Wörter der Passage) und `answer_to`
-(die Frage, die sie beantwortet). Bis 2026-10-11 war das ein optionales Feld
-`check` von `compare_models`; GPT-6 Luna füllte es zweimal mit Max' eigener Frage
-(„Wer hat die Ironman-WM gewonnen?“, „kannst du den watch … starten“), und die
-App prüfte sie als fremden Text. Seitdem lehnt `own_request` (als Ergebnis, nicht
-als Toolfehler, vor jedem bezahlten Aufruf) eine Passage ab, die nur aus Fragen
-besteht, oder die die ganze Nachricht ist, nur einen Satz hat und nicht wie eine
-Aussage endet. Eine reine eingefügte Behauptung („Der Eiffelturm ist 330 m hoch.“)
-bleibt prüfbar. Die Vergleichsmodelle sehen
-die Passage nie: Wer sie vorgelegt bekommt, stimmt ihr eher zu. Sie beantworten
-nur die Frage dahinter; der Server lehnt einen Aufruf ab, dessen Frage oder
-Kontext zwei oder mehr Sätze der Passage überwiegend wörtlich enthält (eigene
-Rahmendaten des Nutzers und kurze Sätze zählen nicht). Die Passage darf auch in
-der vorherigen Nachricht stehen (nach einer Rückfrage). Nach dem Vergleich
-prüft der Coverage-Judge jeden Satz der Passage gegen die Antworten (ein Aufruf,
-kein Differences-Judge), bevor die Antwort geschrieben wird; die Antwort liest
-dieselben Urteile (`checked_text`). Die Marken stehen auf der Nachricht des
-Nutzers, darunter eine Zeile mit den Zählern und der Frage, gegen die geprüft
-wurde. Zusammenfassen, Übersetzen, Umschreiben, Code-Review oder Fragen zu genau
-diesem Dokument laufen ohne `check_text`; im Zweifel ohne. Live-Check 2026-10-09
-(Luna, Gemini 3.5 Flash-Lite, DeepSeek V4 Flash, eine Wärmepumpen-Antwort mit
-zwei eingebauten Fehlern): beide Fehler 3/3 widersprochen, die richtigen Sätze
-3/3 gestützt, Zusammenfassen/Übersetzen ohne `check`, rund 0,09 $ und 106 s für
-den ganzen Lauf. Danach hat eine Prüfung mit fünf parallelen Review-Agenten
-(Server, Anweisungen/Sicherheit, Oberfläche, echter Browser, Regression) unter
-anderem falsche Offsets bei Überschriften-Kopien, einen manipulierbaren
-Judge-Text, zu strenge Sperren und unsichtbare Marken im hellen Modus gefunden;
-alles behoben und mit Tests abgedeckt. Details: [codebase-map.md](codebase-map.md),
-Abschnitt „Eingefügten Text prüfen".
+Bis zum einen Modus prüfte der Vergleichsmodus eine eingefügte fremde Antwort
+(„Stimmt das?“ oder ganz ohne Zusatz) mit `check_text` (bis 2026-10-11 ein
+Feld `check` von `compare_models`): Die Vergleichsmodelle beantworteten nur die
+Frage dahinter, ohne die Passage zu sehen (wer sie vorgelegt bekommt, stimmt
+ihr eher zu), der Coverage-Judge prüfte jeden Satz der Passage gegen die
+Antworten, und `own_request` lehnte eine Passage ab, die nur die eigene Frage
+des Nutzers war (GPT-6 Luna hatte zweimal Max' Frage als fremden Text
+eingereicht). Live-Check 2026-10-09: beide eingebauten Fehler einer
+Wärmepumpen-Antwort 3/3 widersprochen, die richtigen Sätze 3/3 gestützt, rund
+0,09 $ und 106 s. Seit 2026-10-31 gibt es weder Werkzeug noch Live-Karte: Eine
+eingefügte Antwort behandelt der Agent wie jede andere Bitte, und die Prüfer
+prüfen seine Antwort. Der Platzhalter sagt nicht mehr „paste an AI answer“,
+sondern „Ask anything“. Gespeicherte Turns behalten ihre Karte über der Antwort
+(`passage-check.js`, `review.passage_check`); geöffnet wird ein solcher Chat wie
+jeder gespeicherte. Der tolerante Zitat-Locator (`_search_form`,
+`_anchor_form`, `_locate_in`) lebt in `agent_audit.py` weiter und findet die
+Zitate der Prüfer (`locate_quote`). Geschichte in der codebase-map, Abschnitt
+„Eingefügten Text prüfen“.
 
 ## Watch vorschlagen (seit 2026-10-11)
 
 Bittet der Nutzer, ihn zu erinnern oder ihm Bescheid zu geben, wenn sich etwas
 ändert oder eintritt („sag mir, wenn GPT-6 erscheint“, „erinnere mich, wann der
 Sieger feststeht“), ruft der Agent `prepare_watch`
-(`app/services/agent_watch.py`), und zwar vor dem Vergleich, der den aktuellen
-Stand wie gewohnt beantwortet. Der Steuer-Prompt (`agent_watch.ORCHESTRATOR_PROMPT`)
-nennt Erinnern ausdrücklich und sagt, dass eine Watch der einzige Weg der App
-ist, den Nutzer später zu erreichen: Am 2026-10-11 las GPT-6 Luna „kannst du
+(`app/services/agent_watch.py`) und beantwortet den aktuellen Stand wie
+gewohnt. Der Block `agent_watch.AUDIT_PROMPT` („WATCHES“, seit 2026-10-28 nur
+Fakten) sagt, was eine Watch tut und dass sie der einzige Weg der App ist, den
+Nutzer später zu erreichen; bis 2026-10-31 nannte im Vergleichsmodus
+`agent_watch.ORCHESTRATOR_PROMPT` Erinnern ausdrücklich. Anlass: Am 2026-10-11 las GPT-6 Luna „kannst du
 mich erinnern, wann der Sieger der Ironman-WM feststeht?“ nach einer Websuche
 als Frage nach dem Termin, bereitete keine Watch vor, und die Antwort behauptete,
 consens.io könne niemanden benachrichtigen (Live-Probe mit Suche: alter Prompt
@@ -3726,11 +3453,11 @@ Sieger fest?“ und „erinnere mich an die Formel“ bleiben ohne). Das Tool le
   (`agent_watch: {question, goals, interval}`; der letzte gewinnt, nur solange
   der Turn `pending` ist). Ein Speicherfehler wird wie ein Fehler der
   Vorabprüfung zur lesbaren Ablehnung an das Modell und beendet den Turn nie.
-- Der Agent sieht das Ergebnis von `prepare_watch` in seinem Kontext.
-  `agent_watch.ORCHESTRATOR_PROMPT` verlangt, dass die Antwort in einem Satz auf
-  die Karte verweist (bei `already_watched` und `limit_reached` stattdessen den
-  Grund nennt), und verbietet zu sagen, die Watch sei aktiv. Derselbe Prompt
-  sagt, dass Watches der Weg der App sind, Nutzer später zu erreichen. Bis
+- Der Agent sieht das Ergebnis von `prepare_watch` in seinem Kontext. Was er
+  dem Nutzer sagt, steht im Ergebnis (`agent_watch.INSTRUCTIONS`: nur
+  vorbereitet, die Karte unter der Antwort startet sie, nie behaupten, die
+  Watch sei aktiv; bei `already_watched` und `limit_reached` den Grund nennen).
+  Bis 2026-10-31 verlangte das im Vergleichsmodus `ORCHESTRATOR_PROMPT`, bis
   2026-10-14 bekam der getrennte Antwortschritt dafür `prepared_watch` in der
   Evidenz, `agent_watch.SYNTHESIS_PROMPT` und `AGENT_ANSWER_WATCH_FACT`.
 
@@ -3757,16 +3484,17 @@ belegen und keine Mails auslösen. Außerdem kennt der Server die Zeitzone des
 Nutzers nicht.
 
 **Gating:**
-- Das Tool gibt es nur in Account-Mode-Turns mit Vergleich und ohne
-  Google-Daten (`DelegationLoop(google_data=…)`). Eine Frage aus privater Post
+- Das Tool gibt es in jedem Chat-Lauf im Kontomodus ohne Google-Daten
+  (`DelegationLoop(google_data=…)`). Eine Frage aus privater Post
   soll kein geplanter Check werden.
 - Eine reine „beobachte das“-Nachricht oder „starte die Watch“ zu einer früher
-  vorbereiteten: `prepare_watch` (erneut) und die Antwort ohne Vergleich. Die
+  vorbereiteten: `prepare_watch` (erneut) und eine kurze Antwort. Die
   Karte steht nur unter der neuesten Antwort (`agent-watch.js` hängt an
   `#agentAnswerBody`; der Verlauf zeigt sie nicht, Max: in Ordnung); deshalb
-  verweist die Antwort laut `ORCHESTRATOR_PROMPT` nur auf eine Karte, wenn
-  `prepare_watch` in dieser Nachricht einen Vorschlag vorbereitet hat. Live
-  2026-10-11 hatte die Antwort auf eine verschwundene Karte verwiesen.
+  soll die Antwort nur auf eine Karte verweisen, wenn `prepare_watch` in dieser
+  Nachricht einen Vorschlag vorbereitet hat (das Ergebnis nennt die Karte nur
+  dann). Live 2026-10-11 hatte die Antwort auf eine verschwundene Karte
+  verwiesen.
 - Ein Turn mit eigenem Vorschlag zeigt den allgemeinen Hinweis
   „Watch this question“ (`offerWatch`) nicht.
 - Unter `MOCK_LLM` bereitet „Watch: <Frage>“ einen Vorschlag vor (für
@@ -3819,18 +3547,22 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   V4.1 Flash mit dessen Standard High, wählbar ist nur Low. „Denk
   gründlicher“ wird dort nie Low; die Stufenwahl vergleicht Auto mit der
   Stufe, auf der es läuft (aus bei `enabled`/`default_enabled: false`).
-- **Was geht:** Chatmodell, Reasoning-Stufe (auch „eine höher/tiefer“),
-  Antworttiefe, Antwortstart, Agent-Freiheit, Antwortprüfung (`answer_check`
-  on/off, seit 2026-10-17; `true`/`false` zählen als on/off), Vergleichs-Preset (Daily, Open
-  Models, High Quality) und die Anzeige von Highlights, Zählern und
-  Agreement-Score. Alle Werte sind aufgezählt; ein Modell nennt der Agent mit
-  dem Namen des Nutzers, der Server sucht es in der Modellliste (mehrdeutig
-  oder unbekannt: Ablehnung mit den Möglichkeiten).
+- **Was geht:** Chatmodell (`chat_model`), Reasoning-Stufe (auch „eine
+  höher/tiefer“), Vergleichs-Lineup (`comparison_lineup`: Daily, Open Models,
+  High Quality; seine Modelle sind die Prüfer) und die Anzeige von
+  Highlights, Zählern und Agreement-Score. Alle Werte sind aufgezählt; ein
+  Modell nennt der Agent mit dem Namen des Nutzers, der Server sucht es in der
+  Modellliste (mehrdeutig oder unbekannt: Ablehnung mit den Möglichkeiten).
+  Bis 2026-10-31 auch Antworttiefe, Antwortstart, Agent-Freiheit und
+  Antwortprüfung (`answer_check`, Gruppe `PREFERENCES`); ein alter Vorschlag
+  mit `agent_preferences` bleibt lesbar und wird beim Anwenden einzeln
+  abgelehnt.
 - **Was nie geht:** System-Prompt (Freitext, der jeden künftigen Lauf
   steuert: ein dauerhafter Träger für eingeschleuste Anweisungen), Memory und
-  ihr Opt-in, Datenschutz, Verbindungen, Benachrichtigungen, Konto. Diese
-  Felder gibt es im Schema nicht; die Karte übernimmt auch aus einem
-  manipulierten Vorschlag nur die bekannten Einstellungen.
+  ihr Opt-in, Datenschutz, Verbindungen, Benachrichtigungen, Konto, der Modus
+  (Agent oder Compare, im (+)-Menü eines neuen Chats). Diese Felder gibt es im
+  Schema nicht; die Karte übernimmt auch aus einem manipulierten Vorschlag nur
+  die bekannten Einstellungen.
 - **Stufe und Modell:** dieselben Regeln wie der Lauf (`require_model_access`,
   `require_reasoning_access`, `free_default_effort`). High, Extra high und Max
   sind Pro; ohne Pro wird eine höhere Stufe auf die höchste erlaubte begrenzt
@@ -3838,41 +3570,37 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   Auto als Medium vorgeschlagen. Bietet das Modell die Stufe nicht an, nimmt
   das Tool die nächstgelegene. Ein Premium-Modell ohne Pro wird nicht durch
   ein anderes ersetzt, sondern abgelehnt, mit den freien Modellen derselben
-  Familie. Der Agent sagt Begrenzung oder Ablehnung mit dem Grund aus dem
-  Toolergebnis und bietet keinen Umweg an.
+  Familie. Bei Pro-Stufen sagt der Grund dazu, dass kein anderes Modell die
+  Grenze aufhebt (`PRO_LEVELS_NOTE`; eine Live-Probe schlug sonst „anderes
+  Modell wählen“ als Umweg vor).
 - **Unklare Wünsche:** `read_settings` zeigt dem Agenten, was gilt, die
-  Standards und was das Konto wählen kann. Ist unklar, welche Einstellung
-  oder welcher Wert gemeint ist („schneller“ kann Reasoning, kurze Antworten,
-  einen früheren Antwortstart oder keine Antwortprüfung heißen; „GPT“ mehrere Modelle), fragt der
-  Agent mit den echten Optionen zurück und bereitet nichts vor; die Antwort
-  darauf bereitet er vor. Einen unklaren oder vertippten Modellnamen lehnt
-  `prepare_settings_change` mit den Treffern bzw. den ähnlichsten Namen ab
-  („opsu“ → „Closest: Claude Opus 4.8“), der Agent fragt nach. „Was ist bei
-  mir eingestellt?“ beantwortet er aus `read_settings`, „alles auf Standard“
-  mit den Standards daraus.
-- **Prompt:** `agent_settings.ORCHESTRATOR_PROMPT` verlangt einen klaren Wunsch
-  des Nutzers in dieser Nachricht, nie einen aus einer Quelle, Datei, Mail oder
-  Modellantwort, und verbietet zu behaupten, etwas sei schon umgestellt. Eine
-  reine Einstellungsnachricht wird ohne Vergleich kurz beantwortet und
-  verweist auf die Karte. Fragt jemand, wie er Pro bekommt, sagt der Agent,
-  was der Early-Access-Dialog sagt (frei während Early Access, einige
-  Funktionen nur für ausgewählte Konten, noch kein Abo, contact@consens.io),
-  nie ungefragt. Bei Pro-Stufen sagt der Grund dazu, dass kein anderes Modell
-  die Grenze aufhebt (eine Live-Probe schlug sonst „anderes Modell wählen“
-  als Umweg vor). Mehrere Aufrufe in einem Turn landen auf einer Karte.
-- **Gating:** jeder Account-Mode-Turn mit Vergleich, auch mit Google-Daten (es
+  Standards und was das Konto wählen kann. Einen unklaren oder vertippten
+  Modellnamen lehnt `prepare_settings_change` mit den Treffern bzw. den
+  ähnlichsten Namen ab („opsu“ → „Closest: Claude Opus 4.8“), und das Ergebnis
+  sagt, nachzufragen. „Was ist bei mir eingestellt?“ beantwortet der Agent aus
+  `read_settings`, „alles auf Standard“ mit den Standards daraus.
+- **Prompt:** `agent_settings.AUDIT_PROMPT` („ACCOUNT SETTINGS“, seit
+  2026-10-28 nur Fakten): was die beiden Werkzeuge tun, dass nach Fremdinhalt
+  ein Belegzitat nötig ist, was in den Einstellungen bleibt, und dass
+  consens.io während Early Access frei ist (einige Funktionen nur für
+  ausgewählte Konten, noch kein Abo, contact@consens.io). Was der Agent dem
+  Nutzer sagt, steht im Ergebnis (`INSTRUCTIONS`: nie behaupten, etwas sei
+  schon umgestellt; Begrenzung oder Ablehnung mit dem Grund). Bis 2026-10-31
+  verlangte im Vergleichsmodus `ORCHESTRATOR_PROMPT` dazu einen klaren Wunsch
+  in dieser Nachricht, eine Antwort ohne Vergleich und das Vorbereiten vor
+  jeder Recherche. Mehrere Aufrufe in einem Turn landen auf einer Karte.
+- **Gating:** jeder Chat-Lauf im Kontomodus, auch mit Google-Daten (es
   verlässt kein Text den Chat; in einem Chat mit Google-Daten nur Modelle, die
   `restricted_model` zulässt). Nicht über die Consensus-API. „Pro“ heißt hier
   wie im Picker die Stufe allein (`is_user_pro`), nicht Admin: die Karte geht
   über den Picker, der einem Admin ohne Pro keine Premium-Modelle freigibt.
 - **Nach Fremdinhalten:** Sobald in der Nachricht eine Suche, ein Vergleich,
-  eine Seite, Datei oder Mail zurückkam (`memory_locked`, wie bei Memory),
+  eine Seite, Datei oder Mail zurückkam (`outside_in_view`, wie bei Memory),
   braucht `prepare_settings_change` ein `evidence`-Zitat aus der neuesten
-  Nachricht des Nutzers. Der Prompt lässt den Agenten deshalb vor jeder
-  Recherche vorbereiten (Live-Probe: Sonnet tat das von sich aus).
+  Nachricht des Nutzers.
 - **„Schon so“:** Ein genanntes Modell gilt nur als eingestellt, wenn dieser
   Chat es fährt UND neue Chats damit starten (Kontowahl); eine Stufe allein
-  betrifft den laufenden Chat. Anzeige und Preset vergleicht das Werkzeug mit
+  betrifft den laufenden Chat. Anzeige und Lineup vergleicht das Werkzeug mit
   dem Kontodokument. Was schon gilt, kommt nicht auf die Karte.
 - **Wo es wirkt:** im offenen Chat und in neuen Chats (die Karte löscht dafür
   auch eine frühere Wahl auf dem Neuer-Chat-Bildschirm). Andere bestehende
@@ -3884,18 +3612,18 @@ Chat das Modell schon, zeigt sie „Chat model in new chats“). Übernommen ode
 abgewiesen merkt sie sich pro Antwort (`chat:turn`, localStorage
 `consensio.agentSettingsCards.v1`, höchstens 100), damit sie beim erneuten
 Öffnen des Chats nicht wiederkommt. Die Aktivitätszeile nennt das Ergebnis
-(`outcome`: „Settings already in place“, „Settings change not prepared“). Das Modell
-übernimmt sie über die Picker-Funktion (`App.agentChat.applyPick`): sonst
-liefe ein offener Chat mit seinem gespeicherten Modell weiter. Alles andere
-geht über `App.userSettings.set(…, {source: "agent"})`, damit Einstellungen,
-Picker und Anzeige es sofort zeigen; gespeichert wird per `PATCH
-/api/my/settings` wie jede Änderung. Unter `MOCK_LLM` bereitet
-„Settings: depth=quick, reasoning=low“ einen Vorschlag vor.
+(`outcome`: „Settings already in place“, „Settings change not prepared“). Das
+Modell übernimmt sie über die Picker-Funktion (`App.agentChat.applyPick`):
+sonst liefe ein offener Chat mit seinem gespeicherten Modell weiter. Alles
+andere geht über `App.userSettings.set(…, {source: "agent"})`, damit
+Einstellungen, Picker und Anzeige es sofort zeigen; gespeichert wird per `PATCH
+/api/my/settings` wie jede Änderung. Unter `MOCK_LLM` bereitet „Settings:
+claim_counts=on, reasoning=low“ einen Vorschlag vor.
 
 **Warum keine direkte Änderung:** Eine eingeschleuste Anweisung soll weder das
 Verhalten noch die Kosten späterer Läufe ändern können; der Klick ist die
 einzige Schreibstelle. Außerdem liest die offene Seite Kontowerte nur bei der
-Anmeldung und schickt Modell, Stufe und Vorlieben mit jeder Nachricht mit: ein
+Anmeldung und schickt Modell, Stufe und Prüfer mit jeder Nachricht mit: ein
 Server-Write wäre bis zum Neuladen wirkungslos.
 
 **Kosten:** Das Tool ruft kein Modell und liest nur die (gecachte) Stufe und
@@ -3921,7 +3649,7 @@ gemessene verbrauchte Kosten. Reservierungen lassen die Anzeige nicht mehr sprin
 Sein Panel trennt unverbrauchtes, für neue Calls verfügbares und reserviertes Kontingent
 und enthält die Reset-Zeit. Consensus zeigt dort weiterhin das Run-Limit; der Composer enthält
 keine Budgetzeile. Das Kontingent gilt gemeinsam für Chat, delegierte Worker,
-Vergleichsmodelle und alle Judge-/Repair-/Retry-Aufrufe.
+Vergleichsantworten, Prüfer, Seitenabrufe und alle Repair-/Retry-Aufrufe.
 
 **Seit 2026-10-31 (Max) zählt jeder Call, was er gekostet hat**
 (`agent_quota.measured_charge`): `usage.estimated_cost_nano_usd`, also
@@ -3967,8 +3695,7 @@ Settlement ersetzt die Reserve genau einmal durch gemessene Tokens. Bei
 fehlender finaler Usage endet die Reservierung ebenfalls; unbekannter Verbrauch
 bleibt als unbekannt gekennzeichnet und wird nicht als Schätzung abgebucht. Abbrüche und Fehler
 schenken keine bereits verbrauchten Tokens zurück. Replays führen keinen neuen
-Call aus. Beim UTC-Wechsel zählt ein Call zu seinem Starttag; nur ungenutzte
-Synthese-/Judge-Reserven wandern auf den neuen Tag.
+Call aus. Beim UTC-Wechsel zählt ein Call zu seinem Starttag.
 Die Prozentanzeige erhält Live- und terminale Kontingent-Snapshots auch bei
 Fehlern; das Panel nennt zusätzlich reservierte Tokens. Ein Restbudget kann
 kleiner als die nötige Reserve für den nächsten Aufruf sein. Dieser Fall wird
@@ -3981,7 +3708,7 @@ Web Search bleibt nach Reasoning und Tool-Fortsetzungen erlaubt. „Skipped ·
 budget reserve“ bezeichnet eine unzureichende Reserve für Suchkontext und
 Folgeantwort, kein generelles Suchverbot nach dem Denken.
 
-**Stufe und Parallelität (Nachbau 2026-10-14).** Im Agent-Lauf hängt nur das
+**Stufe und Parallelität (Nachbau 2026-10-14, Vergleichsmodus).** Im Agent-Lauf hängt nur das
 Limit an der Stufe. Nachgestellt ohne Modellaufrufe (Testharness aus
 `test_agent_answer_mode`/`test_agent_runs`, echte Reservierungs- und Kontocodes,
 EZB-Frage, sechs Daily-Familien, lange Vergleichsantworten, drei
@@ -4089,8 +3816,8 @@ Antworttext bis dorthin (`reset`). Umami zählt `app_stream_buffered`
 Toolnamen in Reasoning-Auszügen bleiben normaler Text. Nur bestätigte laufende
 Tool-Aufrufe erhalten eine dezente Statuszeile. Thinking bleibt geschlossen.
 Die Agentenleiste öffnet sanft und zeigt gemessene Input+Output-Tokens statt
-Dollarbeträgen; unbekannte/teilweise Usage bleibt erkennbar. Judge-Details
-erscheinen sofort aus bereits geladenen Sitzungsdaten, ohne zusätzlichen
+Dollarbeträgen; unbekannte/teilweise Usage bleibt erkennbar. Prüfer-Details
+(in gespeicherten Turns des Vergleichsmodus auch Judge-Details) erscheinen sofort aus bereits geladenen Sitzungsdaten, ohne zusätzlichen
 Datenbankabruf. Andere Details zeigen beim ersten Laden einen Skeleton und
 bleiben anschließend im Cache. Reduced Motion deaktiviert die Animationen.
 Während Live-Session-Ereignisse eintreffen, entfallen die früheren 2,5-Sekunden-
@@ -4107,7 +3834,7 @@ wird die tatsächliche Outputgrenze passend zu Restbudget und Kontextfenster
 gesetzt. Explizite Reasoning-Budgets behalten ihren erforderlichen Platz.
 Reicht es auch für Input und eine minimale Antwort nicht, wird vor dem Provider
 gestoppt. Eine am Outputlimit abgeschnittene Antwort bleibt als Teilantwort erhalten.
-Eine zusätzliche pauschale Reserve für zukünftige Synthese-/Judge-Aufrufe entfällt
+Eine zusätzliche pauschale Reserve für spätere Aufrufe (Antwort, Prüfer) entfällt
 im Chat. Reicht das Tagesbudget für einen nächsten Aufruf nicht, bleiben vorhandene
 Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus erhalten.
 
@@ -4122,19 +3849,22 @@ sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 
 | Schutzgrenze pro Nachricht | Standard | Verhalten |
 |---|---|---|
-| Vergleiche (`turn_comparisons`) | 4 | Der fünfte `compare_models` liefert einen Tool-Fehler („write the answer now“), nichts Bezahltes startet; der vierte meldet „last comparison allowed“. |
+| Vergleiche (`turn_comparisons`) | 4 | Die Beschreibung von `compare_models` nennt die Grenze; der fünfte Aufruf liefert einen Tool-Fehler („This message already has its maximum of 4 comparisons …“), nichts Bezahltes startet; das Ergebnis des vierten sagt, dass es der letzte war. |
 | Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
 | Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. Seit 2026-10-08 kommt der Wrap-up früher, wenn bis zum harten Stopp weniger als `ANSWER_RESERVE_SECONDS` der Denkstufe bleibt (max 10 min, high 6 min, low 2,5 min); ebenso endet dann das Warten auf Nachzügler. |
 | Lange VM-Läufe (`vm_turn_steps`, `vm_turn_seconds`) | 200 Schritte, 2 h | Ersetzen `turn_steps` und `turn_seconds`, sobald die VM in der Nachricht einmal lief (`_long_run`, seit 2026-10-26; Wrap-up und harter Stopp wie dort). |
-| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (ohne `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
+| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (bis 2026-10-31 ohne das Anzeigefeld `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
 
-Wrap-up: Gibt es einen Vergleich mit mindestens zwei Antworten (oder schon eine
-fixierte Antwort) und sind alle Worker geprüft, schreibt der Agent die Antwort in
-einem letzten Schritt ohne aufrufbare Tools (`_merged_wrap_up`, siehe
-„Turn-Grenzen“), und die Judges prüfen sie wie im Normalpfad; der Turn endet
-regulär. Sonst, auch in einem Turn ohne Vergleich, endet er mit
-`AnalysisBudgetExceeded` (`run_limit`, „… The available results have been saved;
-send a follow-up message to continue.“); gespeicherte Vergleiche bleiben erhalten.
+Wrap-up: Sind alle Worker geprüft (`_can_wrap_up`), schreibt der Agent die
+Antwort in einem letzten Schritt ohne aufrufbare Tools aus dem, was er hat
+(`_merged_wrap_up`, siehe „Turn-Grenzen“), und die Prüfer prüfen sie wie im
+Normalpfad; der Turn endet regulär. Die Grenze steht am Turn (`agent_wrap_up`)
+und als App-Eintrag `limit` im Protokoll. Sonst (ein ungeprüfter Worker, ein
+reiner Delegationslauf) endet er mit `AnalysisBudgetExceeded` (`run_limit`, „…
+The available results have been saved; send a follow-up message to
+continue.“); gespeicherte Vergleiche bleiben erhalten. Bis 2026-10-31 schrieb
+der Vergleichsmodus einen Wrap-up nur mit einem Vergleich mit mindestens zwei
+Antworten oder einer schon fixierten Antwort.
 
 **Lange VM-Läufe (seit 2026-10-26).** Arbeitet der Agent in seiner VM
 (`VMSession.started`, auch wenn die VM danach ausfällt), gelten
@@ -4149,8 +3879,8 @@ ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch
 samt Antwort unter 80 % des Modellfensters bleibt (`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
 `TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
 ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
-have, without tool calls.“), statt abzubrechen; sie bleibt wie jede Antwort
-ohne Vergleich ungeprüft. Ein Render-Deploy beendet laufende Läufe weiterhin
+have, without tool calls.“), statt abzubrechen; die Prüfer prüfen sie wie
+jede Antwort. Ein Render-Deploy beendet laufende Läufe weiterhin
 nach `AGENT_SHUTDOWN_GRACE_SECONDS`; der Live-Puffer hält einen Lauf bis 3 h
 nach seinem letzten Frame (`ACTIVE_TTL_SECONDS`, seit 2026-10-29 nicht mehr ab
 dem Start: ein Werkbank-Lauf mit Pausen überschreitet 3 h Wanduhr).
@@ -4192,12 +3922,11 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 |---|---|
 | Parallele Worker-Unteraufrufe | 2 (`max_parallel`, nur Delegation) |
 | Parallele Vergleichsantworten | alle gewählten Modelle eines Vergleichs |
-| Parallele Judge-Aufrufe | 6 |
-| Antwortmodelle pro Vergleich | vorhandene Auswahl, mindestens 2 |
+| Modelle pro Vergleich | alle gewählten, 1 bis 6 (`MAX_RUN_FAMILIES`) |
+| Prüfer je Lauf | dieselben Modelle, je eine Sitzung und ein Thread |
 | Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch fairen Budgetanteil und Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit`. Endet sie nach Denken ohne ein Wort mit `stop` (`empty_answer`), versucht die App sie einmal neu |
-| Antwort (Ausgabegrenze jedes Schritts mit Vergleichstools) | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536; `answer_output_limit`), begrenzt durch Kontextfenster und Restbudget; der Teil über dem Steuer-Budget wird einmal reserviert und darf überziehen |
+| Antwort (Ausgabegrenze jedes Schritts des Agenten) | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536; `answer_output_limit`), begrenzt durch Kontextfenster und Restbudget; der Teil über dem Steuer-Budget wird einmal reserviert und darf überziehen |
 | Orchestrierungsschritte (Zulassung) | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096; mit aktivem Reasoning zusätzlich 12288 (`ROUTING_REASONING_HEADROOM`), reserviert je Suchrunde |
-| Geprüfte Antwortsätze | 320; Coverage prüft in parallelen Fenstern zu 80 Sätzen |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |
@@ -4210,19 +3939,20 @@ verbucht und weiterer Verbrauch blockiert. Unbekannte Nutzung ist kein Nullwert.
 Drei aufeinanderfolgende Tool-Batches ohne gültig ausgeführten Aufruf stoppen
 als Protokollstillstand, statt das Tageskontingent mit derselben ungültigen
 Anfrage aufzubrauchen. Seit 2026-10-12 auch hier per Wrap-up
-(`TURN_INVALID_LIMIT`): bezahlte Vergleiche mit zwei Antworten führen trotzdem
-zur geprüften Antwort, etwa wenn das Modell nach einem Vergleich dreimal einen
-`compare_models` ohne Pflichtfeld `memory` schickt; ohne solchen Vergleich endet
-der Turn wie bisher. Gültige
-Arbeit begrenzen nur die Schutzgrenzen pro Nachricht oben.
+(`TURN_INVALID_LIMIT`): Der Agent schreibt die Antwort aus dem, was er hat,
+und die Prüfer prüfen sie (bis 2026-10-31 nur nach bezahlten Vergleichen mit
+zwei Antworten, etwa wenn das Modell dreimal `compare_models` ohne Pflichtfeld
+`memory` schickte). Gültige Arbeit begrenzen nur die Schutzgrenzen pro
+Nachricht oben.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
-verfügbaren Tools (und dem Hinweis, dass es kein Seitenöffnen gibt, mit
-`read_source` nur für zitierte URLs), Feld und
-Meldung je Schemafehler ohne Eingabewerte. Rein anzeigende Felder
-(`status_update`, `reason`) werden gekürzt statt abgelehnt, `context` darf
-fehlen. Abgelehnte Aufrufe loggen Tool, Feldpfade und Argumentlänge
+verfügbaren Tools (und `_unknown_notes`: welches Werkzeug Seiten öffnet, dass
+es keines gibt, oder dass die Werkzeuge des geschlossenen Arbeitsplatzes erst
+nach `open_workspace` kommen), Feld und Meldung je Schemafehler ohne
+Eingabewerte. Rein anzeigende Felder hat seit 2026-10-31 kein Werkzeug mehr
+(bis dahin wurden `status_update` und `reason` gekürzt statt abgelehnt);
+`context` darf fehlen. Abgelehnte Aufrufe loggen Tool, Feldpfade und Argumentlänge
 (`Agent tool call rejected`), nie Inhalte.
 
 ## Recherche, Delegation und Providerprotokoll
@@ -4253,75 +3983,68 @@ sicher nur auf Exa; ob die eigene Suche der Anbieter sie beachtet, ist nicht gar
 **Wer wie oft sucht.** Das ist die einzige Stellschraube, und sie ist eine
 Produktentscheidung, keine Modell-Sonderlösung:
 
-- Vergleichsmodelle (seit 2026-10-06): `quick` eine Runde, `full` bis zu drei
-  (`SEARCH_ROUNDS`), für jedes Konto und jede Antwort eines Vergleichs gleich.
-  Das ist ein Budget, keine Pflicht: Das Modell entscheidet selbst, ob es nach
-  der ersten Suche nachfasst (Lücken, widersprüchliche oder dünne Belege). Der
-  Vergleich speichert die Obergrenze als `search_rounds`. Der Prompt
-  (`agent_comparison.comparison_system_prompt`) nennt das Datum und die
+- Agent (seit 2026-10-31 in jedem Chat-Lauf, im Audit seit 2026-10-25): in
+  jedem Schritt bis zu `AGENT_SEARCH_ROUNDS` (5) Runden; er recherchiert die
+  ganze Antwort selbst. Der letzte Schritt an einer Turn-Grenze sucht nicht.
+  Bis 2026-10-31 durfte der Orchestrator des Vergleichsmodus vor dem ersten
+  Vergleich bis zu drei Runden suchen (`ORCHESTRATOR_SEARCH_ROUNDS`), nur um
+  die Anfrage zu verstehen, nach einem Vergleich eine Runde je Schritt, und
+  behielt seine Funde seit 2026-10-06 für sich: Gingen sie an alle
+  Vergleichsmodelle, standen alle sechs auf denselben Quellen, und die
+  unabhängigen Perspektiven gingen verloren.
+- Vergleichsantworten (`compare_models`, seit 2026-10-06): `quick` eine Runde,
+  `full` bis zu drei (`SEARCH_ROUNDS`), für jedes Konto und jede Antwort eines
+  Vergleichs gleich. Das ist ein Budget, keine Pflicht: Das Modell entscheidet
+  selbst, ob es nach der ersten Suche nachfasst (Lücken, widersprüchliche oder
+  dünne Belege). Der Vergleich speichert die Obergrenze als `search_rounds`. Der
+  Prompt (`agent_comparison.comparison_system_prompt`) nennt das Datum und die
   Rundenzahl, verlangt bei zeitabhängigen Fakten eine Suche mit Monat und Jahr
-  in der Anfrage und erklärt Angaben im `context` ohne Quelle für ungeprüft.
-  Eine kontingentabhängige Rundenzahl ist bewusst vertagt.
-- Orchestrator: darf vor dem ersten Vergleich bis zu drei Runden suchen
-  (`ORCHESTRATOR_SEARCH_ROUNDS`), aber nur, um die Anfrage zu verstehen und eine
-  präzise Aufgabe zu formulieren (unbekannter Begriff, Produkt, Ereignis, was
-  der Nutzer meint). Seit 2026-10-06 behält er die Funde für sich: keine
-  Funde, keine Quellen-URLs, keine Vorgaben wie „verwende Quelle X“ im
-  `context`. Vorher gingen seine Funde an alle Vergleichsmodelle; damit standen
-  alle sechs auf denselben Quellen, und die unabhängigen Perspektiven, der
-  eigentliche Wert von consens.io, gingen verloren. Der `context` trägt nur,
-  was Nutzer und Gespräch geliefert haben; eigene Erinnerung an Produkte,
-  Versionen oder Preise nicht. Gegenseitig abgesichert: Der
-  Vergleichsmodell-Prompt nennt Quellen im `context` ausdrücklich Hinweise, nie
-  Pflicht. Endet die Server-Suche mit einer Rechercheantwort, führt
-  `_consensus_search_handoff` ohne Quellenliste zum Vergleich zurück. Nach
-  einem Vergleich höchstens eine Runde pro Schritt, etwa um einen konkreten
-  Widerspruch zu klären; eine zitierte Quelle selbst lesen kann er mit
-  `read_source` (siehe „Quellen nachlesen“, standardmäßig an). Seit
-  2026-10-07 kommen alle Prompts aus dem Code;
-  ein gespeicherter Admin-Prompt mit der alten Anweisung wirkt nicht mehr.
-- Judges suchen nie, ebenso wenig der letzte Schritt an einer Turn-Grenze. Der
-  Schritt, der die Antwort schreibt, hat nach einem Vergleich wie jeder Schritt
-  eine Runde (bis 2026-10-14 suchte der getrennte Antwortschritt nie).
+  in der Anfrage, nennt Quellen im `context` Hinweise, nie Pflicht, und Angaben
+  dort ohne Quelle ungeprüft. Eine kontingentabhängige Rundenzahl ist bewusst
+  vertagt.
+- Prüfer: je Live-Runde bis zu `LIVE_SEARCH_ROUNDS` (2), in der Schlussrunde
+  `REVIEW_SEARCH_ROUNDS` (3); Gate-Runden suchen nicht (siehe
+  „Vorab-Prüfung“).
+- Seit 2026-10-07 kommen alle Prompts aus dem Code; ein gespeicherter
+  Admin-Prompt mit einer alten Anweisung wirkt nicht mehr.
 
 Ohne Datum und Suche hatten sich fünf Vergleichsmodelle auf denselben
 veralteten Trainingsstand geeinigt („Claude 3.5 Sonnet, GPT-4o“ als neueste
-Modelle) — ein Scheinkonsens, den die Prüfung nicht erkennen kann.
+Modelle) — ein Scheinkonsens, den keine Prüfung erkennen kann.
 
 **Reservierung.** Jede Suchrunde reserviert für jedes Modell gleich
 `agent_costs.SEARCH_INPUT_TOKENS` (32k), höchstens so viel, wie das
-Kontextfenster noch fasst. Ausnahme seit 2026-10-06: **Vergleichsantworten
-reservieren ihre Suche nicht** (`soft_search`); sie muss nur ins
-Kontextfenster passen, die Abrechnung bucht den gemessenen Verbrauch. Die
-Worst-Case-Schranke für drei Runden und sechs parallele Antworten (≈ 1,5 M
-Tokens) läge sonst über einem ganzen Free-Tag, und die Zulassung hätte die
-zuletzt gestarteten Modelle abgestuft. Damit ein Vergleich, der das Tageslimit
-dabei überzieht, nicht bezahlte Antworten verwirft, dürfen, sobald ein Vergleich
-bezahlte Antworten hat, der Schlussschritt, der die Antwort ohne Tools schreibt
-(`_merged_wrap_up`), und die Judges das Limit überziehen
-(`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die nächste
-Nachricht wird dann abgelehnt, wie nach einem überzogenen Pipeline-Lauf. Ein
-Steuer-Schritt danach läuft nur im Kontingent: Weist es ihn vor seinem Claim ab,
-nimmt der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
-Bis 2026-10-28 überzog jeder Steuer-Schritt nach dem ersten bezahlten Vergleich,
-ohne Absage bis `turn_steps` (Sicherheitsaudit). Im Audit-Modus gibt es keine
-Vergleiche; seit 2026-10-29 (A-R2) gilt dort dasselbe, sobald der Agent in
-dieser Nachricht einen bezahlten Schritt hat (`_paid_audit`, die Prüfer sind
-ihm gefolgt): Der Schlussschritt darf überziehen, und die Schlussrunden der
-Prüfer auf die fixierte Antwort (`_final_review`, Sitzung `audit` nach
-`final_answer`, mit Reparatur und neuer Sitzung) ebenso; Live- und
-Gate-Runden bleiben im Kontingent. Ohne bezahlten Schritt endet ein
-abgewiesener erster Schritt wie bisher mit der Absage. Ein
-Schritt des Agenten reserviert je Such-Segment das Steuer-Budget und das
-Antwortbudget darüber nur einmal (`answer_output`, siehe „Die Antwort schreibt
-der Agent selbst“). Grundlage, gemessen 2026-10-01 pro Runde: eigene
-OpenAI-Suche bis ≈ 11k Tokens, Exa (5 × 2000 Zeichen) ≈ 2,5k, Anthropic ≈ 2k,
-Google ≈ 0 (pro Anfrage abgerechnet). Die Abrechnung bucht den echten Verbrauch;
-eine ungewöhnlich große Runde kann das Tageslimit deshalb leicht überschreiten
-(weiche Grenze, kein Abbruch). Die Suchgebühr kommt aus dem Katalogpreis des
-Modells, sonst gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft
-`smaller_search` ab (mehrere Runden → eine → keine); Vergleichsantworten nur,
-wenn das Kontextfenster die Suche nicht fasst.
+Kontextfenster noch fasst. Ausnahme seit 2026-10-06: **Vergleichsantworten und
+Prüferrunden reservieren ihre Suche nicht** (`soft_search`, `SEARCHING_KINDS`);
+sie muss nur ins Kontextfenster passen, die Abrechnung bucht den gemessenen
+Verbrauch. Die Worst-Case-Schranke für drei Runden und sechs parallele
+Antworten (≈ 1,5 M Tokens) läge sonst über einem ganzen Free-Tag, und die
+Zulassung hätte die zuletzt gestarteten Modelle abgestuft. Damit bezahlte
+Arbeit ihre Antwort und deren Prüfung erreicht, dürfen, sobald die Nachricht
+bezahlte Arbeit hat (Vergleichsantworten, `_paid_comparison`; seit 2026-10-29,
+A-R2, auch ein Schritt des Agenten, dem Prüfer folgten, `_paid_audit`), der
+Schlussschritt, der die Antwort ohne Tools schreibt (`_merged_wrap_up`), und
+die Schlussrunden der Prüfer auf die fixierte Antwort (`_final_review`, Sitzung
+`audit` nach `final_answer`, mit Reparatur und neuer Sitzung) das Limit
+überziehen (`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die
+nächste Nachricht wird dann abgelehnt, wie nach einem überzogenen
+Pipeline-Lauf. Live- und Gate-Runden und jeder Steuer-Schritt laufen nur im
+Kontingent: Weist es einen Schritt vor seinem Claim ab, nimmt der
+Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`). Bis
+2026-10-28 überzog jeder Steuer-Schritt nach dem ersten bezahlten Vergleich,
+ohne Absage bis `turn_steps` (Sicherheitsaudit); bis 2026-10-31 überzogen im
+Vergleichsmodus auch die Judges. Ohne bezahlte Arbeit endet ein abgewiesener
+erster Schritt mit der Absage. Ein Schritt des Agenten reserviert je
+Such-Segment das Steuer-Budget und das Antwortbudget darüber nur einmal
+(`answer_output`, siehe „Die Antwort schreibt der Agent selbst“). Grundlage,
+gemessen 2026-10-01 pro Runde: eigene OpenAI-Suche bis ≈ 11k Tokens, Exa
+(5 × 2000 Zeichen) ≈ 2,5k, Anthropic ≈ 2k, Google ≈ 0 (pro Anfrage
+abgerechnet). Die Abrechnung bucht den echten Verbrauch; eine ungewöhnlich
+große Runde kann das Tageslimit deshalb leicht überschreiten (weiche Grenze,
+kein Abbruch). Die Suchgebühr kommt aus dem Katalogpreis des Modells, sonst
+gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft `smaller_search`
+ab (5 → 3 → 1 → keine); Vergleichsantworten und Prüfer nur, wenn das
+Kontextfenster die Suche nicht fasst.
 
 **Suchzähler.** OpenRouter meldet die Suchen eines Aufrufs im Usage-Paket als
 `usage.server_tool_use_details.web_search_requests` (live 2026-10-10);
@@ -4397,26 +4120,20 @@ servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 Watch bereitet der Agent nur vor (Abschnitt „Watch vorschlagen“).
 
 Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
-consens.io. Ob eine Nachricht durch `compare_models` geht, entscheidet der
-Orchestrator nach der Regel „COMPARE OR ANSWER DIRECTLY“ im Steuer-Prompt (siehe
-Anfang); die Antwort schreibt er selbst, Antwortprüfung und (wenn aktiviert)
-Quellenabgleich der Widersprüche startet danach der Server. Websuche darf
-vorher die Fragestellung klären; eine Frage, die Recherche brauchte, geht immer durch einen Vergleich. Jedes
-Vergleichsmodell kennt das Datum und sucht bei zeitabhängigen Fakten selbst einmal
-(siehe „Websuche“). Rückfragen sind auf fehlende Angaben beschränkt, ohne die keine
-nützliche Antwort möglich ist; sonst mit begründeten Annahmen weiterarbeiten.
-Diese Entscheidung bleibt promptgesteuert; ein zweiter Router oder eine
-sprachabhängige Keyword-Klassifikation erzwingt den Vergleich nicht.
-Das Chatmodell soll consens.io hilfreich, klar und korrekt in der Nutzersprache
-vertreten, den Produktzweck erklären können und keine nicht erfolgten Prüfungen
-oder garantierte Wahrheit behaupten (Schreibregeln `AGENT_ANSWER_SECTION` im
-Agent-Prompt).
-Seit 2026-10-07 kommen die Prompts nur noch aus dem Code; gespeicherte
-Admin-Prompts wirken nicht mehr.
-Liefert der Provider am Suchlimit eine Antwort ohne Vergleichs-Toolcall, folgt
-einmalig eine Orchestrierungsrunde mit den gesammelten Quellen und ohne neue
-Websuche (`_consensus_search_handoff`). Sie führt die Recherche in einen Vergleich;
-nur eine unvermeidbare Rückfrage kann ihn aufschieben.
+consens.io (Agent: `AGENT_AUDIT_ANSWER_SECTION`; Vergleichsmodelle:
+`comparison_system_prompt`; Prüfer: `review_system_prompt`). Ob der Agent
+sucht, liest, die Modelle fragt, zurückfragt oder direkt antwortet, entscheidet
+er selbst (Verfassung, kein zweiter Router, keine sprachabhängige
+Keyword-Klassifikation); die Prüfung der Antwort startet danach der Server.
+Das Chatmodell soll consens.io hilfreich, klar und korrekt in der
+Nutzersprache vertreten und keine nicht erfolgten Prüfungen oder garantierte
+Wahrheit behaupten (Verfassung: „never claim an action, result, file or review
+that did not happen“). Seit 2026-10-07 kommen die Prompts nur noch aus dem
+Code; gespeicherte Admin-Prompts wirken nicht mehr. Bis 2026-10-31 entschied
+der Orchestrator nach der Regel „COMPARE OR ANSWER DIRECTLY“ im Steuer-Prompt
+(siehe Anfang), und lieferte der Provider am Suchlimit eine Antwort ohne
+Vergleichs-Toolcall, führte `_consensus_search_handoff` sie einmalig mit den
+gesammelten Quellen und ohne neue Websuche in einen Vergleich.
 
 ### Quellenauszüge für die Antwort
 
@@ -4451,7 +4168,7 @@ Quellen kamen als `vertexaisearch…`-Weiterleitung mit der Domain als Titel
 gespeicherte Chats behielten Links, die nach einiger Zeit verfallen, und
 dieselbe EZB-Seite stand unter mehreren Adressen. `resolve_redirects` ersetzt
 sie, sobald eine Vergleichsantwort eintrifft, und zwar vor Auszügen,
-Toolergebnis, Judges und Speichern. Dafür fragt es je Weiterleitung den
+Toolergebnis, Prüfern und Speichern. Dafür fragt es je Weiterleitung den
 `Location`-Header bei Google ab (`source_redirects.resolve_urls`, parallel,
 höchstens `REDIRECT_BUDGET_SECONDS` = 3 s je Antwort). Die Offsets werden
 vorher in Zeichen umgerechnet und als umgerechnet markiert (`offsets`), weil
@@ -4464,7 +4181,7 @@ Text bleibt Auszug. Unter `MIN_SEARCH_TEXT_CHARS` (200) holt der
 Server deshalb die Seite selbst, mit einem begrenzten, gecachten Abruf
 (`source_documents.fetch_document` mit `FetchLimits`: nur öffentliche
 Adressen, 5 s, 400 kB; einsame Surrogate wie `&#55357;` werden zu U+FFFD, sonst
-scheitert der UTF-8-Request von Judge oder Agent; `dns_busy` ist eigene
+scheitert der UTF-8-Request des Agenten oder eines Prüfers; `dns_busy` ist eigene
 Kapazität und wird nicht als Fehler der URL gecacht). Die Abrufe starten, sobald eine Vergleichsantwort
 eintrifft (die ersten vier Quellen je Antwort, höchstens zwölf je Turn, drei
 parallel), also während langsamere Modelle noch schreiben. Das
@@ -4530,28 +4247,27 @@ zitierbar, auch ohne Auszug. Scheitert das Bündeln der Auszüge unerwartet,
 steht das Ergebnis mit leerer `sources`-Liste (Warnung im Log); nur ein Stopp
 beendet den Vergleich. Gebundene Läufe (nicht Kontomodus, nur in Tests) lehnen
 einen Schritt über `context_chars` ab; dort bekommen die Auszüge nur den Platz,
-den der Kontext samt Schreibnotiz übrig lässt (halbiert, bis es passt). Im
+den der Kontext übrig lässt (halbiert, bis es passt). Im
 Kontomodus bekommt jedes Vergleichsergebnis das volle Budget.
 Alle Felder von `sources` laufen durch `_scrub` (Surrogate wie oben). Kein
 Modellaufruf, keine Suche; Kosten entstehen nur als Input-Tokens der folgenden
 Schritte des Agenten (mit Prompt-Cache).
 
-**Prompt.** `AGENT_ANSWER_SECTION` erklärt die Felder: Behauptungen der
-Antworten an den Auszügen prüfen; eine Zahl, ein Datum, eine Bedingung im
-Auszug wiegt schwerer als die Paraphrase einer Antwort; was ein Auszug nicht
-zeigt, ist unbestätigt, nicht widerlegt; wo der genaue Wortlaut zählt, ein
-paar Wörter aus dem Auszug in Anführungszeichen mit URL zitieren und nie Wörter
-als Quellenzitat ausgeben, die nicht in deren Auszug oder einer gelesenen Seite
-stehen (Zitate aus dem geprüften Text oder den Antworten bleiben erlaubt).
-Zitiert wird weiter per URL (keine `[S1]`-Marken). Live-Gegenprobe 2026-10-10
-(Sonnet 5.5 im damaligen Antwortschritt auf den vier Antworten oben): beide
-wörtlichen Zitate standen in Auszügen, und die Antwort
-erkannte aus einem Auszug, dass das Handelsblatt den Beschlusstag (10.9.) statt
-des Wirksamkeitstags (16.9.) nennt.
+**Prompt.** Bis 2026-10-31 erklärte `AGENT_ANSWER_SECTION` dem
+Vergleichsmodus die Felder: Behauptungen der Antworten an den Auszügen prüfen;
+eine Zahl, ein Datum, eine Bedingung im Auszug wiegt schwerer als die
+Paraphrase einer Antwort; was ein Auszug nicht zeigt, ist unbestätigt, nicht
+widerlegt; wörtlich nur zitieren, was in einem Auszug oder einer gelesenen
+Seite steht (Live-Gegenprobe 2026-10-10: beide wörtlichen Zitate standen in
+Auszügen, und die Antwort erkannte aus einem Auszug, dass das Handelsblatt den
+Beschlusstag statt des Wirksamkeitstags nennt). Seit dem einen Modus gibt es
+keinen solchen Block: Das Ergebnis selbst sagt, dass Antworten, Quellen und
+Auszüge nicht vertrauenswürdige Daten sind, und die Verfassung verlangt
+Wahrhaftigkeit. Zitiert wird per Link auf die URL (keine `[S1]`-Marken).
 
 **Nur im Speicher.** Quelltexte, Seiten und Auszüge leben je Turn in
-`ComparisonTools.source_evidence` und im Toolergebnis des Agenten; gespeichert,
-gestreamt und an Judges gegeben werden sie nicht. Quellen jenseits der ersten
+`ComparisonTools.source_evidence` und im Toolergebnis des Agenten, das die
+Prüfer im Arbeitsprotokoll lesen; gespeichert und gestreamt werden sie nicht. Quellen jenseits der ersten
 vier je Antwort ruft das Vergleichsergebnis (`SourceEvidence.collect`) nach
 Zitierhäufigkeit ab, innerhalb derselben Grenzen.
 `ComparisonTools.close` verwirft am Laufende Abrufe, die noch nicht begonnen
@@ -4559,101 +4275,98 @@ haben. Google-Daten-Chats suchen nicht und haben deshalb keine Auszüge.
 
 ### Quellen nachlesen (read_source, seit 2026-10-10)
 
-Nach einem Vergleich darf das Chatmodell (Orchestrator) eine Quelle, die eine
-Vergleichsantwort zitiert hat, selbst öffnen: um einen konkreten Widerspruch
-zwischen den Antworten zu klären, eine Quelle zu prüfen, nach der der Nutzer
-fragt, oder den genauen Wortlaut einer Kernaussage (Zahl, Definition, offizielle
-Aussage) zu holen. Seit 2026-10-11 zählen auch die gespeicherten Quellen früherer
-Nachrichten des Chats (`turn.sources`, über `AgentRunStore.messages(sources=…)` →
-`DelegationLoop.chat_sources`, Label „an earlier message's sources“) und URLs, die
-der Nutzer selbst geschrieben hat (`user_urls`, Label „your message“). Vorher fand
-„kannst du eine Quelle direkt nachlesen?“ nach einer Antwort mit tri247.com-Links
-nichts, was es öffnen durfte. **Nicht** lesbar sind Links, die nur im Text einer
-früheren Antwort stehen: Der Agent schreibt aus nicht vertrauenswürdiger
-Evidenz, eine präparierte Seite könnte ihn eine URL mit Chat-Inhalt schreiben
-lassen, die ein späterer Turn ohne Klick abrufen würde (Review 2026-10-11).
-Dasselbe gilt seit 2026-10-12 für eine Antwortpassage, die der Nutzer per „Ask
-about this“ zitiert: `user_urls` liest nur `agent_memory.user_words`, also ohne
-das Zitat (vorher kamen Links aus Antworttext so doch durch). Typografische
-Anführungszeichen („…“, «…», ‚…‘) beenden einen Link wie gerade, und ein
-großgeschriebenes `HTTPS://` zählt mit.
-Seit 2026-10-18 gilt auch eine Quelle, auf die der Nutzer die Antwort
-beschränkt („nur die offizielle Karriereseite“), als Lesegrund
-(`purpose: user_request`): Der Agent liest deren zitierte Seiten statt Kopien
-auf anderen Seiten und sagt, was er dort nicht bestätigen konnte. Anlass
-(Chat-Report 2026-10-18): Die Modelle zitierten 23 TenneT-Karriereseiten, der
-Agent las nur eine Jobbörsen-Kopie. Probe am selben Tag: Exa liefert für die
-Stellenliste (`SearchJobs/feed`) gar keinen Text, für eine einzelne Stellenanzeige
-8.000 Zeichen. Weiterklicken über Links einer gelesenen Seite ist deshalb nicht
-gebaut: Exas Auszug behält kaum Links (Stellenanzeige 13 nackte URLs der
-Navigation, Karriereseite 2, docs.python.org keine).
-Gespeicherte Quellen sind Provider-Zitate oder bereits gelesene Seiten. Schalter:
-`AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
-Code: `agent_read_source.py`.
+`read_source` öffnet eine öffentliche Seite als Text, auch PDFs: ein
+Leser-Dienst holt sie ohne Anmeldung, Skripte oder Klicks, etwa 10–30 s je
+Abruf (die Beschreibung sagt seit 2026-10-28, was es öffnet, nicht wann).
+Argument nur `url` (`AuditReadSourceArgs`; bis 2026-10-31 nahm der
+Vergleichsmodus dazu `purpose` und `point` aus einer Liste von Lesegründen und
+ein `status_update`). Schalter: `AGENT_READ_SOURCES` (Env), seit 2026-10-11
+standardmäßig an, `0` schaltet ab. Code: `agent_read_source.py`.
 
-**Im Audit-Modus jede öffentliche Seite (seit 2026-10-28).** Gemessen über alle
-Audit-Läufe vom 25. bis 28.10.: GPT-6.1 Terra suchte 15-mal und behielt eine
-Quelle, GPT-6 Luna 7-mal und keine (DeepSeek 25 → 45, MiMo 3 → 10, Sonnet 1 → 5).
-Die eingebaute Suche von OpenAI schickt ihre Treffer nicht an die App, nur in
-den Kontext des Modells. `read_source` lehnte deshalb ab, was Terra (seit dem
-28.10. das Standard-Chatmodell) gefunden hatte, die Prüfer sahen nur „hat
-gesucht“, und der Agent wich auf den Browser aus, wo jedes `open` auf die
-Prüfer wartet und ein Prüfer die unerklärte Adresse prompt als Injection anhielt
-(Chat „Bester HSG-Spieler“: linktr.ee). Jetzt liest `read_source` im
-Audit-Modus jede öffentliche http(s)-Adresse; eine, die die Nachricht nicht
-hielt, ging bis 2026-10-29 vorher durch die Vorab-Prüfung (`WEB_READS`), wie
-ein `open` im Browser, seitdem folgen die Prüfer live. `SourceReader.chosen` nimmt sie nur, wenn Prüfer dem Lauf
-folgen (`auditor.sessions`), sonst gilt die alte Absage; gelesen steht sie
-mit dem Label `LABEL_CHOSEN` („a page you chose“). Die Sicherheit bleibt die
-des Browsers: Eine Adresse mit Chat-Inhalt erreicht ihren Server erst nach
-dem Go aller Prüfer, und der Abruf läuft über Exa ohne Anmeldungen. Die
-Werkzeugbeschreibung sagt das als Fakt, `AGENT_AUDIT_ANSWER_SECTION`, dass bei
-manchen Anbietern die Treffer nur das Modell erreichen; die Prüfer lesen in
-`REVIEW_PROMPT_BODY`, dass Adressen nach so einer Suche aus ihr stammen können.
+**Was lesbar ist** (`SourceReader.cited`, `chosen`):
+
+- Quellen, die eine Antwort von `compare_models` dieser Nachricht zitiert;
+- die eigenen Suchtreffer dieser Nachricht (`LABEL_SEARCH`, seit 2026-10-27);
+- die gespeicherten Quellen früherer Nachrichten des Chats (`turn.sources`,
+  über `AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`,
+  Label „an earlier message's sources“, seit 2026-10-11) und URLs, die der
+  Nutzer selbst geschrieben hat (`user_urls`, Label „your message“): Vorher
+  fand „kannst du eine Quelle direkt nachlesen?“ nach einer Antwort mit
+  tri247.com-Links nichts, was es öffnen durfte;
+- seit 2026-10-28, solange Prüfer dem Lauf folgen (`auditor.sessions`), jede
+  öffentliche http(s)-Adresse (`LABEL_CHOSEN`, „a page you chose“).
+
+Ohne Prüfer gilt nur die Liste ohne den letzten Punkt. Dann sind Links, die nur
+im Text einer früheren Antwort stehen, **nicht** lesbar: Der Agent schreibt aus
+nicht vertrauenswürdiger Evidenz, eine präparierte Seite könnte ihn eine URL
+mit Chat-Inhalt schreiben lassen, die ein späterer Turn ohne Klick abrufen
+würde (Review 2026-10-11). Dasselbe gilt seit 2026-10-12 für eine
+Antwortpassage, die der Nutzer per „Ask about this“ zitiert: `user_urls` liest
+nur `agent_memory.user_words`, also ohne das Zitat. Typografische
+Anführungszeichen („…“, «…», ‚…‘) beenden einen Link wie gerade, und ein
+großgeschriebenes `HTTPS://` zählt mit. Mit Prüfern ist die Sicherheit die des
+Browsers: Sie folgen jedem Abruf live, und der Abruf läuft über Exa ohne
+Anmeldungen.
+
+Anlass für die freie Wahl (Audit-Läufe 25.–28.10.): GPT-6.1 Terra suchte
+15-mal und behielt eine Quelle, GPT-6 Luna 7-mal und keine (DeepSeek 25 → 45,
+MiMo 3 → 10, Sonnet 1 → 5). Die eingebaute Suche von OpenAI schickt ihre
+Treffer nicht an die App, nur in den Kontext des Modells. `read_source` lehnte
+deshalb ab, was Terra (seit dem 28.10. das Standard-Chatmodell) gefunden hatte,
+die Prüfer sahen nur „hat gesucht“, und der Agent wich auf den Browser aus, wo
+ein Prüfer die unerklärte Adresse prompt als Injection anhielt (Chat „Bester
+HSG-Spieler“: linktr.ee). Bis 2026-10-29 ging eine Adresse, die die Nachricht
+nicht hielt, vorher durch die Vorab-Prüfung (`WEB_READS`), seitdem folgen die
+Prüfer live. `AGENT_AUDIT_ANSWER_SECTION` sagt, dass bei manchen Anbietern die
+Treffer nur das Modell erreichen; die Prüfer lesen in `REVIEW_PROMPT_BODY`, dass
+Adressen nach so einer Suche aus ihr stammen können. Seit 2026-10-18 war im
+Vergleichsmodus auch eine Quelle, auf die der Nutzer die Antwort beschränkt
+(„nur die offizielle Karriereseite“), ein Lesegrund (`purpose: user_request`;
+Chat-Report 2026-10-18: Die Modelle zitierten 23 TenneT-Karriereseiten, der
+Agent las nur eine Jobbörsen-Kopie). Weiterklicken über Links einer gelesenen
+Seite ist nicht gebaut: Exas Auszug behält kaum Links (Probe 2026-10-18:
+Stellenanzeige 13 nackte URLs der Navigation, Karriereseite 2, docs.python.org
+keine).
 
 **Warum ein eigenes Tool.** Der naheliegende Weg, OpenRouters Server-Tool
-`openrouter:web_fetch` direkt in den Steuerschritt zu hängen, scheitert an der
-Prüfbarkeit: Über Chat Completions (unser Transport) kommt der gelesene Text nie
-beim Client an, nur ein Zähler in `usage.server_tool_use_details`
+`openrouter:web_fetch` direkt in den Schritt des Agenten zu hängen, scheitert an
+der Prüfbarkeit: Über Chat Completions (unser Transport) kommt der gelesene
+Text nie beim Client an, nur ein Zähler in `usage.server_tool_use_details`
 (`tool_calls_requested`/`tool_calls_executed`, auch für gescheiterte Abrufe).
-Die Judges hätten nie gesehen, was der Orchestrator gelesen hat, das Problem, an
-dem die Worker-Delegation scheiterte. Die Responses API liefert
+Weder die Judges von damals noch die Prüfer hätten gesehen, was der Agent gelesen hat,
+das Problem, an dem die Worker-Delegation scheiterte. Die Responses API liefert
 den Text dagegen als Output-Item `{"type": "openrouter:web_fetch", url, title,
 content, httpStatus, error}` (Live-Probe `scripts/probe_web_fetch.py`, Ergebnis
-`artifacts/web-fetch-probe/validation.md`). Deshalb ruft der Orchestrator das
-Client-Tool `read_source(url, purpose, point)`; der Server öffnet die Seite mit
-OpenRouters Fetch in einem kleinen Responses-API-Aufruf (`PageFetch`) des
-Standard-Judges (Luna, bei Ausfall der Gemini-Standard-Judge, jeweils mit der
-leichtesten Denkstufe) und nimmt den Text aus dem Output-Item; die eigene
-Antwort des Helfers („OK“) wird verworfen.
+`artifacts/web-fetch-probe/validation.md`). Deshalb ruft der Agent das
+Client-Tool `read_source(url)`; der Server öffnet die Seite mit OpenRouters
+Fetch in einem kleinen Responses-API-Aufruf (`PageFetch`) des Standard-Judges
+(Luna, bei Ausfall der Gemini-Standard-Judge, jeweils mit der leichtesten
+Denkstufe) und nimmt den Text aus dem Output-Item; die eigene Antwort des
+Helfers („OK“) wird verworfen.
 
 **Grenzen.**
-- Vor der Antwort, seit 2026-10-11 auch ohne Vergleich (eine Seite, auf die der
-  Nutzer zeigt; danach ist kein Vergleich mehr möglich). Das Tool steht während
-  des ganzen Turns in der Registry (eine zwischen Schritten wechselnde Toolliste
-  würde den Prompt-Cache neu schreiben) und lehnt nach der Antwort ab.
-- Nur URLs, die eine Vergleichsantwort dieser Nachricht als Quelle führt, dazu
-  die Quellen früherer Nachrichten und Links des Nutzers (siehe oben)
-  (`answers[].sources`, kanonisch verglichen wie `url_key`: Schema, Host-
-  Schreibweise und Schrägstrich am Ende egal, nur http(s)). Strenger als eine
-  Domainliste: kein anderer Artikel derselben Seite, keine URL aus der eigenen
-  Suche oder aus einem Seitentext. Der Fetch läuft mit `allowed_domains` = genau
-  dieser Host (IDN in ASCII-Form), Engine `exa` fest (nur Exa, Parallel und
-  OpenRouters eigener Abruf halten Domainfilter und Tokendeckel zuverlässig ein;
-  `auto` landete in der Probe ohnehin auf Exa). Meldet der Abruf eine andere
-  Seite als die zitierte (anderer Pfad; Exas Normalisierung von Schema, „www.“,
-  Schrägstrich und Query zählt als dieselbe), gilt er als gescheitert.
+- Nur vor der Antwort. Das Tool steht während des ganzen Turns in der Registry
+  (eine zwischen Schritten wechselnde Toolliste würde den Prompt-Cache neu
+  schreiben) und lehnt nach der Antwort ab.
+- Verglichen wird kanonisch wie `url_key` (Schema, Host-Schreibweise und
+  Schrägstrich am Ende egal, nur http(s)). Der Fetch läuft mit
+  `allowed_domains` = genau dem Host der Adresse (IDN in ASCII-Form), Engine
+  `exa` fest (nur Exa, Parallel und OpenRouters eigener Abruf halten
+  Domainfilter und Tokendeckel zuverlässig ein; `auto` landete in der Probe
+  ohnehin auf Exa). Meldet der Abruf eine andere Seite als die genannte
+  (anderer Pfad; Exas Normalisierung von Schema, „www.“, Schrägstrich und Query
+  zählt als dieselbe), gilt er als gescheitert.
 - Gemini zitiert Googles Weiterleitung (`vertexaisearch.cloud.google.com`), nicht
   die Seite. Ein Request an genau diesen Host liest das Ziel aus dem
   `Location`-Header (`resolve_redirect`, ohne Weiterleitung zu folgen, Ziel nach
-  denselben Regeln wie zitierte URLs geprüft), dann liest Exa die Zielseite;
-  gespeichert werden Ziel (`url`) und Zitat (`cited_url`).
+  denselben Regeln geprüft), dann liest Exa die Zielseite; gespeichert werden
+  Ziel (`url`) und Zitat (`cited_url`).
 - Höchstens `READS_PER_MESSAGE` (15, bis 2026-10-28: 5) Abrufe je Nachricht
-  (auch gescheiterte zählen), `READS_PER_STEP` (5, vorher 3) je Steuerschritt, `READ_CONTENT_TOKENS` (4.000)
-  je Seite (`max_uses: 1`, `max_content_tokens`); gespeichert bis
-  `READ_TEXT_CHARS` (24.000 Zeichen). Eine schon gelesene URL (auch über ihre
-  Weiterleitung) liefert `already_read` ohne neuen Abruf, eine gescheiterte wird
-  nicht erneut versucht.
+  (auch gescheiterte zählen), `READS_PER_STEP` (5, vorher 3) je Schritt,
+  `READ_CONTENT_TOKENS` (4.000) je Seite (`max_uses: 1`,
+  `max_content_tokens`); gespeichert bis `READ_TEXT_CHARS` (24.000 Zeichen).
+  Eine schon gelesene URL (auch über ihre Weiterleitung) liefert `already_read`
+  ohne neuen Abruf, eine gescheiterte wird nicht erneut versucht.
 - Zeit: Ein Abruf endet samt Weiterleitung und Ersatz-Helfer nach höchstens
   `READ_SECONDS` (60 s, eigene, mit dem Turn verkettete Abbruchquelle); unter
   `READ_MIN_SECONDS` (45 s) bis zum spätesten Start der Antwort
@@ -4661,21 +4374,21 @@ Antwort des Helfers („OK“) wird verworfen.
   Abbruch zum `timeout` des Abrufs; jeder andere Stop (Nutzer, Server) beendet
   den Turn wie sonst. Ohne diese Grenze hätte ein hängender Abruf bis zur
   Stall-Frist (180 s) die Zeit der Antwort aufgezehrt.
-- Nach einem gelesenen Abruf lehnt `compare_models` ab: Der Seitentext steht
-  im Kontext des Orchestrators und darf weder als Fund noch als Anweisung einer
-  Seite in eine neue Aufgabe an die unabhängigen Vergleichsmodelle geraten.
-- Nie für Vergleichsmodelle, Judges oder Worker, nie in
-  gebundenen Läufen (nur Kontomodus) und nie in Chats mit Google-Daten
-  (Router-Flag `google_data`, Google-Zugriff für die Nachricht, zusätzlich
-  Prüfung des Chats beim Aufruf).
+- Ein gelesener Text sperrt `compare_models` nicht mehr (bis 2026-10-31 im
+  Vergleichsmodus schon: Der Seitentext sollte nicht in eine neue Aufgabe an
+  die unabhängigen Modelle geraten); die Modelle sehen nur die Frage des
+  Agenten.
+- Nie für Vergleichsmodelle, Prüfer oder Worker, nie in gebundenen Läufen (nur
+  Kontomodus) und nie in Chats mit Google-Daten (Router-Flag `google_data`,
+  Google-Zugriff für die Nachricht, zusätzlich Prüfung des Chats beim Aufruf).
 
-**Ergebnisse statt Toolfehler.** Ablehnungen (nicht zitiert, zu früh oder zu
-spät, Grenze erreicht, Google-Daten, schon gescheitert) kommen als
+**Ergebnisse statt Toolfehler.** Ablehnungen (nicht lesbar hier, zu spät,
+Grenze erreicht, Google-Daten, schon gescheitert) kommen als
 `{"status": "refused", "reason"}`, nicht lesbare Seiten als
 `{"status": "failed", "reason"}`, beide ohne `error`-Schlüssel. Drei Toolfehler
 in Folge beenden einen Turn ohne Antwort (`DelegationLoop.run`,
 `invalid_tool_rounds`); eine Paywall, ein 403 oder ein falsch kopierter Link
-dürfen die bezahlten Vergleiche nicht um ihre Antwort bringen. Ein Toolergebnis
+dürfen die bezahlte Arbeit nicht um ihre Antwort bringen. Ein Toolergebnis
 beginnt mit `status` und `note` (untrusted data, nächster Schritt), der
 Seitentext steht danach in `untrusted_page_text`.
 
@@ -4692,74 +4405,40 @@ schrumpfen, rechnet `_admit_chat_step` bei einem Abruf mit der vollen kleinsten
 Reservierung und gibt auf, sobald ein kleineres Ausgabelimit nichts mehr bringt
 (vorher drehte die Zulassung bei knappem Konto ohne Pause Runden auf dem
 Ledger). Gemessen in der Probe: ein Abruf mit Luna 0,007–0,066 ct und
-2,6–3,9 s. Der gelesene Text steht danach im Verlauf jedes weiteren
-Steuerschritts, deshalb verlangt der Prompt höchstens die ein bis zwei
-entscheidenden Seiten.
+2,6–3,9 s. Der gelesene Text steht danach im Verlauf jedes weiteren Schritts.
 
 **Wohin der Text geht.**
-- Als Toolergebnis an den Orchestrator (`untrusted_page_text`, mit `title`,
-  `text_cut` und `cited_by`); daraus schreibt er die Antwort.
-  `AGENT_READ_SOURCE_PROMPT` lässt gelesenen Text wie einen Auszug zählen
-  (wörtliche Zitate erlaubt) und verbietet, eine nicht gelesene Seite als gelesen
-  auszugeben.
+- Als Toolergebnis an den Agenten (`untrusted_page_text`, mit `title`,
+  `text_cut` und `cited_by`) und damit ins Arbeitsprotokoll, wo die Prüfer ihn
+  lesen.
 - In den Review-Snapshot als `read_sources` (Ziel-URL, ggf. `cited_url` und
-  `fetched_url`, Host, Titel, Text, Zeichen, `retrieved_at`, `purpose`, `point`,
-  `cited_by` mit Vergleich und Familie, `model`; bei Fehlern `status: failed` und
-  `error`, nie Inhalt). Wird der Snapshot zu groß (600 kB), entfallen zuerst die
-  Teiltexte abgebrochener Antworten, dann Judge-Details und Gegenzitate der
-  Textprüfung; danach werden die gespeicherten Seitentexte auf 2.000 Zeichen
-  gekürzt (`text_trimmed`), im Speicher bleiben sie vollständig. Endet der Lauf
-  während eines Abrufs, setzt `finish_run` einen gespeicherten „running“-Eintrag
-  auf `failed`.
-- Bis 2026-10-14 zusätzlich in die Evidenz des getrennten Antwortschritts
-  (`read_sources`, `SourceReader.evidence`).
-- An den Coverage-Judge als eigene `<page label="Page n" url="…">`-Blöcke
-  (`query_differences(read_sources=...)`, zusammen höchstens 40.000 Zeichen).
-  „Page“, nicht „Source“: Die Coverage-Regeln lassen den Judge Quellenmarken in
-  den Antworten ignorieren. `<page>`- und `<response>`-Tags im Seiten- wie im
-  Antworttext werden entschärft, die URL im Attribut kodiert. Der Judge gibt
-  jeder Seite je Satz eine Stance wie einem Modell; sie steht als
-  `claims[].read_sources` (`url`, `stance`, Zitat nur wenn es als ganze Wörter
-  auf der Seite steht) und zählt nie als Stimme: `agree`/`dissent`,
-  Coverage-Zustand und Score bleiben die der Modelle. Der Differences-Judge sieht
-  die Seiten nicht.
+  `fetched_url`, Host, Titel, Text, Zeichen, `retrieved_at`, `cited_by` mit
+  Vergleich und Familie bzw. Label, `model`; bei Fehlern `status: failed` und
+  `error`, nie Inhalt; alte Turns tragen dazu `purpose` und `point`). Wird der
+  Snapshot zu groß (600 kB), entfallen zuerst die Teiltexte abgebrochener
+  Antworten, dann werden die gespeicherten Seitentexte auf `READ_TRIM_CHARS`
+  (2.000 Zeichen) gekürzt (`text_trimmed`, im Speicher bleiben sie
+  vollständig), zuletzt Zitate und lange Anmerkungen der Prüfer (`trim_marks`).
+  Endet der Lauf während eines Abrufs, setzt `finish_run` einen gespeicherten
+  „running“-Eintrag auf `failed`.
+- Bis 2026-10-31 bekam im Vergleichsmodus der Coverage-Judge gelesene Seiten
+  als `<page>`-Blöcke und gab ihnen je Satz eine Stance
+  (`claims[].read_sources`, nie eine Stimme); gespeicherte Turns zeigen das
+  weiter. Bis 2026-10-14 gingen sie zusätzlich in die Evidenz des getrennten
+  Antwortschritts.
 
-**Prompt.** Nur bei eingeschaltetem Feature: der Block `AGENT_READ_SOURCE_PROMPT`
-(„READING SOURCES“) und vier angepasste Sätze (`AGENT_READ_SOURCE_REPLACEMENTS`:
-Seiten lesen statt URL weitergeben, Konflikt erst per gelesener Quelle statt Suche
-klären, „eine Seite lesen, auf die der Nutzer zeigt“ als direkte Antwort,
-`status_update` auch bei `read_source`). Seit 2026-10-11 gibt es kein
-Vorausplanen mehr: Bis dahin wählte das Modell `next_step` beim Aufruf von
-`compare_models`, also bevor es die Antworten sah, und mit `"answer"` konnte es
-nichts mehr lesen (Live-Smoke 2026-10-10: Sonnet setzte zweimal `"answer"`, obwohl
-der Judge danach fünf Abweichungen fand). Jetzt sieht der Orchestrator nach jedem
-Vergleich die Antworten und liest nur, was die Antwort ändert; das Ergebnis von
-`compare_models` erinnert daran, wenn eine Antwort Quellen nennt („If the user
-asked you to read or check a source, if these answers disagree … read_source …;
-otherwise do not read“). Lesen geht auch ohne Vergleich (`purpose:
-"user_request"`): „Lies die Quelle nach“ liest und antwortet direkt. Nach einem
-Lesen bleibt `compare_models` gesperrt (die Modelle müssen unabhängig antworten);
-will der Nutzer die Aussagen einer Seite geprüft haben, erst vergleichen, dann
-lesen. Live 2026-10-11 hatte „Lies die erste Quelle nach und sag mir die
-Siegerzeit“ noch sechs Modelle nach einer Seite gefragt, die sie nicht sehen.
-
-**Live-Smoke 2026-10-10** (echte Läufe über die API, Sonnet 5.5, Standard-Preset,
-Prod-Firestore; Stand vor dem Review, dessen Änderungen der Auslöser enger machten):
-- Grundfreibetrag 2026 mit Wunsch nach wörtlichem Zitat, erste Prompt-Fassung:
-  kein Abruf (`next_step: answer`), 0,14 $.
-- Eiffelturm-Höhe („überall andere Zahlen“), zweite Fassung: `more_work`, der
-  Agent sah die Antworten (alle 330 m) und las richtigerweise nicht, 0,29 $
-  (Tiefe `full`).
-- Grundfreibetrag, zweite Fassung: Abruf von gesetze-im-internet.de/estg/__32a
-  (`exact_wording`, 2.828 Zeichen, Helfer GPT-5.6 Luna – der konfigurierte
-  OpenAI-Standard-Judge – 1.302 Input-Tokens, 0,037 ct); das Gesetzeszitat der
-  Antwort steht Wort für Wort im gelesenen Text; Differences und Coverage
-  liefen, die Seite stützte 8 Aussagen (`claims[].read_sources`); 0,18 $ für den
-  ganzen Turn (gleiche Frage ohne Abruf 0,14 $: Mehrkosten vor allem durch den
-  zusätzlichen Steuerschritt).
+**Live-Smoke 2026-10-10** (Vergleichsmodus, Sonnet 5.5, Standard-Preset,
+Prod-Firestore): Der Grundfreibetrag mit Wunsch nach wörtlichem Zitat las
+gesetze-im-internet.de/estg/__32a (2.828 Zeichen, Helfer GPT-5.6 Luna, 1.302
+Input-Tokens, 0,037 ct); das Gesetzeszitat der Antwort stand Wort für Wort im
+gelesenen Text, 0,18 $ für den Turn statt 0,14 $ ohne Abruf, vor allem durch den
+zusätzlichen Schritt. Bei der Eiffelturm-Höhe sah der Agent, dass alle
+Antworten 330 m nannten, und las richtigerweise nicht. Bis 2026-10-11 wählte
+das Modell schon beim Aufruf von `compare_models` per `next_step`, ob es danach
+noch liest; seitdem sieht es erst die Antworten.
 
 **Anzeige.** Die Aktivität zeigt „Reading example.org…“ (Host nur bei einer
-zitierten URL, nie für Googles Weiterleitung) und danach „Read source ·
+lesbaren URL, nie für Googles Weiterleitung) und danach „Read source ·
 example.org“ nur, wenn der Abruf Text geliefert hat (`read: completed` im
 Tool-Ereignis); sonst „Could not read · example.org“, „Already read ·
 example.org“, „Read source · Skipped“ (abgelehnt) oder „Read source · Stopped“
@@ -4778,8 +4457,8 @@ Claude zeigt Bildtreffer direkt, der Agent schrieb „Direkt einblenden kann ich
 es hier leider nicht“. Ein Markdown-Bild in der Antwort lädt der Browser
 absichtlich nie (`markdown-stream.js`: eine injizierte Bildadresse könnte
 Chat-Inhalt beim Rendern ohne Klick hinaustragen). Deshalb holt der Server
-das Bild (`agent_web_images.py`, nur im Audit-Modus und dort, wo
-`read_source` läuft, also nie in Chats mit Google-Daten), in zwei Schritten
+das Bild (`agent_web_images.py`, überall, wo `read_source` läuft, also nie in
+Chats mit Google-Daten; bis 2026-10-31 nur im Audit), in zwei Schritten
 seit 2026-10-29:
 
 - **Erst ansehen:** `find_pictures(urls)` holt bis zu 6 Adressen gleichzeitig
@@ -4802,7 +4481,7 @@ seit 2026-10-29:
   Agent schreibt es auf eine eigene Zeile dort, wo das Bild hingehört, und die
   App setzt das gespeicherte Bild (`origin.ref`) an diese Stelle. Ein Bild, das
   er nicht setzt, steht nach dem Lauf wie bisher unter der Antwort. Der
-  Audit-Prompt sagt dazu nur den Fakt („a picture shows in it only where you
+  Prompt sagt dazu nur den Fakt („a picture shows in it only where you
   place one you showed, as that tool's result says“), `vm_share_file` setzt
   Bilder genauso (`f1`, `f2` …).
 - Anlass (Max, 2026-10-29, „wer ist das gesicht von delay sports? zeig her“):
@@ -4879,9 +4558,9 @@ Tests: `tests/test_agent_web_images.py`, die Gate-Fälle in
 Stop ist bereits vor dem ersten bezahlten Claim wirksam. Verwaiste Starts ohne
 Receipt werden nach Ablauf ihrer fünfminütigen Chat-Reservierung bei Status/Recovery
 geschlossen; ein neuerer Turn desselben Chats bleibt gesperrt, solange er aktiv ist.
-Bereits fertige Vergleichsantworten werden sofort einzeln gespeichert. Bricht die
-anschließende Synthese ab, bleibt auch deren Teiltext als ungeprüfte Antwortversion
-erhalten. Die Oberfläche zeigt wartende Token-Zulassung ausdrücklich an und hält
+Bereits fertige Vergleichsantworten werden sofort einzeln gespeichert. Bricht der
+Schritt ab, der die Antwort schreibt, bleibt sein gezeigter Teiltext als
+ungeprüfte Antwort erhalten. Die Oberfläche zeigt wartende Token-Zulassung ausdrücklich an und hält
 bei langen Runs die neuesten 64 Aktivitätsereignisse sichtbar.
 
 Ein einzelner Provider-Aufruf ohne Text-, Reasoning-, Tool- oder Tokenfortschritt
@@ -4921,7 +4600,7 @@ nahm nur 0–3 an. Seitdem:
   abgebrochene Versuch wird mit seinem Verbrauch abgerechnet (sonst sperrt er
   den nächsten Claim), im Arbeitsprotokoll steht er als `failed`. Ein zweiter
   Abbruch beendet den Turn wie bisher. Der 429-Retry bleibt auf Schritte nach
-  bezahlten Vergleichen beschränkt.
+  einem Vergleich beschränkt.
 - *Ein abgebrochener oder gestoppter Turn hinterlässt sein Arbeitsprotokoll*
   (`agent_work_record`, vorher nur nach VM-Läufen): „Erneut versuchen“
   schickt die Frage als nächste Nachricht, deren Verlauf nach dem
@@ -4947,15 +4626,15 @@ bestehen; Account-Tombstones verhindern verspätete Writes nach Kontolöschung.
 Ein kontogebundener Lock-Pool serialisiert kurze Agent-Transaktionen im selben
 Prozess. Temporäre Abrechnungsfehler wiederholen nur die idempotente Speicherung
 der ursprünglichen Usage, niemals den Modellaufruf. Firestore sichert weiterhin
-konkurrierende Prozesse ab. Coverage wartet bei unbegrenzter Agent-Laufzeit
-ohne numerisch unendlichen Thread-Timeout auf das Ergebnis; Provider-Abbruch
-und Transportgrenzen bleiben wirksam.
+konkurrierende Prozesse ab.
 
-Abbruch schließt Provider und wartet auf die aktiven Tool-/Judge-Threads. Ein
+Abbruch schließt Provider und wartet auf die aktiven Tool- und Vergleichsthreads;
+Prüfer-Threads bekommen `REVIEWER_JOIN_SECONDS` (10 s), dann endet der Lauf
+trotzdem. Ein
 Prozessabsturz erlaubt kein erneutes Ausführen bereits beanspruchter Schritte;
 abgelaufene Leases werden in terminale unbekannte Belege überführt. Gespeicherte
-Vergleichsantworten mit abgebrochener Prüfung bleiben im Agent-Verlauf sichtbar.
-Direktantworten behalten auch bereits gestreamten Teiltext. `agent_failure` speichert
+Vergleichsantworten bleiben im Agent-Verlauf sichtbar, auch wenn die Prüfung
+abbrach; eine Antwort behält auch bereits gestreamten Teiltext. `agent_failure` speichert
 einen sicheren Fehlercode und verständlichen Grund, der nach Reload sichtbar bleibt;
 rohe Provider-Fehlertexte werden nicht übernommen.
 Recover saved answer lädt ausschließlich den existierenden Snapshot. Auch eine
@@ -4965,15 +4644,27 @@ Ein neuer Versuch ist eine neue Nachricht mit neuem Budget, kein versteckter Ret
 
 ## Validierung
 
-- Backend: tests/test_agent_continuation.py prüft 102 Aufrufe über simulierte 17 Minuten,
-  erneuerbare Leases, weitere Reviews, Kontingent-Stopp und erhaltene Fehler/Teiltexte.
-  tests/test_agent_comparison.py sowie bestehende Agent-, Delegation-,
-  Budget-, Chat-, Bookmark- und Consensus-Judge-Tests.
-- Browser-State: tests/js/agent-review.test.mjs und bestehende Agent-Tests.
-- Oberfläche: tests/e2e/test_agent_comparison_frontend.py mit gemockten Providern,
+- Backend: `tests/test_agent_continuation.py` prüft 102 Aufrufe über simulierte
+  17 Minuten, erneuerbare Leases, weitere Reviews, Kontingent-Stopp und
+  erhaltene Fehler/Teiltexte. Der eine Modus: `tests/test_agent_audit.py`,
+  `tests/test_agent_audit_compare.py` (`compare_models`),
+  `tests/test_agent_audit_tempo.py`, `tests/test_agent_comparison.py`,
+  `tests/test_agent_answer_mode.py`, `tests/test_agent_runs.py` (Route, alte
+  Tabs und Turns, Wiederherstellung) sowie die bestehenden Agent-, Delegation-,
+  Budget-, Chat- und Bookmark-Tests. Läufe, deren Skript nur den Agenten spielt,
+  bekommen Prüfer, die nie starten (`tests/agent_reviewers.py`). Die Judges
+  der Consensus-Pipeline prüfen `tests/test_coverage_judge.py`,
+  `tests/test_differences_schema.py` und `tests/test_judge_hedge.py`.
+- Browser-State: `tests/js/agent-review.test.mjs` (Prüfung und gespeicherte
+  Turns des Vergleichsmodus), `tests/js/audit-marks.test.mjs`,
+  `tests/js/passage-check.test.mjs` (gespeicherte Karte) und bestehende
+  Agent-Tests.
+- Oberfläche: `tests/e2e/test_agent_audit_frontend.py` und
+  `tests/e2e/test_agent_comparison_frontend.py` mit gemockten Providern,
   Desktop, 390/320 Pixel, Hell/Dunkel, Tastatur und gespeicherter Ansicht.
-- Transaktionen im Firestore-Emulator: tests/e2e/test_agent_transactions.py.
+- Transaktionen im Firestore-Emulator: `tests/e2e/test_agent_transactions.py`.
 
 Befehle, isolierte Testumgebung und Build-Vertrag stehen in [testing.md](testing.md).
 Die deterministischen Tests ersetzen keine kostenpflichtigen Providerprobes für
-jede Modell-/Reasoning-Kombination; deren frühere Ergebnisse bleiben unter artifacts/.
+jede Modell-/Reasoning-Kombination; deren frühere Ergebnisse bleiben unter
+`artifacts/`.
