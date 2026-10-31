@@ -728,30 +728,12 @@ def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     """The whole path: POST /agent, the real stream client, the saved turn
     and the recovered answer. The comparison models review it (every
     account's turn since 2026-10-31) and mark nothing."""
-    from test_agent_loop import REAL_STREAM, packet, usage
+    from test_agent_loop import REAL_STREAM, reviewed_transport
     from test_agent_runs import AUTH
-    from app.services.llm import agent_client
     from app.services.llm.agent_client import AgentCompletion
-    from app.services.llm.provider_runtime import current_analysis_budget
     client, store, _ = api
     monkeypatch.setattr(AgentCompletion, "stream", REAL_STREAM)
-    chunks = [ANSWER[i:i + 100] for i in range(0, len(ANSWER), 100)]
-    requests, reviews = [], []
-
-    def lines(url, **kwargs):
-        # The agent's request offers compare_models, a reviewer's does not.
-        body = kwargs["json"]
-        agent = any(tool.get("function", {}).get("name") == "compare_models" for tool in body.get("tools") or [])
-        (requests if agent else reviews).append(body)
-        current_analysis_budget().consume()
-        for chunk in chunks if agent else [json.dumps({"marks": []})]:
-            yield "data: " + json.dumps(packet({"content": chunk}))
-            yield ""
-        yield "data: " + json.dumps(packet(finish="stop", usage=usage(0)))
-        yield ""
-        yield "data: [DONE]"
-        yield ""
-    monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
+    requests, reviews = reviewed_transport(monkeypatch, ANSWER)
     chat = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]
     payload = {"chat_id": chat["id"], "question": "Translate this, please.", "client_request_id": "merged",
                "bookmark_id": "merged", "model_id": "claude-haiku-4-5"}
