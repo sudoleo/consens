@@ -1076,6 +1076,13 @@ describe("single-model agent chat", () => {
     expect(step({...looked, count:0, outcome:'failed'})).toBe('Found no pictures');
     w.App.agentActivity.render(host, {running:true, events:[{...looked, status:'running'}]});
     expect(host.querySelector('.agent-current-status').textContent).toBe('Looking at pictures…');
+    // search_pictures (2026-10-31): what Brave's image search gave to choose from.
+    const searched = {id:'s', kind:'tool', name:'search_pictures', status:'succeeded', count:10};
+    expect(step(searched)).toBe('Found 10 pictures');
+    expect(step({...searched, count:1})).toBe('Found a picture');
+    expect(step({...searched, count:0})).toBe('Found no pictures');
+    w.App.agentActivity.render(host, {running:true, events:[{...searched, status:'running'}]});
+    expect(host.querySelector('.agent-current-status').textContent).toBe('Searching for pictures…');
     dom.window.close();
   });
 

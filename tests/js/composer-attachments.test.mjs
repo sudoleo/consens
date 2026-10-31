@@ -16,7 +16,9 @@ const BODY = `<div class="input-section">
   <input id="reasoningToggle" type="checkbox">
   <div id="threadAskAttachments"></div>
   <dialog id="attachmentViewerModal" class="modal"><div class="modal-content"><span id="attachmentViewerTitle"></span>
-    <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button></div></dialog>`;
+    <span id="attachmentViewerCount" hidden></span>
+    <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button>
+    <button id="attachmentViewerPrev" hidden></button><button id="attachmentViewerNext" hidden></button></div></dialog>`;
 
 function boot() {
   const ctx = loadScripts(["static/js/motion.js", "static/js/modal-dialog.js", "static/js/user-settings.js", "static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
@@ -220,5 +222,36 @@ describe("composer attachment tray", () => {
     const body = document.getElementById("attachmentViewerBody");
     await vi.waitFor(() => expect(body.textContent).toContain("The file has expired or is no longer available."));
     expect(body.querySelector(".attachment-viewer-actions")).toBeNull();
+  });
+
+  // 2026-10-31: the pictures of a collage page through like a gallery.
+  it("pages through a gallery of pictures with the arrows and the keys", async () => {
+    const { window, document } = boot();
+    const picture = (id, host) => ({ fileId: id.repeat(32), name: `picture-${id}.webp`, mime: "image/webp", size: 9,
+      title: `Picture ${id}`, page: `https://${host}/page`, host });
+    const gallery = [picture("a", "rbb24.de"), picture("b", "fupa.net"), picture("c", "nextg.tv")];
+    window.App.agentWorkspace = { openFile: vi.fn(async () => ({ blob: new window.Blob(["RIFF"], { type: "image/webp" }), mime: "image/webp" })) };
+    const title = document.getElementById("attachmentViewerTitle");
+    const count = document.getElementById("attachmentViewerCount");
+    const [prev, next] = ["attachmentViewerPrev", "attachmentViewerNext"].map(id => document.getElementById(id));
+    const body = document.getElementById("attachmentViewerBody");
+    window.App.attachments.openStored({ ...gallery[0], gallery, index: 0 });
+    expect([title.textContent, count.textContent, count.hidden, prev.hidden, next.hidden]).toEqual(["Picture a", "1 / 3", false, false, false]);
+    await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
+    const source = body.querySelector("a.attachment-viewer-source");
+    expect([source.textContent, source.href, source.rel]).toEqual(["rbb24.de", "https://rbb24.de/page", "noopener noreferrer nofollow"]);
+    next.click();
+    expect([title.textContent, count.textContent]).toEqual(["Picture b", "2 / 3"]);
+    expect(window.App.agentWorkspace.openFile).toHaveBeenLastCalledWith(gallery[1].fileId);
+    const modal = document.getElementById("attachmentViewerModal");
+    modal.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    expect(count.textContent).toBe("1 / 3");
+    // From the first back to the last.
+    modal.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    expect([title.textContent, count.textContent]).toEqual(["Picture c", "3 / 3"]);
+    // A file of its own has no arrows.
+    window.App.attachments.openStored({ ...gallery[0], gallery: [gallery[0]], index: 0 });
+    expect([count.hidden, prev.hidden, next.hidden, title.textContent]).toEqual([true, true, true, "Picture a"]);
+    await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
   });
 });

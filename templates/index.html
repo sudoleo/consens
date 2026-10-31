@@ -972,10 +972,14 @@
   <dialog id="attachmentViewerModal" class="modal attachment-viewer-dialog" aria-labelledby="attachmentViewerTitle">
     <div class="modal-content attachment-viewer">
       <div class="attachment-viewer-head">
-        <span id="attachmentViewerTitle" class="attachment-viewer-title"></span>
+        <span id="attachmentViewerTitle" class="attachment-viewer-title" data-i18n-skip></span>
+        <span id="attachmentViewerCount" class="attachment-viewer-count" hidden></span>
         <button type="button" id="attachmentViewerClose" class="attachment-viewer-close close-button" aria-label="Close preview"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
       </div>
       <div id="attachmentViewerBody" class="attachment-viewer-body"></div>
+      <!-- Paging through a gallery of pictures (agent-workspace.js markGalleries). -->
+      <button type="button" id="attachmentViewerPrev" class="attachment-viewer-nav is-prev" aria-label="Previous picture" hidden><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
+      <button type="button" id="attachmentViewerNext" class="attachment-viewer-nav is-next" aria-label="Next picture" hidden><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
     </div>
   </dialog>
 

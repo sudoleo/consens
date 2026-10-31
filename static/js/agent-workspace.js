@@ -497,13 +497,39 @@
         place.replaceChildren(...(figure ? [figure] : []));
       }
     }
+    markGalleries(body);
     const rest = hold ? [] : shown.filter(file => !placed.has(file.id)).map(file => figures.get(file.id).figure);
+    for (const figure of rest) markTile(figure, 0, 0);
     const slot = rest.length ? picturesSlot(body) : body._pictures;
     if (!slot) return;
     if (rest.length !== slot.children.length || rest.some((figure, index) => slot.children[index] !== figure)) {
       slot.replaceChildren(...rest);
     }
     slot.hidden = !rest.length;
+  }
+  // Pictures the agent wrote on one line are a collage (2026-10-31, Max:
+  // ChatGPT's collage to click through): one large, the next two beside it,
+  // "+2" on the third for the rest, which the viewer pages through. The marks
+  // sit on the figures, which are ours: a morph of the streamed text keeps
+  // them (agent-workspace.css lays the line out by them with :has).
+  const GALLERY_TILES = 3;
+  function markGalleries(body) {
+    for (const line of body.querySelectorAll('.md-picture-line')) {
+      const tiles = [...line.querySelectorAll(':scope > .md-picture > .agent-vm-picture')];
+      tiles.forEach((figure, index) => markTile(figure, tiles.length > 1 ? tiles.length : 0, index));
+    }
+  }
+  function markTile(figure, count, index) {
+    const marks = {
+      gallerySize: count ? String(Math.min(count, GALLERY_TILES)) : '',
+      galleryLead: count > 2 && index === 0 ? '' : null,
+      galleryMore: count > GALLERY_TILES && index === GALLERY_TILES - 1 ? `+${count - GALLERY_TILES}` : null,
+      galleryHidden: count && index >= GALLERY_TILES ? '' : null,
+    };
+    for (const [name, value] of Object.entries(marks)) {
+      if (value === null || (name === 'gallerySize' && !value)) delete figure.dataset[name];
+      else if (figure.dataset[name] !== value) figure.dataset[name] = value;
+    }
   }
   function readDataUrl(blob) {
     return new Promise((resolve, reject) => {
@@ -591,7 +617,16 @@
         open.append(node('span', 'agent-vm-picture-failed', 'Picture couldn’t load'));
       }));
     }
-    open.addEventListener('click', () => App.attachments?.openStored?.({ fileId: file.id, name: file.name, mime: file.mime, size: file.size }));
+    // The viewer pages through the pictures of the same line or of the
+    // pictures under the answer, as through a gallery (attachments.js).
+    figure._picture = { fileId: file.id, name: file.name, mime: file.mime, size: file.size, title: name,
+      page: web?.page || '', host: web?.host || '' };
+    open.addEventListener('click', () => {
+      const set = figure.closest('.md-picture-line, .agent-answer-pictures');
+      const figures = set ? [...set.querySelectorAll('.agent-vm-picture')].filter(item => item._picture) : [figure];
+      App.attachments?.openStored?.({ ...figure._picture, gallery: figures.map(item => item._picture),
+        index: Math.max(0, figures.indexOf(figure)) });
+    });
     const caption = node('figcaption', 'agent-vm-picture-caption');
     if (web) {
       // The agent's words and a site's name are content, not app text.

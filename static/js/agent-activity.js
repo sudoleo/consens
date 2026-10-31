@@ -9,9 +9,11 @@
   const tools = {
     web_search: ['Web search', 'Searching the web…', 'Searched the web'],
     read_source: ['Read source', 'Reading a source…', 'Read source'],
-    // Pictures from the web: looked at by the agent alone, then one under the
-    // answer (agent_web_images.py; lookSummary, pictureSummary).
+    // Pictures from the web: found or looked at by the agent alone, then
+    // shown in the answer (agent_web_images.py; lookSummary, foundSummary,
+    // pictureSummary).
     find_pictures: ['Pictures', 'Looking at pictures…', 'Looked at pictures'],
+    search_pictures: ['Picture search', 'Searching for pictures…', 'Searched for pictures'],
     show_image: ['Picture', 'Getting a picture…', 'Showed a picture'],
     compare_models: ['Model comparison', 'Comparing perspectives…', 'Compared perspectives'],
     check_text: ['Text check', 'Checking your text against independent answers…', 'Checked your text against independent answers'],
@@ -119,6 +121,13 @@
     const host = pictureHost(item);
     return host ? `Looked at a picture · ${host}` : 'Looked at a picture';
   }
+  // "Found 10 pictures": what the image search gave the agent to choose from.
+  function foundSummary(item) {
+    if (item.status !== 'succeeded') return null;
+    const count = Number.isInteger(item.count) ? item.count : 0;
+    if (!count) return 'Found no pictures';
+    return count === 1 ? 'Found a picture' : `Found ${count} pictures`;
+  }
   // "Opened the workspace · Build the game and start it": the task the agent
   // opened it for, its own words (agent_vm_tools.OpenWorkspaceArgs).
   function workspaceSummary(item) {
@@ -143,6 +152,7 @@
     if (item.name === 'read_source' && readSummary(item)) return readSummary(item);
     if (item.name === 'show_image' && pictureSummary(item)) return pictureSummary(item);
     if (item.name === 'find_pictures' && lookSummary(item)) return lookSummary(item);
+    if (item.name === 'search_pictures' && foundSummary(item)) return foundSummary(item);
     if (item.name === 'open_workspace' && workspaceSummary(item)) return workspaceSummary(item);
     if (item.name === 'search_chats' && item.opened && ['running', 'succeeded'].includes(item.status)) {
       return item.status === 'running' ? 'Opening an earlier chat…' : 'Read an earlier chat';

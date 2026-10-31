@@ -244,7 +244,13 @@
     const viewerTitle = document.getElementById("attachmentViewerTitle");
     const viewerBody = document.getElementById("attachmentViewerBody");
     const viewerClose = document.getElementById("attachmentViewerClose");
+    const viewerCount = document.getElementById("attachmentViewerCount");
+    const viewerPrev = document.getElementById("attachmentViewerPrev");
+    const viewerNext = document.getElementById("attachmentViewerNext");
     let viewerObjectUrl = null;
+    // The pictures a gallery pages through and the one shown (agent-workspace.js
+    // passes them with a picture of a line), else null.
+    let viewerGallery = null;
     // Stored Agent files load asynchronously; a newer open or a close makes
     // an older response stale so it can never paint into the wrong preview.
     let viewerToken = 0;
@@ -411,6 +417,17 @@
           img.alt = att.name;
           img.src = image;
           viewerBody.appendChild(img);
+          // A picture from the web names the page it came from (agent_web_images.py).
+          if (att.page && att.host) {
+            const source = document.createElement("a");
+            source.className = "attachment-viewer-source";
+            source.href = att.page;
+            source.target = "_blank";
+            source.rel = "noopener noreferrer nofollow";
+            source.textContent = att.host;
+            source.setAttribute("data-i18n-skip", "");
+            viewerBody.appendChild(source);
+          }
         } else if (mime.indexOf("text/") === 0 && file.blob.size <= TEXT_PREVIEW_BYTES) {
           const text = await readBlob(file.blob, "readAsText");
           if (token !== viewerToken) return;
@@ -442,7 +459,8 @@
       // dialog stays open and only changes what it shows.
       viewerToken++;
       releaseViewerContent();
-      viewerTitle.textContent = att.name;
+      viewerTitle.textContent = att.title || att.name;
+      showGalleryPlace(att);
 
       if (att.fileId && window.App?.agentWorkspace?.openFile) {
         showStoredAttachment(att);
@@ -505,6 +523,51 @@
     }
 
     if (viewerClose) viewerClose.addEventListener("click", closeAttachmentViewer);
+
+    // A gallery's pictures one after the other: the arrows, ← and → or a
+    // swipe, from the last back to the first; "2 / 5" beside the title.
+    function showGalleryPlace(att) {
+      const items = Array.isArray(att.gallery) ? att.gallery : [];
+      viewerGallery = items.length > 1 ? { items: items, index: Math.min(Math.max(0, att.index || 0), items.length - 1) } : null;
+      if (viewerCount) {
+        viewerCount.hidden = !viewerGallery;
+        viewerCount.textContent = viewerGallery ? (viewerGallery.index + 1) + " / " + items.length : "";
+      }
+      if (viewerPrev) viewerPrev.hidden = !viewerGallery;
+      if (viewerNext) viewerNext.hidden = !viewerGallery;
+      if (viewerBody) viewerBody.classList.toggle("is-gallery", !!viewerGallery);
+    }
+
+    function pageGallery(step) {
+      if (!viewerGallery || !viewerOverlay?.hasAttribute("open")) return;
+      const items = viewerGallery.items;
+      const index = (viewerGallery.index + step + items.length) % items.length;
+      openAttachmentViewer(Object.assign({}, items[index], { gallery: items, index: index }));
+    }
+
+    if (viewerPrev) viewerPrev.addEventListener("click", function () { pageGallery(-1); });
+    if (viewerNext) viewerNext.addEventListener("click", function () { pageGallery(1); });
+    if (viewerOverlay) {
+      viewerOverlay.addEventListener("keydown", function (event) {
+        if (!viewerGallery || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        pageGallery(event.key === "ArrowLeft" ? -1 : 1);
+      });
+    }
+    if (viewerBody) {
+      let swipe = null;
+      viewerBody.addEventListener("pointerdown", function (event) {
+        swipe = viewerGallery && event.pointerType !== "mouse" ? { x: event.clientX, y: event.clientY } : null;
+      });
+      viewerBody.addEventListener("pointercancel", function () { swipe = null; });
+      viewerBody.addEventListener("pointerup", function (event) {
+        if (!swipe) return;
+        const dx = event.clientX - swipe.x, dy = event.clientY - swipe.y;
+        swipe = null;
+        if (Math.abs(dx) > 48 && Math.abs(dx) > 1.5 * Math.abs(dy)) pageGallery(dx < 0 ? 1 : -1);
+      });
+    }
 
     // Files are open to every account since 2026-10-02: they are paid from
     // the same token account as the question. They still need an account,

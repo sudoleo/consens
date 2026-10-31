@@ -17,7 +17,7 @@ import httpx
 import pytest
 from PIL import Image
 
-from app.services import agent_vm_tools, agent_web_images, prompt_defaults, watch_images
+from app.services import agent_vm_tools, agent_web_images, picture_search, prompt_defaults, watch_images
 from app.services.agent_web_images import INTRO, encode, fetch_picture, page_picture, page_words
 from test_agent_audit import Audit, audit_loop
 from test_agent_gate import go, replies
@@ -238,3 +238,183 @@ def test_the_picture_tools_come_only_with_page_reading(store, monkeypatch):
     monkeypatch.setenv("AGENT_READ_SOURCES", "0")
     loop = audit_loop(store, Audit())
     assert not {"read_source", "find_pictures", "show_image"} & set(loop.registry.tools)
+
+
+# --- The image search (search_pictures, picture_search.py, since 2026-10-31) ---
+# Max, 2026-10-31: ChatGPT shows image results as a collage to click through,
+# its model hardly looks first. Brave's image search answers with pictures,
+# each with its page and title, and the agent chooses by those.
+PAGE_A, PIC_A = "https://www.rbb24.de/sport/delay-sports.html", "https://www.rbb24.de/img/nerlich.jpg"
+PAGE_B, PIC_B = "https://www.fupa.net/player/elias-nerlich", "https://image.fupa.net/nerlich.jpeg"
+PAGE_C, PIC_C = "https://blocked.example/team", "https://blocked.example/team.jpg"
+COPY = "https://imgs.search.brave.com/copy-{}.jpg"
+
+
+def brave_result(page, picture, title, copy="", width=1200, height=800):
+    return {"type": "image_result", "title": title, "url": page, "source": "x",
+            "thumbnail": {"src": copy, "width": 500, "height": 333},
+            "properties": {"url": picture, "placeholder": copy, "width": width, "height": height}}
+
+
+def test_brave_answers_become_pictures_with_their_pages():
+    data = {"type": "images", "results": [
+        brave_result(PAGE_A, PIC_A, "  Elias Nerlich\nvon Delay Sports ", COPY.format("a")),
+        # The same picture from another page, one without a page, one with
+        # neither picture nor copy, and an address with credentials: left out.
+        brave_result(PAGE_B, PIC_A, "again"), brave_result("", PIC_B, "no page"),
+        brave_result(PAGE_B, "", "nothing"), brave_result(PAGE_B, "https://u:p@x.example/p.jpg", "credentials"),
+        # Without the original's address its copy stands in; without its size the copy's.
+        {"title": "x" * 300, "url": PAGE_C, "thumbnail": {"src": COPY.format("c"), "width": 500, "height": 281},
+         "properties": {}},
+        "no result", brave_result(PAGE_B, PIC_B, "Elias Nerlich (FuPa)", COPY.format("b"))]}
+    found = picture_search.pictures(data, 10)
+    assert found == [
+        {"picture": PIC_A, "thumbnail": COPY.format("a"), "page": PAGE_A, "title": "Elias Nerlich von Delay Sports",
+         "width": 1200, "height": 800},
+        {"picture": COPY.format("c"), "thumbnail": COPY.format("c"), "page": PAGE_C, "title": "x" * 200,
+         "width": 500, "height": 281},
+        {"picture": PIC_B, "thumbnail": COPY.format("b"), "page": PAGE_B, "title": "Elias Nerlich (FuPa)",
+         "width": 1200, "height": 800}]
+    assert len(picture_search.pictures(data, 2)) == 2
+    assert picture_search.pictures({"results": "broken"}, 5) == picture_search.pictures([], 5) == []
+
+
+def test_the_search_asks_brave_with_the_key_and_safe_search(monkeypatch):
+    seen = {}
+
+    def answer(request):
+        seen.update(url=request.url, key=request.headers.get("x-subscription-token"))
+        return httpx.Response(200, json={"results": [brave_result(PAGE_A, PIC_A, "Elias Nerlich")]})
+    monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
+    found = picture_search.search("Delay Sports Elias Nerlich", 10, transport=httpx.MockTransport(answer))
+    assert [entry["picture"] for entry in found] == [PIC_A]
+    assert seen["key"] == "test-key"
+    assert str(seen["url"]).startswith(picture_search.ENDPOINT)
+    assert dict(seen["url"].params) == {"q": "Delay Sports Elias Nerlich", "count": str(picture_search.ASK),
+                                        "safesearch": "strict"}
+    refused = httpx.MockTransport(lambda request: httpx.Response(401, json={"error": "bad key"}))
+    with pytest.raises(httpx.HTTPStatusError):
+        picture_search.search("x", 10, transport=refused)
+
+
+def test_the_picture_search_comes_only_with_a_key(store, monkeypatch):
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    assert not picture_search.enabled()
+    loop = audit_loop(store, Audit())
+    assert "search_pictures" not in loop.registry.tools
+    assert "search_pictures" not in loop.registry.tools["show_image"].description
+    monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
+    assert picture_search.enabled()
+    loop = audit_loop(store, Audit())
+    assert "search_pictures" in loop.registry.tools
+    assert set(loop.registry.tools["search_pictures"].arguments.model_json_schema()["properties"]) == {"query"}
+    assert "search_pictures" in loop.registry.tools["show_image"].description
+    monkeypatch.setenv(picture_search.ENABLED_ENV, "0")
+    assert "search_pictures" not in audit_loop(store, Audit()).registry.tools
+
+
+def test_a_found_picture_comes_from_its_site_else_as_braves_copy():
+    picture, asked = png((900, 600)), []
+
+    async def get(url, referer=""):
+        asked.append((url, referer))
+        if "blocked" in url:
+            raise ValueError("status_403")
+        return url, picture, "image/jpeg", False
+    encoded = asyncio.run(agent_web_images.fetch_found(PIC_A, COPY.format("a"), PAGE_A, get=get))
+    assert encoded[1:] == ("image/webp", 900, 600) and asked == [(PIC_A, PAGE_A)]
+    asked.clear()
+    encoded = asyncio.run(agent_web_images.fetch_found(PIC_C, COPY.format("c"), PAGE_C, get=get))
+    assert encoded[2:] == (900, 600) and asked == [(PIC_C, PAGE_C), (COPY.format("c"), "")]
+    # Only the copy (no original address): asked once, with its page.
+    asked.clear()
+    with pytest.raises(ValueError, match="status_403"):
+        asyncio.run(agent_web_images.fetch_found(PIC_C, PIC_C, PAGE_C, get=get))
+    assert asked == [(PIC_C, PAGE_C)]
+
+
+def test_the_agent_searches_pictures_and_shows_its_picks_without_looking(store, monkeypatch, tmp_path):
+    from app.services.agent_files import AgentFiles
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: True)
+    queries, fetched = [], []
+
+    def search(query, count):
+        queries.append((query, count))
+        return [{"picture": PIC_A, "thumbnail": COPY.format("a"), "page": PAGE_A,
+                 "title": "Elias Nerlich von Delay Sports", "width": 1200, "height": 800},
+                {"picture": PIC_B, "thumbnail": COPY.format("b"), "page": PAGE_B, "title": "", "width": None,
+                 "height": None},
+                {"picture": PIC_C, "thumbnail": "", "page": PAGE_C, "title": "Team", "width": 640, "height": 480}]
+
+    async def fetch(picture, copy, page, get=None):
+        fetched.append(picture)
+        if "blocked" in picture:
+            raise ValueError("status_403")
+        return encode(png((900, 600), (len(fetched) * 40, 0, 0)))
+    monkeypatch.setattr(picture_search, "search", search)
+    monkeypatch.setattr(agent_web_images, "fetch_found", fetch)
+    script = Audit(tool_steps=5, step_tools={0: "search_pictures", 1: "show_image", 2: "show_image",
+                                             3: "find_pictures", 4: "show_image"},
+                   step_args={0: {"query": "  Delay Sports\n Elias Nerlich "},
+                              1: {"picture": "p1", "caption": "Elias Nerlich"}, 2: {"picture": "p3"},
+                              3: {"urls": [PIC_B]}, 4: {"picture": "p2", "caption": "Auf dem Platz"}}, live={})
+    loop = audit_loop(store, script)
+    events = list(loop.run())
+    found, shown, failed, looked, second = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert queries == [("Delay Sports Elias Nerlich", agent_web_images.FOUND_PER_SEARCH)]
+    # Ids, pages, the pages' own titles and sizes: words to choose by.
+    assert found["pictures"] == [
+        {"id": "p1", "page": PAGE_A, "picture": PIC_A, "width": 1200, "height": 800,
+         "page_title": "Elias Nerlich von Delay Sports"},
+        {"id": "p2", "page": PAGE_B, "picture": PIC_B},
+        {"id": "p3", "page": PAGE_C, "picture": PIC_C, "width": 640, "height": 480, "page_title": "Team"}]
+    assert "show_image" in found["note"] and agent_web_images.UNTRUSTED_WORDS in found["note"]
+    # Shown: stored and placed like a picture it looked at; its size as fetched.
+    assert shown["status"] == "shown" and (shown["width"], shown["height"]) == (900, 600)
+    assert shown["markdown"] == "![Elias Nerlich](picture:p1)"
+    assert "gallery" in shown["note"]
+    # A site that gives neither the picture nor a copy: a result, not an error.
+    assert failed == {"picture": "p3", "status": "failed", "reason": "No picture: the site answered HTTP 403.",
+                      "note": "The user does not see it."}
+    # Looking at a found picture keeps its id and its fetch.
+    assert [entry["id"] for entry in looked["pictures"]] == ["p2"]
+    assert second["status"] == "shown" and second["markdown"] == "![Auf dem Platz](picture:p2)"
+    assert sorted(fetched) == sorted([PIC_A, PIC_B, PIC_C])
+    # The agent sees only the picture it asked to look at: the search costs no image tokens.
+    pictures = [m for m in loop.messages if m.get("role") == "user" and isinstance(m.get("content"), list)]
+    assert [m["content"][0]["text"] for m in pictures] == [INTRO.format(id="p2", url=PAGE_B)]
+    saved = AgentFiles(store.db).list(UID, loop.chat_id)
+    assert sorted((file["origin"]["ref"], file["origin"]["url"], file["origin"]["caption"]) for file in saved) == [
+        ("p1", PIC_A, "Elias Nerlich"), ("p2", PIC_B, "Auf dem Platz")]
+    done = [(e["name"], e.get("count"), e.get("host"), e.get("outcome")) for e in events
+            if e.get("type") == "activity" and e.get("kind") == "tool" and e.get("status") == "succeeded"
+            and e.get("name") in {"search_pictures", "show_image"}]
+    assert done == [("search_pictures", 3, None, None), ("show_image", None, "rbb24.de", None),
+                    ("show_image", None, None, "failed"), ("show_image", None, "fupa.net", None)]
+    logged = [entry for entry, _ in loop.work_log.entries_after(0)]
+    assert {e["data"] for e in logged if e["kind"] == "tool" and e.get("name") == "search_pictures"} == {"web"}
+
+
+def test_the_picture_search_has_a_bound_and_says_when_it_is_down(store, monkeypatch):
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
+    monkeypatch.setattr(agent_web_images, "SEARCHES_PER_MESSAGE", 2)
+    answers = iter([[], httpx.ConnectError("down")])
+
+    def search(query, count):
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+    monkeypatch.setattr(picture_search, "search", search)
+    script = Audit(tool_steps=3, step_tools={0: "search_pictures", 1: "search_pictures", 2: "search_pictures"},
+                   step_args={index: {"query": f"Oologah Oklahoma {index}"} for index in range(3)}, live={})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    empty, down, over = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert empty == {"pictures": [], "note": "The search found no pictures. Do not claim the user sees one."}
+    assert "not available right now" in down["error"]
+    assert "No more than 2 picture searches per message" in over["error"]

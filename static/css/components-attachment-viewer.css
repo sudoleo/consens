@@ -229,3 +229,85 @@ dialog.modal.attachment-viewer-dialog[open] {
 @media (pointer: coarse) {
   .attachment-viewer-action { min-height: 44px; }
 }
+
+/* A gallery of pictures (attachments.js showGalleryPlace): "2 / 5" beside the
+   title, round arrows over the picture's edges; a swipe pages too, so the
+   body leaves sideways moves to the script. */
+.modal-content.attachment-viewer {
+  position: relative;
+}
+
+.attachment-viewer-count {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.attachment-viewer-body.is-gallery {
+  touch-action: pan-y pinch-zoom;
+}
+
+.attachment-viewer-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--raise) 86%, transparent);
+  color: var(--ink);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 18%, transparent);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.attachment-viewer-nav[hidden] {
+  display: none;
+}
+
+.attachment-viewer-nav.is-prev { left: 10px; }
+.attachment-viewer-nav.is-next { right: 10px; }
+
+.attachment-viewer-nav svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .attachment-viewer-nav:hover { background: var(--raise-hover); }
+}
+
+.attachment-viewer-nav:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The page a picture from the web came from, under it. */
+.attachment-viewer-source {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+.attachment-viewer-source:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

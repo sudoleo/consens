@@ -165,7 +165,8 @@ describe('private Agent workspace', () => {
     expect(img.alt).toBe('chart.png');
     expect(figures[0].querySelector('.agent-files-icon-btn').getAttribute('aria-label')).toBe('Download chart.png');
     figures[0].querySelector('.agent-vm-picture-open').click();
-    expect(window.App.attachments.openStored).toHaveBeenCalledWith({ fileId: PICTURE.id, name: 'chart.png', mime: 'image/png', size: 17000 });
+    const opened = { fileId: PICTURE.id, name: 'chart.png', mime: 'image/png', size: 17000, title: 'chart.png', page: '', host: '' };
+    expect(window.App.attachments.openStored).toHaveBeenCalledWith({ ...opened, gallery: [opened], index: 0 });
     // Any other file is a row with its download; an earlier turn's file is not here.
     expect([...resources.querySelectorAll('.agent-file-row .agent-file-name')].map(el => el.textContent)).toEqual(['table.csv']);
     expect(resources.textContent).not.toContain('earlier.png');
@@ -376,6 +377,42 @@ describe('private Agent workspace', () => {
     // No caption, no usable source: the file's name, and no link at all.
     expect(bare.querySelector('a')).toBeNull();
     expect(bare.querySelector('img').alt).toBe('picture-1a2b3c4d.webp');
+    dom.window.close();
+  });
+
+  // 2026-10-31, Max: ChatGPT's collage of pictures to click through.
+  it('makes a line of pictures a collage that opens as a gallery', async () => {
+    const web = (id, ref) => ({ id: id.repeat(32), name: `picture-${id}.webp`, mime: 'image/webp', size: 900, status: 'ready',
+      kind: 'web_image', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',
+      origin: { source: 'web', page: `https://site-${id}.example/page`, caption: `Picture ${id}`, ref } });
+    const files = [web('a', 'p1'), web('b', 'p2'), web('c', 'p3'), web('d', 'p4'), web('e', 'p5')];
+    const { window, document, dom } = boot({ files });
+    window.fetch = vi.fn(async url => url.includes('/files/') && !url.endsWith('/files')
+      ? { ok: true, blob: async () => new window.Blob([new Uint8Array([82, 73, 70, 70])], { type: 'image/webp' }) } : reply(files));
+    window.App.attachments = { openStored: vi.fn() };
+    const body = document.getElementById('agentAnswerBody');
+    const line = refs => `<div class="md-picture-line">${refs.map(ref => `<span class="md-picture" data-picture="${ref}"></span>`).join(' ')}</div>`;
+    body.innerHTML = `<p>Intro.</p>${line(['p1', 'p2', 'p3', 'p4'])}<p>More.</p>${line(['p5'])}`;
+    await window.App.agentWorkspace.refresh(CHAT);
+    const tiles = [...body.querySelector('.md-picture-line').querySelectorAll('.agent-vm-picture')];
+    const marks = tile => Object.fromEntries(Object.entries(tile.dataset).filter(([name]) => name.startsWith('gallery')));
+    expect(tiles.map(marks)).toEqual([
+      { gallerySize: '3', galleryLead: '' }, { gallerySize: '3' }, { gallerySize: '3', galleryMore: '+1' },
+      { gallerySize: '3', galleryHidden: '' }]);
+    // A picture alone on its line stays a picture of its own.
+    const single = body.querySelectorAll('.md-picture-line')[1].querySelector('.agent-vm-picture');
+    expect(single.dataset.gallerySize).toBeUndefined();
+    // A click opens the viewer on that picture, with the line's pictures to page through.
+    tiles[1].querySelector('.agent-vm-picture-open').click();
+    const [opened] = window.App.attachments.openStored.mock.calls[0];
+    expect([opened.fileId, opened.title, opened.page, opened.host, opened.index]).toEqual(
+      [files[1].id, 'Picture b', 'https://site-b.example/page', 'site-b.example', 1]);
+    expect(opened.gallery.map(item => item.fileId)).toEqual(files.slice(0, 4).map(file => file.id));
+    // The marks follow the line as it changes: two pictures side by side, no lead.
+    body.innerHTML = `<p>Intro.</p>${line(['p1', 'p2'])}`;
+    await Promise.resolve();
+    expect([...body.querySelectorAll('.agent-vm-picture')].map(tile => [tile.dataset.gallerySize, 'galleryLead' in tile.dataset]))
+      .toEqual([['2', false], ['2', false]]);
     dom.window.close();
   });
 

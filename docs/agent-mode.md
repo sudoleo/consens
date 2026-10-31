@@ -4570,6 +4570,52 @@ seit 2026-10-29:
 Tests: `tests/test_agent_web_images.py`, die Gate-Fälle in
 `tests/test_agent_gate.py`.
 
+### Bildersuche (search_pictures, seit 2026-10-31)
+
+Anlass (Max, 2026-10-31): ChatGPT beantwortet Fragen nach etwas Sichtbarem mit
+einer Collage, die man wie eine Diashow durchklickt, und sein Modell muss die
+Bilder kaum ansehen, weil die Bildersuche gut genug ist. `find_pictures` hatte
+nur das Vorschaubild, das eine Seite selbst nennt, oft ein Logo oder Banner;
+der Agent riet Seite für Seite und sah jede an (Bildtokens, Schritte).
+
+- **Anbieter: Brave Search API** (Claudes Entscheidung, Max hat sich
+  registriert, Plan „Search“, 5 $ je 1.000 Anfragen, 5 $ Guthaben im Monat).
+  Geprüft am 2026-10-31 an den echten Bildfragen aus Prod (Rhode-Blush,
+  Oologah/Oklahoma, Elias Nerlich von Delay Sports, ein Hearthstone-Profi):
+  drei sehr gut, der Nischen-Esport gemischt. Eigener Index, Kopie jedes Bildes
+  auf Braves Server (500 px breit), `safesearch=strict`. Verworfen: Parallel
+  (Standardbedingungen erlauben Training auf Ein- und Ausgaben, keine Kopie,
+  nicht im DPF), Linkup und Tavily (nur Bilder von Seiten ihrer Websuche, kein
+  Bildindex), You.com (Bild-API laut eigener Doku Beta und ungepflegt), Google
+  Custom Search (keine Neukunden, Ende 2027-01-01), Serper/SerpAPI (greifen
+  Google ab), Staan von Qwant/Ecosia (keine Bild-API gefunden).
+- **Datenschutz:** Hinaus gehen nur die Suchwörter des Agenten, vom Server mit
+  dem Schlüssel von consens.io, ohne Konto oder IP des Nutzers. Brave hält das
+  Anfrageprotokoll bis 90 Tage; sein Vertrag zur Auftragsverarbeitung nimmt
+  Suchanfragen aus, und Brave steht nicht auf der DPF-Liste (am 2026-10-31
+  geprüft). `privacy.html` sagt beides (Abschnitt 7, „Picture search“). Nie in
+  Chats mit Google-Daten (wie `read_source`).
+- **Ablauf:** `search_pictures(query)` (`picture_search.py`, nur mit
+  `BRAVE_SEARCH_API_KEY`, aus mit `AGENT_PICTURE_SEARCH=0`) gibt bis zu 10
+  Treffer (`FOUND_PER_SEARCH`) mit ID, Seite, Seitentitel und Größe zurück, ohne
+  Bild für das Modell; höchstens 4 Suchen je Nachricht. Der Server holt die
+  ersten 6 (`PREFETCH`) sofort im Hintergrund (3 gleichzeitig wegen des
+  DNS-Tors), das Original mit der Seite als `Referer`, sonst Braves Kopie
+  (`fetch_found`). `show_image` wartet darauf und speichert wie bisher; ein Bild,
+  das nicht kommt, ist ein Ergebnis `failed` mit Grund. Will der Agent eines
+  sehen, nimmt er `find_pictures` mit der Bildadresse; der Treffer behält seine
+  ID. Aktivität „Found 10 pictures“ (`foundSummary`).
+- **Collage:** Das Ergebnis von `show_image` (`PLACE_NOTE`) sagt, dass Bilder
+  auf einer Zeile als Galerie erscheinen. Die App zeigt zwei nebeneinander, ab
+  drei eins groß und zwei daneben, „+N“ für den Rest; ein Klick öffnet die
+  Ansicht, die mit Pfeilen, Tasten und Wischen durch die Bilder der Zeile
+  blättert und die Seite jedes Bildes als Link nennt
+  (`docs/codebase-map.md`, „Collage“).
+
+Tests: `tests/test_agent_web_images.py` (Suche, Abruf, Ablauf),
+`tests/js/agent-workspace.test.mjs` (Collage),
+`tests/js/composer-attachments.test.mjs` (Blättern).
+
 ## Persistenz, Stop und Recovery
 
 `accepted` liefert dem Browser die Turn-ID schon während der Budget-Zulassung.

@@ -115,3 +115,98 @@ def test_a_placed_picture_stands_in_the_text_and_the_others_under_it_after_the_r
         assert errors == []
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width,dark", [(1440, False), (390, True)])
+def test_pictures_on_one_line_are_a_collage_the_viewer_pages_through(browser, phase4_server, width, dark):
+    """2026-10-31, Max: ChatGPT's collage to click through. One large picture,
+    two beside it, "+1" for the fourth; a click opens the viewer, whose arrows
+    and keys page through the line (agent-workspace.js markGalleries,
+    attachments.js pageGallery)."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    chat, turn = "a" * 32, "b" * 32
+    colors = {"c": (40, 90, 160), "d": (160, 120, 40), "e": (60, 140, 90), "f": (150, 60, 90)}
+    files = [{"id": letter * 32, "name": f"picture-{letter}.webp", "mime": "image/png", "size": 4000, "status": "ready",
+              "kind": "web_image", "turn_id": turn, "expires_at": "2099-10-29T10:00:00Z",
+              "origin": {"source": "web", "url": f"https://site-{letter}.example/{letter}.jpg",
+                         "page": f"https://site-{letter}.example/page", "host": f"site-{letter}.example",
+                         "caption": f"Picture {letter}", "ref": f"p{index + 1}"}}
+             for index, letter in enumerate(colors)]
+    pictures = {file["id"]: _png(colors[file["name"][8]]) for file in files}
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": chat, "execution_mode": "agent"}}))
+        page.route(f"**/agent/chats/{chat}/turns/{turn}/agents", lambda r: _json(r, {"agents": [], "status": "running"}))
+        page.route(f"**/agent/chats/{chat}/files", lambda r: _json(r, {"files": files}))
+        page.route(f"**/agent/chats/{chat}/files/*", lambda r: r.fulfill(
+            status=200, content_type="image/png", body=pictures[r.request.url.split("/files/")[1].split("?")[0]]))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        page.evaluate("""data => {
+          const fetch = window.fetch;
+          window.fetch = (url, options) => {
+            if (String(url) !== '/agent') return fetch(url, options);
+            const request = JSON.parse(options.body);
+            return Promise.resolve(new Response(new ReadableStream({start(controller) {
+              const push = (type, event) => controller.enqueue(new TextEncoder().encode(`event: ${type}\ndata: ${JSON.stringify(event)}\n\n`));
+              push('accepted', {chat_id: data.chat, turn_id: data.turn});
+              push('resources', {files: true});
+              push('final', {chat_id: data.chat, turn_id: data.turn, response: data.text,
+                turn: {id: data.turn, execution_mode: 'agent', status: 'completed', consensus: data.text,
+                  agent_settings: {policy: {delegation: true}}},
+                bookmark_meta: {id: request.bookmark_id, title: 'Delay Sports', query: 'Show me Delay Sports', mode: 'Agent', has_consensus: true}});
+              controller.close();
+            }}), {headers: {'Content-Type': 'text/event-stream'}}));
+          };
+        }""", {"chat": chat, "turn": turn, "text": "Delay Sports is a football club from Berlin.\n\n"
+               "![Picture c](picture:p1) ![Picture d](picture:p2) ![Picture e](picture:p3) ![Picture f](picture:p4)\n\n"
+               "It plays in the Berlin-Liga."})
+        page.locator("#questionInput").fill("Show me Delay Sports")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_function("""() => [...document.querySelectorAll('#agentAnswerBody .md-picture-line img')]
+          .filter(img => img.complete && img.naturalWidth === 640).length === 4""")
+        boxes = page.evaluate("""() => {
+          const body = document.getElementById('agentAnswerBody').getBoundingClientRect();
+          const line = document.querySelector('#agentAnswerBody .md-picture-line').getBoundingClientRect();
+          const tiles = [...document.querySelectorAll('#agentAnswerBody .md-picture-line > .md-picture')].map(slot => {
+            const box = slot.getBoundingClientRect();
+            return {left: box.left, right: box.right, top: box.top, bottom: box.bottom, shown: box.width > 0};
+          });
+          const more = getComputedStyle(document.querySelector('[data-gallery-more]'), '::after').content;
+          return {body: {left: body.left, right: body.right}, line: {top: line.top, bottom: line.bottom}, tiles, more};
+        }""")
+        lead, beside, third, fourth = boxes["tiles"]
+        # One large on the left over the line's height, two stacked beside it, the fourth behind "+1".
+        assert abs(lead["top"] - boxes["line"]["top"]) < 1 and abs(lead["bottom"] - boxes["line"]["bottom"]) < 1
+        assert lead["right"] < beside["left"] and abs(beside["left"] - third["left"]) < 1
+        assert beside["bottom"] < third["top"] and (lead["right"] - lead["left"]) > (beside["right"] - beside["left"])
+        assert not fourth["shown"] and boxes["more"] == '"+1"'
+        assert boxes["body"]["left"] - 1 <= lead["left"] and third["right"] <= boxes["body"]["right"] + 1
+        assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
+        body = page.locator("#agentAnswerBody")
+        body.scroll_into_view_if_needed()
+        _snapshot(page, f"agent-picture-collage-{width}-{'dark' if dark else 'light'}")
+        # The viewer opens on the clicked picture and pages through the line.
+        body.locator('.md-picture[data-picture="p2"] .agent-vm-picture-open').click()
+        viewer = page.locator("#attachmentViewerModal")
+        expect(viewer).to_be_visible()
+        expect(page.locator("#attachmentViewerTitle")).to_have_text("Picture d")
+        expect(page.locator("#attachmentViewerCount")).to_have_text("2 / 4")
+        expect(viewer.locator("a.attachment-viewer-source")).to_have_text("site-d.example")
+        page.locator("#attachmentViewerNext").click()
+        expect(page.locator("#attachmentViewerCount")).to_have_text("3 / 4")
+        page.keyboard.press("ArrowRight")
+        expect(page.locator("#attachmentViewerTitle")).to_have_text("Picture f")
+        expect(viewer.locator(".attachment-viewer-image")).to_be_visible()
+        _snapshot(page, f"agent-picture-gallery-viewer-{width}-{'dark' if dark else 'light'}")
+        page.keyboard.press("Escape")
+        expect(viewer).to_be_hidden()
+        assert errors == []
+    finally:
+        context.close()
