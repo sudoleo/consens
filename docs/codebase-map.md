@@ -2120,10 +2120,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `_UNAVAILABLE_PROMPT`, dazu `AUDIT_MEMORY_USE_PROMPT`: bei Konflikt
   entscheiden Frage und Belege) **ans Ende** des System-Prompts; seit
   2026-10-28 Fakten statt Regeln, bis 2026-10-31 hatte der Vergleichsmodus
-  eigene (`MEMORY_*_PROMPT`, `MEMORY_RELEVANCE_RULES`). Vergleichsmodelle und
-  Prüfer sehen Memory nicht pauschal: der Agent gibt relevante Punkte im
-  `compare_models`-Kontext weiter, die Prüfer lesen die Kurzfassung seiner
-  Anweisungen samt Memory (`instructions_brief`). `/ask_*` rendert die
+  eigene (`MEMORY_*_PROMPT`, `MEMORY_RELEVANCE_RULES`). Vergleichsmodelle
+  sehen Memory nicht pauschal: der Agent gibt relevante Punkte im
+  `compare_models`-Kontext weiter. Die Prüfer sehen es vollständig: in der
+  Kurzfassung seiner Anweisungen (`instructions_brief`) und im
+  Arbeitsprotokoll, dessen `context`-Eintrag die System-Nachricht samt Memory
+  hält (30 Tage; eine später gelöschte Erinnerung bleibt dort bis zum Ablauf,
+  so steht es in der Datenschutzerklärung). `/ask_*` rendert die
   Einträge über `render_profile(items=...)` nach der Notiz — seit 2026-10-08
   innerhalb des dokumentierten Deckels (`MAX_PROFILE_CHARS` +
   Stufen-Notizgrenze): höchstens `MAX_ITEMS_PROMPT_CHARS` = 3.000 Zeichen,
@@ -8440,12 +8443,16 @@ keinen Abgleich.
   Antwort, in ihrer Reihenfolge, was jeder Prüfer anmerkte (`notes`:
   `sentence` = Satzanker aus `audit.claims`, `kind` = schwerste Anmerkung,
   `items` mit Familie, `kind` wrong/doubtful/incomplete, Worten und
-  http(s)-Quelle). Nur wenn die Prüfung an genau diesen Text gebunden ist
-  (`answer_hash`) und mit Schlussrunde endete (`succeeded`/`partial`).
-  Bewusst nicht geteilt: Marken auf der Arbeit (`audit.process`) und solche,
-  deren Zitat die Antwort nicht enthält (`audit.unplaced`), weil sie verraten
-  können, was der Lauf las oder tat; auch keine Log-Nummern oder zitierten
-  Wörter. Grenzen `MAX_REVIEW_NOTES` (40), `MAX_REVIEW_ITEMS` (12), Notiz
+  öffentlicher Quelle: `_review_source` lässt nur http(s) auf einem
+  Domainnamen durch, ohne IP-Adresse, `localhost`, interne Endungen
+  (`.internal`, `.local`, `.sprites.app` …), Sonderport, Zugangsdaten oder
+  Token-artige Query-Parameter). Nur wenn die Prüfung an genau diesen Text
+  gebunden ist (`answer_hash`) und mit Schlussrunde endete
+  (`succeeded`/`partial`). Bewusst nicht geteilt: Marken auf der Arbeit, auch
+  wenn ihr Zitat zugleich in der Antwort steht (sie tragen eine Log-Nummer
+  `entry`; `audit.process` ganz), und solche, deren Zitat die Antwort nicht
+  enthält (`audit.unplaced`), weil sie verraten können, was der Lauf las oder
+  tat (Gegenprüfung 2026-10-31); auch keine Log-Nummern oder zitierten Wörter. Grenzen `MAX_REVIEW_NOTES` (40), `MAX_REVIEW_ITEMS` (12), Notiz
   600 Zeichen; `public_share_payload` liest sie nur für Agent-Shares und
   bereinigt erneut. Die Seite (`share.html`, `check_page.review_cards`) zeigt
   „Reviewed by“ (zugeklappt wie „Models compared“, Klasse `share-reviewers`),
@@ -9886,12 +9893,12 @@ unter denen, die Prompts nicht sammeln. Gesetzt in `AgentCompletion.stream`,
 `PageFetch.stream`, `build_provider_payload`, `_call_engine_text`, dem
 Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
 `only`) kommen obendrauf. Ein `service_tier` im `request_config` geht als
-Top-Level-Feld mit (Agent-Judges der OpenAI-Familie: `priority`, siehe
-`JUDGE_SERVICE_TIER_BY_PROVIDER`). Die Schritte des Chatmodells senden dazu eine
+Top-Level-Feld mit (bis 2026-10-31 nutzten das die Agent-Judges der
+OpenAI-Familie mit `priority`; heute setzt es kein Aufruf). Die Schritte des Chatmodells senden dazu eine
 Session pro Chat (`x-session-id`), damit sie beim Endpunkt mit ihrem Prompt-Cache bleiben,
 jeder Hilfsaufruf eine eigene (siehe „Sticky Endpunkt“ im Agent-Abschnitt). Zero Data Retention gilt nur noch in Chats mit
 Google-Daten (`google_connections.restricted_model` setzt `zdr: true` +
-`deny` auf jeden Aufruf des Laufs, auch Vergleich und Judges). Grund: unter
+`deny` auf jeden Aufruf des Laufs, auch `compare_models` und die Prüfer). Grund: unter
 ZDR lief GPT-6 Luna nur über Azure (Hänger bis Minuten, 429-Wellen); ohne ZDR
 landet es direkt bei OpenAI, DeepSeek bei den schnellsten US-Hostern.
 Die 429-Sperre (`agent_provider_limits.ProviderCooldowns`) schlüsselt deshalb

@@ -370,9 +370,13 @@ def _audit_review(*, text=ANSWER, status="succeeded", claims=None):
         "anchor": SENTENCE, "audit": True, "kind": "wrong", "agree": [], "sentence_id": 2, "anchor_occurrence": 0,
         "dissent": [
             {"model": "OpenAI", "kind": "doubtful", "note": "NASA reports **weekly** downlinks.",
-             "source": "https://www.nasa.gov/webb-status", "entry": 7, "mark": 1, "target": "every day"},
+             "source": "https://www.nasa.gov/webb-status", "mark": 1, "target": "every day"},
             {"model": "Gemini", "kind": "wrong", "note": "Data <img src=x onerror=alert(1)> comes daily only in tests.",
              "source": "javascript:alert(1)", "mark": 2},
+            # A mark on the work names its log entry, even where its quote
+            # also stands in the answer: it tells what the run read.
+            {"model": "OpenAI", "kind": "wrong", "note": "Entry 14 (the user's file notes.txt) says otherwise.",
+             "source": "http://localhost:8080/notes?token=abc", "entry": 14, "mark": 3},
         ]}]
     return {
         "version": 1, "mode": "audit", "status": status, "answer_hash": _digest(text), "answer_version": 1,
@@ -406,7 +410,7 @@ def test_a_reviewed_answer_shares_the_notes_on_its_sentences_only():
         ]}],
     }
     stored = json.dumps(payload)
-    assert "private file" not in stored and "inbox" not in stored
+    assert "private file" not in stored and "inbox" not in stored and "notes.txt" not in stored
     # The models the agent asked answered its own question: none named.
     assert payload["included_models"] == [] and payload["differences_data"] is None
 
@@ -487,3 +491,31 @@ def test_an_answer_nobody_objected_to_says_so_quietly(share_app):
     assert "2 AI models reviewed this answer and noted nothing." in body
     assert "Reviewed by" in body
     assert 'id="toggleDifferencesView"' not in body and 'id="diffTeaser"' not in body
+
+
+@pytest.mark.parametrize("url, kept", [
+    ("https://www.nasa.gov/webb-status?id=7", True),
+    ("http://example.org:443/a", True),
+    ("http://localhost:8080/notes", False),
+    ("https://localhost/notes", False),
+    ("http://127.0.0.1/x", False),
+    ("https://[::1]/x", False),
+    ("http://10.0.0.5/admin", False),
+    ("https://8.8.8.8/x", False),
+    ("http://intranet/wiki", False),
+    ("https://app.internal/x", False),
+    ("https://my-vm.sprites.app/x", False),
+    ("https://example.org:8443/x", False),
+    ("https://example.org/doc?token=abc", False),
+    ("https://example.org/doc?X-Amz-Signature=abc", False),
+    ("https://user:pw@example.org/", False),
+    ("ftp://example.org/", False),
+    ("https://example.org:99999/", False),
+])
+def test_a_note_links_only_a_public_page(url, kept):
+    """A reviewer saw what the agent saw, its workspace and browser included."""
+    notes = share_snapshots.sanitize_review_notes({
+        "reviewers": [{"provider": "OpenAI"}],
+        "notes": [{"sentence": "A.", "items": [{"provider": "OpenAI", "kind": "wrong", "note": "N.", "source": url}]}]})
+
+    assert notes["notes"][0]["items"][0].get("source", "") == (url if kept else "")

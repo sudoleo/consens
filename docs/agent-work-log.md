@@ -317,7 +317,9 @@ Agent-Panel.
   umrandet), Uhrzeit; der Inhalt öffnet sich auf Klick, ein langer ganz über
   „Show all“. Endpunkte: `GET /agent/chats/{chat}/turns/{turn}/work-log` und
   `.../work-log/{seq}`, seit 2026-10-31 für den Besitzer des Turns (der Turn
-  wird unter dem Konto des Aufrufers gelesen), vorher nur für Admins.
+  wird unter dem Konto des Aufrufers gelesen), vorher nur für Konten mit
+  Audit-Zugang (`audit_allowed`: Pro und Admins, je nach
+  `AGENT_AUDIT_ACCESS`).
 - Prüfer-Sitzungen im Agent-Panel zeigen seit 2026-10-26 drei Zahlen
   (Runden, Anmerkungen, Schlussprüfung) und eine Zeitleiste: Runden ohne
   Einwand in einer Zeile („Rounds 1–5 · No objections“), Runden mit Befunden

@@ -161,6 +161,30 @@ def test_agent_choice_names_the_widest_compared_field():
     assert persistence_guard.agent_best_model_choice(reviewed) == (None, [])
 
 
+def _saved_review(status="succeeded", check_status="succeeded", best="OpenAI", answers=("OpenAI", "Grok")):
+    return {"status": status,
+            "comparisons": [{"id": "a", "answers": [{"provider_label": label} for label in answers]}],
+            "checks": [{"comparison_id": "a", "status": check_status, "differences_data": {"best_model": best}}]}
+
+
+@pytest.mark.parametrize("review, choice", [
+    (_saved_review(), ("OpenAI", ["OpenAI", "Grok"])),
+    # A partly checked answer counts, by its partial check.
+    (_saved_review(status="partial", check_status="partial"), ("OpenAI", ["OpenAI", "Grok"])),
+    # The answer check was off, failed, or the review never ended.
+    (_saved_review(status="off", check_status="off"), (None, [])),
+    (_saved_review(check_status="failed"), (None, [])),
+    (_saved_review(status="required"), (None, [])),
+    # One answer is no field to pick from; a name outside the leaderboard no pick.
+    (_saved_review(answers=("OpenAI",)), (None, [])),
+    (_saved_review(best="Model C"), (None, [])),
+    (None, (None, [])),
+])
+def test_agent_choice_needs_a_checked_answer_and_a_known_pick(review, choice):
+    """scripts/backfill_model_pulse.py --apply writes these as votes."""
+    assert persistence_guard.agent_best_model_choice(review) == choice
+
+
 # ------------------------------------------------------------------ pages
 
 

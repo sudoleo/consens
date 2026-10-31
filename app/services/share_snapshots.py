@@ -15,6 +15,7 @@ verlassen den Server nie.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import re
 import secrets
@@ -22,7 +23,7 @@ import string
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from threading import RLock
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from cachetools import TTLCache
 from firebase_admin import firestore
@@ -684,16 +685,36 @@ MAX_REVIEW_NOTE_CHARS = 600
 MAX_REVIEW_SOURCE_CHARS = 1000
 
 
+# A reviewer saw what the agent saw, the user's workspace and its browser
+# included: a share links no page that only the user's own machine or
+# network reaches, and no address that carries a credential.
+_PRIVATE_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home", ".corp", ".intranet",
+                          ".flycast", ".sprites.dev", ".sprites.app")
+_SECRET_PARAM = re.compile(r"token|key|sig|secret|passw|auth|session|credential|code", re.IGNORECASE)
+
+
 def _review_source(value):
-    """An http(s) link of a note without credentials, else ""."""
+    """A public http(s) link of a note, else "": no credentials, no IP
+    address, no local or internal host, no other port, no secret in the
+    query."""
     url = str(value or "").strip()
     if not url or len(url) > MAX_REVIEW_SOURCE_CHARS:
         return ""
     try:
         parts = urlsplit(url)
+        port = parts.port
     except ValueError:
         return ""
-    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password:
+    host = (parts.hostname or "").rstrip(".")
+    if (parts.scheme not in {"http", "https"} or "." not in host or parts.username or parts.password
+            or port not in {None, 80, 443} or host.endswith(_PRIVATE_HOST_SUFFIXES)):
+        return ""
+    try:
+        ipaddress.ip_address(host)
+        return ""
+    except ValueError:
+        pass
+    if any(_SECRET_PARAM.search(name) for name, _ in parse_qsl(parts.query, keep_blank_values=True)):
         return ""
     return url
 
@@ -745,10 +766,11 @@ def _agent_review_notes(review, text):
     """The reviewers' notes on this exact answer, for its share; None without.
 
     Only marks the reviewers placed on sentences of the answer: a mark on the
-    work (a step of the run) or one whose quote the answer does not hold
-    stays in the app, since it may tell what the run read or did. Nothing
-    when the review belongs to another text or did not end with a final
-    round (a stop, every reviewer failed).
+    work or one whose quote the answer does not hold stays in the app, since
+    it may tell what the run read or did. A mark on the work names its log
+    entry (the reviewers' prompt), even where its quote also stands in the
+    answer. Nothing when the review belongs to another text or did not end
+    with a final round (a stop, every reviewer failed).
     """
     review = review if isinstance(review, dict) else {}
     audit = review.get("audit") if isinstance(review.get("audit"), dict) else {}
@@ -760,7 +782,8 @@ def _agent_review_notes(review, text):
         "sentence": claim.get("anchor"),
         # Each reviewer's mark names its family (agent_audit.place_marks).
         "items": [{"provider": item.get("model"), "kind": item.get("kind"), "note": item.get("note"),
-                   "source": item.get("source")} for item in claim.get("dissent") or [] if isinstance(item, dict)],
+                   "source": item.get("source")}
+                  for item in claim.get("dissent") or [] if isinstance(item, dict) and not item.get("entry")],
     } for claim in audit["claims"] if isinstance(claim, dict)]
     noted = {item["provider"] for note in notes for item in note["items"]}
     reviewers = [{"provider": row.get("provider_label"),

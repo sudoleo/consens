@@ -19,20 +19,25 @@
   <sub>One agent answer, the disputed claim highlighted, and which models stand on each side. Illustrative demo data, not live model output.</sub>
 </p>
 
-**consens.io** sends one question to models from ten independent providers,
-keeps their answers separate, and shows what they agree on, where they
-contradict each other, and how well each claim is backed by sources. The result
-is one answer with inline confidence, not a wall of ten answers.
+**consens.io** lets one AI do the work and has models from other providers
+check it: they follow its research, review its answer and mark, sentence by
+sentence, what they find wrong, doubtful or incomplete. Side by side, the same
+question goes to up to six models from eleven providers, and Watches and the API
+run a cross-model consensus. The result is one answer with its doubts written
+into it, not a wall of answers.
 
 Agreement between models is a signal, not proof. consens.io treats it as one
 input next to source verification, never as a substitute for it.
 
 ## What it does
 
-- **Agent mode (default).** An agent plans the research, picks models per round,
-  searches the web, reads attachments and Google sources (read-only), and
-  answers with citations. Server-side rules require at least two model families
-  and a judge before an answer ships.
+- **Agent mode (default).** An agent researches the web, reads attachments and
+  Google sources (read-only), works in its own workspace where the account has
+  one, and answers with citations. The models the user picks (one to six)
+  follow its work log, can pause a risky step for the user's decision, and
+  review the answer; the agent can also ask them for their own view
+  (`compare_models`). No judge and no score: a sentence carries a reviewer's
+  note, or nobody objected to it.
 - **Direct comparison.** Run the same question across models side by side and
   read the answers independently.
 - **Consensus.** Anonymised, shuffled answers go to a cross-family judge that
