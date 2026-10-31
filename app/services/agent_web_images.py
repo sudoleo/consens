@@ -38,8 +38,8 @@ place stands under the answer as before, once the answer is written.
 
 The fetch reaches out like a browser's open, which the reviewers follow live
 (from 2026-10-28 to 2026-10-29 an address the message did not hold waited
-for them first, agent_gate.py). Audit mode only, never in chats with Google
-data (like read_source). A chat model that takes images
+for them first, agent_gate.py). Never in chats with Google data (like
+read_source). A chat model that takes images
 sees the pictures after the result (vm_view_image's way,
 DelegationLoop._show_pictures); one that does not chooses by page, title and
 alt text.

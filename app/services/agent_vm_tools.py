@@ -23,8 +23,8 @@ checkpoint.
 Each call is one activity event of its tool (agent-activity.js): what ran,
 its output's end while it runs (``report``, at most every REPORT_SECONDS),
 then exit code and duration. The model gets each stream's end
-(MODEL_STREAM_CHARS) with the cut said in the text; in audit mode the same
-result is the call's ``tool`` entry in the work log, which the reviewers
+(MODEL_STREAM_CHARS) with the cut said in the text; the same result is
+the call's ``tool`` entry in the work log, which the reviewers
 follow live. The turn keeps the summary (``agent_vm``: checkpoint, commands,
 seconds; since 2026-10-30 also the start's parts in seconds, whether a VM
 was cold, the browser's calls and seconds, and why the workspace went off).

@@ -70,47 +70,37 @@ def _delegation(name):
 # (key, label, used_for, source, text factory) in display order.
 _ENTRIES = (
     ("agent", "Agent: instructions",
-     "System prompt of the user's selected Agent model: it steers the run (comparisons, depth, memory, tools) "
-     "and writes the answer itself as its last message (WRITING THE ANSWER, AGENT_ANSWER_SECTION). At runtime "
-     "the comparison settings, the per-message comparison limit and the source reading "
-     "(AGENT_READ_SOURCE_PROMPT), file, document, Google, Watch (agent_watch.py), settings (agent_settings.py; reading and Watch not in chats "
-     "with Google data) and memory instructions are appended (in chats with Google data also a no-web-search "
-     "note); date, reference time and selected model travel with the latest user message. After each "
-     "comparison that returned answers the app adds AGENT_WRITE_NOTE as its own message (the answer is the "
-     "next message: complete, from all answers; depth only steered the comparison models).",
-     "prompt_defaults.py:AGENT_SYSTEM_PROMPT", lambda: _defaults("agent")),
+     "System prompt of the user's selected Agent model in every chat (one mode since 2026-10-31): the agent "
+     "researches with its own web search in every step and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION); "
+     "compare_models asks the models the user chose (its description agent_comparison.py:AUDIT_COMPARE), and "
+     "those models review its work and its answer (\"Agent: reviewers\"), no judge. Since 2026-10-28 it says "
+     "only what the model cannot know, the app's contracts and the rules of safety and truth. At runtime the "
+     "Watch, settings, memory, file, document and Google instructions are appended (\"Agent: tool blocks\"; "
+     "Watch not in chats with Google data, in those also a no-web-search note); date, reference time and "
+     "selected model travel with the latest user message.",
+     "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent")),
     ("comparison", "Agent: comparison models",
-     "System prompt of each independent comparison model, shown for depth \"full\" (3 search rounds). "
-     "Quick depth allows one search round and adds brief-answer guidance instead. The date line is "
-     "filled in per request; in chats with Google data a no-web-search note is appended.",
+     "System prompt of each model compare_models asks, each in a fresh conversation of its own, shown for depth "
+     "\"full\" (3 search rounds). Quick depth allows one search round and adds brief-answer guidance instead. "
+     "The date line is filled in per request; in chats with Google data a no-web-search note is appended.",
      "agent_comparison.py:comparison_system_prompt()", _comparison),
-    ("agent_audit", "Agent: audit mode instructions",
-     "System prompt of the Agent model instead of \"Agent: instructions\" when an admin switched on Audit instead "
-     "of comparison (agent_audit.py): the agent researches with its own web search in every step and writes the "
-     "answer itself (AGENT_AUDIT_ANSWER_SECTION). compare_models only with audit_compare (since 2026-10-31, admins "
-     "or AGENT_AUDIT_COMPARE=all; its description agent_comparison.py:AUDIT_COMPARE, no judge, no write note "
-     "after it). Since 2026-10-28 it says only what the model "
-     "cannot know, the app's contracts and the rules of safety and truth. At runtime the audit versions of the "
-     "source reading, Watch, settings, memory, file, document and Google instructions are appended (\"Agent audit: "
-     "tool blocks\").",
-     "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent_audit")),
-    ("agent_audit_blocks", "Agent audit: tool blocks",
-     "Appended to \"Agent: audit mode instructions\" with their tools, instead of the agent's versions: Watch, "
-     "settings, memory (relevance and, when the user lets the agent update memory, the update rules) and files. "
-     "Without comparisons and without recipes for when to read, ask or remember. Since 2026-10-28 source reading "
-     "and pictures (read_source, find_pictures, show_image) have no block: their descriptions say what they do.",
+    ("agent_audit_blocks", "Agent: tool blocks",
+     "Appended to \"Agent: instructions\" with their tools: Watch, settings, memory (relevance and, when the user "
+     "lets the agent update memory, the update facts) and files. Without recipes for when to read, ask or "
+     "remember. Since 2026-10-28 source reading and pictures (read_source, find_pictures, show_image) have no "
+     "block: their descriptions say what they do.",
      "agent_watch.py/agent_settings.py:AUDIT_PROMPT, "
      "agent_memory.py:AUDIT_MEMORY_*, agent_files.py:AUDIT_UNTRUSTED", _audit_blocks),
-    ("audit_reviewer", "Agent audit: reviewers",
-     "System prompt of each comparison model in audit mode: it follows the agent's work log in rounds (each user "
-     "message holds the new entries as JSON, up to two search rounds each) and reviews the fixed answer in a final "
-     "round (the rest of the log and the answer, up to three search rounds); the message's files go along. The "
-     "date line is filled in per request.",
+    ("audit_reviewer", "Agent: reviewers",
+     "System prompt of each model the user chose, as a reviewer: it follows the agent's work log in rounds (each "
+     "user message holds the new entries as JSON, up to two search rounds each) and reviews the fixed answer in a "
+     "final round (the rest of the log and the answer, up to three search rounds); the message's files go along. "
+     "The date line is filled in per request.",
      "agent_audit.py:review_system_prompt()", _reviewer),
     ("agent_vm", "Agent: Linux VM",
-     "Appended to \"Agent: instructions\" or \"Agent: audit mode instructions\" before the memory instructions when "
-     "an admin switched on Agent VM (agent_vm_tools.py) and the chat has no Google data: the agent's own VM with "
-     "vm_exec, vm_read_file, vm_write_file, vm_edit_file and vm_share_file.",
+     "Appended to \"Agent: instructions\" before the memory instructions when the agent has its workspace "
+     "(agent_vm_tools.py) and the chat has no Google data: the agent's own VM with vm_exec, vm_read_file, "
+     "vm_write_file, vm_edit_file and vm_share_file.",
      "prompt_defaults.py:AGENT_VM_PROMPT", _vm),
     ("agent_vm_no_domains", "Agent: Linux VM without request_domain",
      "In place of \"Agent: Linux VM\" for an account without Pro (routers/agent.py domains_allowed, since "

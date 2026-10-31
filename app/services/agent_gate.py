@@ -1,6 +1,6 @@
 """Which of the agent's calls wait for the reviewers before they run (since 2026-10-27).
 
-In audit mode such a call runs only once the reviewers let it
+Such a call runs only once the reviewers let it
 (agent_audit.AnswerAudit.gate, docs/agent-work-log.md "Vor dem Aufruf"): a
 reviewer's halt came only after the call before, because the app logs a step
 and runs it at once while a round takes seconds.

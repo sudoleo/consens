@@ -246,33 +246,18 @@ class AgentSessionStore:
                 raise TurnStatusConflict("Worker session is not runnable")
             tokens, cost = reservation
             daily = daily_snapshot.to_dict() or {}
-            # Review/synthesis can spend this run's protected budget; workers
-            # and comparisons cannot consume it.
-            protected = data.get("review_hold", 0)
-            previous_daily_ref = None
-            if data.get("quota_day") and data["quota_day"] != day:
-                previous_daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"])
-                previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
-                previous_daily = agent_quota.release(previous_daily, protected)
-                daily = agent_quota.reserve(daily, protected, limit=limit)
             kind = (agent.to_dict() or {}).get("kind") if agent else None
-            can_spend = agent_id == "orchestrator" or kind == "judge"
             # The account holds the call's worst-case cost in micro-euros,
             # whatever kind of call it is (agent_quota.measured_charge).
             quota_amount = agent_budget_config.micro_eur(cost)
-            spend = min(protected, quota_amount) if can_spend else 0
-            cost_hold = data.get("review_cost_hold", 0)
-            cost_spend = min(cost_hold, cost) if can_spend else 0
-            daily = agent_quota.reserve(daily, quota_amount - spend, limit=limit,
+            daily = agent_quota.reserve(daily, quota_amount, limit=limit,
                                         overdraft=overdraft if limits.get("account_budget_only") else False)
             if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
-                    or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
+                    or data["reserved_cost"] + cost > limits["max_cost_nano_usd"]):
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
             states[step] = "running"
             reservations = {**data["reservations"], step: list(reservation)}
-            patch = {**data, "step_states": states, "reservations": reservations,
-                     "quota_day": day, "review_hold": protected - spend,
-                     "review_cost_hold": cost_hold - cost_spend,
+            patch = {**data, "step_states": states, "reservations": reservations, "quota_day": day,
                      "reserved_tokens": data["reserved_tokens"] + tokens, "reserved_cost": data["reserved_cost"] + cost}
             if agent_id == "orchestrator":
                 patch["last_step"] = step
@@ -297,47 +282,12 @@ class AgentSessionStore:
                           currency="USD", billing_mode="simulation")
             tx.set(active_ref, {"leases": leases})
             tx.set(daily_ref, daily)
-            if previous_daily_ref:
-                tx.set(previous_daily_ref, previous_daily)
             if user.exists:
                 tx.update(user_ref, {"agent_usage": totals})
             else:
                 tx.set(user_ref, {"agent_usage": totals})
             return True
         return self._agent_transaction(uid, operation)
-
-    def protect_review(self, uid, chat_id, turn_id, run_token, amount, cost=0):
-        """Atomically protect synthesis/judges from all other concurrent runs:
-        ``amount`` micro-euros of the account, ``cost`` nano-USD of the run's budget."""
-        ref = self.receipt_ref(uid, chat_id, turn_id)
-        budget_config = agent_budget_config.get_config(self.db)
-        limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
-        day = agent_quota.period_key(budget_config)
-        daily_ref = agent_quota.quota_ref(self.db, uid, day)
-        def operation(tx):
-            tombstone, root, daily = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), ref, daily_ref))
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
-            root, daily = root.to_dict() or {}, daily.to_dict() or {}
-            if root.get("run_token") != run_token or root.get("run_status") != "running":
-                raise TurnStatusConflict("Agent run is closed")
-            protected = root.get("review_hold", 0)
-            previous_ref = None
-            if root["quota_day"] != day:
-                previous_ref = agent_quota.quota_ref(self.db, uid, root["quota_day"])
-                previous = previous_ref.get(transaction=tx).to_dict() or {}
-                previous = agent_quota.release(previous, protected)
-                extra = max(amount, protected)
-            else:
-                extra = max(0, amount - protected)
-            daily = agent_quota.reserve(daily, extra, limit=limit)
-            protected_cost = max(cost, root.get("review_cost_hold", 0))
-            if not root["policy"].get("account_budget_only") and root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
-                raise AnalysisBudgetExceeded("Not enough cost budget for synthesis and review")
-            tx.set(daily_ref, daily)
-            if previous_ref:
-                tx.set(previous_ref, previous)
-            tx.update(ref, {"quota_day": day, "review_hold": max(amount, protected), "review_cost_hold": protected_cost})
-        self._agent_transaction(uid, operation)
 
     def save_review(self, uid, chat_id, turn_id, run_token, review, text):
         """Checkpoint exact text and review state before expensive work."""

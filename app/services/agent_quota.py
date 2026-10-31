@@ -350,13 +350,6 @@ def reserve(data, amount, *, limit=None, overdraft=False):
     return data
 
 
-def release(data, amount):
-    data = normalize(data)
-    data["reserved"] = max(0, data.get("reserved", 0) - amount)
-    data["revision"] = data.get("revision", 0) + 1
-    return data
-
-
 def settle(data, reserved, usage):
     """Swap a call's reservation for its charge (measured_charge)."""
     data = normalize(data)
