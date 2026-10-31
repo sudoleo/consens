@@ -244,6 +244,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
    filled edge to edge; caption and source show in the viewer it opens. */
 .md-picture-line:has(> .md-picture > .agent-vm-picture[data-gallery-size]) {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr);
+  align-items: stretch; justify-items: stretch;
   gap: 4px; width: 100%; height: clamp(180px, 40vw, 300px);
 }
 .md-picture-line:has(> .md-picture > .agent-vm-picture[data-gallery-size="3"]) {

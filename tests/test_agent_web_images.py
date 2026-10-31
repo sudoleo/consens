@@ -353,6 +353,9 @@ def test_the_agent_searches_pictures_and_shows_its_picks_without_looking(store, 
         fetched.append(picture)
         if "blocked" in picture:
             raise ValueError("status_403")
+        # In the background the DNS gate may be full once: the fetch runs again.
+        if picture == PIC_B and fetched.count(PIC_B) == 1:
+            raise ValueError("dns_busy")
         return encode(png((900, 600), (len(fetched) * 40, 0, 0)))
     monkeypatch.setattr(picture_search, "search", search)
     monkeypatch.setattr(agent_web_images, "fetch_found", fetch)
@@ -382,7 +385,7 @@ def test_the_agent_searches_pictures_and_shows_its_picks_without_looking(store, 
     # Looking at a found picture keeps its id and its fetch.
     assert [entry["id"] for entry in looked["pictures"]] == ["p2"]
     assert second["status"] == "shown" and second["markdown"] == "![Auf dem Platz](picture:p2)"
-    assert sorted(fetched) == sorted([PIC_A, PIC_B, PIC_C])
+    assert sorted(fetched) == sorted([PIC_A, PIC_B, PIC_B, PIC_C, PIC_C])
     # The agent sees only the picture it asked to look at: the search costs no image tokens.
     pictures = [m for m in loop.messages if m.get("role") == "user" and isinstance(m.get("content"), list)]
     assert [m["content"][0]["text"] for m in pictures] == [INTRO.format(id="p2", url=PAGE_B)]

@@ -495,16 +495,24 @@ class WebImageTools:
 
     def _arrived(self, candidate, cancellation):
         """The found picture once fetched, its data on the candidate;
-        ValueError with the reason when it cannot come."""
-        future = self._fetch(candidate)
-        while not future.done():
-            cancellation.raise_if_cancelled()
-            concurrent.futures.wait([future], timeout=0.25)
-        try:
-            data, mime, width, height = future.result()
-        except Exception as exc:
-            logging.info("Agent found picture fetch failed category=%s", safe_exception(exc))
-            raise ValueError(f"No picture: {_reason(exc)}.") from None
+        ValueError with the reason when it cannot come. A fetch that failed
+        runs once more: in the background it may have met a full DNS gate
+        (dns_busy) or a site's moment."""
+        for attempt in range(2):
+            future = self._fetch(candidate)
+            while not future.done():
+                cancellation.raise_if_cancelled()
+                concurrent.futures.wait([future], timeout=0.25)
+            try:
+                data, mime, width, height = future.result()
+                break
+            except Exception as exc:
+                logging.info("Agent found picture fetch failed category=%s attempt=%s", safe_exception(exc), attempt)
+                with self.lock:
+                    if candidate.get("fetch") is future:
+                        del candidate["fetch"]
+                if attempt:
+                    raise ValueError(f"No picture: {_reason(exc)}.") from None
         with self.lock:
             candidate.update(data=data, mime=mime, width=width, height=height,
                              digest=hashlib.sha256(data).hexdigest())
