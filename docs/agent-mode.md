@@ -2771,7 +2771,7 @@ Bildmodelle, nur die neuesten), `tests/test_agent_notes.py` (Nachricht in den
 laufenden Lauf), `tests/test_agent_vm_restore.py` (Restore über die API und
 Hinweis an die nächste Nachricht),
 `tests/js/agent-vm-activity.test.mjs`, die VM-Fälle in
-`agent-preferences.test.mjs`, `test_user_settings.py` und
+`workspace-view.test.mjs` (Agent-Tab der Einstellungen), `test_user_settings.py` und
 `test_prompt_config.py`.
 
 ### Sicherheitsregeln des Arbeitsplatzes (seit 2026-10-30)

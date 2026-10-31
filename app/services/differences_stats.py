@@ -16,6 +16,13 @@ einer identifizierbaren Person herstellbar) und fallen nicht unter
 personenbezogene Daten. Beim Erweitern des Schemas gilt: niemals Inhalte oder
 nutzerbezogene Identifikatoren aufnehmen.
 
+Schreiber (Stand 2026-10-31): keiner. Bis 2026-10-25 schrieb der
+Consensus-Modus der App, vom 2026-10-15 bis 2026-10-31 der Vergleichsmodus des
+Agenten; seit dem einen Modus prüfen Prüfer statt Judges, und es entsteht kein
+differences_data mehr. Wie der Datensatz künftig gespeist wird, klärt der
+Betreiber nach dem Umbau zusammen mit Model Pulse; bis dahin bleiben Modul und
+Schema für die vorhandenen Dokumente stehen.
+
 Metadaten-Vollständigkeit: schema_version + engine-/modellbezogene Felder sind
 Pflicht, damit alte Datensätze bei späteren Analysen nicht entwertet werden.
 Schema-Änderungen => schema_version erhöhen und hier dokumentieren.
@@ -52,8 +59,9 @@ Consensus-Engine. Nur Provider-/Modell-Metadaten, keine Texte.
   question_word_count   int    Länge der Frage (Zahl, nicht der Text)
   is_pro_user           bool
   used_own_keys         bool
-  source                str    "app" (Consensus), seit 2026-10-15 auch "agent"
-                               (je geprüftem Agent-Vergleich, consensus_model =
+  source                str    "app" (Consensus, bis 2026-10-25), vom
+                               2026-10-15 bis 2026-10-31 auch "agent" (je
+                               geprüftem Agent-Vergleich, consensus_model =
                                Chatmodell) und "agent_text" (Prüfung eines
                                eingefügten Texts); getrennt auswerten
 """
@@ -147,8 +155,8 @@ def build_differences_stats_doc(
                     "model": str(entry.get("model") or "")[:80],
                     "tier": str(entry.get("tier") or "")[:20],
                 }
-                # passes/second_pass_added (since 2026-10-07): how often the
-                # Agent's second differences pass ran and what it added.
+                # passes/second_pass_added (2026-10-07 to 2026-10-31): how
+                # often the Agent's second differences pass ran and what it added.
                 for numeric_key in ("attempts", "duration_ms", "passes", "second_pass_added"):
                     try:
                         value = int(entry.get(numeric_key))

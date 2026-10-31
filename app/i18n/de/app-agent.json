@@ -1031,7 +1031,6 @@
   "Agent turn is no longer runnable": "Diese Agent-Antwort kann nicht mehr laufen",
   "Previous model step has not succeeded": "Der vorige Modellschritt ist nicht gelungen",
   "Worker session is not runnable": "Diese Sitzung kann nicht laufen",
-  "Agent run is closed": "Der Agent-Lauf ist beendet",
   "Agent review is closed": "Die Prüfung ist beendet",
   "Agent work log is closed": "Das Arbeitsprotokoll ist geschlossen",
   "Agent session is closed": "Die Agent-Sitzung ist beendet",

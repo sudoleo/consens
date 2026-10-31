@@ -330,7 +330,7 @@ def _search(kwargs):
 @pytest.mark.parametrize("depth,limit,rounds,own", [("quick", 10_000_000, 1, 5), ("full", 10_000_000, 3, 5),
                                                     ("full", 300_000, 3, 3), ("full", 100_000, 3, 1)])
 def test_every_model_searches_with_one_configuration(store, depth, limit, rounds, own):
-    from app.services.agent_audit import AGENT_SEARCH_ROUNDS
+    from app.services.agent_audit import AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS
     from app.services.llm.engines import web_search_tool
     script = Script(depth=depth)
     seen = []
@@ -349,12 +349,14 @@ def test_every_model_searches_with_one_configuration(store, depth, limit, rounds
     script.factory = factory
     from app.services.llm.provider_runtime import AnalysisBudget
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
-    # One family with its own search, one without.
-    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"})
+    # One family with its own search, one without; the same models review.
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}, reviewers=True)
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
+    reviews = [row for row in seen if row[4].startswith(REVIEWER)]
+    seen = [row for row in seen if not row[4].startswith(REVIEWER)]
     expected = lambda family, rounds: web_search_tool(family, max_uses=rounds, max_results=5,
                                                        max_total_results=5 * rounds, max_characters=2000)["parameters"]
     comparisons = {model: (rounds, tool, prompt) for kind, model, rounds, tool, prompt in seen if kind == "comparison"}
@@ -374,22 +376,34 @@ def test_every_model_searches_with_one_configuration(store, depth, limit, rounds
     assert own <= AGENT_SEARCH_ROUNDS and searched == own and tool == expected("anthropic", own)
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "answer"]
     assert searched >= 1 and tool == expected("anthropic", searched)
-    assert saved_turn(store, loop)["status"] == "completed"
+    # The reviewers search the same way, however tight the budget: live
+    # rounds briefly, the final round of each reviewer fully.
+    assert {(model, searched) for _, model, searched, *_ in reviews} >= {
+        ("anthropic/claude-haiku-4.5", REVIEW_SEARCH_ROUNDS), ("deepseek/deepseek-v4.1-flash", REVIEW_SEARCH_ROUNDS)}
+    assert all(searched in (LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS) and tool == expected(model.split("/")[0], searched)
+               for _, model, searched, tool, _ in reviews)
+    saved = saved_turn(store, loop)
+    assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
 
 
 def test_a_comparison_that_overdraws_the_day_still_reaches_its_answer(store):
     """Search is booked, not reserved: a "full" comparison keeps all its rounds
-    on a small allowance, and the answer is written beyond the limit. The
-    next message is refused instead."""
+    on a small allowance, the answer is written and reviewed beyond the
+    limit. The next message is refused instead."""
+    from app.services.agent_audit import REVIEW_SEARCH_ROUNDS
     from app.services.llm.provider_runtime import AnalysisBudget
     script = Script(depth="full")
-    rounds, base = [], script.factory
+    rounds, reviewed, base = [], [], script.factory
     def factory():
         completion = base()
         stream = completion.stream
         def heavy(*, model, messages, **kwargs):
             yield from stream(model=model, messages=messages, **kwargs)
-            if not completion.step_id.startswith("completion:"):
+            if messages[0]["content"].startswith(REVIEWER):
+                # Light: a reviewer's live round that lands before the
+                # comparison would otherwise spend the allowance first.
+                reviewed.append(kwargs["native_searches"])
+            elif not completion.step_id.startswith("completion:"):
                 rounds.append(kwargs["native_searches"])
                 # Three rounds of search results, measured after the call.
                 completion.usage = measured_usage({"prompt_tokens": 40_000, "completion_tokens": 2_000}, model)
@@ -398,7 +412,7 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_answer(store):
     script.factory = factory
     limit = 60_000
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
-    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"})
+    loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}, reviewers=True)
     loop.policy = AgentPolicy.for_chat(loop.config)
     loop.costs.policy = loop.policy
     loop.budget = AnalysisBudget(unlimited=True)
@@ -406,6 +420,8 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_answer(store):
     saved = saved_turn(store, loop)
     assert rounds == [3, 3]
     assert saved["status"] == "completed" and saved["consensus"] == "The first option costs 100."
+    assert reviewed.count(REVIEW_SEARCH_ROUNDS) >= 2 and saved["agent_review"]["status"] == "succeeded"
+    assert [row["status"] for row in saved["agent_review"]["audit"]["reviewers"]] == ["completed", "completed"]
     ledger = agent_quota.snapshot(store.db, UID)
     assert ledger["used"] > limit and ledger["reserved"] == 0
     assert agent_quota.remaining_allowance(store.db, UID) == 0
