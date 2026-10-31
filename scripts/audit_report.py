@@ -9,7 +9,8 @@ Method as in that spec (section 8):
   (``quota_charged``), the session's kind (``session_kind``, since
   2026-10-29) and a reviewer call's ``round`` where they exist;
 - turns ``users/{uid}/chats/{chat}/turns/{turn}`` in audit mode
-  (``agent_review.mode == "audit"`` or the frozen preference), with their
+  (``agent_review.mode == "audit"`` or the frozen preferences, is_audit;
+  since 2026-10-31 every Agent turn: the Agent's one mode), with their
   sessions (``agents``, reviewers: ``kind == "audit"``) and their work log
   (``answer_fixed``, ``checked``, ``paused``, ``decision`` and the agent's
   ``step`` entries, by time; never their text);
@@ -63,10 +64,6 @@ UNDECIDED = {"timeout", "ended", "waiting", "open"}
 # The release (spec section 1): turns in all, with three reviewers, and
 # workspace runs over ten minutes.
 RELEASE = {"turns": 100, "three_reviewers": 30, "long_workspace_runs": 10}
-# compare_models in audit mode (since 2026-10-31, docs/agent-mode.md "Vergleich
-# im Audit"): this many real turns without an error before
-# AGENT_AUDIT_COMPARE=all opens it beyond the admins.
-COMPARE_GATE = 10
 
 
 # --- Reading (network) --------------------------------------------------------
@@ -138,13 +135,22 @@ def _turn(turn):
             "failed_at": turn.get("failed_at"), "updated_at": turn.get("updated_at"),
             "model": settings.get("model"), "preferences": settings.get("agent_preferences") or {},
             "comparison_models": len(settings.get("comparison_models") or {}),
-            # compare_models offered (audit_compare) and the comparisons it ran, by status.
-            "audit_compare": bool(settings.get("audit_compare")),
+            # The comparisons compare_models ran, by status.
             "comparisons": [c.get("status") for c in review.get("comparisons") or [] if isinstance(c, dict)],
             "review": {"mode": review.get("mode"), "status": review.get("status"), "reviewers": reviewers,
                        "issues": [i.get("code") for i in audit.get("issues") or [] if isinstance(i, dict)]}
             if review else None,
             "vm": bool(turn.get("agent_vm")), "holds": holds}
+
+
+def is_audit(info):
+    """A turn in audit mode: its review says so, or its frozen preferences.
+    From 2026-10-25 they carry ``audit``; since the Agent's one mode
+    (2026-10-31) every turn is one and they hold only ``vm``. Turns from
+    before 2026-10-25 hold neither: comparison mode, as those with audit off."""
+    preferences = info["preferences"] if isinstance(info.get("preferences"), dict) else {}
+    return ((info.get("review") or {}).get("mode") == "audit" or preferences.get("audit") == "on"
+            or ("vm" in preferences and "audit" not in preferences))
 
 
 def collect(db, since, *, exclude_own=False, workers=12):
@@ -167,7 +173,7 @@ def collect(db, since, *, exclude_own=False, workers=12):
             return args, None
         data = snapshot.to_dict() or {}
         info = _turn(data)
-        if not ((info["review"] or {}).get("mode") == "audit" or info["preferences"].get("audit") == "on"):
+        if not is_audit(info):
             return args, {**info, "audit": False}
         info["agents"] = [{"id": a.id, **{key: (a.to_dict() or {}).get(key) for key in
                                          ("kind", "status", "created_at", "ended_at")}}
@@ -485,17 +491,16 @@ def report(data):
                 f"Max' decision (cost share {quota['reviewer_cost_share']})", None),
     ]
     long_runs = sum(1 for r in completed if r["info"].get("vm") and (_seconds(r["created"], r["end"]) or 0) > 600)
-    # The turns that asked the models (compare_models in audit mode); clean:
-    # completed, reviewed, every comparison with answers of at least two.
+    # The turns that asked the models (compare_models); clean: completed,
+    # reviewed, every comparison with answers of at least two.
     compared = [r for r in rows if r["info"].get("comparisons")]
-    comparing = {"offered": sum(1 for r in rows if r["info"].get("audit_compare")), "turns": len(compared),
+    comparing = {"turns": len(compared),
                  "turn_status": dict(Counter(_status(r["info"]) for r in compared)),
                  "comparisons": dict(Counter(s for r in compared for s in r["info"]["comparisons"])),
                  "reviews": dict(Counter((r["info"]["review"] or {}).get("status") for r in compared)),
                  "clean": sum(1 for r in compared if r["info"].get("status") == "completed"
                               and (r["info"]["review"] or {}).get("status") in {"succeeded", "partial"}
-                              and all(s in {"succeeded", "partial"} for s in r["info"]["comparisons"])),
-                 "needed": COMPARE_GATE}
+                              and all(s in {"succeeded", "partial"} for s in r["info"]["comparisons"]))}
     return {
         "since": data["since"].isoformat() if isinstance(data.get("since"), datetime) else data.get("since"),
         "data": {"audit_turns": len(rows), "own": sum(r["own"] for r in rows), "other": sum(not r["own"] for r in rows),
@@ -578,9 +583,8 @@ def render(result):
         f"{release['three_reviewers']}/{release['needed']['three_reviewers']} with three reviewers, "
         f"{release['long_workspace_runs']}/{release['needed']['long_workspace_runs']} workspace runs over 10 min")
     compare = result["compare"]
-    add(f"Compare in audit: offered in {compare['offered']} turns, used in {compare['turns']} "
-        f"(turns {compare['turn_status']}, comparisons {compare['comparisons']}, reviews {compare['reviews']}); "
-        f"gate {compare['clean']}/{compare['needed']} clean turns")
+    add(f"compare_models: used in {compare['turns']} turns (turns {compare['turn_status']}, comparisons "
+        f"{compare['comparisons']}, reviews {compare['reviews']}); {compare['clean']} clean")
     return "\n".join(out)
 
 
