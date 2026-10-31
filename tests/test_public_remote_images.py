@@ -44,6 +44,14 @@ def test_a_picture_the_agent_placed_leaves_nothing_on_a_public_page():
     assert html.count("<p>") == 2 and "<p></p>" not in html and "Text  on." in html
 
 
+def test_a_table_cell_of_only_a_picture_stays_an_empty_cell():
+    """Only a paragraph or heading of only pictures goes; a table cell stays,
+    or the row's other cells move under the wrong column."""
+    html = render_public_markdown("| Pic | Name |\n|---|---|\n| ![a](picture:p1) | Alpha |\n")
+    assert "picture:" not in html
+    assert "<tr>\n<td></td>\n<td>Alpha</td>\n</tr>" in html
+
+
 def test_alt_text_cannot_break_out_of_the_note():
     html = render_public_markdown('![<b onmouseover="x">bad</b>](https://tracker.example/p.png)')
     assert "<b" not in html and "&lt;b onmouseover=" in html

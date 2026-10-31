@@ -234,7 +234,8 @@ def _neutralize_remote_images(tokens):
     2026-10-28 a public page loaded it: a model's or an injected picture told
     its host who read the page, and when (audit). A picture the agent placed
     in its answer (``picture:p2``, a file of the private chat the app shows
-    there) leaves nothing, and a line of only those leaves no paragraph."""
+    there) leaves nothing, and a line of only those leaves no paragraph. A
+    table cell of only those stays, empty: the row keeps its columns."""
     for position, token in enumerate(tokens):
         if token.type != "inline" or not token.children:
             continue
@@ -243,9 +244,11 @@ def _neutralize_remote_images(tokens):
         if any(pictures):
             token.children = [child for child, picture in zip(token.children, pictures) if not picture]
             if all(child.type == "softbreak" or (child.type == "text" and not child.content.strip())
-                   for child in token.children) and 0 < position < len(tokens) - 1:
-                tokens[position - 1].hidden = tokens[position + 1].hidden = True
+                   for child in token.children):
                 token.children = []
+                if (0 < position < len(tokens) - 1
+                        and tokens[position - 1].type in {"paragraph_open", "heading_open"}):
+                    tokens[position - 1].hidden = tokens[position + 1].hidden = True
         for index, child in enumerate(token.children):
             if child.type != "image" or _same_origin_image(child.attrGet("src")):
                 continue
