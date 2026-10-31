@@ -84,9 +84,12 @@ describe("activity head while the run reviews or waits", () => {
       review: { mode: "audit", status: "running" }, answerText: "The answer." });
     expect(title()).toBe("Reviewing · 2m 19s");
     expect(host.querySelector(".agent-activity-verb").dataset.ghost).toBeUndefined();
+    // The comparison mode's answer check is gone (2026-10-31): a review
+    // without the reviewers' mode is no phase of its own.
     activity.render(host, { running: true, elapsedMs: 139000, status: "running", events: [],
       review: { status: "running" }, answerText: "The answer." });
-    expect(title()).toBe("Checking · 2m 19s");
+    expect(title()).toBe("Working for 2m 19s");
+    expect(activity.PHASE_WORDS.checking).toBeUndefined();
     // A pause: the head says so, and its clock does not move while it lasts.
     const hold = { version: 1, kind: "hold", id: "hold-a1", step_id: "hold", reviewer: "Claude", halt: "harm",
       reason: "Deletes files.", state: "waiting" };

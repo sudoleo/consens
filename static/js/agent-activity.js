@@ -174,22 +174,22 @@
   // chat list (run-view.js) and the tab title (tab-status.js), UX audit E1/E2:
   // before, the head said "Working for" while the reviewers checked the
   // answer and while the run waited for the user, and the chat list
-  // "Thinking" or a cut "Writing ans…" at the same moment. "Checking" is the
-  // comparison mode's answer check, which only the demo still plays (demo.js;
-  // a run's review is the reviewers', mode "audit").
-  const PHASE_WORDS = Object.freeze({ working: 'Working', reviewing: 'Reviewing', checking: 'Checking',
+  // "Thinking" or a cut "Writing ans…" at the same moment. A run's review is
+  // the reviewers' (mode "audit"); the comparison mode's answer check, whose
+  // "Checking" only the demo still played, left with it on 2026-10-31.
+  const PHASE_WORDS = Object.freeze({ working: 'Working', reviewing: 'Reviewing',
     paused: 'Paused', asking: 'Waiting for you' });
   function phase({ asking = false, held = false, review = null } = {}) {
     if (asking) return 'asking';
     if (held) return 'paused';
-    if (review?.status === 'running') return review.mode === 'audit' ? 'reviewing' : 'checking';
+    if (review?.mode === 'audit' && review.status === 'running') return 'reviewing';
     return 'working';
   }
   // Every word the head writes before its clock, each alone in its element
   // (the page translates it on its own; tests/test_i18n.py reads this list):
   // until 2026-10-29 "Failed after" and "Stopped after" had no German alone
   // and stood in English before "0 Sek." (I3).
-  const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing', checking: 'Checking',
+  const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing',
     paused: 'Paused', asking: 'Waiting for you', succeeded: 'Thought for', failed: 'Failed after',
     cancelled: 'Stopped after' });
   // "Working for 12s" while it works, "Reviewing · 2m 19s" while the
@@ -1427,8 +1427,9 @@
     // returns with a new responding status after it.
     const afterLatest = latest ? events.slice(events.indexOf(latest) + 1) : [];
     const writing = latest ? latest.status === "responding" && !afterLatest.some(item => item.kind === "tool") : responding;
-    // "Checking the answer…": the demo's answer check (demo.js, see phase).
-    const reviewStage = review?.status === "running" ? (review.mode === "audit" ? "Reviewing the answer…" : "Checking the answer…")
+    // The reviewers review the fixed answer (see phase); before it, the AIs
+    // the agent asked answer (compare_models).
+    const reviewStage = phase({ review }) === "reviewing" ? "Reviewing the answer…"
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
     const waiting = running && latest?.status === 'waiting';
     // The run keeps going on the server while the browser is offline or

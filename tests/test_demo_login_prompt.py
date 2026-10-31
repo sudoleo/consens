@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -43,41 +44,29 @@ class DemoLoginPromptContractTests(unittest.TestCase):
             flow[:cleared],
         )
 
-    def test_demo_result_has_an_agreement_score(self):
+    def test_demo_plays_the_one_mode_without_a_score(self):
+        # Since 2026-10-31 the Agent has one mode: the reviewers' notes on the
+        # answer, no judges and no agreement score.
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
 
-        self.assertIn("agreement: {", demo_module)
-        self.assertIn("score: 43,", demo_module)
+        self.assertIn('version: 1, mode: "audit", status,', demo_module)
+        self.assertIn('kind: "audit", title: `Review · ${model.label}`', demo_module)
+        self.assertIn('name: "audit_answer"', demo_module)
+        for gone in ("agreement: {", "score:", "differencesData", "judge", "Coverage judge"):
+            self.assertNotIn(gone, demo_module)
 
-    def test_every_checkable_demo_passage_has_a_coverage_claim(self):
+    def test_every_reviewer_note_stands_on_a_sentence_of_the_answer(self):
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
-        claims = demo_module.split("    claims: [", 1)[1].split(
-            "    differences: [", 1
-        )[0]
-        anchors = (
-            "Consensus: probably yes, with a few radiators changed",
-            "All six models think a heat pump can heat this house",
-            "The walls were insulated in 2015",
-            "What none of them can tell you from here",
-            "Get a room-by-room heat-loss calculation",
-            "Test it this winter",
-            "Rooms that stay warm keep their radiators",
-            "Original 1970s radiators are often larger than the room needs today",
-            "Have the heat pump sized from the calculation",
-            "The models split on the target flow temperature",
-            "They also disagree on what that costs you",
-            "Keeping the gas boiler as a backup for the coldest days divides them as well",
-            "Whether to start with the survey or with the winter test",
-            "Heat-loss survey: 140 m² at roughly 8 kW.",
-            "Test week at 50 °C",
-            "Replace those two radiators, or more.",
-            "Heat pump sized at 8 to 9 kW.",
-            "Target flow temperature.",
-            "Both bracketed parts are the ones the models could not settle for you",
-        )
-        for anchor in anchors:
-            self.assertIn(f'anchor: "{anchor}"', claims)
-        self.assertEqual(claims.count('coverage: "'), len(anchors))
+        answer = demo_module.split("  answer:\n`", 1)[1].split("`,", 1)[0]
+        notes = demo_module.split("  notes: [", 1)[1].split("\n  ]\n", 1)[0]
+        kinds = re.findall(r'kind: "([a-z]+)"', notes)
+        self.assertEqual(sorted(kinds), ["doubtful", "incomplete", "wrong"])
+        anchors = re.findall(r'anchor: "([^"]+)"', notes)
+        targets = re.findall(r'target: "([^"]+)"', notes)
+        self.assertEqual(len(anchors), 3)
+        for anchor, target in zip(anchors, targets, strict=True):
+            self.assertIn(anchor, answer)
+            self.assertIn(target, anchor)
 
 
 if __name__ == "__main__":

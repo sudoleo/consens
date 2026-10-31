@@ -1,15 +1,15 @@
 // static/demo.js on a German page: the scenario's text arrives in German
 // (demoInPageLanguage), the values the app reads stay as they are, and every
-// anchor and contested word still finds its place in the German answer.
+// reviewer's note still finds its sentence and words in the German answer.
 import { readdirSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
 import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 
-// The fields a reader reads as words. Everything else in differencesData is
-// a value: a type, a severity, a coverage, a model name, a count.
-const TEXT_FIELDS = new Set(["anchor", "quote", "target", "claim", "consensus_anchor", "stance", "verify"]);
+// The fields of a reviewer's note a reader reads as words. Its kind and its
+// reviewer are values.
+const TEXT_FIELDS = new Set(["anchor", "target", "note"]);
 
 // What the browser gets (app/core/i18n.py, client_bundle): every file but the
 // server-only ones, keys with collapsed whitespace.
@@ -48,59 +48,38 @@ function demoOnPage(lang, entries, { scripts = [], body = "", after } = {}) {
   return { ...page, data: page.window.__testDemoData };
 }
 
-function withoutText(value) {
-  if (Array.isArray(value)) return value.map(withoutText);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value)
-      .filter(([key]) => !TEXT_FIELDS.has(key))
-      .map(([key, entry]) => [key, withoutText(entry)]));
-  }
-  return value;
+function values(notes) {
+  return notes.map(note => Object.fromEntries(Object.entries(note).filter(([key]) => !TEXT_FIELDS.has(key))));
 }
 
-function textFields(value, out = []) {
-  if (Array.isArray(value)) value.forEach(entry => textFields(entry, out));
-  else if (value && typeof value === "object") {
-    for (const [key, entry] of Object.entries(value)) {
-      if (TEXT_FIELDS.has(key) && typeof entry === "string") out.push([key, entry]);
-      else textFields(entry, out);
-    }
-  }
-  return out;
+function texts(notes) {
+  return notes.flatMap(note => [...TEXT_FIELDS].map(key => [key, note[key]]));
 }
 
 const english = demoOnPage("en", {}).data;
 
 describe("the demo on a German page", () => {
-  it("translates the text and never a value the app reads", () => {
+  it("translates the notes and never a value the app reads", () => {
     // A dictionary with German for every string: whatever is a value must
-    // still arrive as it was ("contradiction" -> "Widerspruch" took the
-    // demo's red mark, its "vs" and "Critical").
+    // still arrive as it was (a note of kind "falsch" has no colour).
     const german = demoOnPage("de", { Copy: "Kopieren" }, {
       after(window) { window.App.t = text => `DE ${text}`; },
     }).data;
-    expect(withoutText(german.differencesData)).toEqual(withoutText(english.differencesData));
-    for (const [key, text] of textFields(german.differencesData)) expect(text, key).toMatch(/^DE /);
+    expect(values(german.notes)).toEqual(values(english.notes));
+    for (const [key, text] of texts(german.notes)) expect(text, key).toMatch(/^DE /);
   });
 
-  it("keeps every type and severity with the real dictionary", () => {
+  it("has German for every sentence, quoted word and note of the reviewers", () => {
     const german = demoOnPage("de", browserDictionary()).data;
-    expect(withoutText(german.differencesData)).toEqual(withoutText(english.differencesData));
-    expect(german.differencesData.differences.map(diff => [diff.type, diff.severity])).toEqual([
-      ["contradiction", "major"], ["contradiction", "minor"], ["emphasis", "minor"],
-    ]);
-  });
-
-  it("has German for every anchor, quote and contested word", () => {
-    const german = demoOnPage("de", browserDictionary()).data;
-    const before = textFields(english.differencesData);
-    const untranslated = textFields(german.differencesData)
+    expect(values(german.notes)).toEqual(values(english.notes));
+    const before = texts(english.notes);
+    const untranslated = texts(german.notes)
       .filter(([, text], index) => text === before[index][1])
       .map(([key, text]) => `${key}: ${text}`);
     expect(untranslated).toEqual([]);
   });
 
-  it("marks the critical contradiction and every contested word in the German answer", () => {
+  it("marks every note's sentence and words in the German answer", () => {
     const { window, document, data } = demoOnPage("de", browserDictionary(), {
       scripts: ["static/js/user-settings.js", "static/js/consensus-anchor.js", "static/js/consensus-insights.js"],
       body: `
@@ -108,22 +87,32 @@ describe("the demo on a German page", () => {
           <div class="consensus-answer-body"></div>
           <div class="consensus-claims-fallback" hidden></div>
         </article>
-        <div id="differencesCards"></div>
         <div id="claimPopover" hidden></div>
         <div id="claimSheetBackdrop" hidden></div>
       `,
     });
     window.Element.prototype.scrollIntoView = function () {};
     const body = document.querySelector(".consensus-answer-body");
-    body.innerHTML = data.consensus;
-    window.renderStoredConsensusClaims(body, data.differencesData,
-      document.querySelector(".consensus-claims-fallback"), []);
-
-    const critical = data.differencesData.differences[0];
-    expect([...body.querySelectorAll(".cx-claim.is-major")].map(mark => mark.textContent).join(""))
-      .toContain(critical.consensus_anchor);
+    const fallback = document.querySelector(".consensus-claims-fallback");
+    body.innerHTML = data.answer;
+    // The answer itself arrived in German.
+    expect(body.textContent).toContain("Als Erstes");
+    const audit = { claims: data.notes.map(note => ({ anchor: note.anchor, audit: true, kind: note.kind, agree: [],
+      dissent: [{ model: note.model, kind: note.kind, note: note.note, target: note.target }] })), unplaced: [], process: [] };
+    expect(window.renderStoredAuditMarks(body, audit, fallback, [])).toBe(true);
+    expect(fallback.hidden).toBe(true);
+    expect([...body.querySelectorAll(".cx-claim.is-audit")].map(mark => mark.textContent.trim()))
+      .toEqual(data.notes.map(note => note.anchor));
     const spots = [...body.querySelectorAll(".cx-spot")].map(spot => spot.textContent);
-    const targets = [...new Set(data.differencesData.claims.flatMap(claim => claim.dissent.map(item => item.target)))];
-    expect(targets.filter(target => !spots.some(spot => spot.includes(target)))).toEqual([]);
+    expect(data.notes.map(note => note.target).filter(target => !spots.some(spot => spot.includes(target)))).toEqual([]);
+  });
+
+  it("has German for the agent's notes while it works", () => {
+    const source = readFileSync(`${ROOT}/static/demo.js`, "utf8");
+    const block = source.split("const DEMO_AGENT_NOTES = demoInPageLanguage({", 2)[1].split("});", 1)[0];
+    const notes = [...block.matchAll(/^\s+\w+: "(.+)",?$/gm)].map(match => match[1]);
+    expect(notes).toHaveLength(2);
+    const dictionary = browserDictionary();
+    expect(notes.filter(note => !dictionary[note])).toEqual([]);
   });
 });

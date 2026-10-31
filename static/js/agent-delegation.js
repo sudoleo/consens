@@ -6,10 +6,10 @@
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
   // Judge calls of the comparison mode's answer check (turns saved before
-  // 2026-10-31, and the scripted turn of demo.js) are plumbing: retries and
-  // backup models are routine and say nothing about the answer. The panel
-  // shows them as ONE row, "Answer check", whose state is the outcome of the
-  // checks, not of individual attempts.
+  // 2026-10-31) are plumbing: retries and backup models are routine and say
+  // nothing about the answer. The panel shows them as ONE row, "Answer
+  // check", whose state is the outcome of the checks, not of individual
+  // attempts. No judge works any more: the row is always a saved outcome.
   const ended = new Set(["failed", "stopped"]);
   const CHECK_ID = "answer-check";
   const checkNames = { "Differences judge": "differences", "Coverage judge": "coverage", "Text check": "text" };
@@ -21,15 +21,12 @@
     if (!judges.length) return null;
     const titles = [...new Set(judges.map(agent => agent.title))];
     const done = new Set(titles.filter(title => judges.some(agent => agent.title === title && agent.status === "completed")));
-    const busy = judges.filter(agent => activeStates.has(agent.status));
     // Coverage windows started while the answer was still being written
     // (agent_coverage_prefetch); the answer's check was done only after its
     // Differences judge, so finished early windows never read as done: the
     // run ended before the check, which did not finish.
     const answerCheckOpen = titles.includes("Coverage judge") && !titles.includes("Differences judge");
-    // Only the demo's judges still work while the row is on screen.
-    const status = view.running && busy.length ? "working"
-      : done.size === titles.length && !answerCheckOpen ? "completed" : "failed";
+    const status = done.size === titles.length && !answerCheckOpen ? "completed" : "failed";
     const metered = judges.filter(agent => measured(agent.usage));
     const usage = metered.length ? { input_tokens: metered.reduce((n, a) => n + a.usage.input_tokens, 0),
       output_tokens: metered.reduce((n, a) => n + a.usage.output_tokens, 0),
@@ -632,8 +629,7 @@
         row.body.append(usage);
       }
       const names = agent.missing;
-      row.body.append(node('p', 'agent-judge-note', agent.status === 'working' ? 'Check in progress.'
-        : names.length === 1 ? `The ${joinNames(names)} check could not run. The answer is shown without it.`
+      row.body.append(node('p', 'agent-judge-note', names.length === 1 ? `The ${joinNames(names)} check could not run. The answer is shown without it.`
         : names.length ? `The ${joinNames(names)} checks could not run. The answer is shown without them.`
           : agent.textOnly ? 'The check of your text is shown above the answer.'
             : agent.checkedText ? 'The check of your text is shown above the answer, the rest under Review.'
@@ -1032,8 +1028,18 @@
   }
   // demo.js plays a turn the server never sees. Its rows arrive here as a
   // whole snapshot each time (null releases them), so the demo shows the same
-  // model icons, panel and light as a real run: no requests, no stop.
+  // model icons, panel and light as a real run: no requests, no stop. A
+  // comparison answer brings its `text`, a reviewer its `messages` (rounds,
+  // then the final review, as agent_audit.review_text writes them).
   const demoAgent = /^[\w-]{1,64}$/;
+  function demoMessages(agent) {
+    const listed = Array.isArray(agent.messages) ? agent.messages
+      : agent.text ? [{ id: `${agent.id}:answer`, kind: "result", text: agent.text }] : [];
+    return listed.filter(message => typeof message?.text === "string").map((message, index) => ({
+      id: message.id || `${agent.id}:${index + 1}`, seq: index + 1, kind: message.kind || "result",
+      sender: agent.id, recipient: "orchestrator", text: message.text,
+      ...(message.created_at ? { created_at: message.created_at } : {}) }));
+  }
   function demo(spec) {
     resetOwner();
     if (!spec) {
@@ -1058,10 +1064,11 @@
       const same = old && old.status === agent.status;
       view.agents.set(agent.id, { ...agent, duration_ms: same ? old.duration_ms : old ? elapsed(view, old) : 0,
         runtimeAnchor: same ? old.runtimeAnchor : performance.now() });
-      if (agent.text && !view.details.get(agent.id)?.messages.size) {
-        view.details.set(agent.id, { messages: new Map([[`${agent.id}:answer`, { id: `${agent.id}:answer`, seq: 1, kind: "result",
-          sender: agent.id, recipient: "orchestrator", text: agent.text }]]), cursor: 1, loadedSeq: 1 });
-      } else if (!view.details.has(agent.id)) view.details.set(agent.id, { messages: new Map(), cursor: 0, loadedSeq: 0 });
+      const messages = demoMessages(agent);
+      if (messages.length !== (view.details.get(agent.id)?.messages.size ?? -1)) {
+        view.details.set(agent.id, { messages: new Map(messages.map(message => [message.id, message])),
+          cursor: messages.length, loadedSeq: messages.length });
+      }
     }
     view.usage = spec.usage || view.usage;
     if (view.running && !spec.running) stopClock(view);
