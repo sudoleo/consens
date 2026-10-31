@@ -273,6 +273,24 @@ describe("conversation scroll", () => {
     app.dom.window.close();
   });
 
+  it("waits for Latest message without a frame loop while the end is just out of reach", () => {
+    const app = boot();
+    app.window.App.revealSentMessage(); app.tick(80);
+    const button = app.document.querySelector(".chat-scroll-latest");
+    button.click(); app.tick(80);
+    expect(button.hidden).toBe(true);
+    // 120px above the end: past the near-end band, not far enough for the
+    // button. Idle, no frame stays scheduled (bug hunt 2026-10-30: one per
+    // frame, 3750 in a minute).
+    app.scroll(2280); app.tick(80);
+    expect(button.hidden).toBe(true);
+    expect(app.frames.size).toBe(0);
+    // Further up, the button comes as before.
+    app.scroll(2000); app.tick(40);
+    expect(button.hidden).toBe(false);
+    app.dom.window.close();
+  });
+
   it("keeps the Latest message jump on the end it was pressed for while text streams in", () => {
     const app = boot();
     app.window.App.revealSentMessage(); app.tick();

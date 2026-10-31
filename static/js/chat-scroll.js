@@ -131,7 +131,9 @@
   }
   // "Latest message" comes once the end stays out of reach a moment and by
   // more than the near-end band; it goes at once. Live lines that grow and
-  // fold during a run made it flash on and off (2026-10-28).
+  // fold during a run made it flash on and off (2026-10-28). Just out of
+  // reach (up to SHOW_FAR) the wait ends; the next scroll or layout change
+  // starts it again, instead of a check in every frame while idle.
   const SHOW_FAR = 160, SHOW_AFTER_MS = 500;
   let farSince = null, showFrame = 0;
   function away() { return !valid() || !!jump || occupied() || maxTop() - window.scrollY <= NEAR_END; }
@@ -145,9 +147,9 @@
   function showWhenFar(now) {
     showFrame = 0;
     if (!button || !button.hidden) return;
-    if (away()) { farSince = null; return; }
+    if (away() || maxTop() - window.scrollY <= SHOW_FAR) { farSince = null; return; }
     if (farSince === null) farSince = now;
-    if (now - farSince >= SHOW_AFTER_MS && maxTop() - window.scrollY > SHOW_FAR) { button.hidden = false; farSince = null; return; }
+    if (now - farSince >= SHOW_AFTER_MS) { button.hidden = false; farSince = null; return; }
     showFrame = window.requestAnimationFrame(showWhenFar);
   }
   function pause() {

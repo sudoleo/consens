@@ -2867,7 +2867,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Der Knopf erscheint erst, wenn das Ende 500 ms lang mehr als 160 px
   außer Reichweite bleibt (`SHOW_AFTER_MS`, `SHOW_FAR`, `showWhenFar`, seit
   2026-10-28), und geht sofort; so blinkt er nicht, wenn Reasoning-Zeilen die
-  Höhe kurz springen lassen.
+  Höhe kurz springen lassen. Steht das Ende nur 81–160 px entfernt, endet das
+  Warten (seit 2026-10-31); der nächste Scroll oder Layoutwechsel startet es
+  neu, statt im Leerlauf jeden Frame zu prüfen.
   „Latest message“ (`latest()`) springt einmal zu dem Inhaltsende, das
   beim Drücken bestand (gemessen an der Reserve-Unterkante); Text, der während
   des Sprungs ankommt, verlängert ihn nicht, ein wachsender Composer schon.
