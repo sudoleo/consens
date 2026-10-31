@@ -23,7 +23,6 @@ from firebase_admin import firestore
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.services import persistence_guard
-from app.services.agent_comparison import AgentAudit, AgentAutonomy, AgentDepth, AgentJudges, AgentQuorum, AgentVM
 from app.services.llm.agent_client import REASONING_EFFORT_PATTERN
 
 
@@ -62,20 +61,6 @@ class AgentModelSetting(_Strict):
     reasoning_effort: str = Field(default="default", pattern=REASONING_EFFORT_PATTERN)
 
 
-class AgentPreferencesSetting(_Strict):
-    """Agent depth, answer start, model choice, answer check, audit and VM; only the fields chosen."""
-
-    depth: Optional[AgentDepth] = None
-    quorum: Optional[AgentQuorum] = None
-    autonomy: Optional[AgentAutonomy] = None
-    judges: Optional[AgentJudges] = None
-    # Audit instead of comparison: shown to admins only, and only an admin's
-    # message runs with it (routers/agent.py effective_preferences).
-    audit: Optional[AgentAudit] = None
-    # Agent VM: shown to admins only, and only an admin's message runs with it.
-    vm: Optional[AgentVM] = None
-
-
 class CompareModelSetting(_Strict):
     """One model family in Compare and Agent's comparisons: included or not, which model."""
 
@@ -91,7 +76,6 @@ class UserSettings(_Strict):
     # on read (sanitize_settings), so the account falls back to the default.
     run_mode: Optional[Literal["compare", "agent"]] = None
     agent_model: Optional[AgentModelSetting] = None
-    agent_preferences: Optional[AgentPreferencesSetting] = None
     # Keyed by the family label the app shows (OpenAI, Gemini, ...).
     compare_models: Optional[dict[FamilyLabel, CompareModelSetting]] = Field(
         default=None, max_length=MAX_COMPARE_FAMILIES
@@ -124,13 +108,15 @@ class UserSettings(_Strict):
 
 
 SETTING_NAMES = tuple(UserSettings.model_fields)
-# Settings a change merges into field by field instead of replacing: an open
-# page of an older version does not know a newer field (agent_preferences
-# gained "judges" on 2026-10-17) and must not erase it with its next change.
-# A field is never removed alone; null resets the whole setting.
-FIELDWISE_SETTINGS = frozenset({"agent_preferences"})
-# A PATCH names each setting at most once; more keys are not a settings change.
-MAX_PATCH_FIELDS = len(SETTING_NAMES)
+# Settings the app no longer has that an open page of an older version still
+# sends: agent_preferences (answer depth, answer start, Agent freedom, answer
+# check, audit, VM) until the Agent's one mode (2026-10-31). A PATCH gets one
+# back in ``rejected`` like any unknown name; a stored one is dropped on read
+# (sanitize_settings) and with the account's next change.
+RETIRED_SETTINGS = ("agent_preferences",)
+# A PATCH names each setting at most once, an older page's retired ones
+# included; more keys are not a settings change.
+MAX_PATCH_FIELDS = len(SETTING_NAMES) + len(RETIRED_SETTINGS)
 
 
 def _compact(name: str, value):
@@ -249,8 +235,6 @@ class FirestoreUserSettingsRepository:
                     raise ValueError(f"Unknown setting: {name}")
                 if value is None:
                     values.pop(name, None)
-                elif name in FIELDWISE_SETTINGS and isinstance(values.get(name), dict):
-                    values[name] = {**values[name], **value}
                 else:
                     values[name] = value
                 field_revisions[name] = revision
