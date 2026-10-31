@@ -105,8 +105,10 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         assert max(centers) - min(centers) <= 1
         assert all(a['right'] <= b['left'] + 1 for a, b in zip(bounds, bounds[1:]))
         assert box('#questionInput')['bottom'] <= min(b['top'] for b in bounds) + 1
+        # Beside the reviewers a long chat model name ends in an ellipsis
+        # inside the row; the tooltip holds it whole.
         assert page.locator('.agent-model-picker .model-picker-display-text').evaluate(
-            'label => label.scrollWidth <= label.clientWidth + 1')
+            "label => getComputedStyle(label).textOverflow === 'ellipsis' && label.getBoundingClientRect().right <= innerWidth")
         assert bounds[0]['x'] >= 0 and bounds[-1]['right'] <= width and agent_model['right'] <= width
         assert page.locator('.agent-model-picker').evaluate(
             "el => getComputedStyle(el, '::after').display === 'none'")
@@ -241,12 +243,9 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         page.route("**/agent", respond)
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
-        # The marks stand before the chip on a desktop start screen; a phone
-        # leaves the count to the chip's words (composer.css).
-        if width > 700:
-            expect(page.locator('#composerModelPicker')).to_be_visible()
-        else:
-            expect(page.locator('#composerModelPicker')).to_be_hidden()
+        # The reviewers' marks and words stand before the chip on the start
+        # screen, on a phone in their short form ("3 AIs", agent-mode.js).
+        expect(page.locator('#composerModelPicker')).to_be_visible()
         expect(page.locator('#composerModeBar')).to_be_hidden()
         assert page.evaluate("App.runMode.preference()") == 'agent'
         assert page.evaluate("localStorage.getItem('agentMode')") is None
@@ -273,8 +272,10 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             assert input_box["width"] >= min(210, composer["width"] * (.7 if hero else .25))
             assert input_box["height"] <= 80
             if page.locator("#agentModelControls").is_visible():
+                # The chat model's name; on the narrowest phone it shares the
+                # row with the reviewers' "3 AIs" and Reasoning, cut short.
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
-                assert label["width"] >= 90
+                assert label["width"] >= (40 if width <= 320 else 90)
         expect(page.locator(".consensus-model-inline")).to_be_hidden()
         # The chip names the chat model; the reviewers have their own words.
         expect(page.locator(".agent-model-picker .model-picker-display-text")).to_have_text("DeepSeek V4.1 Flash")

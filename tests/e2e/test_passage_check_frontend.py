@@ -92,12 +92,17 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         # No hint at the feature any more: a new chat just asks.
         expect(page.locator("#questionInput")).to_have_attribute("placeholder", "Ask anything")
 
-        # The saved chat, opened (bookmark path), the thread question set again afterwards.
+        # The saved chat, opened (bookmark path), the thread question set again
+        # afterwards; the composer leaves the start screen as for any open chat.
         page.evaluate("""turn => {
             App.runRegistry.showSavedView({type: 'bookmark'}, {chatId: 'a'.repeat(32), turnId: turn.id, executionMode: 'agent',
                 question: turn.question, consensus: turn.consensus, currentTurn: turn});
             App.setThreadQuestion(turn.question);
+            window.exitHeroMode();
         }""", SAVED)
+        page.wait_for_function("() => !document.body.classList.contains('is-hero') && "
+                               "!document.body.classList.contains('composer-animating') && "
+                               "!document.body.classList.contains('composer-gliding')")
         expect(page.locator("#agentAnswerBody")).to_contain_text(ANSWER)
 
         # The message stays as it was sent: plain text with its paragraphs, no marks.
