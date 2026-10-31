@@ -413,6 +413,11 @@ describe('private Agent workspace', () => {
     await Promise.resolve();
     expect([...body.querySelectorAll('.agent-vm-picture')].map(tile => [tile.dataset.gallerySize, 'galleryLead' in tile.dataset]))
       .toEqual([['2', false], ['2', false]]);
+    // A line that became a paragraph with words holds pictures of their own again.
+    body.innerHTML = '<p><span class="md-picture" data-picture="p3"></span> <span class="md-picture" data-picture="p4"></span><br>Source: FuPa</p>';
+    await Promise.resolve();
+    expect([...body.querySelectorAll('.agent-vm-picture')].map(tile => Object.keys(tile.dataset).filter(name => name.startsWith('gallery'))))
+      .toEqual([[], []]);
     dom.window.close();
   });
 

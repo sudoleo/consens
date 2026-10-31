@@ -400,15 +400,48 @@
       return row;
     }
 
+    // A gallery's pictures load once each, and its neighbours before they
+    // are asked for: paging is a slideshow, not a download each time.
+    let galleryFiles = new Map();
+    function storedFile(att) {
+      if (!viewerGallery) return window.App.agentWorkspace.openFile(att.fileId);
+      let entry = galleryFiles.get(att.fileId);
+      if (!entry) {
+        entry = { done: false };
+        entry.load = window.App.agentWorkspace.openFile(att.fileId).then(async function (file) {
+          const mime = file.mime || att.mime;
+          const image = mime.indexOf("image/") === 0 ? await readDataUrl(file.blob) : "";
+          entry.done = true;
+          return Object.assign({}, file, { image: image });
+        });
+        // A failed load may be asked for again.
+        entry.load.catch(function () { if (galleryFiles.get(att.fileId) === entry) galleryFiles.delete(att.fileId); });
+        galleryFiles.set(att.fileId, entry);
+      }
+      return entry.load;
+    }
+
+    function preloadNeighbours() {
+      if (!viewerGallery) return;
+      const items = viewerGallery.items;
+      for (const step of [1, -1]) {
+        const item = items[(viewerGallery.index + step + items.length) % items.length];
+        if (item?.fileId) storedFile(item).catch(function () {});
+      }
+    }
+
     function showStoredAttachment(att) {
       const token = viewerToken;
-      const loading = document.createElement("p");
-      loading.className = "attachment-viewer-loading";
-      loading.textContent = "Loading preview…";
-      viewerBody.appendChild(loading);
-      window.App.agentWorkspace.openFile(att.fileId).then(async function (file) {
+      if (!galleryFiles.get(att.fileId)?.done) {
+        const loading = document.createElement("p");
+        loading.className = "attachment-viewer-loading";
+        loading.textContent = "Loading preview…";
+        viewerBody.appendChild(loading);
+      }
+      storedFile(att).then(async function (file) {
         const mime = file.mime || att.mime;
-        const image = mime.indexOf("image/") === 0 ? await readDataUrl(file.blob) : "";
+        const image = file.image !== undefined ? file.image
+          : mime.indexOf("image/") === 0 ? await readDataUrl(file.blob) : "";
         if (token !== viewerToken) return;
         viewerBody.innerHTML = "";
         if (image) {
@@ -445,6 +478,7 @@
             "This file type cannot be previewed here. Download it to open it."));
         }
         viewerBody.appendChild(storedFileActions(att, file.blob));
+        preloadNeighbours();
       }).catch(function (failure) {
         if (token !== viewerToken) return;
         viewerBody.innerHTML = "";
@@ -519,7 +553,8 @@
         if (window.App?.modalDialog) window.App.modalDialog.open(viewerOverlay, { focus: viewerClose });
         else viewerOverlay.setAttribute("open", "");
       }
-      trackAppEvent("app_attachment_viewed", { mime: att.mime, preview_only: !!att.previewOnly, stored: !!att.fileId });
+      // Paging through a gallery is still the one view.
+      if (!att.paged) trackAppEvent("app_attachment_viewed", { mime: att.mime, preview_only: !!att.previewOnly, stored: !!att.fileId });
     }
 
     if (viewerClose) viewerClose.addEventListener("click", closeAttachmentViewer);
@@ -529,6 +564,9 @@
     function showGalleryPlace(att) {
       const items = Array.isArray(att.gallery) ? att.gallery : [];
       viewerGallery = items.length > 1 ? { items: items, index: Math.min(Math.max(0, att.index || 0), items.length - 1) } : null;
+      // Another gallery (or none) keeps none of the last one's pictures.
+      const ids = viewerGallery ? new Set(items.map(function (item) { return item.fileId; })) : new Set();
+      for (const id of [...galleryFiles.keys()]) if (!ids.has(id)) galleryFiles.delete(id);
       if (viewerCount) {
         viewerCount.hidden = !viewerGallery;
         viewerCount.textContent = viewerGallery ? (viewerGallery.index + 1) + " / " + items.length : "";
@@ -542,14 +580,17 @@
       if (!viewerGallery || !viewerOverlay?.hasAttribute("open")) return;
       const items = viewerGallery.items;
       const index = (viewerGallery.index + step + items.length) % items.length;
-      openAttachmentViewer(Object.assign({}, items[index], { gallery: items, index: index }));
+      openAttachmentViewer(Object.assign({}, items[index], { gallery: items, index: index, paged: true }));
     }
 
     if (viewerPrev) viewerPrev.addEventListener("click", function () { pageGallery(-1); });
     if (viewerNext) viewerNext.addEventListener("click", function () { pageGallery(1); });
+    // On the document: a page step empties the body, and a focused Download
+    // or source link inside it leaves the focus on <body>.
     if (viewerOverlay) {
-      viewerOverlay.addEventListener("keydown", function (event) {
-        if (!viewerGallery || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      document.addEventListener("keydown", function (event) {
+        if (!viewerGallery || !viewerOverlay.hasAttribute("open")) return;
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
         event.preventDefault();
         pageGallery(event.key === "ArrowLeft" ? -1 : 1);

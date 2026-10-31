@@ -4598,19 +4598,36 @@ der Agent riet Seite für Seite und sah jede an (Bildtokens, Schritte).
 - **Ablauf:** `search_pictures(query)` (`picture_search.py`, nur mit
   `BRAVE_SEARCH_API_KEY`, aus mit `AGENT_PICTURE_SEARCH=0`) gibt bis zu 10
   Treffer (`FOUND_PER_SEARCH`) mit ID, Seite, Seitentitel und Größe zurück, ohne
-  Bild für das Modell; höchstens 4 Suchen je Nachricht. Der Server holt die
-  ersten 6 (`PREFETCH`) sofort im Hintergrund (3 gleichzeitig wegen des
-  DNS-Tors), das Original mit der Seite als `Referer`, sonst Braves Kopie
-  (`fetch_found`). `show_image` wartet darauf und speichert wie bisher; ein Bild,
-  das nicht kommt, ist ein Ergebnis `failed` mit Grund. Will der Agent eines
-  sehen, nimmt er `find_pictures` mit der Bildadresse; der Treffer behält seine
-  ID. Aktivität „Found 10 pictures“ (`foundSummary`).
-- **Collage:** Das Ergebnis von `show_image` (`PLACE_NOTE`) sagt, dass Bilder
-  auf einer Zeile als Galerie erscheinen. Die App zeigt zwei nebeneinander, ab
-  drei eins groß und zwei daneben, „+N“ für den Rest; ein Klick öffnet die
-  Ansicht, die mit Pfeilen, Tasten und Wischen durch die Bilder der Zeile
-  blättert und die Seite jedes Bildes als Link nennt
-  (`docs/codebase-map.md`, „Collage“).
+  Bild für das Modell; höchstens 4 Suchen je Nachricht (eine Suche, die nicht
+  antwortet, zählt nicht). Der Server holt die ersten 6 (`PREFETCH`) sofort im
+  Hintergrund, 2 gleichzeitig (`PREFETCH_AT_ONCE`): Das DNS-Tor der Quellen hat
+  prozessweit 4 Plätze und weist ab statt zu warten. Das Original kommt mit der
+  Seite als `Referer`, sonst Braves Kopie (`fetch_found`). `show_image` wartet
+  darauf und speichert wie bisher; nur ein volles DNS-Tor (`dns_busy`) wird
+  einmal neu versucht, jede andere Absage ist ein Ergebnis `failed` mit Grund.
+  Dasselbe Bild unter zwei IDs (Vorschaubild einer Seite, dann Suchtreffer;
+  gleicher Hash) zeigt `show_image` einmal. Will der Agent eines sehen, nimmt
+  er `find_pictures` mit der Bildadresse; der Treffer behält seine ID, und ein
+  vorher über seine eigene Adresse angesehenes Bild bekommt Seite und Titel der
+  Suche. Am Ende des Laufs schließt `close()` den Abruf (wartende Abrufe
+  beginnen nicht mehr). Aktivität „Found 10 pictures“ (`foundSummary`).
+  Geprüft am 2026-10-31 mit dem echten Schlüssel: drei Suchen, Format wie
+  erwartet; von 9 geholten Bildern kamen 8, bei nextg.tv lieferten Original
+  und Braves Kopie 504.
+- **Collage:** Das Ergebnis von `show_image` (`PLACE_NOTE`) sagt als Fakt der
+  Darstellung, dass Bilder auf einer Zeile oder auf Zeilen ohne Leerzeile
+  dazwischen als Galerie erscheinen und eine Leerzeile sie untereinander
+  stellt; wie es sie setzt, entscheidet das Modell. Die App zeigt zwei
+  nebeneinander, ab drei eins groß und zwei daneben, „+N“ für den Rest. Beim
+  Streamen hält `markdown-stream.js` (`OPEN_PICTURE_LINES`) Bildzeilen am Ende
+  zurück, bis etwas anderes folgt: Bild für Bild gezeichnet sprang die Collage
+  von einem großen Bild auf zwei, dann auf drei. Ein Klick öffnet die Ansicht,
+  die mit Pfeilen, Tasten und Wischen durch die Bilder der Zeile blättert, jedes
+  einmal lädt und die Nachbarn vorlädt, in fester Höhe, und die Seite jedes
+  Bildes als Link nennt (`docs/codebase-map.md`, „Collage“).
+- **Offen (Max):** Brave ist nicht im DPF und deckt Suchanfragen nicht mit
+  Standardvertragsklauseln ab; Suchwörter können Namen enthalten. Ohne
+  Schlüssel in Render bleibt die Suche aus.
 
 Tests: `tests/test_agent_web_images.py` (Suche, Abruf, Ablauf),
 `tests/js/agent-workspace.test.mjs` (Collage),

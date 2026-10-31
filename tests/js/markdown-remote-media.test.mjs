@@ -126,9 +126,33 @@ describe("untrusted model markup cannot load remote resources on render", () => 
       window.renderMarkdownStream(output, shown);
       expect(output.textContent.trim()).toBe("Intro.");
     }
+    // Its line is written once something else follows (a collage may go on).
     window.renderMarkdownStream(output, "Intro.\n\n![The tower](picture:p2)");
+    expect(output.querySelector(".md-picture")).toBeNull();
+    window.renderMarkdownStream(output, "Intro.\n\n![The tower](picture:p2)\n\nAt");
     expect(output.querySelector('.md-picture[data-picture="p2"]')).not.toBeNull();
-    expect(output.textContent.trim()).toBe("Intro.");
+    expect([...output.querySelectorAll("p")].map(line => line.textContent)).toEqual(["Intro.", "At"]);
+  });
+
+  // 2026-10-31: drawn picture by picture, a collage jumped from one large
+  // picture to two, then to three; its lines now come at once.
+  it("holds a line of pictures until it is written whole, then shows it as one", () => {
+    const { window, document } = boot();
+    const output = document.createElement("div");
+    const steps = ["Intro.\n\n![a](picture:p1) ![b](picture:p2)", "Intro.\n\n![a](picture:p1) ![b](picture:p2) ![c](pic",
+      "Intro.\n\n![a](picture:p1) ![b](picture:p2) ![c](picture:p3)\n", "Intro.\n\n![a](picture:p1) ![b](picture:p2) ![c](picture:p3)\n![d](picture:p4)\n"];
+    for (const shown of steps) {
+      window.renderMarkdownStream(output, shown);
+      expect(output.querySelectorAll(".md-picture")).toHaveLength(0);
+      expect(output.textContent.trim()).toBe("Intro.");
+    }
+    window.renderMarkdownStream(output, steps[3] + "\nAfter");
+    expect([...output.querySelectorAll(".md-picture-line > .md-picture")].map(place => place.dataset.picture))
+      .toEqual(["p1", "p2", "p3", "p4"]);
+    // A picture in a sentence is no collage and does not wait.
+    const inline = document.createElement("div");
+    window.renderMarkdownStream(inline, "Text ![x](picture:f1) on");
+    expect(inline.querySelector('p > .md-picture[data-picture="f1"]')).not.toBeNull();
   });
 
   it("keeps ordinary links clickable", () => {

@@ -16,7 +16,7 @@ const BODY = `<div class="input-section">
   <input id="reasoningToggle" type="checkbox">
   <div id="threadAskAttachments"></div>
   <dialog id="attachmentViewerModal" class="modal"><div class="modal-content"><span id="attachmentViewerTitle"></span>
-    <span id="attachmentViewerCount" hidden></span>
+    <span id="attachmentViewerCount" aria-live="polite" hidden></span>
     <div id="attachmentViewerBody"></div><button id="attachmentViewerClose"></button>
     <button id="attachmentViewerPrev" hidden></button><button id="attachmentViewerNext" hidden></button></div></dialog>`;
 
@@ -230,6 +230,9 @@ describe("composer attachment tray", () => {
     const picture = (id, host) => ({ fileId: id.repeat(32), name: `picture-${id}.webp`, mime: "image/webp", size: 9,
       title: `Picture ${id}`, page: `https://${host}/page`, host });
     const gallery = [picture("a", "rbb24.de"), picture("b", "fupa.net"), picture("c", "nextg.tv")];
+    const seen = [];
+    window.trackUmamiEvent = name => seen.push(name);
+    const views = () => seen.filter(name => name === "app_attachment_viewed").length;
     window.App.agentWorkspace = { openFile: vi.fn(async () => ({ blob: new window.Blob(["RIFF"], { type: "image/webp" }), mime: "image/webp" })) };
     const title = document.getElementById("attachmentViewerTitle");
     const count = document.getElementById("attachmentViewerCount");
@@ -242,13 +245,24 @@ describe("composer attachment tray", () => {
     expect([source.textContent, source.href, source.rel]).toEqual(["rbb24.de", "https://rbb24.de/page", "noopener noreferrer nofollow"]);
     next.click();
     expect([title.textContent, count.textContent]).toEqual(["Picture b", "2 / 3"]);
-    expect(window.App.agentWorkspace.openFile).toHaveBeenLastCalledWith(gallery[1].fileId);
+    expect(window.App.agentWorkspace.openFile).toHaveBeenCalledWith(gallery[1].fileId);
     const modal = document.getElementById("attachmentViewerModal");
     modal.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
     expect(count.textContent).toBe("1 / 3");
     // From the first back to the last.
     modal.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
     expect([title.textContent, count.textContent]).toEqual(["Picture c", "3 / 3"]);
+    // Each picture loads once, its neighbours before they are asked for;
+    // paging is one view, not a view per picture.
+    await vi.waitFor(() => expect(window.App.agentWorkspace.openFile).toHaveBeenCalledTimes(3));
+    expect(views()).toBe(1);
+    // With the focus on Download, emptied by the step, the keys still page.
+    await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-action")).not.toBeNull());
+    body.querySelector(".attachment-viewer-action").focus();
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(count.textContent).toBe("1 / 3");
+    expect(body.textContent).not.toContain("Loading preview");
+    expect(count.getAttribute("aria-live")).toBe("polite");
     // A file of its own has no arrows.
     window.App.attachments.openStored({ ...gallery[0], gallery: [gallery[0]], index: 0 });
     expect([count.hidden, prev.hidden, next.hidden, title.textContent]).toEqual([true, true, true, "Picture a"]);

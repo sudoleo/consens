@@ -385,7 +385,8 @@ def test_the_agent_searches_pictures_and_shows_its_picks_without_looking(store, 
     # Looking at a found picture keeps its id and its fetch.
     assert [entry["id"] for entry in looked["pictures"]] == ["p2"]
     assert second["status"] == "shown" and second["markdown"] == "![Auf dem Platz](picture:p2)"
-    assert sorted(fetched) == sorted([PIC_A, PIC_B, PIC_B, PIC_C, PIC_C])
+    # A full DNS gate is tried again, a site's refusal is its answer.
+    assert sorted(fetched) == sorted([PIC_A, PIC_B, PIC_B, PIC_C])
     # The agent sees only the picture it asked to look at: the search costs no image tokens.
     pictures = [m for m in loop.messages if m.get("role") == "user" and isinstance(m.get("content"), list)]
     assert [m["content"][0]["text"] for m in pictures] == [INTRO.format(id="p2", url=PAGE_B)]
@@ -399,13 +400,15 @@ def test_the_agent_searches_pictures_and_shows_its_picks_without_looking(store, 
                     ("show_image", None, None, "failed"), ("show_image", None, "fupa.net", None)]
     logged = [entry for entry, _ in loop.work_log.entries_after(0)]
     assert {e["data"] for e in logged if e["kind"] == "tool" and e.get("name") == "search_pictures"} == {"web"}
+    # Fetches still waiting end with the run.
+    assert loop.image_tools._fetcher is None
 
 
 def test_the_picture_search_has_a_bound_and_says_when_it_is_down(store, monkeypatch):
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
     monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
     monkeypatch.setattr(agent_web_images, "SEARCHES_PER_MESSAGE", 2)
-    answers = iter([[], httpx.ConnectError("down")])
+    answers = iter([[], httpx.ConnectError("down"), []])
 
     def search(query, count):
         answer = next(answers)
@@ -413,11 +416,45 @@ def test_the_picture_search_has_a_bound_and_says_when_it_is_down(store, monkeypa
             raise answer
         return answer
     monkeypatch.setattr(picture_search, "search", search)
-    script = Audit(tool_steps=3, step_tools={0: "search_pictures", 1: "search_pictures", 2: "search_pictures"},
-                   step_args={index: {"query": f"Oologah Oklahoma {index}"} for index in range(3)}, live={})
+    script = Audit(tool_steps=4, step_tools={index: "search_pictures" for index in range(4)},
+                   step_args={index: {"query": f"Oologah Oklahoma {index}"} for index in range(4)}, live={})
     loop = audit_loop(store, script)
     list(loop.run())
-    empty, down, over = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
-    assert empty == {"pictures": [], "note": "The search found no pictures. Do not claim the user sees one."}
+    empty, down, again, over = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert empty == again == {"pictures": [], "note": "The search found no pictures. Do not claim the user sees one."}
+    # A search that did not answer is none of the message's searches.
     assert "not available right now" in down["error"]
     assert "No more than 2 picture searches per message" in over["error"]
+
+
+def test_the_same_picture_found_twice_shows_once_with_its_page(store, monkeypatch, tmp_path):
+    """Review 2026-10-31: a picture looked at by its own address, then
+    found by the image search, keeps its id and gains the search's page; the
+    same picture under two addresses shows once."""
+    from app.services.agent_files import AgentFiles
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
+    same = png((900, 600), (10, 20, 30))
+    monkeypatch.setattr(picture_search, "search", lambda query, count: [
+        {"picture": PIC_A, "thumbnail": "", "page": PAGE_A, "title": "Elias Nerlich", "width": 900, "height": 600},
+        {"picture": PIC_B, "thumbnail": "", "page": PAGE_B, "title": "", "width": 900, "height": 600}])
+
+    async def fetch_picture(url, get=None):
+        return same, url, "", {}
+
+    async def fetch(picture, copy, page, get=None):
+        return encode(same)
+    monkeypatch.setattr(agent_web_images, "fetch_picture", fetch_picture)
+    monkeypatch.setattr(agent_web_images, "fetch_found", fetch)
+    script = Audit(tool_steps=4, step_tools={0: "find_pictures", 1: "search_pictures", 2: "show_image", 3: "show_image"},
+                   step_args={0: {"urls": [PIC_A]}, 1: {"query": "Elias Nerlich"}, 2: {"picture": "p1"},
+                              3: {"picture": "p2"}}, live={})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    looked, found, shown, twice = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert looked["pictures"][0]["page"] == PIC_A
+    assert [(entry["id"], entry["page"]) for entry in found["pictures"]] == [("p1", PAGE_A), ("p2", PAGE_B)]
+    assert shown["status"] == "shown" and shown["page"] == PAGE_A
+    assert twice["markdown"] == shown["markdown"] and "same picture as p1" in twice["note"]
+    assert [file["origin"]["ref"] for file in AgentFiles(store.db).list(UID, loop.chat_id)] == ["p1"]

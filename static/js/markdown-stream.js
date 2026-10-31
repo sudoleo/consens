@@ -655,11 +655,19 @@ function holdOpenTask(text) {
 // A picture the agent places ("![…](picture:p2)") showed its raw marks until
 // its line was complete: an image still arriving waits for the next chunk.
 const OPEN_IMAGE = /!\[[^\]\n]*(?:\](?:\([^)\n]*)?)?$/;
+// Lines of only pictures at the end wait until something else follows: one
+// line, or lines without a blank one between, are one collage
+// (agent-workspace.js markGalleries), which drawn picture by picture jumped
+// from one large picture to two, then to three (2026-10-31).
+const PICTURES_ONLY = String.raw`[ \t]*(?:!\[[^\]\n]*\]\(picture:[^)\s]*\)[ \t]*)+`;
+const OPEN_PICTURE_LINES = new RegExp(String.raw`(^|\n)(?:${PICTURES_ONLY}\n)*${PICTURES_ONLY}\n?[ \t]*$`);
 
 function holdOpenImage(text) {
   if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
   const match = text.match(OPEN_IMAGE);
-  return match ? text.slice(0, match.index) : text;
+  if (match) text = text.slice(0, match.index);
+  const lines = text.match(OPEN_PICTURE_LINES);
+  return lines ? text.slice(0, lines.index + lines[1].length) : text;
 }
 
 function renderStreamTail(text, decorate) {

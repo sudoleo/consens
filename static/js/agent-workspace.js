@@ -514,9 +514,16 @@
   // them (agent-workspace.css lays the line out by them with :has).
   const GALLERY_TILES = 3;
   function markGalleries(body) {
+    const marked = new Set();
     for (const line of body.querySelectorAll('.md-picture-line')) {
       const tiles = [...line.querySelectorAll(':scope > .md-picture > .agent-vm-picture')];
-      tiles.forEach((figure, index) => markTile(figure, tiles.length > 1 ? tiles.length : 0, index));
+      if (tiles.length < 2) continue;
+      tiles.forEach((figure, index) => { markTile(figure, tiles.length, index); marked.add(figure); });
+    }
+    // A picture that left its collage (the line became a paragraph, lost a
+    // picture) is a picture of its own again.
+    for (const figure of body.querySelectorAll('.md-picture > .agent-vm-picture')) {
+      if (!marked.has(figure)) markTile(figure, 0, 0);
     }
   }
   function markTile(figure, count, index) {

@@ -3332,6 +3332,9 @@ class DelegationLoop(AgentLoop):
             watcher.join()
             if self.comparison:
                 self.comparison.close()
+            if self.image_tools is not None:
+                # Pictures fetched ahead and never shown stop with the run.
+                self.image_tools.close()
             # Every session update is saved before the run closes: a later
             # one would find the run finished. With the work log's writer at
             # most CLOSE_WAIT_SECONDS in all.

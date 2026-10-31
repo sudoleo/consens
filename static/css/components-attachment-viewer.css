@@ -244,7 +244,10 @@ dialog.modal.attachment-viewer-dialog[open] {
   font-variant-numeric: tabular-nums;
 }
 
+/* One height for every picture of a gallery: the dialog and its arrows stay
+   where they are while it pages. */
 .attachment-viewer-body.is-gallery {
+  min-height: min(60dvh, 560px);
   touch-action: pan-y pinch-zoom;
 }
 
