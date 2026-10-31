@@ -272,10 +272,15 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
             assert input_box["width"] >= min(210, composer["width"] * (.7 if hero else .25))
             assert input_box["height"] <= 80
             if page.locator("#agentModelControls").is_visible():
-                # The chat model's name; on the narrowest phone it shares the
-                # row with the reviewers' "3 AIs" and Reasoning, cut short.
+                # The chat model's name stays readable at every width: on a
+                # small phone the reviewers keep their "3 AIs" and give up
+                # their marks (composer.css, to 380px); with them it was cut
+                # to 44px at 320px.
                 label = page.locator(".agent-model-picker .model-picker-display-text").bounding_box()
-                assert label["width"] >= (40 if width <= 320 else 90)
+                assert label["width"] >= 90, label
+                if width <= 380 and hero:
+                    expect(page.locator("#composerModelLabel")).to_be_visible()
+                    expect(page.locator("#composerModelIcons")).to_be_hidden()
         expect(page.locator(".consensus-model-inline")).to_be_hidden()
         # The chip names the chat model; the reviewers have their own words.
         expect(page.locator(".agent-model-picker .model-picker-display-text")).to_have_text("DeepSeek V4.1 Flash")
