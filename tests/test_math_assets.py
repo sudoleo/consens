@@ -18,6 +18,9 @@ from app.core.math_assets import contains_math, register_math_globals
     r"costs $5 and $x^2$ more",
     r"inline $\alpha$",
     r"escaped dollar inside $a\$b_1$",
+    "3-SAT nicht in O(2^{εn})",
+    "Wert (n+1)^{2}",
+    "<p>s_{k} = 0</p>",
 ])
 def test_formulas_are_found(text):
     assert contains_math(text)

@@ -2299,6 +2299,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Die Regex dafür kommt ohne Lookbehind aus: Safari/iOS unter 16.4 kann ihn
   nicht parsen und verwarf damit das ganze verkettete App-Bundle
   (`tests/js/frontend-syntax.test.mjs` verbietet `(?<=`/`(?<!` im Frontend).
+  **Blanke TeX-Indizes (seit 2026-11-01):** Formeln ganz ohne Trennzeichen
+  („O(2^{εn})“, „2^{n^{o(1)}}“, „s_{k}“) setzt `bareScriptsToInline()` als
+  Inline-Formel: Basis (Wort, `\befehl`, Klammergruppe, davorstehende blanke
+  Indizes) plus Kette aus `^`/`_`, in der mindestens ein `^{...}`/`_{...}`
+  mit geschlossener Klammer in derselben Zeile steht. Blankes `n^2`/`s_k`
+  bleibt Text, Wörter mit `://`, `](` oder `@` bleiben unangetastet. Gilt im
+  Markdown-Pass, in `stripMath()` und im DOM-Pass der Share-Seiten;
+  `page_has_math()` erkennt dieselbe Form (`_BARE_SCRIPT`).
   `stripMath()` liefert die formelfreie Fassung eines Satzes; die Ankersuche
   braucht sie, weil eine gerenderte Formel im DOM ein übersprungener
   `.katex`-Block ist, der Anker aber den LaTeX-Quelltext trägt.

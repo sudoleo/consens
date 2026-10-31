@@ -78,8 +78,116 @@
     );
   }
 
+  // Manche Modelle schreiben Formeln ganz ohne Trennzeichen: "O(2^{εn})",
+  // "2^{n^{o(1)}}", "s_{k}" (DeepSeek V4.1 Flash, 2026-10-31) - im Text
+  // standen dann Klammern und Dach als Quelltext. Ein Exponent oder Index in
+  // TeX-Klammern kommt in normalem Text nicht vor; als Formel gilt deshalb
+  // nur eine Kette aus Basis und Hoch-/Tiefstellungen, in der mindestens ein
+  // "^{...}" oder "_{...}" steckt. Blankes "n^2" oder "s_k" bleibt Text: es
+  // liest sich auch so, und "_" steht in Bezeichnern ("max_tokens"). Woerter
+  // mit Adresse ("://", "](", "@") bleiben unangetastet.
+  const BARE_SCRIPT_RE = /[\^_]\{/g;
+  const ADDRESS_WORD_RE = /\S*(?::\/\/|\]\(|@)\S*/g;
+  const BASE_CHAR_RE = /[\p{L}\p{N}]/u;
+  const SCRIPT_TOKEN_RE = /^(?:-?\d+|[\p{L}\p{N}])/u;
+
+  // Ende der geschweiften Klammer, die bei "open" beginnt, in derselben Zeile.
+  function closingBrace(text, open) {
+    let depth = 0;
+    for (let i = open; i < text.length && text[i] !== "\n"; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}" && --depth === 0) return i + 1;
+    }
+    return -1;
+  }
+
+  function openingParen(text, close, floor) {
+    let depth = 0;
+    for (let i = close; i >= floor && text[i] !== "\n"; i--) {
+      if (text[i] === ")") depth++;
+      else if (text[i] === "(" && --depth === 0) return i;
+    }
+    return -1;
+  }
+
+  // Basis vor dem ersten Hoch-/Tiefzeichen: ein Wort ("2", "log", "\sum"),
+  // eine Klammer ("(n+1)", "f(x)") und davor stehende blanke Indizes
+  // ("x_i^{2}"). -1, wenn keine Basis davorsteht.
+  function scriptBase(text, at, floor) {
+    let base = -1;
+    let start = at;
+    for (;;) {
+      let i = start;
+      if (text[i - 1] === ")") {
+        i = openingParen(text, i - 1, floor);
+        if (i < 0) return base;
+      }
+      const wordEnd = i;
+      while (i > floor && BASE_CHAR_RE.test(text[i - 1])) i--;
+      if (i < wordEnd && i > floor && text[i - 1] === "\\") i--;
+      if (i === start) return base;
+      base = i;
+      if ((text[i - 1] !== "^" && text[i - 1] !== "_") || i - 1 <= floor) return base;
+      start = i - 1;
+    }
+  }
+
+  // Ende der Kette ab "at": "^{...}", "_{...}", "^2", "^-3", "_i" in Folge.
+  function scriptChainEnd(text, at) {
+    let end = at;
+    while (text[end] === "^" || text[end] === "_") {
+      let next;
+      if (text[end + 1] === "{") {
+        next = closingBrace(text, end + 1);
+      } else {
+        const token = SCRIPT_TOKEN_RE.exec(text.slice(end + 1, end + 12));
+        next = token ? end + 1 + token[0].length : -1;
+      }
+      if (next < 0) break;
+      end = next;
+    }
+    return end;
+  }
+
+  function wrapScriptChains(text) {
+    let out = "";
+    let cursor = 0;
+    let match;
+    BARE_SCRIPT_RE.lastIndex = 0;
+    while ((match = BARE_SCRIPT_RE.exec(text)) !== null) {
+      const start = scriptBase(text, match.index, cursor);
+      if (start < 0) continue;
+      const end = scriptChainEnd(text, match.index);
+      if (end === match.index || end - start > MAX_INLINE_MATH_CHARS) continue;
+      out += text.slice(cursor, start) + "\\(" + text.slice(start, end) + "\\)";
+      cursor = end;
+      BARE_SCRIPT_RE.lastIndex = end;
+    }
+    return out + text.slice(cursor);
+  }
+
+  function bareScriptsToInline(text) {
+    const source = String(text);
+    if (!/[\^_]\{/.test(source)) return source;
+    let out = "";
+    let cursor = 0;
+    let match;
+    ADDRESS_WORD_RE.lastIndex = 0;
+    while ((match = ADDRESS_WORD_RE.exec(source)) !== null) {
+      out += wrapScriptChains(source.slice(cursor, match.index)) + match[0];
+      cursor = match.index + match[0].length;
+    }
+    return out + wrapScriptChains(source.slice(cursor));
+  }
+
+  function keepMath(math) { return math; }
+
   function toKatexDelimiters(text) {
-    return bareBracketsToDisplay(dollarInlineToParens(text));
+    return withMathSegments(
+      bareBracketsToDisplay(dollarInlineToParens(text)),
+      keepMath,
+      bareScriptsToInline
+    );
   }
 
   // Innerhalb einer Formel ist Markdown kein Markup, sondern Notation.
@@ -161,9 +269,11 @@
 
   // Nicht jeder Weg fuehrt ueber prepareMarkdown: Share- und Topic-Seiten
   // liefern fertiges HTML vom Server, und ohne marked/DOMPurify zeigt die App
-  // den Rohtext. Damit "$...$" auch dort eine Formel wird, laeuft dieselbe
-  // konservative Erkennung noch einmal ueber die fertigen Textknoten.
-  const MATH_SKIP_SELECTOR = "script, style, code, pre, textarea, .katex";
+  // den Rohtext. Damit "$...$" und blanke "^{...}" auch dort eine Formel
+  // werden, laeuft dieselbe konservative Erkennung noch einmal ueber die
+  // fertigen Textknoten. Eine Fehlermarke von KaTeX traegt den Quelltext und
+  // wuerde sonst bei jedem Durchgang erneut eingewickelt.
+  const MATH_SKIP_SELECTOR = "script, style, code, pre, textarea, .katex, .katex-error";
 
   function normalizeDollarMath(root) {
     const doc = root.ownerDocument || document;
@@ -172,9 +282,9 @@
     let node;
     while ((node = walker.nextNode())) {
       const value = node.nodeValue;
-      if (!value || value.indexOf("$") === -1) continue;
+      if (!value || (value.indexOf("$") === -1 && !/[\^_]\{/.test(value))) continue;
       if (node.parentElement && node.parentElement.closest(MATH_SKIP_SELECTOR)) continue;
-      const converted = dollarInlineToParens(value);
+      const converted = withMathSegments(dollarInlineToParens(value), keepMath, bareScriptsToInline);
       if (converted !== value) pending.push([node, converted]);
     }
     pending.forEach(function (entry) { entry[0].nodeValue = entry[1]; });

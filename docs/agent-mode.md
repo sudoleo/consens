@@ -3240,6 +3240,8 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
 - Der Systemprompt ist `AGENT_AUDIT_SYSTEM_PROMPT`: die Verfassung und
   `AGENT_AUDIT_ANSWER_SECTION` („HOW CONSENS.IO WORKS“: Text ohne Toolcall ist
   die Antwort, Text daneben eine Notiz, Markdown mit Links statt Marken,
+  Formeln zwischen `$...$`/`$$...$$` gesetzt (seit 2026-11-01; DeepSeek V4.1
+  Flash schrieb vorher ganze Antworten als blankes `O(2^{εn})`),
   Checklisten, Bilder nur wo gesetzt, Prüfer unsichtbar, Wissensstand). Die
   Blöcke zu Watches, Einstellungen, Memory, Dateien, Dokumenten, Google und mit
   dem Arbeitsplatz VM, GitHub und Plan folgen. Bis 2026-10-31 schrieb der

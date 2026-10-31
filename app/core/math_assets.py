@@ -25,6 +25,9 @@ _DELIMITER = re.compile(r"\$\$|\\\(|\\\[|\\begin\{")
 # overlapping pairs, so "$5 and $x^2$" is still seen.
 _DOLLAR_PAIR = re.compile(r"(?=\$((?:[^$\n\\]|\\[^\n]){1,200}?)\$)")
 _LATEX_SIGNAL = re.compile(r"\\[A-Za-z]|[\^_{}]")
+# A TeX script with braces right after a base and without any delimiter
+# ("O(2^{εn})"), which math-render.js sets as inline math since 2026-11-01.
+_BARE_SCRIPT = re.compile(r"[\w)][\^_]\{")
 
 _MAX_DEPTH = 8
 
@@ -33,6 +36,8 @@ def contains_math(value, _depth: int = 0) -> bool:
     """True when a string anywhere in ``value`` may hold a formula."""
 
     if isinstance(value, str):
+        if _BARE_SCRIPT.search(value):
+            return True
         if "$" not in value and "\\" not in value:
             return False
         if _DELIMITER.search(value):

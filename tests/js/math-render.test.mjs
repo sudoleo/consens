@@ -110,6 +110,27 @@ y^2
     window.close();
   });
 
+  it("typesets bare TeX scripts written without any delimiter", () => {
+    // Antwort vom 2026-10-31 (ETH-Frage): kein einziges "$", Exponenten in
+    // TeX-Klammern, dazwischen Unicode und ein Link mit Unterstrich.
+    const { window, document } = bootRenderPipeline();
+    const answer = document.getElementById("answer");
+    window.injectMarkdown(answer, [
+      "ETH sagt: es gibt ein ε > 0, sodass 3-SAT **nicht** in Zeit O(2^{εn}) läuft"
+        + " ([Skript](https://example.org/FGC_HWs_{2}.pdf)); s₃ = inf{c : 3-SAT in 2^{cn}}.",
+      "",
+      "- jedes NP-Problem in 2^{n^{o(1)}}, aber nicht 2^{√n} oder 2^{n/log²ⁿ}",
+      "- s_k = 0 für alle k, und 3^w bleibt Text",
+    ].join("\n"));
+    const formulas = Array.from(answer.querySelectorAll(".katex annotation"), (el) => el.textContent);
+    expect(formulas).toEqual(["2^{εn}", "2^{cn}", "2^{n^{o(1)}}", "2^{√n}", "2^{n/log²ⁿ}"]);
+    expect(answer.querySelector(".katex-error")).toBeNull();
+    expect(answer.querySelector("a").getAttribute("href")).toBe("https://example.org/FGC_HWs_%7B2%7D.pdf");
+    expect(answer.querySelector("strong").textContent).toBe("nicht");
+    expect(answer.textContent).toContain("s_k = 0 für alle k, und 3^w bleibt Text");
+    window.close();
+  });
+
   it("keeps code literal and renders ordinary Markdown and currency as before", () => {
     const { window, document } = bootRenderPipeline();
     const answer = document.getElementById("answer");
@@ -198,6 +219,28 @@ describe("ConsensusMath.prepareMarkdown", () => {
     expect(throughMarkdown(math.prepareMarkdown(source))).toBe(source);
   });
 
+  it.each([
+    ["Zeit O(2^{εn}) laeuft", String.raw`Zeit O(\(2^{εn}\)) laeuft`],
+    ["in 2^{n^{o(1)}}.", String.raw`in \(2^{n^{o(1)}}\).`],
+    ["Wert (n+1)^{2} und f(x)^{2}", String.raw`Wert \((n+1)^{2}\) und \(f(x)^{2}\)`],
+    ["mit x_i^{2} und x_{i}^2", String.raw`mit \(x_i^{2}\) und \(x_{i}^2\)`],
+    [String.raw`Summe \sum_{i=1}^{n} a_i`, String.raw`Summe \(\sum_{i=1}^{n}\) a_i`],
+    ["auf **2^{o(n)}**-Niveau", String.raw`auf **\(2^{o(n)}\)**-Niveau`],
+  ])("setzt blanke TeX-Indizes als Formel: %s", (source, expected) => {
+    expect(throughMarkdown(math.prepareMarkdown(source))).toBe(expected);
+  });
+
+  it.each([
+    "O(n^2) und s_k = 0 und 3^w",
+    "Die Option max_tokens und _kursiv_ bleiben Text.",
+    String.raw`Ein escaptes \^{x} und ein Dach ^{x} ohne Basis.`,
+    "Noch offen: 2^{o(n)",
+    "Siehe https://example.org/a_{b}/x^{2} oder [Doku](https://x.y/s_{k}) oder a_{b}@example.org.",
+    "Nutze `x^{2}` im Code.",
+  ])("laesst Text ohne vollstaendige TeX-Klammer stehen: %s", (source) => {
+    expect(math.prepareMarkdown(source)).toBe(source);
+  });
+
   it("behaelt ein einzelnes \\( ausserhalb einer Formel sichtbar", () => {
     expect(throughMarkdown(math.prepareMarkdown(String.raw`Rest \( ohne Ende`))).toBe(
       String.raw`Rest \( ohne Ende`
@@ -221,6 +264,10 @@ describe("ConsensusMath.stripMath", () => {
     expect(math.stripMath(String.raw`Der Zuwachs betraegt $17{,}5\%$.`)).toBe(
       "Der Zuwachs betraegt  ."
     );
+  });
+
+  it("laesst auch blanke TeX-Indizes weg, die als Formel gesetzt werden", () => {
+    expect(math.stripMath("3-SAT laeuft nicht in O(2^{εn}).")).toBe("3-SAT laeuft nicht in O( ).");
   });
 
   it("meldet mit \"\", dass gar keine Formel drin war", () => {
@@ -266,6 +313,20 @@ describe("ConsensusMath.render", () => {
     expect(seen).toEqual([
       String.raw`Also \(6{,}7 / 5{,}7 - 1 \approx 17{,}5\%\).`
     ]);
+  });
+
+  it("setzt blanke TeX-Indizes auch im fertigen HTML der Share-Seiten", () => {
+    const { window, document, math } = boot();
+    const seen = [];
+    window.renderMathInElement = (root) => seen.push(root.textContent);
+    const box = document.createElement("div");
+    box.innerHTML = "<p>Zeit O(2^{εn}), <code>x^{2}</code></p>";
+    document.body.appendChild(box);
+
+    math.render(box);
+    math.render(box);
+
+    expect(seen).toEqual([String.raw`Zeit O(\(2^{εn}\)), x^{2}`, String.raw`Zeit O(\(2^{εn}\)), x^{2}`]);
   });
 
   it("fasst Betraege im fertigen DOM nicht an", () => {
