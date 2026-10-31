@@ -2,12 +2,14 @@
 
 Vom 2026-10-25, von Max freigegeben. Etappe 1 (das Protokoll,
 `app/services/agent_work_log.py`) und Etappe 2 (die Prüfer lesen es live,
-`app/services/agent_audit.py`) sind umgesetzt. Gilt zuerst nur im Audit-Modus
-(„Audit instead of comparison“, Admins, [agent-mode.md](agent-mode.md)).
+`app/services/agent_audit.py`) sind umgesetzt. Galt zuerst nur im Audit-Modus
+(„Audit instead of comparison“, Admins); seit 2026-10-31 ist das der eine
+Modus des Agenten, und jeder Chat-Lauf jedes Kontos schreibt ein Protokoll
+([agent-mode.md](agent-mode.md)).
 
 ## Ziel
 
-Der Agent arbeitet, die Vergleichsmodelle prüfen, und zwar während er arbeitet,
+Der Agent arbeitet, die gewählten Modelle prüfen, und zwar während er arbeitet,
 nicht erst danach. Grundlage ist ein Arbeitsprotokoll, das live mitschreibt, was
 der Agent sieht und tut. Läuft der Agent später lange (VM, Code), ist eine
 Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halten.
@@ -23,7 +25,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
    Lauf dauert. Eine Zurücknahme ist ein neuer Eintrag.
 4. **Alle Prüfer sind gleich.** Jeder prüft unabhängig, mit demselben Auftrag
    und derselben Sicht. Keine Rollen.
-5. **Ein Fehler kostet Prüfung, nie die Antwort.** Wie heute im Audit-Modus.
+5. **Ein Fehler kostet Prüfung, nie die Antwort.**
 
 ## Das Protokoll
 
@@ -39,9 +41,9 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
 Worker (`start_agent`) schreiben in dasselbe Protokoll, mit ihrer ID als
-Absender (`worker:<id>`). Nie im Protokoll: die Prüfer, die Judges und die
-Seitenabrufe der App für `read_source` (`DelegationLoop._log_actor`); ihr
-Ergebnis steht als `tool`-Eintrag darin.
+Absender (`worker:<id>`). Nie im Protokoll: die Prüfer, die Antworten der
+Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
+(`DelegationLoop._log_actor`); ihr Ergebnis steht als `tool`-Eintrag darin.
 
 ### Was nicht hineinkommt
 
@@ -73,7 +75,7 @@ Ergebnis steht als `tool`-Eintrag darin.
   früheren VM-Turns im Verlauf (`agent_work_record`, Herkunft `vm`); was der Lauf danach als Nutzernachricht
   anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
   Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`). Das Ergebnis von
-  `compare_models` (seit 2026-10-31 im Audit) sind die Antworten anderer Modelle
+  `compare_models` (seit 2026-10-31) sind die Antworten anderer Modelle
   mit ihren Seiten: `agent`. Prüfer lesen es als Struktur bis
   `agent_audit.COMPARISON_ENTRY_CHARS`, nicht als einen bei `ENTRY_CHARS`
   abgeschnittenen Text.
@@ -139,8 +141,10 @@ Ergebnis steht als `tool`-Eintrag darin.
 
 ## Die Prüfer
 
-**Wer:** die gewählten Vergleichsmodelle, wie heute im Audit-Modus. Answer
-check aus heißt: keine Prüfer, das Protokoll wird trotzdem geschrieben.
+**Wer:** die gewählten Modelle der Nachricht (eins bis sechs,
+`agent_comparison.comparison_selection`). Seit 2026-10-31 hat jeder Chat-Lauf
+Prüfer; „Answer check“ aus (bis dahin: keine Prüfer, das Protokoll wurde
+trotzdem geschrieben) gibt es nicht mehr.
 
 **Was sie bekommen:** dasselbe Protokoll, als Fortsetzung einer eigenen Sitzung
 je Prüfer (`ReviewerSession`, ein Thread je Prüfer ab dem Start des Laufs,
@@ -305,13 +309,15 @@ Agent-Panel.
 ## Anzeige
 
 - Seitenleiste: Abschnitt „Work log“ am Ende der Sitzungsliste, nur für
-  Admins und nur bei Turns mit Protokoll (`agent_work_log` am Turn, im
-  laufenden Turn die Audit-Einstellung). Lädt erst beim Öffnen, folgt einem
+  Admins (`viewer-is-admin`) und nur bei Turns mit Protokoll
+  (`agent_work_log` am Turn; ein laufender Turn hat seit 2026-10-31 immer
+  eins). Lädt erst beim Öffnen, folgt einem
   laufenden Turn alle 3 s und lädt nach dessen Ende die letzten Einträge.
   Jede Zeile: Nummer, Absender, Art, Name, Herkunft (Fremdinhalt gestrichelt
   umrandet), Uhrzeit; der Inhalt öffnet sich auf Klick, ein langer ganz über
   „Show all“. Endpunkte: `GET /agent/chats/{chat}/turns/{turn}/work-log` und
-  `.../work-log/{seq}`, beide nur für Admins.
+  `.../work-log/{seq}`, seit 2026-10-31 für den Besitzer des Turns (der Turn
+  wird unter dem Konto des Aufrufers gelesen), vorher nur für Admins.
 - Prüfer-Sitzungen im Agent-Panel zeigen seit 2026-10-26 drei Zahlen
   (Runden, Anmerkungen, Schlussprüfung) und eine Zeitleiste: Runden ohne
   Einwand in einer Zeile („Rounds 1–5 · No objections“), Runden mit Befunden

@@ -7,6 +7,12 @@
 > `data_collection=deny` for every model (optional allowlists), consent is asked
 > once per chat. Current setup: [`google-integrations-setup.md`](google-integrations-setup.md);
 > architecture: "Google als Quelle" in [`codebase-map.md`](codebase-map.md).
+>
+> **Since 2026-10-31** the Agent has one mode: it writes the answer itself
+> (no separate synthesis step since 2026-10-14) and the user's chosen models
+> review its work and answer ([`agent-mode.md`](agent-mode.md)). The
+> synthesis, `judge_answer` handoff and judges below describe the comparison
+> mode of these PRs, which is gone; saved turns from it stay readable.
 
 Baseline: `main` at `b13e0205` (2026-09-27); no open PRs at inspection. Existing
 worktrees were left intact. Review in order: attachments → documents → Google
