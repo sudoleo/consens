@@ -63,7 +63,7 @@ def vm_turn(store, *, checkpoint="v3", status="completed", name=None, taken=None
 
 @pytest.fixture
 def admin_api(api, monkeypatch):
-    # The VM: admins, or every account with audit (routers/agent.py vm_allowed).
+    # The VM: admins, or every account with AGENT_VM_ACCESS=all (routers/agent.py vm_allowed).
     monkeypatch.setattr(agent_router, "vm_allowed", lambda uid: True)
     return api
 
@@ -130,8 +130,7 @@ def test_the_next_message_is_told_once(admin_api, fake_vm):
     assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 200
     contexts = []
     for request_id in ("after-1", "after-2"):
-        payload = {"chat_id": chat, "question": "Go on.", "client_request_id": request_id, "bookmark_id": "agent_test",
-                   "agent_preferences": {"audit": "on"}}
+        payload = {"chat_id": chat, "question": "Go on.", "client_request_id": request_id, "bookmark_id": "agent_test"}
         assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
         turn = store._turn_ref(UID, chat, agent_router._idempotent_turn_id(chat, request_id)).get().to_dict()
         contexts.append(turn["app_context"])

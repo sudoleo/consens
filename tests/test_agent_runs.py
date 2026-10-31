@@ -14,6 +14,7 @@ from app.core import config as cfg
 from app.api.routers import agent, chat_history
 from app.core.rate_limit import limiter, api_uid_limiter
 from app.services import agent_runs, persistence_guard
+from app.services.agent_comparison import AgentPreferences, stored_preferences
 from app.services.agent_runs import APP_CONTEXT_OPEN, AgentRunStore, strip_app_context
 from app.services.chat_store import ChatStore, TurnStatusConflict
 from app.services.llm import agent_client
@@ -224,6 +225,15 @@ def test_client_makes_one_tool_free_request_and_reads_final_usage_chunk(monkeypa
     assert completion.usage["input_tokens"] == 12
 
 
+class Calls(list):
+    """The agent's model calls of the ``api`` fixture; ``reviews`` holds the
+    reviewers' calls."""
+
+    def __init__(self):
+        super().__init__()
+        self.reviews = []
+
+
 @pytest.fixture
 def api(monkeypatch, store):
     limiter.reset()
@@ -236,8 +246,17 @@ def api(monkeypatch, store):
     monkeypatch.setattr(agent, "get_user_tier", lambda uid: "pro")
     monkeypatch.setattr(agent, "resolve_developer_api_keys", lambda: {"OpenRouter": "test"})
     monkeypatch.setattr(agent, "mock_llm_enabled", lambda: False)
-    calls = []
+    calls = Calls()
     def stream(self, **kwargs):
+        if not self.step_id.startswith("completion:"):
+            # Every account's turn is reviewed by its comparison models (the
+            # one mode, 2026-10-31): they mark nothing and cost nothing here,
+            # so ``calls`` and the ledger's cost are the agent's own.
+            calls.reviews.append(kwargs)
+            self.usage = measured_usage({"prompt_tokens": 0, "completion_tokens": 0}, kwargs["model"])
+            self.text, self.finish_reason = json.dumps({"marks": []}), "stop"
+            yield {"type": "delta", "text": self.text}
+            return
         calls.append(kwargs)
         value = receipt()
         self.__dict__.update(value.__dict__)
@@ -323,11 +342,12 @@ def test_endpoint_single_call_replay_and_cumulative_costs(api, monkeypatch):
     # The composer learns from the final event whether the next message needs Google consent.
     assert final["google_data"] is False
     assert len(calls) == 1
+    paid = totals(store)["calls"]
     monkeypatch.setattr(agent, "agent_model", lambda: pytest.fail("Replay must not consult new model config"))
     replay = client.post("/agent", json=payload, headers=AUTH)
     assert replay.status_code == 200, replay.text
     assert replay.json()["response"] == "A helpful answer"
-    assert len(calls) == 1 and totals(store)["calls"] == 1
+    assert len(calls) == 1 and totals(store)["calls"] == paid
     assert totals(store)["estimated_cost_nano_usd"] == 132000
 
 
@@ -348,6 +368,88 @@ def test_agent_is_open_to_every_account_and_premium_models_stay_pro(api, monkeyp
                   "comparison_models": {"openai": cfg.OPENAI_SOL_MODEL, "deepseek": cfg.DEEPSEEK_PRO_MODEL}}
     assert client.post("/agent", json=comparison, headers=AUTH).status_code == (200 if pro or admin else 403)
     assert len(calls) == (3 if pro or admin else 1)
+
+
+# What a page from before the one mode (2026-10-31) sends as agent_preferences.
+LEGACY_PREFERENCES = {"depth": "quick", "quorum": "fast", "autonomy": "free", "judges": "off", "audit": "off",
+                      "vm": "on"}
+
+
+def test_old_preferences_read_in_todays_form():
+    assert stored_preferences(LEGACY_PREFERENCES) == {"vm": "on"}
+    assert stored_preferences(None) == stored_preferences({}) == {"vm": "off"}
+    assert AgentPreferences.model_validate({"audit": "on", "judges": "off"}).model_dump() == {"vm": "off"}
+
+
+def test_every_account_runs_the_one_mode_whatever_an_older_page_sends(api, monkeypatch):
+    """Since 2026-10-31 the Agent has one mode for every account, Free
+    included: the comparison models follow the work and review the answer. A
+    page from before still sends its comparison-mode preferences: accepted
+    and ignored, the turn keeps what the route set."""
+    client, store, calls = api
+    monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(agent, "get_user_tier", lambda uid: "free")
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "old-tab", "bookmark_id": "bm1",
+               "agent_preferences": LEGACY_PREFERENCES}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert response.status_code == 200 and "event: final" in response.text, response.text
+    turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
+    settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
+    assert settings["agent_preferences"] == {"vm": "off"} and "audit_compare" not in settings
+    names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
+    assert "compare_models" in names and "check_text" not in names
+    assert len(calls) == 1 and calls.reviews
+    # Whatever an older page held, also a value its own rules refused, is no 422.
+    for preferences in ({"depth": "deep"}, {}, None, LEGACY_PREFERENCES):
+        replay = client.post("/agent", json={**payload, "agent_preferences": preferences}, headers=AUTH)
+        assert replay.status_code == 200 and replay.json()["response"] == "A helpful answer"
+    assert len(calls) == 1
+
+
+def test_an_old_turn_with_the_comparison_preferences_still_recovers(api, monkeypatch):
+    """A turn from before the one mode froze six preferences, one from before
+    the account's VM access changed another vm. Neither is part of the
+    request identity: the replay returns the saved answer without a model
+    call, from an older page and from today's."""
+    client, store, calls = api
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "before", "bookmark_id": "bm1"}
+    assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
+    turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
+    ref = store._turn_ref(UID, chat_id, turn["id"])
+    ref.update({"agent_settings": {**ref.get().to_dict()["agent_settings"],
+                                   "agent_preferences": {**LEGACY_PREFERENCES, "vm": "off"}}})
+    monkeypatch.setenv("AGENT_VM_ACCESS", "all")
+    for body in ({**payload, "agent_preferences": LEGACY_PREFERENCES}, payload, {**payload, "recover_only": True}):
+        replay = client.post("/agent", json=body, headers=AUTH)
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["response"] == "A helpful answer"
+        assert replay.json()["turn"]["agent_settings"]["agent_preferences"]["audit"] == "off"
+    assert len(calls) == 1
+
+
+def test_recovering_a_failed_turn_never_calls_a_model_and_names_its_request(api):
+    """recover_only returns a failed turn as saved, without a model call or a
+    charge. Its comparison models are part of the request identity; the
+    preferences an older page still sends are not."""
+    from app.services import agent_quota
+    client, store, calls = api
+    chat_id, turn = pending(store)
+    store.claim(UID, chat_id, turn["id"], AgentModel())
+    store.settle(UID, chat_id, turn["id"], completion=receipt(), status="failed")
+    payload = {"chat_id": chat_id, "question": "Question one", "client_request_id": "one", "bookmark_id": "bm1",
+               "recover_only": True}
+    ledger = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
+    before = ledger.get().to_dict()
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert response.json()["turn"]["status"] == "failed"
+    other = {**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}
+    assert client.post("/agent", json=other, headers=AUTH).status_code == 409
+    for preferences in (LEGACY_PREFERENCES, {"depth": "deep"}):
+        assert client.post("/agent", json={**payload, "agent_preferences": preferences}, headers=AUTH).status_code == 200
+    assert calls == [] and calls.reviews == [] and ledger.get().to_dict() == before
 
 
 def test_foreign_chat_and_client_supplied_models_or_usage_are_rejected(api):

@@ -2136,47 +2136,46 @@ def test_a_pause_that_could_not_be_saved_is_still_decided(api, monkeypatch, acti
 
 # --- The route ---------------------------------------------------------------------
 
-# Audit for Pro accounts and admins since 2026-10-26 (routers/agent.py audit_allowed).
-@pytest.mark.parametrize("admin", [True, False])
-def test_only_an_allowed_accounts_message_runs_in_audit_mode(api, monkeypatch, admin):
+# One mode for every account since 2026-10-31 (before: Pro and admins,
+# routers/agent.py audit_allowed, and the comparison mode for the others).
+@pytest.mark.parametrize("pro,admin", [(False, False), (True, False), (False, True)])
+def test_every_accounts_message_runs_in_audit_mode(api, monkeypatch, pro, admin):
     from app.api.routers import agent
     client, store, calls = api
-    monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
+    monkeypatch.setattr(agent, "is_user_pro", lambda uid: pro)
+    monkeypatch.setattr(agent, "is_user_admin", lambda uid: admin)
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    # A page from before still asks for the comparison mode: no such thing.
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
-               "agent_preferences": {"audit": "on"}}
+               "agent_preferences": {"audit": "off", "judges": "off"}}
     response = client.post("/agent", json=payload, headers=AUTH)
     assert response.status_code == 200, response.text
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
-    settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
-    assert settings["agent_preferences"]["audit"] == ("on" if admin else "off")
+    saved = store.get_turn(UID, chat_id, turn["id"])
+    assert set(saved["agent_settings"]["agent_preferences"]) == {"vm"}
     first = calls[0]
     names = {tool["function"]["name"] for tool in first.get("tools") or [] if tool.get("type") == "function"}
     system = first["messages"][0]["content"]
-    if admin:
-        assert system.startswith(prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT) and "compare_models" not in names
-        # The fake model's reply is no review: the reviewers lose their marks, the answer stands.
-        assert store.get_turn(UID, chat_id, turn["id"])["status"] == "completed"
-    else:
-        assert "COMPARE OR ANSWER DIRECTLY" in system and "compare_models" in names
-    # The same request again is the same message, with the same effective settings.
+    assert system.startswith(prompt_defaults.DEFAULT_PROMPTS["agent"]) and "COMPARE OR ANSWER DIRECTLY" not in system
+    # The agent may ask the models; no judge checks the answer, the reviewers do.
+    assert "compare_models" in names and "check_text" not in names
+    assert {review["model"].model for review in calls.reviews} == {m.model for m in comparison_selection().values()}
+    assert saved["status"] == "completed"
+    # The same request again is the same message.
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+    assert len(calls) == 1
 
 
-@pytest.mark.parametrize("admin", [True, False])
-def test_one_reviewer_is_enough_only_in_audit_mode(api, monkeypatch, admin):
-    """In audit mode the comparison models review the agent's work, and one
-    is enough; a comparison still needs two sides (2026-10-26)."""
-    from app.api.routers import agent
-    client, store, _calls = api
-    monkeypatch.setattr(agent, "audit_allowed", lambda uid: admin)
+def test_one_reviewer_is_enough(api):
+    """The comparison models review the agent's work, and one is enough
+    (2026-10-26; for every account since the one mode, 2026-10-31)."""
+    client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1",
-               "agent_preferences": {"audit": "on"}, "comparison_models": {"anthropic": "claude-haiku-4-5"}}
+               "comparison_models": {"anthropic": "claude-haiku-4-5"}}
     response = client.post("/agent", json=payload, headers=AUTH)
-    if not admin:
-        assert response.status_code == 422 and "between two and" in response.text
-        return
     assert response.status_code == 200, response.text
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
     assert list(store.get_turn(UID, chat_id, turn["id"])["agent_settings"]["comparison_models"]) == ["anthropic"]
+    assert calls.reviews and {review["model"].model for review in calls.reviews} == {
+        comparison_selection({"anthropic": "claude-haiku-4-5"})["anthropic"].model}

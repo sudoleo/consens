@@ -1,6 +1,7 @@
 """The agent's work log, written live by the app (docs/agent-work-log.md).
 
-Since 2026-10-25, in audit mode only (AgentPreferences.audit, admins). While
+Since 2026-10-25 in audit mode, since 2026-10-31 the Agent's one mode: every
+turn of every account (routers/agent.py lets the turn's owner read it). While
 the agent works, the app records what it sees and does, never the agent
 itself: the context each model step receives (``context``: the chat's
 history and question, then everything the run adds to the conversation,

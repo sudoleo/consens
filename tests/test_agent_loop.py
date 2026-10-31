@@ -70,6 +70,30 @@ def transport(monkeypatch, responses):
     return requests, budgets, closed
 
 
+def reviewed_transport(monkeypatch, answer, *, searches=0):
+    """The provider for POST /agent in the one mode (2026-10-31): the
+    agent's request (it offers compare_models) streams ``answer``, each
+    reviewer's request a review without marks. Returns both lists of
+    requests, the agent's and the reviewers'."""
+    agent, reviews = [], []
+
+    def lines(url, **kwargs):
+        body = kwargs["json"]
+        own = any(tool.get("function", {}).get("name") == "compare_models" for tool in body.get("tools") or [])
+        (agent if own else reviews).append(body)
+        current_analysis_budget().consume()
+        chunks = [answer[i:i + 100] for i in range(0, len(answer), 100)] if own else [json.dumps({"marks": []})]
+        for chunk in chunks:
+            yield "data: " + json.dumps(packet({"content": chunk}))
+            yield ""
+        yield "data: " + json.dumps(packet(finish="stop", usage=usage(searches if own else 0)))
+        yield ""
+        yield "data: [DONE]"
+        yield ""
+    monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
+    return agent, reviews
+
+
 def loop_for(store, **kwargs):
     chat_id, turn = pending(store)
     model = configured_model(resolve_agent_model("claude-haiku-4-5"))
@@ -584,18 +608,17 @@ def test_deletion_between_steps_preserves_accounting_and_fences_next_call(store,
 def test_native_endpoint_replay_uses_receipt_and_does_not_search_again(api, monkeypatch):
     client, store, _ = api
     monkeypatch.setattr(AgentCompletion, "stream", REAL_STREAM)
-    requests, _, _ = transport(monkeypatch, [
-        [packet({"content": "Research findings"}, finish="stop", usage=usage(1))],
-        [packet({"content": "Found answer"}, finish="stop", usage=usage(0))],
-    ])
+    requests, reviews = reviewed_transport(monkeypatch, "Found answer", searches=1)
     chat = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]
     payload = {"chat_id": chat["id"], "question": "Research, without a model comparison", "client_request_id": "native", "bookmark_id": "native",
                "model_id": "claude-haiku-4-5"}
     assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
+    assert len(requests) == 1 and any(tool.get("type") == "openrouter:web_search" for tool in requests[0]["tools"])
+    sent = len(requests) + len(reviews)
     replay = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
     assert replay.status_code == 200 and replay.json()["response"] == "Found answer"
-    assert len(requests) == 2
-    assert not any(tool.get("type") == "openrouter:web_search" for tool in requests[1].get("tools", []))
+    # The saved answer, from its receipt: no request, no search.
+    assert len(requests) + len(reviews) == sent
     assert replay.json()["turn"]["agent_settings"]["tools"] == ["web_search"]
     assert client.post("/agent", json={**payload, "tools": ["shell"]}, headers=AUTH).status_code == 422
 

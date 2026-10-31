@@ -32,7 +32,8 @@ SETTINGS_PATH = ("users", UID, "settings", "app")
 def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
     stored = {
         "run_mode": "bogus",
-        # A setting the app no longer has (the source check, until 2026-10-15).
+        # Settings the app no longer has (the source check until 2026-10-15,
+        # the Agent's own settings until its one mode, 2026-10-31).
         "check_sources": True,
         "agent_model": {"model_id": "openai/gpt-6-luna", "reasoning_effort": "low"},
         "agent_preferences": {"depth": "quick", "quorum": None},
@@ -45,7 +46,6 @@ def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
     }
     assert user_settings.sanitize_settings(stored) == {
         "agent_model": {"model_id": "openai/gpt-6-luna", "reasoning_effort": "low"},
-        "agent_preferences": {"depth": "quick"},
         "system_prompt": "Answer in German.",
         "claim_counts": True,
         "letter_animations": False,
@@ -56,7 +56,6 @@ def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
 
 def test_sanitize_drops_settings_that_hold_only_unchosen_parts():
     assert user_settings.sanitize_settings({
-        "agent_preferences": {},
         "compare_models": {"OpenAI": {}},
         "system_prompt": "   ",
     }) == {}
@@ -120,18 +119,21 @@ def test_update_changes_only_the_named_settings_and_notes_when(repository, datab
     assert set(stored) == {"values", "revision", "field_revisions", "updated_at"}
 
 
-def test_agent_preferences_change_field_by_field(repository):
-    """An open page of an older version sends agent_preferences without a
-    field it does not know (judges, since 2026-10-17); the account keeps it."""
-    repository.update(UID, {"agent_preferences": {"depth": "quick", "judges": "off"}})
-    values, revision, _ = repository.update(UID, {"agent_preferences": {"depth": "full", "autonomy": "free"}})
-    assert values["agent_preferences"] == {"depth": "full", "autonomy": "free", "judges": "off"} and revision == 2
-    # null still resets the whole setting to the app default.
-    assert "agent_preferences" not in repository.update(UID, {"agent_preferences": None})[0]
-    assert repository.update(UID, {"agent_preferences": {"quorum": "fast"}})[0]["agent_preferences"] == {"quorum": "fast"}
-    # The admin settings are stored like the others (the route decides who runs them).
-    values = repository.update(UID, {"agent_preferences": {"audit": "on", "vm": "on"}})[0]
-    assert values["agent_preferences"] == {"quorum": "fast", "audit": "on", "vm": "on"}
+def test_the_retired_agent_preferences_vanish_from_a_stored_account(repository, database):
+    """The Agent's own settings until its one mode (2026-10-31): a stored
+    value and its revision are no longer read, and the next change of the
+    account leaves them out."""
+    database.documents[SETTINGS_PATH] = {
+        "values": {"agent_preferences": {"depth": "quick", "quorum": "fast", "autonomy": "free", "judges": "off",
+                                         "audit": "on", "vm": "on"}, "claim_counts": True},
+        "revision": 3, "field_revisions": {"agent_preferences": 2, "claim_counts": 3}}
+    assert repository.get(UID) == ({"claim_counts": True}, 3, {"claim_counts": 3})
+    assert repository.update(UID, {"run_mode": "agent"}) == (
+        {"claim_counts": True, "run_mode": "agent"}, 4, {"claim_counts": 3, "run_mode": 4})
+    stored = database.documents[SETTINGS_PATH]
+    assert "agent_preferences" not in stored["values"] and "agent_preferences" not in stored["field_revisions"]
+    with pytest.raises(ValueError):
+        repository.update(UID, {"agent_preferences": {"vm": "on"}})
 
 
 def test_update_drops_a_stored_value_that_no_longer_validates(repository, database):
@@ -256,7 +258,6 @@ def test_patch_changes_named_settings_and_null_resets(settings_api):
     {"agreement_display": "never"},
     {"agent_model": {"model_id": "x", "reasoning_effort": "turbo"}},
     {"agent_model": {"reasoning_effort": "low"}},
-    {"agent_preferences": {"depth": "deep"}},
     {"compare_models": {"Open<AI>": {"enabled": True}}},
     {"compare_models": {"OpenAI": {"enabled": True, "colour": "red"}}},
     {"compare_models": {f"Family{index}": {"enabled": True} for index in range(user_settings.MAX_COMPARE_FAMILIES + 1)}},
@@ -272,6 +273,22 @@ def test_patch_refuses_a_value_outside_the_rules_and_keeps_the_others(settings_a
     assert response.status_code == 200
     assert response.json()["rejected"] == list(settings)
     assert stub.updates == [(UID, {"claim_counts": True})]
+
+
+def test_an_older_page_still_sending_the_agent_preferences_saves_the_rest(settings_api):
+    """Until the Agent's one mode (2026-10-31) a page sent answer depth,
+    answer start, Agent freedom, answer check, audit and VM as
+    agent_preferences: rejected alone, the other settings are saved."""
+    client, stub = settings_api
+    legacy = {"depth": "quick", "quorum": "fast", "autonomy": "free", "judges": "off", "audit": "on", "vm": "on"}
+    response = client.patch("/api/my/settings", headers=AUTH,
+                            json={"settings": {"agent_preferences": legacy, "claim_counts": True}})
+    assert response.status_code == 200 and response.json()["rejected"] == ["agent_preferences"]
+    assert stub.updates == [(UID, {"claim_counts": True})]
+    # Its first upload to a new account names every setting it knows: still a settings change.
+    everything = {**{name: None for name in user_settings.SETTING_NAMES}, "agent_preferences": legacy}
+    response = client.patch("/api/my/settings", headers=AUTH, json={"settings": everything})
+    assert response.status_code == 200 and response.json()["rejected"] == ["agent_preferences"]
 
 
 def test_patch_with_only_refused_values_writes_nothing(settings_api):
@@ -356,9 +373,5 @@ def test_the_browser_keeps_and_checks_the_settings_the_server_stores():
     assert sorted(json.loads(const("RUN_MODES"))) == choices(fields["run_mode"].annotation)
     assert sorted(json.loads(const("AGREEMENT_DISPLAY_MODES"))) == choices(fields["agreement_display"].annotation)
     assert sorted(json.loads(const("HIGHLIGHT_FILTERS")) + ["none"]) == choices(fields["consensus_highlights"].annotation)
-    agent_choices = json.loads(re.sub(r"(\w+):", r'"\1":', const("AGENT_CHOICES")).replace(",\n  }", "\n  }"))
-    assert set(agent_choices) == set(user_settings.AgentPreferencesSetting.model_fields)
-    for field, values in agent_choices.items():
-        assert sorted(values) == choices(user_settings.AgentPreferencesSetting.model_fields[field].annotation)
     definitions = re.search(r"const DEFINITIONS = Object\.freeze\(\{(.+?)\}\);", source, re.DOTALL).group(1)
     assert re.findall(r"^    (\w+):", definitions, re.MULTILINE) == list(user_settings.SETTING_NAMES)

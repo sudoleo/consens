@@ -298,17 +298,22 @@ def test_tool_results_are_logged_for_the_agent_but_not_for_the_apps_own_review(s
 
 # --- Reading, deleting, retention ---------------------------------------------------
 
-@pytest.mark.parametrize("admin", [True, False])
-def test_only_accounts_with_audit_read_the_log(api, monkeypatch, admin):
+def test_every_account_reads_the_log_of_its_own_turns_only(api, monkeypatch):
+    """Every turn writes one since the Agent's one mode (2026-10-31): its
+    owner reads it whatever the tier, another account finds nothing."""
     from app.api.routers import agent as agent_router
     client, store, _ = api
-    monkeypatch.setattr(agent_router, "audit_allowed", lambda uid: admin)
+    monkeypatch.setattr(agent_router, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(agent_router, "get_user_tier", lambda uid: "free")
     chat_id, turn = pending(store)
+    store._turn_ref(UID, chat_id, turn["id"]).collection("work_log").document("000001").set(
+        {"seq": 1, "kind": "app", "content": "short"})
     response = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log", headers=AUTH)
-    if admin:
-        assert response.status_code == 200 and response.json()["entries"] == []
-    else:
-        assert response.status_code == 404
+    assert response.status_code == 200 and [e["seq"] for e in response.json()["entries"]] == [1]
+    assert client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log/1", headers=AUTH).status_code == 200
+    other = {"Authorization": "Bearer someone-else"}
+    for path in ("work-log", "work-log/1"):
+        assert client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/{path}", headers=other).status_code == 404
 
 
 def test_the_reader_learns_when_entries_were_lost(store):

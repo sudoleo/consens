@@ -2,7 +2,9 @@
 receipts and daily counters, offline (A-M8)."""
 from datetime import datetime, timedelta, timezone
 
-from scripts.audit_report import quantiles, render, report
+import pytest
+
+from scripts.audit_report import is_audit, quantiles, render, report
 
 T0 = datetime(2026, 10, 29, 10, tzinfo=timezone.utc)
 OWN, GUEST = "mWKgPUowner", "guestaccount"
@@ -27,7 +29,7 @@ def log(*entries):
 def turn(*, status="completed", reviewers, holds=(), entries=(), agents=(), vm=False, error_code=None):
     return {"audit": True, "status": status, "error_code": error_code, "failure": None, "created_at": T0,
             "completed_at": None, "failed_at": None, "updated_at": None, "model": TERRA,
-            "preferences": {"audit": "on"}, "comparison_models": len(reviewers), "vm": vm, "holds": list(holds),
+            "preferences": {"vm": "off"}, "comparison_models": len(reviewers), "vm": vm, "holds": list(holds),
             "review": {"mode": "audit", "status": "succeeded" if status == "completed" else "cancelled",
                        "reviewers": [{"model": m, "status": "completed", "failure": None} for m in reviewers],
                        "issues": []},
@@ -110,21 +112,37 @@ def test_the_spec_tables_and_targets_from_turns_receipts_and_counters():
     assert OWN not in text and GUEST not in text and "c1" not in text
 
 
-def test_the_turns_that_asked_the_models_count_toward_the_compare_gate():
-    """compare_models in audit mode (2026-10-31): its gate counts real turns
-    that completed, were reviewed and got answers in every comparison."""
+def test_the_turns_that_asked_the_models_and_the_clean_ones():
+    """compare_models (in audit mode since 2026-10-31): clean are turns that
+    completed, were reviewed and got answers in every comparison."""
     source = data()
-    asked = {**turn(reviewers=[LUNA, FLASH]), "audit_compare": True, "comparisons": ["succeeded", "partial"]}
+    asked = {**turn(reviewers=[LUNA, FLASH]), "comparisons": ["succeeded", "partial"]}
     source["turns"].update({
         (OWN, "c1", "t4"): asked,
         (OWN, "c1", "t5"): {**asked, "comparisons": ["failed"]},
-        (OWN, "c1", "t6"): {**turn(reviewers=[LUNA]), "audit_compare": True, "comparisons": []}})
+        (OWN, "c1", "t6"): {**turn(reviewers=[LUNA]), "comparisons": []}})
     result = report(source)
-    assert result["compare"] == {"offered": 3, "turns": 2, "turn_status": {"completed": 2},
+    assert result["compare"] == {"turns": 2, "turn_status": {"completed": 2},
                                  "comparisons": {"succeeded": 1, "partial": 1, "failed": 1},
-                                 "reviews": {"succeeded": 2}, "clean": 1, "needed": 10}
-    assert "Compare in audit: offered in 3 turns, used in 2" in render(result)
-    assert "gate 1/10 clean turns" in render(result)
+                                 "reviews": {"succeeded": 2}, "clean": 1}
+    assert "compare_models: used in 2 turns" in render(result) and "1 clean" in render(result)
+
+
+@pytest.mark.parametrize("preferences,review,audit", [
+    # Since the Agent's one mode (2026-10-31): only the VM, every turn audit,
+    # also one that failed before any review.
+    ({"vm": "off"}, None, True),
+    ({"vm": "on"}, {"mode": "audit"}, True),
+    # 2026-10-25 to 2026-10-31: the frozen choice.
+    ({"depth": "auto", "quorum": "all", "autonomy": "guided", "judges": "on", "audit": "on", "vm": "on"}, None, True),
+    ({"depth": "auto", "quorum": "all", "autonomy": "guided", "judges": "on", "audit": "off", "vm": "off"},
+     {"mode": "comparison"}, False),
+    # Before 2026-10-25: comparison mode.
+    ({"depth": "quick", "quorum": "all", "autonomy": "guided"}, None, False),
+    ({}, None, False),
+])
+def test_old_and_new_turns_are_told_apart_by_their_frozen_preferences(preferences, review, audit):
+    assert is_audit({"preferences": preferences, "review": review}) is audit
 
 
 def test_quantiles_by_nearest_rank():

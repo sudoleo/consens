@@ -726,21 +726,20 @@ def test_a_watch_is_prepared_and_the_agent_points_to_its_card(store, monkeypatch
 
 def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     """The whole path: POST /agent, the real stream client, the saved turn
-    and the recovered answer."""
-    from test_agent_loop import REAL_STREAM, packet, transport, usage
+    and the recovered answer. The comparison models review it (every
+    account's turn since 2026-10-31) and mark nothing."""
+    from test_agent_loop import REAL_STREAM, reviewed_transport
     from test_agent_runs import AUTH
     from app.services.llm.agent_client import AgentCompletion
     client, store, _ = api
     monkeypatch.setattr(AgentCompletion, "stream", REAL_STREAM)
-    chunks = [ANSWER[i:i + 100] for i in range(0, len(ANSWER), 100)]
-    requests, _, _ = transport(monkeypatch, [[*(packet({"content": chunk}) for chunk in chunks),
-                                              packet(finish="stop", usage=usage(0))]])
+    requests, reviews = reviewed_transport(monkeypatch, ANSWER)
     chat = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]
     payload = {"chat_id": chat["id"], "question": "Translate this, please.", "client_request_id": "merged",
                "bookmark_id": "merged", "model_id": "claude-haiku-4-5"}
     body = client.post("/agent", json=payload, headers=AUTH).text
     assert "event: final" in body
-    assert len(requests) == 1
+    assert len(requests) == 1 and reviews
     names = [tool.get("function", {}).get("name") for tool in requests[0]["tools"] if tool.get("type") == "function"]
     assert "compare_models" in names and "answer" not in names
     assert requests[0]["tool_choice"] == "auto"
@@ -748,7 +747,7 @@ def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     # own (agent_client.with_cache_points).
     [system] = requests[0]["messages"][0]["content"]
     assert system["cache_control"] == {"type": "ephemeral"}
-    assert system["text"].startswith(prompt_defaults.AGENT_SYSTEM_PROMPT.split("COMPARE OR ANSWER DIRECTLY")[0])
+    assert system["text"].startswith(prompt_defaults.DEFAULT_PROMPTS["agent"])
     replay = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
     assert replay.status_code == 200 and replay.json()["response"] == ANSWER
     assert replay.json()["turn"]["agent_settings"]["answer_mode"] == "merged"

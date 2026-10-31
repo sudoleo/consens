@@ -11,7 +11,6 @@ import time
 
 import pytest
 
-from app.api.routers import agent as agent_router
 from app.services import agent_audit, prompt_defaults
 from app.services.agent_audit import COMPARISON_ENTRY_CHARS, ENTRY_CHARS, review_entry
 from app.services.agent_comparison import AgentPreferences, comparison_selection, review_is_bound
@@ -339,21 +338,3 @@ def test_a_comparison_entry_shows_every_answer_to_the_reviewers():
     # Other tool results stay one text, as before.
     other = review_entry({**entry, "name": "vm_exec"}, text)
     assert isinstance(other["content"], str) and len(other["content"]) < len(text)
-
-
-@pytest.mark.parametrize("env, admin, allowed", [("", True, True), ("", False, False), ("all", False, True),
-                                                 ("ALL ", False, True), ("admins", False, False)])
-def test_compare_in_audit_is_for_admins_until_the_switch_opens_it(monkeypatch, env, admin, allowed):
-    monkeypatch.setenv("AGENT_AUDIT_COMPARE", env)
-    monkeypatch.setattr(agent_router, "is_user_admin", lambda uid: admin)
-    assert agent_router.audit_compare_allowed("u1") is allowed
-
-
-def test_an_unknown_tier_keeps_compare_in_audit_closed(monkeypatch):
-    from app.core.security import TierStatusUnavailable
-    monkeypatch.delenv("AGENT_AUDIT_COMPARE", raising=False)
-
-    def unavailable(uid):
-        raise TierStatusUnavailable("down")
-    monkeypatch.setattr(agent_router, "is_user_admin", unavailable)
-    assert agent_router.audit_compare_allowed("u1") is False

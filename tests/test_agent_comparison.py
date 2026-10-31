@@ -786,30 +786,6 @@ def test_the_prompt_says_when_the_answer_check_is_off(autonomy):
     assert "check_text) is still checked" in off and "Compare as usual" in off
 
 
-def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
-    client, store, calls = api
-    loop = make_loop(store, Script())
-    def failed_review(*args, **kwargs):
-        raise AnalysisBudgetExceeded("Review admission unavailable")
-    loop.app_registry.tools["judge_answer"] = replace(loop.app_registry.tools["judge_answer"], execute=failed_review)
-    with pytest.raises(AnalysisBudgetExceeded):
-        list(loop.run())
-    payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",
-               "bookmark_id": "agent_review_recovery", "recover_only": True}
-    before = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
-    response = client.post("/agent", json=payload, headers=AUTH)
-    assert response.status_code == 200, response.text
-    assert response.json()["turn"]["agent_review"]["status"] == "missing"
-    assert response.json()["turn"]["status"] == "failed"
-    assert calls == []
-    assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict() == before
-    assert client.post("/agent", json={**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}, headers=AUTH).status_code == 409
-    # Settings are part of the request identity; the defaults equal "not sent".
-    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "auto", "quorum": "all"}}, headers=AUTH).status_code == 200
-    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "full", "quorum": "all"}}, headers=AUTH).status_code == 409
-    assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "deep"}}, headers=AUTH).status_code == 422
-
-
 @pytest.mark.parametrize("committed,failures", [(False, 1), (True, 1), (False, 3)])
 def test_transient_settlement_failure_never_repeats_model_or_leaves_run_pending(store, monkeypatch, committed, failures):
     from google.api_core.exceptions import ServiceUnavailable

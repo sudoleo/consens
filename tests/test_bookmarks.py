@@ -403,7 +403,9 @@ def test_agent_bookmark_names_its_running_turn_for_another_tab_to_follow():
                "position": 2, "client_request_id": "req-running",
                "attachments": [{"name": "a.csv", "mime": "text/csv", "size": 3}],
                "agent_settings": {"selection": {"model_id": "m", "reasoning_effort": "default"},
-                                  "comparison_selection": {"openai": "gpt"}, "agent_preferences": {"audit": "on"},
+                                  "comparison_selection": {"openai": "gpt"},
+                                  # Frozen with the turn, never repeated by a request (2026-10-31).
+                                  "agent_preferences": {"vm": "off"},
                                   "file_ids": [], "google_selection": None, "google_data_consent": False,
                                   "policy": {"delegation": True}},
                "agent_activity": [{"id": "x"}]}
@@ -426,7 +428,7 @@ def test_agent_bookmark_names_its_running_turn_for_another_tab_to_follow():
         "id": "2" * 32, "question": "Second", "client_request_id": "req-running", "position": 2,
         "attachments": [{"name": "a.csv", "mime": "text/csv", "size": 3}],
         "agent_settings": {"selection": {"model_id": "m", "reasoning_effort": "default"},
-                           "comparison_selection": {"openai": "gpt"}, "agent_preferences": {"audit": "on"},
+                           "comparison_selection": {"openai": "gpt"},
                            "file_ids": [], "google_selection": None, "google_data_consent": False}}
 
 
