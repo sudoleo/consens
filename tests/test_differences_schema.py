@@ -795,6 +795,13 @@ class AgreementScoreTests(unittest.TestCase):
 
 
 class DifferencesPromptTests(unittest.TestCase):
+    def test_judge_writes_in_the_language_of_the_consensus_answer(self):
+        from app.services.llm import consensus_engine as engine
+        context = engine._build_judge_context({"openai": "Uno.", "gemini": "Eins."}, "One.")
+        prompt = engine._build_differences_prompt_from(context)
+        self.assertIn("in the language of the consensus answer", prompt)
+        self.assertIn("language of the consensus answer", engine._differences_system_prompt())
+
     def test_prompt_requests_json_and_anonymizes(self):
         built = _build_differences_prompt(
             {"openai": "answer one", "mistral": "answer two"},

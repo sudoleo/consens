@@ -564,9 +564,6 @@ def query_consensus(
 # ---------------------------------------------------------------------------
 
 MAX_CONSENSUS_SENTENCES = 80
-# Agent answers are not length-capped by the pipeline; their judges index
-# more sentences and Coverage splits them into windows (see COVERAGE_WINDOW).
-CHAT_MAX_CONSENSUS_SENTENCES = 320
 # Kuerzere Fragmente sind Abkuerzungsreste ("Kosten: ca.") oder Stummel
 # ("Kurz."), keine pruefbare Aussage - sie gehoeren an den Satz daneben.
 # Bewusst nach Woertern statt nach Zeichen: "Es wurde 1889 fertiggestellt." ist
@@ -923,49 +920,15 @@ class _JudgeContext:
     resolved_question: str
     unindexed_sentences: int = 0
     truncated_answers: int = 0
-    # Pages the Agent read (read_source), for the Coverage judge only:
-    # ((label, url, text), ...) and their <page> blocks. Never a vote.
-    sources: tuple = ()
-    sources_text: str = ""
 
 
 # Also "< /response>" or "</ Response>": a judge would read those as a tag too.
-# A read page's <page> block likewise: neither an answer nor a page can forge
-# the other's block.
-_RESPONSE_TAG = re.compile(r"<\s*/?\s*(?:response|page)\b", re.IGNORECASE)
+# Until 2026-10-31 "<page" too: the Agent's read pages had blocks of their own.
+_RESPONSE_TAG = re.compile(r"<\s*/?\s*response\b", re.IGNORECASE)
 
 
 def _defused(text: str) -> str:
     return _RESPONSE_TAG.sub(lambda match: match.group(0).replace("<", "&lt;"), text or "")
-
-
-def _with_read_sources(context: "_JudgeContext", read_sources) -> "_JudgeContext":
-    """The judge context plus the pages the Agent read, as "Page n" blocks.
-
-    Only the Coverage judge sees them; the Differences judge keeps comparing
-    the model responses alone. "Page", not "Source": the Coverage rules tell
-    the judge to ignore source labels and citation markers in the answers."""
-    sources, blocks = [], []
-    for item in read_sources or ():
-        text = str((item or {}).get("text") or "").strip()
-        url = str((item or {}).get("url") or "")
-        if not text or not url:
-            continue
-        label = f"Page {len(sources) + 1}"
-        sources.append((label, url, text))
-        attribute = "".join("%{:02X}".format(ord(c)) if c in '"<>&' else c for c in _clip(url, 500))
-        blocks.append(f'<page label="{label}" url="{attribute}">\n{_defused(text)}\n</page>')
-    if not sources:
-        return context
-    from dataclasses import replace
-    return replace(context, sources=tuple(sources), sources_text="\n\n".join(blocks))
-
-
-def _source_quote_found(quote: str, text: str) -> bool:
-    """A page quote counts only as whole words of the page, in order."""
-    words = lambda value: " ".join(re.findall(r"\w+", str(value or "").casefold()))
-    quote = words(quote)
-    return bool(quote) and f" {quote} " in f" {words(text)} "
 
 
 def _response_block(label: str, text: str) -> str:
@@ -2116,41 +2079,14 @@ def _fallback_judge_engine(exclude_provider: str, api_keys: dict):
     return None
 
 
-def _chat_judge_attempts(chat_model: str, api_keys: dict):
-    """Chat uses configured standard judges, independent of the chat model's tier.
-
-    The first family of the judge priority (OpenAI's standard judge, Luna)
-    goes first, also for an OpenAI chat. Gemini's standard judge is the
-    fallback; if Gemini is primary (admin preference), OpenAI's instead.
-    Never escalate to the Pro judge table or walk into a third model family.
-    """
-    resolved = _resolve_engine(chat_model)
-    if resolved is None:
-        return None
-    families = _judge_families(resolved[0], api_keys, count=1)
-    if not families:
-        return []
-    primary_provider = families[0]
-    primary = _standard_judge_engine(primary_provider)
-    attempts = [(primary, False), (primary, True)]
-    fallback_provider = "gemini" if primary_provider != "gemini" else "openai"
-    if _provider_key_available(fallback_provider, api_keys):
-        attempts.append((_standard_judge_engine(fallback_provider), True))
-    return attempts
-
-
-def _differences_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
+def _differences_attempts(differences_model: str, api_keys: dict):
     """Attempt-Plan für den Differences-Judge. None bei ungültiger Engine.
 
     Einträge sind ((provider, api_model, model_ref), is_retry, tier):
     primärer Judge (erste Prioritäts-Familie, Stufe der Engine), Retry, dann
     die nächste Familie in derselben Stufe. Die Pro-Stufe fail-opent zuletzt
     auf einen Standard-Judge; gibt es keine zweite Familie, ist der
-    Standard-Judge der Engine-Familie die letzte Stufe. Chat nutzt stattdessen den expliziten
-    Standard-Plan aus _chat_judge_attempts."""
-    if chat_mode:
-        attempts = _chat_judge_attempts(differences_model, api_keys)
-        return [(engine, retry, "standard") for engine, retry in attempts] if attempts is not None else None
+    Standard-Judge der Engine-Familie die letzte Stufe."""
     resolved = _resolve_engine(differences_model)
     if resolved is None:
         return None
@@ -2222,13 +2158,6 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
 COVERAGE_TEMPERATURE = 0.0
 # Ein Satz pro Konsens-Satz; mehr kann die Zerlegung gar nicht liefern.
 MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
-# Longer answers are covered in parallel windows of this many sentences.
-COVERAGE_WINDOW = MAX_CONSENSUS_SENTENCES
-# The Agent's windows (since 2026-10-17): small enough that a window is done
-# seconds after its last sentence was written, so the check of a finished
-# answer is waiting only for its last paragraph. Each window repeats the model
-# answers as input (~+0.25 ct per window with GPT-6 Luna).
-AGENT_COVERAGE_WINDOW = 16
 # One attempt of either judge (Differences, Coverage, Coverage repair) may take
 # this long; then it stops and the plan moves to the next family. Measured
 # 2026-10-15: Coverage in Agent receipts median 13 s, p90 21 s; Differences in
@@ -2251,20 +2180,6 @@ JUDGE_HEDGE_SECONDS = 15.0
 # 8 s (p90 16 s at OpenRouter, 2026-10-18 to 10-21), so the next family only
 # answers when Luna really hangs.
 JUDGE_FALLBACK_SECONDS = 30.0
-# The Agent's judge calls (ComparisonTools.judge_transport) ask for this
-# service tier, per family. Chat review 2026-10-19: a check still took 25 s
-# after the answer because every Luna judge call needed 20-24 s on OpenAI's
-# standard lane in the US daytime (8-15 s to the first token), against 10 s at
-# night. Nothing hung, so no hedge ever won. OpenRouter's endpoint stats the
-# same evening: priority 0.9 s to the first token and 95 tokens/s, standard
-# 3.3 s and 59 tokens/s. Priority costs twice the price, about 2 ct more per
-# checked answer; the token account counts tokens, not price. When no priority
-# endpoint answers, OpenRouter falls back to the standard lane. Other families
-# stay on their standard lane (Anthropic's priority is its much pricier fast
-# mode).
-JUDGE_SERVICE_TIER_BY_PROVIDER = {"openai": "priority"}
-
-
 def _next_family(plan, index, provider):
     """The first entry after ``index`` of an attempt plan (entries start with
     their engine tuple) whose judge is another family than ``provider``."""
@@ -2409,14 +2324,11 @@ def _attempt_time_limit(seconds: float):
         unlink()
 
 
-def _coverage_attempts(differences_model: str, api_keys: dict, *, chat_mode: bool = False):
+def _coverage_attempts(differences_model: str, api_keys: dict):
     """Attempt-Plan des Coverage-Judges: Prioritäts-Familie, Standard-Stufe.
 
     Einträge sind ((provider, api_model, model_ref), is_retry). Fail-open wie
-    beim Differences-Judge: ohne Key bleibt der eigene Standard-Judge.
-    Chat teilt seinen Standard-/Fallback-Plan mit dem Differences-Judge."""
-    if chat_mode:
-        return _chat_judge_attempts(differences_model, api_keys)
+    beim Differences-Judge: ohne Key bleibt der eigene Standard-Judge."""
     resolved = _resolve_engine(differences_model)
     if resolved is None:
         return None
@@ -2454,7 +2366,7 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
     ids = list(missing)[:coverage.MAX_COVERAGE_REPAIR_IDS]
     if not ids:
         return {}
-    labels = _coverage_labels(context)
+    labels = list(context.labels)
     prompt = coverage.build_coverage_prompt(
         labels=labels,
         responses_text=context.responses_text,
@@ -2462,7 +2374,6 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
         ids=ids,
         resolved_question=context.resolved_question,
         missing_only=True,
-        sources_text=context.sources_text,
     )
     try:
         with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
@@ -2479,8 +2390,7 @@ def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
     return coverage.parse_coverage_payload(raw, labels, ids) or {}
 
 
-def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str, *, chat_mode: bool = False,
-                        window: int | None = None, prefetch=None, progress=None):
+def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str):
     """Belegt jeden nummerierten Satz. Gibt (coverage | None, meta | None).
 
     None heisst: der Coverage-Judge hat gar nichts geliefert. Dann bleibt es
@@ -2488,274 +2398,20 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
     nichts) - eine Antwort ohne Marken ist ehrlicher als eine, in der jeder
     Satz grau als "unbelegt" dasteht, weil ein Provider ausgefallen ist.
 
-    ``window``: Saetze je Aufruf (Standard COVERAGE_WINDOW). ``prefetch``
-    (Agent): Fenster, die schon waehrend des Schreibens liefen
-    (agent_coverage_prefetch.CoveragePrefetch). Ihre Saetze werden hier nur
-    noch eingesammelt, solange sie im fertigen Text wortgleich an derselben
-    Stelle stehen; der Rest laeuft sofort parallel dazu. ``progress``
-    (Agent): bekommt die Voten jedes Fensters, sobald es fertig ist
-    ({Satz-ID: Eintrag}, _CoverageProgress), nie einen Satz ohne Votum."""
+    Ein Aufruf deckt alle Saetze ab: MAX_CONSENSUS_SENTENCES begrenzt sie.
+    Bis 2026-10-31 teilten laengere Agent-Antworten sie in parallele Fenster,
+    zum Teil schon waehrend des Schreibens."""
     ids = coverage.sentence_ids(context.sentences)
     if not ids:
         return None, None
-    attempts = _coverage_attempts(differences_model, api_keys, chat_mode=chat_mode)
+    attempts = _coverage_attempts(differences_model, api_keys)
     if not attempts:
         return None, None
-    window = max(1, int(window or COVERAGE_WINDOW))
-    if prefetch is not None:
-        return _run_coverage_with_prefetch(context, api_keys, attempts, ids, window, prefetch, progress)
-    if len(ids) <= window:
-        parsed, meta = _run_coverage_window(context, api_keys, attempts, ids)
-        _report_coverage(progress, parsed)
-        return parsed, meta
-    return _run_coverage_windows(context, api_keys, attempts, ids, window, progress)
-
-
-def _report_coverage(progress, part) -> None:
-    """Hands one window's verdicts to ``progress``; a failing receiver never
-    costs the check."""
-    if progress is None or not part:
-        return
-    try:
-        progress(part)
-    except Exception as exc:
-        logging.warning("Coverage progress failed category=%s", safe_exception(exc))
-
-
-class _CoverageProgress:
-    """The marks of the Coverage windows that are in, while the rest of the
-    check still runs (Agent, since 2026-10-18): the page shows them before
-    the Differences judge is done. Only sentences a window answered become
-    claims, so a sentence still being checked never looks grey ("thin").
-    ``receiver`` gets every claim so far each time, not only the new ones."""
-
-    def __init__(self, context, consensus_answer: str, receiver):
-        self.context, self.answer, self.receiver = context, consensus_answer, receiver
-        self.entries = {}
-        self.lock = threading.Lock()
-
-    def __call__(self, part: dict) -> None:
-        # Windows finish in their own threads; one at a time keeps every
-        # report a superset of the one before.
-        with self.lock:
-            self.entries.update(part)
-            claims = _coverage_claims(self.entries, self.context, only=set(self.entries))
-            _verify_claims(claims, self.answer, self.context.answers_by_model)
-            self.receiver({"claims": claims, "models_compared": sorted(self.context.anon_map.values()),
-                           "checked": len(self.entries), "sentences": len(self.context.sentences)})
-
-
-def settled_sentence_count(partial_answer: str, limit=CHAT_MAX_CONSENSUS_SENTENCES) -> int:
-    """How many leading sentences of an answer still being written are final.
-
-    Sentences are numbered line by line, and whether a line is a table header
-    depends on the line after it. So only sentences on complete lines that
-    are followed by another complete line count: their number and wording
-    are the same once the answer is finished."""
-    text = str(partial_answer or "")
-    last = text.rfind("\n")
-    if last < 0:
-        return 0
-    complete = text[:last]
-    settled_end = complete.rfind("\n")
-    if settled_end < 0:
-        return 0
-    spans = []
-    _enumerate_consensus_sentences(complete, limit=limit, spans=spans)
-    return sum(1 for _, end in spans if end <= settled_end)
-
-
-def prefetch_coverage_window(answers: Mapping[str, str], partial_answer: str, ids: list, api_keys: dict,
-                             differences_model: str, *, resolved_question: str = "", read_sources=None,
-                             chat_mode: bool = True):
-    """Coverage of the sentences ``ids`` of an answer still being written.
-
-    The judge sees the answer written so far, numbered as it will be once it
-    is finished (settled_sentence_count decides which ids may be asked). Its
-    own anonymization differs from the final check's, so the stances come
-    back keyed by model name (and ``("page", url)`` for read pages):
-    ``{"sentences": {id: text}, "entries": {id: entry}, "meta": meta}``, or
-    None when nothing usable came back."""
-    context = _build_judge_context(
-        answers, partial_answer, None, resolved_question,
-        sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES if chat_mode else MAX_CONSENSUS_SENTENCES,
-    )
-    if context is None:
-        return None
-    context = _with_read_sources(context, read_sources)
-    known = set(coverage.sentence_ids(context.sentences))
-    ids = [sid for sid in ids if sid in known]
-    attempts = _coverage_attempts(differences_model, api_keys, chat_mode=chat_mode)
-    if not ids or not attempts:
-        return None
-    parsed, meta = _run_coverage_window(context, api_keys, attempts, ids)
-    if not parsed:
-        return None
-    keys = {**context.anon_map, **{label: ("page", url) for label, url, _ in context.sources}}
-    entries = {sid: {"classification": entry["classification"],
-                     "models": {keys[label]: stance for label, stance in entry["models"].items() if label in keys},
-                     "quotes": {keys[label]: quote for label, quote in entry["quotes"].items() if label in keys},
-                     "targets": {keys[label]: target for label, target in entry.get("targets", {}).items()
-                                 if label in keys}}
-               for sid, entry in parsed.items()}
-    number = coverage.sentence_id_number
-    return {"sentences": {sid: context.sentences[number(sid) - 1] for sid in parsed},
-            "entries": entries, "meta": meta}
-
-
-def _adopt_prefetched(context, result) -> dict:
-    """A prefetched window's entries in this context's labels, for the
-    sentences that are still word for word the same. An entry naming a model
-    or page this check does not have is dropped (and asked again)."""
-    labels = {name: label for label, name in context.anon_map.items()}
-    labels.update({("page", url): label for label, url, _ in context.sources})
-    number = coverage.sentence_id_number
-    adopted = {}
-    for sid, entry in (result or {}).get("entries", {}).items():
-        n = number(sid)
-        if not n or n > len(context.sentences) or context.sentences[n - 1] != result["sentences"].get(sid):
-            continue
-        targets = entry.get("targets", {})
-        if any(key not in labels for key in (*entry["models"], *entry["quotes"], *targets)):
-            continue
-        models = {labels[key]: stance for key, stance in entry["models"].items()}
-        for label in _coverage_labels(context):
-            models.setdefault(label, "not_addressed")
-        adopted[sid] = {"classification": entry["classification"], "models": models,
-                        "quotes": {labels[key]: quote for key, quote in entry["quotes"].items()},
-                        "targets": {labels[key]: target for key, target in targets.items()}}
-    return adopted
-
-
-def _run_coverage_with_prefetch(context, api_keys, attempts, ids, window, prefetch, progress=None):
-    """Coverage of a finished answer whose first windows ran while it was written.
-
-    Sentences no window is working on start at once, in parallel; then the
-    early windows are collected as they finish. What they could not deliver,
-    or what changed, is asked again. ``progress`` gets each collected window
-    and each new one at once (_CoverageProgress)."""
-    launched = prefetch.launched()
-    pending = [sid for sid in ids if launched.get(sid) is not None
-               and context.sentences[coverage.sentence_id_number(sid) - 1] == launched[sid]]
-    pending_set = set(pending)
-    rest = [sid for sid in ids if sid not in pending_set]
-    cancellation = current_provider_cancellation()
-    budget = current_analysis_budget()
-    from contextvars import copy_context
-
-    def run(part):
-        with bind_analysis_budget(budget):
-            if cancellation is None:
-                return _run_coverage_windows(context, api_keys, attempts, part, window, progress)
-            with bind_provider_cancellation(cancellation):
-                return _run_coverage_windows(context, api_keys, attempts, part, window, progress)
-
-    parsed, metas = {}, []
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="coverage-rest") as pool:
-        rest_future = pool.submit(copy_context().run, run, rest) if rest else None
-        for result in prefetch.results():
-            adopted = {sid: entry for sid, entry in _adopt_prefetched(context, result).items() if sid in pending_set}
-            parsed.update(adopted)
-            _report_coverage(progress, adopted)
-            if adopted and result.get("meta"):
-                metas.append({**result["meta"], "prefetched": True})
-        prefetched = len(parsed)
-        redo = [sid for sid in pending if sid not in parsed]
-        if redo:
-            part, meta = run(redo)
-            parsed.update(part or {})
-            if meta:
-                metas.append(meta)
-        if rest_future is not None:
-            try:
-                part, meta = rest_future.result()
-            except Exception as exc:
-                logging.warning("Coverage windows failed category=%s", safe_exception(exc))
-                part, meta = None, None
-            parsed.update(part or {})
-            if meta:
-                metas.append(meta)
-    if not metas:
-        return None, None
-    final = [m for m in metas if not m.get("prefetched")]
-    meta = dict(final[0] if final else metas[0])
-    meta.pop("prefetched", None)
-    meta.update({
-        "attempts": sum(m.get("attempts", 0) for m in metas),
-        # The time the check took after the answer was finished.
-        "duration_ms": max((m.get("duration_ms", 0) for m in final), default=0),
-        "sentences": len(ids),
-        "covered": len(parsed),
-        "prefetched": prefetched,
-        "repaired": sum(m.get("repaired", 0) for m in metas),
-        "missing": len(coverage.missing_sentence_ids(parsed, ids)),
-        "windows": sum(m.get("windows", 1) for m in metas),
-    })
-    return parsed, meta
-
-
-def _run_coverage_windows(context, api_keys, attempts, ids, window=COVERAGE_WINDOW, progress=None):
-    """Long answers: one Coverage call per window of ``window`` ids.
-
-    Every window sees the whole numbered answer as context but covers only its
-    own binding id list, so each call stays as large as a normal answer. The
-    windows run in parallel; a failed window leaves its ids missing (grey),
-    it never discards the windows that did return. ``progress`` gets each
-    window's verdicts as soon as that window is done."""
-    if not ids:
-        return {}, None
-    windows = [ids[start:start + window] for start in range(0, len(ids), window)]
-    cancellation = current_provider_cancellation()
-    budget = current_analysis_budget()
-    from contextvars import copy_context
-
-    def work(window):
-        with bind_analysis_budget(budget):
-            if cancellation is None:
-                result = _run_coverage_window(context, api_keys, attempts, window)
-            else:
-                with bind_provider_cancellation(cancellation):
-                    result = _run_coverage_window(context, api_keys, attempts, window)
-        _report_coverage(progress, result[0])
-        return result
-
-    with ThreadPoolExecutor(max_workers=len(windows), thread_name_prefix="coverage-window") as pool:
-        futures = [pool.submit(copy_context().run, work, window) for window in windows]
-        results = []
-        for future in futures:
-            try:
-                results.append(future.result())
-            except Exception as exc:
-                logging.warning("Coverage window failed category=%s", safe_exception(exc))
-                results.append((None, None))
-    parsed, metas = {}, []
-    for part, meta in results:
-        if part:
-            parsed.update(part)
-        if meta:
-            metas.append(meta)
-    if not metas:
-        return None, None
-    meta = dict(metas[0])
-    meta.update({
-        "attempts": sum(m.get("attempts", 0) for m in metas),
-        "duration_ms": max(m.get("duration_ms", 0) for m in metas),
-        "sentences": len(ids),
-        "covered": len(parsed),
-        "repaired": sum(m.get("repaired", 0) for m in metas),
-        "missing": len(coverage.missing_sentence_ids(parsed, ids)),
-        "windows": len(windows),
-    })
-    return parsed, meta
-
-
-def _coverage_labels(context) -> list:
-    """Model labels, then the labels of read pages (never votes)."""
-    return [*context.labels, *(label for label, _, _ in context.sources)]
+    return _run_coverage_window(context, api_keys, attempts, ids)
 
 
 def _run_coverage_window(context, api_keys, attempts, ids):
-    labels = _coverage_labels(context)
+    labels = list(context.labels)
     schema = coverage.build_coverage_schema(labels, ids)
     prompt = coverage.build_coverage_prompt(
         labels=labels,
@@ -2763,7 +2419,6 @@ def _run_coverage_window(context, api_keys, attempts, ids):
         numbered_answer=context.numbered_answer,
         ids=ids,
         resolved_question=context.resolved_question,
-        sources_text=context.sources_text,
     )
 
     skip_retries_for = set()
@@ -2853,22 +2508,19 @@ def _run_coverage_window(context, api_keys, attempts, ids):
     return None, None
 
 
-def _coverage_claims(coverage_result: dict, context: _JudgeContext, only=None) -> list:
+def _coverage_claims(coverage_result: dict, context: _JudgeContext) -> list:
     """Coverage-Votum -> Claim-Eintraege in der bestehenden Payload-Form.
 
     Die Form bleibt bewusst identisch zu den frueheren Judge-Claims (anchor,
     agree, dissent, sentence_id, anchor_occurrence), damit Frontend, Snapshot,
     Opinion-Map und Score unveraendert weiterlaufen. Neu ist nur "coverage":
     der Anzeigezustand, der eine duenn belegte Aussage sichtbar macht, statt
-    sie - wie bisher - fallen zu lassen. ``only`` (Satz-IDs): nur diese Saetze,
-    fuer die vorlaeufigen Marken einer laufenden Pruefung (_CoverageProgress)."""
+    sie - wie bisher - fallen zu lassen."""
     sentences = list(context.sentences)
     anon_map = context.anon_map
     claims = []
     for number in range(1, len(sentences) + 1):
         key = coverage.sentence_id(number)
-        if only is not None and key not in only:
-            continue
         entry = coverage_result.get(key)
         if entry is not None and entry.get("classification") != "claim":
             # Ausdruecklich als Nicht-Aussage eingestuft: kein Marker. Das ist
@@ -2908,20 +2560,6 @@ def _coverage_claims(coverage_result: dict, context: _JudgeContext, only=None) -
                 len(agree), len(dissent), MIN_SCORED_CLAIM_SUPPORT
             ),
         }
-        # What a page the Agent read says about the sentence: shown with the
-        # claim, never counted in agree/dissent, coverage state or score.
-        read = []
-        for label, url, text in context.sources:
-            stance = stances.get(label)
-            if stance not in coverage.SUPPORTING_STANCES | coverage.OPPOSING_STANCES:
-                continue
-            page = {"url": url, "stance": stance}
-            quote = _clip(quotes.get(label), MAX_DIFF_QUOTE_CHARS)
-            if quote and _source_quote_found(quote, text):
-                page["quote"] = quote
-            read.append(page)
-        if read:
-            claim["read_sources"] = read
         if sentence_id is not None:
             claim["sentence_id"] = sentence_id
             claim["anchor_occurrence"] = occurrence
@@ -2965,89 +2603,7 @@ def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consens
         return None
 
 
-def _difference_quotes(item: dict) -> set:
-    quotes = set()
-    for position in item.get("positions") or []:
-        quote = re.sub(r"[\W_]+", " ", str(position.get("quote") or "").lower()).strip()
-        if len(quote) >= 12:
-            quotes.add(quote)
-    return quotes
-
-
-def _same_difference(a: dict, b: dict) -> bool:
-    """Two judge passes describe the same disagreement when they cite the same
-    passage of a response (verbatim quotes, one inside the other), state the
-    same claim, or hang on the same consensus sentence. The sides do not have
-    to match: two passes group the same models differently (measured on 79
-    labelled pass pairs, 2026-10-07: requiring the same models kept 14
-    duplicates, without it 5, and no real finding was lost)."""
-    quotes_a, quotes_b = _difference_quotes(a), _difference_quotes(b)
-    if any(x in y or y in x for x in quotes_a for y in quotes_b):
-        return True
-    claim = lambda item: re.sub(r"[\W_]+", " ", str(item.get("claim") or "").lower()).strip()
-    if claim(a) and claim(a) == claim(b):
-        return True
-    anchor = lambda item: re.sub(r"[\W_]+", " ", str(item.get("consensus_anchor") or "").lower()).strip()
-    return bool(anchor(a)) and anchor(a) == anchor(b)
-
-
-# Once the first pass has a result, the second gets this much more time (at
-# least the minimum, half the first pass's duration, at most the maximum).
-# A second pass stuck in a slow retry must not hold the answer check.
-SECOND_PASS_GRACE_MIN_SECONDS = 8.0
-SECOND_PASS_GRACE_MAX_SECONDS = 30.0
-
-
-def _second_pass_grace(first_pass_seconds: float) -> float:
-    return min(SECOND_PASS_GRACE_MAX_SECONDS, max(SECOND_PASS_GRACE_MIN_SECONDS, 0.5 * max(0.0, first_pass_seconds)))
-
-
-def merge_difference_passes(primary: dict, secondary: dict) -> int:
-    """Adds the disagreements only the second judge pass found; returns how many.
-
-    A single pass finds about two thirds of the real disagreements, two passes
-    together about four fifths (judge audit 2026-10-07). The primary pass keeps
-    its wording, best model and metadata; the score is recomputed by the
-    caller (_apply_coverage). Only the primary pass's findings count as
-    known: two findings of the second pass on the same sentence are distinct
-    by that pass's own judgement."""
-    known = list(primary.get("differences") or [])
-    merged = list(known)
-    added = 0
-    for item in secondary.get("differences") or []:
-        if any(_same_difference(item, k) for k in known):
-            continue
-        merged.append(item)
-        added += 1
-    primary["differences"] = merged
-    return added
-
-
-def _in_background(work, name: str, *, cancellation=None):
-    """Runs work() in its own thread with the caller's analysis budget and
-    context (judge transport) bound, and with `cancellation` or else the
-    caller's cancellation; returns (pool, future)."""
-    cancellation = cancellation or current_provider_cancellation()
-    budget = current_analysis_budget()
-
-    def _work():
-        with bind_analysis_budget(budget):
-            if cancellation is None:
-                return work()
-            with bind_provider_cancellation(cancellation):
-                return work()
-
-    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=name)
-    try:
-        from contextvars import copy_context
-        return pool, pool.submit(copy_context().run, _work)
-    except Exception:
-        pool.shutdown(wait=False)
-        raise
-
-
-def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: bool = False,
-                            window: int | None = None, prefetch=None, progress=None):
+def _coverage_in_background(context, api_keys, differences_model):
     """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future, stop).
 
     Der Aufrufer muss ``pool.shutdown()`` sicherstellen. Der Worker bekommt
@@ -3063,8 +2619,7 @@ def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: 
     def _work():
         try:
             with bind_analysis_budget(budget), bind_provider_cancellation(stop):
-                return _run_coverage_judge(context, api_keys, differences_model, chat_mode=chat_mode,
-                                           window=window, prefetch=prefetch, progress=progress)
+                return _run_coverage_judge(context, api_keys, differences_model)
         finally:
             unlink()
 
@@ -3078,22 +2633,10 @@ def _coverage_in_background(context, api_keys, differences_model, *, chat_mode: 
         raise
 
 
-def _collect_background(future, what: str):
-    """Result of a background judge pass, or None; a failure there never
-    breaks the run."""
-    try:
-        budget = current_analysis_budget()
-        timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget and math.isfinite(budget.deadline) else None
-        return future.result(timeout=timeout)
-    except Exception as exc:
-        logging.warning("%s failed category=%s", what, safe_exception(exc))
-        return None
-
-
 def _collect_coverage(pool, future, stop=None):
     """Ergebnis des Nebenläufers einsammeln; ein Fehler dort darf den Lauf
     niemals kippen. Nach der Frist wird der Coverage-Call beendet (``stop``):
-    der Agent wartet sonst beim Aufraeumen auf ein Ergebnis, das er verwirft."""
+    der Aufrufer wartet sonst beim Aufraeumen auf ein Ergebnis, das er verwirft."""
     try:
         budget = current_analysis_budget()
         timeout = max(0.05, budget.deadline - time.monotonic()) + 0.2 if budget and math.isfinite(budget.deadline) else None
@@ -3123,14 +2666,8 @@ def query_differences(
     excluded_models: list = None,
     resolved_question: str = "",
     *,
-    chat_mode: bool = False,
     output_language: str = "",
     statement_claims: bool = False,
-    passes: int = 1,
-    read_sources=None,
-    coverage_window: int | None = None,
-    coverage_prefetch=None,
-    coverage_progress=None,
 ) -> tuple:
     """
     Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
@@ -3138,68 +2675,36 @@ def query_differences(
     Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge;
     der Judge folgt der Prioritätsliste (OpenAI zuerst, auch für Engines derselben
     Familie; siehe _resolve_differences_engine) und wird in data["judges"] ausgewiesen.
-    Im Beta-Chat verwenden beide Judges nur die konfigurierten Standardmodelle;
-    der Gemini-Fallback darf dabei auch die Familie des Chatmodells sein.
     Parallel dazu belegt der Coverage-Judge jeden Satz der Konsensantwort.
     `output_language`/`statement_claims` setzen Topics (englische öffentliche
     Seiten): claim/stance/verify in dieser Sprache, claim als Aussage statt
     Frage; die App lässt beides leer (Sprache der Antworten).
-    `passes=2` (Agent) laesst denselben Differences-Judge ein zweites Mal
-    parallel laufen und fuehrt die Funde zusammen (merge_difference_passes):
-    ein Lauf findet rund zwei Drittel der echten Streitpunkte, zwei rund vier
-    Fuenftel (Judge-Audit 2026-10-07).
-    `read_sources` (Agent, [{url, title, text}]): Seiten, die der Agent
-    nachgelesen hat. Nur der Coverage-Judge sieht sie, als eigene Bloecke;
-    ihr Votum steht als claims[].read_sources und zaehlt nie als Stimme.
-    `coverage_window` (Agent): Saetze je Coverage-Aufruf, kleiner als
-    COVERAGE_WINDOW, damit die Fenster parallel schnell fertig sind.
-    `coverage_prefetch` (Agent): Coverage-Fenster, die schon waehrend des
-    Schreibens liefen (_run_coverage_with_prefetch).
-    `coverage_progress` (Agent): bekommt nach jedem fertigen Coverage-Fenster
-    die vorlaeufigen Claims aller bis dahin gepruefter Saetze
-    ({claims, models_compared, checked, sentences}), solange Differences noch
-    laeuft (_CoverageProgress).
+    Bis 2026-10-31 prueften beide Judges auch die Antworten des Agenten (mit
+    eigenem Judge-Plan, zwei Differences-Durchgaengen, gelesenen Seiten und
+    Coverage-Fenstern); seitdem pruefen dort Reviewer (agent_audit.py).
     Gibt (legacy_text, structured_data | None) zurück.
     """
-    passes = 2 if passes and int(passes) > 1 else 1
-    budget = current_analysis_budget()
-    if passes > 1 and budget is not None and math.isfinite(budget.max_calls) and budget.max_calls - budget.calls < 4:
-        # A bounded run keeps its remaining calls for the first pass, its
-        # retry and Coverage; the extra pass is an addition, never a cost.
-        passes = 1
     # Claims appear next to the answer the user reads, so they take its
     # language; a detected language is named explicitly (see _answer_language).
     output_language = output_language or _answer_language(consensus_answer)
-    context = _build_judge_context(
-        answers, consensus_answer, excluded_models, resolved_question,
-        sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES if chat_mode else MAX_CONSENSUS_SENTENCES,
-    )
+    context = _build_judge_context(answers, consensus_answer, excluded_models, resolved_question)
     if context is None:
         return "Error in comparison: no model responses available.", None
 
     differences_prompt = _build_differences_prompt_from(
         context, output_language=output_language, statement_claims=statement_claims)
-    # After the differences prompt: it never sees the read pages.
-    context = _with_read_sources(context, read_sources)
     anon_map = context.anon_map
     answers_by_model = context.answers_by_model
     sentences = list(context.sentences)
 
-    attempts = _differences_attempts(differences_model, api_keys, chat_mode=chat_mode)
+    attempts = _differences_attempts(differences_model, api_keys)
     if attempts is None:
         return "Invalid model selected for difference comparison.", None
 
-    coverage_pool, coverage_future, coverage_stop = _coverage_in_background(
-        context, api_keys, differences_model, chat_mode=chat_mode,
-        window=coverage_window, prefetch=coverage_prefetch,
-        progress=_CoverageProgress(context, consensus_answer, coverage_progress) if coverage_progress else None,
-    )
-    second_pool = second_future = None
-    second_cancellation = None
-    unlink_second = lambda: None
+    coverage_pool, coverage_future, coverage_stop = _coverage_in_background(context, api_keys, differences_model)
 
-    def run_pass(plan=attempts):
-        """One differences judge with retry and fallback: (data, legacy_text,
+    def run_judge():
+        """The differences judge with retry and fallback: (data, legacy_text,
         prose_fallback, last_error); data is None when every attempt failed."""
         prose_fallback = None
         last_error = "empty result from differences engine."
@@ -3218,7 +2723,7 @@ def query_differences(
                 json_schema=DIFFERENCES_JSON_SCHEMA,
             )
 
-        for index, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(plan):
+        for index, ((provider, api_model, model_ref), is_retry, judge_tier) in enumerate(attempts):
             attempt_key = (provider, api_model, judge_tier)
             if is_retry and attempt_key in skip_retries_for:
                 continue
@@ -3226,9 +2731,8 @@ def query_differences(
             attempt_no = executed_attempts
             attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
             attempt_started = time.monotonic()
-            # A hanging judge: the plan's next family judges alongside. The
-            # second pass has no other family in its plan (see below).
-            following = _next_family(plan, index, provider)
+            # A hanging judge: the plan's next family judges alongside.
+            following = _next_family(attempts, index, provider)
             won = {}
             try:
                 with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
@@ -3289,41 +2793,7 @@ def query_differences(
         return None, None, prose_fallback, last_error
 
     try:
-        if passes > 1:
-            # A second, independent pass in parallel: same prompt, same judge.
-            # It costs one more judge call but almost no wall-clock time. It
-            # only tries the primary judge (Luna) with its retry: when that is
-            # down, the first pass alone falls back, so the pricier fallback
-            # judge never runs twice.
-            primary = attempts[0][0] if attempts else None
-            second_plan = [attempt for attempt in attempts if attempt[0] == primary]
-            # Its own cancellation, linked to the caller's: a user stop still
-            # ends it, and a second pass past its grace time ends alone.
-            second_cancellation = ProviderCancellation()
-            parent = current_provider_cancellation()
-            if parent is not None:
-                unlink_second = parent.register(second_cancellation)
-            second_pool, second_future = _in_background(
-                lambda: run_pass(second_plan), "differences-pass", cancellation=second_cancellation)
-        first_started = time.monotonic()
-        data, legacy_text, prose_fallback, last_error = run_pass()
-        if second_future is not None:
-            if data is not None and not second_future.done():
-                try:
-                    second_future.result(timeout=_second_pass_grace(time.monotonic() - first_started))
-                except Exception:
-                    # Timed out (or failed): stop it and answer with the first pass.
-                    second_cancellation.cancel()
-            extra = _collect_background(second_future, "Second differences pass")
-            if extra and extra[0] is not None:
-                if data is None:
-                    data, legacy_text = extra[0], extra[1]
-                    data["judges"]["differences"].update(passes=2, second_pass_added=0, first_pass_failed=True)
-                else:
-                    added = merge_difference_passes(data, extra[0])
-                    data["judges"]["differences"].update(passes=2, second_pass_added=added)
-            elif data is not None:
-                data["judges"]["differences"].update(passes=1, second_pass_failed=True)
+        data, legacy_text, prose_fallback, last_error = run_judge()
         if data is not None:
             coverage_result, coverage_meta = _collect_coverage(
                 coverage_pool, coverage_future, coverage_stop
@@ -3344,90 +2814,9 @@ def query_differences(
         # Nebenlaeufer-Thread nicht verwaisen.
         from app.services.llm.task_transport import task_transport
         wait = task_transport.get() is not None
-        if second_future is not None and not second_future.done():
-            # The run ended without its result (error or cancellation): stop
-            # it before waiting for the thread, so nothing outlives the check.
-            second_cancellation.cancel()
         if not coverage_future.done():
             coverage_stop.cancel()
         coverage_pool.shutdown(wait=wait)
-        if second_pool is not None:
-            second_pool.shutdown(wait=wait)
-        unlink_second()
-
-
-# A pasted text is untrusted and goes into the judge prompt as the numbered
-# text. Same-length stand-ins keep every offset valid: "[3]" can no longer pose
-# as a sentence number, "<response ...>" no longer as a model's answer block.
-_PASTED_NUMBER_RE = re.compile(r"\[(\d{1,4})\]")
-
-
-def _judge_copy(text: str) -> str:
-    return _PASTED_NUMBER_RE.sub(r"(\1)", text.replace("<", "\u2039"))
-
-
-@analysis_budgeted
-def check_text_coverage(
-    answers: Mapping[str, str],
-    text: str,
-    api_keys: dict,
-    judge_model: str,
-    *,
-    resolved_question: str = "",
-):
-    """Coverage judge alone on a text consens.io did not write.
-
-    The Agent checks a passage the user pasted (typically another AI's answer)
-    against independent answers to the question behind it. The differences
-    judge is skipped on purpose: it describes disagreements between the
-    answers, while the user asked about THEIR text, sentence by sentence.
-    Returns None when the text has no checkable sentence or the judge
-    delivered nothing; otherwise the claims in the usual payload form, each
-    with `start`/`end` offsets into `text` (code points), so the browser marks
-    the pasted text without searching for it."""
-    original = str(text or "")
-    judged = _judge_copy(original)
-    context = _build_judge_context(
-        answers, judged, None, resolved_question, sentence_limit=CHAT_MAX_CONSENSUS_SENTENCES,
-    )
-    if context is None or not context.sentences:
-        return None
-    spans = []
-    _enumerate_consensus_sentences(judged, limit=CHAT_MAX_CONSENSUS_SENTENCES, spans=spans)
-    result, meta = _run_coverage_judge(context, api_keys, judge_model, chat_mode=True)
-    if not result:
-        return None
-    claims = _coverage_claims(result, context)
-    _verify_claims(claims, judged, context.answers_by_model)
-    located = []
-    for claim in claims:
-        number = claim.get("sentence_id")
-        if not isinstance(number, int) or not 1 <= number <= len(spans):
-            continue
-        claim["start"], claim["end"] = spans[number - 1]
-        # The disputed words as the user pasted them: the judge's copy writes
-        # "<" and "[1]" differently, but keeps every character where it was.
-        judged_sentence = judged[claim["start"]:claim["end"]]
-        for item in claim.get("dissent") or []:
-            at = judged_sentence.find(item.get("target") or "\0")
-            if at < 0:
-                item.pop("target", None)
-            else:
-                begin = claim["start"] + at
-                item["target"] = original[begin:begin + len(item["target"])]
-        # The card quotes what the user pasted, not the judge's copy of it.
-        claim["anchor"] = _clip(original[claim["start"]:claim["end"]], MAX_DIFF_TEXT_CHARS)
-        located.append(claim)
-    return {
-        "claims": located,
-        "models_compared": sorted(context.anon_map.values()),
-        "sentences": len(context.sentences),
-        "evidence_coverage": {
-            "unindexed_sentences": context.unindexed_sentences,
-            "truncated_answers": context.truncated_answers,
-        },
-        "judges": {"coverage": meta} if meta else {},
-    }
 
 
 CHANGE_CAUSES = ("new_evidence", "evidence_missing", "reassessment", "none")
