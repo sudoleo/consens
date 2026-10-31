@@ -39,7 +39,8 @@ const BODY = `
       </div>
     </div>
     <div id="composerModeBar"><span id="composerReasoningState">Off</span><button id="composerModelPicker"><span id="composerModelLabel" hidden></span><span id="composerModelIcons"></span></button></div>
-    <div id="composerStarters"><button class="composer-starter" data-starter="check">Check an AI answer</button></div>
+    <div id="composerStarters"><button class="composer-starter" data-starter="glp1">GLP-1?</button></div>
+    <footer class="app-footer"></footer>
   </div>`;
 
 const contexts = [];

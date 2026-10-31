@@ -1,8 +1,8 @@
 // Predicted example questions under an empty new chat (2026-10-16).
 //
-// The app shell renders three curated questions (a new pick per page load,
-// app/services/starter_questions.py) and "Check an AI answer". Once an
-// account has a few saved chats, three questions predicted from them take
+// The app shell renders three curated questions in one row (a new pick per
+// page load, app/services/starter_questions.py). Once an account has a few
+// saved chats, three questions predicted from them take
 // the curated ones' place: POST /api/my/starter-questions reads the newest
 // chats and suggests what this person may ask next. The prediction is not
 // announced; the reader recognises their own topics.
@@ -77,8 +77,8 @@
   }
 
   // ---- The row ---------------------------------------------------------------
-  // Predicted buttons go before "Check an AI answer"; the curated ones stay
-  // in the document, hidden, and come back when the prediction goes.
+  // Predicted buttons go after the curated ones, which stay in the
+  // document, hidden, and come back when the prediction goes.
   function render(target, questions, { animate = false } = {}) {
     if (!target) return;
     const items = questionsOf(questions);
@@ -89,9 +89,8 @@
     if (same) return;
     shown.forEach(button => button.remove());
     target.querySelectorAll(".composer-starter").forEach(button => {
-      if (button.dataset.starter !== "check") button.hidden = items.length > 0;
+      button.hidden = items.length > 0;
     });
-    const check = target.querySelector('[data-starter="check"]');
     const quiet = !animate || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     items.forEach(item => {
       const button = document.createElement("button");
@@ -100,7 +99,7 @@
       button.dataset.starter = "predicted";
       button.dataset.question = item.question;
       button.textContent = item.label;
-      target.insertBefore(button, check);
+      target.append(button);
       if (!quiet && button.animate) button.animate([{ opacity: 0 }, { opacity: 1 }], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out" });
     });
   }

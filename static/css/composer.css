@@ -5,7 +5,7 @@
    in it. The box itself (surface, edge, shadow) stays in shell.css.
 
      start screen                [ field .......................................... ]
-     (hero, or the Compare       [ (+) ][ tools ]  [ marks ][ models ][ 🧠 ] [ Demo Send ]
+     (hero, or the Compare       [ (+) ][ tools ]  [ marks ][ 🧠 ][ models ] [ Demo Send ]
      start with its empty cards)
 
      desktop thread, one line    ( (+) ][ field ............. ][ models ] [ Demo Send )  a pill
@@ -30,9 +30,10 @@
                                models. Their marks stand before it: on the
                                start screen always (#composerModelPicker),
                                in a chat the reviewers' (.composer-reviewers).
-                               In audit mode the chip names the chat model.
-                               After them, right before Send, Reasoning
-                               (brain and level, start screen from 701px)
+                               In audit mode the chip names the chat model,
+                               and Reasoning (brain and level, start screen
+                               from 701px) stands between the reviewers'
+                               words and it; otherwise after the chip
      .input-actions-container  Demo (onboarding only), Send
    Every setting has one place: what the row shows, the (+) menu leaves out
    (see "Each setting in one place").
@@ -89,9 +90,12 @@
 .composer-tools[hidden] { display: none; }
 /* Reasoning shows its brain and its level ("Auto") and keeps its word for
    screen readers and speech input: the room goes to the question (Max,
-   2026-10-31). It stands after the models, right before Send. */
+   2026-10-31). Between the reviewers' words and the chat model it steers
+   (audit: the chip names that model); where the chip speaks for the
+   comparison models, after it, a little away from Send. */
 .composer-models > .composer-tool { flex: 0 0 auto; font-size: var(--font-size-xs); white-space: nowrap; }
 .composer-models > .composer-agent-toggle[hidden] { display: none; }
+.composer-models:not(:has(#composerModelLabel:not([hidden]))) > #composerReasoningToggle { order: 1; margin-right: 6px; }
 @media (max-width: 700px) {
   .composer-models > .composer-tool { display: none; }
 }

@@ -1134,24 +1134,24 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
    and breathes slowly in place (below): something is running, without a
    spinner and without anything travelling round the rim. */
 .input-action-btn-primary.send-glow:not(.is-cancel-action) {
-  --glow-wash: 54%;
+  --glow-wash: 62%;
   --glow-rim: 100%;
-  --glow-rest: 0.5;
-  --glow-rise: 20%;
+  --glow-rest: 0.4;
+  --glow-rise: 26%;
 }
 .dark-mode .input-action-btn-primary.send-glow:not(.is-cancel-action) {
-  --glow-wash: 44%;
-  --glow-rim: 90%;
+  --glow-wash: 54%;
+  --glow-rim: 100%;
 }
 .input-action-btn-primary.send-glow:disabled {
-  --glow-wash: 38%;
-  --glow-rim: 84%;
-  --glow-rest: 0.15;
-  --glow-rise: 14%;
+  --glow-wash: 46%;
+  --glow-rim: 96%;
+  --glow-rest: 0.08;
+  --glow-rise: 20%;
 }
 .dark-mode .input-action-btn-primary.send-glow:disabled {
-  --glow-wash: 40%;
-  --glow-rim: 76%;
+  --glow-wash: 50%;
+  --glow-rim: 88%;
 }
 /* Without motion the light simply stands, half as strong while nothing can go. */
 .input-action-btn-primary.send-glow:disabled::before {
@@ -1175,7 +1175,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   @media (hover: hover) and (pointer: fine) {
     .input-action-btn-primary.send-glow:not(:disabled):not(.is-cancel-action):hover {
       --glow-rest: 1;
-      --glow-rise: 24%;
+      --glow-rise: 30%;
     }
   }
 }

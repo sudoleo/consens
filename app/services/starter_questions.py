@@ -1,7 +1,7 @@
 """Example questions under an empty new chat (#composerStarters).
 
-Two sources. A curated pool: the app shell shows three of them per page load,
-next to "Check an AI answer". They are questions where one confident answer
+Two sources. A curated pool: the app shell shows three of them per page
+load, in one row (since 2026-10-31 without "Check an AI answer"). They are questions where one confident answer
 is not enough -- law, health, energy, engineering and business decisions on
 which careful sources and experts differ -- so several models and their
 disagreements earn their place. And, once an account has a few saved
@@ -27,8 +27,7 @@ from app.services.llm.consensus_engine import query_engine_json
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.mock_llm import mock_llm_enabled
 
-# Short labels on purpose: three of them and "Check an AI answer" fit one row
-# under the desktop composer. A click puts the full question in the field.
+# Short labels on purpose: three of them fit one row under the composer. A click puts the full question in the field.
 CURATED_STARTERS = (
     {
         "key": "eu_ai_act",

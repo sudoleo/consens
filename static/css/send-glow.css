@@ -107,14 +107,14 @@
    the same way twice in a row. It stays on the lower edge: nothing runs
    round the rim (2026-10-02). */
 @keyframes send-glow-drift {
-  from { --glow-x: 26%; }
-  to { --glow-x: 48%; }
+  from { --glow-x: 20%; }
+  to { --glow-x: 52%; }
 }
 
-/* The arrow rides the light: at its brightest the light lifts it by a
-   pixel (shell.css, landing.css). */
+/* The arrow rides the light: at its brightest the light lifts it by two
+   pixels (shell.css, landing.css). */
 @keyframes send-arrow-float {
-  50% { transform: translateY(-1px); }
+  50% { transform: translateY(-2px); }
 }
 
 /* The moment a question can go, the light flares up once to the top and

@@ -2509,10 +2509,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   die Werkzeuge des Startbildschirms. Seit 2026-10-30 ist der Composer dort
   **eine Fläche, eine Reihe** (Max): `(+)` · `#composerTools` (Arbeitsplatz
   `#composerWorkspaceButton`) · `#composerModelPicker` (Anbieter-Marken der
-  nächsten Frage, im Audit mit „N KIs prüfen mit“) vor dem Modell-Chip ·
-  Reasoning `#composerReasoningToggle` (Gehirn + Stufe, seit 2026-10-31 direkt
-  vor Senden; im Agent steuert die Stufe nur das Chatmodell, nie die Prüfer) ·
-  Senden. Die frühere Leiste unter
+  nächsten Frage, im Audit mit „N KIs prüfen mit“) · Reasoning
+  `#composerReasoningToggle` (Gehirn + Stufe, seit 2026-10-31; im Audit
+  zwischen den Prüfer-Worten und dem Chip mit dem Chatmodell, sonst hinter dem
+  Chip; im Agent steuert die Stufe nur das Chatmodell, nie die Prüfer) ·
+  Modell-Chip · Senden. Die frühere Leiste unter
   dem Feld samt „Attach“-Knopf ist weg; Dateien kommen über das (+).
   Werkzeuge und Marken gehören in jedem Modus zum Startbildschirm (Hero oder
   Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`); in
@@ -3794,8 +3795,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   um das der Hinweis beim Tippen in ihren Platz gleitet (composer.css).
 - **`composer-starters.js`** (seit 2026-10-16, Head-Bundle vor
   `app-bootstrap.js`) — vorhergesagte Beispielfragen. `window.App.composerStarters`:
-  `seed(row)` (aus dem First-Paint-Seed von `app-bootstrap.js`, sobald der
-  „Check an AI answer“-Knopf geparst ist) malt die gespeicherte Vorhersage
+  `seed(row)` (aus dem First-Paint-Seed von `app-bootstrap.js`, sobald die
+  Zeile geparst ist, erkennbar an `.app-footer` direkt dahinter) malt die gespeicherte Vorhersage
   `localStorage["consensio.starterQuestions.v1"] = {uid, basis, at, questions}`,
   wenn sie zum Konto passt (vor der Auth über die `user_id` im gespeicherten
   ID-Token, sonst `__consensioAuthState`) und höchstens 7 Tage alt ist;
@@ -3806,7 +3807,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Chats stehen dafür seit 2026-10-31 an ihrem Platz in der Zeit, nicht vorn,
   `newestFirst`) geändert haben; unter 3 Chats wird die
   Vorhersage vergessen. „skipped“ oder ein Fehler lässt stehen, was da ist.
-  Vorhergesagte Knöpfe stehen vor „Check an AI answer“, die kuratierten bleiben
+  Vorhergesagte Knöpfe stehen hinter den kuratierten, die kuratierten bleiben
   `hidden` im DOM und kommen zurück; unter Zeiger oder Fokus wird nie
   getauscht (erst bei `pointerleave`/`focusout`), sonst blenden sie weich ein.
   `clear()` (`clearAuthenticatedUiState`, ein anderes Konto oder Gast im
@@ -7537,13 +7538,14 @@ stehen seit 2026-10-22 in ihren eigenen Farben (auch im Landing-Mockup
 `.lp-composer-model`): bei 14 px erkennt man eine Marke an der Farbe, und auf
 dem Handy gibt es keinen Hover. Unter den Antworten und im Modell-Picker ruhen
 sie weiter einfarbig mit Farbe bei Hover. Unter einem leeren
-neuen Chat (Hero) stehen seit 2026-10-15 vier Beispielfragen
+neuen Chat (Hero) stehen seit 2026-10-31 drei Beispielfragen in einer Zeile
 (`#composerStarters`, seit 2026-10-31 schlichte Wörter ohne Fläche, Hover-Ton; auf dem Handy eine seitlich
 scrollende Zeile): ein Klick füllt nur das Feld (`composer-invite.js`). Seit
 2026-10-16 sind es drei pro Seitenaufruf zufällig aus einem kuratierten Pool
 (`app/services/starter_questions.py::CURATED_STARTERS`, `pick_curated()` im
-`/app`-Kontext `starters`; Labels ≤ 22 Zeichen, damit jede Dreierkombination plus „Check an
-AI answer“ in die 768 px breite Desktop-Zeile passt, ~7,2 px je Zeichen) plus „Check an AI answer“; ein Konto
+`/app`-Kontext `starters`; Labels ≤ 22 Zeichen, damit jede Dreierkombination in
+die Desktop-Zeile passt, ~7,2 px je Zeichen); „Check an AI answer“ ist seit
+2026-10-31 weg (Max: drei Fragen, eine Zeile); ein Konto
 mit ≥ 3 Chats sieht stattdessen drei aus seinen neuesten Chats vorhergesagte
 (`composer-starters.js`, `POST /api/my/starter-questions`). Sobald
 Text im Feld steht, werden sie per `#questionInput:not(:placeholder-shown)`

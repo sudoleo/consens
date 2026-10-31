@@ -58,7 +58,7 @@ def test_prediction_sends_the_chats_as_data_and_returns_clean_questions():
         HISTORY, query_fn=fake_query, api_keys={"OpenRouter": "key"}, today="2026-10-16"
     )
 
-    assert questions == PREDICTED["questions"]
+    assert questions == PREDICTED["questions"][:starter_questions.PREDICTED_COUNT]
     (model, kwargs), = calls
     assert model == starter_questions.title_model()
     assert kwargs["json_schema"]["required"] == ["questions"]
@@ -112,7 +112,7 @@ def test_mock_engine_predicts_deterministically():
     from app.services.llm.mock_llm import _mock_engine_output
 
     prompt = starter_questions.PREDICT_PROMPT.format(
-        today="2026-10-16", count=3,
+        today="2026-10-16", count=starter_questions.PREDICTED_COUNT,
         conversations=starter_questions._conversation_lines(HISTORY),
     )
     raw = json.loads(_mock_engine_output(prompt, True))
@@ -246,7 +246,7 @@ def test_predictions_are_capped_per_account_before_any_read():
     assert database.reads == cap
 
 
-def test_the_app_shell_shows_three_curated_questions_and_the_check():
+def test_the_app_shell_shows_three_curated_questions_in_one_row():
     app = FastAPI()
     app.include_router(pages_router.router)
     html = TestClient(app).get("/app").text
@@ -254,5 +254,5 @@ def test_the_app_shell_shows_three_curated_questions_and_the_check():
     row = html.split('id="composerStarters"', 1)[1].split("</div>", 1)[0]
     starters = re.findall(r'data-starter="([a-z0-9_]+)"', row)
     pool = {item["key"] for item in starter_questions.CURATED_STARTERS}
-    assert len(starters) == 4 and starters[-1] == "check"
-    assert set(starters[:3]) <= pool and len(set(starters[:3])) == 3
+    assert len(starters) == 3 and "check" not in starters
+    assert set(starters) <= pool and len(set(starters)) == 3

@@ -368,9 +368,9 @@
     }
     // An account's predicted example questions from the first frame
     // (composer-starters.js): the curated ones swapped out in front of the
-    // reader otherwise. Once the row's last button is parsed.
-    const check = once("starters", document.querySelector('#composerStarters [data-starter="check"]'));
-    if (check) window.App.composerStarters?.seed(check.parentElement);
+    // reader otherwise. Once the row is parsed: the note after it is there.
+    const note = once("starters", document.querySelector("#composerStarters + .app-footer"));
+    if (note) window.App.composerStarters?.seed(note.previousElementSibling);
     // The switch says "Watches" before it is ever painted as "Chat".
     if (!watchPage) {
       seeded.add("switch");

@@ -42,10 +42,12 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         room = starters.bounding_box()["height"]
         gap_below_field = page.evaluate(NOTE_BELOW_FIELD)
 
-        # Three curated questions per page load (starter_questions.py), then
-        # "Check an AI answer".
-        expect(starters.locator(".composer-starter")).to_have_count(4)
-        expect(starters.locator(".composer-starter").last).to_have_attribute("data-starter", "check")
+        # Three curated questions per page load (starter_questions.py), in one
+        # row, without "Check an AI answer" since 2026-10-31.
+        expect(starters.locator(".composer-starter")).to_have_count(3)
+        expect(starters.locator('[data-starter="check"]')).to_have_count(0)
+        tops = {round(box["y"]) for box in (starters.locator(".composer-starter").nth(i).bounding_box() for i in range(3))}
+        assert len(tops) == 1, tops
         first = starters.locator(".composer-starter").first
         question = first.get_attribute("data-question")
         first.click()
@@ -128,7 +130,9 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
         page.reload(wait_until="domcontentloaded")
 
         visible = page.locator("#composerStarters .composer-starter:visible")
-        expect(visible).to_have_text([item["label"] for item in PREDICTED] + ["Check an AI answer"])
+        # Two predicted and the check: three in one row (2026-10-31).
+        # Three predicted, in one row, without "Check an AI answer" (2026-10-31).
+        expect(visible).to_have_text([item["label"] for item in PREDICTED])
         assert asked == ["POST"]
         page.locator('[data-starter="predicted"]').first.click()
         expect(page.locator("#questionInput")).to_have_value(PREDICTED[0]["question"])

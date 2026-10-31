@@ -5,8 +5,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // newest chats, kept per account and painted from the first frame.
 const ROW = '<div id="composerStarters">'
   + '<button type="button" class="composer-starter" data-starter="glp1" data-question="GLP-1?">GLP-1?</button>'
-  + '<button type="button" class="composer-starter" data-starter="check" data-question="Check this AI answer:&#10;&#10;">Check an AI answer</button>'
-  + '</div>';
+  + '</div><footer class="app-footer"></footer>';
 const KEY = "consensio.starterQuestions.v1";
 const PREDICTED = [
   { label: "Heat pump costs?", question: "What will a heat pump cost to run per year?" },
@@ -69,7 +68,7 @@ describe("the first frame", () => {
       storage: { id_token: token("uid-1"), [KEY]: record("uid-1") },
       files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"],
     });
-    expect(labels()).toEqual(["Heat pump costs?", "AI Act deadlines?", "Check an AI answer"]);
+    expect(labels()).toEqual(["Heat pump costs?", "AI Act deadlines?"]);
     const predicted = document.querySelector('[data-starter="predicted"]');
     expect(predicted.dataset.question).toBe(PREDICTED[0].question);
     // The curated question waits, hidden, for a sign-out.
@@ -82,7 +81,7 @@ describe("the first frame", () => {
     ["a week-old", { id_token: token("uid-1"), [KEY]: record("uid-1", Date.now() - 8 * 24 * 3600 * 1000) }],
   ])("keeps the curated questions for %s prediction", (_label, storage) => {
     const { labels } = boot({ storage, files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"] });
-    expect(labels()).toEqual(["GLP-1?", "Check an AI answer"]);
+    expect(labels()).toEqual(["GLP-1?"]);
   });
 });
 
@@ -99,7 +98,7 @@ describe("asking for a prediction", () => {
     expect(url).toBe("/api/my/starter-questions");
     expect(options.method).toBe("POST");
     expect(options.headers.Authorization).toBe("Bearer fresh-token");
-    expect(ctx.labels()).toEqual(["Heat pump costs?", "AI Act deadlines?", "Check an AI answer"]);
+    expect(ctx.labels()).toEqual(["Heat pump costs?", "AI Act deadlines?"]);
     expect(ctx.stored()).toMatchObject({ uid: "uid-1", basis: "chat_0,chat_1,chat_2", questions: PREDICTED });
 
     // Same newest chats: nothing to ask.
@@ -146,7 +145,7 @@ describe("asking for a prediction", () => {
     await settle(ctx);
     expect(ctx.calls.fetches).toHaveLength(0);
     expect(ctx.stored()).toBeNull();
-    expect(ctx.labels()).toEqual(["GLP-1?", "Check an AI answer"]);
+    expect(ctx.labels()).toEqual(["GLP-1?"]);
   });
 
   it("keeps what the row shows when the server skips", async () => {
@@ -156,7 +155,7 @@ describe("asking for a prediction", () => {
     await settle(ctx);
     expect(ctx.calls.fetches).toHaveLength(1);
     expect(ctx.stored()).toBeNull();
-    expect(ctx.labels()).toEqual(["GLP-1?", "Check an AI answer"]);
+    expect(ctx.labels()).toEqual(["GLP-1?"]);
   });
 
   it("does not swap the buttons under the pointer", async () => {
@@ -165,11 +164,11 @@ describe("asking for a prediction", () => {
     ctx.row.matches = selector => selector === ":hover";
     ctx.App.composerStarters.refresh();
     await settle(ctx);
-    expect(ctx.labels()).toEqual(["GLP-1?", "Check an AI answer"]);
+    expect(ctx.labels()).toEqual(["GLP-1?"]);
 
     ctx.row.matches = () => false;
     ctx.row.dispatchEvent(new ctx.window.Event("pointerleave"));
-    expect(ctx.labels()).toEqual(["Heat pump costs?", "AI Act deadlines?", "Check an AI answer"]);
+    expect(ctx.labels()).toEqual(["Heat pump costs?", "AI Act deadlines?"]);
   });
 });
 
@@ -179,9 +178,9 @@ describe("leaving the account", () => {
   it("takes the prediction off the row and out of the browser on sign-out", () => {
     const ctx = boot({ storage: { id_token: token("uid-1"), [KEY]: record },
       files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"] });
-    expect(ctx.labels()).toHaveLength(3);
+    expect(ctx.labels()).toHaveLength(2);
     ctx.App.composerStarters.clear();
-    expect(ctx.labels()).toEqual(["GLP-1?", "Check an AI answer"]);
+    expect(ctx.labels()).toEqual(["GLP-1?"]);
     expect(ctx.document.querySelector('[data-starter="predicted"]')).toBeNull();
     expect(ctx.stored()).toBeNull();
   });

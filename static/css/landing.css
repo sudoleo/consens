@@ -988,10 +988,10 @@ img { display: block; max-width: 100%; }
 
 /* The light below Send (send-glow.css), as in /app (shell.css): it breathes
    while the field is empty and turns brighter once there is a question. */
-.lp-send.send-glow { --glow-wash: 38%; --glow-rim: 84%; --glow-rest: 0.15; --glow-rise: 14%; }
-.lp-send.send-glow.is-ready { --glow-wash: 54%; --glow-rim: 100%; --glow-rest: 0.5; --glow-rise: 20%; }
-.dark-mode .lp-send.send-glow { --glow-wash: 40%; --glow-rim: 76%; }
-.dark-mode .lp-send.send-glow.is-ready { --glow-wash: 44%; --glow-rim: 90%; }
+.lp-send.send-glow { --glow-wash: 46%; --glow-rim: 96%; --glow-rest: 0.08; --glow-rise: 20%; }
+.lp-send.send-glow.is-ready { --glow-wash: 62%; --glow-rim: 100%; --glow-rest: 0.4; --glow-rise: 26%; }
+.dark-mode .lp-send.send-glow { --glow-wash: 50%; --glow-rim: 88%; }
+.dark-mode .lp-send.send-glow.is-ready { --glow-wash: 54%; --glow-rim: 100%; }
 .lp-send.send-glow::before { opacity: 0.6; }
 .lp-send.send-glow.is-ready::before { opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
