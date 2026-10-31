@@ -6520,6 +6520,9 @@ weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
   `upsertBookmarkMeta`, Löschen und `bookmarkUi.invalidate` werfen ihn raus)
   steht sofort da und wird im Hintergrund geprüft; nur eine echte Änderung
   (`bookmarkViewSignature`) rendert ihn neu, ohne die Leseposition zu bewegen.
+  Der Chat, der schon auf dem Schirm steht (seine Zeile erneut, „…“ → Share),
+  wird seit 2026-10-31 gar nicht neu gezeichnet, nur geprüft: Folgefrage,
+  Zitat und Anhänge im Composer bleiben.
   Sonst zeigt `showChatOpening` sofort Frage (aus der Listen-Meta) und
   `.answer-skeleton` (`.thread-opening`, `body.chat-opening` blendet den
   vorigen Chat nur aus; ein Fehler gibt ihn unverändert zurück), und

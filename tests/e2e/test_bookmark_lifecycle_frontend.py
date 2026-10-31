@@ -369,6 +369,19 @@ def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_togethe
         release('detail', 'first'); release('conversation', 'first')
         page.wait_for_timeout(200)
         expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat.')
+
+        # The chat on screen, its row again: not drawn anew, the typed
+        # follow-up stays; only the background check goes out.
+        page.locator('#questionInput').fill('And what did it cost?')
+        page.locator('.bookmark[data-id="first"]').click()
+        page.wait_for_timeout(150)
+        expect(page.locator('#questionInput')).to_have_value('And what did it cost?')
+        expect(page.locator('.thread-opening')).to_have_count(0)
+        assert any(key == 'first' for _, key, _ in held)
+        release('detail', 'first'); release('conversation', 'first')
+        page.wait_for_timeout(200)
+        expect(page.locator('#questionInput')).to_have_value('And what did it cost?')
+        expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat.')
         assert not errors
     finally:
         context.close()

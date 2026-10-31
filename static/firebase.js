@@ -3188,6 +3188,7 @@ window.openBookmark = async function (bookmarkId) {
   // The tap is answered at once: the phone menu closes and the row is
   // marked before anything loads (Apple audit D2).
   window.App.chatScroll?.closeMenu?.();
+  const fromWatches = document.body.classList.contains("is-watch-view");
   window.App.watch?.leave?.();
   syncActiveBookmark(bookmarkId);
   const requestEpoch = ++bookmarkViewEpoch;
@@ -3215,7 +3216,13 @@ window.openBookmark = async function (bookmarkId) {
   if (cached) {
     bookmarkViewCache.delete(bookmarkId);
     bookmarkViewCache.set(bookmarkId, cached);
-    show(cached);
+    // The chat on screen again (its row, or "…" → Share) is not drawn anew:
+    // a typed follow-up, its quote and its files stay. A view that failed to
+    // load is never cached, so its row still loads it again.
+    const onScreen = openedBookmarkId === bookmarkId && activeBookmarkId() === bookmarkId
+      && !document.querySelector(".container > .thread-opening");
+    if (!onScreen) show(cached);
+    else if (fromWatches) window.App.chatScroll?.opened?.();
     trackAppEvent("app_bookmark_opened", { source: "cache" });
     const shownEpoch = bookmarkViewEpoch;
     bookmarkDetailCache.delete(bookmarkId);
