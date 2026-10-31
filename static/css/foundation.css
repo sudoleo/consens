@@ -424,8 +424,7 @@ html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-she
   .settings-nav-item.is-active,
   .view-switch-btn.is-active,
   [role="tab"][aria-selected="true"],
-  .attach-menu-mode[aria-pressed="true"],
-  .composer-tool[aria-checked="true"] {
+  .attach-menu-mode[aria-pressed="true"] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }

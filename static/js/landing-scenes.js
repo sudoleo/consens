@@ -50,7 +50,7 @@
     const composer = scene.querySelector("[data-ask-composer]");
     const chip = scene.querySelector("[data-ask-chip]");
     const send = scene.querySelector("[data-ask-send]");
-    const leaving = scene.querySelectorAll(".lp-composer-tools, .lp-composer-models");
+    const leaving = scene.querySelectorAll(".lp-composer-models");
     if (!text || !composer) return null;
     text.setAttribute("data-i18n-skip", "");
 

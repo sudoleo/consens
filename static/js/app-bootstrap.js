@@ -154,7 +154,9 @@
     // under the field (agent-mode.js renderReviewers).
     if (agent?.dataset.catalog === "ready") {
       look.agentModel = text(agent.selectedOptions?.[0]);
-      look.agentEffort = text(document.getElementById("agentReasoningEffort")?.selectedOptions?.[0]);
+      // The level beside the model's name, only for a model that has one.
+      const effort = document.getElementById("agentReasoningEffort");
+      if (effort?.dataset.available === "true") look.agentEffort = text(effort.selectedOptions?.[0]);
     }
     try { window.localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private mode */ }
   }
@@ -227,7 +229,7 @@
   // The chip a custom picker (model-picker.js) will draw, drawn now: the same
   // button in the same place, which initCustomModelPicker adopts. The native
   // select behind it is hidden the way the enhanced picker hides it.
-  function seedPickerChip(wrapper, label, ariaLabel) {
+  function seedPickerChip(wrapper, label, ariaLabel, level) {
     const select = wrapper?.querySelector("select");
     if (!select || !label || select._customModelPicker || wrapper.querySelector(":scope > .model-picker-display")) return;
     wrapper.classList.add("custom-model-picker", "is-enhanced");
@@ -239,11 +241,19 @@
     chip.setAttribute("aria-haspopup", "listbox");
     chip.setAttribute("aria-expanded", "false");
     // Translated part by part: "{picker}: {label}" has no entry of its own.
-    chip.setAttribute("aria-label", ariaLabel || `${window.App.t(select.getAttribute("aria-label") || "Models")}: ${window.App.t(label)}`);
+    const spoken = ariaLabel || `${window.App.t(select.getAttribute("aria-label") || "Models")}: ${window.App.t(label)}`;
+    chip.setAttribute("aria-label", level ? `${spoken} · ${window.App.t("Reasoning")} ${window.App.t(level)}` : spoken);
     const name = document.createElement("span");
     name.className = "model-picker-display-text";
     name.textContent = label;
     chip.append(name);
+    // The chat model's reasoning level beside its name (model-picker.js).
+    if (level) {
+      const quiet = document.createElement("span");
+      quiet.className = "model-picker-display-level";
+      quiet.textContent = level;
+      chip.append(quiet);
+    }
     wrapper.append(chip);
   }
 
@@ -296,7 +306,7 @@
   let draftSeeded = false;
   const seeded = new Set();
   const SEED_KEYS = ["body", "sidebar", "auth", "input", "starters", "switch", "watches",
-    "families", "agentChip", "consensusChip", "demo", "send", "reasoning", "icons", "bookmarks", "login", "watchHint"];
+    "families", "agentChip", "consensusChip", "demo", "send", "icons", "bookmarks", "login", "watchHint"];
   function once(key, node) {
     if (seeded.has(key) || !node) return null;
     seeded.add(key);
@@ -388,7 +398,7 @@
       }
     }
     // The composer as the app will draw it (Apple-Audit B1, B2, B13): the
-    // chips, Reasoning, the provider marks, the demo button and Send. Every
+    // chips (with the chat model's reasoning level), the provider marks, the demo button and Send. Every
     // node below is parsed before the composer's end, so the first frame
     // has all of them.
     const families = window.MODEL_FAMILIES || [];
@@ -401,9 +411,10 @@
       // agent-chat.js keeps the reasoning select hidden: it lives in the chip's menu.
       const effortWrapper = document.getElementById("agentReasoningEffort")?.parentElement;
       if (effortWrapper) effortWrapper.hidden = true;
-      // The chat model's name; its tooltip and full name follow with the
-      // model list (model-picker.js).
-      seedPickerChip(agentControls.querySelector(".agent-model-picker"), window.App.firstFrame.agentModel());
+      // The chat model's name and its reasoning level; its tooltip and full
+      // name follow with the model list (model-picker.js).
+      seedPickerChip(agentControls.querySelector(".agent-model-picker"), window.App.firstFrame.agentModel(),
+        null, window.App.firstFrame.agentEffort());
     }
     const consensusChip = once("consensusChip", document.querySelector(".consensus-model .select-wrapper select") && document.querySelector(".consensus-model"));
     if (consensusChip) {
@@ -421,11 +432,6 @@
     if (send && draftSeeded && guestExpected()) {
       send.disabled = false;
       send.setAttribute("aria-disabled", "false");
-    }
-    const reasoning = once("reasoning", document.getElementById("composerReasoningState"));
-    if (reasoning && agentLook) {
-      reasoning.textContent = window.App.firstFrame.agentEffort() || "Auto";
-      reasoning.dataset.seeded = "true";
     }
     const icons = once("icons", document.getElementById("composerModelIcons"));
     if (icons) {

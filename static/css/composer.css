@@ -88,27 +88,7 @@
   white-space: nowrap;
 }
 .composer-tools[hidden] { display: none; }
-/* Reasoning shows its brain and its level ("Auto") and keeps its word for
-   screen readers and speech input: the room goes to the question (Max,
-   2026-10-31). Between the reviewers' words and the chat model it steers
-   (audit: the chip names that model); where the chip speaks for the
-   comparison models, after it, a little away from Send. */
-.composer-models > .composer-tool { flex: 0 0 auto; font-size: var(--font-size-xs); white-space: nowrap; }
 .composer-models > .composer-agent-toggle[hidden] { display: none; }
-.composer-models:not(:has(#composerModelLabel:not([hidden]))) > #composerReasoningToggle { order: 1; margin-right: 6px; }
-@media (max-width: 700px) {
-  .composer-models > .composer-tool { display: none; }
-}
-.composer-tool-name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 @container composer-tools (max-width: 290px) {
   .composer-tools .composer-tool-label { display: none; }
   .composer-tools .composer-tool { width: 32px; justify-content: center; padding: 0; }
@@ -211,6 +191,16 @@
 }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display-text {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The chat model's reasoning level, quiet beside its name, one word space
+   away ("DeepSeek V4.1 Flash Auto", model-picker.js; Max 2026-10-31, after
+   ChatGPT's "GPT-6.1 Sol High"). The name gives way first; a phone and the
+   one-line thread pill (below) keep the level in the chip's menu. */
+.chat-input-container .composer-models .model-picker-display-level {
+  flex: 0 0 auto; margin-left: -3px; color: var(--ink-3); font-weight: 400; white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .chat-input-container .composer-models .model-picker-display-level { display: none; }
 }
 .chat-input-container .agent-model-picker .model-picker-display { color: var(--ink); }
 .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after {
@@ -354,8 +344,10 @@
   body:not(.is-hero, .direct-comparison-preview) .input-section:not(:has(> .composer-mode-bar:not([hidden]))) > .chat-input-container:not(.is-multiline) {
     border-radius: var(--composer-pill-radius);
   }
-  /* In a chat the Agent picker yields width to the question. */
+  /* In a chat the Agent picker yields width to the question, its reasoning
+     level first (it stays in the chip's menu and the (+) menu). */
   body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) .model-picker-display-level { display: none; }
   body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
 }
 
@@ -582,13 +574,13 @@
 }
 
 /* ---- Each setting in one place --------------------------------------------
-   On a desktop start screen the row already switches Reasoning, opens the
-   workspace and the comparison models, with their state written out.
-   The (+) menu then only adds files (with the formats it takes). Phones keep
-   the full menu: there the row has no tools. */
+   On a desktop start screen the row already opens the workspace and the
+   comparison models. The (+) menu then adds files and keeps Reasoning (the
+   chip only shows the level beside a chat model it names). Phones keep the
+   full menu: there the row has no tools. */
 @media (min-width: 701px) {
   .chat-input-container:has(> .composer-tools:not([hidden])) .attach-menu
-    :is(#agentReasoningMenuOption, #agentComparisonMenuOption, #attachWorkspaceOption, .attach-menu-toggle, .attach-menu-divider:not(.attach-menu-mode-divider)) {
+    :is(#agentComparisonMenuOption, #attachWorkspaceOption) {
     display: none;
   }
 }

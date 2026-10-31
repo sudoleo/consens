@@ -82,10 +82,9 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
         _pro_account(page)
         page.evaluate("() => window.loadBookmarks()")
         # The start screen: (+), the reviewers and the chat model, Send or the
-        # demo and an example question; Reasoning is in the (+) menu on a
-        # phone. The reviewers keep their words ("3 AIs"), up to 380px
+        # demo and an example question; Reasoning is in the (+) menu and the
+        # chip's menu. The reviewers keep their words ("3 AIs"), up to 380px
         # without their marks. The drawing stays 36 px.
-        expect(page.locator("#composerReasoningToggle")).to_be_hidden()
         reviewers = page.locator("#composerModelPicker")
         expect(reviewers.locator(".composer-tool-label")).to_be_visible()
         expect(reviewers.locator(".composer-model-icons")).to_be_visible(visible=width > 380)

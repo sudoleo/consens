@@ -693,7 +693,9 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertNotIn("DEEP_THINK_CONSENSUS_MODEL", module)
         # One Reasoning switch for every tier, no Pro badge on its menu row.
         self.assertIn('id="reasoningToggle"', template)
-        self.assertIn('id="composerReasoningToggle"', template)
+        # No button of its own in the row since 2026-10-31: the level stands
+        # beside the chat model in its chip, the switch in the (+) menu.
+        self.assertNotIn('id="composerReasoningToggle"', template)
         row = template[template.index('for="reasoningToggle"'):]
         row = row[:row.index("</label>")]
         self.assertIn("Reasoning", row)

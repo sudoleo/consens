@@ -35,7 +35,8 @@ SAMPLER = r"""
     const host = document.querySelector(selector);
     if (!shown(host)) return 'hidden';
     const display = host.querySelector('.model-picker-display');
-    if (shown(display)) return 'chip:' + text(display);
+    // The chip's words; the level beside the chat model is sampled apart.
+    if (shown(display)) return 'chip:' + text(display.querySelector('.model-picker-display-text') || display);
     const select = host.querySelector('select');
     return shown(select) ? 'native:' + text(select.selectedOptions[0]) : 'empty';
   };
@@ -50,7 +51,9 @@ SAMPLER = r"""
       consensus: chip('.consensus-model'),
       // Written out on a desktop start screen, in the (+) menu on a phone:
       // the word is painted from the first frame either way.
-      reasoning: text(document.getElementById('composerReasoningState')),
+      // The chat model's reasoning level, quiet beside its name in the chip
+      // (since 2026-10-31); a phone keeps it in the chip's menu.
+      level: (el => shown(el) ? text(el) : '')(document.querySelector('#agentModelControls .model-picker-display-level')),
       marks: document.querySelectorAll('#composerModelIcons .composer-model-icon').length,
       greeting: shown(document.querySelector('.hero-greeting')) ? text(document.querySelector('.hero-greeting')) : '-',
       tab: text(document.getElementById('viewSwitchConsensus')),
@@ -122,13 +125,13 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         _settled(page)
         frames = _frames(page)
         # One face from the first frame to the end: Agent's chip with the
-        # chat model, Reasoning "Auto", no demo, no Consensus chip, a quiet
-        # Send (B1); "Chat" and "New chat" (B10).
+        # chat model and its level "Auto" (from 701px), no demo, no Consensus
+        # chip, a quiet Send (B1); "Chat" and "New chat" (B10).
         assert len(frames) == 1, frames
         first = frames[0]
         assert first["agent"] == "chip:DeepSeek V4.1 Flash", first
         assert first["consensus"] == "hidden" and first["demo"] == "-" and first["send"] == "disabled", first
-        assert first["reasoning"] == "Auto" and first["marks"] == 3, first
+        assert first["level"] == ("" if mobile else "Auto") and first["marks"] == 3, first
         assert first["tab"] == "Chat" and first["newChat"] == "New chat", first
         # On a phone the switch lives in the menu, never cut off in the bar (B2);
         # on a desktop the bar is only a wrapper (display: contents) around it.
@@ -225,7 +228,8 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
         assert frames[0]["agent"].startswith("chip:"), frames
         last = frames[-1]
         assert last["guestButtons"] and last["agent"] == f"chip:{default}", last
-        assert last["reasoning"] == "Auto" and last["consensus"] == "hidden", last
+        # A guest's model list never loads: no level beside the model.
+        assert last["level"] == "" and last["consensus"] == "hidden", last
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         field.type("Still here")
         expect(field).to_have_value("Still here")
@@ -237,8 +241,9 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
 def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
     """H3 (Max): a guest sees Agent's composer of a new chat as an account
     does by default, from the first frame to the end: the chip with the
-    default chat model, Agent's greeting, Reasoning
-    "Auto"; the demo offer stays a guest's (B13). One face, also on reload."""
+    default chat model (no level: a guest's model list never loads),
+    Agent's greeting; the demo offer stays a guest's (B13). One face, also
+    on reload."""
     context = _context(browser, width, height, uid=None, mobile=mobile)
     page = context.new_page()
     agent_calls = []
@@ -259,7 +264,7 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         default = page.evaluate("document.querySelector('[data-agent-default-label]').dataset.agentDefaultLabel")
         assert first["agent"] == f"chip:{default}", first
         assert first["consensus"] == "hidden", first
-        assert first["reasoning"] == "Auto" and first["marks"] == 3, first
+        assert first["level"] == "" and first["marks"] == 3, first
         assert first["greeting"] == "What do you want to be sure about?", first
         assert first["tab"] == "Chat" and first["switchInHeader"] is not mobile
         # Nothing a guest cannot have is asked for (the model list needs an account).

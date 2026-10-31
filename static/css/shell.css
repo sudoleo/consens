@@ -3886,11 +3886,6 @@ body .theme-toggle:focus-visible {
 .composer-agent-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .composer-tool { margin-left: 0; font-weight: 500; }
 .composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-.composer-tool[aria-checked="true"], .composer-tool[aria-checked="true"] .composer-agent-state { color: var(--mode-active); }
-/* The state is part of the label's sentence ("Reasoning Auto"): same size,
-   same baseline, one step quieter. */
-.composer-agent-state { color: var(--ink-3); font-size: inherit; font-weight: var(--font-weight-regular); }
-.composer-tools, .composer-models { --mode-active: var(--agree); }
 .composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
 /* Agent: the reviewers say what they do next to their marks ("2 AIs
    cross-check"), in the words of the tools beside them. On the start screen
@@ -3972,8 +3967,8 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     content: attr(data-short); font-size: var(--font-size-xs);
   }
 }
-/* 44px to the finger (Apple-Audit F5): Reasoning, the workspace and the
-   models keep their drawing; on touch each reaches out to 44px. */
+/* 44px to the finger (Apple-Audit F5): the workspace and the models keep
+   their drawing; on touch each reaches out to 44px. */
 @media (pointer: coarse) {
   .composer-agent-toggle { position: relative; }
   .composer-agent-toggle::after {

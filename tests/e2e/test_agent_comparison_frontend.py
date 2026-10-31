@@ -169,7 +169,6 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         _snapshot(page, f'agent-toolbar-reasoning-touch-{width}')
         page.locator('.agent-model-picker [data-setting-value="high"]').tap()
         expect(page.locator('#agentReasoningEffort')).to_have_value('high')
-        expect(page.locator('#composerReasoningState')).to_have_text('High')
         expect(page.locator('#agentReasoningMenuState')).to_have_text('High')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     finally:
@@ -250,18 +249,18 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert page.evaluate("App.runMode.preference()") == 'agent'
         assert page.evaluate("localStorage.getItem('agentMode')") is None
         expect(page.locator('#composerSourcesToggle')).to_have_count(0)
-        # The start screen's row switches Reasoning; a phone's (+) menu does.
-        if width > 700:
-            page.locator('#composerReasoningToggle').focus()
-            page.keyboard.press('Enter')
-        else:
-            expect(page.locator('#composerReasoningToggle')).to_be_hidden()
-            page.locator('#attachTrigger').click()
-            page.locator('#agentReasoningMenuOption').click()
+        # Reasoning has no button in the row (since 2026-10-31): the (+) menu
+        # opens its level, on the start screen too, and the chip shows it
+        # quietly beside the chat model (from 701px).
+        page.locator('#attachTrigger').click()
+        page.locator('#agentReasoningMenuOption').click()
         expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
         page.locator('.agent-model-picker [data-setting-value="high"]').click()
         expect(page.locator('#agentReasoningEffort')).to_have_value('high')
-        expect(page.locator('#composerReasoningState')).to_have_text('High')
+        expect(page.locator('#agentReasoningMenuState')).to_have_text('High')
+        level = page.locator('.agent-model-picker .model-picker-display-level')
+        expect(level).to_have_text('High')
+        expect(level).to_be_visible(visible=width > 700)
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
         expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^75% of today'))
         expect(page.locator("#agentTokenBudget")).to_have_count(0)

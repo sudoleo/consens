@@ -128,9 +128,10 @@ eine Zeile, auf dem Handy eingeklappt (+), Feld und Senden. Ein neuer Chat zeigt
 die Startleiste wieder.
 Der Moduswähler (Agent / Compare, `run-mode.js`; Consensus bis 2026-10-25) tritt
 in einem offenen Agent-Chat zurück: Compare braucht einen neuen Chat,
-weil die Chat-Familien serverseitig getrennt sind. „Reasoning“
-(`#composerReasoningToggle`, im (+)-Menü `#agentReasoningMenuOption`) öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
-aktuelle Stufe. Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
+weil die Chat-Familien serverseitig getrennt sind. „Reasoning“ im (+)-Menü
+(`#agentReasoningMenuOption`) öffnet direkt die vorhandene Reasoning-Auswahl des Chatmodells und zeigt deren
+aktuelle Stufe; im Chip steht sie grau neben dem Chatmodell („DeepSeek V4.1
+Flash Auto“, seit 2026-10-31). Modelle ohne wählbares Reasoning und laufende Nachrichten sperren
 dieses Menü. „Attach“ lädt PDF, Word, Text und Bilder in den privaten Chat-Dateispeicher.
 Siehe [Agent integrations](agent-integrations.md) für Limits und Konfiguration.
 

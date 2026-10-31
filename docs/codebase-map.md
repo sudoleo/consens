@@ -612,8 +612,9 @@ models answer.“ mit Score und Judge, was der Agent nicht mehr tut.
 Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip
 (der Modus steckt im (+)), rechts „3 AIs cross-check“ neben den drei Marken von
 Daily, ohne Pfeil wie in /app; eine Fläche, eine Reihe:
-(+) · die drei Marken vor dem Chip · Reasoning Auto vor Senden
-(`partials/composer_marks_mockup.html`, `partials/composer_tools_mockup.html`).
+(+) · die drei Marken vor den Prüfer-Worten · Senden
+(`partials/composer_marks_mockup.html`; seit 2026-10-31 ohne Reasoning: die
+Mockups zeigen keinen Chatmodell-Chip, neben dem in /app die Stufe steht).
 Das Wärmepumpen-Beispiel ist ein Lauf mit drei Prüfern (Szene 01 zeigt keine
 sechs mehr). Szene 02 (`#agent-mode`, `.lp-agent`) baut einen Turn des einen
 Modus so nach, wie `agent-activity.js`/`agent-review.js` ihn zeichnen: die Marken
@@ -793,12 +794,10 @@ dieselben Werte samt 95-%-Intervall, die großen Diagramme sind als Scroller
 fokussierbar. `tests/test_benchmark_charts.py` hält Balken und Tabelle gleich.
 Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
-Eingabe-Mockups im Landing-Hero und der Ask-Szene setzen die Reihe aus zwei
-Includes zusammen: `partials/composer_tools_mockup.html` (Reasoning Auto, wie
-`#composerTools`, ein `div`, damit die Chip-Worte daneben für die Übersetzung
-ein Satz bleiben; unter 701 px ausgeblendet) und
-`partials/composer_marks_mockup.html` (gestapelte Provider-Icons vor dem Chip,
-wie `#composerModelPicker`). Keine HTML-Kommentare mit Apostroph in diesen
+Eingabe-Mockups im Landing-Hero und der Ask-Szene setzen die Reihe mit
+`partials/composer_marks_mockup.html` zusammen (gestapelte Provider-Icons vor
+den Prüfer-Worten, wie `#composerModelPicker`; das frühere
+`partials/composer_tools_mockup.html` mit Reasoning ist seit 2026-10-31 weg). Keine HTML-Kommentare mit Apostroph in diesen
 Templates: `scripts/i18n.py` liest sie sonst als offenen Attributwert. Seit 2026-10-30 hängt keine 36-px-Leiste
 mehr unter dem Feld (früher mit „Attach“). Die Ask-Szene blendet Werkzeuge
 und Marken beim Senden aus (`.is-sent`, reservierter Platz stabilisiert die
@@ -2520,11 +2519,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   die Werkzeuge des Startbildschirms. Seit 2026-10-30 ist der Composer dort
   **eine Fläche, eine Reihe** (Max): `(+)` · `#composerTools` (Arbeitsplatz
   `#composerWorkspaceButton`) · `#composerModelPicker` (Anbieter-Marken der
-  nächsten Frage, in Agent mit „N KIs prüfen mit“) · Reasoning
-  `#composerReasoningToggle` (Gehirn + Stufe, seit 2026-10-31; in Agent
-  zwischen den Prüfer-Worten und dem Chip mit dem Chatmodell, in Compare hinter
-  dem Chip; in Agent steuert die Stufe nur das Chatmodell, nie die Prüfer) ·
-  Modell-Chip · Senden. Die frühere Leiste unter
+  nächsten Frage, in Agent mit „N KIs prüfen mit“) · Modell-Chip · Senden.
+  Reasoning hat seit 2026-10-31 keinen eigenen Knopf mehr in der Reihe (Max,
+  nach ChatGPTs „GPT-6.1 Sol High“): Der Agent-Chip nennt das Chatmodell, und
+  dessen Stufe steht grau daneben („DeepSeek V4.1 Flash Auto“,
+  `.model-picker-display-level`, `model-picker.js` `syncCustomModelPicker`,
+  im ersten Bild aus `App.firstFrame.agentEffort()`, nur für Modelle mit
+  Reasoning); Compares Chip („3 models“) zeigt keine. Gewählt wird im
+  Chip-Menü oder im (+)-Menü, das Reasoning jetzt auch auf dem
+  Startbildschirm führt. In Agent steuert die Stufe nur das Chatmodell, nie
+  die Prüfer; unter 701 px und im einzeiligen Chat-Feld am Desktop bleibt das
+  Wort weg (die Frage hat Vorrang). Die frühere Leiste unter
   dem Feld samt „Attach“-Knopf ist weg; Dateien kommen über das (+).
   Werkzeuge und Marken gehören in jedem Modus zum Startbildschirm (Hero oder
   Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`); in
@@ -4466,7 +4471,7 @@ das (+) auf dem Startbildschirm und im eingeklappten Handy-Composer.
 `composer-collapse.js` lässt Pointer/Fokus auf Plus und dessen Menü direkt durch,
 ohne das Layout zwischen Touch und Klick zu verschieben. Ein neuer Chat zeigt die
 Startleiste wieder. In einem offenen Agent-Chat tritt die Modusgruppe im (+)
-zurück (Compare und Consensus brauchen einen neuen Chat). `Reasoning` (`#composerReasoningToggle`) öffnet über
+zurück (Compare und Consensus brauchen einen neuen Chat). `Reasoning` (`#agentReasoningMenuOption`) öffnet über
 `openModelPicker(select, {secondary: true})` die bestehende Reasoning-Auswahl;
 `Attach` bleibt bis zur Unterstützung von Anhängen deaktiviert. Vergleichsicons
 und Compare-Picker verwenden weiterhin dieselbe Modellauswahl.
@@ -7039,8 +7044,8 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Own-Key nutzt ausschließlich `openrouter_key`, speichert/loggt ihn nicht und
   fällt bei Fehlen niemals auf den serverseitigen OpenRouter-Key zurück.
 - **Reasoning-Schalter** (seit 2026-10-02, ersetzt Deep Think; für alle
-  Stufen, kein Pro-Gate): `#reasoningToggle` im (+)-Menü bzw.
-  `#composerReasoningToggle` in der Startleiste. Ein lässt dieselben gewählten
+  Stufen, kein Pro-Gate): `#reasoningToggle` im (+)-Menü (seit 2026-10-31
+  auch auf dem Startbildschirm, ohne eigenen Knopf in der Reihe). Ein lässt dieselben gewählten
   Antwortmodelle länger nachdenken: kein Pro-Modell-Tausch, kein Zusatzprompt,
   weiter eine Suchrunde, Consensus-Engine unverändert. Serverseitig füllt
   `cfg.effective_model_reasoning(..., reasoning=True)` nur eine noch offene
@@ -7387,14 +7392,14 @@ Chevron). Das (+)-Menü `#attachMenu` hat seit
 2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·
 Label (höchstens eine kurze Zeile darunter) · Wert mit Chevron oder Schalter;
 „Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Ab 701 px
-steht jede Einstellung nur einmal: Reasoning, Arbeitsplatz und die
-Vergleichsmodelle stehen auf dem Startbildschirm in der Reihe des Feldes
-(`#composerTools`, `#composerModelPicker`), das (+)-Menü trägt dort den Modus
-und Dateien; auf dem Handy (ohne Werkzeuge in der Reihe) und in einem Chat
-bleibt das Menü vollständig. Reasoning trägt überall
-dasselbe Gehirn mit Funken (seit 2026-10-31; in der Reihe des Startbildschirms
-ohne das Wort, nur mit der Stufe), Anhänge dieselbe Büroklammer. In der Reihe stehen
-Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
+steht jede Einstellung nur einmal: Arbeitsplatz und Vergleichsmodelle stehen
+auf dem Startbildschirm in der Reihe des Feldes (`#composerTools`,
+`#composerModelPicker`), das (+)-Menü trägt dort den Modus, Dateien und
+Reasoning (seit 2026-10-31 ohne Knopf in der Reihe; die Stufe steht grau neben
+dem Chatmodell im Chip); auf dem Handy (ohne Werkzeuge in der Reihe) und in
+einem Chat bleibt das Menü vollständig. Reasoning trägt im Menü das Gehirn mit
+Funken, Anhänge dieselbe Büroklammer. In der Reihe stehen
+Zustände („Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
 stehen seit 2026-10-22 in ihren eigenen Farben (auch im Landing-Mockup
 `.lp-composer-model`): bei 14 px erkennt man eine Marke an der Farbe, und auf
 dem Handy gibt es keinen Hover. Unter den Antworten und im Modell-Picker ruhen

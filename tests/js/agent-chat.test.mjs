@@ -3368,12 +3368,14 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
     const menu = d.querySelector('.agent-model-picker .model-picker-menu');
     expect(d.querySelector('.consensus-model').hidden).toBe(true);
-    // The chip names the chat model; what the comparison models do is in its
-    // tooltip and name (and under the field, agent-mode.js).
+    // The chip names the chat model, its reasoning level quiet beside it
+    // (2026-10-31); what the comparison models do is in its tooltip and name
+    // (and under the field, agent-mode.js).
     expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
+    expect(trigger.querySelector('.model-picker-display-level').textContent).toBe('Auto');
     expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
-    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it');
+    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it · Reasoning Auto');
     expect(trigger.textContent).not.toMatch(/Agent|Compare/);
 
     trigger.click();

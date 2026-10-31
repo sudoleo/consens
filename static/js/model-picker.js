@@ -556,12 +556,38 @@
           : `${linked}: ${selectedLabel} writes the answer, ${count} AIs cross-check it`;
     }
 
+    // The chat model's reasoning level stands quietly beside its name
+    // ("DeepSeek V4.1 Flash Auto", Max 2026-10-31, after ChatGPT's "GPT-6.1
+    // Sol High"); Compare's chip names how many answer and has none. While
+    // the list loads, the level the first frame painted (app-bootstrap.js);
+    // a model without the setting shows none.
+    const effort = state.secondarySelect;
+    let level = "";
+    if (!state.presets && effort) {
+      if (effort.dataset.available === "true") level = effort.selectedOptions[0]?.textContent || "";
+      else if (!["ready", "failed"].includes(select.dataset.catalog)) level = window.App.firstFrame?.agentEffort?.() || "";
+    }
+    // Part by part: the sentence before it has its own entry (docs/i18n.md).
+    if (level) ariaLabel = `${window.App.t(ariaLabel)} · ${window.App.t("Reasoning")} ${window.App.t(level)}`;
+
     if (state.displayButton) {
       // The comparison models stay open to change while the chat model is
       // locked (a running message); only both locked disable the chip.
       state.displayButton.disabled = select.disabled
         && !(state.companion && !state.companion.disabled);
-      state.displayButton.querySelector(".model-picker-display-text").textContent = displayLabel;
+      const text = state.displayButton.querySelector(".model-picker-display-text");
+      text.textContent = displayLabel;
+      // Gone, not hidden, without a level: the chip's text is its words alone.
+      let levelNode = state.displayButton.querySelector(".model-picker-display-level");
+      if (!level) levelNode?.remove();
+      else {
+        if (!levelNode) {
+          levelNode = document.createElement("span");
+          levelNode.className = "model-picker-display-level";
+          text.after(levelNode);
+        }
+        if (levelNode.textContent !== window.App.t(level)) levelNode.textContent = level;
+      }
       state.displayButton.title = displayTitle;
       state.displayButton.setAttribute("aria-label", ariaLabel);
       state.displayButton.setAttribute('aria-haspopup', state.menu.getAttribute('role'));

@@ -336,52 +336,28 @@
     // The tools come in when they come back (a new chat, the Compare start),
     // never on the first paint, where they are simply there (Apple-Audit B1).
     if (wasHidden && !tools.hidden) revealBar(tools);
-    // Reasoning stands after the models, right before Send, on the start
-    // screen as the tools; in a chat it is in the (+) menu.
-    const reasoningTool = document.getElementById("composerReasoningToggle");
-    if (reasoningTool) reasoningTool.hidden = !start;
     bar.hidden = !summary;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);
     const comparisonCount = document.querySelector("#agentComparisonMenuOption .attach-menu-value");
     if (comparisonCount) comparisonCount.textContent = String(models.length);
     const icons = document.getElementById("composerModelIcons");
-    const reasoningOn = !beta && !!document.getElementById("reasoningToggle")?.checked;
-    for (const [buttonId, stateId] of [["composerReasoningToggle", "composerReasoningState"], ["agentReasoningMenuOption", "agentReasoningMenuState"]]) {
-      const reasoningButton = document.getElementById(buttonId);
-      if (!reasoningButton) continue;
+    // Reasoning's entry in the (+) menu, the Agent's way to its level (the
+    // chip shows it beside the chat model, model-picker.js). Compare has the
+    // switch row there instead.
+    const reasoningButton = document.getElementById("agentReasoningMenuOption");
+    if (reasoningButton && beta) {
       const effort = document.getElementById("agentReasoningEffort");
       // While the model list loads, Reasoning keeps its look and opens the
       // chip's menu; it is dimmed only for a model without it or a run.
       const loading = !["ready", "failed"].includes(document.getElementById("agentModelDropdown")?.dataset.catalog);
-      reasoningButton.disabled = beta && !loading && (!effort || effort.disabled || effort.dataset.available !== "true");
-      reasoningButton.setAttribute("role", beta ? "button" : "switch");
-      reasoningButton.setAttribute("aria-checked", String(reasoningOn));
-      // A switch says On or Off as its state. As the Agent's menu button the
-      // word is the chosen level, and the name is what it shows ("Reasoning
-      // Auto"), so speech input finds it by its words (WCAG 2.5.3).
-      if (buttonId === "composerReasoningToggle") {
-        if (beta) reasoningButton.removeAttribute("aria-label");
-        else reasoningButton.setAttribute("aria-label", "Reasoning");
-      }
-      reasoningButton.title = reasoningOn ? "Reasoning on · Models think longer before they answer"
-        : "Reasoning off · Models think longer before they answer";
-      // One write, and only of a change: the label is in the first frame
-      // already (app-bootstrap.js).
-      const state = document.getElementById(stateId);
-      // Until agent-chat.js has drawn the levels, the first frame's word
-      // (app-bootstrap.js, data-seeded) stays.
-      if (effort?.dataset.options) delete state.dataset.seeded;
-      const level = state.dataset.seeded ? state.textContent : effort?.selectedOptions[0]?.textContent;
-      const word = beta ? level || "Auto" : reasoningOn ? "On" : "Off";
-      if (state.textContent !== window.App.t(word)) state.textContent = word;
-      if (beta) {
-        reasoningButton.removeAttribute("aria-checked");
-        reasoningButton.setAttribute("aria-haspopup", "listbox");
-        reasoningButton.title = !reasoningButton.disabled ? "Choose reasoning for your next chat message"
-          : effort?.dataset.available === "true" ? "This model thinks at one fixed level"
-            : "This model has no reasoning setting";
-      } else reasoningButton.removeAttribute("aria-haspopup");
+      reasoningButton.disabled = !loading && (!effort || effort.disabled || effort.dataset.available !== "true");
+      const state = document.getElementById("agentReasoningMenuState");
+      const word = effort?.selectedOptions[0]?.textContent || "Auto";
+      if (state && state.textContent !== window.App.t(word)) state.textContent = word;
+      reasoningButton.title = !reasoningButton.disabled ? "Choose reasoning for your next chat message"
+        : effort?.dataset.available === "true" ? "This model thinks at one fixed level"
+          : "This model has no reasoning setting";
     }
     const labels = models.map(pref => {
       const select = document.getElementById(pref.selectId);
@@ -667,16 +643,6 @@
     window.App.runMode.set(this.value, { source: "settings" });
   });
   window.addEventListener("consensio:run-mode-change", onRunModeChange);
-  // Reuse the original controls, including their plan checks and file picker.
-  document.getElementById("composerReasoningToggle")?.addEventListener("click", function (event) {
-    if (isBeta()) {
-      event.stopPropagation();
-      window.App.openModelPicker?.(document.getElementById("agentModelDropdown"), { secondary: true, trigger: this });
-      return;
-    }
-    document.getElementById("reasoningToggle")?.click();
-    renderComposerMode();
-  });
   // From the (+) menu, which closes: a login dialog gives the focus back to (+).
   document.getElementById("agentReasoningMenuOption")?.addEventListener("click", function (event) {
     event.stopPropagation();

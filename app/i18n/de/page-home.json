@@ -272,7 +272,7 @@
   "Last updated: 25 October 2026": "Zuletzt aktualisiert: 25. Oktober 2026",
   "Composer preview: reasoning on auto, attachments and six comparison models": "Vorschau des Eingabefelds: Nachdenken automatisch, Anhänge und sechs Vergleichsmodelle",
   "Composer preview: reasoning on auto, attachments and three comparison models": "Vorschau des Eingabefelds: Nachdenken automatisch, Anhänge und drei Vergleichsmodelle",
-  "<0>3 AIs cross-check<1/></0> <2> <3/> <4>Try the demo</4> </2>": "<0>3 KIs prüfen mit<1/></0> <2> <3/> <4>Demo ausprobieren</4> </2>",
+  "<0>3 AIs cross-check</0> <1> <2/> <3>Try the demo</3> </1>": "<0>3 KIs prüfen mit</0> <1> <2/> <3>Demo ausprobieren</3> </1>",
   "Last updated: 28 October 2026": "Zuletzt aktualisiert: 28. Oktober 2026",
   "Last updated: 31 October 2026": "Zuletzt aktualisiert: 31. Oktober 2026",
   "consens.io is an AI agent whose work other leading AI models check while it works. They mark in its answer what they doubt, and a Watch tells you when the answer changes.": "consens.io ist ein KI-Agent, dem andere führende KI-Modelle beim Arbeiten über die Schulter schauen. Was sie anzweifeln, markieren sie in seiner Antwort, und eine Watch sagt dir, wenn sich die Antwort ändert.",

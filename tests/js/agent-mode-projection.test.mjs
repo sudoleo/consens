@@ -11,7 +11,6 @@ const BODY = `
     <option value="compare">Compare</option></select></div>
   <select id="runModeSetting"><option value="agent">Agent · Beta</option><option value="compare">Compare</option></select>
   <div id="composerTools">
-    <button id="composerReasoningToggle"></button><span id="composerReasoningState"></span>
     <p id="composerModeDescription"></p>
   </div>
   <button id="composerModelPicker" aria-label="Configure models for your next question" title="Configure models">
@@ -76,12 +75,9 @@ describe("agent mode panel projection", () => {
     expect(select.value).toBe('agent');
     // An open Agent chat names its fixed mode on the (+) trigger only.
     expect(document.getElementById('attachTrigger').title).toBe('Chat options');
-    expect(document.getElementById('composerReasoningState').textContent).toBe('High');
-    document.getElementById('composerReasoningToggle').click();
-    // The control that asked travels along (a guest's login dialog gives the focus back to it).
-    expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'),
-      {secondary: true, trigger: document.getElementById('composerReasoningToggle')});
-    window.App.openModelPicker.mockClear();
+    // The (+) menu's entry, the only Reasoning button (since 2026-10-31; the
+    // chip shows the level beside a chat model it names). The control that
+    // asked travels along (a guest's login dialog gives the focus back to it).
     document.getElementById('agentReasoningMenuOption').click();
     expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'),
       {secondary: true, trigger: document.getElementById('attachTrigger')});
@@ -157,22 +153,6 @@ describe("agent mode panel projection", () => {
     dom.window.close();
   });
 
-  it("routes the start tools through the original controls and respects a rejected reasoning toggle", () => {
-    const { window, document, dom } = boot();
-    const deep = document.getElementById('reasoningToggle');
-    const button = document.getElementById('composerReasoningToggle');
-    button.click();
-    expect(deep.checked).toBe(true);
-    expect(button.getAttribute('aria-checked')).toBe('true');
-    expect(button.title).toBe('Reasoning on · Models think longer before they answer');
-    expect(button.title).not.toContain('Pro');
-    expect(document.getElementById('composerReasoningState').textContent).toBe('On');
-    deep.addEventListener('click', event => event.preventDefault());
-    button.click();
-    expect(deep.checked).toBe(true);
-    expect(button.getAttribute('aria-checked')).toBe('true');
-    dom.window.close();
-  });
   it("keeps the mode choice independent of a frozen run and synchronizes selector and settings", () => {
     const { window, document, dom } = boot();
     window.projectAgentModeRun({runId: 'direct', config: {agentMode: false}});

@@ -750,9 +750,12 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       „New chat“ bringt sie zurück. Der Composer ist in beiden Modi
       derselbe: (+) links (auf dem Startbildschirm unter dem Feld, im
       Desktop-Chat vor dem Feld), Modelle und Senden rechts; auch der Compare-Start mit den
-      leeren Antwortkarten zeigt ihn so, samt Werkzeugen in der Reihe
-      (Nachdenken, Arbeitsplatz) und den Marken vor dem Chip; unter dem Feld
-      hängt keine Leiste. Der Modell-Chip
+      leeren Antwortkarten zeigt ihn so, samt Arbeitsplatz in der Reihe und
+      den Marken vor dem Chip; unter dem Feld hängt keine Leiste. Reasoning
+      hat keinen Knopf in der Reihe: in Agent steht die Stufe grau neben dem
+      Chatmodell im Chip („DeepSeek V4.1 Flash Auto“, ab 701 px, nach Wahl im
+      Menü sofort neu), Compares „3 models“ zeigt keine; das (+)-Menü führt
+      Reasoning auch auf dem Startbildschirm. Der Modell-Chip
       sagt nur, wer antwortet („6 models“), nie „Compare“ und keinen Preset-Namen. Direkt nach dem Laden mit gespeicherter Agent-Wahl
       sendet nichts als Compare, solange der Agent-Zugang noch lädt.
 - [ ] Frage eingeben + senden → alle ausgewählten Modelle streamen Antworten.

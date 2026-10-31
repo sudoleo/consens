@@ -38,8 +38,10 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
     try:
         page.goto(phase4_server + '/', wait_until='networkidle')
         page.evaluate('() => document.fonts.ready')
-        expect(page.locator('.lp-composer-tools')).to_have_count(2)
-        expect(page.locator('.lp-composer-preview > .lp-composer-tools')).to_have_count(0)
+        # No chat model chip in the mockups, so no reasoning level either: in
+        # /app it stands beside the model's name (since 2026-10-31).
+        expect(page.locator('.lp-composer-preview .lp-composer-models')).to_have_count(2)
+        expect(page.locator('.lp-composer-preview svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
         # The field opens the app with the caret in the composer; only the demo
         # button starts the demo, and it sits above the field's link.
         expect(page.locator('#heroAskField')).to_have_attribute('href', '/app?focus=1')
@@ -52,19 +54,12 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         hit = page.evaluate('([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.id',
             [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
         assert hit == 'heroAskField'
-        previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
+        previews = page.locator('.lp-composer-preview:has(.lp-composer-models)')
         # The hero and the heat-pump scene show Daily's three reviewers (the
         # app's default since 2026-10-28, the demo's lineup).
         for preview, marks in zip(previews.all(), (3, 3), strict=True):
             field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
-            tools = field.locator('.lp-composer-tools')
-            # The mode lives in the (+) menu (as in /app), so the row's tools
-            # start with Reasoning. Its words are its name (a plain span may
-            # not carry an aria-label, test_a11y_axe.py).
-            tool = tools.locator('.lp-composer-tool')
-            expect(tool).to_have_count(1)
-            expect(tool).to_have_attribute('title', 'Reasoning auto · the model decides how long to think')
-            assert tool.get_attribute('aria-label') is None
+            # The mode lives in the (+) menu, as in /app.
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
             # The reviewers' marks stand inside the field, before their words
             # (no chevron: the words are no picker of their own, as in /app).
@@ -79,26 +74,20 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
                 const field = el.firstElementChild.getBoundingClientRect();
                 return Math.abs(el.getBoundingClientRect().bottom - field.bottom) < 1;
             }""")
-            if width > 700:
-                expect(tools).to_be_visible()
-                # (+), Reasoning, the marks and the chip share one line.
-                centres = field.evaluate("""el => [':is(.lp-attach, .lp-icon-btn)', '.lp-composer-tool', '.lp-composer-models', '.lp-run-chip']
+            if width > 640:
+                # (+), the marks and the reviewers' words share one line.
+                centres = field.evaluate("""el => [':is(.lp-attach, .lp-icon-btn)', '.lp-composer-models', '.lp-run-chip']
                     .map(selector => { const r = el.querySelector(selector).getBoundingClientRect(); return r.top + r.height / 2; })""")
                 assert max(centres) - min(centres) <= 2, centres
-                assert tools.evaluate('el => el.scrollWidth <= el.clientWidth + 1')
-            else:
-                # A phone keeps Reasoning in the (+) menu, as /app does.
-                expect(tools).to_be_hidden()
         output = Path('test-results/public-composer-mockups')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}-{"still" if reduced else "motion"}'
         previews.nth(0).screenshot(path=str(output / f'hero-{suffix}.png'))
-        # The marks leave with the tools after send. A phone leaves the count
+        # The marks leave after send. A phone leaves the count
         # to the reviewers' words and shows no marks.
         ask_bar = page.locator('[data-scene="ask"] .lp-composer-models')
         ask_field = page.locator('[data-scene="ask"] .lp-composer')
         if reduced:
-            assert page.locator('[data-scene="ask"] .lp-composer-tools').evaluate('el => getComputedStyle(el).animationName') == 'none'
             ask_field.scroll_into_view_if_needed()
         else:
             scroll_ask(page, .65)
@@ -123,7 +112,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         }).slice(0, 12).map(el => ({tag:el.tagName, cls:el.className, right:el.getBoundingClientRect().right}))""")
         page.goto(phase4_server + '/consensus-engine', wait_until='networkidle')
         expect(page.locator('.public-product-result')).to_be_visible()
-        expect(page.locator('.lp-composer-tools')).to_have_count(0)
+        expect(page.locator('.lp-composer-models')).to_have_count(0)
         expect(page.get_by_role('heading', name='Is the consensus just the majority answer?')).to_have_count(1)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert errors == []

@@ -2651,40 +2651,10 @@ img { display: block; max-width: 100%; }
   .lp-hero-composer .lp-prompt.lp-hero-prompt:hover { transform: none; }
 }
 /* The row of the /app start screen (composer.css, since 2026-10-30): (+)
-   on the left; on the right the comparison models' marks, the chip and,
-   right before Send, Reasoning. Nothing hangs under the field. */
-.lp-composer-tools {
-  --lp-mode-active: var(--agree);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  min-width: 0;
-  color: var(--ink);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.5;
-  text-align: left;
-  white-space: nowrap;
-  /* backwards, not both: a held end frame would pin opacity at 1, and the
-     fade after send (.is-sent) could only cut, not fade. */
-  animation: lpComposerToolsIn var(--dur-state) var(--ease-out) backwards;
-  transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
-}
-.lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; padding: 3px 6px; }
-.lp-composer-tool-name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.lp-composer-state { font-size: inherit; font-weight: var(--font-weight-regular); color: var(--ink-3); }
-.lp-composer-state.is-on { color: var(--lp-mode-active); }
-.lp-composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+   on the left; on the right the reviewers' marks and words, then Send.
+   Nothing hangs under the field. The mockups have no chat model chip, so
+   no reasoning level either: in /app it stands beside the model's name
+   (since 2026-10-31). */
 .lp-composer-models {
   display: flex;
   align-items: center;
@@ -2697,27 +2667,14 @@ img { display: block; max-width: 100%; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
 .lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
 .dark-mode .lp-composer-mono { filter: invert(1); }
-/* After send the start screen's tools and marks leave, as in /app; they keep
-   their room so scrolling back has a stable progress range. */
-:is(.lp-composer-tools, .lp-composer-models).is-sent { visibility: hidden; opacity: 0; }
-@keyframes lpComposerToolsIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-/* A phone keeps Reasoning in the (+) menu, as /app does, and leaves the
-   count to the reviewers' words ("3 AIs cross-check"): no marks beside
-   them (/app drops them to 380px, where the chat model's chip needs the
-   room; the mockups have no chip and keep the words whole). */
-@media (max-width: 700px) {
-  .lp-composer-tools { display: none; }
-}
+/* After send the start screen's marks leave, as in /app; they keep their
+   room so scrolling back has a stable progress range. */
+.lp-composer-models.is-sent { visibility: hidden; opacity: 0; }
+/* A phone leaves the count to the reviewers' words ("3 AIs cross-check"):
+   no marks beside them (/app drops them to 380px, where the chat model's
+   chip needs the room; the mockups have no chip and keep the words whole). */
 @media (max-width: 640px) {
   .lp-composer-models { display: none; }
-}
-/* The Ask preview can be narrower than the viewport even on desktop: the
-   tools give up their words before the row would break. */
-@container (max-width: 480px) {
-  .lp-composer-tool-label { display: none; }
 }
 @media (max-width: 480px) {
   /* A single auto-minimum grid track let the benchmark teaser widen the page. */
@@ -2725,7 +2682,7 @@ img { display: block; max-width: 100%; }
   .lp-section .bench-hero > * { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lp-composer-tools, .lp-composer-models { animation: none; transition: none; }
+  .lp-composer-models { animation: none; transition: none; }
 }
 
 /* Phones: like the /app composer, the models chip takes its own line above

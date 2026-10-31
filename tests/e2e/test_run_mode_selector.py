@@ -295,18 +295,15 @@ def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, 
 
         page.locator("#attachUploadOption").click()
         asks("Log in to add files.", "#attachTrigger")
+        # Reasoning is the (+) menu's at every width (since 2026-10-31).
+        page.locator("#attachTrigger").click()
+        page.locator("#agentReasoningMenuOption").click()
+        asks("Log in to choose the reasoning.", "#attachTrigger")
         if width < 701:
-            # Phones keep Reasoning and the comparison models in the (+) menu.
-            page.locator("#attachTrigger").click()
-            page.locator("#agentReasoningMenuOption").click()
-            asks("Log in to choose the reasoning.", "#attachTrigger")
+            # Phones keep the comparison models in the (+) menu too.
             page.locator("#attachTrigger").click()
             page.locator("#agentComparisonMenuOption").click()
             asks("Log in to choose your models.", "#attachTrigger")
-        else:
-            # From 701px the start screen's row switches Reasoning itself.
-            page.locator("#composerReasoningToggle").click()
-            asks("Log in to choose the reasoning.", "#composerReasoningToggle")
         chip.click()
         asks("Log in to choose your models.", "#agentModelControls .model-picker-display")
 

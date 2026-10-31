@@ -38,7 +38,7 @@ const BODY = `
         <button id="sendButton" aria-disabled="true" disabled></button>
       </div>
     </div>
-    <div id="composerModeBar"><span id="composerReasoningState">Off</span><button id="composerModelPicker"><span id="composerModelLabel" hidden></span><span id="composerModelIcons"></span></button></div>
+    <div id="composerModeBar"><button id="composerModelPicker"><span id="composerModelLabel" hidden></span><span id="composerModelIcons"></span></button></div>
     <div id="composerStarters"><button class="composer-starter" data-starter="glp1">GLP-1?</button></div>
     <footer class="app-footer"></footer>
   </div>`;
@@ -77,8 +77,9 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.body.classList.contains("is-guest")).toBe(true);
     expect(document.getElementById("authTopActions").hidden).toBe(false);
     // What an account sees by default (Max, Apple-Audit H3): Agent's chip
-    // with the default chat model, what the reviewers do, its greeting and
-    // Reasoning; no Compare chip, no account placeholders.
+    // with the default chat model, what the reviewers do, its greeting; no
+    // Compare chip, no account placeholders. A guest's model list never
+    // loads, so no reasoning level stands beside the model.
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.querySelector(".hero-greeting").textContent).toBe("What do you want to be sure about?");
@@ -87,7 +88,7 @@ describe("the session a first frame expects (B4)", () => {
     expect(chip(document).querySelector(".model-picker-display-count")).toBeNull();
     expect(document.getElementById("composerModelLabel").textContent).toBe("3 AIs cross-check");
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
-    expect(document.getElementById("composerReasoningState").textContent).toBe("Auto");
+    expect(chip(document).querySelector(".model-picker-display-level")).toBeNull();
     expect(document.getElementById("questionInput").placeholder).toBe("Ask anything");
     expect(document.querySelector(".demo-chip").hidden).toBe(false);
     expect(document.querySelectorAll("#bookmarksContainer .skeleton-bookmark")).toHaveLength(0);
@@ -141,9 +142,10 @@ describe("the session a first frame expects (B4)", () => {
 });
 
 describe("the composer's first frame (B1, B2, B13)", () => {
-  // The chip names the chat model, the reviewers say their words next to
-  // their marks under the field (agent-mode.js; Max, 2026-10-27).
-  it("draws Agent's chip with the remembered chat model, the reviewers' words and Reasoning, and no Compare chip", () => {
+  // The chip names the chat model, its reasoning level quiet beside it
+  // (Max, 2026-10-31); the reviewers say their words next to their marks
+  // (agent-mode.js; Max, 2026-10-27).
+  it("draws Agent's chip with the remembered chat model and its level, the reviewers' words, and no Compare chip", () => {
     const look = JSON.stringify({ uid: "u1", agentModel: "Claude Opus 5.5", agentEffort: "High" });
     const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": look,
       pref_check_Grok: "false" } });
@@ -151,10 +153,10 @@ describe("the composer's first frame (B1, B2, B13)", () => {
     expect(document.querySelector(".agent-effort-control").hidden).toBe(true);
     expect(chip(document).dataset.seeded).toBe("true");
     expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Opus 5.5");
-    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5");
+    expect(chip(document).querySelector(".model-picker-display-level").textContent).toBe("High");
+    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5 · Reasoning High");
     expect(document.getElementById("agentModelDropdown").classList.contains("native-model-picker")).toBe(true);
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
-    expect(document.getElementById("composerReasoningState").textContent).toBe("High");
     // Grok left the comparison (the account's stored choice): two marks,
     // "2 AIs cross-check".
     expect(document.getElementById("grokCheck").checked).toBe(false);
@@ -177,7 +179,8 @@ describe("the composer's first frame (B1, B2, B13)", () => {
     const { window, document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": other } });
     // The name the waiting chat model option carries (agent-chat.js).
     expect(window.App.firstFrame.agentModel()).toBe("Claude Sonnet 5.5");
-    expect(document.getElementById("composerReasoningState").textContent).toBe("Auto");
+    expect(window.App.firstFrame.agentEffort()).toBe("");
+    expect(chip(document).querySelector(".model-picker-display-level")).toBeNull();
   });
 
   it("offers the demo to a guest once, decided before the first paint", () => {
@@ -210,10 +213,16 @@ describe("remembering the composer for the next first frame", () => {
     // comparison models do.
     document.getElementById("agentModelDropdown").dataset.catalog = "ready";
     document.getElementById("agentModelDropdown").innerHTML = '<option value="gpt-6-sol" selected>GPT-6 Sol</option>';
-    document.getElementById("agentReasoningEffort").innerHTML = '<option value="medium" selected>Medium</option>';
+    const effort = document.getElementById("agentReasoningEffort");
+    effort.innerHTML = '<option value="medium" selected>Medium</option>';
+    effort.dataset.available = "true";
     window.dispatchEvent(new window.Event("pagehide"));
     const look = JSON.parse(window.localStorage.getItem("consensio.firstFrame.v1"));
     expect(look).toMatchObject({ uid: "u1", agentModel: "GPT-6 Sol", agentEffort: "Medium" });
+    // A model without a reasoning setting leaves no level to paint beside it.
+    effort.dataset.available = "false";
+    window.dispatchEvent(new window.Event("pagehide"));
+    expect(JSON.parse(window.localStorage.getItem("consensio.firstFrame.v1")).agentEffort).toBeUndefined();
     // A placeholder ("Loading…") is never remembered.
     document.getElementById("agentModelDropdown").dataset.catalog = "loading";
     window.dispatchEvent(new window.Event("pagehide"));

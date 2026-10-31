@@ -38,16 +38,16 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('#composerModelIcons img')).to_have_count(3)
         expect(page.locator('#composerModelCount')).to_have_count(0)
         expect(page.locator('#composerAttachButton')).to_have_count(0)
+        # Reasoning has no button in the row (since 2026-10-31): Compare's
+        # switch is in the (+) menu at every width.
+        expect(page.locator('.chat-input-container .composer-models svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
         if width > 700:
-            expect(page.locator('.chat-input-container #composerReasoningToggle')).to_be_visible()
             # The row is one line: (+), the tools, the marks and Send (or the
             # demo offer in its place) share it.
             boxes = [page.locator(selector).bounding_box() for selector in (
-                '#attachTrigger', '#composerReasoningToggle', '#composerModelPicker', '.input-actions-container')]
+                '#attachTrigger', '#composerModelPicker', '.input-actions-container')]
             centres = [box['y'] + box['height'] / 2 for box in boxes]
             assert max(centres) - min(centres) <= 2, centres
-        else:
-            expect(page.locator('#composerReasoningToggle')).to_be_hidden()
         expect(page.locator('#composerModeDescription')).to_contain_text('side by side')
         output = Path('test-results/composer-mode-bar')
         output.mkdir(parents=True, exist_ok=True)
@@ -121,7 +121,6 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.evaluate("document.getElementById('newRunButton').click()")
         expect(bar).to_be_hidden()
         if width > 700:
-            expect(page.locator('#composerReasoningToggle')).to_be_visible()
             expect(picker).to_be_visible()
         expect(mode).to_have_value('compare')
         assert errors == []
@@ -139,15 +138,12 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
         draft = page.locator('#questionInput')
         draft.fill('Keep this question while I explore the app.')
         # Reasoning is open to every tier: no notice, the switch just turns on.
-        # From 701px the start screen's row switches it; a phone's (+) menu.
-        reasoning = page.locator('#composerReasoningToggle')
-        expect(reasoning).to_contain_text('Reasoning')
+        # Compare's switch is in the (+) menu, on the start screen too.
+        reasoning = page.locator('#reasoningToggle')
 
         def switch_reasoning():
-            if width > 700:
-                reasoning.click()
-                return
             page.locator('#attachTrigger').click()
+            expect(page.locator('label[for="reasoningToggle"]')).to_contain_text('Reasoning')
             page.locator('label[for="reasoningToggle"]').click()
             if page.locator('#attachMenu').is_visible():
                 page.locator('#attachTrigger').click()
@@ -161,11 +157,9 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
         # The app's one notice line (App.toast) says it, with the way to the note.
         notice = page.locator('#appToasts .toast.is-shown')
         expect(notice).to_be_hidden()
-        expect(reasoning).to_have_attribute('aria-checked', 'true')
-        expect(page.locator('#reasoningToggle')).to_be_checked()
+        expect(reasoning).to_be_checked()
         switch_reasoning()
-        expect(reasoning).to_have_attribute('aria-checked', 'false')
-        expect(page.locator('#reasoningToggle')).not_to_be_checked()
+        expect(reasoning).not_to_be_checked()
         draft.fill('The composer is still usable.')
         # Files are open to every signed-in account: the picker opens, no notice.
         with page.expect_file_chooser():
@@ -210,7 +204,7 @@ def test_toolbar_reasoning_and_uploads_are_open_and_plan_gates_stay_calm(browser
         expect(notice).to_be_hidden()
         page.evaluate("window.updateUserTierUI('pro', true)")
         expect(notice).to_be_hidden()
-        expect(reasoning).to_have_attribute('aria-checked', 'true')
+        expect(reasoning).to_be_checked()
         switch_reasoning()
         expect(page.locator('#reasoningToggle')).not_to_be_checked()
         with page.expect_file_chooser() as chooser:
