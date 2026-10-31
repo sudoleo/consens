@@ -354,8 +354,10 @@ BRIEF_TOOLS = (
                 "localhost there is the agent's own workbench, where it serves what it builds for the user."),
     ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets on the workbench: the agent "
                  "reads it there for the command that needs it, which is its purpose."),
-    ("update_memory", "update_memory saves lasting facts the user states about themselves, each with a quote of "
-                      "the user's words, as the user allowed in their settings."),
+    # No quote of the user any more (since 2026-10-28): with outside content
+    # in view a change waits for the reviewers' gate (GATE_MEMORY_NOTE).
+    ("update_memory", "update_memory saves lasting facts about the user, as the user allowed in their settings; "
+                      "once outside content is in view, a change waits for the reviewers' approval first."),
     ("update_plan", "update_plan keeps the plan of a long task, as the app asks the agent to."),
 )
 BRIEF_NO_MEMORY = "No memory of the user is in use for this message."
