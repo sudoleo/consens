@@ -59,8 +59,8 @@ it('marks pages read for an answer without a comparison in its sources', () => {
   expect(panel.textContent).toContain('Read by the agent');
   dom.window.close();
 });
-// Only the demo's scripted turn (demo.js) still shows a comparison of the
-// comparison mode while it runs; saved turns end finished.
+// A comparison-mode turn saved before 2026-10-31 that ended while its
+// answers were still pending keeps saying so.
 it('shows the comparison purpose while its answers and checks are still pending', () => {
   const {window: w, document: d, dom} = setup();
   const host = d.createElement('div');
@@ -370,7 +370,7 @@ it('shows a model stopped mid-answer as a marked, readable incomplete answer, an
   expect(panel.textContent).toContain('GPT Luna: stopped before it finished, it was still writing when the answer was finished.');
   dom.window.close();
 });
-// The demo's answer check (demo.js) and the reviewers' marks share the reveal.
+// A saved answer check and the reviewers' marks share the reveal.
 it('strokes the marks on once, in reading order, when an answer is first checked', () => {
   vi.useFakeTimers();
   const {window: w, document: d, dom} = setup();

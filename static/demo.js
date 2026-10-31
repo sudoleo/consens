@@ -12,25 +12,23 @@ if (!Array.isArray(window.currentEvidenceSources)) {
 /* === DEMO: Data & Utilities =======================================
    Das Szenario ist eine Entscheidung, fuer die man sich im echten Leben
    eine zweite und dritte Meinung holt: eine Waermepumpe im Haus von 1978
-   mit den alten Heizkoerpern. Sie kostet fuenfstellig, die Fachleute sind
-   sich wirklich uneins, und die Uneinigkeit ist die Nachricht, nicht der
-   Fehler. Deshalb hat der Lauf drei strittige Stellen (ein kritischer
-   Widerspruch zur Vorlauftemperatur, ein kleiner zum Gaskessel als Reserve,
-   eine andere Gewichtung bei der Reihenfolge) statt einer Randnotiz, und
-   der Score liegt im mittleren Bereich. Quellenlisten gibt es bewusst
-   nicht: erfundene Belege waeren die schlechtere Demo.
+   mit den alten Heizkoerpern. Sie kostet fuenfstellig, und die Fachleute
+   sind sich wirklich uneins. Seit 2026-10-31 spielt die Demo den einen
+   Modus des Agenten: Eine KI arbeitet, die gewaehlten KIs folgen ihrer
+   Arbeit und pruefen ihre Antwort. Der Agent fragt sie einmal (hier lohnen
+   unabhaengige Antworten), schreibt die Antwort selbst, und die Pruefer
+   haben drei Anmerkungen: eine falsche Stelle (der Agent hat die Hausdaten
+   der Frage verwechselt), eine zweifelhafte und eine unvollstaendige. Kein
+   Score. Quellenlisten gibt es bewusst nicht: erfundene Belege waeren die
+   schlechtere Demo.
    ================================================================= */
 // A German page shows the scenario in German: every text of it through the
 // dictionary (docs/i18n.md), markup through i18n.js's own rules. Anchors and
-// quotes are entries of their own, each a passage of the German answer, so
-// the marks still find their place. Names and numbers have no entry and stay.
-// Values the app reads are no text and stay English: the dictionary has
-// "contradiction" (a UI word), and a difference typed "Widerspruch" is none,
-// so the red mark, its "vs" and "Critical" were gone.
-const DEMO_VALUE_FIELDS = new Set([
-  "type", "severity", "coverage", "level",
-  "model", "models", "agree", "models_compared", "best_model", "provider"
-]);
+// quoted words are entries of their own, each a passage of the German
+// answer, so the marks still find their place. Names and numbers have no
+// entry and stay. Values the app reads are no text and stay English: a
+// note of kind "falsch" is none, and its red mark would be gone.
+const DEMO_VALUE_FIELDS = new Set(["kind", "model", "models", "provider"]);
 function demoInPageLanguage(value) {
   const t = window.App?.t;
   if (window.App?.lang !== "de" || !t) return value;
@@ -160,264 +158,62 @@ const DEMO_DATA = demoInPageLanguage({
   <p>Two things I would insist on: a room-by-room heat-loss calculation, and a heat pump sized from it rather than from the old boiler. An oversized heat pump cycles on and off, and that wears it out faster than a cold January.</p>
 </div>`
   },
-  consensus:
-`<div class="ai-consensus">
-  <p>Consensus: probably yes, with a few radiators changed, not all of them</p>
-  <p>All six models think a heat pump can heat this house. The walls were insulated in 2015, and that matters more than the year it was built. What none of them can tell you from here is which rooms fall short, and that is the whole question.</p>
+  // The agent's own answer, written after it asked the AIs once. The first
+  // line is its verdict (bold in the chat, demoAgentAnswer). One sentence
+  // mixes up the house's data (the walls were insulated in 2015, the
+  // windows are the original glazing): the reviewers' wrong note is about it.
+  answer:
+`<div class="ai-answer">
+  <p>Probably yes, with a few radiators changed, not all of them.</p>
+  <p>The walls and windows were renewed in 2015, and that matters more than the year the house was built. What nobody can tell you from here is which rooms fall short, and that is the whole question.</p>
   <h4>Do this first</h4>
   <ul>
     <li>Get a room-by-room heat-loss calculation before anyone quotes a heat pump size.</li>
-    <li>Test it this winter: turn the boiler down to 50 °C for a cold week and note which rooms stay warm.</li>
+    <li>Test it this winter: turn the boiler down to 50 °C for a cold week and note which rooms stay warm.</li>
     <li>Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones.</li>
-    <li>Original 1970s radiators are often larger than the room needs today, because they were sized for an uninsulated house.</li>
     <li>Have the heat pump sized from the calculation, not from the old boiler’s output.</li>
   </ul>
   <h4>Decide for yourself</h4>
   <ul>
-    <li>The models split on the target flow temperature: three would keep most radiators and run at 55 °C, three would replace more of them to run at 45 °C or below.</li>
-    <li>They also disagree on what that costs you: estimates for the efficiency gap between 55 °C and 45 °C range from a few percent to about a quarter.</li>
-    <li>Keeping the gas boiler as a backup for the coldest days divides them as well: a cheap safety net for some, two systems to maintain for others.</li>
-    <li>Whether to start with the survey or with the winter test is a matter of order, not of substance.</li>
+    <li>The answers I asked for split on the target flow temperature: keep most radiators and run at 55 °C, or replace more of them to run at 45 °C or below.</li>
+    <li>They also disagree on what that costs you: estimates for the efficiency gap between 55 °C and 45 °C range from a few percent to about a quarter.</li>
   </ul>
-  <h4>What that looks like</h4>
-  <blockquote>Heat-loss survey: 140 m² at roughly 8 kW. Test week at 50 °C: the living room and two bedrooms stay warm, the bathroom and the north bedroom do not. [Replace those two radiators, or more.] Heat pump sized at 8 to 9 kW. [Target flow temperature.]</blockquote>
-  <p>Both bracketed parts are the ones the models could not settle for you, and both come down to the same trade: what you spend once on radiators against what you spend every winter on electricity.</p>
+  <p>Both come down to the same trade: what you spend once on radiators against what you spend every winter on electricity.</p>
 </div>`,
 
-  // Strukturierte Auswertung, exakt das Schema, das eine echte Consensus-Query
-  // liefert. Treibt Verdict-Header, Agreement-Badges und die Differences-Karten
-  // (inkl. Contradiction) ueber window.renderConsensusInsights.
-  //
-  // Der Score ist nicht gegriffen, sondern die Rechnung aus
-  // app/services/llm/consensus_scoring.py auf genau diese Daten:
-  // Claim-Schnitt 15.8333/19 = 0.8333, minus 0.25 (major) - 0.10 (minor)
-  // - 0.05 (emphasis) = 0.4333 -> 43, Deckel 0.64 greift nicht. Jeder
-  // pruefbare Satz traegt einen Claim; dieselbe Uneinigkeit taucht deshalb
-  // auch im Beispiel unten in den Klammern auf.
-  differencesData: {
-    models_compared: DEMO_MODELS,
-    best_model: "Anthropic",
-    judges: { differences: { provider: "Gemini" } },
-    agreement: {
-      score: 43,
-      level: "partially",
-      model_count: 6,
-      major_contradictions: 1,
-      minor_contradictions: 1,
-      emphases: 1
+  // What the reviewers note on that answer, in the review's own shape
+  // (agent_audit.place_marks): the sentence it concerns (anchor), the
+  // quoted words in it (target), its kind and the reviewer's note. Each
+  // reviewer one note; a reviewer the Daily lineup does not have stays out.
+  notes: [
+    {
+      model: "OpenAI",
+      kind: "wrong",
+      anchor: "The walls and windows were renewed in 2015, and that matters more than the year the house was built.",
+      target: "walls and windows were renewed in 2015",
+      note: "The question says only the walls were insulated in 2015. The windows are still the original double glazing."
     },
-    claims: [
-      {
-        anchor: "Consensus: probably yes, with a few radiators changed",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "All six models think a heat pump can heat this house",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "The walls were insulated in 2015",
-        agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "What none of them can tell you from here",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Get a room-by-room heat-loss calculation",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Test it this winter",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"],
-        dissent: [{
-          model: "DeepSeek",
-          quote: "Do not rely on a boiler test alone", target: "Test it this winter"
-        }],
-        coverage: "split"
-      },
-      {
-        anchor: "Rooms that stay warm keep their radiators",
-        agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
-        dissent: [
-          { model: "Mistral", quote: "Replace the radiators in every room you use daily", target: "keep their radiators" },
-          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most", target: "keep their radiators" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "Original 1970s radiators are often larger than the room needs today",
-        agree: ["OpenAI", "Anthropic", "Gemini", "Grok"],
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Have the heat pump sized from the calculation",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "The models split on the target flow temperature",
-        agree: ["OpenAI", "Gemini", "Grok"],
-        dissent: [
-          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below", target: "target flow temperature" },
-          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C", target: "target flow temperature" },
-          { model: "DeepSeek", quote: "so the system can run at 45 °C or below", target: "target flow temperature" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "They also disagree on what that costs you",
-        agree: ["Mistral", "Anthropic", "DeepSeek"],
-        dissent: [
-          { model: "OpenAI", quote: "costs a few percent on the annual bill", target: "to about a quarter" },
-          { model: "Gemini", quote: "The step down to 45 °C is worth a few percent", target: "to about a quarter" },
-          { model: "Grok", quote: "saves less than the radiators cost", target: "to about a quarter" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "Keeping the gas boiler as a backup for the coldest days divides them as well",
-        agree: ["Mistral", "Gemini", "Grok"],
-        dissent: [
-          { model: "OpenAI", quote: "I would also take the gas boiler out completely", target: "Keeping the gas boiler as a backup" },
-          { model: "Anthropic", quote: "Do not keep the gas boiler as a backup", target: "Keeping the gas boiler as a backup" },
-          { model: "DeepSeek", quote: "You keep the standing charge and lose the reason you switched", target: "Keeping the gas boiler as a backup" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "Whether to start with the survey or with the winter test",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Heat-loss survey: 140 m² at roughly 8 kW.",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Test week at 50 °C",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"],
-        dissent: [{
-          model: "DeepSeek",
-          quote: "A boiler at 50 °C on a mild day says little about a heat pump at minus ten", target: "Test week at 50 °C"
-        }],
-        coverage: "split"
-      },
-      {
-        anchor: "Replace those two radiators, or more.",
-        agree: ["OpenAI", "Gemini", "Grok"],
-        dissent: [
-          { model: "Mistral", quote: "Replace the radiators in every room you use daily", target: "Replace those two radiators" },
-          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C", target: "Replace those two radiators" },
-          { model: "DeepSeek", quote: "Replace the radiators in the rooms you heat most", target: "Replace those two radiators" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "Heat pump sized at 8 to 9 kW.",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      },
-      {
-        anchor: "Target flow temperature.",
-        agree: ["OpenAI", "Gemini", "Grok"],
-        dissent: [
-          { model: "Mistral", quote: "That is what lets the heat pump run at 45 °C or below", target: "Target flow temperature" },
-          { model: "Anthropic", quote: "Plan for 45 °C rather than 55 °C", target: "Target flow temperature" },
-          { model: "DeepSeek", quote: "so the system can run at 45 °C or below", target: "Target flow temperature" }
-        ],
-        coverage: "split"
-      },
-      {
-        anchor: "Both bracketed parts are the ones the models could not settle for you",
-        agree: DEMO_MODELS,
-        dissent: [],
-        coverage: "supported"
-      }
-    ],
-    differences: [
-      {
-        claim: "Run at 55 °C with most radiators, or replace more of them for 45 °C?",
-        // Stelle im Konsenstext, die inline markiert wird (Wellenlinie +
-        // Marker). Muss woertlich im Antworttext oben vorkommen.
-        consensus_anchor: "three would replace more of them to run at 45 °C or below",
-        type: "contradiction",
-        severity: "major",
-        positions: [
-          {
-            stance: "55 °C. Keep every radiator that passes the test; the last ten degrees save little.",
-            models: ["OpenAI", "Gemini", "Grok"],
-            quote: "replacing every radiator to get there costs more than that difference will save in a decade."
-          },
-          {
-            stance: "45 °C. Replace more radiators now; the efficiency is paid every winter.",
-            models: ["Anthropic", "Mistral", "DeepSeek"],
-            quote: "The efficiency difference is around a quarter, and you pay it every winter for twenty years."
-          }
-        ],
-        verify: "Ask for the heat pump’s rated efficiency at 35 °C and at 55 °C from its datasheet, and get a price for the extra radiators. That turns the disagreement into arithmetic."
-      },
-      {
-        claim: "Keep the gas boiler as a backup?",
-        consensus_anchor: "two systems to maintain for others",
-        type: "contradiction",
-        severity: "minor",
-        positions: [
-          {
-            stance: "Keep it for the first winter, then decide.",
-            models: ["Mistral", "Gemini", "Grok"],
-            quote: "Keep the gas boiler connected for the first winter as a backup."
-          },
-          {
-            stance: "Take it out; a backup becomes the system that runs.",
-            models: ["OpenAI", "Anthropic", "DeepSeek"],
-            quote: "a backup tends to become the system that runs whenever it is cold."
-          }
-        ],
-        verify: "Ask what the gas connection costs per year with no gas used. If it is small, one winter of backup is cheap insurance."
-      },
-      {
-        claim: "Survey first, or winter test first?",
-        consensus_anchor: "a matter of order, not of substance",
-        type: "emphasis",
-        severity: "minor",
-        positions: [
-          {
-            stance: "Test first: it is free and shows which rooms matter.",
-            models: ["OpenAI", "Gemini", "Grok"],
-            quote: "Every room that stays warm is a room you do not need to touch."
-          },
-          {
-            stance: "Survey first: without it every answer is a guess.",
-            models: ["Anthropic", "Mistral", "DeepSeek"],
-            quote: "Without it, every answer you get, including this one, is a guess."
-          }
-        ],
-        verify: "Both camps want both. The test can start this week; the survey is what the quote should be built on."
-      }
-    ]
-  }
+    {
+      model: "DeepSeek",
+      kind: "doubtful",
+      anchor: "Test it this winter: turn the boiler down to 50 °C for a cold week and note which rooms stay warm.",
+      target: "for a cold week",
+      note: "A boiler at 50 °C on a mild day says little about a heat pump at minus ten. Run the test in the coldest week you get, and let the calculation decide."
+    },
+    {
+      model: "Anthropic",
+      kind: "incomplete",
+      anchor: "Have the heat pump sized from the calculation, not from the old boiler’s output.",
+      target: "Have the heat pump sized from the calculation",
+      note: "Hot water is missing. A cylinder reheated to 60 °C for hygiene changes what the heat pump has to deliver, so ask how the quote handles it."
+    }
+  ]
 });
 
 // Six authored viewpoints are instantiated for the configured Daily families.
-// Keep every claim/quote attached to the same viewpoint if an admin changes
-// a preset family (for example Claude -> Kimi). These are local demo fixtures.
+// Keep every answer and reviewer's note attached to the same viewpoint if an
+// admin changes a preset family (for example Claude -> Kimi). These are
+// local demo fixtures.
 function buildDemoDataForModels(models) {
   const replacements = models.filter(model => !DEMO_MODELS.includes(model));
   const mapping = Object.fromEntries(DEMO_MODELS.map(model => [model,
@@ -638,45 +434,43 @@ function renderDemoModelResponse(model, outputEl) {
 
 /* === DEMO: Agent turn ===================================================
    Agent is where every question starts, so the demo plays an Agent turn on
-   the real Agent surfaces: the activity line (agent-activity.js), the
-   streamed answer (markdown-stream.js) and the answer check with its marks,
-   agreement score and evidence links (agent-review.js). The run is local and
-   scripted from the same fixtures as the Compare demo: no request, no
-   bookmark, no vote. agent-chat.js keeps the answer panel on screen while the
-   demo owns it (App.agentChat.demoView), also for guests without Agent access.
+   the real Agent surfaces, in the one mode every account has since
+   2026-10-31: one AI does the work, the AIs of the Daily lineup follow it
+   and review its answer. The activity line and its notes
+   (agent-activity.js), the reviewers and the AIs it asks beside the clock
+   and in the panel (App.agentDelegation.demo, sessions of kind "audit" and
+   "comparison"), the streamed answer (markdown-stream.js), then the review
+   of exactly that text (agent-review.js, a review of mode "audit"): the
+   reviewers' marks in the answer, Notes and the Answers of the AIs it
+   asked under it. No score. The run is local and scripted from the same
+   fixtures as the Compare demo: no request, no bookmark, no vote.
+   agent-chat.js keeps the answer panel on screen while the demo owns it
+   (App.agentChat.demoView), also for guests.
    ======================================================================= */
 const DEMO_AGENT_ID = "demo";
 const DEMO_AGENT_HASH = "demo-answer-v1";
-const DEMO_AGENT_BASIS = "demo-basis";
 const DEMO_AGENT_STEPS = {
-  plan: 900,            // first progress note
-  compare: 1900,        // compare_models starts
-  modelSpread: 5200,    // last comparison answer lands this long after compare
+  plan: 900,            // first progress note; the reviewers start following
+  round: 2300,          // the reviewers' first round on the work so far
+  compare: 2700,        // compare_models: the agent asks the AIs once
+  modelSpread: 4400,    // the last answer lands this long after compare
   afterCompare: 900,    // progress note, then the answer starts streaming
-  check: 2300           // the judges hold the fixed answer against all six
+  review: 2600          // the reviewers' final review of the fixed answer
 };
 const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 42 };
 const DEMO_AGENT_NOTES = demoInPageLanguage({
-  plan: "Whether this works depends on the heat loss of each room, not on the year the house was built. I will get six independent reads before I answer.",
-  compared: "All six say it can work. They split on the flow temperature and on what it costs, so the answer has to say so instead of picking a side."
+  plan: "Whether this works depends on the heat loss of each room, not on the year the house was built. Installers genuinely disagree here, so I will ask the other AIs for independent answers before I answer.",
+  compared: "They agree it can work. They split on the flow temperature and on what it costs, so the answer has to say so instead of picking a side."
 });
+// A reviewer's round without a note, in the words of agent_audit.review_text.
+// The panel compares it as a value (agent-delegation.js NO_OBJECTION), so it
+// is never translated.
+const DEMO_NO_OBJECTIONS = "No objections.";
 
-const capitalize = text => text.charAt(0).toUpperCase() + text.slice(1);
-// The Agent writes its own answer: the consensus fixture without its
-// "Consensus:" label ("Konsens:" on a German page), opened by the verdict in bold.
-const DEMO_CONSENSUS_LABEL = /^(?:Consensus|Konsens):\s*/;
+// The agent writes its own answer: the fixture as Markdown, the verdict in
+// its first line bold.
 function demoAgentAnswer() {
-  return demoResponseMarkdown(activeDemoData.consensus || "")
-    .replace(/^(?:Consensus|Konsens):\s*(.+)$/m, (_, verdict) => `**${capitalize(verdict.replace(/[.\s]*$/, ""))}.**`);
-}
-function demoAgentDifferences() {
-  const data = JSON.parse(JSON.stringify(activeDemoData.differencesData || {}));
-  for (const claim of data.claims || []) {
-    if (typeof claim.anchor === "string" && DEMO_CONSENSUS_LABEL.test(claim.anchor)) {
-      claim.anchor = capitalize(claim.anchor.replace(DEMO_CONSENSUS_LABEL, ""));
-    }
-  }
-  return data;
+  return demoResponseMarkdown(activeDemoData.answer || "").replace(/^(.+)$/m, "**$1**");
 }
 function demoAgentModels() {
   return activeDemoModels.map(key => {
@@ -685,39 +479,68 @@ function demoAgentModels() {
     const option = select?.selectedOptions?.[0];
     return {
       key,
+      provider: pref?.provider || key.toLowerCase(),
       label: (option?.textContent || "").trim() || pref?.label || key,
       model: select?.value || "",
       text: demoResponseMarkdown(activeDemoData.responses[key] || "")
     };
   });
 }
-// The review object a real turn carries (agent_review), reduced to one
-// comparison: who has answered, the fixed answer version and its check.
-function demoAgentReview({ answered, pending, status, answer, checked }) {
-  const comparison = {
+// The reviewers' notes of the lineup on screen, numbered like the review's
+// marks (agent_audit.place_marks `mark`).
+function demoAgentNotes(models) {
+  const keys = new Set(models.map(model => model.key));
+  return (activeDemoData.notes || []).filter(note => keys.has(note.model))
+    .map((note, index) => ({ ...note, mark: index + 1 }));
+}
+// compare_models as the review carries it (agent_comparison.py _rebuild):
+// running until the first answer, partial while others still answer.
+function demoAgentComparison(models, answered) {
+  const pending = models.filter(model => !answered.includes(model));
+  return {
     id: "demo-comparison",
-    basis_hash: DEMO_AGENT_BASIS,
-    status: pending.length ? "running" : "completed",
     question: DEMO_TYPED_QUESTION,
-    reason: "A five-figure decision where installers genuinely disagree: six models assess the house independently.",
+    context: DEMO_SCENARIO_PROMPT.split("\n\n")[1] || "",
+    asked: models.map(model => model.provider),
+    status: !answered.length ? "running" : pending.length ? "partial" : "succeeded",
     answers: answered.map(model => ({
-      provider: model.key, provider_label: model.key,
+      provider: model.provider, provider_label: model.key,
       model: { label: model.label, model: model.model }, text: model.text, sources: []
     })),
-    pending_models: pending.map(model => ({ label: model.label, model: model.model })),
-    failed_models: []
+    failed_models: [],
+    ...(pending.length ? { pending_models: pending.map(model => ({ label: model.label, model: model.model })) } : {})
   };
-  const review = { status, comparisons: [comparison], versions: [], checks: [] };
+}
+// The review a real turn carries (agent_review, agent_comparison.snapshot):
+// mode "audit", the reviewers, the comparison, once fixed the answer's
+// version, and once reviewed the notes on its sentences.
+function demoAgentReview({ models, comparison, status, answer = "", notes = null }) {
+  const review = {
+    version: 1, mode: "audit", status, answer_version: 0, answer_hash: "",
+    comparisons: comparison ? [comparison] : [], versions: [],
+    audit: {
+      reviewers: models.map(model => ({
+        provider: model.provider, provider_label: model.key,
+        model: { label: model.label, model: model.model }, status: notes ? "completed" : "running"
+      }))
+    }
+  };
   if (answer) {
-    review.answer_version = "v1";
+    review.answer_version = 1;
     review.answer_hash = DEMO_AGENT_HASH;
-    review.versions = [{ id: "v1", text: answer, hash: DEMO_AGENT_HASH, status }];
+    review.versions = [{ id: 1, text: answer, hash: DEMO_AGENT_HASH, status }];
   }
-  if (checked) {
-    review.checks = [{
-      comparison_id: comparison.id, answer_hash: DEMO_AGENT_HASH, basis_hash: DEMO_AGENT_BASIS,
-      status: "succeeded", issues: [], differences_data: checked
-    }];
+  if (notes) {
+    const claims = [];
+    for (const note of notes) {
+      let claim = claims.find(item => item.anchor === note.anchor);
+      if (!claim) {
+        claim = { anchor: note.anchor, audit: true, kind: note.kind, agree: [], dissent: [] };
+        claims.push(claim);
+      }
+      claim.dissent.push({ model: note.model, kind: note.kind, note: note.note, target: note.target, mark: note.mark });
+    }
+    Object.assign(review.audit, { claims, unplaced: [], process: [] });
   }
   return review;
 }
@@ -749,35 +572,49 @@ function clearDemoAgentAnswer() {
   window.App.agentDelegation?.demo?.(null);
 }
 // The calls behind the turn, as agent-delegation.js shows a real one: the
-// model icons beside the clock, the activity panel and the light under it.
-// Token counts are estimated from the fixture texts (about 4 characters per
-// token), so the panel reads like a run without claiming a measured one.
+// reviewers from the first step (one session each, its rounds and its final
+// review), the AIs the agent asked once it asks; a reviewer and its answer
+// share one icon. Token counts are estimated from the fixture texts (about
+// 4 characters per token), so the panel reads like a run without claiming a
+// measured one.
 const DEMO_AGENT_PROMPT_TOKENS = 1180;
-function demoAgentUsage(text) {
-  return { input_tokens: DEMO_AGENT_PROMPT_TOKENS, output_tokens: Math.round(text.length / 4), complete: true };
+function demoAgentUsage(input, output) {
+  return { input_tokens: DEMO_AGENT_PROMPT_TOKENS + Math.round(input.length / 4),
+    output_tokens: Math.round(output.length / 4), complete: true };
 }
-function demoAgentCalls({ models, answered, judges }) {
-  const comparisons = models.map(model => {
-    const done = answered.includes(model);
+// A reviewer's final review in the words of agent_audit.review_text.
+function demoFinalReview(notes) {
+  return notes.length
+    ? notes.map(note => `- **${note.kind}** · “${note.target}”: ${note.note}`).join("\n")
+    : DEMO_NO_OBJECTIONS;
+}
+function demoAgentCalls({ models, rounds, asked, answered, answer, reviewed, notes }) {
+  const reviewers = models.map(model => {
+    const own = notes.filter(note => note.model === model.key);
+    const messages = [...rounds, ...(reviewed ? [{ kind: "result", text: demoFinalReview(own), created_at: reviewed }] : [])];
     return {
-      id: `demo-${model.key}`, kind: "comparison", title: model.label,
-      status: done ? "completed" : "working",
-      model: { label: model.label, model: model.model, provider: model.key },
-      text: done ? model.text : "", usage: done ? demoAgentUsage(model.text) : null
+      id: `demo-review-${model.key}`, kind: "audit", title: `Review · ${model.label}`,
+      status: reviewed ? "completed" : "working", created_at: rounds.started,
+      model: { label: model.label, model: model.model, provider: model.key }, messages,
+      usage: reviewed ? demoAgentUsage(answer, messages.at(-1).text) : null
     };
   });
-  const checks = judges.map(judge => ({
-    id: `demo-${judge.id}`, kind: "judge", title: judge.title, status: judge.status,
-    model: { label: "Answer check", model: "" },
-    usage: judge.status === "completed" ? { input_tokens: 4200, output_tokens: 640, complete: true } : null
-  }));
-  const metered = [...comparisons, ...checks].filter(call => call.usage);
+  const comparisons = asked ? models.map(model => {
+    const done = answered.includes(model);
+    return {
+      id: `demo-${model.key}`, kind: "comparison", title: `Comparison 1 · ${model.label}`,
+      status: done ? "completed" : "working", created_at: asked,
+      model: { label: model.label, model: model.model, provider: model.key },
+      text: done ? model.text : "", usage: done ? demoAgentUsage(DEMO_SCENARIO_PROMPT, model.text) : null
+    };
+  }) : [];
+  const metered = [...reviewers, ...comparisons].filter(call => call.usage);
   const usage = metered.length ? {
     input_tokens: metered.reduce((n, call) => n + call.usage.input_tokens, 0),
     output_tokens: metered.reduce((n, call) => n + call.usage.output_tokens, 0),
     complete: true, measured_calls: metered.length, unmetered_calls: 0
   } : null;
-  return { agents: [...comparisons, ...checks], usage };
+  return { agents: [...reviewers, ...comparisons], usage };
 }
 
 async function runAgentDemoFlow() {
@@ -815,15 +652,21 @@ async function runAgentDemoFlow() {
   const host = App.agentChat?.demoView?.(true);
   const body = document.getElementById("agentAnswerBody");
   const models = demoAgentModels();
+  const notes = demoAgentNotes(models);
   const answer = demoAgentAnswer();
-  const checked = demoAgentDifferences();
   const started = Date.now();
+  const iso = ms => new Date(started + ms).toISOString();
   const events = [];
+  // The reviewers' rounds on the work so far; `started` dates their sessions.
+  const rounds = [];
+  rounds.started = iso(DEMO_AGENT_STEPS.plan);
+  const answered = [];
   let review = null;
   let answerText = "";
   let running = true;
-  const answered = [];
-  const judges = [];
+  let following = false;
+  let asked = "";
+  let reviewed = "";
 
   const paint = () => {
     if (!live() || !host) return;
@@ -833,25 +676,34 @@ async function runAgentDemoFlow() {
       status: running ? "running" : "succeeded",
       elapsedMs: Date.now() - started
     });
-    // The calls start with compare_models, as in a real turn.
-    if (review && document.body.classList.contains("agent-demo-active")) App.agentDelegation?.demo?.({ turnId: `demo-${runId}`, running, ...demoAgentCalls({ models, answered, judges }) });
+    // The reviewers follow from the first step, as in a real turn.
+    if (following && document.body.classList.contains("agent-demo-active")) {
+      App.agentDelegation?.demo?.({ turnId: `demo-${runId}`, running,
+        ...demoAgentCalls({ models, rounds, asked, answered, answer, reviewed, notes: reviewed ? notes : [] }) });
+    }
   };
   const at = async ms => {
     const wait = started + ms - Date.now();
     if (wait > 0) await sleep(wait);
     return live();
   };
+  const round = ms => rounds.push({ kind: "round", text: DEMO_NO_OBJECTIONS, created_at: iso(ms) });
   paint();
 
   if (!await at(DEMO_AGENT_STEPS.plan)) return;
   events.push({ version: 1, kind: "progress", id: "demo-plan", text: DEMO_AGENT_NOTES.plan });
+  following = true;
+  paint();
+  if (!await at(DEMO_AGENT_STEPS.round)) return;
+  round(DEMO_AGENT_STEPS.round);
   paint();
 
-  // compare_models: six independent answers, each landing on its own beat.
+  // compare_models: the AIs answer independently, each on its own beat.
   if (!await at(DEMO_AGENT_STEPS.compare)) return;
   const compareTool = { version: 1, kind: "tool", id: "demo-compare", name: "compare_models", status: "running" };
   events.push(compareTool);
-  review = demoAgentReview({ answered, pending: models, status: "required" });
+  asked = iso(DEMO_AGENT_STEPS.compare);
+  review = demoAgentReview({ models, comparison: demoAgentComparison(models, answered), status: "required" });
   paint();
   const order = DEMO_PHASES.order.filter(key => models.some(model => model.key === key))
     .concat(models.map(model => model.key).filter(key => !DEMO_PHASES.order.includes(key)));
@@ -859,11 +711,12 @@ async function runAgentDemoFlow() {
     const landing = DEMO_AGENT_STEPS.compare + Math.round(DEMO_AGENT_STEPS.modelSpread * ((i + 1) / order.length) ** 1.15);
     if (!await at(landing)) return;
     answered.push(models.find(model => model.key === order[i]));
-    review = demoAgentReview({ answered, pending: models.filter(model => !answered.includes(model)), status: "required" });
+    review = demoAgentReview({ models, comparison: demoAgentComparison(models, answered), status: "required" });
     paint();
   }
   compareTool.status = "succeeded";
   events.push({ version: 1, kind: "progress", id: "demo-compared", text: DEMO_AGENT_NOTES.compared });
+  round(DEMO_AGENT_STEPS.compare + DEMO_AGENT_STEPS.modelSpread);
   paint();
 
   // The answer, written in its own step after the comparison.
@@ -885,17 +738,22 @@ async function runAgentDemoFlow() {
   }
   showDemoAgentAnswer(body, answerText, false);
 
-  // The judges check that exact text; a quiet sheen says it is still going on.
-  review = demoAgentReview({ answered, pending: [], status: "running", answer: answerText });
-  judges.push({ id: "differences", title: "Differences judge", status: "working" },
-    { id: "coverage", title: "Coverage judge", status: "working" });
+  // The reviewers review exactly this text: the row under it stands with
+  // Notes waiting, a quiet sheen passes over the answer (agent-chat.js
+  // setAnswerChecking), the head says "Reviewing".
+  const comparison = demoAgentComparison(models, answered);
+  const reviewTool = { version: 1, kind: "tool", id: "demo-review", name: "audit_answer", status: "running" };
+  events.push(reviewTool);
+  review = demoAgentReview({ models, comparison, status: "running", answer: answerText });
   body?.classList.add("is-answer-checking");
+  App.agentReview?.render(body, review, { key: DEMO_AGENT_ID, question: DEMO_SCENARIO_PROMPT });
   paint();
-  await sleep(DEMO_AGENT_STEPS.check);
+  await sleep(DEMO_AGENT_STEPS.review);
   if (!live()) return;
 
-  review = demoAgentReview({ answered, pending: [], status: "succeeded", answer: answerText, checked });
-  judges.forEach(judge => { judge.status = "completed"; });
+  reviewTool.status = "succeeded";
+  reviewed = new Date().toISOString();
+  review = demoAgentReview({ models, comparison, status: "succeeded", answer: answerText, notes });
   running = false;
   paint();
   if (body) {
@@ -941,7 +799,8 @@ async function runDemoFlow() {
   activeDemoModels = (window.App.modelPrefs || []).filter(pref => daily?.models?.[pref.provider]).map(pref => pref.key);
   activeDemoData = buildDemoDataForModels(activeDemoModels);
   // Agent (the default, also for guests who come from the landing page)
-  // plays an Agent turn; a chosen Compare plays the six answer windows.
+  // plays an Agent turn (its reviewers and the AIs it asks are this lineup);
+  // a chosen Compare plays the lineup's answer windows side by side.
   if (window.App?.runMode?.preference?.() === "agent" && window.App.agentChat?.demoView) {
     return runAgentDemoFlow();
   }
@@ -1011,7 +870,7 @@ async function runDemoFlow() {
 
   if (runId !== demoRunId) return;
 
-  // Compare ends after the six answers.
+  // Compare ends after the lineup's answers.
   window.setAgentModeStatus?.("complete");
   showPostDemoLoginPrompt();
 

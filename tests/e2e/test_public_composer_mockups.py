@@ -53,9 +53,9 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
         assert hit == 'heroAskField'
         previews = page.locator('.lp-composer-preview:has(.lp-composer-tools)')
-        # The hero shows Daily's three marks (the app's default since
-        # 2026-10-28); the heat-pump scene is a run with six.
-        for preview, marks in zip(previews.all(), (3, 6), strict=True):
+        # The hero and the heat-pump scene show Daily's three reviewers (the
+        # app's default since 2026-10-28, the demo's lineup).
+        for preview, marks in zip(previews.all(), (3, 3), strict=True):
             field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
             tools = field.locator('.lp-composer-tools')
             # The mode lives in the (+) menu (as in /app), so the row's tools
@@ -66,11 +66,14 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             expect(tool).to_have_attribute('title', 'Reasoning auto · the model decides how long to think')
             assert tool.get_attribute('aria-label') is None
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)
-            # The marks stand inside the field, before the chip.
+            # The reviewers' marks stand inside the field, before their words
+            # (no chevron: the words are no picker of their own, as in /app).
             models = field.locator('.lp-composer-models')
             expect(models.locator('img')).to_have_count(marks)
             assert models.evaluate('el => [...el.querySelectorAll("img")].every(img => img.complete && img.naturalWidth > 0)')
             assert models.evaluate('el => el.nextElementSibling.classList.contains("lp-run-chip")')
+            expect(field.locator('.lp-run-chip')).to_have_text('3 AIs cross-check')
+            expect(field.locator('.lp-run-chip i')).to_have_count(0)
             # One field, one row: nothing below the field's own edge.
             assert preview.evaluate("""el => {
                 const field = el.firstElementChild.getBoundingClientRect();
@@ -90,8 +93,8 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}-{"still" if reduced else "motion"}'
         previews.nth(0).screenshot(path=str(output / f'hero-{suffix}.png'))
-        # The marks leave with the tools after send. A phone, as /app, leaves
-        # the count to the chip's words and shows no marks.
+        # The marks leave with the tools after send. A phone leaves the count
+        # to the reviewers' words and shows no marks.
         ask_bar = page.locator('[data-scene="ask"] .lp-composer-models')
         ask_field = page.locator('[data-scene="ask"] .lp-composer')
         if reduced:
@@ -122,6 +125,49 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         expect(page.locator('.public-product-result')).to_be_visible()
         expect(page.locator('.lp-composer-tools')).to_have_count(0)
         expect(page.get_by_role('heading', name='Is the consensus just the majority answer?')).to_have_count(1)
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+        assert errors == []
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize('width,dark', [(1440, False), (390, True)])
+def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
+    """Since 2026-10-31 the Agent has one mode: one AI does the work, the AIs
+    you choose check it. The page says so and shows no score or judge."""
+    context = browser.new_context(viewport={'width': width, 'height': 900}, reduced_motion='reduce')
+    context.add_init_script("localStorage.setItem('theme', '" + ('dark' if dark else 'light') + "')")
+    context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))
+    page = context.new_page()
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.goto(phase4_server + '/', wait_until='networkidle')
+        expect(page.locator('h1')).to_have_text('One AI does the work. Several check it.')
+        expect(page.locator('meta[property="og:image:alt"]')).to_have_attribute(
+            'content', 'One AI does the work. Several check it. | consens.io')
+        main = page.locator('main')
+        for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs'):
+            expect(main).not_to_contain_text(gone)
+        # Scene 02 ends on the reviewers' marks and the row under the answer.
+        run = page.locator('[data-run]')
+        expect(run.locator('[data-run-clock]')).to_have_text('Thought for 24s')
+        expect(run.locator('.cx-claim.is-audit.is-major')).to_have_count(1)
+        expect(run.locator('[data-run-evidence]')).to_contain_text('Notes')
+        expect(run.locator('[data-run-evidence]')).to_contain_text('Answers')
+        # Decide: the marked sentence opens the reviewer's note.
+        mark = page.locator('[data-diff-open="lpNoteWalls"]')
+        mark.scroll_into_view_if_needed()
+        mark.click()
+        expect(page.locator('#lpNoteWalls')).to_have_attribute('open', '')
+        expect(page.locator('#lpNoteWalls')).to_contain_text('The windows are still the original double glazing.')
+        expect(page.locator('.lp-pause-title')).to_have_text('A reviewer paused before a step')
+        output = Path('test-results/landing-one-mode')
+        output.mkdir(parents=True, exist_ok=True)
+        suffix = f'{width}-{"dark" if dark else "light"}'
+        page.locator('.lp-scene-02 .lp-scene-visual').screenshot(path=str(output / f'run-{suffix}.png'))
+        page.locator('.lp-scene-03').screenshot(path=str(output / f'decide-{suffix}.png'))
+        page.locator('.lp-section--hero').screenshot(path=str(output / f'hero-{suffix}.png'))
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert errors == []
     finally:

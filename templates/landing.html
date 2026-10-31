@@ -4,26 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "partials/font_preload.html" %}
-  <meta name="description" content="consens.io is an AI agent that checks its answer against other leading models, marks where they disagree, and watches for changes.">
+  <meta name="description" content="consens.io is an AI agent whose work other leading AI models check while it works. They mark in its answer what they doubt, and a Watch tells you when the answer changes.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://www.consens.io/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="consens.io">
-  <meta property="og:title" content="The AI Agent That Cross-Checks With Other Models | consens.io">
-  <meta property="og:description" content="Ask once. consens.io checks the answer against several leading AI models and marks where they disagree.">
+  <meta property="og:title" content="The AI Agent Other AI Models Check | consens.io">
+  <meta property="og:description" content="Ask once. One AI does the work, and several other leading models check it as it goes and mark in the answer what they doubt.">
   <meta property="og:url" content="https://www.consens.io/">
   <meta property="og:image" content="https://www.consens.io{{ asset_url('/static/og-home-v2.png') }}">
   <meta property="og:image:secure_url" content="https://www.consens.io{{ asset_url('/static/og-home-v2.png') }}">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Several models answer. See where they disagree. | consens.io">
+  <meta property="og:image:alt" content="One AI does the work. Several check it. | consens.io">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="The AI Agent That Cross-Checks With Other Models | consens.io">
-  <meta name="twitter:description" content="Ask once. consens.io checks the answer against several leading AI models and marks where they disagree.">
+  <meta name="twitter:title" content="The AI Agent Other AI Models Check | consens.io">
+  <meta name="twitter:description" content="Ask once. One AI does the work, and several other leading models check it as it goes and mark in the answer what they doubt.">
   <meta name="twitter:image" content="https://www.consens.io{{ asset_url('/static/og-home-v2.png') }}">
-  <meta name="twitter:image:alt" content="Several models answer. See where they disagree. | consens.io">
-  <title>The AI Agent That Cross-Checks With Other Models | consens.io</title>
+  <meta name="twitter:image:alt" content="One AI does the work. Several check it. | consens.io">
+  <title>The AI Agent Other AI Models Check | consens.io</title>
   <link rel="stylesheet" href="{{ asset_url('/static/css/landing.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/benchmark.css') }}">
   <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
@@ -45,7 +45,7 @@
         "url": "https://www.consens.io/",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web browser",
-        "description": "consens.io is an AI agent that checks its answer against other leading models, marks where they disagree, and watches for changes.",
+        "description": "consens.io is an AI agent whose work other leading AI models check while it works. They mark in its answer what they doubt, and a Watch tells you when the answer changes.",
         "creator": { "@id": "{{ organization_id }}" },
         "isPartOf": { "@id": "{{ website_id }}" },
         "offers": {
@@ -82,14 +82,17 @@
         <!-- The page's h1 is its loudest line (Feinschliff 2026-10-02): a
              statement, then the field. The field stays the thing you reach
              for through its surface and its light, not through a quiet h1. -->
-        <!-- Since 2026-10-02 the mechanism in its true order: the models
-             answer independently, and the one answer written from them shows
-             where they disagree. ("One agent does the work. Six models check
-             it." had it the wrong way round: the models answer, a separate
-             judge pass does the checking.) "Several", not a number, since
-             2026-10-28: Daily and Open Models ask three, High Quality six.
-             Two lines at every width. -->
-        <h1 class="lp-hero-claim"><span>Several models answer.</span> <span>See where they disagree.</span></h1>
+        <!-- The mechanism in its true order since 2026-10-31, when the Agent
+             became one mode for every account: one AI (the chat model you
+             pick) does the work, and the AIs you choose check it while it
+             works and review its answer. From 2026-10-02 to 10-31 the line
+             was "Several models answer. See where they disagree.": then the
+             models answered and a separate judge pass checked the answer
+             written from them. "Several", not a number: Daily and Open
+             Models have three, High Quality six. In German the line of the
+             strategy deck, Eine KI arbeitet, mehrere pruefen. Two lines at
+             every width. -->
+        <h1 class="lp-hero-claim"><span>One AI does the work.</span> <span>Several check it.</span></h1>
 
         <div class="lp-hero-composer lp-composer-preview">
         <div id="heroField" class="lp-prompt lp-hero-prompt">
@@ -111,11 +114,11 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </span>
             {% include "partials/composer_marks_mockup.html" %}
-            <span class="lp-run-chip">3 AIs cross-check<i aria-hidden="true"></i></span>
+            <span class="lp-run-chip">3 AIs cross-check</span>
             {% include "partials/composer_tools_mockup.html" %}
             <a id="heroDemoButton" class="lp-demo-btn demo-action send-glow" href="/app?demo=1"
                data-umami-event="landing_hero_demo_start"
-               aria-label="Try the demo: watch one question checked across six AI models">
+               aria-label="Try the demo: watch one AI work on a question while three others check it">
               <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5v9l7-4.5z"></path></svg></span>
               <span>Try the demo</span>
             </a>
@@ -140,7 +143,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">Agent is where every question starts: it researches, asks several models and writes one answer.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to your files.</span></p>
+              <p class="lp-lead">Agent is where every question starts: one AI researches and writes the answer, and the AIs you chose check its work.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to your files.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- The field and nothing else: no window, no title bar, no
@@ -159,14 +162,14 @@
                   <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text data-placeholder="Enter your question"></span>
-                    {# The heat-pump run asks six models (partials/composer_marks_mockup.html). #}
-                    {% set full_run = true %}
+                    {# The heat-pump run has the three reviewers of Daily, as the
+                       demo behind the hero (static/demo.js). #}
                     <div class="lp-composer-row">
                       <span class="lp-icon-btn" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                       </span>
                       {% include "partials/composer_marks_mockup.html" %}
-                      <span class="lp-run-chip" data-ask-chip>6 AIs cross-check<i aria-hidden="true"></i></span>
+                      <span class="lp-run-chip" data-ask-chip>3 AIs cross-check</span>
                       {% include "partials/composer_tools_mockup.html" %}
                       <span class="lp-send send-glow" data-ask-send aria-hidden="true">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -191,80 +194,87 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">02 · Run</p>
               <h2 class="lp-h2">The agent shows its work.</h2>
-              <p class="lp-lead">It asks several models in parallel, writes one answer from what they said, and has that answer checked against all of them.<span class="lp-wide-only"> Where they contradict each other on a fact, a separate judge reads the sources they cited. Scroll to move the run.</span></p>
+              <p class="lp-lead">It researches and writes the answer itself. The AIs you chose follow every step, answer independently when it asks them, and review the answer.<span class="lp-wide-only"> Before a risky step, a reviewer can pause the run until you decide. Scroll to move the run.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
-              <!-- An Agent turn in /app, the way agent-activity.js and
-                   agent-review.js draw it: the clock ("Working for 12s",
-                   later "Thought for 24s"), the agent's own notes, the
-                   comparison step with the six models landing one by one,
-                   one live status row (Writing answer… / Checking the
-                   answer…), then the answer with its marks and the evidence
-                   row. Every line, count and the score are the demo run's
-                   own data (static/demo.js). Driver: landing-scenes.js.
+              <!-- An Agent turn in /app, the way agent-activity.js,
+                   agent-delegation.js and agent-review.js draw it in the one
+                   mode (2026-10-31): the clock ("Working for 12s", "Reviewing
+                   · 21s", later "Thought for 24s") with the reviewers' marks
+                   beside it, the agent's own notes, the one time it asks the
+                   three AIs (compare_models, their answers landing one by
+                   one), one live status row (Writing answer… / Reviewing the
+                   answer…), then the answer with the reviewers' marks and the
+                   evidence row. No score. Every line and count is the demo
+                   run's own data (static/demo.js). Driver: landing-scenes.js.
                    The run is a function of the scroll position, so a
                    screen reader read whatever frame the page stood on: the
                    finished turn below speaks for it (a11y audit P2). -->
               <div class="lp-sr">
                 <p>Preview of a finished Agent turn:</p>
                 <p>Can a heat pump heat our 1978 house with the original radiators?</p>
-                <p>Thought for 24s</p>
+                <p>Thought for 24s, reviewed by ChatGPT, Claude and DeepSeek</p>
                 <ul>
-                  <li>This turns on each room's heat loss, not on the year the house was built. Six independent reads first.</li>
-                  <li>Compared perspectives: 6 answers</li>
-                  <li>All six say it can work. They split on the flow temperature, so the answer says so instead of picking a side.</li>
+                  <li>This turns on each room's heat loss, not on the year the house was built. Independent answers first.</li>
+                  <li>Compared perspectives: 3 answers</li>
+                  <li>All three say it can work. They split on the flow temperature, so the answer says so instead of picking a side.</li>
                 </ul>
                 <p>Probably yes, with a few radiators changed, not all of them.</p>
-                <p>Three sentences from the answer and how the six models divided on each</p>
+                <p>Three sentences from the answer and what the reviewers noted on each</p>
                 <dl>
-                  <dt>Get a room-by-room heat-loss calculation before anyone quotes a size.</dt>
-                  <dd>All six models agree.</dd>
-                  <dt>Rooms that stay warm at 50 °C keep their radiators.</dt>
-                  <dd>Four of six models support it.</dd>
-                  <dt>Run at 55 °C, or replace more radiators for 45 °C: three models each way.</dt>
-                  <dd>The models contradict each other here.</dd>
+                  <dt>The walls and windows were renewed in 2015, and that matters more than the year the house was built.</dt>
+                  <dd>Wrong: only the walls were insulated in 2015.</dd>
+                  <dt>Test it this winter: turn the boiler down to 50 °C for a cold week.</dt>
+                  <dd>Doubtful: a mild week says little about a heat pump at minus ten.</dd>
+                  <dt>Have the heat pump sized from the calculation, not from the old boiler’s output.</dt>
+                  <dd>Incomplete: the hot water is missing.</dd>
                 </dl>
-                <p>A single answer would have handed you all three as settled.</p>
-                <p>43/100 agreement, 2 contradictions, 6 answers</p>
+                <p>Without the reviewers, all three would have read as settled.</p>
+                <p>Notes 3, Answers 3</p>
               </div>
               <div class="lp-app lp-agent" data-run aria-hidden="true">
                 <p class="lp-agent-ask">Can a heat pump heat our 1978 house with the original radiators?</p>
                 <div class="lp-agent-body" data-run-body>
                   <div class="lp-agent-activity">
-                    <p class="lp-agent-clock"><span data-run-clock>Working for 0s</span><i aria-hidden="true"></i></p>
+                    <p class="lp-agent-clock"><span data-run-clock>Working for 0s</span><i aria-hidden="true"></i>
+                      <span class="lp-agent-models lp-agent-reviewers" data-run-reviewers aria-hidden="true">
+                        {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
+                        <span class="lp-agent-model" data-reviewer title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+                        {% endfor %}
+                      </span>
+                    </p>
                     <div class="lp-agent-log" data-run-log>
                       <div class="lp-agent-log-items">
-                      <p class="lp-agent-note" data-run-item="plan" hidden>This turns on each room's heat loss, not on the year the house was built. Six independent reads first.</p>
+                      <p class="lp-agent-note" data-run-item="plan" hidden>This turns on each room's heat loss, not on the year the house was built. Independent answers first.</p>
                       <div class="lp-agent-step" data-run-item="compare" hidden>
                         <span class="lp-agent-step-label" data-run-compare>Comparing perspectives…</span>
                         <span class="lp-agent-models" aria-hidden="true">
-                          {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('Gemini', 'gemini-icon.png', false), ('Mistral', 'mistral.png', false), ('DeepSeek', 'deepseek.png', false), ('Grok', 'grok.png', true)] %}
+                          {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
                           <span class="lp-agent-model" data-model="{{ loop.index0 }}" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
                           {% endfor %}
                         </span>
                         <span class="lp-agent-count" data-run-count></span>
                       </div>
-                      <p class="lp-agent-note" data-run-item="compared" hidden>All six say it can work. They split on the flow temperature, so the answer says so instead of picking a side.</p>
+                      <p class="lp-agent-note" data-run-item="compared" hidden>All three say it can work. They split on the flow temperature, so the answer says so instead of picking a side.</p>
                       <p class="lp-agent-step is-current" data-run-item="status" hidden><span data-run-status>Writing answer…</span></p>
                       </div>
                     </div>
                   </div>
                   <div class="lp-agent-answer" data-run-answer>
                     <!-- The verdict, then three sentences of the answer, each
-                         wearing what the six actually did with it: agreed,
-                         split, or contradicted each other. -->
+                         wearing the note of a reviewer on it: wrong (red),
+                         doubtful (amber), incomplete (grey, dashed). -->
                     <p class="lp-agent-verdict"><strong data-stream>Probably yes, with a few radiators changed, not all of them.</strong></p>
-                    <ul class="lp-run-claims" aria-label="Three sentences from the answer and how the six models divided on each">
-                      <li><span class="cx-claim" data-mark="is-unanimous" data-stream>Get a room-by-room heat-loss calculation before anyone quotes a size.</span><span class="claim-badge" aria-hidden="true"><span class="claim-ratio">6/6</span></span></li>
-                      <li><span class="cx-claim" data-mark="is-split" data-stream>Rooms that stay warm at 50 °C keep their radiators.</span><span class="claim-badge has-dissent" aria-hidden="true"><span class="claim-ratio">4/6</span></span></li>
-                      <li><span class="cx-claim" data-mark="is-major" data-stream>Run at 55 °C, or replace more radiators for 45 °C: three models each way.</span></li>
+                    <ul class="lp-run-claims" aria-label="Three sentences from the answer and what the reviewers noted on each">
+                      <li><span class="cx-claim is-audit" data-mark="is-major" data-stream>The walls and windows were renewed in 2015, and that matters more than the year the house was built.</span></li>
+                      <li><span class="cx-claim is-audit" data-mark="is-split" data-stream>Test it this winter: turn the boiler down to 50 °C for a cold week.</span></li>
+                      <li><span class="cx-claim is-audit" data-mark="is-minor" data-stream>Have the heat pump sized from the calculation, not from the old boiler’s output.</span></li>
                     </ul>
-                    <p class="lp-run-result-open" data-stream>A single answer would have handed you all three as settled.</p>
+                    <p class="lp-run-result-open" data-stream>Without the reviewers, all three would have read as settled.</p>
                   </div>
                   <div class="lp-agent-evidence" data-run-evidence>
-                    <span class="lp-agent-agreement"><b>43</b>/100 agreement</span>
-                    <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5"/></svg>Contradictions <b>2</b></span>
-                    <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>Answers <b>6</b></span>
+                    <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-5 4v-4H4V5ZM8 9h8M8 12.5h5"/></svg>Notes <b>3</b></span>
+                    <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>Answers <b>3</b></span>
                   </div>
                 </div>
               </div>
@@ -278,82 +288,86 @@
     <!-- ====================================================== DECIDE
          Four steps, not one wall.
 
-         This used to be a reading key, a full consensus box, a hint line and
-         a slideshow that repeated the whole consensus box three more times —
-         four copies of the same surface in one section, none of them
-         explained. It is now taken apart into the four things the surface
-         actually does, in the order you meet them: the score, the counts, the
-         marks, and the disagreement behind a mark. Every slice is a real
-         piece of the /app surface and every one of them works: the ratios
-         open their breakdown, the marks open the card in step 04.
-         Behaviour: static/js/landing-insights.js. -->
+         The surface under an Agent answer taken apart into the four things
+         it does, in the order you meet them: who reviewed it, a note behind
+         a mark, the colours of the marks, and the answers of the AIs the
+         agent asked. Since 2026-10-31 (one mode) there is no score and no
+         judge: the notes of the reviewers are the review. Every slice is a piece of
+         the /app surface, and the marked sentence in step 02 opens its note
+         as in /app. Behaviour: static/js/landing-insights.js and the
+         data-diff-open script below. -->
     <section class="lp-section lp-section--grey lp-scene-03">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">03 · Decide</p>
           <h2 class="lp-h2">The doubt is marked in the answer.</h2>
-          <p class="lp-lead">One answer, read top to bottom, with the disagreement written into it rather than hidden behind it.<span class="lp-wide-only"> Four things carry that, and you can try each one here.</span></p>
+          <p class="lp-lead">One answer, read top to bottom, with the reviewers' doubts written into it rather than hidden behind it.<span class="lp-wide-only"> Four things carry that.</span></p>
         </div>
 
         <ol class="lp-steps">
-          <!-- 01 · the score -->
+          <!-- 01 · who reviewed it -->
           <li class="lp-step lp-reveal">
             <div class="lp-step-copy">
               <p class="lp-step-num">01</p>
-              <h3>How far apart they were</h3>
-              <p>Every checked answer carries one number: how much the answers actually agreed.<span class="lp-wide-only"> A separate judge pass checks every sentence against all of them, and the number is counted from those verdicts, not given as a grade.</span></p>
+              <h3>Who checked it</h3>
+              <p>Under every answer stand the AIs that reviewed it and what they found. There is no score: a passage carries a reviewer's note, or nobody objected to it.<span class="lp-wide-only"> Unmarked text means no objection, not confirmed.</span></p>
             </div>
             <div class="lp-step-visual">
-              <div class="lp-excerpt">
-              <div class="consensus-verdict is-warn">
-                <!-- 43 is the score the demo run actually produces (the sum
-                     in app/services/llm/consensus_scoring.py over the data in
-                     static/demo.js), and it is the same number scene 02 now
-                     hands over with. One run, one score, wherever the page
-                     shows it. -->
-                <span class="verdict-gauge" style="--val:43" title="Agreement score 43/100">
-                  <span class="verdict-score">
-                    <span class="verdict-score-num">43</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
+              <!-- The card of the review in the activity (agent-review.js
+                   renderAuditActivity) and the row under the answer, in
+                   their own words. -->
+              <div class="lp-excerpt lp-review">
+                <p class="lp-review-head">
+                  <span class="lp-review-marks" aria-hidden="true">
+                    {% for name, icon, mono in [('ChatGPT', 'chatgpt.png', true), ('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
+                    <span class="lp-composer-model"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+                    {% endfor %}
                   </span>
-                  <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
-                </span>
-                <span class="verdict-main">
-                  <span class="verdict-headline">Partial agreement</span>
-                  <span class="verdict-detail">1 critical · 1 minor detail · disputed: 55 °C with most radiators, or more radiators for 45 °C, 6 models compared</span>
-                </span>
-                <span class="verdict-judge">
-                  <span>Analysis by Gemini</span>
-                  <span class="verdict-judge-sub">separate judge pass</span>
-                </span>
-              </div>
+                  <span>Reviewed by ChatGPT, Claude, DeepSeek</span>
+                </p>
+                <p class="lp-review-tally"><span data-kind="wrong">1 wrong</span> · <span data-kind="doubtful">1 doubtful</span> · <span data-kind="incomplete">1 incomplete</span></p>
+                <p class="lp-review-note">Unmarked text means no objection, not confirmed.</p>
+                <div class="lp-agent-evidence is-visible">
+                  <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-5 4v-4H4V5ZM8 9h8M8 12.5h5"/></svg>Notes <b>3</b></span>
+                  <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4"/></svg>Answers <b>3</b></span>
+                </div>
               </div>
             </div>
           </li>
 
-          <!-- 02 · the counts -->
+          <!-- 02 · the note behind a mark -->
           <li class="lp-step lp-reveal">
             <div class="lp-step-copy">
               <p class="lp-step-num">02</p>
-              <h3>Who backed each claim</h3>
-              <p>The small number behind a sentence is how many models supported it. Rest on it, or tap it, and it names them: who agreed, who deviated<span class="lp-wide-only">, and in what words</span>.</p>
-              <p class="lp-step-try">Try it on the 4/6.</p>
+              <h3>What a reviewer noted</h3>
+              <p>Click a marked passage and its notes open: who noted it, what kind of note it is, and in what words<span class="lp-wide-only">, with the source where the reviewer gave one</span>.</p>
+              <p class="lp-step-try">Try the marked sentence.</p>
             </div>
             <div class="lp-step-visual">
               <div class="lp-excerpt">
-                <div class="consensus-main-text consensus-answer-body">
-                  <!-- The data- attributes are what make a ratio a control
-                       rather than a picture of one; the splits match the card
-                       in step 04, because a mock that contradicts itself is
-                       worse than no mock. -->
-                  <p><span class="cx-claim is-unanimous">Get a room-by-room heat-loss calculation before anyone quotes a heat pump size</span><button class="claim-badge" type="button"
-                      data-claim-anchor="Get a room-by-room heat-loss calculation before anyone quotes a heat pump size"
-                      data-claim-agree="ChatGPT, Claude, Gemini, Mistral, DeepSeek, Grok"
-                      aria-label="6/6: All 6 models that address this agree — open details"><span class="claim-ratio" aria-hidden="true">6/6</span></button></p>
-                  <p><span class="cx-claim is-split">Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones</span><button class="claim-badge has-dissent" type="button"
-                      data-claim-anchor="Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones."
-                      data-claim-agree="ChatGPT, Claude, Gemini, Grok"
-                      data-claim-dissent="Mistral: replace the radiators in every room you use daily | DeepSeek: replace the radiators in the rooms you heat most"
-                      aria-label="4/6: 4 of 6 models support this — open details"><span class="claim-ratio" aria-hidden="true">4/6</span></button></p>
+                <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
+                  <p><span class="cx-claim is-audit is-major is-interactive" role="button" tabindex="0" data-diff-open="lpNoteWalls" aria-haspopup="dialog" aria-describedby="lpMarkWallsVerdict">The walls and windows were renewed in 2015, and that matters more than the year the house was built.</span></p><p id="lpMarkWallsVerdict" hidden>Wrong: 1 reviewer objects — open details</p>
+                </div>
+                <!-- The card of a mark in /app (consensus-insights.js auditCard):
+                     the words it concerns, then each note with its reviewer
+                     and kind. Built on the shared card list, so the hover
+                     preview reads it (landing-insights.js). -->
+                <div class="differences-cards">
+                  <details class="diff-card is-contradiction is-major lp-note-card" id="lpNoteWalls" open>
+                    <summary class="diff-card-summary">
+                      <span class="diff-card-tags">
+                        <span class="sev-dot is-crit" aria-hidden="true"></span>
+                        <span class="diff-type-tag">Wrong: 1 reviewer objects</span>
+                      </span>
+                      <span class="diff-card-claim">walls and windows were renewed in 2015</span>
+                    </summary>
+                    <div class="diff-card-body">
+                      <div class="diff-position">
+                        <div class="diff-position-label">ChatGPT · Wrong</div>
+                        <div class="diff-position-stance">The question says only the walls were insulated in 2015. The windows are still the original double glazing.</div>
+                      </div>
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>
@@ -363,113 +377,83 @@
           <li class="lp-step lp-reveal">
             <div class="lp-step-copy">
               <p class="lp-step-num">03</p>
-              <h3>Where they pull apart</h3>
-              <p>Every checked sentence is highlighted in the colour of its result: green where every model agreed, amber where they split, red where they contradict each other.<span class="lp-wide-only"> The mark sits on the sentence it belongs to, so you never have to hold two documents open at once.</span></p>
+              <h3>What the colours mean</h3>
+              <p>A noted passage wears the colour of its most serious note: red where a reviewer says it is wrong, amber where one doubts it, grey where something is missing.<span class="lp-wide-only"> The mark sits on the sentence it belongs to, so you never have to hold two documents open at once.</span></p>
             </div>
             <div class="lp-step-visual">
               <div class="lp-excerpt">
                 <ul class="lp-mark-key" aria-label="What the marks in an answer mean">
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-unanimous">Size the heat pump from the calculation</span><span class="claim-badge" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">6/6</span></span></span>
-                    <span class="lp-mark-note">green · all of them agreed</span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-major">The walls and windows were renewed in 2015</span></span>
+                    <span class="lp-mark-note">red · wrong</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-split">Rooms that stay warm keep their radiators</span><span class="claim-badge has-dissent" aria-hidden="true"><span class="claim-ratio" aria-hidden="true">4/6</span></span></span>
-                    <span class="lp-mark-note">amber · support is split</span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-split">Turn the boiler down to 50 °C for a cold week</span></span>
+                    <span class="lp-mark-note">amber · doubtful</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-minor">Keep the gas boiler as a backup, or not</span></span>
-                    <span class="lp-mark-note">grey · a difference in detail</span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-minor">Size the heat pump from the calculation</span></span>
+                    <span class="lp-mark-note">grey · incomplete</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-major">55 °C, or more radiators for 45 °C</span></span>
-                    <span class="lp-mark-note">red · they contradict each other</span>
+                    <span class="lp-mark-sample">Rooms that stay warm keep their radiators</span>
+                    <span class="lp-mark-note">unmarked · no objection</span>
                   </li>
                 </ul>
               </div>
             </div>
           </li>
 
-          <!-- 04 · the difference behind the mark -->
+          <!-- 04 · the answers of the AIs the agent asked -->
           <li class="lp-step lp-reveal">
             <div class="lp-step-copy">
               <p class="lp-step-num">04</p>
-              <h3>What they actually said</h3>
-              <p>Click a mark and the disagreement opens: both camps, named, with the sentence each side actually wrote<span class="lp-wide-only"> and a note on what is worth checking yourself</span>.</p>
-              <p class="lp-step-try">Try the marked sentence.</p>
+              <h3>What the others answered</h3>
+              <p>When independent views help, or when you ask for them, the agent puts its question to the same AIs. Each answers on its own, and under Answers you read every answer in full<span class="lp-wide-only">, or two side by side</span>.</p>
             </div>
             <div class="lp-step-visual">
+              <!-- The first lines of the three answers in the demo run
+                   (static/demo.js, the Daily lineup). -->
               <div class="lp-excerpt">
-                <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
-                  <p><span class="cx-claim is-major is-interactive" role="button" tabindex="0" data-diff-open="lpDiffFlow" aria-haspopup="dialog" aria-describedby="lpMarkFlowVerdict">Three models would keep most radiators and run at 55 °C, three would replace more of them to run at 45 °C or below.</span></p><p id="lpMarkFlowVerdict" hidden>The models contradict each other here. Open details</p>
-                </div>
-                <div class="differences-cards">
-                  <details class="diff-card is-contradiction is-major" id="lpDiffFlow" open>
-                    <summary class="diff-card-summary">
-                      <span class="diff-card-tags">
-                        <span class="sev-dot is-crit" aria-hidden="true"></span>
-                        <span class="diff-type-tag">Contradiction · critical</span>
-                      </span>
-                      <span class="diff-card-claim">Run at 55 °C with most radiators, or replace more of them for 45 °C?</span>
-                    </summary>
-                    <div class="diff-card-body">
-                      <div class="diff-position">
-                        <div class="diff-position-label">ChatGPT, Gemini, Grok</div>
-                        <div class="diff-position-stance">55 °C. Keep every radiator that passes the test; the last ten degrees save little.</div>
-                        <blockquote class="diff-position-quote">replacing every radiator to get there costs more than that difference will save in a decade</blockquote>
-                      </div>
-                      <div class="diff-position">
-                        <div class="diff-position-label">Claude, Mistral, DeepSeek</div>
-                        <div class="diff-position-stance">45 °C. Replace more radiators now; the efficiency is paid every winter.</div>
-                        <blockquote class="diff-position-quote">The efficiency difference is around a quarter, and you pay it every winter for twenty years</blockquote>
-                      </div>
-                      <div class="diff-verify"><b>Worth verifying: </b>ask for the heat pump's rated efficiency at 35 °C and at 55 °C from its datasheet, and get a price for the extra radiators. That turns the disagreement into arithmetic.</div>
-                    </div>
-                  </details>
-                </div>
+                <ul class="lp-answers" aria-label="The answers of the AIs the agent asked">
+                  <li>
+                    <span class="lp-answers-who"><span class="lp-composer-model"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="" width="14" height="14" class="lp-composer-mono"></span>ChatGPT</span>
+                    <span class="lp-answers-text">Short version: very likely yes, and probably without replacing most of the radiators.</span>
+                  </li>
+                  <li>
+                    <span class="lp-answers-who"><span class="lp-composer-model"><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt="" width="14" height="14"></span>Claude</span>
+                    <span class="lp-answers-text">Plan for 45 °C rather than 55 °C. The efficiency difference is around a quarter, and you pay it every winter for twenty years.</span>
+                  </li>
+                  <li>
+                    <span class="lp-answers-who"><span class="lp-composer-model"><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="" width="14" height="14"></span>DeepSeek</span>
+                    <span class="lp-answers-text">Replace the radiators in the rooms you heat most, so the system can run at 45 °C or below.</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </li>
         </ol>
 
-        <!-- The three other questions used to be three more full consensus
-             boxes in a slideshow. What they were ever there to say is that the
-             same lens gives very different readings — which is a score, a
-             headline and one line, not a fourth copy of the surface. -->
+        <!-- Until 2026-10-31 three more questions with their agreement
+             scores stood here. There is no score any more; what the
+             reviewers do besides marking the answer is this: they can stop
+             a step before it runs (agent_gate.py, the card above the field
+             in /app, agent-chat.js holdCard). An illustration in the
+             words of that card. -->
         <div class="lp-examples lp-reveal">
-          <p class="lp-examples-title">The same lens on other questions</p>
-          <ul class="lp-example-list">
-            <li class="lp-example">
-              <span class="lp-example-score is-ok" style="--val:94">
-                <b>94</b><i aria-hidden="true">/100</i>
-                <span class="lp-example-meter" aria-hidden="true"><span></span></span>
-              </span>
-              <span class="lp-example-body">
-                <span class="lp-example-q">“Is nuclear power a low-carbon energy source?”</span>
-                <span class="lp-example-note">High agreement · nothing marked in the answer</span>
-              </span>
-            </li>
-            <li class="lp-example">
-              <span class="lp-example-score is-ok" style="--val:84">
-                <b>84</b><i aria-hidden="true">/100</i>
-                <span class="lp-example-meter" aria-hidden="true"><span></span></span>
-              </span>
-              <span class="lp-example-body">
-                <span class="lp-example-q">“Which programming language should I learn first?”</span>
-                <span class="lp-example-note">Strong agreement · one difference in emphasis, no contradiction</span>
-              </span>
-            </li>
-            <li class="lp-example">
-              <span class="lp-example-score is-warn" style="--val:41">
-                <b>41</b><i aria-hidden="true">/100</i>
-                <span class="lp-example-meter" aria-hidden="true"><span></span></span>
-              </span>
-              <span class="lp-example-body">
-                <span class="lp-example-q">“Can I take ibuprofen while on blood thinners?”</span>
-                <span class="lp-example-note">Partial agreement · one critical contradiction, marked in the answer</span>
-              </span>
-            </li>
-          </ul>
+          <p class="lp-examples-title">Before a risky step</p>
+          <div class="lp-pause">
+            <div class="lp-pause-card">
+              <span class="lp-pause-glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></span>
+              <div class="lp-pause-body">
+                <p class="lp-pause-title">A reviewer paused before a step</p>
+                <p class="lp-pause-reason"><strong>Possible damage:</strong> This cancels both contracts, but you asked about the internet contract only. <span class="lp-pause-by">Claude</span></p>
+                <p class="lp-pause-step"><span>The step that has not run yet</span> Clicks “Cancel both contracts”</p>
+                <span class="lp-pause-btn">Let it run</span>
+              </div>
+            </div>
+            <p class="lp-pause-note">The step runs only if you let it. Until then the agent waits, and you can stop the run instead.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -625,17 +609,17 @@
           <article class="lp-card">
             <p class="lp-eyebrow">Compare</p>
             <h3>Original answers stay visible</h3>
-            <p>Open Model answers to read each original response or compare two answers side by side.</p>
+            <p>Open Answers to read what each AI answered when the agent asked, or compare two answers side by side.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">Verify</p>
-            <h3>Disagreement is marked in place</h3>
-            <p>Where the models pull apart, the sentence itself carries the mark, instead of the doubt being smoothed into one confident answer.</p>
+            <h3>Doubt is marked in place</h3>
+            <p>Where a reviewer finds a passage wrong, doubtful or incomplete, the sentence itself carries the mark, instead of the doubt being smoothed into one confident answer.</p>
           </article>
           <article class="lp-card">
             <p class="lp-eyebrow">Control</p>
             <h3>You choose the checks</h3>
-            <p>Pick the agent's model, the models it checks with, and whether it reasons first. Model agreement is a comparison, not a fact-check of the whole answer.</p>
+            <p>Pick the AI that does the work, the AIs that check it, and whether it reasons first. A review is a second view, not a guarantee: unmarked text means no objection, not confirmed.</p>
           </article>
         </div>
       </div>
@@ -647,7 +631,7 @@
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">Model coverage</p>
           <h2 class="lp-h2">One workspace for leading AI providers.</h2>
-          <p class="lp-lead">Direct comparison across major model families, so every answer can be checked against independent alternatives.</p>
+          <p class="lp-lead">Pick from the major model families the AI that does the work and the AIs that check it, so every answer gets independent eyes.</p>
         </div>
         <div class="lp-logos lp-reveal">
           <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
@@ -682,7 +666,7 @@
               <span class="lp-attach" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </span>
-              <span class="lp-run-chip">3 AIs cross-check<i aria-hidden="true"></i></span>
+              <span class="lp-run-chip">3 AIs cross-check</span>
               <span class="lp-demo-btn demo-action send-glow">
                 <span>Ask the agent</span>
                 <span class="demo-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>

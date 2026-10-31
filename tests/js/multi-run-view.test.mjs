@@ -280,8 +280,10 @@ describe("selected RunContext projection", () => {
     expect(status.textContent).toBe("Working");
     registry.update(agent.runId, context => { context.metadata.agentReview = { mode: "audit", status: "running" }; });
     expect(status.textContent).toBe("Reviewing");
+    // The comparison mode's answer check has no word of its own any more
+    // (2026-10-31): a review of another mode is work.
     registry.update(agent.runId, context => { context.metadata.agentReview = { status: "running" }; });
-    expect(status.textContent).toBe("Checking");
+    expect(status.textContent).toBe("Working");
     dom.window.close();
   });
 

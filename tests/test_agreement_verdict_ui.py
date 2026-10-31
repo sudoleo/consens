@@ -94,18 +94,11 @@ def test_public_mockups_use_the_same_score_semantics():
     assert "Agreement on the core" not in product
     assert '<div class="consensus-verdict is-calm">' in product
     assert '<span class="verdict-headline">Strong agreement</span>' in product
-    # 43 ist der Score, den der Demo-Lauf wirklich rechnet (consensus_scoring
-    # auf die Daten in static/demo.js). Scene 02 uebergibt ihn im Lauf-Fuss,
-    # Scene 03 zeigt ihn im Verdict — ein Lauf, eine Zahl.
-    assert (
-        'style="--val:43" title="Agreement score 43/100"' in landing
-        and '<span class="verdict-headline">Partial agreement</span>' in landing
-    )
-    assert "<b>43</b>/100 agreement" in landing
-    # Der Landing-Walkthrough zeigt denselben Lauf wie die Demo in /app: unter
-    # 65 faerbt der Verdict-Balken amber, sonst behauptet das Mockup eine Ruhe,
-    # die der Score nicht deckt.
-    assert '<div class="consensus-verdict is-warn">' in landing
+    # Seit 2026-10-31 hat der Agent einen Modus: Die Pruefer markieren die
+    # Antwort, es gibt keinen Score. Die Landing zeigt denselben Lauf wie die
+    # Demo in /app, also weder Verdict noch Zahl.
+    for gone in ("consensus-verdict", "/100 agreement", "Agreement score", "verdict-gauge"):
+        assert gone not in landing
     assert (
         'style="--val:64" title="Agreement score 64/100"' in engine
         and '<span class="verdict-headline">Partial agreement</span>' in engine

@@ -370,16 +370,29 @@
      reviewers, as in a chat) or stand in for the chip a guest does not get. */
   body:not(.is-guest) .composer-models > .composer-mode-models:not(:has(> .composer-tool-label:not([hidden]))) { display: none; }
 }
+/* The small phones (to 380px): the chip names the one AI that does the
+   work, and its name stays readable beside the reviewers. They keep their
+   words in the short form ("3 AIs") and give up their marks, which only
+   repeat who they are (their tooltip and their menu name them): with the
+   marks, the name was cut to 44px at 320px. Words, never marks alone (UX
+   audit E4, E5); the start screen (#composerModelPicker) and a chat
+   (.composer-reviewers) alike. */
+@media (max-width: 380px) {
+  .composer-models > .composer-mode-models:has(> .composer-tool-label:not([hidden])) > .composer-model-icons,
+  .composer-reviewers:has(> .composer-reviewers-label:not(:empty)) > .composer-model-icons { display: none; }
+  .composer-models > .composer-mode-models:has(> .composer-tool-label:not([hidden])) { gap: 0; }
+  .composer-reviewers-label { margin-left: 0; }
+}
 /* The narrowest phones: the onboarding Demo button keeps its play mark and
    its accessible name but gives up the word, so the bottom row stays one. */
 @media (max-width: 360px) {
   .chat-input-container .demo-chip-label-short { display: none; }
   /* Round like (+) and Send, not a narrow oval around the mark. */
   .chat-input-container .demo-chip.demo-action { width: 36px; min-width: 36px; padding: 0; justify-content: center; }
-  /* The default model's name ("DeepSeek V4.1 Flash") and its comparison
-     count stay whole at 320px: the row and the chip give up a little air,
-     (+) and Send keep their size. Inter sets the name 3px wider in Linux
-     Chromium than on Windows; 4px gaps leave room for both. */
+  /* The chat model's name ("DeepSeek V4.1 Flash") beside the reviewers'
+     "3 AIs" at 320px: the row and the chip give up a little air, (+) and
+     Send keep their size. Inter sets the name 3px wider in Linux Chromium
+     than on Windows; 4px gaps leave room for both. */
   .chat-input-container { column-gap: 4px; }
   .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { gap: 4px; padding-inline: 4px; }
 }

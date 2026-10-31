@@ -103,23 +103,25 @@
 
   // ---- Scene 02: Run --------------------------------------------------
 
-  // One Agent turn, on the same surfaces agent-activity.js and
-  // agent-review.js draw in /app: a note on the plan, the comparison with
-  // the six models landing one by one, the answer written in its own step,
-  // the check on that exact text, then the marks and the evidence row. The
-  // comparison owns the longest stretch, as it does in a real run.
+  // One Agent turn in the one mode (2026-10-31), on the surfaces
+  // agent-activity.js, agent-delegation.js and agent-review.js draw in
+  // /app: the reviewers join beside the clock with the first step, a note
+  // on the plan, the agent asking the three AIs once (their answers land
+  // one by one), the answer written in its own step, the reviewers'
+  // review of that exact text, then their marks and the evidence row. No
+  // score. The comparison owns the longest stretch, as it does in a run.
   const PLAN_AT = 0.05;
   const COMPARE_AT = 0.13;
-  const COMPARE_END = 0.54;
-  const COMPARED_AT = 0.57;
-  const WRITE_AT = 0.61;
-  const CHECK_AT = 0.80;
+  const COMPARE_END = 0.50;
+  const COMPARED_AT = 0.53;
+  const WRITE_AT = 0.58;
+  const REVIEW_AT = 0.79;
   const DONE_AT = 0.91;
   const RUN_SECONDS = 24;
 
-  // Where each model lands inside the comparison. A run is only as fast as
-  // its slowest model, so the spread is deliberate.
-  const MODEL_FINISH = [0.30, 0.42, 0.55, 0.66, 0.82, 1.0];
+  // Where each AI's answer lands inside the comparison. A comparison is only
+  // as fast as its slowest AI, so the spread is deliberate.
+  const MODEL_FINISH = [0.42, 0.7, 1.0];
 
   function buildRunScene(scene) {
     const run = scene.querySelector("[data-run]");
@@ -134,6 +136,7 @@
     const count = scene.querySelector("[data-run-count]");
     const status = scene.querySelector("[data-run-status]");
     const models = Array.from(scene.querySelectorAll("[data-model]"));
+    const reviewers = Array.from(scene.querySelectorAll("[data-reviewer]"));
     const answer = scene.querySelector("[data-run-answer]");
     const evidence = scene.querySelector("[data-run-evidence]");
     // The answer streams in as one text across its blocks, in reading order.
@@ -158,7 +161,7 @@
     // it may jump (Apple-Audit I1). The SLOT the card sits in is locked to
     // the card's tallest state, so the heading beside it and the page below
     // keep their place and the scroll progress keeps a fixed reference. The
-    // card itself follows its content: the log grows, and once the check is
+    // card itself follows its content: the log grows, and once the review is
     // back it FOLDS into the clock line with a height transition
     // (.lp-agent-log.is-folded) instead of vanishing in one frame, which
     // dropped the answer 204 px (277 on a phone) and left a blank card. The
@@ -172,7 +175,7 @@
       if (compareLabel) compareLabel.style.minWidth = "";
       let tallest = 0;
       let label = 0;
-      for (const p of [COMPARE_AT + 0.01, COMPARED_AT, CHECK_AT + 0.01, 1]) {
+      for (const p of [COMPARE_AT + 0.01, COMPARED_AT, REVIEW_AT + 0.01, 1]) {
         renderRun(p);
         tallest = Math.max(tallest, run.offsetHeight);
         if (compareLabel) label = Math.max(label, compareLabel.getBoundingClientRect().width);
@@ -190,12 +193,18 @@
     function renderRun(p) {
       lastP = p;
       const done = p >= DONE_AT;
+      const reviewing = p >= REVIEW_AT && !done;
       const seconds = done ? RUN_SECONDS : Math.floor(span(p, 0, DONE_AT) * RUN_SECONDS);
       if (clock) {
-        const text = done ? `Thought for ${RUN_SECONDS}s` : `Working for ${seconds}s`;
+        // The head's words in /app (agent-activity.js HEAD_VERBS): working,
+        // the reviewers reviewing the written answer, done.
+        const text = done ? `Thought for ${RUN_SECONDS}s` : reviewing ? `Reviewing · ${seconds}s` : `Working for ${seconds}s`;
         if (clock.textContent !== say(text)) clock.textContent = text;
       }
       run.classList.toggle("is-running", !done);
+
+      // The reviewers follow from the first step on, beside the clock.
+      reviewers.forEach(reviewer => reviewer.classList.toggle("is-done", p >= PLAN_AT));
 
       // The log: notes and steps appear as they happen and fold into the
       // clock line once the run is over, as in /app -- a fold, not a cut.
@@ -222,17 +231,18 @@
         if (count.textContent !== say(text)) count.textContent = text;
       }
 
-      // One live status row: writing, then checking the fixed text. It stays
-      // in the log while the log folds, so the fold has one height to close.
+      // One live status row: writing, then the reviewers reviewing the
+      // fixed text. It stays in the log while the log folds, so the fold has
+      // one height to close.
       show(items.status, p >= WRITE_AT);
       if (status) {
-        const text = p >= CHECK_AT ? "Checking the answer…" : "Writing answer…";
+        const text = p >= REVIEW_AT ? "Reviewing the answer…" : "Writing answer…";
         if (status.textContent !== say(text)) status.textContent = text;
       }
 
-      // The answer streams in while it is written; the sheen runs while it
-      // is checked; the marks stroke on once the check is back.
-      const chars = Math.round(span(p, WRITE_AT, CHECK_AT - 0.03) * total);
+      // The answer streams in while it is written; the sheen runs while the
+      // reviewers review it; their marks stroke on once they are back.
+      const chars = Math.round(span(p, WRITE_AT, REVIEW_AT - 0.03) * total);
       if (chars !== lastChars) {
         let left = chars;
         streams.forEach(item => {
@@ -245,7 +255,7 @@
       }
       if (answer) {
         answer.classList.toggle("is-streaming", p >= WRITE_AT && chars < total);
-        answer.classList.toggle("is-checking", p >= CHECK_AT && !done);
+        answer.classList.toggle("is-reviewing", reviewing);
         answer.classList.toggle("is-marked", done);
       }
       marks.forEach(mark => mark.classList.toggle(mark.dataset.mark, done));

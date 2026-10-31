@@ -222,8 +222,8 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     # Seit 2026-08-15 sind die Marken farbige Textmarker statt Linien unter
     # dem Satz (User-Vorgabe: eine Unterstreichung liest sich wie ein Link).
     # Die Legende muss von Farben sprechen, nicht mehr von Linienstaerken.
-    assert "green &middot; all of them agreed" in landing or "green · all of them agreed" in landing
-    assert "red · they contradict each other" in landing
+    # Seit 2026-10-31 (ein Modus) sind es die Arten der Pruefer-Anmerkungen.
+    assert "red · wrong" in landing and "amber · doubtful" in landing and "grey · incomplete" in landing
     assert "fine rule" not in landing
     assert "heavier amber rule" not in landing
     assert "fine dotted line" not in landing

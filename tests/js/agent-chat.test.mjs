@@ -648,14 +648,14 @@ describe("single-model agent chat", () => {
   it('keeps a review stage in one live row when tool events arrive', () => {
     const { window, document, dom } = boot();
     const host = document.getElementById('agentAnswerActivity');
-    const state = { running: true, review: {status: 'running'}, events: [] };
+    const state = { running: true, review: {mode: 'audit', status: 'running', audit: {reviewers: []}}, events: [] };
     window.App.agentActivity.render(host, state);
     expect(host.querySelector('.agent-progress-action')).toBe(null);
-    state.events.push({id:'judge', kind:'tool', name:'judge_answer', status:'running'});
+    state.events.push({id:'review', kind:'tool', name:'audit_answer', status:'running'});
     window.App.agentActivity.render(host, state);
-    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe('Checking the answer…');
+    expect(host.querySelector('.agent-progress .agent-current-status').textContent).toBe('Reviewing the answer…');
     expect(host.querySelector('.agent-progress').hidden).toBe(false);
-    expect(host.querySelector('.agent-progress').textContent.match(/Checking the answer…/g)).toHaveLength(1);
+    expect(host.querySelector('.agent-progress').textContent.match(/Reviewing the answer…/g)).toHaveLength(1);
     state.events[0].status = 'failed';
     window.App.agentActivity.render(host, state);
     expect(host.querySelector('.agent-progress-action')).toBe(null);
@@ -997,13 +997,14 @@ describe("single-model agent chat", () => {
     activity.render(host, {events, running:true, answerText:'The answer begins'});
     const preview = host.querySelector('.agent-progress');
     expect(preview.hidden).toBe(true);
-    for (const name of ['judge_answer']) {
+    for (const name of ['audit_answer']) {
       activity.receive(events, {version:1, id:name, kind:'tool', name, status:'running'});
-      activity.render(host, {events, running:true, answerText:'The answer begins and ends.', review:{status:'running'}});
+      activity.render(host, {events, running:true, answerText:'The answer begins and ends.',
+        review:{mode:'audit', status:'running', audit:{reviewers:[]}}});
       expect(preview.hidden).toBe(true);
       expect(preview.childElementCount).toBe(0);
-      // The step stays named in the history (and the answer shows its check).
-      expect(host.querySelector('.agent-activity-tool[data-status="running"] strong').textContent).toBe('Checking the answer…');
+      // The step stays named in the history (and the answer shows its review).
+      expect(host.querySelector('.agent-activity-tool[data-status="running"] strong').textContent).toBe('Reviewing the answer…');
       activity.receive(events, {version:1, id:name, kind:'tool', name, status:'succeeded'});
     }
     activity.render(host, {events, running:false, answerText:'The answer begins and ends.'});

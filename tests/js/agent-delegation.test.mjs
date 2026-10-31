@@ -822,26 +822,35 @@ describe("Agent sidebar", () => {
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
     dom.window.close();
   });
-  // The demo still plays the comparison mode's answer check (demo.js): its
-  // judges work in one row until they are through.
-  it("shows the demo's answer check working, then done", () => {
+  // The demo plays the one mode (demo.js): a reviewer follows the work in
+  // rounds and closes with its final review, its answer to the agent's
+  // question shares its icon. No judge works any more.
+  it("shows the demo's reviewer following the work, then its final review", () => {
     const { window: w, document: d, dom } = boot();
     d.getElementById("agentAnswerActivity").innerHTML = "<details><summary></summary></details>";
-    const judge = (id, title, status) => ({ id, kind: "judge", title, status, model: { label: "Answer check", model: "" },
-      usage: status === "completed" ? { input_tokens: 4200, output_tokens: 640, complete: true } : null });
-    const answer = { id: "demo-OpenAI", kind: "comparison", title: "GPT", status: "completed", text: "Send it.",
-      model: { label: "GPT", model: "" }, usage: null };
+    const at = seconds => new Date(Date.parse("2026-10-31T10:00:00Z") + seconds * 1000).toISOString();
+    const model = { label: "GPT", model: "openai/gpt" };
+    const reviewer = (status, messages) => ({ id: "demo-review-OpenAI", kind: "audit", title: "Reviewer · GPT", status,
+      model, created_at: at(0), messages });
+    const answer = { id: "demo-OpenAI", kind: "comparison", title: "GPT", status: "completed", text: "Send it.", model,
+      created_at: at(4) };
     w.App.agentDelegation.demo({ turnId: "demo-2", running: true,
-      agents: [answer, judge("demo-differences", "Differences judge", "working"), judge("demo-coverage", "Coverage judge", "working")] });
+      agents: [reviewer("working", [{ kind: "round", text: "No objections.", created_at: at(3) }]), answer] });
+    // The reviewer and its answer are one voice: one icon, two calls.
+    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(1);
+    expect(d.querySelector(".agent-inline-model").title).toBe("GPT · 2 calls · Working");
     d.querySelector(".agent-sidebar-toggle").click();
-    const check = () => [...d.querySelectorAll(".agent-session")].at(-1);
-    expect(check().querySelector("strong").textContent).toBe("Answer check");
-    check().open = true; check().dispatchEvent(new w.Event("toggle"));
-    expect(check().querySelector(".agent-judge-note").textContent).toBe("Check in progress.");
-    w.App.agentDelegation.demo({ turnId: "demo-2", running: false,
-      agents: [answer, judge("demo-differences", "Differences judge", "completed"), judge("demo-coverage", "Coverage judge", "completed")] });
-    expect(check().querySelector(".agent-session-state").textContent).toMatch(/^Completed/);
-    expect(check().querySelector(".agent-judge-note").textContent).toBe("Results are marked in the answer and listed under Review.");
+    const row = () => d.querySelector('.agent-session[data-agent-id="demo-review-OpenAI"]')
+      || [...d.querySelectorAll(".agent-session")].find(item => item.textContent.includes("Reviewer"));
+    row().open = true; row().dispatchEvent(new w.Event("toggle"));
+    expect(row().querySelector(".agent-review-stats").textContent).toBe("1 round · No objections · Final review pending");
+    w.App.agentDelegation.demo({ turnId: "demo-2", running: false, agents: [reviewer("completed", [
+      { kind: "round", text: "No objections.", created_at: at(3) },
+      { kind: "result", text: "- **wrong** · “in 2015”: Only the walls were insulated.", created_at: at(20) }]), answer] });
+    expect(row().querySelector(".agent-review-stats").textContent).toBe("1 round · No objections · Final review: 1 note");
+    expect(row().querySelector(".agent-review-note-text").textContent).toBe("Only the walls were insulated.");
+    expect(d.querySelector(".agent-judge-note")).toBeNull();
+    expect(w.fetch).not.toHaveBeenCalled();
     dom.window.close();
   });
 });

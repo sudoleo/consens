@@ -51,6 +51,30 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     expect(wrapper.querySelectorAll("[data-run-item]").length).toBe(4);
   });
 
+  // The one mode (2026-10-31): the reviewers follow beside the clock, their
+  // marks are on the answer, and the row under it has Notes and Answers. No
+  // score, no judge.
+  it("ends on the reviewers' marks and Notes, without a score", async () => {
+    const { document } = await stillFrame();
+    // The template's loops are cut out here: one mark stands for the three.
+    const reviewers = [...document.querySelectorAll("[data-reviewer]")];
+    expect(reviewers.length).toBeGreaterThan(0);
+    expect(reviewers.every((mark) => mark.classList.contains("is-done"))).toBe(true);
+    const models = document.querySelectorAll("[data-model]");
+    expect(document.querySelectorAll("[data-model].is-done")).toHaveLength(models.length);
+    expect(document.querySelector("[data-run-count]").textContent).toBe(`${models.length} answers`);
+    // The reviewers beside the clock never count as the AIs the agent asked.
+    expect(document.querySelector("[data-reviewer][data-model]")).toBeNull();
+    const kinds = [...document.querySelectorAll("[data-mark]")]
+      .map((mark) => ["is-major", "is-split", "is-minor"].find((kind) => mark.classList.contains(kind)));
+    expect(kinds).toEqual(["is-major", "is-split", "is-minor"]);
+    const row = document.querySelector("[data-run-evidence]");
+    expect(row.classList.contains("is-visible")).toBe(true);
+    expect(row.textContent.replace(/\s+/g, " ").trim()).toBe("Notes 3 Answers 3");
+    expect(document.querySelector("[data-run-answer]").classList.contains("is-reviewing")).toBe(false);
+    expect(SCENE).not.toMatch(/agreement|\/100|judge|claim-badge/i);
+  });
+
   // a11y audit P2: the run is a function of the scroll position, so a screen
   // reader read whatever frame the page stood on.
   it("speaks the finished turn to screen readers instead of a frame", async () => {
