@@ -32,6 +32,22 @@ def test_no_form_of_the_app_puts_its_fields_into_the_address():
     assert "secret" not in response.text
 
 
+def test_no_form_of_any_page_puts_a_named_field_into_the_address():
+    """The same on the public pages: a form a script takes over (Topic and
+    Watch follow forms) names none of its fields, so a submit before the
+    deferred script runs sends an empty GET instead of ?email=... into the
+    address bar and the access logs. Only the Model Pulse filters are a GET
+    form by design: they carry no personal data."""
+    for path in sorted((ROOT / "templates").rglob("*.html")):
+        html = path.read_text(encoding="utf-8")
+        for form in re.finditer(r"(<form\b[^>]*>)(.*?)</form>", html, re.S):
+            tag, body = form.groups()
+            if 'method="post"' in tag or 'id="modelPulseFilters"' in tag:
+                continue
+            named = re.findall(r'<(?:input|textarea|select)\b[^>]*\bname="([^"]+)"', body)
+            assert not named, (path.name, tag, named)
+
+
 def test_the_composer_decides_demo_and_send_in_the_template():
     html = read("templates/index.html")
     actions = html[html.index('<div class="input-actions-container">'):html.index('id="composerModeBar"')]
