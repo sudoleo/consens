@@ -467,8 +467,11 @@ async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_v
     details = "".join(f" {key}={ending[key]}" for key in ("browser_code", "upstream_code", "exit")
                       if isinstance(ending.get(key), int))
     logging.info("Agent workspace %s closed seconds=%d code=%d by=%s%s", kind, int(elapsed), code, by, details)
-    await _end(websocket, code)
+    # Counted before the close, as in _refuse: once the socket is closed,
+    # nothing guarantees the task runs on (the push CI of 2026-10-31 lost
+    # the end counter).
     await asyncio.to_thread(_count, kind, "end_" + by, elapsed)
+    await _end(websocket, code)
 
 
 @router.websocket("/agent/workspace/view")

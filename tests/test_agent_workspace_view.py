@@ -360,7 +360,6 @@ def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(vie
     caplog.set_level(logging.INFO)
     ws = open_view(client)
     ws.close(code=1001)
-    ws.__exit__(None, None, None)
     import time as clock
     deadline = clock.monotonic() + 5
     # Until everything asserted below happened: the view's own line (a line of
@@ -370,6 +369,10 @@ def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(vie
         return any("Agent workspace view closed" in record.getMessage() for record in caplog.records)             and any(outcome.startswith("end_") for _, outcome, _ in counted)
     while not ended() and clock.monotonic() < deadline:
         clock.sleep(0.02)
+    # Only then the test client's session ends: leaving it cancels the
+    # server's task wherever it is, and the line or the counter went missing
+    # (push CI 2026-10-31, 1 of 3 local runs).
+    ws.__exit__(None, None, None)
     [line] = [record.getMessage() for record in caplog.records if "Agent workspace view closed" in record.getMessage()]
     assert "code=1000 by=browser browser_code=1001" in line and UID not in line
     assert counted[0] == ("view", "opened", False) and ("view", "end_browser", True) in counted
