@@ -205,10 +205,21 @@ async def fetch_picture(url, get=None):
         return data, image_url, final, {key: value for key, value in page_words(html).items() if value}
 
 
+# The source documents' DNS gate admits four lookups at once (dns_busy beyond,
+# also for other users in the process): three addresses at a time, as in
+# agent_source_evidence.
+FETCHES_AT_ONCE = 3
+
+
 async def _fetch_all(urls):
-    """fetch_picture for each address side by side: a result or the exception."""
-    return await asyncio.gather(*(asyncio.wait_for(fetch_picture(url), CALL_SECONDS) for url in urls),
-                                return_exceptions=True)
+    """fetch_picture for each address, FETCHES_AT_ONCE side by side: a result
+    or the exception. Each address has CALL_SECONDS once it starts."""
+    gate = asyncio.Semaphore(FETCHES_AT_ONCE)
+
+    async def one(url):
+        async with gate:
+            return await asyncio.wait_for(fetch_picture(url), CALL_SECONDS)
+    return await asyncio.gather(*(one(url) for url in urls), return_exceptions=True)
 
 
 def _reason(exc):

@@ -87,6 +87,28 @@ def test_a_page_brings_its_preview_picture_with_the_page_as_referer():
         asyncio.run(fetch_picture("https://x.example/", get=bare))
 
 
+def test_find_pictures_fetches_no_more_addresses_at_once_than_the_dns_gate_leaves(monkeypatch):
+    """Bug hunt 2026-10-30: six addresses side by side met the source DNS gate
+    (four lookups, dns_busy beyond, source_documents.pinned_target); the fifth
+    and sixth failed as "it could not be fetched", and a full gate let other
+    users' lookups fail. Three at a time, like agent_source_evidence; each
+    address still gets its own CALL_SECONDS once it starts."""
+    running, peak = 0, 0
+
+    async def fetch(url, get=None):
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return b"", url, "", {}
+    monkeypatch.setattr(agent_web_images, "fetch_picture", fetch)
+    urls = [f"https://site{index}.example/" for index in range(6)]
+    results = asyncio.run(agent_web_images._fetch_all(urls))
+    assert [result[1] for result in results] == urls
+    assert peak == 3
+
+
 def test_the_fetch_takes_extra_headers_but_keeps_its_own(monkeypatch):
     """watch_images._fetch(headers=...): the Referer goes along, the pinned
     Host and the honest User-Agent stay."""
