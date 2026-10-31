@@ -107,7 +107,8 @@
             <div class="admin-section">
                 <h3>Preset Model Sets</h3>
                 <p class="section-hint">
-                    Each preset selects exactly six answer models from the available families and the final Consensus engine.
+                    Each preset selects the Agent's reviewers (two to six families; they also answer compare_models and
+                    the Compare grid) and a Consensus engine for the server pipeline. Every outward step waits for all reviewers.
                     Daily and Open Models accept Free-tier models only; High Quality is always Pro-only.
                 </p>
                 <div id="presetModelsContainer" class="preset-model-cards">
@@ -271,7 +272,7 @@
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
                     Issue a key for an active, e-mail-verified Firebase user. The key inherits that
-                    UID's tier and its daily allowance in euros (shared with the app). All v1 runs use the six server-selected Daily-preset
+                    UID's tier and its daily allowance in euros (shared with the app). All v1 runs use the server-selected Open Models
                     families, including DeepSeek processing in China.
                     Run content expires after 30 days.
                     Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
