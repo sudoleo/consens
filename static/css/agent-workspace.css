@@ -284,6 +284,10 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .agent-resources > .agent-files-list + .agent-doc-card { border-top: 1px solid var(--line-soft); padding-top: 12px; }
 .agent-file-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .agent-file-actions .agent-files-icon-btn, .agent-file-actions .agent-files-more { color: var(--ink-3); }
+.agent-file-actions .agent-files-more[aria-expanded="true"] { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-file-actions :is(.agent-files-more, .agent-files-icon-btn:not(:disabled)):hover { color: var(--ink); }
+}
 
 /* This answer's own files could not load (agent-workspace.js): one quiet
    line in the row's ink, Retry as the text link (UX audit B13). */
@@ -321,7 +325,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 }
 @media (pointer: coarse) {
   .agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost,
-  .agent-files-menu-item, .agent-doc-earlier > summary { min-height: 44px; }
+  .agent-files-menu-item, .agent-doc-earlier > summary, button.agent-doc-main { min-height: 44px; }
   .agent-files-more, .agent-files-icon-btn { width: 44px; }
   .agent-doc-version .agent-files-chip { min-height: 44px; }
 }

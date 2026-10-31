@@ -194,8 +194,9 @@
 }
 /* The chat model's reasoning level, quiet beside its name, one word space
    away ("DeepSeek V4.1 Flash Auto", model-picker.js; Max 2026-10-31, after
-   ChatGPT's "GPT-6.1 Sol High"). The name gives way first; a phone and the
-   one-line thread pill (below) keep the level in the chip's menu. */
+   ChatGPT's "GPT-6.1 Sol High"). The name gives way first; a phone and a
+   desktop chat (below, where the chip is capped at 180px) keep the level in
+   the chip's menu. */
 .chat-input-container .composer-models .model-picker-display-level {
   flex: 0 0 auto; margin-left: -3px; color: var(--ink-3); font-weight: 400; white-space: nowrap;
 }
@@ -347,7 +348,7 @@
   /* In a chat the Agent picker yields width to the question, its reasoning
      level first (it stays in the chip's menu and the (+) menu). */
   body.single-agent-active:not(.is-hero) .agent-model-picker { max-width: 180px; }
-  body:not(.is-hero, .direct-comparison-preview) .chat-input-container:not(.is-multiline) .model-picker-display-level { display: none; }
+  body:not(.is-hero, .direct-comparison-preview) .chat-input-container .model-picker-display-level { display: none; }
   body.single-agent-active:not(.is-hero) .agent-effort-control .model-picker-display-text::before { content: ''; }
 }
 

@@ -154,7 +154,7 @@ describe("the composer's first frame (B1, B2, B13)", () => {
     expect(chip(document).dataset.seeded).toBe("true");
     expect(chip(document).querySelector(".model-picker-display-text").textContent).toBe("Claude Opus 5.5");
     expect(chip(document).querySelector(".model-picker-display-level").textContent).toBe("High");
-    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5 · Reasoning High");
+    expect(chip(document).getAttribute("aria-label")).toBe("Chat model: Claude Opus 5.5 High");
     expect(document.getElementById("agentModelDropdown").classList.contains("native-model-picker")).toBe(true);
     expect(document.querySelector(".consensus-model").hidden).toBe(true);
     // Grok left the comparison (the account's stored choice): two marks,

@@ -241,8 +241,9 @@
     chip.setAttribute("aria-haspopup", "listbox");
     chip.setAttribute("aria-expanded", "false");
     // Translated part by part: "{picker}: {label}" has no entry of its own.
-    const spoken = ariaLabel || `${window.App.t(select.getAttribute("aria-label") || "Models")}: ${window.App.t(label)}`;
-    chip.setAttribute("aria-label", level ? `${spoken} · ${window.App.t("Reasoning")} ${window.App.t(level)}` : spoken);
+    // The level is spoken right after the name, as it stands (WCAG 2.5.3).
+    const named = level ? `${window.App.t(label)} ${window.App.t(level)}` : window.App.t(label);
+    chip.setAttribute("aria-label", ariaLabel || `${window.App.t(select.getAttribute("aria-label") || "Models")}: ${named}`);
     const name = document.createElement("span");
     name.className = "model-picker-display-text";
     name.textContent = label;

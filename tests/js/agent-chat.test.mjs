@@ -3382,7 +3382,7 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     expect(trigger.querySelector('.model-picker-display-level').textContent).toBe('Auto');
     expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
-    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it · Reasoning Auto');
+    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash Auto writes the answer, 2 AIs cross-check it');
     expect(trigger.textContent).not.toMatch(/Agent|Compare/);
 
     trigger.click();

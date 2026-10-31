@@ -533,7 +533,22 @@
     // its tooltip and menu the reviewers ("6 AIs cross-check" stand under the
     // field, agent-mode.js renderReviewers).
     // Translated part by part: "{picker}: {label}" has no entry of its own.
-    let ariaLabel = `${window.App.t(select.getAttribute("aria-label") || "Choose model")}: ${window.App.t(displayLabel)}`;
+    // The chat model's reasoning level stands quietly beside its name
+    // ("DeepSeek V4.1 Flash Auto", Max 2026-10-31, after ChatGPT's "GPT-6.1
+    // Sol High"); Compare's chip names how many answer and has none. While
+    // the list loads, the level the first frame painted (app-bootstrap.js);
+    // a model without the setting shows none.
+    const effort = state.secondarySelect;
+    let level = "";
+    if (!state.presets && effort) {
+      if (effort.dataset.available === "true") level = effort.selectedOptions[0]?.textContent || "";
+      else if (!["ready", "failed"].includes(select.dataset.catalog)) level = window.App.firstFrame?.agentEffort?.() || "";
+    }
+    // Spoken as it stands, the level right after the name, so speech input
+    // finds the chip by its words (WCAG 2.5.3); the level translated on its
+    // own, the sentence around it keeps its entry (docs/i18n.md).
+    const spoken = name => (level ? `${name} ${window.App.t(level)}` : name);
+    let ariaLabel = `${window.App.t(select.getAttribute("aria-label") || "Choose model")}: ${spoken(window.App.t(displayLabel))}`;
     // A companion still being enhanced is already this chip's word: it
     // stands from the first frame (app-bootstrap.js) and must not go for the
     // moment until the link is made. A model list that failed to load says
@@ -550,25 +565,12 @@
       displayTitle = count < 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
         : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
           : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
+      const model = spoken(selectedLabel);
       ariaLabel = count < 1
-        ? `${linked}: ${selectedLabel} writes the answer, no cross-check`
-        : count === 1 ? `${linked}: ${selectedLabel} writes the answer, 1 AI cross-checks it`
-          : `${linked}: ${selectedLabel} writes the answer, ${count} AIs cross-check it`;
+        ? `${linked}: ${model} writes the answer, no cross-check`
+        : count === 1 ? `${linked}: ${model} writes the answer, 1 AI cross-checks it`
+          : `${linked}: ${model} writes the answer, ${count} AIs cross-check it`;
     }
-
-    // The chat model's reasoning level stands quietly beside its name
-    // ("DeepSeek V4.1 Flash Auto", Max 2026-10-31, after ChatGPT's "GPT-6.1
-    // Sol High"); Compare's chip names how many answer and has none. While
-    // the list loads, the level the first frame painted (app-bootstrap.js);
-    // a model without the setting shows none.
-    const effort = state.secondarySelect;
-    let level = "";
-    if (!state.presets && effort) {
-      if (effort.dataset.available === "true") level = effort.selectedOptions[0]?.textContent || "";
-      else if (!["ready", "failed"].includes(select.dataset.catalog)) level = window.App.firstFrame?.agentEffort?.() || "";
-    }
-    // Part by part: the sentence before it has its own entry (docs/i18n.md).
-    if (level) ariaLabel = `${window.App.t(ariaLabel)} · ${window.App.t("Reasoning")} ${window.App.t(level)}`;
 
     if (state.displayButton) {
       // The comparison models stay open to change while the chat model is

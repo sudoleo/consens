@@ -7398,8 +7398,9 @@ auf dem Startbildschirm in der Reihe des Feldes (`#composerTools`,
 Reasoning (seit 2026-10-31 ohne Knopf in der Reihe; die Stufe steht grau neben
 dem Chatmodell im Chip); auf dem Handy (ohne Werkzeuge in der Reihe) und in
 einem Chat bleibt das Menü vollständig. Reasoning trägt im Menü das Gehirn mit
-Funken, Anhänge dieselbe Büroklammer. In der Reihe stehen
-Zustände („Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
+Funken, Anhänge dieselbe Büroklammer. Die Stufe im Chip („DeepSeek V4.1 Flash
+Auto“) steht in Labelgröße auf derselben Grundlinie, eine Stufe leiser; im
+Vorlesetext folgt sie direkt dem Modellnamen. Anbieterzeichen
 stehen seit 2026-10-22 in ihren eigenen Farben (auch im Landing-Mockup
 `.lp-composer-model`): bei 14 px erkennt man eine Marke an der Farbe, und auf
 dem Handy gibt es keinen Hover. Unter den Antworten und im Modell-Picker ruhen
@@ -11602,8 +11603,10 @@ Zustandswechsel gleitet den Kopf einmal auf seine neue Breite.
 `Writing answer…` erscheint nur, wenn nach dem letzten `responding`-Status kein
 Tool-Schritt mehr kam; Text vor einem Tool-Aufruf ist Vorrede, nicht Antwort.
 
-**DOM-Haken.** `templates/index.html`: `#agentAnswerResources` direkt nach
-`#agentAnswerBody` (Paket B rendert Dokumentkarten hinein),
+**DOM-Haken.** `templates/index.html`: `#agentAnswerResources` nach
+`#agentAnswerBody` (Dateizeilen, Teil-gelesen-Hinweis; die Dokumentzeilen
+stehen seit 2026-10-31 davor in `.agent-answer-documents`, direkt nach dem
+Text und seinem Bilderplatz),
 `#agentAnswerErrorActions` nach `#agentAnswerError`, `#agentReviewNotice` vor
 `.chat-input-container`.
 
