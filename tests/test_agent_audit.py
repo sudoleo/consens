@@ -1365,6 +1365,18 @@ def test_a_quote_is_found_like_a_checked_passage(quote, expected):
     assert ANSWER[start:stop] == expected
 
 
+def test_a_link_quoted_by_its_label_is_found_when_its_address_holds_the_words_again():
+    """Bug hunt 2026-10-26: "OpenAI" in "[OpenAI](https://openai.com/...)"
+    stands twice in the raw answer (label and address), once in what the
+    reader sees; the raw count named no passage before the visible text was
+    asked, and the mark landed under Other notes."""
+    answer = "The model comes from [OpenAI](https://openai.com/index/gpt-6) and costs less."
+    start, stop = locate_quote(answer, "OpenAI")
+    assert answer[start:stop] == "[OpenAI](https://openai.com/index/gpt-6)"
+    # Twice in what the reader sees stays unplaced.
+    assert locate_quote(answer + " OpenAI says so.", "OpenAI") is None
+
+
 def test_quotes_the_answer_does_not_hold_or_holds_twice_stay_unplaced():
     assert locate_quote(ANSWER, "The tower is made of glass") is None
     assert locate_quote(ANSWER, "is") is None

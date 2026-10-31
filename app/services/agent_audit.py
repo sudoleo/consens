@@ -1139,6 +1139,10 @@ def locate_quote(answer, quote):
     for text, origin in ((answer, None), _visible(answer)):
         found = _occurrences(text, needle)
         if found > 1:
+            # A link's address may hold the words once more ("[OpenAI](https://
+            # openai.com/...)"): what the reader sees decides.
+            if origin is None:
+                continue
             return None
         span = None
         if found:
