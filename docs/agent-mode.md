@@ -4586,17 +4586,15 @@ der Agent riet Seite für Seite und sah jede an (Bildtokens, Schritte).
   Oologah/Oklahoma, Elias Nerlich von Delay Sports, ein Hearthstone-Profi):
   drei sehr gut, der Nischen-Esport gemischt. Eigener Index, Kopie jedes Bildes
   auf Braves Server (500 px breit), `safesearch=strict`. Verworfen: Parallel
-  (Standardbedingungen erlauben Training auf Ein- und Ausgaben, keine Kopie,
-  nicht im DPF), Linkup und Tavily (nur Bilder von Seiten ihrer Websuche, kein
+  (Standardbedingungen erlauben Training auf Ein- und Ausgaben, keine Kopie),
+  Linkup und Tavily (nur Bilder von Seiten ihrer Websuche, kein
   Bildindex), You.com (Bild-API laut eigener Doku Beta und ungepflegt), Google
   Custom Search (keine Neukunden, Ende 2027-01-01), Serper/SerpAPI (greifen
   Google ab), Staan von Qwant/Ecosia (keine Bild-API gefunden).
 - **Datenschutz:** Hinaus gehen nur die Suchwörter des Agenten, vom Server mit
-  dem Schlüssel von consens.io, ohne Konto oder IP des Nutzers. Brave hält das
-  Anfrageprotokoll bis 90 Tage; sein Vertrag zur Auftragsverarbeitung nimmt
-  Suchanfragen aus, und Brave steht nicht auf der DPF-Liste (am 2026-10-31
-  geprüft). `privacy.html` sagt beides (Abschnitt 7, „Picture search“). Nie in
-  Chats mit Google-Daten (wie `read_source`).
+  dem Schlüssel von consens.io, ohne Konto oder IP des Nutzers; Brave hält das
+  Anfrageprotokoll bis 90 Tage (`privacy.html`, Abschnitt 7, „Picture
+  search“). Nie in Chats mit Google-Daten (wie `read_source`).
 - **Ablauf:** `search_pictures(query)` (`picture_search.py`, nur mit
   `BRAVE_SEARCH_API_KEY`, aus mit `AGENT_PICTURE_SEARCH=0`) gibt bis zu 10
   Treffer (`FOUND_PER_SEARCH`) mit ID, Seite, Seitentitel und Größe zurück, ohne
@@ -4627,9 +4625,7 @@ der Agent riet Seite für Seite und sah jede an (Bildtokens, Schritte).
   die mit Pfeilen, Tasten und Wischen durch die Bilder der Zeile blättert, jedes
   einmal lädt und die Nachbarn vorlädt, in fester Höhe, und die Seite jedes
   Bildes als Link nennt (`docs/codebase-map.md`, „Collage“).
-- **Offen (Max):** Brave ist nicht im DPF und deckt Suchanfragen nicht mit
-  Standardvertragsklauseln ab; Suchwörter können Namen enthalten. Ohne
-  Schlüssel in Render bleibt die Suche aus.
+- Ohne Schlüssel in Render bleibt die Suche aus.
 
 Tests: `tests/test_agent_web_images.py` (Suche, Abruf, Ablauf),
 `tests/js/agent-workspace.test.mjs` (Collage),

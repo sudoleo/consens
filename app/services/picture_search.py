@@ -17,10 +17,9 @@ pages their web search found, You.com's is an unmaintained beta, Google's API
 takes no new customers and the services that scrape Google break its terms.
 
 What leaves: the words the agent searches for, from the server, with
-consens.io's key; nothing of the user's account or browser. Brave keeps its
-query log up to 90 days (billing, abuse) and its data processing addendum
-leaves search queries out (privacy.html). Never in chats with Google data,
-like read_source and find_pictures (agent_delegation.py).
+consens.io's key; nothing of the user's account or browser (privacy.html).
+Never in chats with Google data, like read_source and find_pictures
+(agent_delegation.py).
 """
 from __future__ import annotations
 
