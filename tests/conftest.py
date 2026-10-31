@@ -56,6 +56,43 @@ def deepseek_default_agent(monkeypatch):
     monkeypatch.setenv("AGENT_MODEL", "deepseek/deepseek-v4.1-flash")
 
 
+# $1.15 per million tokens is one micro-euro per token
+# (agent_budget_config.NANO_USD_PER_MICRO_EUR); a search costs $0.000001.
+FLAT_PRICE = "0.00000115"
+
+
+@pytest.fixture(autouse=True)
+def flat_agent_prices(request, monkeypatch):
+    """Since 2026-10-31 the daily account counts micro-euros. Agent tests run
+    whole loops against the suite's allowance (250,000, see below) and were
+    written in tokens: reservations shrinking to fit, waiting siblings,
+    overdrafts, long runs. At one flat price for input, cached input, cache
+    writes and output every catalog model costs one micro-euro per token, so
+    their arithmetic holds and no catalog price update moves them. Tests of
+    real prices carry ``@pytest.mark.real_prices`` (and explicit models:
+    test_agent_euro_account.py, test_usage_meter.py)."""
+    if request.node.get_closest_marker("real_prices"):
+        return
+    from app.services.llm import agent_model_metadata
+    real = agent_model_metadata.snapshot
+
+    def flat():
+        catalog = real()
+        for entry in catalog.values():
+            entry["pricing"] = {**entry.get("pricing", {}), "prompt": FLAT_PRICE, "completion": FLAT_PRICE,
+                                "input_cache_read": FLAT_PRICE, "input_cache_write": FLAT_PRICE,
+                                "web_search": "0.000001"}
+        return catalog
+
+    monkeypatch.setattr(agent_model_metadata, "snapshot", flat)
+    # Models without a search price of their own reserve Exa's ($0.007): next
+    # to nothing here too, as searches cost no tokens in those tests.
+    from app.services import agent_costs
+    from app.services.llm import agent_client
+    for module in (agent_costs, agent_client):
+        monkeypatch.setattr(module, "search_cost_nanos", lambda model: 1_000)
+
+
 @pytest.fixture(autouse=True)
 def _fresh_agent_background(monkeypatch):
     """Each test gets its own Agent run registry: a lifespan test drains the

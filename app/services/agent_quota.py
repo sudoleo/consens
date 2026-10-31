@@ -1,13 +1,16 @@
-"""UTC-day token account. Agent calls are charged input + output, prompt
-tokens read from the provider's cache at CACHED_INPUT_WEIGHT (charged_tokens),
-an audit reviewer's calls at AUDIT_REVIEWER_QUOTA_WEIGHT (receipt_weight).
+"""UTC-day allowance in micro-euros (agent_budget_config.MICRO_EUR). Every
+call is charged what it cost: the provider's dollar cost of the call (cache,
+reasoning and web search included), else its catalog price, converted at
+agent_budget_config.NANO_USD_PER_MICRO_EUR (measured_charge). Until
+2026-10-31 the account counted tokens, cache reads and audit reviewers at
+weights that stood in for their cost.
 
 One ledger document per account and period serves Agent and the Consensus
 pipeline alike; the limit comes from the account tier (agent_budget_config).
 Agent reserves before every call and settles with measured usage. The pipeline
 is admitted per run against the expected cost of a typical run, holds that
 estimate while the run is young (``pipeline_holds``) and books the measured
-tokens of every finished operation afterwards. A run may therefore push the
+cost of every finished operation afterwards. A run may therefore push the
 account slightly below zero; the next admission then fails. The overdraft is
 bounded because only runs with enough remaining budget are admitted and every
 admitted run holds its estimate against concurrent admissions.
@@ -20,9 +23,9 @@ is missing is neither fully released nor fully charged. Its reservation is
 released and a bounded estimate is charged instead: the measured provisional
 lower bound, but at least ``UNKNOWN_ESTIMATE_FRACTION`` of the reservation.
 Estimates live in their own ``estimated`` bucket, strictly separate from
-measured ``used`` tokens, and count against ``remaining``. When the provider
-later reports the generation's real usage, reconciliation swaps the estimate
-for the measured tokens exactly once. Calls that provably never started are
+the measured ``used`` amount, and count against ``remaining``. When the
+provider later reports the generation's real cost, reconciliation swaps the
+estimate for it exactly once. Calls that provably never started are
 settled as a measured zero and release everything. There is no day-long lock.
 """
 import math
@@ -35,13 +38,16 @@ from app.services import agent_budget_config
 
 
 class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
+    """``remaining``, ``required`` and ``reserved`` in micro-euros. The codes
+    keep their names from the token account (browser and API contract)."""
+
     def __init__(self, remaining, required, *, reserved=0):
         self.remaining, self.required = remaining, required
         self.reserved = reserved
         self.code = "agent_token_reservation" if remaining else "agent_tokens_exhausted"
-        message = (f"The next model call needed a reservation of {required:,} tokens; {remaining:,} were available at that point. "
+        message = ("The next model call needed more of today's allowance than was available at that point. "
                    "Some allowance may be reserved for active calls. Completed calls release their reservations."
-                   if remaining else "No tokens were left in today's allowance for the next model call. Active calls temporarily reserve tokens. The daily allowance resets at 00:00 UTC.")
+                   if remaining else "Nothing was left in today's allowance for the next model call. Active calls temporarily reserve part of it. The daily allowance resets at 00:00 UTC.")
         super().__init__(message)
 
 
@@ -137,8 +143,8 @@ def public_snapshot(data, period, config, tier, *, now=None, limit=None):
             "tier": tier, "run_estimates": agent_budget_config.run_estimates_for(config, tier)}
 
 
-def remaining_tokens(db, uid, *, tier=None):
-    """Plain read of today's unreserved allowance, without snapshot repairs."""
+def remaining_allowance(db, uid, *, tier=None):
+    """Plain read of today's unreserved allowance (micro-euros), without snapshot repairs."""
     config = agent_budget_config.get_config(db)
     tier = account_tier(uid) if tier is None else tier
     data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
@@ -174,10 +180,16 @@ def day_key():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+# The unit of the period's ledger. Ledgers of the token account (until
+# 2026-10-31) have no suffix: a call reserved in tokens before the switch
+# settles into its own token ledger, never into the euro one.
+LEDGER_UNIT = "_eur"
+
+
 def period_key(config):
     # Receipts retain this key, so calls started before a reset settle into the
     # old ledger without consuming or releasing the freshly reset allowance.
-    return day_key() + ("_" + config['reset_epoch'] if config.get('reset_epoch') else "")
+    return day_key() + ("_" + config['reset_epoch'] if config.get('reset_epoch') else "") + LEDGER_UNIT
 
 
 def quota_ref(db, uid, day):
@@ -188,78 +200,29 @@ def quota_ref(db, uid, day):
 UNKNOWN_ESTIMATE_FRACTION = 0.5
 
 
-# A prompt token the provider read from its cache counts this much (Max,
-# 2026-10-27, for every Agent mode). It costs a fraction of a fresh one (a
-# tenth at Anthropic, a quarter to a half elsewhere), and an agent, its
-# reviewers and its workers send their whole conversation again with every
-# step: counted in full, the cache hits were 60 % of what an audit turn took
-# from the account (Prod, 24.-27.10.). Cache writes count in full.
-CACHED_INPUT_WEIGHT = 0.25
-
-# An audit reviewer's call counts this much of its charge (Max, 2026-10-29:
-# "alle Pakete umsetzen", spec A-K2), its cache reads at CACHED_INPUT_WEIGHT
-# on top. Reviewers send their whole conversation again in every live round:
-# measured 28.-29.10. they took 48 % of an audit turn's allowance at 22 % of
-# its cost. At half weight their share of the allowance is about their share
-# of the cost, and the limit still bounds a reviewer that runs away.
-AUDIT_REVIEWER_QUOTA_WEIGHT = 0.5
-# The rounds of a reviewer's call (its receipt's ``round``, agent_audit).
-REVIEWER_ROUNDS = frozenset({"live", "gate", "final", "repair", "hedge"})
+def measured_charge(usage):
+    """What a measured call takes from the account in micro-euros, or None
+    when its cost is not final: the provider's cost of the call, else its
+    catalog price (agent_client.measured_usage), whatever kind of call it was."""
+    if not usage or usage.get("provisional") or not usage.get("cost_complete", usage.get("complete", True)):
+        return None
+    cost = usage.get("estimated_cost_nano_usd")
+    return agent_budget_config.micro_eur(cost) if type(cost) is int and cost >= 0 else None
 
 
-def receipt_weight(receipt):
-    """The weight of one call's receipt in the allowance: an audit reviewer's
-    call (its session's kind, or its reviewer round) counts
-    AUDIT_REVIEWER_QUOTA_WEIGHT, any other call in full. Either field alone
-    is enough."""
-    receipt = receipt or {}
-    if receipt.get("session_kind") == "audit" or receipt.get("round") in REVIEWER_ROUNDS:
-        return AUDIT_REVIEWER_QUOTA_WEIGHT
-    return 1
+def provisional_lower_bound(usage):
+    """The cost of the counts seen before a lost final chunk: a lower bound only."""
+    cost = (usage or {}).get("estimated_cost_nano_usd")
+    return agent_budget_config.micro_eur(cost) if type(cost) is int and cost >= 0 else 0
 
 
-def weighted(tokens, weight=1):
-    """``tokens`` at ``weight``, rounded up; whole tokens at weight 1."""
-    return tokens if weight == 1 else math.ceil(tokens * weight)
-
-
-def _cached(usage):
-    """The usage's cache reads, within its input; 0 when unknown."""
-    cached = usage.get("cached_input_tokens")
-    return cached if type(cached) is int and 0 <= cached <= usage["input_tokens"] else 0
-
-
-def charged_tokens(prompt, completion, cached=0, weight=1):
-    """What one call takes from the account: its fresh input and output in
-    full, its cache reads at CACHED_INPUT_WEIGHT (rounded up), all of it at
-    ``weight`` (receipt_weight)."""
-    cached = cached if type(cached) is int and 0 <= cached <= prompt else 0
-    return weighted(prompt - cached + math.ceil(cached * CACHED_INPUT_WEIGHT) + completion, weight)
-
-
-def measured_tokens(usage, weight=1):
-    """The charge of a measured call (charged_tokens), or None when its usage
-    is not final. Reasoning is part of output; cache reads and writes are
-    parts of input."""
-    if usage and not usage.get("provisional") and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
-        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage), weight)
-    return None
-
-
-def provisional_lower_bound(usage, weight=1):
-    """Cumulative counts seen before a lost final chunk: a lower bound only."""
-    if usage and all(type(usage.get(k)) is int and usage[k] >= 0 for k in ("input_tokens", "output_tokens")):
-        return charged_tokens(usage["input_tokens"], usage["output_tokens"], _cached(usage), weight)
-    return 0
-
-
-def unknown_estimate(reserved, usage, weight=1):
-    """Bounded charge for a started call without final usage, else None.
-    ``reserved`` is the ledger's reservation, already at the call's weight."""
-    if measured_tokens(usage) is not None:
+def unknown_estimate(reserved, usage):
+    """Bounded charge for a started call without a final cost, else None.
+    ``reserved`` is the ledger's reservation of the call."""
+    if measured_charge(usage) is not None:
         return None
     floor = math.ceil(max(0, reserved) * UNKNOWN_ESTIMATE_FRACTION)
-    return max(provisional_lower_bound(usage, weight), floor)
+    return max(provisional_lower_bound(usage), floor)
 
 
 # A pipeline run holds its expected cost against concurrent admissions for at
@@ -284,21 +247,21 @@ def active_holds(data, now=None):
     now = _now(now)
     holds = data.get("pipeline_holds") or {}
     return {key: dict(hold) for key, hold in holds.items()
-            if isinstance(hold, dict) and type(hold.get("tokens")) is int and hold["tokens"] > 0
+            if isinstance(hold, dict) and type(hold.get("amount")) is int and hold["amount"] > 0
             and isinstance(hold.get("expires_at"), (int, float)) and hold["expires_at"] > now}
 
 
-def held_tokens(data, now=None):
-    return sum(hold["tokens"] for hold in active_holds(data, now).values())
+def held_amount(data, now=None):
+    return sum(hold["amount"] for hold in active_holds(data, now).values())
 
 
-def spent_tokens(data):
+def spent_amount(data):
     """Measured plus estimated consumption of both modes; holds excluded."""
     return data.get("used", 0) + data.get("estimated", 0) + data.get("pipeline_estimated", 0)
 
 
 def _remaining(data, limit, now=None):
-    return max(0, limit - spent_tokens(data) - data.get("reserved", 0) - held_tokens(data, now))
+    return max(0, limit - spent_amount(data) - data.get("reserved", 0) - held_amount(data, now))
 
 
 def admit_run(data, run_id, estimate, *, limit, now=None, readmission=False):
@@ -313,10 +276,10 @@ def admit_run(data, run_id, estimate, *, limit, now=None, readmission=False):
         return data
     remaining = _remaining(data, limit, now)
     if estimate > remaining:
-        raise AgentTokenBudgetExceeded(remaining, estimate, reserved=data.get("reserved", 0) + held_tokens(data, now))
+        raise AgentTokenBudgetExceeded(remaining, estimate, reserved=data.get("reserved", 0) + held_amount(data, now))
     if len(holds) >= MAX_PIPELINE_HOLDS:
         raise PipelineCapacityExceeded("Too many runs are starting at once")
-    holds[run_id] = {"tokens": int(estimate), "expires_at": now + PIPELINE_HOLD_SECONDS}
+    holds[run_id] = {"amount": int(estimate), "expires_at": now + PIPELINE_HOLD_SECONDS}
     data["pipeline_holds"] = holds
     counter = "pipeline_readmissions" if readmission else "pipeline_runs"
     data[counter] = data.get(counter, 0) + 1
@@ -333,9 +296,9 @@ def book_run(data, run_id, *, measured, estimated, now=None):
     data["pipeline_estimated"] = data.get("pipeline_estimated", 0) + estimated
     holds = active_holds(data, now)
     if run_id in holds:
-        left = holds[run_id]["tokens"] - measured - estimated
+        left = holds[run_id]["amount"] - measured - estimated
         if left > 0:
-            holds[run_id]["tokens"] = left
+            holds[run_id]["amount"] = left
         else:
             holds.pop(run_id)
     data["pipeline_holds"] = holds
@@ -394,10 +357,10 @@ def release(data, amount):
     return data
 
 
-def settle(data, reserved, usage, weight=1):
-    """Swap a call's reservation for its charge at ``weight`` (receipt_weight)."""
+def settle(data, reserved, usage):
+    """Swap a call's reservation for its charge (measured_charge)."""
     data = normalize(data)
-    actual = measured_tokens(usage, weight)
+    actual = measured_charge(usage)
     data['reserved'] = max(0, data.get('reserved', 0) - reserved)
     if actual is not None:
         data["used"] = data.get("used", 0) + actual
@@ -406,13 +369,13 @@ def settle(data, reserved, usage, weight=1):
         # a bounded estimate is charged until reconciliation replaces it.
         data["unknown"] = data.get("unknown", 0) + reserved
         data['unknown_released'] = data.get('unknown_released', 0) + reserved
-        data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage, weight)
+        data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage)
     data["revision"] = data.get("revision", 0) + 1
     return data
 
 
 def reconcile(data, estimate, actual):
-    """Replace one charged estimate with measured tokens. Callers fence once."""
+    """Replace one charged estimate with the measured charge. Callers fence once."""
     data = normalize(data)
     data["estimated"] = max(0, data.get("estimated", 0) - estimate)
     data["used"] = data.get("used", 0) + actual
@@ -426,7 +389,8 @@ def public(data, day=None, *, limit=None, now=None):
     limit = daily_limit() if limit is None else limit
     # `estimated` is everything charged without a final measurement (both
     # modes), `reserved` everything held for running work (both modes).
-    return {"day": day or day_key(), "revision": data.get("revision", 0), "limit": limit, "used": data.get("used", 0),
-            "reserved": data.get("reserved", 0) + held_tokens(data, now), "unknown": data.get("unknown", 0),
+    return {"day": day or day_key(), "unit": "micro_eur", "revision": data.get("revision", 0), "limit": limit,
+            "used": data.get("used", 0),
+            "reserved": data.get("reserved", 0) + held_amount(data, now), "unknown": data.get("unknown", 0),
             "estimated": data.get("estimated", 0) + data.get("pipeline_estimated", 0),
             "remaining": _remaining(data, limit, now)}

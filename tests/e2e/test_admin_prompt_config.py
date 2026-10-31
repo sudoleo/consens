@@ -78,7 +78,7 @@ def test_configuration_tab_shows_prompts_read_only_and_saves_settings(browser, p
             expect(page.locator(f'label[for="delegation-{key}"]')).to_be_hidden()
         for key in ('orchestrator_prompt', 'worker_prompt'):
             expect(page.locator(f'#delegation-{key}')).to_have_count(0)
-        expect(page.locator('#delegationConfig > p')).to_contain_text('daily token budget')
+        expect(page.locator('#delegationConfig > p')).to_contain_text('daily allowance in euros')
 
         # Native validation must open the collapsed delegation section rather
         # than silently rejecting submission before our submit handler runs.

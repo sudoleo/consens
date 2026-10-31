@@ -16,7 +16,7 @@ from app.services.agent_provider_limits import ModelEmptyAnswer
 from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, AnalysisBudgetExceeded
 from app.services.prompt_defaults import AGENT_WRITE_NOTE
-from test_agent_runs import UID, AUTH, api, pending, receipt, store
+from test_agent_runs import UID, AUTH, api, pending, receipt, store, priced
 
 
 class Script:
@@ -183,9 +183,9 @@ def test_real_judges_exact_versions_context_sources_and_all_usage(store, compare
         assert "first option costs" not in script.prompts[2 * i][1]["content"]
     usage = saved["agent_usage"]
     assert usage["input_tokens"] + usage["output_tokens"] == len(script.calls) * 70
-    quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
-    # 30 fresh + 20 cache reads at a quarter + 20 output per call (agent_quota.CACHED_INPUT_WEIGHT).
-    assert quota["used"] == len(script.calls) * 55 and quota["reserved"] == 0
+    quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
+    # Each call's provider cost, $0.0001, is 87 micro-euros (rounded up).
+    assert quota["used"] == len(script.calls) * 87 and quota["reserved"] == 0
     assert any(e["type"] == "review" and e["review"]["status"] == "running" for e in events)
     tools = [e for e in events if e.get("kind") == "tool" and e.get("name") == "compare_models"]
     assert [e["status"] for e in tools] == [s for _ in range(compares) for s in ("running", "succeeded")]
@@ -305,7 +305,7 @@ def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
     def claim(loop):
         try:
             return store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
-                policy=loop.policy.snapshot(), reservation=(60, 100))
+                policy=loop.policy.snapshot(), reservation=(60, priced(60)))
         except AnalysisBudgetExceeded:
             return False
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -317,8 +317,9 @@ def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
         "prompt_tokens_details": {"cached_tokens": 5}, "completion_tokens_details": {"reasoning_tokens": 5}}, loop.model)
     for _ in range(2):
         store.settle(UID, loop.chat_id, loop.turn_id, completion=value, status="cancelled", final=False)
-    quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
-    assert quota["used"] == 5 + 2 + 5 and quota["reserved"] == 0  # cache reads at a quarter, rounded up
+    quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
+    # 15 tokens at the flat test price, settled once.
+    assert quota["used"] == 15 and quota["reserved"] == 0
 
 
 @pytest.mark.parametrize("remaining", [0, 40000])
@@ -339,8 +340,8 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
     loop = make_loop(store, Script())
     params = dict(run_token=loop.run_token, policy=loop.policy.snapshot())
     with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
-        store.claim(UID, loop.chat_id, loop.turn_id, loop.model, reservation=(2001, 100), **params)
-    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, reservation=(1500, 100), **params)
+        store.claim(UID, loop.chat_id, loop.turn_id, loop.model, reservation=(2001, priced(2001)), **params)
+    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, reservation=(1500, priced(1500)), **params)
     store.protect_review(UID, loop.chat_id, loop.turn_id, loop.run_token, 400)
     assert agent_quota.snapshot(store.db, UID)['remaining'] == 100
     config.save(expected_revision=1, updated_by='admin', reset=True)
@@ -350,13 +351,13 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
     # Review holds move once to the fresh generation before further work.
     store.protect_review(UID, loop.chat_id, loop.turn_id, loop.run_token, 600)
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 600
-    old = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
-    # 800 fresh + 200 cache reads at a quarter + 100 output (agent_quota.CACHED_INPUT_WEIGHT).
-    assert old['used'] == 950 and old['reserved'] == 0
-    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, step='completion:1', reservation=(800, 100), **params)
+    old = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
+    # The receipt's cost, $0.000132, in micro-euros (rounded up).
+    assert old['used'] == 115 and old['reserved'] == 0
+    assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, step='completion:1', reservation=(800, priced(800)), **params)
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 800
     store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', step='completion:1', final=False)
-    assert agent_quota.snapshot(store.db, UID)['used'] == 950
+    assert agent_quota.snapshot(store.db, UID)['used'] == 115
 
 
 
@@ -455,7 +456,7 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_checked_answer(st
     assert saved["status"] == "completed" and saved["agent_review"]["status"] == "succeeded"
     ledger = agent_quota.snapshot(store.db, UID)
     assert ledger["used"] > limit and ledger["reserved"] == 0
-    assert agent_quota.remaining_tokens(store.db, UID) == 0
+    assert agent_quota.remaining_allowance(store.db, UID) == 0
 
 
 def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
@@ -526,7 +527,7 @@ def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remain
     loop.search_remaining = 1
     if context_room is not None:
         loop.policy = replace(loop.policy, context_chars=len(json.dumps(loop.messages, ensure_ascii=False)) + context_room)
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": 250000 - remaining})
     if succeeds:
         events = list(loop.run())
@@ -568,11 +569,11 @@ def test_unknown_terminal_usage_releases_admission_and_utc_day_is_separate(store
     loop = make_loop(store, Script())
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
     assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
-        policy=loop.policy.snapshot(), reservation=(500, 100))
+        policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(measured=False), status="cancelled", final=False)
-    quota = agent_quota.quota_ref(store.db, UID, "2026-09-19").get().to_dict()
+    quota = agent_quota.quota_ref(store.db, UID, "2026-09-19" + agent_quota.LEDGER_UNIT).get().to_dict()
     assert quota['reserved'] == 0 and quota['unknown'] == quota['unknown_released'] == 500
-    assert agent_quota.public(agent_quota.quota_ref(store.db, UID, "2026-09-20").get().to_dict())["remaining"] == 250000
+    assert agent_quota.public(agent_quota.quota_ref(store.db, UID, "2026-09-20" + agent_quota.LEDGER_UNIT).get().to_dict())["remaining"] == 250000
 
 
 def test_configured_default_uses_cross_family_judges(store):
@@ -673,14 +674,14 @@ def test_midnight_moves_only_unspent_review_hold(store, monkeypatch):
     loop = make_loop(store, Script())
     args = (UID, loop.chat_id, loop.turn_id)
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
-    assert store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    assert store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     store.settle(*args, completion=receipt(measured=False), status="succeeded", final=False)
     store.protect_review(*args, loop.run_token, 200)
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-20")
-    assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, reservation=(50, 100))
-    previous = agent_quota.quota_ref(store.db, UID, '2026-09-19').get().to_dict()
+    assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, reservation=(50, priced(50)))
+    previous = agent_quota.quota_ref(store.db, UID, '2026-09-19' + agent_quota.LEDGER_UNIT).get().to_dict()
     assert previous['reserved'] == 0 and previous['unknown'] == previous['unknown_released'] == 100
-    assert agent_quota.quota_ref(store.db, UID, "2026-09-20").get().to_dict()["reserved"] == 200
+    assert agent_quota.quota_ref(store.db, UID, "2026-09-20" + agent_quota.LEDGER_UNIT).get().to_dict()["reserved"] == 200
 
 
 def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(store):
@@ -795,13 +796,13 @@ def test_failed_review_recovery_preserves_status_and_never_calls_provider(api):
         list(loop.run())
     payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",
                "bookmark_id": "agent_review_recovery", "recover_only": True}
-    before = agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict()
+    before = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
     response = client.post("/agent", json=payload, headers=AUTH)
     assert response.status_code == 200, response.text
     assert response.json()["turn"]["agent_review"]["status"] == "missing"
     assert response.json()["turn"]["status"] == "failed"
     assert calls == []
-    assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).get().to_dict() == before
+    assert agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict() == before
     assert client.post("/agent", json={**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}, headers=AUTH).status_code == 409
     # Settings are part of the request identity; the defaults equal "not sent".
     assert client.post("/agent", json={**payload, "agent_preferences": {"depth": "auto", "quorum": "all"}}, headers=AUTH).status_code == 200
@@ -1152,8 +1153,8 @@ def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store, qui
 def test_answer_allowance_respects_the_saved_review_size(store):
     from app.services.agent_comparison import REVIEW_ANSWER_CHARS, CHARS_PER_TOKEN
     loop = make_loop(store, Script())
-    share = loop.comparison._output_share(6)
-    assert share <= REVIEW_ANSWER_CHARS // 6 // CHARS_PER_TOKEN
+    shares = loop.comparison._output_shares({f"model-{index}": loop.model for index in range(6)})
+    assert len(shares) == 6 and all(share <= REVIEW_ANSWER_CHARS // 6 // CHARS_PER_TOKEN for share in shares.values())
 
 
 def test_a_depth_fixed_in_settings_overrides_the_orchestrator(store):

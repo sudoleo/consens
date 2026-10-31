@@ -1,4 +1,7 @@
-"""Pipeline token metering in the transport layer and booking per operation."""
+"""Pipeline cost metering in the transport layer and booking per operation.
+
+The meter books micro-euros (1 EUR = 1.15 USD): a reported ``usage.cost`` of
+$0.00115 is 1,000 of them."""
 
 import json
 from types import SimpleNamespace
@@ -27,7 +30,7 @@ def test_streamed_request_reports_provider_usage(monkeypatch):
         sent.update(request_payload)
         yield from sse({"choices": [{"delta": {"content": "Hi"}}]},
                        {"choices": [{"delta": {}, "finish_reason": "stop"}],
-                        "usage": {"prompt_tokens": 120, "completion_tokens": 30,
+                        "usage": {"prompt_tokens": 120, "completion_tokens": 30, "cost": 0.000115,
                                   "completion_tokens_details": {"reasoning_tokens": 10}}})
 
     monkeypatch.setattr(streaming, "_openrouter_sse", fake_sse)
@@ -37,7 +40,7 @@ def test_streamed_request_reports_provider_usage(monkeypatch):
     assert sent["stream_options"] == {"include_usage": True}
     assert {"type": "delta", "text": "Hi"} in events
     totals = meter.close()
-    assert totals["measured"] == 150 and totals["reasoning_tokens"] == 10
+    assert totals["measured"] == 100 and totals["tokens"] == 150 and totals["reasoning_tokens"] == 10
     assert totals["estimated"] == 0 and totals["calls"] == 1
 
 
@@ -51,8 +54,9 @@ def test_cut_stream_is_estimated_and_rejection_is_free(monkeypatch):
         list(streaming._iter_openrouter_chunks(api_key="k", payload=PAYLOAD))
     totals = meter.totals()
     assert totals["measured"] == 0 and totals["missing_calls"] == 1
-    # Half of input estimate + output cap, like Agent's bounded estimate.
-    assert totals["estimated"] >= 500
+    # Half of the cost of input estimate + output cap, like Agent's bounded
+    # estimate: "m" is unknown to the catalog, so at FALLBACK_PRICES.
+    assert totals["estimated"] >= 1000 * 25_000 // 2 // 1150 and totals["estimated_tokens"] >= 500
 
     def rejected(*, api_key, request_payload):
         raise _ProviderHTTPStatusError(429)
@@ -77,13 +81,13 @@ def test_non_streaming_judge_call_reports_usage(monkeypatch):
         awaitable.close()
         return SimpleNamespace(status_code=200, json=lambda: {
             "choices": [{"message": {"content": "{}"}}],
-            "usage": {"prompt_tokens": 900, "completion_tokens": 100}})
+            "usage": {"prompt_tokens": 900, "completion_tokens": 100, "cost": 0.00115}})
 
     monkeypatch.setattr(provider_runtime, "_guard_provider_io", fake_guard)
     meter = usage_meter.UsageMeter()
     with usage_meter.bind_usage_meter(meter):
         provider_runtime.cancellable_post_json("https://example.invalid", json=PAYLOAD, headers={})
-    assert meter.totals()["measured"] == 1000
+    assert meter.totals()["measured"] == 1000 and meter.totals()["tokens"] == 1000
 
 
 def test_non_streaming_answer_reports_usage(monkeypatch):
@@ -92,7 +96,7 @@ def test_non_streaming_answer_reports_usage(monkeypatch):
 
         def json(self):
             return {"choices": [{"message": {"content": "Answer"}, "finish_reason": "stop"}],
-                    "usage": {"prompt_tokens": 50, "completion_tokens": 25}}
+                    "usage": {"prompt_tokens": 50, "completion_tokens": 25, "cost": 0.0000575}}
 
         def close(self):
             pass
@@ -102,12 +106,12 @@ def test_non_streaming_answer_reports_usage(monkeypatch):
     with usage_meter.bind_usage_meter(meter):
         result = engines.query_model("openai", "Q?", "key")
     assert result.get("text") or result.get("response")
-    assert meter.totals()["measured"] == 75
+    assert meter.totals()["measured"] == 50 and meter.totals()["tokens"] == 75
 
 
 def test_parallel_fan_out_reports_into_the_callers_meter():
     def provider_call(provider, model, question, keys, tier, deep_think):
-        usage_meter.current_meter().record({"prompt_tokens": 10, "completion_tokens": 5})
+        usage_meter.current_meter().record({"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.0000115})
         return {"text": f"{provider} answer", "sources": [], "completion": "complete"}
 
     meter = usage_meter.UsageMeter()
@@ -116,7 +120,24 @@ def test_parallel_fan_out_reports_into_the_callers_meter():
             question="Q", provider_models={"openai": "a", "mistral": "b"}, keys={},
             tier="free", deep_think=False, provider_call=provider_call)
     assert len(answers) == 2
-    assert meter.totals()["measured"] == 30
+    assert meter.totals()["measured"] == 20 and meter.totals()["tokens"] == 30
+
+
+def test_a_call_without_a_reported_cost_is_charged_at_its_catalog_price():
+    """Cache reads at their own price; a model the catalog does not know at
+    FALLBACK_PRICES, never for free."""
+    known = usage_meter.UsageMeter()
+    call = known.start({**PAYLOAD, "model": "anthropic/claude-haiku-4.5"})
+    call.finish({"prompt_tokens": 1000, "completion_tokens": 100, "prompt_tokens_details": {"cached_tokens": 800}})
+    # 200 x $1/M + 800 x $0.10/M + 100 x $5/M = 780,000 nano-USD.
+    assert known.totals()["cost_nano_usd"] == 780_000 and known.totals()["measured"] == 679
+    unknown = usage_meter.UsageMeter()
+    unknown.start(PAYLOAD).finish({"prompt_tokens": 1000, "completion_tokens": 100})
+    assert unknown.totals()["cost_nano_usd"] == 1000 * 5_000 + 100 * 25_000
+    # A reported cost wins over any price.
+    reported = usage_meter.UsageMeter()
+    reported.start(PAYLOAD).finish({"prompt_tokens": 1000, "completion_tokens": 100, "cost": 0})
+    assert reported.totals()["measured"] == 0
 
 
 class Repo:
@@ -132,7 +153,7 @@ def test_operation_booking_books_once_and_survives_storage_errors():
     repo = Repo()
     booking = OperationBooking(repo, "uid", "run", "ask:openai")
     with booking.metering():
-        usage_meter.current_meter().record({"prompt_tokens": 40, "completion_tokens": 2})
+        usage_meter.current_meter().record({"prompt_tokens": 40, "completion_tokens": 2, "cost": 0.0000483})
     assert booking.extras() == {"token_budget": {"used": 42, "limit": 1000}}
     assert booking.finish() == {"used": 42, "limit": 1000}
     assert repo.booked == [("ask:openai", 42, 0, False)]
@@ -146,7 +167,7 @@ def test_operation_booking_books_once_and_survives_storage_errors():
 
 def test_metered_events_put_the_booked_account_on_the_final_event_and_book_on_close():
     def events():
-        usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3})
+        usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3, "cost": 0.0000115})
         yield {"type": "delta", "text": "x"}
         yield {"type": "final", "result": {"text": "x"}}
 
@@ -155,7 +176,7 @@ def test_metered_events_put_the_booked_account_on_the_final_event_and_book_on_cl
     assert out[-1]["extras"] == {"token_budget": {"used": 10, "limit": 1000}}
 
     def interrupted():
-        usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3})
+        usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3, "cost": 0.0000115})
         yield {"type": "delta", "text": "x"}
         yield {"type": "delta", "text": "y"}
 
@@ -180,7 +201,7 @@ def test_stream_cleanup_error_still_books_once_without_masking_cleanup_error(sto
 
     def source():
         try:
-            usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3})
+            usage_meter.current_meter().record({"prompt_tokens": 7, "completion_tokens": 3, "cost": 0.0000115})
             yield {"type": "delta", "text": "partial"}
         finally:
             raise cleanup_error

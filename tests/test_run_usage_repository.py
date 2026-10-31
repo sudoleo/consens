@@ -160,7 +160,7 @@ def test_parallel_same_idempotency_key_admits_only_once(usage_repo):
 
     assert sum(not result.idempotent for result in results) == 1
     assert all(result.status is RunStatus.RESERVED for result in results)
-    assert agent_quota.held_tokens(ledger(db, "same-key-user"), UTC_NOON.timestamp()) == 30_000
+    assert agent_quota.held_amount(ledger(db, "same-key-user"), UTC_NOON.timestamp()) == 30_000
 
 
 def test_idempotency_is_scoped_by_uid_and_bound_to_run_kind(usage_repo):
@@ -208,7 +208,7 @@ def test_booking_debits_measured_tokens_once_and_may_overdraw(usage_repo):
     assert second["remaining"] == 0 and second["reserved"] == 0
     data = ledger(db, "booker")
     assert data["pipeline_used"] == 115_000 and data["pipeline_estimated"] == 1_000
-    assert agent_quota.spent_tokens(data) > ADMISSION.limit
+    assert agent_quota.spent_amount(data) > ADMISSION.limit
     run = next(doc for path, doc in db.documents.items() if path[2:3] == ("usage_runs",))
     assert set(run["booked_operations"]) == {"ask:openai", "consensus"}
     # The overdraft blocks the next admission instead of another run.
@@ -222,9 +222,9 @@ def test_bookings_shrink_the_hold_and_final_drops_the_rest(usage_repo):
     epoch = UTC_NOON.timestamp()
 
     repo.book_operation("holder", "run", "ask:openai", measured=10_000, estimated=0, now=UTC_NOON)
-    assert agent_quota.held_tokens(ledger(db, "holder"), epoch) == 20_000
+    assert agent_quota.held_amount(ledger(db, "holder"), epoch) == 20_000
     repo.book_operation("holder", "run", "consensus", measured=5_000, estimated=0, final=True, now=UTC_NOON)
-    assert agent_quota.held_tokens(ledger(db, "holder"), epoch) == 0
+    assert agent_quota.held_amount(ledger(db, "holder"), epoch) == 0
     assert ledger(db, "holder")["used"] == 15_000
 
 
@@ -239,15 +239,15 @@ def test_a_compare_run_drops_its_hold_with_its_last_planned_answer(usage_repo):
     repo.book_operation("comparer", "run", "ask:openai", measured=1_000, estimated=0, now=UTC_NOON)
     # A repeated booking of the same answer completes nothing.
     repo.book_operation("comparer", "run", "ask:openai", measured=1_000, estimated=0, now=UTC_NOON)
-    assert agent_quota.held_tokens(ledger(db, "comparer"), epoch) == 29_000
+    assert agent_quota.held_amount(ledger(db, "comparer"), epoch) == 29_000
     snapshot = repo.book_operation("comparer", "run", "ask:mistral", measured=2_000, estimated=0, now=UTC_NOON)
-    assert agent_quota.held_tokens(ledger(db, "comparer"), epoch) == 0
+    assert agent_quota.held_amount(ledger(db, "comparer"), epoch) == 0
     assert snapshot["reserved"] == 0 and snapshot["used"] == 3_000
 
     # Without the count (a run that skipped /prepare) the hold waits for its expiry.
     consumed(repo, "comparer", "unplanned")
     repo.book_operation("comparer", "unplanned", "ask:openai", measured=1_000, estimated=0, now=UTC_NOON)
-    assert agent_quota.held_tokens(ledger(db, "comparer"), epoch) == 29_000
+    assert agent_quota.held_amount(ledger(db, "comparer"), epoch) == 29_000
 
 
 @pytest.mark.parametrize("planned", [0, -1, True, 1.5, "2", 33])
@@ -278,7 +278,7 @@ def test_a_run_cannot_bank_its_admission_beyond_its_hold(usage_repo):
         repo.reserve("banker", key, RunKind.REGULAR, ADMISSION, request_fingerprint=run_fp, now=UTC_NOON)
         repo.consume("banker", key)
     later = UTC_NOON + timedelta(seconds=agent_quota.PIPELINE_HOLD_SECONDS + 1)
-    assert agent_quota.held_tokens(ledger(db, "banker"), later.timestamp()) == 0
+    assert agent_quota.held_amount(ledger(db, "banker"), later.timestamp()) == 0
     repo.reserve("banker", "young", RunKind.REGULAR, ADMISSION, request_fingerprint=run_fp, now=later)
     repo.consume("banker", "young")
     key = ("users", "banker", "chat_state", "agent_tokens_" + PERIOD)
@@ -299,7 +299,7 @@ def test_a_run_cannot_bank_its_admission_beyond_its_hold(usage_repo):
                                              request_fingerprint=run_fp, now=later)
     assert claim.idempotent is False and result.token_budget is not None
     stored = ledger(db, "banker")
-    assert agent_quota.held_tokens(stored, later.timestamp()) == 2 * ADMISSION.estimate
+    assert agent_quota.held_amount(stored, later.timestamp()) == 2 * ADMISSION.estimate
     assert stored["pipeline_readmissions"] == 1 and stored["pipeline_runs"] == 3
     run = db.documents[("users", "banker", "usage_runs", result.idempotency_hash)]
     assert run["admitted_at"] == later and run["quota_day"] == PERIOD
@@ -334,7 +334,7 @@ def test_release_drops_the_hold_and_is_idempotent(usage_repo):
 
     assert released.status is RunStatus.RELEASED and released.idempotent is False
     assert repeated.status is RunStatus.RELEASED and repeated.idempotent is True
-    assert agent_quota.held_tokens(ledger(db, "releaser")) == 0
+    assert agent_quota.held_amount(ledger(db, "releaser")) == 0
     with pytest.raises(UsageTransitionError):
         repo.consume("releaser", "release-me")
 
@@ -346,9 +346,10 @@ def test_agent_and_pipeline_share_one_account(usage_repo):
     db.documents[key] = agent_quota.reserve({}, 80_000, limit=100_000)
     with pytest.raises(UsageLimitExceeded):
         repo.reserve("shared", "run", RunKind.REGULAR, ADMISSION, now=UTC_NOON)
-    # Agent settled at 20k measured; the run fits and books on the same document.
+    # Agent settled at 20k micro-euros measured; the run fits and books on the same document.
     db.documents[key] = agent_quota.settle(db.documents[key], 80_000,
-                                           {"input_tokens": 15_000, "output_tokens": 5_000})
+                                           {"input_tokens": 15_000, "output_tokens": 5_000,
+                                            "estimated_cost_nano_usd": 20_000 * 1_150})
     consumed(repo, "shared", "run")
     budget = repo.book_operation("shared", "run", "ask:openai", measured=30_000, estimated=0, now=UTC_NOON)
     assert budget["used"] == 50_000

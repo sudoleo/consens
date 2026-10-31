@@ -2047,7 +2047,7 @@ class AnswerAudit:
             # The reviewers then read the instructions themselves.
             logging.warning("Agent reviewer brief unavailable category=%s", safe_exception(exc))
         self.slots = threading.BoundedSemaphore(max(1, len(models)))
-        share = tools._output_share(len(models))
+        shares = tools._output_shares(models)
         with tools.lock:
             self.reviewers = {provider: {"provider": provider, "provider_label": cfg.provider_label(provider),
                                          "model": model.settings(), "status": "waiting", "rounds": 0,
@@ -2055,7 +2055,8 @@ class AnswerAudit:
                               for provider, model in models.items()}
         loop.cancellation.register(self._limit)
         for provider, model in models.items():
-            session = ReviewerSession(self, provider, replace(model, max_output_tokens=min(model.max_output_tokens, share)))
+            session = ReviewerSession(self, provider, replace(model, max_output_tokens=min(model.max_output_tokens,
+                                                                                            shares[provider])))
             self._limit.register(session.cancellation)
             session.thread = threading.Thread(target=copy_context().run, args=(session.run,),
                                               name=f"agent-review-{provider}", daemon=True)

@@ -63,7 +63,8 @@ Run-Objekt. Der Request akzeptiert nur `question` und optional `reasoning`;
 Modelle, Modellanzahl, Kosten und Limits werden ausschließlich serverseitig
 bestimmt. `reasoning: true` lässt dieselben serverseitig gewählten Modelle
 länger nachdenken (mehr Tokens, langsamer, gegen die größere Reasoning-Schätzung
-des Tokenkontos admittiert); es steht jeder Kontostufe offen und ändert weder
+des Tageskontos admittiert, das seit 2026-10-31 Kosten in Mikro-Euro zählt;
+`token_budget` behält seinen Namen); es steht jeder Kontostufe offen und ändert weder
 Antwortmodelle noch Consensus-Engine. `deep_think` ist ein veralteter Alias
 desselben Schalters (Deep Think gibt es seit 2026-10-02 nicht mehr): ist eines
 der beiden Felder `true`, ist Reasoning an. Das Run-Objekt trägt `reasoning`

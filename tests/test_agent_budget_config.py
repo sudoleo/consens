@@ -15,7 +15,12 @@ PRODUCT_TIER_LIMITS = dict(budgets.DEFAULT_TIER_LIMITS)
 
 
 def test_product_tier_limits_are_the_real_defaults():
-    assert PRODUCT_TIER_LIMITS == {"free": 660_000, "plus": 1_650_000, "pro": 5_000_000, "admin": 5_000_000}
+    # Micro-euros per day since 2026-10-31 (Max): 1 / 2.50 / 5 / 5 EUR.
+    assert PRODUCT_TIER_LIMITS == {"free": 1_000_000, "plus": 2_500_000, "pro": 5_000_000, "admin": 5_000_000}
+    assert budgets.MICRO_EUR == 1_000_000 and budgets.NANO_USD_PER_MICRO_EUR == 1_150
+    # A dollar cost in micro-euros, rounded up; and back.
+    assert budgets.micro_eur(1_150_000_000) == 1_000_000 and budgets.micro_eur(1) == 1 and budgets.micro_eur(None) is None
+    assert budgets.nano_usd(1_000_000) == 1_150_000_000
 
 
 def test_defaults_cover_every_tier_and_mode_and_ignore_the_legacy_agent_limit():
@@ -24,9 +29,9 @@ def test_defaults_cover_every_tier_and_mode_and_ignore_the_legacy_agent_limit():
     assert config["tier_limits"]["free"] == budgets.DEFAULT_TIER_LIMITS["free"]
     assert all(set(modes) == {"compare", "consensus", "deep_think"} for modes in config["run_estimates"].values())
     assert "daily_token_limit" not in config
-    # Free/Plus keep today's capacity: old run quota x typical consensus run.
-    assert budgets.DEFAULT_TIER_LIMITS["free"] == 12 * budgets.DEFAULT_RUN_ESTIMATES["free"]["consensus"]
-    assert budgets.DEFAULT_TIER_LIMITS["plus"] == 30 * budgets.DEFAULT_RUN_ESTIMATES["plus"]["consensus"]
+    # Free holds ten typical Consensus runs a day, Plus 2.5 times as many.
+    assert budgets.DEFAULT_TIER_LIMITS["free"] == 10 * budgets.DEFAULT_RUN_ESTIMATES["free"]["consensus"]
+    assert budgets.DEFAULT_TIER_LIMITS["plus"] == 25 * budgets.DEFAULT_RUN_ESTIMATES["plus"]["consensus"]
     for tier, modes in budgets.DEFAULT_RUN_ESTIMATES.items():
         assert modes["compare"] < modes["consensus"] <= modes["deep_think"]
     # Missing values default per field; present invalid values fail closed.
@@ -116,7 +121,7 @@ def test_admin_limit_and_reset_routes_require_role_and_revision(client):
     assert loaded['config']['tier_limits']['free'] == budgets.DEFAULT_TIER_LIMITS['free']
     assert loaded['defaults']['run_estimates'] == budgets.DEFAULT_RUN_ESTIMATES
     for bad in [{'tier_limits': {'free': 0}}, {'tier_limits': {'free': True}}, {'tier_limits': {'free': 2.5}},
-                {'tier_limits': {'free': '500000'}}, {'tier_limits': {'free': 100000001}},
+                {'tier_limits': {'free': '500000'}}, {'tier_limits': {'free': 1_000_000_001}},
                 {'tier_limits': {'gold': 5}}, {'run_estimates': {'free': {'agent': 5}}},
                 {'daily_token_limit': 500000}, {}]:
         assert api.put('/api/admin/agent-budget', headers=auth, json={'revision': 0, **bad}).status_code == 422, bad

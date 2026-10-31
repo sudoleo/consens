@@ -14,14 +14,15 @@ from app.services.agent_costs import aggregate_usage
 from app.services.agent_sessions import ROOT_MAX_BYTES, ROOT_SETTLED_STEP_WINDOW, root_usage
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
-from test_agent_runs import UID, store, totals
+from test_agent_runs import UID, store, totals, priced
 from test_agent_continuation import chat_loop
 
 
 def measured(model, prompt=100, completion=20):
     value = AgentCompletion()
     value.text, value.finish_reason = "ok", "stop"
-    value.usage = measured_usage({"prompt_tokens": prompt, "completion_tokens": completion, "cost": .001}, model)
+    # $0.000138 is 120 micro-euros, the account's charge (as many as the tokens).
+    value.usage = measured_usage({"prompt_tokens": prompt, "completion_tokens": completion, "cost": .000138}, model)
     return value
 
 
@@ -41,7 +42,7 @@ def test_hundreds_of_sequential_steps_keep_the_root_bounded_without_losing_usage
     for index in range(steps):
         step = f"completion:{index}"
         assert store.claim(*args, loop.model, step=step, run_token=loop.run_token,
-                           policy=loop.policy.snapshot(), reservation=(500, 100))
+                           policy=loop.policy.snapshot(), reservation=(500, priced(500)))
         store.settle(*args, completion=measured(loop.model), status="succeeded", step=step, final=False)
         if index % 50 == 49:
             sizes.append(size(root_of(store, loop)))
@@ -72,13 +73,13 @@ def test_compacted_previous_step_still_authorizes_the_next_step_and_replays_are_
     for index in range(ROOT_SETTLED_STEP_WINDOW + 3):
         step = f"completion:{index}"
         store.claim(*args, loop.model, step=step, run_token=loop.run_token,
-                    policy=loop.policy.snapshot(), reservation=(10, 1))
+                    policy=loop.policy.snapshot(), reservation=(10, priced(10)))
         store.settle(*args, completion=measured(loop.model), status="succeeded", step=step, final=False)
     root = root_of(store, loop)
     assert "completion:0" not in root["step_states"]
     # A compacted step can never be claimed (and paid) a second time.
     assert store.claim(*args, loop.model, step="completion:0", run_token=loop.run_token,
-                       policy=loop.policy.snapshot(), reservation=(10, 1)) is False
+                       policy=loop.policy.snapshot(), reservation=(10, priced(10))) is False
     assert not store.settle(*args, completion=measured(loop.model), status="succeeded",
                             step="completion:0", final=False)
     assert agent_quota.snapshot(store.db, UID)["used"] == (ROOT_SETTLED_STEP_WINDOW + 3) * 120
@@ -88,7 +89,7 @@ def test_parallel_worker_settlements_keep_running_leases_and_exact_usage(store):
     loop = chat_loop(store, AgentCompletion)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, step="completion:0", run_token=loop.run_token,
-                policy=loop.policy.snapshot(), reservation=(10, 1))
+                policy=loop.policy.snapshot(), reservation=(10, priced(10)))
     workers = [f"{index:032x}" for index in range(1, 5)]
     for aid in workers:
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
@@ -99,7 +100,7 @@ def test_parallel_worker_settlements_keep_running_leases_and_exact_usage(store):
         for index in range(per_worker):
             step = f"agent:{aid}:{index}"
             assert store.claim(*args, loop.model, step=step, run_token=loop.run_token,
-                               policy=loop.policy.snapshot(), reservation=(50, 1))
+                               policy=loop.policy.snapshot(), reservation=(50, priced(50)))
             store.settle(*args, completion=measured(loop.model), status="succeeded", step=step, final=False)
 
     with ThreadPoolExecutor(max_workers=len(workers)) as pool:
@@ -122,13 +123,13 @@ def test_oversized_root_is_a_saved_resumable_stop_not_a_write_failure(store, mon
     loop = chat_loop(store, AgentCompletion)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, step="completion:0", run_token=loop.run_token,
-                policy=loop.policy.snapshot(), reservation=(10, 1))
+                policy=loop.policy.snapshot(), reservation=(10, priced(10)))
     store.settle(*args, completion=measured(loop.model), status="succeeded", step="completion:0", final=False)
     monkeypatch.setattr(agent_sessions, "ROOT_MAX_BYTES", 10)
     before = agent_quota.snapshot(store.db, UID)
     with pytest.raises(AnalysisBudgetExceeded, match="technical limit"):
         store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token,
-                    policy=loop.policy.snapshot(), reservation=(10, 1))
+                    policy=loop.policy.snapshot(), reservation=(10, priced(10)))
     # Nothing was reserved or started; the turn can still be finished and saved.
     assert not store.receipt_ref(*args, step="completion:1").get().exists
     assert agent_quota.snapshot(store.db, UID)["reserved"] == before["reserved"]
@@ -152,7 +153,7 @@ def test_reaping_after_compaction_keeps_every_worker_step_usage(store):
     loop = chat_loop(store, AgentCompletion)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, step="completion:0", run_token=loop.run_token,
-                policy=loop.policy.snapshot(), reservation=(10, 1))
+                policy=loop.policy.snapshot(), reservation=(10, priced(10)))
     aid = "a" * 32
     store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
                         patch={"assignment": {"goal": "Verify"}, "status": "working", "kind": "comparison"})
@@ -160,7 +161,7 @@ def test_reaping_after_compaction_keeps_every_worker_step_usage(store):
     for index in range(steps):
         step = f"agent:{aid}:{index}"
         store.claim(*args, loop.model, step=step, run_token=loop.run_token,
-                    policy=loop.policy.snapshot(), reservation=(50, 1))
+                    policy=loop.policy.snapshot(), reservation=(50, priced(50)))
         store.settle(*args, completion=measured(loop.model), status="succeeded", step=step, final=False)
     root_ref = store.receipt_ref(*args)
     store._transaction(lambda tx: tx.update(root_ref, {"lease_until": datetime.now(timezone.utc) - timedelta(seconds=1)}))

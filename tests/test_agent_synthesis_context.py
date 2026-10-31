@@ -167,7 +167,8 @@ def test_answer_step_shows_reasoning_excerpts_while_thinking_but_never_in_the_an
 
 def _thought_only():
     return [packet({"reasoning": "Still weighing every option. "}),
-            packet({}, finish="length", usage={"prompt_tokens": 50, "completion_tokens": 32768, "cost": .5})]
+            # $0.03774 is 32,818 micro-euros, as many as the tokens.
+            packet({}, finish="length", usage={"prompt_tokens": 50, "completion_tokens": 32768, "cost": .03774})]
 
 
 def test_thought_only_answer_step_is_written_again_with_lighter_reasoning(store, monkeypatch):

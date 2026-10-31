@@ -26,6 +26,8 @@ function boot({ mode = 'compare' } = {}) {
 }
 
 const estimates = { compare: 32000, consensus: 55000, deep_think: 150000 };
+// The account in micro-euros (since 2026-10-31): Free 1 EUR a day.
+const euroEstimates = { compare: 60000, consensus: 100000, deep_think: 200000 };
 
 it('shows one quiet ring for the shared account, the value only in label and panel', () => {
   const { d, w, dom } = boot();
@@ -34,8 +36,8 @@ it('shows one quiet ring for the shared account, the value only in label and pan
   w.App.sidebarQuota.sync();
   expect(trigger.hidden).toBe(true);
 
-  w.App.tokenBudget.apply({ limit: 660000, used: 250800, estimated: 0, reserved: 0, remaining: 409200,
-    revision: 3, day: '2026-10-01', run_estimates: estimates });
+  w.App.tokenBudget.apply({ limit: 1000000, used: 380000, estimated: 0, reserved: 0, remaining: 620000,
+    unit: 'micro_eur', revision: 3, day: '2026-10-31', run_estimates: euroEstimates });
   expect(trigger.hidden).toBe(false);
   // No text inside the ring at all.
   expect(trigger.textContent.trim()).toBe('');
@@ -46,16 +48,16 @@ it('shows one quiet ring for the shared account, the value only in label and pan
   expect(d.getElementById('quotaPrimary').hidden).toBe(false);
   expect(d.getElementById('quotaPercent').textContent).toBe('62%');
   expect(d.getElementById('quotaReset').textContent).toMatch(/^Resets at .+ · in /);
-  // The token figures are the operator's: they stand in an admin-only part
+  // The euro figures are the operator's: they stand in an admin-only part
   // (style.css hides .admin-only without body.viewer-is-admin, Apple-Audit H4).
-  expect(d.getElementById('quotaDetail').textContent).toBe('409k of 660k tokens · A Compare run uses about 5%.');
-  expect(d.querySelector('#quotaDetail .admin-only').textContent).toBe('409k of 660k tokens · ');
-  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Compare run uses about 5%.');
+  expect(d.getElementById('quotaDetail').textContent).toBe('€0.62 of €1.00 · A Compare run uses about 6%.');
+  expect(d.querySelector('#quotaDetail .admin-only').textContent).toBe('€0.62 of €1.00 · ');
+  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Compare run uses about 6%.');
   // The Reasoning switch shows its own (larger) run, under its new name.
   const reasoning = d.getElementById('reasoningToggle');
   reasoning.checked = true;
   w.App.sidebarQuota.sync();
-  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Reasoning run uses about 23%.');
+  expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Reasoning run uses about 20%.');
   reasoning.checked = false;
   w.App.sidebarQuota.sync();
   expect(d.getElementById('quotaWatchValue').textContent).toBe('3 / 5');
@@ -99,6 +101,10 @@ it('orders concurrent snapshots and fences other accounts', () => {
   expect(api.apply({ limit: 0, used: 1 })).toBe(false);
   expect(api.fromResponse({ detail: { token_budget: { limit: 1000, used: 20, revision: 2, day: '2026-10-02' } } })).toBe(true);
   expect(api.current().used).toBe(20);
+  // The account in euros (2026-10-31) is a new account: its revisions start
+  // again, and its first snapshot replaces the token one of the same day.
+  expect(api.apply({ limit: 1000000, used: 5, revision: 1, day: '2026-10-02', unit: 'micro_eur' })).toBe(true);
+  expect(api.current().unit).toBe('micro_eur');
   dom.window.close();
 });
 
@@ -113,6 +119,9 @@ it('admits a run like the server: available tokens against the mode estimate', (
   expect(api.runShare('deep_think')).toBe('23%');
   expect(api.formatTokens(1650000)).toBe('1.7M');
   expect(api.formatTokens(5000000)).toBe('5M');
+  expect(api.formatAmount(2500000, 'micro_eur')).toBe('€2.50');
+  expect(api.formatAmount(4200, 'micro_eur')).toBe('€0.00');
+  expect(api.formatAmount(1650000)).toBe('1.7M tokens');
   dom.window.close();
 });
 

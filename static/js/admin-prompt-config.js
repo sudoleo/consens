@@ -82,7 +82,7 @@ export function createPromptConfigPanel(request) {
             delegation.hidden = !result.config.delegation;
             const budgetNote = document.createElement('p');
             budgetNote.className = 'section-hint';
-            budgetNote.textContent = 'Agent Chat uses the daily token budget in Limits. Active responses have no time, round, search or cost cap. Worker concurrency and message sizes below still apply.';
+            budgetNote.textContent = 'Agent Chat uses the daily allowance in euros in Limits. Active responses have no time, round, search or cost cap. Worker concurrency and message sizes below still apply.';
             delegation.append(budgetNote);
             const legacyLimits = new Set(['max_calls', 'max_tools', 'seconds', 'max_tokens', 'max_cost_nano_usd',
                 'max_messages', 'context_chars', 'worker_calls', 'max_searches']);

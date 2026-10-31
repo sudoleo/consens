@@ -13,7 +13,7 @@ from app.services.agent_policy import AgentPolicy
 from app.services.agent_tools import ToolRegistry
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancelled
-from test_agent_runs import UID, store, totals
+from test_agent_runs import UID, store, totals, priced
 from test_agent_continuation import chat_loop
 from test_agent_comparison import Script, make_loop
 
@@ -26,7 +26,7 @@ class Completion(AgentCompletion):
 
 
 def quota(store, remaining):
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": 250000 - remaining})
     return ref
 
@@ -41,7 +41,7 @@ def exhaust(generator):
 
 def root(loop):
     args = UID, loop.chat_id, loop.turn_id
-    assert loop.store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(1, 1))
+    assert loop.store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(1, priced(1)))
     value = AgentCompletion()
     value.usage = measured_usage({"prompt_tokens": 0, "completion_tokens": 0}, loop.model)
     loop.store.settle(*args, completion=value, status="succeeded", final=False)

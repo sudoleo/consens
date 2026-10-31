@@ -88,3 +88,19 @@ def snapshot():
     if os.getenv('UNIT_TEST_MODE') == '1' or os.getenv('E2E_TEST_MODE') == '1':
         return {key: {**deepcopy(value), '_version': BASELINE['version']} for key, value in BASELINE['models'].items()}
     return _cache.snapshot()
+
+
+def pricing(model_id):
+    """One model's OpenRouter prices (dollars per token, as strings), or None.
+
+    For the pipeline's usage meter, which prices a call whose response named
+    no cost. Live metadata first, then the baseline; offline in test suites."""
+    if os.getenv('UNIT_TEST_MODE') == '1' or os.getenv('E2E_TEST_MODE') == '1':
+        entry = BASELINE['models'].get(model_id)
+    else:
+        if time.monotonic() >= _cache._refresh_at:
+            _cache.snapshot()  # refreshes the live metadata at most every 300 s
+        with _cache._lock:
+            entry = _cache._live.get(model_id) or BASELINE['models'].get(model_id)
+    pricing = (entry or {}).get('pricing')
+    return dict(pricing) if isinstance(pricing, dict) else None

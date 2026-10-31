@@ -11,7 +11,7 @@ from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import ProviderCooldowns, AgentProviderCooldown
 from app.services.llm.agent_client import AgentCompletion, agent_models, measured_usage, resolve_agent_model
 from app.services.llm.engines import _ProviderHTTPStatusError, _raise_provider_http_status
-from test_agent_runs import api, store, AUTH, UID, receipt, totals
+from test_agent_runs import api, store, AUTH, UID, receipt, totals, priced
 from test_agent_loop import loop_for, packet, transport, usage
 
 
@@ -147,7 +147,7 @@ def test_every_searching_step_is_counted_with_the_pages_it_kept(monkeypatch, sto
     # The receipt keeps it.
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     value = receipt()
     value.search_hits = 0
     store.settle(*args, completion=value, status="succeeded", final=False)
@@ -168,6 +168,7 @@ def test_provider_zero_is_valid_and_cost_without_tokens_remains_partial():
     assert measured_usage({"prompt_tokens": 12}, model) is None
 
 
+@pytest.mark.real_prices
 def test_catalog_fallback_accounts_for_cache_writes_once_and_is_labeled():
     result = measured_usage({"prompt_tokens": 1000, "completion_tokens": 100,
         "prompt_tokens_details": {"cached_tokens": 200, "cache_write_tokens": 300}}, resolve_agent_model("claude-haiku-4-5"))
@@ -175,6 +176,7 @@ def test_catalog_fallback_accounts_for_cache_writes_once_and_is_labeled():
     assert result["cost_source"] == "catalog"
 
 
+@pytest.mark.real_prices
 def test_default_prices_match_catalog_instead_of_stale_dataclass_defaults():
     from decimal import Decimal
     from app.services.llm import agent_client

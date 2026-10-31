@@ -1,4 +1,4 @@
-"""Die Run-Belege der Pipeline auf dem gemeinsamen Tokenkonto, ueber die API-Flows."""
+"""Die Run-Belege der Pipeline auf dem gemeinsamen Tageskonto (Mikro-Euro), ueber die API-Flows."""
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
@@ -22,8 +22,9 @@ AUTH = {"Authorization": "Bearer test-token"}
 FREE_LIMIT = agent_budget_config.DEFAULT_TIER_LIMITS["free"]
 FREE_RUN = agent_budget_config.DEFAULT_RUN_ESTIMATES["free"]
 PRO_RUN = agent_budget_config.DEFAULT_RUN_ESTIMATES["pro"]
-# Every fake answer reports this usage through the transport meter.
-ANSWER_USAGE = {"prompt_tokens": 1_000, "completion_tokens": 500}
+# Every fake answer reports this usage through the transport meter: its
+# cost, $0.001725, is 1,500 micro-euros of the account.
+ANSWER_USAGE = {"prompt_tokens": 1_000, "completion_tokens": 500, "cost": 0.001725}
 
 
 @pytest.fixture
@@ -119,7 +120,7 @@ def test_prepare_admits_once_and_answers_book_their_measured_tokens(run_api):
     ledger = _ledger(db)
     assert ledger["used"] == ledger["pipeline_used"] == 3_000
     assert ledger["pipeline_runs"] == 1
-    assert agent_quota.held_tokens(ledger) == FREE_RUN["consensus"] - 3_000
+    assert agent_quota.held_amount(ledger) == FREE_RUN["consensus"] - 3_000
 
 
 def test_compare_runs_are_admitted_against_the_compare_estimate(run_api):
@@ -138,7 +139,7 @@ def test_the_last_announced_answer_frees_what_a_compare_run_still_holds(run_api,
     assert _prepare(client, "compare-run", mode="compare", operations=operations).status_code == 200
     for route, provider in [("/ask_openai", "openai"), ("/ask_mistral", "mistral")]:
         assert _ask(client, route, provider, "compare-run").status_code == 200
-    assert agent_quota.held_tokens(_ledger(db)) == held
+    assert agent_quota.held_amount(_ledger(db)) == held
     assert _ledger(db)["used"] == 3_000
 
 
@@ -249,7 +250,7 @@ def test_usage_endpoint_reads_the_account_and_release_drops_the_hold(run_api):
     released = client.post("/usage/run/release", json={"id_token": "test-token", "usage_run_key": key})
     assert released.status_code == 200
     assert released.json()["status"] == "released"
-    assert agent_quota.held_tokens(_ledger(db)) == 0
+    assert agent_quota.held_amount(_ledger(db)) == 0
     assert client.post("/usage", json={"id_token": "test-token"}).json()["token_budget"]["remaining"] == FREE_LIMIT
 
 
@@ -295,6 +296,9 @@ def test_free_reasoning_run_passes_prepare_and_ask_without_pro_gate(run_api):
 def test_reasoning_is_admitted_against_the_reasoning_estimate(run_api, monkeypatch):
     client, _repository, db = run_api
     monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "pro")
+    # The suite's Pro allowance (conftest, 250,000) is below one Reasoning run
+    # at Pro's real estimate (0.40 EUR); Pro's real limit holds it.
+    monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
     key = "reasoning-run"
 
     prepared = _prepare(client, key, deep=True)

@@ -265,7 +265,7 @@ def test_agent_receipt_records_connect_failure_as_free_usage():
     value = AgentCompletion()
     value.record_rejection(httpx.ConnectError("dns"), model)
     assert value.usage["source"] == "not_dispatched"
-    assert agent_quota.measured_tokens(value.usage) == 0
+    assert agent_quota.measured_charge(value.usage) == 0
 
     streamed = AgentCompletion()
     streamed.text = "Partial"

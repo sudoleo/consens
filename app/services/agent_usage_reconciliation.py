@@ -2,8 +2,8 @@
 
 Settlement charges such calls a bounded estimate (``agent_quota.settle``) and
 marks their receipt ``quota_reconcile="pending"`` when a provider generation id
-exists. This module later asks OpenRouter for that generation's real token
-counts and swaps the estimate for them in one transaction, fenced by the
+exists. This module later asks OpenRouter for that generation's real cost
+and swaps the estimate for it in one transaction, fenced by the
 receipt state so a call is never reconciled (or charged) twice. Receipts that
 stay unmeasured after a bounded number of attempts or a bounded age keep their
 estimate and become ``final``. Receipts store no prompts or answers; neither
@@ -64,7 +64,7 @@ def schedule(db, uid: str) -> bool:
             from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
             key = openrouter_api_key(resolve_developer_api_keys())
             if key:
-                reconcile_pending(db, uid, fetch_usage=lambda generation_id: fetch_generation_tokens(generation_id, key))
+                reconcile_pending(db, uid, fetch_usage=lambda generation_id: fetch_generation_charge(generation_id, key))
         except Exception as exc:
             logging.warning("Agent usage reconciliation failed category=%s", safe_exception(exc))
 
@@ -72,8 +72,8 @@ def schedule(db, uid: str) -> bool:
     return True
 
 
-def fetch_generation_tokens(generation_id: str, api_key: str):
-    """Measured input + output tokens of one generation, or None if not ready."""
+def fetch_generation_charge(generation_id: str, api_key: str):
+    """The measured charge of one generation (micro-euros), or None if not ready."""
     import httpx
 
     response = httpx.get(
@@ -85,24 +85,20 @@ def fetch_generation_tokens(generation_id: str, api_key: str):
     if response.status_code == 404:
         return None
     response.raise_for_status()
-    return generation_tokens(response.json())
+    return generation_charge(response.json())
 
 
-def generation_tokens(payload):
-    """Parse OpenRouter generation stats; native counts match stream usage.
-    The charge as for a streamed call (agent_quota.charged_tokens): cache
-    reads (``native_tokens_cached``, with the native counts) at their weight,
-    in full where the stats do not name them."""
+def generation_charge(payload):
+    """The charge of a generation from OpenRouter's stats: its ``total_cost``
+    (dollars; cache, reasoning and search included, as a streamed call's
+    ``usage.cost``) in micro-euros, or None while the stats name none."""
+    from app.services.agent_budget_config import micro_eur
+    from app.services.agent_costs import provider_cost_nanos
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):
         return None
-    for prompt_key, completion_key, cached_key in (
-            ("native_tokens_prompt", "native_tokens_completion", "native_tokens_cached"),
-            ("tokens_prompt", "tokens_completion", None)):
-        prompt, completion = data.get(prompt_key), data.get(completion_key)
-        if all(type(value) is int and 0 <= value <= 10_000_000 for value in (prompt, completion)):
-            return agent_quota.charged_tokens(prompt, completion, data.get(cached_key) if cached_key else 0)
-    return None
+    cost = provider_cost_nanos(data.get("total_cost"))
+    return micro_eur(cost) if cost is not None else None
 
 
 def _as_datetime(value):
@@ -159,17 +155,16 @@ def _apply(db, uid, receipt_ref, *, actual, now, retry=False) -> bool:
         if actual is None:
             tx.update(receipt_ref, {"quota_reconcile": FINAL, "quota_reconciled_at": now})
             return True
-        # Measured at the call's weight, as settlement charges it (agent_quota.receipt_weight).
-        charged = agent_quota.weighted(actual, agent_quota.receipt_weight(receipt))
+        charged = actual
         if daily_ref:
             tx.set(daily_ref, agent_quota.reconcile(daily, estimate, charged))
         if user is not None and user.exists:
             totals = dict((user.to_dict() or {}).get("agent_usage") or {})
             totals["reconciled_calls"] = totals.get("reconciled_calls", 0) + 1
-            totals["reconciled_tokens"] = totals.get("reconciled_tokens", 0) + charged
+            totals["reconciled_micro_eur"] = totals.get("reconciled_micro_eur", 0) + charged
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
-        tx.update(receipt_ref, {"quota_reconcile": MEASURED, "quota_measured_tokens": charged,
+        tx.update(receipt_ref, {"quota_reconcile": MEASURED, "quota_measured": charged,
                                 "quota_reconciled_at": now})
         return True
 

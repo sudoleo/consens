@@ -117,7 +117,7 @@ def test_a_long_run_at_its_step_limit_writes_the_answer_from_its_own_work(store,
 
 def test_a_long_run_ends_with_its_answer_before_the_allowance_runs_out(store, fake_vm, monkeypatch):
     left = [10_000_000]
-    monkeypatch.setattr(agent_quota, "remaining_tokens", lambda db, uid: left[0])
+    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: left[0])
     script = LongAgent([[("vm_exec", {"command": f"make step{n}"})] for n in range(10)])
     loop = vm_loop(store, script, audit="off")
     original = loop._turn_limit
@@ -146,7 +146,7 @@ def test_a_long_run_ends_with_its_answer_before_the_context_window_is_full(store
 def test_a_short_turn_never_reads_the_allowance_between_steps(store, fake_vm, monkeypatch):
     def unexpected(db, uid):
         raise AssertionError("read the allowance")
-    monkeypatch.setattr(agent_quota, "remaining_tokens", unexpected)
+    monkeypatch.setattr(agent_quota, "remaining_allowance", unexpected)
     loop = vm_loop(store, LongAgent([]), audit="off")
     list(loop.run())
     assert saved(store, loop)["status"] == "completed"

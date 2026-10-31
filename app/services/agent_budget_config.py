@@ -1,14 +1,16 @@
-"""Admin-owned daily token account, cached per database; reset without a user scan.
+"""Admin-owned daily allowance in euros, cached per database; reset without a user scan.
 
 One account serves every mode: Agent books each call (reserve, then settle with
-measured usage), the Consensus pipeline is admitted against the expected cost
-of a typical run and books the measured tokens afterwards. Both read their
+its measured cost), the Consensus pipeline is admitted against the expected
+cost of a typical run and books the measured cost afterwards. Both read their
 limit from the account tier (Free, Plus, Pro, Admin). Opening Agent to another
 tier is therefore an access decision only; the ledger needs no change.
 
-The defaults keep a typical user's daily capacity from the run quotas they
-replace: limit ~ old daily run limit x tokens of a typical run. The derivation
-lives in docs/codebase-map.md ("Ein Tokenkonto für alle Modi").
+Since 2026-10-31 (Max) the account counts money, not tokens: whole
+micro-euros (1 EUR = 1,000,000), converted from the provider's dollar cost at
+the fixed NANO_USD_PER_MICRO_EUR. A cached prompt, a web search and an audit
+reviewer then count what they cost, without weights. The derivation of the
+limits lives in docs/codebase-map.md ("Ein Konto in Euro für alle Modi").
 """
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -20,38 +22,57 @@ from weakref import WeakKeyDictionary, ref as weakref
 from app.services import persistence_guard
 
 CACHE_SECONDS = 30
-MAX_DAILY_TOKENS = 100_000_000
-MAX_RUN_ESTIMATE = 10_000_000
+# Amounts are whole micro-euros: 1 EUR = 1,000,000.
+MICRO_EUR = 1_000_000
+MAX_DAILY_LIMIT = 1_000 * MICRO_EUR
+MAX_RUN_ESTIMATE = 10 * MICRO_EUR
+# A fixed exchange rate, 1 EUR = 1.15 USD (late October 2026: about 1.12 to
+# 1.15). OpenRouter bills in dollars; a few percent of drift do not matter for
+# a daily allowance, and a fixed rate keeps every booking reproducible.
+NANO_USD_PER_MICRO_EUR = 1_150
 
 TIER_KEYS = ("free", "plus", "pro", "admin")
 # "deep_think" is the kept storage key (app_config, admin API) of a run with
 # the Reasoning switch on; Deep Think itself was removed on 2026-10-02.
 RUN_MODES = ("compare", "consensus", "deep_think")
 
-# Old run quotas in production (12 / 30 / 50 runs, 5 of them Deep Think) times
-# the typical run below. Pro and Admin additionally keep the separate
-# 750,000-token Agent allowance they had before both modes shared one account.
+# Euros per day (Max, 2026-10-31). Measured 21.-30.10. in Prod, one million
+# tokens of the former account cost 0.24 to 2.18 USD, about 1.46 USD at Free:
+# 660,000 tokens were about 0.85 EUR a day, 5 million at Pro typically 4 EUR.
+# The limits keep that capacity in round figures; Plus stays 2.5 x Free.
 DEFAULT_TIER_LIMITS = {
-    "free": 660_000,
-    "plus": 1_650_000,
-    "pro": 5_000_000,
-    "admin": 5_000_000,
+    "free": 1 * MICRO_EUR,
+    "plus": 2_500_000,
+    "pro": 5 * MICRO_EUR,
+    "admin": 5 * MICRO_EUR,
 }
 
-# Expected tokens of one typical run (input + output, reasoning included), the
-# admission threshold of the pipeline. Free/Plus answer with the 4,096-token
-# cap, Pro with 8,192. A Reasoning run ("deep_think") keeps the same models but
-# thinks with effort "high" and up to 8,192 output tokens per answer; the
-# estimate stays at the former Deep Think value on purpose (admission errs on
-# the safe side, Admin can tune it in the Limits tab).
-_STANDARD_RUN = {"compare": 32_000, "consensus": 55_000, "deep_think": 150_000}
-_PRO_RUN = {"compare": 40_000, "consensus": 75_000, "deep_think": 150_000}
+# Expected cost of one typical run, the admission threshold of the pipeline:
+# the former token estimates (Free/Plus 32k Compare, 55k Consensus, 150k with
+# Reasoning; Pro 40k/75k/150k) at the price of the tier's models, searches
+# included, rounded up. Derived, not measured: Compare and Consensus ran on a
+# single account-day in the ten days before the switch. Admin tunes them in
+# the Limits tab; bookings charge the measured cost either way.
+_STANDARD_RUN = {"compare": 60_000, "consensus": 100_000, "deep_think": 200_000}
+_PRO_RUN = {"compare": 150_000, "consensus": 250_000, "deep_think": 400_000}
 DEFAULT_RUN_ESTIMATES = {
     "free": dict(_STANDARD_RUN),
     "plus": dict(_STANDARD_RUN),
     "pro": dict(_PRO_RUN),
     "admin": dict(_PRO_RUN),
 }
+
+
+def micro_eur(nano_usd):
+    """A dollar cost in nano-USD as whole micro-euros, rounded up; None stays None."""
+    if nano_usd is None:
+        return None
+    return -(-max(0, int(nano_usd)) // NANO_USD_PER_MICRO_EUR)
+
+
+def nano_usd(micro_eur):
+    """Micro-euros as nano-USD (the unit of model prices and receipts)."""
+    return int(micro_eur) * NANO_USD_PER_MICRO_EUR
 
 
 class BudgetConfigConflict(ValueError):
@@ -68,9 +89,9 @@ def normalize_tier_limits(value):
     """Missing tiers take their default; a present but invalid value fails closed."""
     value = value if value is not None else {}
     if not isinstance(value, dict) or any(key not in TIER_KEYS for key in value):
-        raise ValueError("Invalid daily token limits")
-    return {tier: _positive_int(value.get(tier, DEFAULT_TIER_LIMITS[tier]), MAX_DAILY_TOKENS,
-                                 "Invalid daily token limit")
+        raise ValueError("Invalid daily limits")
+    return {tier: _positive_int(value.get(tier, DEFAULT_TIER_LIMITS[tier]), MAX_DAILY_LIMIT,
+                                 "Invalid daily limit")
             for tier in TIER_KEYS}
 
 

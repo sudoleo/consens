@@ -1671,8 +1671,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   bleibt der Wrapper `display: contents` und die bestehende Float-Anordnung
   erhalten. Reader-Dialoge bleiben oberhalb der Kopfleiste.
 - **`token-budget.js`** (head-Bundle, vor `firebase.js`) — `App.tokenBudget`,
-  der einzige Browser-Besitzer des gemeinsamen Tokenkontos (Compare,
-  Consensus, Reasoning-Läufe, Agent; siehe §4 „Ein Tokenkonto für alle Modi").
+  der einzige Browser-Besitzer des gemeinsamen Tageskontos (Compare,
+  Consensus, Reasoning-Läufe, Agent; siehe §4 „Ein Konto in Euro für alle Modi").
   `apply(snapshot, {uid, authoritative})` validiert, bindet an den angemeldeten
   Account und ordnet parallele Snapshots (Konfigurationsrevision → UTC-Tag →
   Ledger-`revision` → `observed_at`); `/usage` und `/user_status` sind
@@ -1693,8 +1693,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Prozentwert und Reset stehen im `title`/`aria-label` und im Panel. Panel:
   Kopf „Today's allowance" + Plan, eine Hauptzahl (`#quotaPercent` „62 %
   left today"), dünner Balken `#quotaTrack` (`role=meter`), Reset-Zeile, eine
-  Detailzeile (`#quotaDetail`: „409k of 660k tokens · A Compare run uses
-  about 5 %" bzw. in Agent „Agent books each model call"), Watches als
+  Detailzeile (`#quotaDetail`: „€0.62 of €1.00 · A Compare run uses
+  about 6 %", die Euro nur für Admins, bzw. in Agent „Agent books each model
+  call"), Watches als
   eigene kleine Zeile (aus `#watchUsageDisplay`, eigenes Kontingent) und nur
   bei Bedarf eine Fußnote (Holds laufender Arbeit, Schätzungen, leeres Konto,
   veralteter Stand). Ampelfarbe nur auf Ring-Bogen und Balkenfüllung
@@ -4005,7 +4006,7 @@ Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_confi
   relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
   eine zusätzliche Bookmark-View-Epoch macht die letzte Auswahl autoritativ.
   Listenfehler zeigen einen eigenen Retry-Zustand statt einer scheinbar leeren
-  Liste. `/usage` synchronisiert neben dem Tokenkonto auch den Tierstatus und heilt
+  Liste. `/usage` synchronisiert neben dem Tageskonto auch den Tierstatus und heilt
   so einen transient fehlgeschlagenen `/user_status`-Startcheck in derselben
   Sitzung; beim Start läuft es nur noch in diesem Fehlerfall. Der dynamische Account-Menü-Außenklick-Listener wird bei
   jedem Token-Callback entfernt, bevor ein neuer gebunden wird. Das Account-Menü
@@ -4567,8 +4568,9 @@ abgeschnitten, und Recherche geht nicht früher verloren. Suchkonfiguration (`se
 Modelle, Engine `auto`, nur Grok fest Exa), Reservierung
 (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte stehen
 ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze ist die Completion-Grenze des
-Modells, begrenzt durch `_output_share` (fairer Anteil am freien Tageskontingent
-über `agent_quota.remaining_tokens`). `depth=quick` gibt eine kurze Längenvorgabe,
+Modells, begrenzt durch `_output_shares` (fairer Anteil am freien Tageskontingent
+über `agent_quota.remaining_allowance`, je Modell zu dessen Output-Preis in
+Tokens umgerechnet). `depth=quick` gibt eine kurze Längenvorgabe,
 `full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
 Strukturierte Transportfehler werden am Fehlerfeld erkannt, nicht am Wort
 „Error“ im Antworttext; nur Legacy-Stringadapter behalten ihre Fehlerkonvention.
@@ -4896,7 +4898,7 @@ verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
 
 Bis 2026-10-15 reihte das Tool `check_contradictions` (`agent_contradictions.py`)
 nach `judge_answer` je Vergleich eine Quellenprüfung der Widersprüche als
-Hintergrundjob auf dem Agent-Tokenkonto ein; sie ist mit der ganzen
+Hintergrundjob auf dem Agent-Tageskonto ein; sie ist mit der ganzen
 Quellenprüfung entfernt (siehe „Quellenprüfung entfernt“). Einen Faktenstreit
 klärt der Agent vor dem Schreiben mit `read_source`.
 
@@ -5711,22 +5713,22 @@ Modellvergleichsprüfung, ausdrücklich keine unabhängige Faktenprüfung.
 Fehlende Coverage, fehlende Sätze, gekürzte Grundlagen und ausgefallene Modelle
 werden nicht als vollständig geprüft dargestellt.
 
-**Tokenkontingent und Kosten.** agent_quota.py ist das zentrale UTC-Tageskonto,
-seit 2026-10-01 gemeinsam mit Compare/Consensus/Reasoning-Läufen (§4 „Ein Tokenkonto
+**Tageskonto und Kosten.** agent_quota.py ist das zentrale UTC-Tageskonto,
+seit 2026-10-01 gemeinsam mit Compare/Consensus/Reasoning-Läufen (§4 „Ein Konto in Euro
 für alle Modi"). Das Limit kommt aus der Kontostufe
 (`app_config/agent_budget.tier_limits[free|plus|pro|admin]`, `account_tier`:
 Admin-Rolle vor gespeicherter Stufe); das frühere globale
-`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Ein
-Agent-Aufruf bucht seit 2026-10-27 `charged_tokens` ab: Input und Output
-voll, Cache-Reads (`cached_input_tokens`) zu `CACHED_INPUT_WEIGHT` = 0,25
-(Max; `measured_tokens`, `provisional_lower_bound`, Abgleich
-`agent_usage_reconciliation.generation_tokens` mit `native_tokens_cached`),
-der Beleg trägt `quota_charged`; Pipeline-Läufe zählen unverändert. Seit
-2026-10-29 zählt ein Call eines Audit-Prüfers mit
-`AUDIT_REVIEWER_QUOTA_WEIGHT` = 0,5 (`receipt_weight`: Beleg-Feld
-`session_kind == "audit"`, das `_claim_delegated` aus der Sitzung schreibt,
-oder `round` einer Prüfer-Runde; Reserve, Abbuchung, Schätzung und Abgleich
-gleich gewichtet, Details `docs/agent-mode.md`). Agent ist
+`daily_token_limit`/`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Seit
+2026-10-31 (Max) zählt das Konto **Geld statt Tokens**: ganze Mikro-Euro,
+jeder Agent-Aufruf bucht seine Kosten ab (`agent_quota.measured_charge`:
+`usage.estimated_cost_nano_usd`, also OpenRouters `usage.cost` inkl. Cache,
+Reasoning und Websuche, sonst Katalogpreis; umgerechnet mit dem festen
+`agent_budget_config.NANO_USD_PER_MICRO_EUR`, 1 € = 1,15 $). Die Gewichte
+von vorher (Cache-Reads 0,25 seit 10-27, Audit-Prüfer 0,5 seit 10-29) sind
+entfallen: sie standen nur für die Kosten. Der Beleg trägt die Abbuchung als
+`quota_charged` (Mikro-Euro, Ledger mit Endung `_eur`), der Abgleich nimmt
+`total_cost` der Generation (`agent_usage_reconciliation.generation_charge`,
+`quota_measured`). Agent ist
 seit 2026-10-02 für jedes angemeldete Konto offen (`require_agent_access`);
 Pro bleiben Premium-Modelle und hohe Denkstufen.
 agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.
@@ -5877,13 +5879,13 @@ und mit `on` immer `judges: on` und `vm: on`, wo das Konto die VM hat
 (`vm_allowed`: seit 2026-10-27 nur Admins, `AGENT_VM_ACCESS=pro` öffnet sie
 wieder für jedes Konto mit Audit; ohne Audit keine VM). Seit 2026-10-30 öffnet
 `AGENT_AUDIT_ACCESS=all` Audit (und damit VM und Browser) für jedes Konto
-(`agent_vm.audit_for_all`, auch in `/user_status`), gehalten vom Tokenkonto (jede
+(`agent_vm.audit_for_all`, auch in `/user_status`), gehalten vom Tageskonto (jede
 Browser-Aktion ist ein Modellschritt) und der VM-Zeit (`agent_vm_time.daily_limit`:
 Pro 2 h, sonst `BASE_DAILY_SECONDS` = 20 min, Admins ohne Grenze). Domains über die
 Paketquellen hinaus (`request_domain`) bleiben Pro und Admins (`domains_allowed`,
 `DelegationLoop(domains=…)`, sonst ohne `DomainTools` und mit
 `AGENT_VM_NO_DOMAINS_PROMPT`, Admin-Katalog `agent_vm_no_domains`): ein Skript auf der
-Werkbank erreicht sie ohne Modellschritt, das hält kein Tokenkonto auf. Der
+Werkbank erreicht sie ohne Modellschritt, das hält kein Tageskonto auf. Der
 Prüfer-Brief nennt `request_domain` nur, wo es das Werkzeug gibt. Die Seite zeigt dann nur, was gilt
 (`#agentSettingsSection.is-audit`: Vergleichszeilen weg, GitHub da). Mit `on` schickt die Route
 `AGENT_AUDIT_SYSTEM_PROMPT` (`DEFAULT_PROMPTS["agent_audit"]`) statt des
@@ -6618,7 +6620,7 @@ Seit 2026-10-25 startet der Browser auf diesem Weg nur noch **Compare**
 Consensus-Lauf danach (`/consensus`) kommt aus dem Browser nicht mehr.
 
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
-   Auth sowie transaktionale Admission auf dem Tokenkonto (`run_mode`
+   Auth sowie transaktionale Admission auf dem Tageskonto (`run_mode`
    `compare`; der Server kennt weiter `consensus` für andere Aufrufer,
    Reasoning-Schätzung aus `deep_search`) und sofortiger Consume
    des vom Client erzeugten, kostenfreien `usage_run_key`; `operations` nennt
@@ -7833,7 +7835,7 @@ warten darauf. Bis 2026-10-28 lief er im Webprozess pro Familien-Request,
 hinter einer Bytesuche nach `<!doctype`/`<!entity`, die UTF-16 übersah
 (Sicherheitsaudit; ein OOM beendete alle laufenden Agent-Turns).
 
-### Ein Tokenkonto für alle Modi (seit 2026-10-01)
+### Ein Konto in Euro für alle Modi (seit 2026-10-01, in Euro seit 2026-10-31)
 
 Compare, Consensus (je mit oder ohne Reasoning) und Agent · Beta buchen auf **dasselbe**
 Tageskonto pro Nutzer (`users/{uid}/chat_state/agent_tokens_{periode}`,
@@ -7911,6 +7913,8 @@ Agent.
     zurückgehalten“). Ohne Zahl (Legacy, eigene Keys) läuft der Hold ab. Gebucht wird vor dem `final`-Event (das das gebuchte
     `token_budget` trägt) bzw. beim Schließen des Streams. Ein Buchungsfehler
     bricht die Antwort nie ab, sondern wird als `Token booking failed` geloggt.
+    Seit 2026-10-31 sind `measured`/`estimated` Mikro-Euro (der Meter liest
+    `usage.cost`, sonst Katalogpreis; Tokens nur noch im Log).
   - *Überziehen*: eine laufende Operation darf das Konto unter null drücken;
     danach scheitert die nächste Admission. Begrenzt, weil nur Läufe mit
     ausreichendem Puffer starten und jeder junge Lauf seine Schätzung hält.
@@ -7925,7 +7929,44 @@ Agent.
   Reasoning-Lauf nicht, bietet sie „Send without reasoning" an
   (`data-bucket="reasoning"`, Warnton statt Absage).
 
-**Herleitung der Defaults** (Prinzip: ein typischer Nutzer behält ungefähr
+**Seit 2026-10-31 in Euro** (Max: „Ja, so umbauen"). Das Konto zählt ganze
+Mikro-Euro (`agent_budget_config.MICRO_EUR`): jeder Call, was er gekostet hat
+(Agent: `agent_quota.measured_charge`; Pipeline: `usage_meter`, OpenRouters
+`usage.cost`, sonst Tokens × Katalogpreis aus
+`agent_model_metadata.pricing`, unbekannte Modelle zu `FALLBACK_PRICES`),
+umgerechnet zum festen Kurs `NANO_USD_PER_MICRO_EUR` = 1 150 (1 € = 1,15 $).
+Grund: in Prod (21.–30.10., nur gelesen) kostete eine Million gezählter Tokens
+0,24–2,18 $ je nach Lauf; Websuche (39 % der Agent-Kosten) zählte als Tokens
+kaum, Cache und Prüfer brauchten Gewichte. Die neue Einheit beginnt mit einem
+eigenen Ledger: `period_key` hängt `LEDGER_UNIT` = `_eur` an, ein noch in
+Tokens reservierter Call bucht in sein altes Ledger. Der Browser zeigt weiter
+nur Prozent; der Snapshot trägt `unit: "micro_eur"`, ein Wechsel der Einheit
+gilt in `token-budget.js` als neues Konto. Feldnamen der Verträge
+(`token_budget`, `required_tokens`, `agent_tokens_exhausted`,
+`limiting_bucket="tokens"`) bleiben, ihre Beträge sind Mikro-Euro.
+
+| Stufe | Default € / Tag | vorher Tokens | gemessen ≈ |
+|---|---|---|---|
+| Free | 1,00 | 660 000 | 0,85 € (1,46 $/Mio.) |
+| Plus | 2,50 | 1 650 000 | 2,5 × Free |
+| Pro | 5,00 | 5 000 000 | typisch 4 € |
+| Admin | 5,00 | 5 000 000 | wie Pro |
+
+Laufschätzungen der Pipeline (`run_estimates`, Mikro-Euro): Free/Plus 60 000 /
+100 000 / 200 000 (Compare / Consensus / Reasoning), Pro/Admin 150 000 /
+250 000 / 400 000: die Token-Schätzungen unten zum Preis der Stufenmodelle,
+nicht gemessen (Compare/Consensus liefen in den zehn Tagen davor an einem
+Kontotag). Admin → Limits gibt Euro ein (`admin-agent-budget.js` rechnet in
+Mikro-Euro um).
+
+In der Agent-Schleife rechnen alle Stellen, die den Rest des Kontos lesen,
+in Geld: `_admit_chat_step` kürzt die Ausgabe auf das, was der Rest bezahlt
+(`RunCosts.output_within`, zwei Schätzungen, linear), `beyond` (Antwort über
+der Routing-Grenze) ist deren Preis, `_long_run_limit` vergleicht mit
+`worst_case_nanos` zweier Schritte plus Antwort, `_output_shares` gibt jedem
+Vergleichsmodell/Prüfer Output-Tokens im Wert seines Anteils.
+
+**Herleitung der Token-Defaults bis 2026-10-31** (Prinzip: ein typischer Nutzer behält ungefähr
 seine bisherige Tageskapazität; Limit ≈ bisheriges Run-Limit × Tokens eines
 typischen Laufs). Bisherige Produktionswerte (2026-10-01, nur gelesen):
 Free 12, Plus 30, Pro 50 Runs/Tag (davon 5 Deep Think), Agent 750 000 Tokens
@@ -7951,7 +7992,7 @@ Antworten ~16 500 × 6 ≈ 99 000 + Synthese ~16 000 + Judges ~28 000 →
 weiter diese Schätzung: Admission irrt lieber zur sicheren Seite; nach
 Prod-Daten im Admin nachjustieren.
 
-| Stufe | Rechnung | Default `tier_limits` |
+| Stufe | Rechnung | Default `tier_limits` (bis 2026-10-31) |
 |---|---|---|
 | Free | 12 × 55 000 | 660 000 |
 | Plus | 30 × 55 000 | 1 650 000 |
@@ -8093,20 +8134,20 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   `free`, `plus` oder `pro`; der historische Tag `premium` bedeutet weiterhin
   Pro, alles Unbekannte fällt auf Free. Admin bleibt `users/{uid}.role == admin`.
 
-  | | Frontier-Modelle | Anhänge | Resolve | Tokenkonto/Tag (Default) |
+  | | Frontier-Modelle | Anhänge | Resolve | Konto/Tag (Default) |
   |---|---|---|---|---|
-  | Free | – | – | – | 660 000 |
-  | Plus | – | ✓ | ✓ | 1 650 000 |
-  | Pro | ✓ | ✓ | ✓ | 5 000 000 |
-  | Admin (Rolle) | wie Stufe | wie Stufe | wie Stufe | 5 000 000 |
+  | Free | – | – | – | 1,00 € |
+  | Plus | – | ✓ | ✓ | 2,50 € |
+  | Pro | ✓ | ✓ | ✓ | 5,00 € |
+  | Admin (Rolle) | wie Stufe | wie Stufe | wie Stufe | 5,00 € |
 
   Der Reasoning-Schalter (früher Pro-only „Deep Think") ist seit 2026-10-02
   keine Berechtigung mehr: alle Stufen dürfen ihn nutzen; `entitlements.deep_think`
   und das Feld `deep_think` der Admin-Kontoansicht sind entfernt.
 
   Plus existiert für Tester, die Funktionen ausprobieren sollen, **ohne einen
-  Frontier-Lauf auslösen zu können**. Herleitung der Tokenkonten: §4 „Ein
-  Tokenkonto für alle Modi".
+  Frontier-Lauf auslösen zu können**. Herleitung der Konten: §4 „Ein
+  Konto in Euro für alle Modi".
 - **Zwei Flags, eine Regel:** `is_user_pro(uid)` behält überall seine alte
   Bedeutung „darf teure Modelle" und ist für Plus **False**;
   `is_user_plus(uid)`/`entitlements.attachments|resolve` decken die
@@ -8141,7 +8182,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Stufe sofort statt erst nach ≤60 s greift. Ein Konto in Löschung bekommt
   keine neue Stufe (`persistence_guard`). UI: Admin-Tab **Accounts**.
 - **Usage ist persistent und tokenbasiert (seit 2026-10-01):** siehe §4 „Ein
-  Tokenkonto für alle Modi". `app/services/usage_repository.py`
+  Konto in Euro für alle Modi". `app/services/usage_repository.py`
   (`FirestoreUsageRepository`) hält weiterhin genau einen Beleg pro logischem
   Lauf (`usage_run_key`: Idempotenz, Request-Fingerprint, Operations-Claims
   `ask:<provider>`/`consensus`/`resolve`, Chat-Kontext-Bindung, 12
@@ -8161,7 +8202,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Normalisierung weg (`pro_deep_search_max_tokens` wird einmalig zu
   `reasoning_max_tokens`, solange das neue Feld fehlt). Mit Reasoning gilt
   `get_output_token_limit(tier, True) = max(Stufenlimit, reasoning_max_tokens)`;
-  `get_word_limit` ignoriert den Schalter. Das Tokenkonto
+  `get_word_limit` ignoriert den Schalter. Das Tageskonto
   lebt getrennt in `app_config/agent_budget`.
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
@@ -8348,7 +8389,7 @@ keinen Abgleich.
   Doppelte HTTP-Requests/Worker können deshalb weder doppelt konsumieren noch
   den Provider-Fan-out doppelt starten.
 - Die Usage-Reservierung nutzt `FirestoreUsageRepository` auf demselben
-  Tokenkonto wie App und Agent: beim Annehmen wird der Lauf gegen die
+  Tageskonto wie App und Agent: beim Annehmen wird der Lauf gegen die
   Consensus- bzw. Reasoning-Schätzung (`deep_think`) der Stufe admittiert
   (`token_admission_for_run`, Admin-Rolle zählt), beim Übergang zu `running`
   konsumiert, und nach der Pipeline bucht `OperationBooking("pipeline",
@@ -8939,9 +8980,9 @@ app/services/
   agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge; im Audit-Modus seit 2026-10-28 jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN, nur mit Prüfern, vorher durch die Vorab-Prüfung), SourceReader.knows für das Gate
   agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, Audit-Modus, wo read_source läuft): find_pictures holt bis zu 6 Adressen gleichzeitig (18 je Nachricht), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht
-  usage_repository.py        Run-Belege auf dem Tokenkonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
+  usage_repository.py        Run-Belege auf dem Tageskonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
-  agent_quota.py             Gemeinsames UTC-Tokenkonto (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
+  agent_quota.py             Gemeinsames UTC-Tageskonto in Mikro-Euro (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
   agent_background.py        Agent-Turns auf eigenem Thread statt an der Verbindung (start/stop per Request oder Turn, Stop-vor-Start-Marke, Drain bei SIGTERM, run_loop für Entscheidungen im Prozess)
   agent_live.py              Prozesslokale Frames je laufendem Turn (SSE-Tail für POST /agent, JSON für /live, reset bei Fensterverlust)
   agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
@@ -9189,12 +9230,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
     `created_at`), lesen zusätzlich das Kontodokument und werden dort
     (erneut) admittiert. `/prepare` und die externe Consensus-API behalten
     ihren Reserve-/Consume-Vertrag.
-  - `chat_state/agent_tokens_{YYYY-MM-DD}[_{reset_epoch}]` — das gemeinsame
-    Tokenkonto (Agent + Pipeline): `used` (gemessen, beide Modi), `reserved`
+  - `chat_state/agent_tokens_{YYYY-MM-DD}[_{reset_epoch}]_eur` — das gemeinsame
+    Tageskonto in Mikro-Euro (Agent + Pipeline; ohne `_eur` die Token-Ledger
+    bis 2026-10-31): `used` (gemessen, beide Modi), `reserved`
     (Agent-Reservierungen), `estimated` (Agent-Schätzungen, später
     reconciled), `pipeline_used` (Anteil der Pipeline an `used`),
     `pipeline_estimated` (Schätzungen für Pipeline-Calls ohne finale Usage),
-    `pipeline_holds` (`{run_hash: {tokens, expires_at}}`, max. 32 aktive,
+    `pipeline_holds` (`{run_hash: {amount, expires_at}}`, max. 32 aktive,
     zehn Minuten), `pipeline_runs`, `pipeline_readmissions`,
     `unknown`/`unknown_released`, `revision`.
   - `api_consensus_idempotency/{sha256(idempotency_key)}` — Mapping von UID +
@@ -10035,7 +10077,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
 ausgeführt. Buildcheck bestanden. Vollständiger [Testkatalog](test-coverage-map.md),
 [Befunde](test-coverage/findings.md) und [Produktmatrix](test-coverage/product/README.md).
 Neue Bereiche umfassen Google/Kalender/Gmail, private Dateien/Dokumentversionen,
-gemeinsames Tokenkonto, Antwortreceipts und Watch-Evidenz/Outbox. Historische
+gemeinsames Tageskonto, Antwortreceipts und Watch-Evidenz/Outbox. Historische
 Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
 
 - **Windows-Einstieg:** `dev.ps1 check frontend|backend|browser` koordiniert

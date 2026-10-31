@@ -1,9 +1,13 @@
-// Daily token allowance (one account for Compare, Consensus, Reasoning runs and
-// Agent): limit per tier and the expected tokens of a typical run per tier and
-// mode, which is the admission threshold of the pipeline. Revision-guarded like
-// before; the global reset stays a separate product action.
+// Daily allowance in euros (one account for Compare, Consensus, Reasoning runs
+// and Agent): limit per tier and the expected cost of a typical run per tier and
+// mode, which is the admission threshold of the pipeline. The API speaks whole
+// micro-euros; the fields show euros. Revision-guarded like before; the global
+// reset stays a separate product action.
 const TIERS = [['free', 'Free'], ['plus', 'Plus'], ['pro', 'Pro'], ['admin', 'Admin']];
 const MODES = [['compare', 'Compare run'], ['consensus', 'Consensus run'], ['deep_think', 'Reasoning run']];
+const MICRO_EUR = 1000000;
+const toMicro = value => Math.round(Number(value) * MICRO_EUR);
+const toEuros = micro => (typeof micro === 'number' ? String(micro / MICRO_EUR) : '');
 
 export function createAgentBudgetPanel(request) {
     const form = document.getElementById('agentBudgetForm');
@@ -19,12 +23,12 @@ export function createAgentBudgetPanel(request) {
         const field = document.createElement('input');
         field.type = 'number';
         field.id = id;
-        field.min = '1';
+        field.min = '0.01';
         field.max = String(max);
-        field.step = '1';
+        field.step = '0.01';
         field.required = true;
         field.disabled = true;
-        field.inputMode = 'numeric';
+        field.inputMode = 'decimal';
         field.setAttribute('aria-label', label);
         return field;
     }
@@ -37,11 +41,11 @@ export function createAgentBudgetPanel(request) {
         head.textContent = tierLabel;
         row.append(head);
         const limitCell = document.createElement('td');
-        limitCell.append(input(`budgetLimit-${tier}`, `${tierLabel} tokens per day`, 100000000));
+        limitCell.append(input(`budgetLimit-${tier}`, `${tierLabel} euros per day`, 1000));
         row.append(limitCell);
         for (const [mode, modeLabel] of MODES) {
             const cell = document.createElement('td');
-            cell.append(input(`budgetEstimate-${tier}-${mode}`, `${tierLabel} ${modeLabel} estimate`, 10000000));
+            cell.append(input(`budgetEstimate-${tier}-${mode}`, `${tierLabel} ${modeLabel} estimate in euros`, 10));
             row.append(cell);
         }
         rows?.append(row);
@@ -51,9 +55,9 @@ export function createAgentBudgetPanel(request) {
     function draft() {
         const tier_limits = {}, run_estimates = {};
         for (const [tier] of TIERS) {
-            tier_limits[tier] = Number(document.getElementById(`budgetLimit-${tier}`).value);
+            tier_limits[tier] = toMicro(document.getElementById(`budgetLimit-${tier}`).value);
             run_estimates[tier] = {};
-            for (const [mode] of MODES) run_estimates[tier][mode] = Number(document.getElementById(`budgetEstimate-${tier}-${mode}`).value);
+            for (const [mode] of MODES) run_estimates[tier][mode] = toMicro(document.getElementById(`budgetEstimate-${tier}-${mode}`).value);
         }
         return { tier_limits, run_estimates };
     }
@@ -72,9 +76,9 @@ export function createAgentBudgetPanel(request) {
     function display(config) {
         saved = config;
         for (const [tier] of TIERS) {
-            document.getElementById(`budgetLimit-${tier}`).value = config.tier_limits?.[tier] ?? '';
+            document.getElementById(`budgetLimit-${tier}`).value = toEuros(config.tier_limits?.[tier]);
             for (const [mode] of MODES) {
-                document.getElementById(`budgetEstimate-${tier}-${mode}`).value = config.run_estimates?.[tier]?.[mode] ?? '';
+                document.getElementById(`budgetEstimate-${tier}-${mode}`).value = toEuros(config.run_estimates?.[tier]?.[mode]);
             }
         }
         meta.textContent = `Revision ${config.revision}` + (config.reset_at ? ` · Last reset: ${new Date(config.reset_at).toLocaleString()}` : ' · No manual reset');
@@ -104,7 +108,7 @@ export function createAgentBudgetPanel(request) {
     reset.addEventListener('click', () => {
         if (!saved || busy) return;
         // This is a product action affecting every account, distinct from Save.
-        if (!window.confirm('Reset today’s token allowance for every account? Work already started keeps its previous accounting.')) return;
+        if (!window.confirm('Reset today’s allowance for every account? Work already started keeps its previous accounting.')) return;
         return perform('POST', '/api/admin/agent-budget/reset', { revision: saved.revision },
             'All allowances reset. Applies within 30 seconds; usage history is preserved.');
     });

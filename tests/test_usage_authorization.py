@@ -99,7 +99,7 @@ def test_distinct_run_race_cannot_exceed_the_account():
     with ThreadPoolExecutor(max_workers=8) as pool:
         accepted = list(pool.map(attempt, range(12)))
     assert sum(accepted) == 3
-    assert agent_quota.held_tokens(db.documents[LEDGER], NOW.timestamp()) == 90_000
+    assert agent_quota.held_amount(db.documents[LEDGER], NOW.timestamp()) == 90_000
 
 
 @pytest.mark.parametrize("changes,error", [

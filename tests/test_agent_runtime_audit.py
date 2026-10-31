@@ -16,7 +16,7 @@ import pytest
 from app.services import agent_delegation
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
-from test_agent_runs import UID, pending, receipt, store  # noqa: F401  (fixture)
+from test_agent_runs import UID, pending, receipt, store, priced  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, Agent, fake_vm, results, vm_loop  # noqa: F401  (fixture)
 
 
@@ -531,7 +531,7 @@ def _settled_step(guess):
         store._expected_daily = lambda uid: None
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     del trips[:]
     store.settle(*args, completion=receipt(), status="succeeded", final=False)
     saved = store.receipt_ref(*args).get().to_dict()
@@ -559,7 +559,7 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     from test_agent_delegation import make_loop
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     # A day that is never today: until 2026-10-31 this read "2026-10-31", and
     # at midnight UTC that day was the claim's own (CI 2026-10-31, 00:0x UTC).
     monkeypatch.setattr(AgentRunStore, "_expected_daily",

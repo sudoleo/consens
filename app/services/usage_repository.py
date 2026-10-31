@@ -1,9 +1,10 @@
-"""Persistente Run-Belege der Consensus-Pipeline auf dem gemeinsamen Tokenkonto.
+"""Persistente Run-Belege der Consensus-Pipeline auf dem gemeinsamen Tageskonto.
 
 Ein logischer Lauf (``usage_run_key``) ist weiterhin genau ein Beleg: er bindet
 Idempotenz, Request-Fingerprint, Operations-Claims und Chat-Kontext. Gezaehlt
-werden aber keine Runs mehr, sondern Tokens auf demselben Tageskonto wie Agent
-(``agent_quota``; Limit nach Kontostufe aus ``agent_budget_config``):
+werden aber keine Runs mehr, sondern Kosten in Mikro-Euro (seit 2026-10-31,
+vorher Tokens) auf demselben Tageskonto wie Agent (``agent_quota``; Limit nach
+Kontostufe aus ``agent_budget_config``):
 
 * **Admission:** ein neuer Lauf startet nur, wenn das freie Budget die
   erwarteten Kosten eines typischen Laufs dieses Modus deckt (Compare,
@@ -14,7 +15,7 @@ werden aber keine Runs mehr, sondern Tokens auf demselben Tageskonto wie Agent
   ein Konto vorab zugelassene Laeufe fuer das stundenlange
   Ausfuehrungsfenster.
 * **Buchung:** jede abgeschlossene Operation (``ask:<familie>``, ``consensus``,
-  ``resolve``, API ``pipeline``) bucht ihre gemessenen Tokens genau einmal
+  ``resolve``, API ``pipeline``) bucht ihre gemessenen Kosten genau einmal
   (``booked_operations``). Fehlt die Messung, bucht sie dieselbe begrenzte
   Schaetzung wie Agent. Ein Lauf darf das Konto dabei leicht ueberziehen.
   Die letzte Operation gibt den Rest-Hold frei: ``final`` (Consensus, API) oder,
@@ -142,7 +143,7 @@ class UsageRepositoryError(Exception):
 
 
 class UsageLimitExceeded(UsageRepositoryError):
-    """The remaining tokens do not cover the expected cost of this run."""
+    """The remaining allowance does not cover the expected cost of this run."""
 
     limiting_bucket = "tokens"
 
@@ -487,7 +488,7 @@ class FirestoreUsageRepository:
         final: bool = False,
         now: datetime | None = None,
     ) -> dict:
-        """Debit one finished operation's tokens exactly once.
+        """Debit one finished operation's cost (micro-euros) exactly once.
 
         ``final`` marks the last operation of a run (Consensus, API pipeline,
         Resolve): its remaining admission hold is dropped instead of waiting

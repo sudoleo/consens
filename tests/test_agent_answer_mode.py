@@ -394,7 +394,7 @@ def test_every_step_may_write_a_whole_answer_but_is_admitted_like_a_routing_step
 def free_account(store, monkeypatch, remaining):
     monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "free")
     limit = agent_budget_config.DEFAULT_TIER_LIMITS["free"]
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": limit - remaining})
     return ref
 
@@ -430,7 +430,8 @@ def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance(store, monkeyp
     assert any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
     assert script.limits[0] == answer_output_limit(loop.model) > 30_000
     ledger = ref.get().to_dict()
-    assert ledger["reserved"] == 0 and ledger["used"] == used + 70
+    # The answer's provider cost, $0.0001, is 87 micro-euros (rounded up).
+    assert ledger["reserved"] == 0 and ledger["used"] == used + 87
 
 
 def test_a_turn_limit_lets_the_agent_write_without_tools(store, monkeypatch):

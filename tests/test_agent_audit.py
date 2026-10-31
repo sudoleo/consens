@@ -24,7 +24,7 @@ from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, current_provider_cancellation
-from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtures)
+from test_agent_runs import AUTH, UID, api, pending, store, priced  # noqa: F401  (fixtures)
 
 
 @pytest.fixture(autouse=True)
@@ -1073,7 +1073,7 @@ def test_the_turns_time_under_the_account_lock_is_measured(store):
     threading.Thread(target=hold, daemon=True).start()
     assert holding.wait(5)
     waited = store.lock_time()["waited"]
-    store.repair_quota_period(UID, agent_quota.day_key())
+    store.repair_quota_period(UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     assert store.lock_time()["waited"] - waited >= .15
     assert store.lock_time()["longest_wait"] >= .15
 
@@ -1086,7 +1086,7 @@ def test_a_crash_or_the_reaper_leaves_no_reviewer_at_work(store):
     from test_agent_runs import receipt
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     store.settle(*args, completion=receipt(), status="succeeded", final=False)
     reviewers = [{"provider": "anthropic", "status": "completed", "marks": 0}, {"provider": "openai", "status": "running"},
                  {"provider": "google", "status": "waiting"}]

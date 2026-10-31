@@ -71,6 +71,21 @@ def totals(store):
     return store.db.collection("users").document(UID).get().to_dict()["agent_usage"]
 
 
+def priced(amount):
+    """The cost (nano-USD) of a reservation that holds ``amount`` micro-euros
+    of the account (agent_budget_config.NANO_USD_PER_MICRO_EUR)."""
+    from app.services.agent_budget_config import NANO_USD_PER_MICRO_EUR
+    return amount * NANO_USD_PER_MICRO_EUR
+
+
+def allowance(model, inputs, outputs=0):
+    """The micro-euros the account holds for ``inputs`` and ``outputs``
+    tokens of ``model`` at their reservation's worst-case price."""
+    from app.services.agent_budget_config import micro_eur
+    from app.services.agent_costs import worst_case_nanos
+    return micro_eur(worst_case_nanos(model, inputs, outputs))
+
+
 def test_usage_uses_reported_tokens_and_does_not_double_count_reasoning():
     usage = receipt().usage
     assert usage["input_tokens"] == 1000
@@ -412,12 +427,13 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert totals(store)["estimated_cost_nano_usd"] == 2 * 132000
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
     error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
-    # 800 fresh input + 200 cache reads at a quarter + 100 output (CACHED_INPUT_WEIGHT), twice.
-    assert error["token_budget"]["used"] == 2 * 950
+    # What each attempt cost, $0.000132, in micro-euros (1 EUR = 1.15 USD,
+    # rounded up), twice.
+    assert error["token_budget"]["used"] == 2 * 115
     assert error["token_budget"]["reserved"] == 0
-    assert error["token_budget"]["remaining"] == 250000 - 2 * 950
+    assert error["token_budget"]["remaining"] == 250000 - 2 * 115
     receipts = [r for r in store.db.documents.values() if isinstance(r, dict) and "quota_charged" in r]
-    assert [r["quota_charged"] for r in receipts] == [950, 950]
+    assert [r["quota_charged"] for r in receipts] == [115, 115]
     assert error['recoverable'] is True
     count = len(store.db.documents)
     for _ in range(3):
@@ -431,14 +447,14 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
     assert totals(store)['calls'] == 2
     turn = store.list_turns(UID, chat_id)["turns"][0]
     data = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/agents", headers=AUTH).json()
-    assert data["token_budget"]["remaining"] == 250000 - 2 * 950
+    assert data["token_budget"]["remaining"] == 250000 - 2 * 115
     assert data["token_budget"]["observed_at"] >= error["token_budget"]["observed_at"]
 
 
 def test_quota_failure_returns_current_allowance_and_reservation_reason(api):
     from app.services import agent_quota
     client, store, calls = api
-    agent_quota.quota_ref(store.db, UID, agent_quota.day_key()).set({"used": 249900})
+    agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).set({"used": 249900})
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi",
         "client_request_id": "quota", "bookmark_id": "bm1"}, headers=AUTH)
@@ -617,6 +633,7 @@ def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monk
     assert all(event["version"] == 1 for event in events if event["type"] == "activity")
 
 
+@pytest.mark.real_prices
 def test_selected_model_prices_and_mandatory_provider_routes(monkeypatch):
     model = agent_client.resolve_agent_model("gpt-5.6-luna", "low")
     usage = measured_usage({"prompt_tokens": 1000, "completion_tokens": 100,
@@ -726,6 +743,7 @@ def test_agent_history_never_queries_empty_model_answers(store, monkeypatch):
     assert len(store.list_turns(UID, chat_id)["turns"]) == 1
 
 
+@pytest.mark.real_prices
 @pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3.1-pro", "openai/gpt-4o"])
 def test_configured_default_uses_its_own_prices_context_and_routing(monkeypatch, model_id):
     from app.core import config as cfg

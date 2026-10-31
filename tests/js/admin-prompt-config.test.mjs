@@ -57,7 +57,7 @@ describe('Admin prompt configuration', () => {
         await panel.setUser('admin');
         expect(doc.getElementById('delegation-seconds').hidden).toBe(true);
         expect(doc.getElementById('delegation-max_parallel').hidden).toBe(false);
-        expect(doc.getElementById('delegationConfig').textContent).toContain('daily token budget');
+        expect(doc.getElementById('delegationConfig').textContent).toContain('daily allowance in euros');
         change(window, 'delegation-max_parallel', '3');
         submit(window);
         await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('Saved.'));

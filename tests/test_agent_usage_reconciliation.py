@@ -10,16 +10,18 @@ from datetime import timedelta
 import pytest
 
 from app.services import agent_quota, agent_usage_reconciliation as reconciliation
+from app.services.agent_budget_config import NANO_USD_PER_MICRO_EUR as EUR
 from app.services.llm.agent_client import AgentCompletion
-from test_agent_runs import UID, store, receipt, totals
+from test_agent_runs import UID, store, receipt, totals, priced
 from test_agent_delegation import make_loop
 
 
 def unknown_call(store, *, reservation=500, generation_id="gen-1", step="completion:0", loop=None):
+    """``reservation`` micro-euros of the account (its cost: that many x EUR nano-USD)."""
     loop = loop or make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
-                step=step, reservation=(reservation, 100))
+                step=step, reservation=(reservation, reservation * EUR))
     value = receipt(measured=False)
     value.generation_id = generation_id
     store.settle(*args, completion=value, status="failed", step=step, final=False)
@@ -32,7 +34,8 @@ def test_unknown_usage_is_charged_a_bounded_estimate_not_released_or_fully_charg
     assert budget["used"] == 0 and budget["reserved"] == 0
     assert budget["estimated"] == 50 and budget["remaining"] == 50
     # A provisional lower bound above the floor is charged as the estimate.
-    provisional = {"input_tokens": 80, "output_tokens": 5, "provisional": True, "complete": False}
+    provisional = {"input_tokens": 80, "output_tokens": 5, "provisional": True, "complete": False,
+                   "estimated_cost_nano_usd": 85 * EUR}
     data = agent_quota.settle(agent_quota.reserve({}, 100, limit=100), 100, provisional)
     assert agent_quota.public(data, limit=100)["estimated"] == 85
 
@@ -45,7 +48,7 @@ def test_repeated_unknown_calls_are_bounded_but_measured_calls_do_not_lock():
     with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
         agent_quota.reserve(data, 150, limit=250)
     # Normal measured calls release their holds completely.
-    measured = {"input_tokens": 10, "output_tokens": 5}
+    measured = {"input_tokens": 10, "output_tokens": 5, "estimated_cost_nano_usd": 15 * EUR}
     clean = agent_quota.settle(agent_quota.reserve({}, 200, limit=250), 200, measured)
     assert agent_quota.public(clean, limit=250)["remaining"] == 235
 
@@ -53,7 +56,7 @@ def test_repeated_unknown_calls_are_bounded_but_measured_calls_do_not_lock():
 def test_provably_unstarted_calls_are_still_released_completely(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     value = AgentCompletion()
     value.record_unstarted(loop.model)
     store.settle(*args, completion=value, status="cancelled", final=False)
@@ -78,7 +81,7 @@ def test_reconciliation_replaces_the_estimate_exactly_once(store):
     assert after["remaining"] == after["limit"] - 130
     assert lookups == ["gen-1"]
     saved = store.receipt_ref(*args).get().to_dict()
-    assert saved["quota_reconcile"] == "measured" and saved["quota_measured_tokens"] == 130
+    assert saved["quota_reconcile"] == "measured" and saved["quota_measured"] == 130
     assert totals(store)["reconciled_calls"] == 1
 
     # Repeated passes and a late settlement retry never charge twice.
@@ -88,22 +91,23 @@ def test_reconciliation_replaces_the_estimate_exactly_once(store):
     assert lookups == ["gen-1"]
 
 
-def test_a_reviewers_estimate_is_reconciled_at_its_weight(store):
-    """A-K2: the measurement replaces the estimate at the reviewer's weight,
-    as settlement would have charged it."""
+def test_a_reviewers_estimate_is_reconciled_at_its_cost(store):
+    """Since 2026-10-31 a reviewer's call counts what it cost, like any other
+    (until then at half weight, A-K2)."""
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
+                reservation=(500, 500 * EUR))
     reviewer = "a" * 32
     store.publish_agent(*args, run_token=loop.run_token, agent_id=reviewer, patch={
         "assignment": {"goal": "Check"}, "status": "working", "kind": "audit"})
     unknown_call(store, reservation=1000, step=f"agent:{reviewer}:0", loop=loop)
     saved = store.receipt_ref(*args, f"agent:{reviewer}:0").get().to_dict()
-    # Half of the reservation is held, half of that charged as the estimate.
-    assert saved["quota_reserved"] == 500 and saved["quota_estimate"] == 250
+    # The whole reservation is held, half of it charged as the estimate.
+    assert saved["quota_reserved"] == 1000 and saved["quota_estimate"] == 500
     assert reconciliation.reconcile_pending(store.db, UID, fetch_usage=lambda _gid: 130)["measured"] == 1
-    assert store.receipt_ref(*args, f"agent:{reviewer}:0").get().to_dict()["quota_measured_tokens"] == 65
-    assert agent_quota.snapshot(store.db, UID)["used"] == 65
+    assert store.receipt_ref(*args, f"agent:{reviewer}:0").get().to_dict()["quota_measured"] == 130
+    assert agent_quota.snapshot(store.db, UID)["used"] == 130
 
 
 def test_parallel_reconciliation_passes_apply_the_measurement_once(store):
@@ -147,35 +151,37 @@ def test_receipts_without_generation_id_keep_their_estimate_as_final(store):
     assert agent_quota.snapshot(store.db, UID)["estimated"] == 250
 
 
-def test_generation_stats_prefer_native_counts_and_reject_garbage():
-    assert reconciliation.generation_tokens(
-        {"data": {"native_tokens_prompt": 100, "native_tokens_completion": 30, "tokens_prompt": 90}}) == 130
-    assert reconciliation.generation_tokens({"data": {"tokens_prompt": 90, "tokens_completion": 10}}) == 100
-    assert reconciliation.generation_tokens({"data": {"native_tokens_prompt": None}}) is None
-    assert reconciliation.generation_tokens({"data": {"tokens_prompt": -1, "tokens_completion": 3}}) is None
-    assert reconciliation.generation_tokens([]) is None
-    # Cache reads count at a quarter, as for a streamed call; unreadable ones in full.
-    assert reconciliation.generation_tokens({"data": {"native_tokens_prompt": 100, "native_tokens_completion": 30,
-                                                      "native_tokens_cached": 80}}) == 20 + 20 + 30
-    assert reconciliation.generation_tokens({"data": {"native_tokens_prompt": 100, "native_tokens_completion": 30,
-                                                      "native_tokens_cached": 900}}) == 130
+def test_generation_stats_charge_their_total_cost_and_reject_garbage():
+    """OpenRouter's ``total_cost`` (dollars) in micro-euros, rounded up."""
+    assert reconciliation.generation_charge({"data": {"total_cost": 0.00115, "native_tokens_prompt": 100}}) == 1000
+    assert reconciliation.generation_charge({"data": {"total_cost": "0.0023"}}) == 2000
+    assert reconciliation.generation_charge({"data": {"total_cost": 0.000001}}) == 1
+    # Counts without a cost are not a measurement of it.
+    assert reconciliation.generation_charge({"data": {"native_tokens_prompt": 100, "native_tokens_completion": 30}}) is None
+    assert reconciliation.generation_charge({"data": {"total_cost": None}}) is None
+    assert reconciliation.generation_charge({"data": {"total_cost": -1}}) is None
+    assert reconciliation.generation_charge({"data": {"total_cost": True}}) is None
+    assert reconciliation.generation_charge([]) is None
 
 
-def test_cache_reads_count_at_a_quarter_in_the_account():
-    """Max, 2026-10-27: a prompt token read from the provider's cache takes a
-    quarter of a fresh one from the daily account, in every Agent mode; cache
-    writes and output count in full, the receipt keeps the usage as measured."""
-    usage = {"input_tokens": 10_000, "output_tokens": 500, "cached_input_tokens": 8_000, "cache_write_tokens": 1_000}
-    assert agent_quota.CACHED_INPUT_WEIGHT == .25
-    assert agent_quota.measured_tokens(usage) == 2_000 + 2_000 + 500
-    # Rounded up, never below what was fresh; unknown or impossible cache counts count in full.
-    assert agent_quota.charged_tokens(10, 0, 3) == 7 + 1
-    assert agent_quota.measured_tokens({**usage, "cached_input_tokens": None}) == 10_500
-    assert agent_quota.measured_tokens({**usage, "cached_input_tokens": 20_000}) == 10_500
+def test_every_call_counts_what_it_cost_in_the_account():
+    """Max, 2026-10-31: the account counts money. A call takes its cost
+    (cache discount, reasoning and search included) in micro-euros, whatever
+    kind it is; no weights. A cost that is not final is no measurement."""
+    usage = {"input_tokens": 10_000, "output_tokens": 500, "cached_input_tokens": 8_000, "cache_write_tokens": 1_000,
+             "estimated_cost_nano_usd": 2_300_000, "cost_source": "provider", "cost_complete": True}
+    assert agent_quota.measured_charge(usage) == 2_000
+    # Rounded up to a whole micro-euro.
+    assert agent_quota.measured_charge({**usage, "estimated_cost_nano_usd": 1}) == 1
+    assert agent_quota.measured_charge({**usage, "estimated_cost_nano_usd": 0}) == 0
+    assert agent_quota.measured_charge({**usage, "cost_complete": False}) is None
+    assert agent_quota.measured_charge({**usage, "estimated_cost_nano_usd": None}) is None
+    assert agent_quota.measured_charge({**usage, "provisional": True}) is None
+    assert agent_quota.measured_charge({"session_kind": "audit", **usage}) == 2_000
     data = agent_quota.settle(agent_quota.reserve({}, 20_000, limit=100_000), 20_000, usage)
-    assert data["used"] == 4_500 and data["reserved"] == 0
-    # A lost final chunk: the bound of what was seen is weighted the same way.
-    assert agent_quota.provisional_lower_bound({**usage, "provisional": True}) == 4_500
+    assert data["used"] == 2_000 and data["reserved"] == 0
+    # A lost final chunk: the cost of what was seen is the lower bound.
+    assert agent_quota.provisional_lower_bound({**usage, "provisional": True}) == 2_000
 
 
 def test_background_scheduling_is_disabled_in_unit_test_mode(store):

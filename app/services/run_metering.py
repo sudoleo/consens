@@ -1,4 +1,4 @@
-"""Measure one Consensus-pipeline operation and book it on the token account.
+"""Measure one Consensus-pipeline operation and book its cost on the allowance.
 
 The transport reports usage (``llm.usage_meter``); this module only binds a
 meter around one logical operation (an ``/ask_*`` answer, an API pipeline
@@ -57,14 +57,14 @@ class OperationBooking:
             )
         except Exception as exc:
             logging.error(
-                "Token booking failed operation=%s measured=%d estimated=%d category=%s",
+                "Token booking failed operation=%s measured_ueur=%d estimated_ueur=%d category=%s",
                 self.operation.split(":")[0], totals["measured"], totals["estimated"], safe_exception(exc),
             )
             return None
         logging.info(
-            "Tokens booked operation=%s calls=%d measured=%d estimated=%d missing=%d",
+            "Tokens booked operation=%s calls=%d measured_ueur=%d estimated_ueur=%d tokens=%d missing=%d",
             self.operation.split(":")[0], totals["calls"], totals["measured"],
-            totals["estimated"], totals["missing_calls"],
+            totals["estimated"], totals["tokens"], totals["missing_calls"],
         )
         return self.token_budget
 

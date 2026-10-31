@@ -170,7 +170,8 @@ def _require_admin(request, data):
 _SHARE_ERROR_STATUS = {"not_found": 404, "bad_request": 400}
 
 
-TokenLimit = Annotated[int, Field(ge=1, le=agent_budget_config.MAX_DAILY_TOKENS)]
+# Micro-euros (agent_budget_config.MICRO_EUR); the Limits tab enters euros.
+TokenLimit = Annotated[int, Field(ge=1, le=agent_budget_config.MAX_DAILY_LIMIT)]
 RunEstimate = Annotated[int, Field(ge=1, le=agent_budget_config.MAX_RUN_ESTIMATE)]
 
 
@@ -199,7 +200,7 @@ class RunEstimates(BaseModel):
 
 
 class AgentBudgetRequest(BaseModel):
-    """The shared daily token account: limits per tier, run estimates per tier/mode."""
+    """The shared daily allowance in micro-euros: limits per tier, run estimates per tier/mode."""
     model_config = ConfigDict(extra="forbid", strict=True)
     revision: int = Field(ge=0)
     tier_limits: Optional[TierLimits] = None
@@ -217,6 +218,7 @@ def admin_get_agent_budget(request: Request):
     try:
         return {"config": agent_budget_config.store(db_firestore).read(force=True),
                 "cache_seconds": agent_budget_config.CACHE_SECONDS,
+                "unit": "micro_eur", "usd_per_eur": agent_budget_config.NANO_USD_PER_MICRO_EUR / 1000,
                 "defaults": {"tier_limits": agent_budget_config.DEFAULT_TIER_LIMITS,
                              "run_estimates": agent_budget_config.DEFAULT_RUN_ESTIMATES}}
     except Exception as exc:

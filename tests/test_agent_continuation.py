@@ -15,7 +15,7 @@ from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import AgentRunInterrupted
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
-from test_agent_runs import UID, AUTH, api, pending, store, totals
+from test_agent_runs import UID, AUTH, api, pending, store, totals, priced
 from test_agent_comparison import Script, make_loop as comparison_loop
 
 
@@ -54,7 +54,8 @@ def test_all_turn_steps_and_eighteen_minutes_complete_with_live_lease(store, mon
             store.check_delegation(UID, loop.chat_id, loop.turn_id, loop.run_token)
             loop.budget.consume()
             searches.append(native_searches)
-            self.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, "cost": .1}, model)
+            # $0.000138 is 120 micro-euros of the account.
+            self.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, "cost": .000138}, model)
             index = int(self.step_id.split(":")[-1])
             # The old admin max_calls=1 does not apply; the turn's own step
             # cap (24) does, and identical polling is not a repeated request.
@@ -86,9 +87,10 @@ def test_all_turn_steps_and_eighteen_minutes_complete_with_live_lease(store, mon
 def test_daily_budget_still_stops_before_any_additional_paid_step_and_saves_reason(store):
     class Completion(AgentCompletion):
         def stream(self, *, model, **kwargs):
-            # One paid step exhausts the actual daily budget. The next step must
-            # not be dispatched, even with no per-run caps.
-            self.usage = measured_usage({"prompt_tokens": 249990, "completion_tokens": 10, "cost": .1}, model)
+            # One paid step exhausts the actual daily budget ($0.2875 is the
+            # suite's 250,000 micro-euros). The next step must not be
+            # dispatched, even with no per-run caps.
+            self.usage = measured_usage({"prompt_tokens": 249990, "completion_tokens": 10, "cost": .2875}, model)
             self.tool_calls = [{"id": "wait", "type": "function", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}]
             self.finish_reason = "tool_calls"
             yield from ()
@@ -106,7 +108,7 @@ def test_lease_renewal_keeps_all_fences_in_sync_but_never_revives_a_stopped_run(
     timer = clock(monkeypatch)
     loop = chat_loop(store, AgentCompletion)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(1, 1))
+    store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(1, priced(1)))
     root, chat, active = store.receipt_ref(*args), store._chat_ref(UID, loop.chat_id), store.active_ref(UID)
     original = root.get().to_dict()["lease_until"]
     timer.stamp += timedelta(seconds=35)
@@ -283,7 +285,7 @@ def test_recovery_reaps_expired_producer_and_restores_checkpoint_without_paid_re
     client, store, calls = api
     loop = chat_loop(store, AgentCompletion)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     value = AgentCompletion()
     value.usage = measured_usage({"prompt_tokens": 20, "completion_tokens": 10}, loop.model)
     store.settle(*args, completion=value, status="succeeded", final=False)

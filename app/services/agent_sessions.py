@@ -189,7 +189,7 @@ class AgentSessionStore:
         agent_id = step.split(":")[1] if step.startswith("agent:") else "orchestrator"
         index = int(step.split(":")[-1])
         budget_config = agent_budget_config.get_config(self.db)
-        token_limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
+        limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
 
         day = agent_quota.period_key(budget_config)
         daily_ref = agent_quota.quota_ref(self.db, uid, day)
@@ -254,17 +254,16 @@ class AgentSessionStore:
                 previous_daily_ref = agent_quota.quota_ref(self.db, uid, data["quota_day"])
                 previous_daily = previous_daily_ref.get(transaction=tx).to_dict() or {}
                 previous_daily = agent_quota.release(previous_daily, protected)
-                daily = agent_quota.reserve(daily, protected, limit=token_limit)
+                daily = agent_quota.reserve(daily, protected, limit=limit)
             kind = (agent.to_dict() or {}).get("kind") if agent else None
             can_spend = agent_id == "orchestrator" or kind == "judge"
-            spend = min(protected, tokens) if can_spend else 0
+            # The account holds the call's worst-case cost in micro-euros,
+            # whatever kind of call it is (agent_quota.measured_charge).
+            quota_amount = agent_budget_config.micro_eur(cost)
+            spend = min(protected, quota_amount) if can_spend else 0
             cost_hold = data.get("review_cost_hold", 0)
             cost_spend = min(cost_hold, cost) if can_spend else 0
-            # An audit reviewer's call holds and takes its weight of the
-            # allowance (agent_quota.receipt_weight); the run's own budgets
-            # below keep counting its tokens in full.
-            quota_tokens = agent_quota.weighted(tokens, agent_quota.receipt_weight({"session_kind": kind}))
-            daily = agent_quota.reserve(daily, quota_tokens - spend, limit=token_limit,
+            daily = agent_quota.reserve(daily, quota_amount - spend, limit=limit,
                                         overdraft=overdraft if limits.get("account_budget_only") else False)
             if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
                     or data["reserved_cost"] + cost + cost_hold - cost_spend > limits["max_cost_nano_usd"]):
@@ -281,7 +280,7 @@ class AgentSessionStore:
             if _serialized_size(patch) > ROOT_MAX_BYTES:
                 raise AnalysisBudgetExceeded(TECHNICAL_STEP_LIMIT)
             record = {"schema_version": 3, "purpose": "agent", "step": step, "agent_id": agent_id,
-                      "quota_day": day, "quota_reserved": quota_tokens,
+                      "quota_day": day, "quota_reserved": quota_amount,
                       "chat_id": chat_id, "turn_id": turn_id, "status": "running",
                       "model": model.snapshot(), "created_at": firestore.SERVER_TIMESTAMP}
             if kind:
@@ -307,11 +306,12 @@ class AgentSessionStore:
             return True
         return self._agent_transaction(uid, operation)
 
-    def protect_review(self, uid, chat_id, turn_id, run_token, tokens, cost=0):
-        """Atomically protect synthesis/judges from all other concurrent runs."""
+    def protect_review(self, uid, chat_id, turn_id, run_token, amount, cost=0):
+        """Atomically protect synthesis/judges from all other concurrent runs:
+        ``amount`` micro-euros of the account, ``cost`` nano-USD of the run's budget."""
         ref = self.receipt_ref(uid, chat_id, turn_id)
         budget_config = agent_budget_config.get_config(self.db)
-        token_limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
+        limit = agent_budget_config.limit_for(budget_config, agent_quota.account_tier(uid))
         day = agent_quota.period_key(budget_config)
         daily_ref = agent_quota.quota_ref(self.db, uid, day)
         def operation(tx):
@@ -326,17 +326,17 @@ class AgentSessionStore:
                 previous_ref = agent_quota.quota_ref(self.db, uid, root["quota_day"])
                 previous = previous_ref.get(transaction=tx).to_dict() or {}
                 previous = agent_quota.release(previous, protected)
-                extra = max(tokens, protected)
+                extra = max(amount, protected)
             else:
-                extra = max(0, tokens - protected)
-            daily = agent_quota.reserve(daily, extra, limit=token_limit)
+                extra = max(0, amount - protected)
+            daily = agent_quota.reserve(daily, extra, limit=limit)
             protected_cost = max(cost, root.get("review_cost_hold", 0))
             if not root["policy"].get("account_budget_only") and root["reserved_cost"] + protected_cost > root["policy"]["max_cost_nano_usd"]:
                 raise AnalysisBudgetExceeded("Not enough cost budget for synthesis and review")
             tx.set(daily_ref, daily)
             if previous_ref:
                 tx.set(previous_ref, previous)
-            tx.update(ref, {"quota_day": day, "review_hold": max(tokens, protected), "review_cost_hold": protected_cost})
+            tx.update(ref, {"quota_day": day, "review_hold": max(amount, protected), "review_cost_hold": protected_cost})
         self._agent_transaction(uid, operation)
 
     def save_review(self, uid, chat_id, turn_id, run_token, review, text):
@@ -730,7 +730,7 @@ class AgentSessionStore:
                     # Never distribute a multi-call aggregate across missing steps.
                     if (len(steps) == 1 and session.get('status') in {'completed', 'failed', 'stopped'}
                             and usage.get('complete') is True and usage.get('measured_calls') == 1
-                            and not usage.get('unmetered_calls') and agent_quota.measured_tokens(usage) is not None):
+                            and not usage.get('unmetered_calls') and agent_quota.measured_charge(usage) is not None):
                         value.usage = {**usage, 'source': 'saved_agent'}
                         value.finish_reason = session.get('finish_reason') or ''
                 self.settle(uid, chat_id, turn_id, completion=value, status="cancelled", step=step, final=False)

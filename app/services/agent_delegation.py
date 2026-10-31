@@ -21,7 +21,8 @@ from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
 from app.services import agent_secrets
 from app.services.agent_ask import TOOL as ASK_TOOL
-from app.services.agent_costs import aggregate_usage, fetch_bounds
+from app.services.agent_budget_config import micro_eur, nano_usd
+from app.services.agent_costs import aggregate_usage, worst_case_nanos
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
@@ -446,8 +447,8 @@ class DelegationLoop(AgentLoop):
         # the turn's clock like a halt (A-T3).
         self.gate_paused, self.gate_started = 0.0, None
         self.routing_steps = 0
-        # What the reviewers' calls took from the allowance so far, at their
-        # weight (agent_quota.receipt_weight): _long_run_limit's estimate.
+        # What the reviewers' calls took from the allowance so far, in
+        # micro-euros (agent_quota.measured_charge): _long_run_limit's estimate.
         self.reviewer_charge = 0
         # Set once a routing step reasoned through its allowance: every later
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
@@ -907,12 +908,16 @@ class DelegationLoop(AgentLoop):
         if inputs + answer > model.context_length * LONG_RUN_CONTEXT_SHARE:
             return TURN_CONTEXT_LIMIT
         try:
-            remaining = agent_quota.remaining_tokens(self.store.db, self.uid)
+            remaining = agent_quota.remaining_allowance(self.store.db, self.uid)
         except Exception as exc:
             # The next admission reads the ledger again and refuses then.
             logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
             return None
-        if remaining < 2 * inputs + routing_output_limit(model) + answer + 2 * self._reviewer_step_charge():
+        # One more step and the answer as their admissions reserve them
+        # (micro-euros, agent_quota): the whole conversation twice at the
+        # dearest input price.
+        steps = micro_eur(worst_case_nanos(model, 2 * inputs, routing_output_limit(model) + answer))
+        if remaining < steps + 2 * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
 
@@ -1446,9 +1451,10 @@ class DelegationLoop(AgentLoop):
             reservation = None
             # Searches whose tokens this admission reserves.
             reserved = 0 if soft else searches
-            # A merged step's answer above its routing allowance: reserved, not admitted.
+            # A merged step's answer above its routing allowance: reserved, not
+            # admitted (its cost in micro-euros, agent_quota.reserve).
             extra = max(0, answer_output - model.max_output_tokens)
-            beyond = True if overdraft else extra
+            beyond = True if overdraft else micro_eur(worst_case_nanos(model, 0, extra)) if extra else 0
             try:
                 reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft,
                                                  answer_output=answer_output)
@@ -1461,18 +1467,17 @@ class DelegationLoop(AgentLoop):
                 if reservation is not None:
                     self.costs.release(reservation)
                 if isinstance(exc, AgentTokenBudgetExceeded):
-                    inputs = input_estimate(messages, tools, model.request_config)
-                    minimum = inputs + minimum_output(model)
-                    if fetch_bounds(tools)[0]:
-                        # A page read's tokens do not shrink with the output
-                        # allowance: the smallest reservation still holds them.
-                        minimum = self.costs.estimate(replace(model, max_output_tokens=minimum_output(model)),
-                                                      messages, tools)[0]
+                    # The ledger's amounts are micro-euros: the smallest
+                    # reservation of this call, its page reads and searches
+                    # included, and the output that fits what is left.
+                    search = {"native_searches": searches, "soft_search": soft}
+                    minimum = micro_eur(self.costs.estimate(replace(model, max_output_tokens=minimum_output(model)),
+                                                            messages, tools, **search)[1])
                     if exc.reserved and not (clamp_floor and reserved) and (
                             (not reserved and minimum <= exc.remaining + exc.reserved)
                             or (reserved and exc.required <= exc.remaining + exc.reserved)):
                         if clamp_floor and not reserved:
-                            output = min(model.max_output_tokens, exc.remaining - inputs)
+                            output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining), **search)
                             if output >= max(clamp_floor, minimum_output(model)):
                                 model = replace(model, max_output_tokens=output)
                                 continue
@@ -1498,8 +1503,8 @@ class DelegationLoop(AgentLoop):
                             yield from self._events()
                         continue
                     if not reserved:
-                        inputs = input_estimate(messages, tools, model.request_config)
-                        output = min(model.max_output_tokens, exc.remaining - inputs)
+                        output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining),
+                                                          native_searches=searches, soft_search=soft)
                         # Nothing smaller to try (a page read's reservation does
                         # not shrink with its output): the same request again
                         # would only spin on the ledger.
@@ -1839,8 +1844,7 @@ class DelegationLoop(AgentLoop):
                     self.unsettled[step] = (value, status)
                     if getattr(worker, "kind", None) == "audit":
                         from app.services import agent_quota
-                        self.reviewer_charge += agent_quota.measured_tokens(
-                            value.usage, agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT) or 0
+                        self.reviewer_charge += agent_quota.measured_charge(value.usage) or 0
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
                 if log_actor:

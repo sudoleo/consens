@@ -15,7 +15,7 @@ from app.services.agent_sessions import USER_NOTES_MAX
 from app.services.chat_store import TurnStatusConflict, _idempotent_turn_id
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from test_agent_long_runs import LongAgent
-from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtures)
+from test_agent_runs import AUTH, UID, api, pending, store, priced  # noqa: F401  (fixtures)
 from test_agent_vm import ANSWER, _admin_allowance, fake_vm, vm_loop  # noqa: F401  (fixtures)
 
 
@@ -27,7 +27,7 @@ def running(store, *, vm="on", request_id="req-1"):
                                             {"agent_settings": {"agent_preferences": {"vm": vm}}}))
     loop = vm_loop(store, LongAgent(), chat_id=chat, request_id=request_id)
     store.claim(UID, chat, turn["id"], loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token,
-                reservation=(1, 1))
+                reservation=(1, priced(1)))
     return chat, turn["id"], loop
 
 

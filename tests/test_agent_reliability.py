@@ -17,7 +17,7 @@ from app.core import config as cfg
 from app.services.chat_store import TurnStatusConflict
 from app.services.llm import agent_client, provider_runtime as runtime
 from app.services.llm.agent_client import AgentCompletion, AgentModel
-from test_agent_runs import UID, AUTH, api, store, pending, totals
+from test_agent_runs import UID, AUTH, api, store, pending, totals, priced
 from test_agent_continuation import chat_loop
 from test_agent_comparison import Script, make_loop
 from test_agent_admission import Completion, exhaust
@@ -29,7 +29,7 @@ def test_legacy_receipts_cannot_hide_recoverable_token_reservations(store):
         calls.document(f'000-legacy-{index}').set({'run_status':'running', 'status':'succeeded', 'policy':{}})
     loop = chat_loop(store, Completion)
     store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
-        policy=loop.policy.snapshot(), reservation=(500, 1))
+        policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     store.receipt_ref(UID, loop.chat_id, loop.turn_id).update({
         'lease_until':datetime.now(timezone.utc)-timedelta(seconds=1)})
     budget = agent_quota.snapshot(store.db, UID)
@@ -54,7 +54,7 @@ def test_one_comparison_model_is_enough_only_as_a_reviewer():
 
 def test_admission_cannot_wait_when_even_released_tokens_cannot_fit(store, monkeypatch):
     loop = chat_loop(store, Completion)
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": 249800, "reserved": 100})
     monkeypatch.setattr(loop.condition, "wait", lambda *_: pytest.fail("Impossible admission must not wait"))
     with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
@@ -243,7 +243,8 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
     value = AgentCompletion()
     with runtime.bind_analysis_budget(runtime.AnalysisBudget(unlimited=True)):
         list(value.stream(model=AgentModel(), messages=[], api_key="test"))
-    assert value.text == "Long answer with progress." and agent_quota.measured_tokens(value.usage) == 14
+    assert value.text == "Long answer with progress."
+    assert value.usage["input_tokens"] + value.usage["output_tokens"] == 14
 
 
 @pytest.mark.parametrize("comparison,closing", [("answered", True), ("answered", False), ("unanswered", False),
@@ -268,7 +269,7 @@ def test_answer_step_after_paid_comparisons_starts_at_once_instead_of_queueing(s
     if comparison:
         answers = [{"provider": "openai", "text": "The first option costs 100."}] if compared else []
         loop.comparison.comparisons.append({"id": "paid", "answers": answers})
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": 130000, "reserved": 100000})  # 20k free, 100k held by sibling calls
     waited = []
     def wait(*_):

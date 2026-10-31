@@ -21,7 +21,7 @@ def _admin_allowance(monkeypatch):
 
 def use_up_the_day(store):
     """Another tab used up the rest of the day; held reservations stay."""
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({**(ref.get().to_dict() or {}), "used": agent_quota.snapshot(store.db, UID)["limit"]})
 
 
@@ -61,7 +61,7 @@ def test_a_long_runs_reserve_counts_what_the_reviewers_took(store, monkeypatch):
     model = loop.model
     inputs = input_estimate(loop.messages, loop.registry.schemas, model.request_config)
     room = 2 * inputs + routing_output_limit(model) + answer_output_limit(model) + 1_000
-    monkeypatch.setattr(agent_quota, "remaining_tokens", lambda db, uid: room)
+    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: room)
     assert loop._long_run_limit() is None
     # 10,000 over four steps: the next step's live rounds and the final
     # rounds need about 2,500 each, more than the 1,000 left over.

@@ -17,6 +17,14 @@ from app.services.agent_delegation_config import defaults
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
 from app.services import agent_budget_config, agent_quota
 from app.services.chat_store import TurnStatusConflict
+from dataclasses import replace
+
+
+# One micro-euro per token (1 EUR = 1.15 USD): the account counts money since
+# 2026-10-31, and at this price the ledger arithmetic of these races stays in
+# the whole numbers of the token account it was written for.
+FLAT = AgentModel(input_usd_per_million="1.15", output_usd_per_million="1.15",
+                  cache_read_usd_per_million="1.15", cache_write_usd_per_million="1.15")
 
 
 def test_stop_and_first_admission_are_atomic_without_process_lock(monkeypatch):
@@ -24,7 +32,7 @@ def test_stop_and_first_admission_are_atomic_without_process_lock(monkeypatch):
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = 'agent-stop-race-' + uuid.uuid4().hex
     store = AgentRunStore(db)
-    model = AgentModel()
+    model = FLAT
     # Exercise Firestore contention, as on two server processes. The normal
     # per-account Python lock would otherwise serialize these two operations.
     monkeypatch.setattr(AgentRunStore, '_agent_transaction', lambda self, uid, op: self._transaction(op))
@@ -76,7 +84,7 @@ def test_chat_admission_waits_across_runs_then_uses_released_allowance():
     store = AgentRunStore(db)
     entered, finish, waiting = threading.Event(), threading.Event(), threading.Event()
     calls, loops = [], []
-    model = AgentModel(max_output_tokens=2048)
+    model = replace(FLAT, max_output_tokens=2048)
     class Completion(AgentCompletion):
         def stream(self, *, model, **kwargs):
             calls.append(model.max_output_tokens)
@@ -98,7 +106,7 @@ def test_chat_admission_waits_across_runs_then_uses_released_allowance():
             loop.registry = ToolRegistry()
             loop.messages[0]['content'] = 'Answer.'
             loops.append(loop)
-        quota = agent_quota.quota_ref(db, uid, agent_quota.day_key())
+        quota = agent_quota.quota_ref(db, uid, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
         quota.set({'used': 246500})
         def run(loop):
             for event in loop.run():
@@ -159,7 +167,7 @@ def test_concurrent_budget_refresh_recovers_orphaned_receipt_and_saved_usage_onc
     assert_safe_e2e_environment()
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = 'agent-orphan-repair-' + uuid.uuid4().hex
-    store, model = AgentRunStore(db), AgentModel()
+    store, model = AgentRunStore(db), FLAT
     try:
         for index in range(25):
             db.collection('users').document(uid).collection('llm_calls').document(f'000-legacy-{index}').set({
@@ -201,7 +209,7 @@ def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatc
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 100)
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = "agent-token-race-" + uuid.uuid4().hex
-    store, model = AgentRunStore(db), AgentModel()
+    store, model = AgentRunStore(db), FLAT
     config = defaults()
     config["enabled"] = True
     policy = AgentPolicy.from_config(config)
@@ -214,7 +222,7 @@ def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatc
             identities.append((uid, chat, turn))
         def claim(args):
             try:
-                return AgentRunStore(db).claim(*args, model, run_token=args[1], policy=policy.snapshot(), reservation=(60, 100))
+                return AgentRunStore(db).claim(*args, model, run_token=args[1], policy=policy.snapshot(), reservation=(60, 60 * 1_150))
             except AnalysisBudgetExceeded:
                 return False
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -227,14 +235,13 @@ def test_daily_token_admission_and_idempotent_settlement_in_firestore(monkeypatc
         with ThreadPoolExecutor(max_workers=2) as pool:
             assert sum(pool.map(lambda _: AgentRunStore(db).settle(*args, completion=value,
                 status="cancelled", final=False), range(2))) == 1
-        quota = agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()
-        # 5 fresh input + 5 cache reads at a quarter, rounded up (2) + 5 output
-        # (agent_quota.CACHED_INPUT_WEIGHT since 2974d716).
-        assert quota["used"] == 12 and quota["reserved"] == 0
+        quota = agent_quota.quota_ref(db, uid, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
+        # 15 tokens at one micro-euro each (FLAT), settled once.
+        assert quota["used"] == 15 and quota["reserved"] == 0
         assert quota['revision'] == 2  # one admitted call, one settlement despite retries
         store.finish_run(*args, completion=value, status="cancelled", run_token=args[1])
         store.delete_chat(uid, args[1])
-        assert agent_quota.quota_ref(db, uid, agent_quota.day_key()).get().to_dict()["used"] == 12
+        assert agent_quota.quota_ref(db, uid, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()["used"] == 15
     finally:
         FirestoreAccountDeletion(db)._delete_user_subcollections(uid)
         db.collection("users").document(uid).delete()
@@ -245,7 +252,7 @@ def test_delegation_budget_journal_and_receipts_are_atomic_in_firestore():
     assert_safe_e2e_environment()
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = "delegation-race-" + uuid.uuid4().hex
-    store, model = AgentRunStore(db), AgentModel()
+    store, model = AgentRunStore(db), FLAT
     try:
         chat = store.create_chat(uid, execution_mode="agent")["id"]
         turn = store.create_turn(uid, chat, question="Two workers", mode="Agent", deep_search=False,
@@ -304,7 +311,7 @@ def test_a_journal_batch_is_one_transaction_with_its_own_refusals_in_firestore(m
     assert_safe_e2e_environment()
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = "journal-batch-" + uuid.uuid4().hex
-    store, model = AgentRunStore(db), AgentModel()
+    store, model = AgentRunStore(db), FLAT
     monkeypatch.setattr(AgentRunStore, "_agent_transaction", lambda self, uid, op: self._transaction(op))
     try:
         chat = store.create_chat(uid, execution_mode="agent")["id"]
@@ -352,7 +359,7 @@ def test_parallel_workers_share_admission_and_settle_each_receipt_once():
     db = firestore.Client(project=E2E_PROJECT_ID)
     uid = "agent-race-" + uuid.uuid4().hex
     store = AgentRunStore(db)
-    model = AgentModel()
+    model = FLAT
     turns = []
     try:
         for i in range(6):

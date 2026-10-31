@@ -238,12 +238,12 @@ Marken, kein Model-Pulse-Pick und keine `differences_stats`.
 
 **Für alle Konten per Schalter (seit 2026-10-30, Max).** `AGENT_AUDIT_ACCESS=all`
 öffnet Audit für jedes Konto, wie zuvor `AGENT_VM_ACCESS=pro` die VM für Pro; mit
-beiden bekommt jedes Konto VM und Browser. Kosten hält das Tokenkonto (jede
+beiden bekommt jedes Konto VM und Browser. Kosten hält das Tageskonto (jede
 Browser-Aktion ist ein Modellschritt) und die VM-Zeit: ohne Pro 20 Minuten am Tag
 (`agent_vm_time.BASE_DAILY_SECONDS`), Pro 2 Stunden. Nur `request_domain` bleibt
 Pro und Admins (`routers/agent.py::domains_allowed`, `AGENT_VM_NO_DOMAINS_PROMPT`):
 Ein Skript auf der Werkbank erreicht freigegebene Domains ohne Modellschritt, tausende
-Anfragen in einem Befehl, die kein Tokenkonto bremst. Der Rest dieses Abschnitts
+Anfragen in einem Befehl, die kein Tageskonto bremst. Der Rest dieses Abschnitts
 beschreibt den Stand davor, wo er nur von Admins oder Pro spricht.
 
 Einstellungen → Agent · Beta → **Audit instead of comparison**
@@ -270,7 +270,7 @@ umgehen), und das hebt keine Bitte des Nutzers auf; eine solche Bitte lehnt der
 Agent ab und sagt, warum. Passend dazu nennt der Haltgrund `harm` der Prüfer
 Schaden an consens.io, „whoever asked for it“, und die Kurzfassung für die
 Prüfer (`BRIEF_HEAD`) den Grundsatz. Der Halt bleibt eine Entscheidung des
-Nutzers; die harten Grenzen (Tokenkonto, VM-Zeit, abgeschottete Werkbank, keine
+Nutzers; die harten Grenzen (Tageskonto, VM-Zeit, abgeschottete Werkbank, keine
 Domain-Freigaben ohne Pro) tragen, wo ein Modell sich überreden lässt. Danach nur Fakten der App
 (`AGENT_AUDIT_ANSWER_SECTION` „HOW CONSENS.IO WORKS“: Modus, Antwort und Notiz,
 Markdown mit Links statt `[S1]`, Prüfer unsichtbar, Wissensstand). Die Blöcke
@@ -2911,7 +2911,7 @@ Pflichtfeld `models` (`free_compare_args`: das Schema zählt genau die Familien 
 Compare-Auswahl dieses Turns samt Modellnamen als Enum auf, mindestens zwei), der
 Orchestrierungsprompt den Zusatz `FREE_PROMPT`. Das Chatmodell entscheidet so pro
 Vergleich, welche Familien es fragt, und wie viele Runden es braucht (im Chat ohnehin
-nur durch das Tokenkonto begrenzt). Die Auswahl im Compare-Picker bleibt der Pool:
+nur durch das Tageskonto begrenzt). Die Auswahl im Compare-Picker bleibt der Pool:
 der Nutzer bestimmt, welche Modelle infrage kommen, der Agent, welche er wann fragt.
 Jeder Vergleich speichert die gefragten Familien als `asked` (im geführten Modus die
 ganze Auswahl); Quorum, `failed_models`, `pending_models` und `status` beziehen
@@ -3690,7 +3690,7 @@ Nutzers nicht.
 
 **Kosten:** Das Tool ruft kein Modell. Die Checks einer gestarteten Watch
 laufen wie bei jeder Watch auf dem Server-Key (global
-`watch_max_runs_per_day`), nicht auf dem Agent-Tokenkonto.
+`watch_max_runs_per_day`), nicht auf dem Agent-Tageskonto.
 
 ## Frühere Chats durchsuchen (seit 2026-10-28)
 
@@ -3820,10 +3820,11 @@ die Modellliste. Der Prompt-Abschnitt ist statisch und bleibt im Cache.
 ## Tageskontingent
 
 Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep
-Think (siehe codebase-map, „Ein Tokenkonto für alle Modi“). Das Limit pro
-Stufe (Free/Plus/Pro/Admin) und die erwarteten Tokens eines typischen Laufs
-liegen in app_config/agent_budget und sind in Admin → Limits speicherbar
-(Defaults: Pro/Admin 5 000 000 Tokens pro UID und UTC-Tag, Reset um 00:00 UTC).
+Think (siehe codebase-map, „Ein Konto in Euro für alle Modi“). Seit 2026-10-31
+zählt es Geld: Das Limit pro Stufe (Free/Plus/Pro/Admin) und die erwarteten
+Kosten eines typischen Laufs liegen in Mikro-Euro in app_config/agent_budget
+und sind in Admin → Limits in Euro speicherbar (Defaults: Free 1 €, Plus
+2,50 €, Pro/Admin 5 € pro UID und UTC-Tag, Reset um 00:00 UTC).
 `AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Der Button „Reset all
 allowances“ setzt das Konto aller Nutzer über eine neue Budgetgeneration
 zurück, ohne Nutzer-Scan. Begonnene Aufrufe rechnen weiter gegen
@@ -3832,16 +3833,24 @@ Config-Refresh nach 30 Sekunden; der Admin-Client verwendet Revisionsschutz.
 Der bestehende
 Kontingent-Ring im Sidebar-Footer zeigt im Agent-Chat den verbleibenden Anteil
 als abgerundete Prozentzahl des noch unverbrauchten Budgets: Limit minus
-gemessene verbrauchte Tokens. Reservierungen lassen die Anzeige nicht mehr springen.
-Sein Panel trennt unverbrauchte, für neue Calls verfügbare und reservierte Tokens
+gemessene verbrauchte Kosten. Reservierungen lassen die Anzeige nicht mehr springen.
+Sein Panel trennt unverbrauchtes, für neue Calls verfügbares und reserviertes Kontingent
 und enthält die Reset-Zeit. Consensus zeigt dort weiterhin das Run-Limit; der Composer enthält
 keine Budgetzeile. Das Kontingent gilt gemeinsam für Chat, delegierte Worker,
 Vergleichsmodelle und alle Judge-/Repair-/Retry-Aufrufe.
 
-Gezählt wird Provider-Input plus Provider-Output. Cache-Reads/-Writes sind bereits
-im Input enthalten, Reasoning bereits im Output. Diese Kategorien werden für
-Transparenz gespeichert, aber niemals zusätzlich zum Kontingent addiert.
-**Seit 2026-10-27 (Max) zählen Cache-Reads zu einem Viertel**
+**Seit 2026-10-31 (Max) zählt jeder Call, was er gekostet hat**
+(`agent_quota.measured_charge`): `usage.estimated_cost_nano_usd`, also
+OpenRouters `usage.cost` (Cache-Rabatt, Reasoning und Websuche inklusive),
+sonst der Katalogpreis, in Mikro-Euro zum festen Kurs 1 € = 1,15 $. Ein Call
+ohne endgültige Kosten (Abbruch, Katalogpreis ohne Suchzahl) bucht die
+begrenzte Schätzung und wird über `total_cost` der Generation abgeglichen
+(`generation_charge`). Die Gewichte unten (Cache-Reads, Prüfer) gibt es
+seitdem nicht mehr: ein Cache-Read kostet, was der Anbieter für ihn nimmt,
+ein Prüfer, was seine Runden kosten. Bis dahin galt:
+Gezählt wurde Provider-Input plus Provider-Output. Cache-Reads/-Writes sind bereits
+im Input enthalten, Reasoning bereits im Output.
+**Von 2026-10-27 bis 2026-10-31 (Max) zählten Cache-Reads zu einem Viertel**
 (`agent_quota.CACHED_INPUT_WEIGHT` = 0,25, `charged_tokens`): frischer Input,
 Cache-Writes und Output voll, `cached_input_tokens` zu 25 % (aufgerundet), in
 jedem Agent-Modus (Chat, Worker, Vergleichsmodelle, Judges, Prüfer). Ein
@@ -3854,7 +3863,7 @@ bleibt wie gemessen; der spätere Abgleich (`generation_tokens`) gewichtet
 halten weiter den vollen Input (wie viel davon im Cache liegt, weiß erst die
 Antwort), das Settlement gibt den Rest frei. Compare/Consensus/Reasoning-Läufe
 (`usage_meter`) zählen unverändert.
-**Seit 2026-10-29 (Max, Audit-Spezifikation A-K2) zählen Prüfer zur Hälfte**
+**Von 2026-10-29 bis 2026-10-31 (Max, Audit-Spezifikation A-K2) zählten Prüfer zur Hälfte**
 (`agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT` = 0,5, `receipt_weight`): ein Call
 einer Sitzung der Art `audit` (Beleg `session_kind`, das `_claim_delegated`
 aus der Sitzung übernimmt) oder mit einer Prüfer-Runde (`round`) reserviert,
@@ -3864,8 +3873,7 @@ Prüfer schicken in jeder Live-Runde ihr ganzes Gespräch erneut und nahmen am
 28.–29.10. 48 % des Kontingents eines Audit-Turns bei 22 % seiner Kosten. Die
 Budgets des Laufs selbst (`reserved_tokens`, `max_tokens`) zählen weiter voll.
 Provider-Gesamtkosten haben Vorrang; ohne sie berechnet die App eine gekennzeichnete
-Katalogschätzung. Kosten werden erfasst; im Agent-Chat gilt allein die zentrale
-Tokenquote als Verbrauchsgrenze.
+Katalogschätzung. Seit 2026-10-31 sind diese Kosten die Verbrauchsgrenze.
 
 Vor jedem bezahlten Schritt reserviert der Server transaktional das erwartbare
 Inputvolumen mit Sicherheitsaufschlag und erlaubtem Output zusammen mit dessen
@@ -4047,10 +4055,10 @@ send a follow-up message to continue.“); gespeicherte Vergleiche bleiben erhal
 **Lange VM-Läufe (seit 2026-10-26).** Arbeitet der Agent in seiner VM
 (`VMSession.started`, auch wenn die VM danach ausfällt), gelten
 `vm_turn_steps` = 200 und `vm_turn_seconds` = 2 h (Vorschlag, Konstanten in
-`AgentPolicy.for_chat`). Die eigentliche Grenze bleibt das Tageskonto, das auch
-gecachte Tokens voll zählt: Vor jedem Schritt prüft `_long_run_limit`, ob es
-noch zwei Schritte im heutigen Umfang plus Antwort trägt
-(`remaining_tokens`, ein Firestore-Lesezugriff je Schritt, nur in langen
+`AgentPolicy.for_chat`). Die eigentliche Grenze bleibt das Tageskonto: Vor
+jedem Schritt prüft `_long_run_limit`, ob es noch zwei Schritte im heutigen
+Umfang plus Antwort trägt, so teuer, wie ihre Zulassung sie reserviert
+(`worst_case_nanos`; `remaining_allowance`, ein Firestore-Lesezugriff je Schritt, nur in langen
 Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
 Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
 ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch
@@ -4256,7 +4264,7 @@ verworfen hätte). Stattdessen:
 - Gebundene Läufe: `search_remaining` (Delegation) und `remaining_tools`
   (`AgentLoop`) dürfen negativ werden. Die Überschreitung ist Schuld; spätere
   Schritte bekommen bis zum Ausgleich keine Suche (`max(0, …)` bei der
-  Reservierung). Im Kontomodus gilt nur das Tokenkonto, und die Suchtreffer
+  Reservierung). Im Kontomodus gilt nur das Tageskonto, und die Suchtreffer
   stecken in den gemessenen Input-Tokens.
 - Die Aktivität zeigt die echte Zahl („3 searches“).
 

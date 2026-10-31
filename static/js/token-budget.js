@@ -1,5 +1,5 @@
 /* ==========================================================================
-   token-budget.js — the one daily token account in the browser
+   token-budget.js — the one daily allowance in the browser
 
    Agent, Compare and Reasoning runs book on the same server-side account
    (app/services/agent_quota.py). Every response that knows the account
@@ -8,11 +8,15 @@
    it, orders concurrent snapshots and derives what the UI shows:
 
      - the percentage left ((limit − measured − estimated) / limit). Short
-       reservations of running work change the tokens *available for new
+       reservations of running work change the allowance *available for new
        work*, never the percentage;
      - whether a pipeline run of a given mode can start (the same rule as the
-       server's admission: available ≥ expected tokens of a typical run);
+       server's admission: available ≥ expected cost of a typical run);
      - the approximate share one run of a mode takes.
+
+   Since 2026-10-31 the account counts money: amounts are whole micro-euros
+   (`unit: "micro_eur"`). Readers see percent only; the euro figures are the
+   operator's (formatAmount).
 
    Loaded in the head group so firebase.js, the run modules, Agent and the
    sidebar can all feed and read it.
@@ -44,6 +48,9 @@
   // without revisions the server's observation time.
   function isOlder(next, previous) {
     if (!previous) return false;
+    // A new unit is a new account (the token ledger before 2026-10-31):
+    // its revisions start again.
+    if ((next.unit || "") !== (previous.unit || "")) return false;
     var nextConfig = next.config_revision || 0;
     var prevConfig = previous.config_revision || 0;
     if (nextConfig !== prevConfig) return nextConfig < prevConfig;
@@ -127,7 +134,7 @@
 
   function percentLabel(left, limit) {
     var percent = Math.max(0, Math.min(100, Math.floor(left / limit * 100)));
-    // 2,300 of 660,000 is not "0 %": anything left reads "<1 %".
+    // 2,300 of 1,000,000 is not "0 %": anything left reads "<1 %".
     return percent === 0 && left > 0 ? "<1%" : percent + "%";
   }
 
@@ -196,6 +203,14 @@
     return String(n);
   }
 
+  /* An amount of the account for the operator's line: euros ("€0.42") when
+     the account counts money, tokens ("2.3k tokens") otherwise. */
+  function formatAmount(value, unit) {
+    if (unit !== "micro_eur") return formatTokens(value) + " tokens";
+    var euros = Math.max(0, Number(value) || 0) / 1000000;
+    return "€" + euros.toFixed(2);
+  }
+
   window.App.tokenBudget = {
     apply: apply,
     fromResponse: fromResponse,
@@ -207,6 +222,7 @@
     canStart: canStart,
     runShare: runShare,
     resetInfo: resetInfo,
-    formatTokens: formatTokens
+    formatTokens: formatTokens,
+    formatAmount: formatAmount
   };
 })();

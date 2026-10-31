@@ -11,7 +11,7 @@ from app.services.agent_runtime import AgentCapacity
 from app.services.llm.agent_client import AgentModel
 from app.services.llm.provider_runtime import ProviderCancelled
 from adapter_test_support import http_adapter, api_adapter, login
-from test_agent_runs import pending
+from test_agent_runs import pending, priced
 from test_chat_history import FakeDocumentRef
 
 
@@ -33,7 +33,7 @@ def agent_http(http_adapter, monkeypatch):
         AgentModel(),
         policy=replace(AgentPolicy(), delegation=True).snapshot(),
         run_token=h.token,
-        reservation=(100, 100),
+        reservation=(100, priced(100)),
     )
     for i in range(7):
         h.store.publish_agent(
@@ -104,7 +104,7 @@ def test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker(agent_ht
         AgentModel(),
         policy=replace(AgentPolicy(), delegation=True).snapshot(),
         run_token="other",
-        reservation=(100, 100),
+        reservation=(100, priced(100)),
     )
     control = deepcopy(
         h.store.receipt_ref("owner", other_chat, other_turn["id"]).get().to_dict()

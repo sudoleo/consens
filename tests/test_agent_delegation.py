@@ -15,7 +15,7 @@ from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import ChatNotFound, TurnStatusConflict
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
-from test_agent_runs import UID, AUTH, api, pending, receipt, store, totals
+from test_agent_runs import UID, AUTH, api, pending, receipt, store, totals, priced
 from test_agent_loop import packet, transport
 
 
@@ -139,7 +139,7 @@ def test_simple_request_does_not_delegate_or_repeat_after_reload(store, monkeypa
     assert not loop.workers and len(requests) == 1
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] == []
     assert not store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
-                          policy=loop.policy.snapshot(), reservation=(10, 100))
+                          policy=loop.policy.snapshot(), reservation=(10, priced(10)))
 
 
 def test_worker_failure_reports_unknown_cost_and_orchestrator_can_finish_fallback(store):
@@ -157,7 +157,7 @@ def test_worker_failure_reports_unknown_cost_and_orchestrator_can_finish_fallbac
 def test_activity_view_reuses_the_receipt_read_for_lease_check(store):
     loop = make_loop(store)
     assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
-                       policy=loop.policy.snapshot(), reservation=(100, 100))
+                       policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     store.db.read_log.clear()
     assert store.delegation_view(UID, loop.chat_id, loop.turn_id)['status'] == 'running'
     path = store.receipt_ref(UID, loop.chat_id, loop.turn_id).path
@@ -168,6 +168,8 @@ def test_atomic_durable_and_memory_budget_reservations(store):
     loop = make_loop(store)
     policy = replace(loop.policy, max_cost_nano_usd=100)
     args = (UID, loop.chat_id, loop.turn_id, loop.model)
+    # The run's own cost budget in nano-USD (max_cost_nano_usd=100); the
+    # account holds a rounded-up micro-euro for each.
     assert store.claim(*args, policy=policy.snapshot(), run_token=loop.run_token, reservation=(1, 10))
     store.settle(*args[:3], completion=receipt(measured=False), status="succeeded", final=False)
     ids = ["a" * 32, "b" * 32]
@@ -210,14 +212,14 @@ def test_stop_joins_all_workers_and_accounts_every_started_step(store):
 def test_crashed_process_never_restarts_paid_steps_and_deduplicates_events(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(10, 100))
+    store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(10, priced(10)))
     aid = "f" * 32
     publish = dict(run_token=loop.run_token, agent_id=aid, event_id="same", patch={"assignment": {"goal": "Test"}, "status": "working"})
     assert store.publish_agent(*args, **publish) == store.publish_agent(*args, **publish)
     first = f"agent:{aid}:0"
-    store.claim(*args, loop.model, step=first, run_token=loop.run_token, reservation=(2000, 1_000_000))
+    store.claim(*args, loop.model, step=first, run_token=loop.run_token, reservation=(2000, priced(2000)))
     store.settle(*args, completion=receipt(), status="succeeded", step=first, final=False)
-    store.claim(*args, loop.model, step=f"agent:{aid}:1", run_token=loop.run_token, reservation=(2000, 1_000_000))
+    store.claim(*args, loop.model, step=f"agent:{aid}:1", run_token=loop.run_token, reservation=(2000, priced(2000)))
     root = store.receipt_ref(*args)
     store._transaction(lambda tx: tx.update(root, {"lease_until": datetime.now(timezone.utc) - timedelta(seconds=1)}))
     view = store.delegation_view(*args)
@@ -225,7 +227,7 @@ def test_crashed_process_never_restarts_paid_steps_and_deduplicates_events(store
     assert totals(store)["calls"] == 3 and totals(store)["unmetered_calls"] == 2
     assert view["agents"][0]["usage"]["cost_complete"] is False
     assert view["agents"][0]["usage"]["estimated_cost_nano_usd"] == receipt().usage["estimated_cost_nano_usd"]
-    assert not store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(10, 100))
+    assert not store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(10, priced(10)))
     with pytest.raises(TurnStatusConflict):
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid, patch={"status": "completed"})
     store.delete_chat(UID, loop.chat_id)
@@ -317,7 +319,7 @@ def test_confirmed_own_fallback_finishes_without_echo_rework(store):
     from app.services.agent_delegation import Worker, ReviewAgent
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, 1))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, priced(1)))
     worker = Worker("a" * 32, loop.model, [], state="review")
     loop.workers[worker.id] = worker
     loop._publish(worker, patch={"assignment": {"goal": "Check"}, "status": "review"})
@@ -344,7 +346,7 @@ def test_message_during_active_generation_is_delivered_at_next_boundary(store):
             yield {"type": "delta", "text": self.text}
     loop = make_loop(store, Completion)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, 1))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(1, priced(1)))
     store.settle(*args, completion=receipt(), status="succeeded", final=False)
     try:
         aid = loop.start_agent(StartAgent(**assignment("Check")), cancellation=loop.cancellation)["agent_id"]

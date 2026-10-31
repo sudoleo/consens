@@ -40,9 +40,9 @@
     return window.App && window.App.tokenBudget ? window.App.tokenBudget : null;
   }
 
-  function fmt(value) {
+  function fmt(value, unit) {
     var api = tokens();
-    return api ? api.formatTokens(value) : String(value);
+    return api ? api.formatAmount(value, unit) : String(value);
   }
 
   // A part of the allowance as the reader sees it: "8%", never "<1" as 0.
@@ -132,14 +132,15 @@
     setText(el("quotaReset"), "Resets at " + view.reset.clock + " · in " + view.reset.relative);
 
     if (detail) {
-      // The reader's unit is the allowance in percent; the token figures
+      // The reader's unit is the allowance in percent; the euro figures
       // are the operator's and stand in a line only an admin sees
       // (.admin-only, Apple-Audit H4).
       var mode = nextRunMode();
       var share = mode !== "agent" && tokens() ? tokens().runShare(mode) : null;
       var line = share ? "A " + MODE_NAMES[mode] + " uses about " + share + "."
         : mode === "agent" ? "Agent uses a little of it for each model it asks." : "";
-      var figures = fmt(view.left) + " of " + fmt(view.limit) + " tokens";
+      var unit = tokens() && tokens().current() ? tokens().current().unit : undefined;
+      var figures = fmt(view.left, unit) + " of " + fmt(view.limit, unit);
       var admin = detail.querySelector(".admin-only");
       var words = detail.querySelector(".quota-detail-words");
       if (!admin || !words) {

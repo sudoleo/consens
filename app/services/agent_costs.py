@@ -1,6 +1,7 @@
 """Admission reservations and measured totals; never used to debit an account."""
 import json
 import threading
+from dataclasses import replace
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded
@@ -15,6 +16,15 @@ def token_cost_nanos(model, prompt, completion, cached, written=0):
              + written * Decimal(model.cache_write_usd_per_million or model.input_usd_per_million)
              + completion * Decimal(model.output_usd_per_million)) * 1000
     return int(nanos.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def worst_case_nanos(model, inputs, outputs):
+    """The most ``inputs`` and ``outputs`` tokens can cost: every input token at
+    the dearest of fresh, cached and cache-written input (a reservation)."""
+    price = max(Decimal(model.input_usd_per_million), Decimal(model.cache_read_usd_per_million),
+                Decimal(model.cache_write_usd_per_million or model.input_usd_per_million))
+    return int(((inputs * price + outputs * Decimal(model.output_usd_per_million)) * 1000
+                ).quantize(Decimal("1"), rounding=ROUND_CEILING))
 
 
 def provider_cost_nanos(raw):
@@ -140,13 +150,26 @@ class RunCosts:
             total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
         outputs = model.max_output_tokens * segments + extra
         tokens = total_inputs + outputs
-        cost = int(((total_inputs * max(Decimal(model.input_usd_per_million), Decimal(model.cache_read_usd_per_million),
-                                 Decimal(model.cache_write_usd_per_million or model.input_usd_per_million))
-                     + outputs * Decimal(model.output_usd_per_million)) * 1000
-                    ).quantize(Decimal("1"), rounding=ROUND_CEILING))
+        cost = worst_case_nanos(model, total_inputs, outputs)
         if native_searches:
             cost += native_searches * (search_cost_nanos(model) or 10_000_000)
         return tokens, cost + pages * FETCH_COST_NANOS
+
+    def output_within(self, model, messages, tools, nanos, *, native_searches=0, soft_search=False):
+        """The largest output allowance whose worst-case cost (estimate) fits
+        ``nanos``, at most ``model.max_output_tokens``; 0 when not even one
+        output token fits. The estimate is linear in the output allowance, so
+        two estimates find it (the daily account counts money, agent_quota)."""
+        search = {"native_searches": native_searches, "soft_search": soft_search}
+        high = self.estimate(model, messages, tools, **search)[1]
+        if nanos >= high or model.max_output_tokens <= 1:
+            return model.max_output_tokens if nanos >= high else 0
+        low = self.estimate(replace(model, max_output_tokens=1), messages, tools, **search)[1]
+        if nanos < low:
+            return 0
+        if high <= low:
+            return model.max_output_tokens
+        return min(model.max_output_tokens, 1 + (nanos - low) * (model.max_output_tokens - 1) // (high - low))
 
     def reconcile(self, reservation, usage):
         with self._lock:

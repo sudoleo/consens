@@ -34,7 +34,7 @@ from app.services.source_catalog import normalize_provider_answers
 
 # Upper bound for one comparison answer. The effective allowance is the
 # model's own completion limit and a fair share of the remaining account
-# budget (see ComparisonTools._output_share), not a product length cap.
+# budget (see ComparisonTools._output_shares), not a product length cap.
 COMPARISON_OUTPUT_CEILING = 65_536
 # Share of the remaining daily budget that one comparison may reserve for all
 # of its answers together; the rest stays for synthesis and judges.
@@ -1094,7 +1094,12 @@ class ComparisonTools:
         # and token admission. Holds belong to the durable producer, not tools.
         future = 24_000 + (len(self.comparisons) + 1) * len(asked) * 6000
         if not loop.policy.account_budget_only:
-            loop.store.protect_review(loop.uid, loop.chat_id, loop.turn_id, loop.run_token, future, cost=future * 10_000)
+            from app.services.agent_budget_config import micro_eur
+            from app.services.agent_costs import worst_case_nanos
+            # Those tokens at the chat model's dearest input price in the
+            # account, at a simulated $10 per million in the run's own budget.
+            loop.store.protect_review(loop.uid, loop.chat_id, loop.turn_id, loop.run_token,
+                                      micro_eur(worst_case_nanos(loop.model, future, 0)), cost=future * 10_000)
         # A passage check adds a Coverage call and its possible repair.
         if not loop.policy.account_budget_only and (loop.costs.calls + len(asked) + 4 + 2 * len(self.comparisons)
                                                     + (2 if passage is not None else 0)) > loop.policy.max_calls:
@@ -1122,8 +1127,8 @@ class ComparisonTools:
         cid = comparison["id"]
         self._raw[cid], self._failures[cid], self._running[cid], self._partials[cid] = {}, {}, {}, {}
         comparison["depth"] = depth
-        share = self._output_share(len(asked))
-        models = {p: replace(self.models[p], max_output_tokens=min(self.models[p].max_output_tokens, share))
+        shares = self._output_shares({p: self.models[p] for p in asked})
+        models = {p: replace(self.models[p], max_output_tokens=min(self.models[p].max_output_tokens, shares[p]))
                   for p in asked}
         rounds = SEARCH_ROUNDS[depth]
         comparison["search_rounds"] = rounds
@@ -1327,23 +1332,37 @@ class ComparisonTools:
                 self._rebuild(comparison)
                 self.checkpoint()
 
-    def _output_share(self, count):
-        """Fair output allowance per answer, so parallel calls need not queue.
+    def _output_shares(self, models):
+        """Fair output allowance per answer ({provider: tokens}), so parallel
+        calls need not queue.
 
         Every call reserves its full output before it starts. Without a share,
-        a few large reservations make the others wait for their settlement."""
+        a few large reservations make the others wait for their settlement.
+        The account counts money (agent_quota): an answer's share of the
+        remaining allowance buys as many output tokens as its model's price
+        allows."""
+        from decimal import Decimal
+        from app.services.agent_budget_config import nano_usd
         loop = self.loop
+        count = max(1, len(models))
         with self.lock:
             stored = sum(len(a["text"]) for c in self.comparisons for a in c.get("answers", []))
             stored += sum(len(t) for partials in self._partials.values() for t in partials.values())
-        storage = max(0, REVIEW_ANSWER_CHARS - stored) // max(1, count) // CHARS_PER_TOKEN
+        storage = max(0, REVIEW_ANSWER_CHARS - stored) // count // CHARS_PER_TOKEN
         try:
             from app.services import agent_quota
-            remaining = agent_quota.remaining_tokens(loop.store.db, loop.uid)
+            remaining = agent_quota.remaining_allowance(loop.store.db, loop.uid)
         except Exception:
             remaining = None
-        share = storage if remaining is None else min(storage, int(remaining * COMPARISON_BUDGET_SHARE / max(1, count)))
-        return max(cfg.MAX_TOKENS, share)
+        shares = {}
+        for provider, model in models.items():
+            share = storage
+            # Nano-USD per output token.
+            price = Decimal(model.output_usd_per_million) * 1000
+            if remaining is not None and price > 0:
+                share = min(storage, int(nano_usd(remaining) * Decimal(str(COMPARISON_BUDGET_SHARE)) / count / price))
+            shares[provider] = max(cfg.MAX_TOKENS, share)
+        return shares
 
     def _await_quorum(self, comparison, depth, done, finished, cancellation):
         cid = comparison["id"]

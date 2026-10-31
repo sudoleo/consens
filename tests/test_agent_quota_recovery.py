@@ -7,12 +7,12 @@ import pytest
 from app.services import agent_quota
 from app.services.agent_costs import aggregate_usage
 from app.services.llm.agent_client import AgentCompletion, measured_usage
-from test_agent_runs import UID, store, receipt, totals
+from test_agent_runs import UID, store, receipt, totals, priced
 from test_agent_delegation import make_loop
 
 
 def test_refresh_migrates_terminal_unknown_holds_but_preserves_live_reservations(store):
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     store.db.collection('users').document(UID).set({})
     ref.set({'used': 85329, 'unknown': 154521, 'reserved': 161923})
     with ThreadPoolExecutor(max_workers=6) as pool:
@@ -32,7 +32,7 @@ def test_refresh_migrates_terminal_unknown_holds_but_preserves_live_reservations
 def test_terminal_unknown_usage_releases_admission_without_inventing_zero_usage(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     store.settle(*args, completion=receipt(measured=False), status='failed', final=False)
     budget = agent_quota.snapshot(store.db, UID)
     assert budget['used'] == budget['reserved'] == 0
@@ -50,25 +50,26 @@ def test_terminal_unknown_usage_releases_admission_without_inventing_zero_usage(
 def test_reload_reaps_lost_lease_map_and_recovers_exact_saved_single_call_usage(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     store.settle(*args, completion=receipt(), status='succeeded', final=False)
     saved_usage = measured_usage({'prompt_tokens':155, 'completion_tokens':284, 'cost':.000460410}, loop.model)
     for aid, usage in [('a'*32, aggregate_usage([saved_usage])), ('b'*32, None)]:
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
             patch={'assignment':{'goal':'Verify'}, 'status':'working', 'kind':'comparison'})
         store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
-                    step=f'agent:{aid}:0', reservation=(3701, 100))
+                    step=f'agent:{aid}:0', reservation=(3701, priced(3701)))
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid, patch={'status':'failed', 'usage':usage})
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key())
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({'used':85329, 'unknown':154521, 'reserved':161923})
     root = store.receipt_ref(*args)
     store._transaction(lambda tx: tx.update(root, {'lease_until':datetime.now(timezone.utc)-timedelta(seconds=60)}))
     store.active_ref(UID).set({'leases':{}})
     original_totals = totals(store)
     budget = agent_quota.snapshot(store.db, UID)
-    # The unmeasured 3701-token step keeps a bounded 1851-token estimate.
-    assert budget['used'] == 85768 and budget['reserved'] == 0 and budget['estimated'] == 1851
-    assert budget['remaining'] == 164232 - 1851
+    # The saved call cost $0.000460410, 401 micro-euros; the unmeasured step
+    # held 3701 and keeps a bounded estimate of 1851.
+    assert budget['used'] == 85329 + 401 and budget['reserved'] == 0 and budget['estimated'] == 1851
+    assert budget['remaining'] == 250000 - 85730 - 1851
     assert budget['unknown'] == 158222
     assert totals(store)['input_tokens'] == original_totals['input_tokens'] + 155
     assert totals(store)['output_tokens'] == original_totals['output_tokens'] + 284
@@ -83,7 +84,7 @@ def test_reload_reaps_lost_lease_map_and_recovers_exact_saved_single_call_usage(
 def test_live_lease_is_never_reaped_by_a_budget_refresh(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     budget = agent_quota.snapshot(store.db, UID)
     assert budget['reserved'] == 500 and budget['unknown'] == 0
     assert store.receipt_ref(*args).get().to_dict()['run_status'] == 'running'
@@ -92,7 +93,7 @@ def test_live_lease_is_never_reaped_by_a_budget_refresh(store):
 def test_renewal_committed_after_recovery_read_cannot_be_cancelled(store, monkeypatch):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     root = store.receipt_ref(*args)
     store._transaction(lambda tx: tx.update(root, {'lease_until':datetime.now(timezone.utc)-timedelta(seconds=1)}))
     original = store._agent_transaction
@@ -109,7 +110,7 @@ def test_renewal_committed_after_recovery_read_cannot_be_cancelled(store, monkey
 def test_recovery_never_guesses_an_individual_receipt_from_ambiguous_saved_usage(store, case):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     store.settle(*args, completion=receipt(), status='succeeded', final=False)
     before = totals(store)
     aid = 'a' * 32
@@ -125,12 +126,12 @@ def test_recovery_never_guesses_an_individual_receipt_from_ambiguous_saved_usage
     store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
         patch={'assignment':{'goal':'Verify'}, 'status':'working', 'kind':'comparison'})
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
-                step=f'agent:{aid}:0', reservation=(500, 100))
+                step=f'agent:{aid}:0', reservation=(500, priced(500)))
     if case == 'multiple_steps':
         store.settle(*args, completion=receipt(), status='succeeded', step=f'agent:{aid}:0', final=False)
         before = totals(store)
         store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
-                    step=f'agent:{aid}:1', reservation=(500, 100))
+                    step=f'agent:{aid}:1', reservation=(500, priced(500)))
     store.publish_agent(*args, run_token=loop.run_token, agent_id=aid, patch={'status':'failed', 'usage':usage})
     root = store.receipt_ref(*args)
     store._transaction(lambda tx: tx.update(root, {'lease_until':datetime.now(timezone.utc)-timedelta(seconds=60)}))
@@ -144,7 +145,7 @@ def test_recovery_never_guesses_an_individual_receipt_from_ambiguous_saved_usage
 def test_deleted_chat_cannot_leave_an_expired_receipt_blocking_the_account(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
-    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, 100))
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     root = store.receipt_ref(*args)
     store.delete_chat(UID, loop.chat_id)
     store._transaction(lambda tx: tx.update(root, {'lease_until':datetime.now(timezone.utc)-timedelta(seconds=60)}))

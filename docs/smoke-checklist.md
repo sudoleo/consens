@@ -30,7 +30,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 - [ ] Private Dateien/Dokumente: gespeicherte Version am richtigen Turn,
       Download und bestätigtes Entfernen, lesbare Warnung für Teilinhalt;
       erzeugte DOCX/PDF-Seiten zusätzlich visuell prüfen.
-- [ ] Gemeinsames Tokenkonto: Moduswechsel, Holds, geschätzter Verbrauch,
+- [ ] Gemeinsames Tageskonto (Euro): Moduswechsel, Holds, geschätzter Verbrauch,
       Kontowechsel und UTC-Reset gegen dieselbe Kontoanzeige prüfen.
 - [ ] Watch/Topic: stehende Antwort bei dünner Evidenz, neue Belege, Recheck,
       erreichtes Ziel und erneutes Öffnen mit anderem Ziel; Zustellfehler und
@@ -1510,12 +1510,12 @@ Server.
 - [ ] Desktop und 390/320px, Hell/Dunkel, Tastatur und Reduced Motion prüfen.
 - [ ] Agent-Budget: Reservierung und Freigabe ohne gemessenen Verbrauch verändern
   den Prozentwert nicht; der Kontingent-Dialog zeigt Reserven separat. Admin →
-  Limits speichert Tageslimit je Stufe und Laufschätzungen je Stufe/Modus und
+  Limits speichert Tageslimit je Stufe und Laufschätzungen je Stufe/Modus in Euro und
   kann alle Konten zurücksetzen.
-- [ ] Ein Tokenkonto für alle Modi: Ring im Sidebar-Fuß ist ein ruhiges
+- [ ] Ein Konto in Euro für alle Modi: Ring im Sidebar-Fuß ist ein ruhiges
   20-px-Glyph ohne Zahl; Hover/Screenreader nennen „62% of today's allowance
   left · resets …“. Panel: eine Hauptzahl, dünner Balken, Reset-Zeile,
-  Detailzeile („409k of 660k tokens · A Compare run uses about 5%“), Watches
+  Detailzeile („€0.62 of €1.00 · A Compare run uses about 6%“, Euro nur für Admins), Watches
   separat. Hell/Dunkel, Desktop und 320/390 px; bei ≤ 25 % färben sich nur
   Bogen und Balken amber, leer rot. Ein Compare-Lauf senkt den
   Prozentwert nach seinen Antworten; Agent zeigt dieselbe

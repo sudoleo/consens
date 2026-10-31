@@ -14,9 +14,11 @@ keine aktuelle Freigabe geänderter Quellen.
 
 Neue Funktionsgruppen: Agent-Dateien/DOCX/PDF (`test_agent_files.py`,
 `test_agent_documents.py`), Google/OAuth/Kalender/Gmail (`test_google_connections.py`,
-`test_agent_calendar.py`, `test_agent_gmail.py`), gemeinsames Tokenkonto und
+`test_agent_calendar.py`, `test_agent_gmail.py`), gemeinsames Tageskonto in Euro und
 Nachmessung (`test_usage_meter.py`, `test_run_usage_repository.py`,
-`test_agent_usage_reconciliation.py`), Antwortreceipts (`test_result_integrity.py`)
+`test_agent_usage_reconciliation.py`, `test_agent_euro_account.py`; alle Tests laufen
+mit Einheitspreis, ein Token = ein Mikro-Euro: autouse-Fixture `flat_agent_prices`,
+echte Katalogpreise per Marker `real_prices`), Antwortreceipts (`test_result_integrity.py`)
 sowie Watch-Evidenz/Outbox (`test_watch_evidence_model.py`,
 `test_watch_review_regressions.py`). DOM-/Browsergegenstücke und Mockgrenzen
 stehen im [Bereichsindex](test-coverage/areas.md).

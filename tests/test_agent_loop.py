@@ -280,6 +280,7 @@ def test_other_provider_errors_never_resend_the_request(monkeypatch):
     assert len(requests) == 1
 
 
+@pytest.mark.real_prices
 def test_native_search_stays_in_selected_model_request_with_real_citations(store, monkeypatch):
     sources = [{"type": "url_citation", "url_citation": {"url": "https://example.com/report", "title": "Report"}},
                {"type": "url_citation", "url_citation": {"url": "javascript:alert(1)", "title": "Bad"}}]
@@ -610,6 +611,7 @@ def search_usage(searches, field):
 SEARCH_FIELDS = ["server_tool_use_details", "server_tool_use"]
 
 
+@pytest.mark.real_prices
 @pytest.mark.parametrize("field", SEARCH_FIELDS)
 def test_known_search_charge_survives_missing_tokens_without_inventing_zero_tokens(store, monkeypatch, field):
     transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=search_usage(1, field))]])
@@ -636,6 +638,7 @@ def test_known_search_count_returns_the_unused_search_budget(store, monkeypatch,
     assert tool["status"] == "succeeded" and tool["count"] == 1
 
 
+@pytest.mark.real_prices
 @pytest.mark.parametrize("field", SEARCH_FIELDS)
 def test_search_overrun_is_booked_and_never_fails_the_answer(store, monkeypatch, field):
     # OpenRouter does not enforce max_uses for every model (Haiku 4.5 searched
@@ -715,6 +718,7 @@ def test_normalized_input_output_usage_aliases():
     assert value["input_tokens"] == 100 and value["output_tokens"] == 20
 
 
+@pytest.mark.real_prices
 @pytest.mark.parametrize("field", SEARCH_FIELDS)
 def test_search_and_token_usage_in_separate_chunks_are_merged_once(store, monkeypatch, field):
     transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop",

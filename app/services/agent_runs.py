@@ -436,11 +436,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             totals["updated_at"] = firestore.SERVER_TIMESTAMP
             tx.update(user_ref, {"agent_usage": totals})
             estimate = None
-            # An audit reviewer's call counts at its weight (agent_quota.receipt_weight).
-            weight = agent_quota.receipt_weight(receipt_data)
             if daily_ref:
-                tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage, weight))
-                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage, weight)
+                tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage))
+                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage)
             leases = dict((active.to_dict() or {}).get("leases") or {})
             if final:
                 leases.pop(self.receipt_ref(uid, chat_id, turn_id).id, None)
@@ -465,11 +463,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 # A reviewer's call (audit mode): live, gate, final, repair
                 # or hedge (agent_audit; DelegationLoop.worker_completion).
                 receipt_patch["round"] = review_round
-            charged = agent_quota.measured_tokens(usage, weight)
+            charged = agent_quota.measured_charge(usage)
             if daily_ref and charged is not None:
-                # What the account was charged: cache reads at their weight
-                # (agent_quota.CACHED_INPUT_WEIGHT), a reviewer's call at its
-                # own (AUDIT_REVIEWER_QUOTA_WEIGHT), the usage itself in full.
+                # What the account was charged, in micro-euros (since
+                # 2026-10-31; tokens before, without the ledger's "_eur").
                 receipt_patch["quota_charged"] = charged
             if estimate is not None:
                 # Bounded uncertainty: the ledger now carries this estimate.
