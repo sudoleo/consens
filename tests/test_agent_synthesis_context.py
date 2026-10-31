@@ -1,17 +1,17 @@
 """The agent writes the answer in its own conversation (agent_answer_mode).
 
 The step after a comparison sees every answer in full, with the sources'
-excerpts, and writes the answer with the chosen reasoning and the answer
+excerpts, and may write the answer with the chosen reasoning and the answer
 allowance. Reasoning excerpts show while it thinks; the text it writes is
-exactly what the app shows, saves and checks. Provider continuation data
-never reaches the user or the saved turn.
+exactly what the app shows, saves and has reviewed. Provider continuation
+data never reaches the user or the saved turn.
 """
 from dataclasses import replace
 import json
 
 import pytest
 
-from app.services.agent_comparison import review_is_bound
+from app.services.agent_comparison import answer_hash
 from app.services.llm.agent_client import AgentCompletion, answer_output_limit, routing_output_limit
 from test_agent_comparison import Script, make_loop
 from test_agent_loop import packet, transport
@@ -21,6 +21,11 @@ from test_agent_runs import UID, store  # noqa: F401  (fixture)
 def _writes_answer(step_id, script):
     """The orchestrator step after the scripted comparisons: it writes the answer."""
     return step_id.startswith("completion:") and int(step_id.split(":")[-1]) >= script.compares
+
+
+def reviewed(review, text):
+    """The saved review is the reviewers' review of exactly ``text``."""
+    return review.get("mode") == "audit" and review.get("answer_hash") == answer_hash(text)
 
 
 def _comparison_results(messages):
@@ -37,7 +42,7 @@ def _deltas(events):
 
 @pytest.mark.parametrize("compares,fail_model", [(1, False), (2, False), (1, True)])
 def test_the_answer_step_writes_from_full_answers_in_its_own_conversation(store, compares, fail_model):
-    from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
+    from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION
     history = [{"role": "system", "content": "STEERING_PROMPT"},
                {"role": "user", "content": "Please preserve literal code and my budget of 100."},
                {"role": "assistant", "content": "Your example is `status_update = 'ready'`."},
@@ -61,10 +66,10 @@ def test_the_answer_step_writes_from_full_answers_in_its_own_conversation(store,
     assert len(captured) == 1
     request = captured[0]
     messages = request["messages"]
-    # The agent's own conversation, with the writing rules and its tools
-    # still listed: no fresh context, no second read of the answers.
+    # The agent's own conversation, with the app's facts and its tools still
+    # listed: no fresh context, no second read of the answers.
     assert messages[1:4] == history[1:]
-    assert messages[0]["content"].startswith("STEERING_PROMPT") and AGENT_ANSWER_SECTION in messages[0]["content"]
+    assert messages[0]["content"].startswith("STEERING_PROMPT") and AGENT_AUDIT_ANSWER_SECTION in messages[0]["content"]
     assert request["tools"] and request.get("allow_tool_calls") is not False
     results = _comparison_results(messages)
     assert [result["question"] for result in results] == [f"Evaluate option {i + 1}" for i in range(compares)]
@@ -81,12 +86,13 @@ def test_the_answer_step_writes_from_full_answers_in_its_own_conversation(store,
             assert [missing["family"] for missing in result["missing_answers"]] == ["anthropic"]
         else:
             assert len(result["answers"]) == 2 and result["missing_answers"] == []
-    # The write note follows only a comparison with answers to write from.
-    assert (messages[-1] == {"role": "user", "content": AGENT_WRITE_NOTE}) == (not fail_model)
+    # No app note after the evidence (until 2026-10-31 AGENT_WRITE_NOTE): the
+    # answers advise, the agent goes on from them.
+    assert messages[-1]["role"] == "tool"
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    # What the step wrote is what the user saw, what was saved and checked.
+    # What the step wrote is what the user saw, what was saved and reviewed.
     assert _deltas(events) == saved["consensus"] == "The first option costs 100."
-    assert review_is_bound(saved["agent_review"], saved["consensus"])
+    assert reviewed(saved["agent_review"], saved["consensus"])
     # A preamble before a tool call never reaches the user; continuation
     # data stays with the provider conversation.
     assert "I will compare" not in _deltas(events)
@@ -135,7 +141,7 @@ def test_answer_step_keeps_effort_and_allowance_and_never_stores_reasoning_conti
     assert _deltas(events) == answer
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["consensus"] == answer
-    assert review_is_bound(saved["agent_review"], answer)
+    assert reviewed(saved["agent_review"], answer)
     assert "PRIVATE_" not in json.dumps(events) + json.dumps(saved, default=str)
 
 
@@ -161,7 +167,7 @@ def test_answer_step_shows_reasoning_excerpts_while_thinking_but_never_in_the_an
                                          "The first option fits the stated budget exactly."}]
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["consensus"] == answer == _deltas(events)
-    assert review_is_bound(saved["agent_review"], answer)
+    assert reviewed(saved["agent_review"], answer)
     assert any(item["id"].endswith("/thinking") for item in saved["agent_activity"])
 
 
@@ -188,7 +194,7 @@ def test_thought_only_answer_step_is_written_again_with_lighter_reasoning(store,
     assert any(e.get("kind") == "progress" and e["id"] == "completion:2/retry" for e in events)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["consensus"] == answer == _deltas(events)
-    assert review_is_bound(saved["agent_review"], answer)
+    assert reviewed(saved["agent_review"], answer)
     # Both attempts are paid and counted.
     assert saved["agent_usage"]["output_tokens"] >= 32768 + 20
 
@@ -208,7 +214,8 @@ def test_thought_only_answer_without_lighter_reasoning_fails_as_output_limit_not
     # The turn says what to do instead of only what happened.
     assert "lower reasoning level" in loop.completion.failure["error"]
     assert agent_failure(ModelOutputLimit())["code"] == "output_limit"
-    assert loop.comparison.judge_calls == 0
+    # No answer, so nothing to review.
+    assert loop.comparison.versions == []
 
 
 def test_reasoning_answer_step_gets_headroom_and_a_lighter_retry_effort():
@@ -234,7 +241,7 @@ PAGE = "\n".join(["Navigation and unrelated history."] * 40
                  + ["Footer text about the weather."] * 40)
 
 
-def _cited_run(store, monkeypatch, *, context_chars=None):
+def _cited_run(store, monkeypatch):
     """Both comparison answers cite a shared source without text and one of
     their own: the Exa family with search text, the native one without.
     Returns the comparison result the answer step writes from."""
@@ -257,7 +264,7 @@ def _cited_run(store, monkeypatch, *, context_chars=None):
             if _writes_answer(self.step_id, script):
                 captured.append(json.loads(json.dumps(messages)))
             yield from super().stream(model=model, messages=messages, **kwargs)
-            if not self.step_id.startswith("completion:") and not model.request_config.get("response_format"):
+            if not self.step_id.startswith("completion:"):
                 own = NATIVE if model.model.startswith("anthropic") else EXA
                 self.sources = [{"url": SHARED, "title": "Shared"}, {"url": own, "title": "Own"}]
                 self.citations = [
@@ -266,13 +273,9 @@ def _cited_run(store, monkeypatch, *, context_chars=None):
                      "end_index": claim_end, "fallback_end_index": 0}]
 
     loop = make_loop(store, script)
-    if context_chars:
-        loop.policy = replace(loop.policy, context_chars=context_chars)
     loop.factory = Completion
     list(loop.run())
     assert len(captured) == 1
-    if context_chars:
-        assert len(json.dumps(captured[0], ensure_ascii=False)) <= context_chars
     results = _comparison_results(captured[0])
     assert len(results) == 1
     return loop, results[0], fetched
@@ -299,7 +302,7 @@ def test_comparison_result_carries_what_the_cited_sources_say_without_storing_it
     assert sorted(fetched) == sorted([SHARED, NATIVE])
     # Excerpts are context for the agent's next step: never saved with the turn.
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    assert saved["status"] == "completed" and reviewed(saved["agent_review"], saved["consensus"])
     serialized = json.dumps(saved, default=str)
     assert "EXA_HIGHLIGHT" not in serialized and "PAGE_PASSAGE" not in serialized
     assert '"title": "Own"' in serialized
@@ -317,13 +320,4 @@ def test_a_failing_excerpt_step_never_costs_the_paid_answer(store, monkeypatch):
     assert result["sources"] == []
     assert all(answer["sources"][0] == SHARED for answer in result["answers"])
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
-
-
-# Bounded runs only (AgentPolicy.from_config): production uses for_chat,
-# which does not check context_chars.
-@pytest.mark.parametrize("context_chars", [7000, 9000])
-def test_bounded_runs_give_excerpts_only_the_context_room_left(store, monkeypatch, context_chars):
-    loop, result, _ = _cited_run(store, monkeypatch, context_chars=context_chars)
-    assert {source["url"] for source in result["sources"]} == {SHARED, EXA, NATIVE}
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    assert saved["status"] == "completed" and reviewed(saved["agent_review"], saved["consensus"])

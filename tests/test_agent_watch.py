@@ -4,13 +4,14 @@ import json
 import pytest
 
 from app.services import agent_watch, watch_service
-from app.services.agent_comparison import AgentPreferences, comparison_selection
+from app.services.agent_comparison import comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation
+from agent_reviewers import without_reviewers
 from test_agent_comparison import Script
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
@@ -19,7 +20,6 @@ pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 QUESTION = "When will OpenAI release GPT-6 to the public?"
 WATCH = {"question": QUESTION, "goals": ["GPT-6 is officially released", "OpenAI announces a release date"]}
-CARD_NOTE = "When prepare_watch prepared a Watch in this message, a card below your answer shows its question and goal"
 
 
 def outlook(**fields):
@@ -72,7 +72,10 @@ class WatchScript(Script):
 
 
 def watch_loop(store, script, *, watch_outlook=None, question="Tell me when GPT-6 comes out.",
-               preferences=None, google_data=False, comparisons=True):
+               preferences=None, google_data=False, comparisons=True, reviewers=False):
+    """A chat turn of the agent; its reviewers never start (agent_reviewers.py)
+    unless ``reviewers``, whose rounds Script answers without marks.
+    ``comparisons=False``: a delegation-only run, without the agent's tools."""
     chat, turn = pending(store, question=question)
     config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -85,6 +88,8 @@ def watch_loop(store, script, *, watch_outlook=None, question="Tell me when GPT-
         agent_preferences=preferences, google_data=google_data)
     if loop.watch_tools:
         loop.watch_tools.outlook = watch_outlook or outlook()
+    if comparisons and not reviewers:
+        without_reviewers(loop)
     script.loop = loop
     return loop
 
@@ -110,7 +115,7 @@ def seen_watch(messages):
 @pytest.mark.usefixtures("no_watch_writes")
 def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     script = WatchScript()
-    loop = watch_loop(store, script)
+    loop = watch_loop(store, script, reviewers=True)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed"
@@ -119,17 +124,18 @@ def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     assert saved["agent_watch"] == proposal
     result = tool_results(loop)[0]
     assert result["status"] == "prepared" and "nothing is watched yet" in result["instruction"]
-    # The agent learns the rules once; the tool is offered with the comparison.
+    # The agent learns what a Watch is once; the tool is offered with compare_models.
     assert "prepare_watch" in script.tools and "compare_models" in script.tools and "answer" not in script.tools
-    assert agent_watch.ORCHESTRATOR_PROMPT in script.system
-    # The step that writes the answer knows the card exists and what it
-    # says, and the rule that it must not claim more.
+    assert agent_watch.AUDIT_PROMPT in script.system
+    # The step that writes the answer knows what the Watch is, and the tool's
+    # result says what to tell the user: it must not claim more.
     writer = script.writer()
-    assert CARD_NOTE in writer[0]["content"] and "Never say the Watch is active" in writer[0]["content"]
+    assert agent_watch.AUDIT_PROMPT in writer[0]["content"]
     assert seen_watch(writer)["status"] == "prepared" and seen_watch(writer)["question"] == QUESTION
+    assert "never claim the Watch is active" in seen_watch(writer)["instruction"]
     assert saved["consensus"] == "The first option costs 100."
-    assert saved["agent_review"]["comparisons"], "the current state is still compared and checked"
-    assert saved["agent_review"]["status"] == "succeeded"
+    assert saved["agent_review"]["comparisons"], "the current state is still compared, then reviewed"
+    assert saved["agent_review"]["mode"] == "audit" and saved["agent_review"]["status"] == "succeeded"
     steps = [event for event in saved["agent_activity"] if event.get("name") == "prepare_watch"]
     assert steps and steps[-1]["status"] == "succeeded"
 
@@ -154,26 +160,24 @@ def test_an_existing_watch_or_a_full_account_is_said_not_offered(store, fields, 
     list(loop.run())
     assert tool_results(loop)[0]["status"] == status
     writer = script.writer()
+    # What to tell the user comes with the result the answer is written from.
     assert seen_watch(writer)["status"] == status
-    assert "If its status is already_watched" in writer[0]["content"]
-    assert "if it is limit_reached" in writer[0]["content"]
+    assert seen_watch(writer)["instruction"] == agent_watch.INSTRUCTIONS[status]
     # The card still shows the question; it reads the live state itself.
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]["question"] == QUESTION
 
 
 @pytest.mark.usefixtures("no_watch_writes")
-@pytest.mark.parametrize("autonomy", ["guided", "free"])
-def test_a_watch_only_message_ends_with_an_acknowledgement(store, autonomy):
+def test_a_watch_only_message_ends_with_an_acknowledgement(store):
     script = WatchScript(direct_reply="I prepared a Watch for this question below.")
-    loop = watch_loop(store, script, question="Can you watch that for me?",
-                      preferences=AgentPreferences(autonomy=autonomy))
+    loop = watch_loop(store, script, question="Can you watch that for me?")
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed"
     assert saved["consensus"] == "I prepared a Watch for this question below."
     assert saved["agent_watch"]["question"] == QUESTION
     assert not (saved.get("agent_review") or {}).get("comparisons")
-    # A short acknowledgement is plain text in both modes (no reminder).
+    # A short acknowledgement is plain text (no reminder).
     reminders = [m for m in loop.messages if "App rule" in str(m.get("content"))]
     assert reminders == []
 
@@ -213,13 +217,13 @@ def test_starting_an_earlier_watch_prepares_it_again_and_answers_without_a_compa
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["agent_watch"]["question"] == QUESTION
-    assert not loop.comparison.comparisons and loop.comparison.direct
+    assert not loop.comparison.comparisons
     # The text of that step stands as the answer: shown, never retracted.
     assert saved["consensus"] == WatchWithReply.REPLY
     assert "".join(e["text"] for e in events if e.get("type") == "delta") == WatchWithReply.REPLY
     assert not any(e.get("clear_response") for e in events)
     assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0"]
-    assert "to start or set up a Watch prepared earlier, call prepare_watch" in script.system
+    assert agent_watch.AUDIT_PROMPT in script.system
 
 
 def watch_outage(uid, question):
@@ -247,28 +251,27 @@ def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, w
     assert tool_results(loop)[0].get("status") != "prepared"
 
 
-def test_a_reminder_request_counts_and_the_answer_never_denies_reminders():
+def test_the_watch_block_says_it_is_the_only_way_to_reach_the_user_later():
     """2026-10-11: GPT-6 Luna read "kannst du mich erinnern, wann der Sieger
     feststeht?" after a search as a question about the date, prepared nothing,
-    and the answer said consens.io could not notify anyone."""
-    prompt = agent_watch.ORCHESTRATOR_PROMPT
-    assert "to remind, notify or alert them" in prompt and "there is no other way to reach them later" in prompt
-    assert "A Watch is how consens.io reminds and notifies users" in prompt
-    assert "call prepare_watch once, about whatever can still happen or change" in prompt
-    # A follow-up "start the Watch" gets a new card: the old one is gone.
-    assert "to start or set up a Watch prepared earlier, call prepare_watch with that question" in prompt
-    # The agent writes the answer itself: the card note is part of its
-    # prompt, and nothing refers to the removed answer tool or step.
-    assert CARD_NOTE in prompt and "Never say the Watch is active or that you will notify anyone" in prompt
-    assert "never claim a Watch is active" in prompt
+    and the answer said consens.io could not notify anyone. Since 2026-10-28
+    the block says what a Watch is, as facts; the tool's result says what to
+    tell the user."""
+    prompt = agent_watch.AUDIT_PROMPT
+    assert "it is consens.io's only way to reach the user later" in prompt
+    assert "emails the user when a source changes the answer" in prompt
+    assert "prepare_watch prepares one as a card below your answer, which only the user starts" in prompt
+    assert "never claim the Watch is active" in agent_watch.INSTRUCTIONS["prepared"]
+    # No recipe and nothing about removed tools or steps.
     assert "call answer" not in prompt and "answer step" not in prompt and "evidence" not in prompt
+    assert "compare" not in prompt
 
 
 def test_no_watch_tool_with_google_data_or_without_comparisons(store):
     script = WatchScript()
     google = watch_loop(store, script, google_data=True)
     assert google.watch_tools is None and "prepare_watch" not in google.registry.tools
-    assert agent_watch.ORCHESTRATOR_PROMPT not in google.messages[0]["content"]
+    assert agent_watch.AUDIT_PROMPT not in google.messages[0]["content"]
     bounded = watch_loop(store, WatchScript(), comparisons=False)
     assert bounded.watch_tools is None and "prepare_watch" not in bounded.registry.tools
 

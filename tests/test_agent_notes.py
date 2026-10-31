@@ -117,7 +117,7 @@ def test_the_agent_reads_the_message_before_its_next_step(store, fake_vm):
 
 def test_a_message_after_the_answer_is_said_to_be_unread(store, fake_vm):
     script = LongAgent()
-    loop = vm_loop(store, script, audit="off")
+    loop = vm_loop(store, script)
     original = script.factory
 
     def factory():

@@ -1,4 +1,4 @@
-"""Tempo, long runs and load of the audit mode (spec A-L1 to A-L3, 2026-10-29).
+"""Tempo, long runs and load of the reviewers (spec A-L1 to A-L3, 2026-10-29).
 
 In Prod (25.-29.10., docs/agent-audit-readiness-2026-10-29.md section 2) the
 marks stood a median 10 s after the answer's last word (p90 35 s, max 74 s)
@@ -19,8 +19,8 @@ measure what the server adds to the models' own time:
   out of following; the final round still comes with its earlier marks, and
   the review counts all of it. It also measures what the work log holds in
   memory (docs/agent-work-log.md).
-- A-L3: three audit turns with three reviewers each at once in one process.
-- Advisers (compare_models in audit mode, 2026-10-31): the same three
+- A-L3: three turns with three reviewers each at once in one process.
+- Advisers (compare_models, 2026-10-31): the same three
   models answer the agent's question while they review its run.
 
 Measured times are printed (pytest -s), with their Prod equivalent; the
@@ -202,7 +202,7 @@ def reasoning(step_id, i):
 
 
 class Turn:
-    """A scripted audit turn: the agent's first ``steps`` steps run a
+    """A scripted turn: the agent's first ``steps`` steps run a
     workbench command each (``vm_exec``, ``output`` characters on stdout and
     on stderr), the step ``gate_step`` changes memory instead, then it writes
     ANSWER. A reviewer answers a live round after its median (every fifth
@@ -213,8 +213,8 @@ class Turn:
     stopped (the hedge answers); ``stuck``: whose every final request hangs.
     ``live``: replies of live rounds by family, ``reply(messages, number)``
     (a dict, or an exception to raise). ``timed=False``: no model takes time.
-    ``compare_step``: the step that asks the models instead (compare_models
-    in audit mode); each answers after its ADVICE median."""
+    ``compare_step``: the step that asks the models instead (compare_models);
+    each answers after its ADVICE median."""
 
     def __init__(self, reviewers, *, uid=UID, steps=STEPS, gate_step=None, long_live=None, hang=(), stuck=(),
                  output=200, live=None, timed=True, compare_step=None):
@@ -386,8 +386,7 @@ def tempo_loop(store, script, *, model="claude-haiku-4-5"):
                   {"role": "user", "content": "Build me a small site in the workspace."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection(script.reviewers, audit=True),
-        agent_preferences=AgentPreferences(audit="on", judges="on"), audit_compare=script.compare_step is not None)
+        comparison_models=comparison_selection(script.reviewers), agent_preferences=AgentPreferences())
     loop.registry = ToolRegistry([*loop.registry.tools.values(), *tools(script)],
                                  argument_limit=loop.registry.argument_limit)
     loop._long_run = lambda: True
@@ -589,7 +588,7 @@ def test_final_requests_that_all_hang_end_at_the_final_rounds_time(slow_store, s
     assert alive == []
 
 
-# --- Advisers beside the reviewers (compare_models in audit mode, 2026-10-31) -----
+# --- Advisers beside the reviewers (compare_models, 2026-10-31) ------------------
 
 def test_three_advisers_beside_three_reviewers_keep_their_tempo(slow_store, scaled, measured):
     """Package 1 of one mode for comparison and audit: the Daily preset's
@@ -603,7 +602,7 @@ def test_three_advisers_beside_three_reviewers_keep_their_tempo(slow_store, scal
     round), the account lock held 44-49 % of the 2.5 s turn and waited for
     0.7 s in all, the longest wait 0.03 s."""
     script = Turn(DAILY, steps=8, compare_step=2)
-    loop = tempo_loop(slow_store, script)
+    tempo_loop(slow_store, script)
     watch_marks(slow_store, [script])
     before = set(threading.enumerate())
     turn = play(slow_store, script)
@@ -628,7 +627,8 @@ def test_three_advisers_beside_three_reviewers_keep_their_tempo(slow_store, scal
     assert values["server per live round"]["median"] < .25 and values["server per live round"]["max"] < 1
     assert values["server per agent step"]["median"] < .3
     assert values["marks after the last word"] < prod(FINAL["openai"][1]) + 1
-    assert loop.comparison.judge_calls == 0
+    # No judge checks anything: the reviewers' marks are the review.
+    assert review.get("checks", []) == [] and "differences_data" not in json.dumps(review)
     assert alive == []
 
 

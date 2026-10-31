@@ -1,8 +1,10 @@
-"""The whole visible answer must finish before any judge can review it.
+"""The whole visible answer must finish before the reviewers' final round.
 
 The agent writes the answer itself, in the step after its comparison
-(agent_answer_mode). The app starts the judges only once that step has
-ended with a complete text, and checks exactly what the user saw.
+(agent_answer_mode). The app starts the reviewers' final round
+(agent_audit.AnswerAudit.run) only once that step has ended with a complete
+text, and has exactly what the user saw reviewed. Until 2026-10-31 the
+judges of comparison mode followed the same rule.
 """
 import json
 
@@ -10,7 +12,7 @@ import httpx
 import pytest
 
 from app.services.agent_answer_mode import ANSWER_HOLD_CHARS
-from app.services.agent_comparison import review_is_bound
+from app.services.agent_comparison import answer_hash
 from app.services.agent_provider_limits import ProviderCooldowns
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancelled
@@ -32,12 +34,22 @@ def test_the_answer_streams_while_it_is_written():
     assert len(ANSWER) > ANSWER_HOLD_CHARS > len(CHUNKS[0]) + len(CHUNKS[1])
 
 
-def answer_factory(script, *, early_judge=False, ending="stop", chunks=CHUNKS):
-    """completion:0 compares (Script). With ``early_judge`` completion:1
-    writes an intro and calls judge_answer, which only the app runs. The
-    next step writes the answer in ``chunks`` and ends with ``ending``."""
+def final_round(loop):
+    """Whether the reviewers' final round has begun (AnswerAudit.run)."""
+    return loop.comparison.auditor.final_answer is not None
+
+
+def reviewed(review, text):
+    return review.get("mode") == "audit" and review.get("answer_hash") == answer_hash(text)
+
+
+def answer_factory(script, *, early_review=False, ending="stop", chunks=CHUNKS, direct=False):
+    """completion:0 compares (Script), unless ``direct``. With
+    ``early_review`` completion:1 writes an intro and calls audit_answer,
+    which only the app runs. The next step writes the answer in ``chunks``
+    and ends with ``ending``."""
     base = type(script.factory())
-    answer_step = 2 if early_judge else 1
+    answer_step = 0 if direct else 2 if early_review else 1
 
     class Completion(base):
         def stream(self, *, model, messages, tools, **kwargs):
@@ -48,7 +60,7 @@ def answer_factory(script, *, early_judge=False, ending="stop", chunks=CHUNKS):
                 # The agent's own steering step: its model, its tools, no search.
                 assert model.selection_id == script.loop.model.selection_id
                 assert tools and kwargs["native_searches"] == 0
-                assert script.loop.comparison.judge_calls == 0
+                assert not final_round(script.loop)
                 # No unfinished assistant tool-call message may enter this step.
                 pending = set()
                 for message in messages:
@@ -59,7 +71,7 @@ def answer_factory(script, *, early_judge=False, ending="stop", chunks=CHUNKS):
                 for chunk in chunks:
                     self.text += chunk
                     yield {"type": "delta", "text": chunk}
-                    assert script.loop.comparison.judge_calls == 0
+                    assert not final_round(script.loop)
                 if ending == "cancelled":
                     script.loop.cancellation.cancel()
                     raise ProviderCancelled()
@@ -67,13 +79,13 @@ def answer_factory(script, *, early_judge=False, ending="stop", chunks=CHUNKS):
                     raise httpx.ReadTimeout("Provider interrupted the answer")
                 self.finish_reason = ending
                 return
-            if early_judge and index == 1:
+            if early_review and index == 1:
                 script.calls.append((self.step_id, model.model))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 self.text = INTRO
                 yield {"type": "delta", "text": self.text}
-                self.tool_calls = [{"id": "early_judge", "type": "function", "function": {
-                    "name": "judge_answer", "arguments": json.dumps({"finalize": False})}}]
+                self.tool_calls = [{"id": "early_review", "type": "function", "function": {
+                    "name": "audit_answer", "arguments": json.dumps({})}}]
                 self.finish_reason = "tool_calls"
                 return
             yield from super().stream(model=model, messages=messages, tools=tools, **kwargs)
@@ -86,19 +98,19 @@ def tool_result(loop, call_id):
                            if m.get("role") == "tool" and m.get("tool_call_id") == call_id))
 
 
-@pytest.mark.parametrize("early_judge", [False, True])
-def test_early_judge_or_intro_cannot_replace_complete_streamed_answer(store, early_judge):
+@pytest.mark.parametrize("early_review", [False, True])
+def test_early_review_or_intro_cannot_replace_complete_streamed_answer(store, early_review):
     script = Script()
-    loop = make_loop(store, script)
-    loop.factory = answer_factory(script, early_judge=early_judge)
+    loop = make_loop(store, script, reviewers=True)
+    loop.factory = answer_factory(script, early_review=early_review)
     visible, events, deltas = "", [], 0
     for event in loop.run():
         events.append(event)
         if event["type"] == "delta":
             visible += event["text"]
             deltas += 1
-            assert loop.comparison.judge_calls == 0
-        if event.get("name") == "judge_answer" and event.get("status") == "running":
+            assert not final_round(loop)
+        if event.get("name") == "audit_answer" and event.get("status") == "running":
             assert visible == ANSWER
             assert store.get_turn(UID, loop.chat_id, loop.turn_id)["consensus"] == ANSWER
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
@@ -108,18 +120,19 @@ def test_early_judge_or_intro_cannot_replace_complete_streamed_answer(store, ear
     assert INTRO not in visible
     assert saved["status"] == "completed"
     assert len(saved["agent_review"]["versions"]) == 1
-    assert review_is_bound(saved["agent_review"], ANSWER)
-    assert loop.comparison.judge_calls == 2
+    assert reviewed(saved["agent_review"], ANSWER) and saved["agent_review"]["status"] == "succeeded"
+    # The reviewers' final round had exactly what the user saw.
+    assert loop.comparison.auditor.final_answer == ANSWER
     first_delta = next(i for i, e in enumerate(events) if e["type"] == "delta")
     assert not any(e.get("clear_response") for e in events[first_delta + 1:])
-    if early_judge:
-        # The judges are the app's: the agent cannot start them early.
-        assert "error" in tool_result(loop, "early_judge")
-        assert not any(e.get("name") == "judge_answer" for e in events[:first_delta])
+    if early_review:
+        # The review is the app's: the agent cannot start it early.
+        assert "error" in tool_result(loop, "early_review")
+        assert not any(e.get("name") == "audit_answer" for e in events[:first_delta])
 
 
-def test_the_check_is_announced_the_moment_the_last_word_stands(store):
-    """The page shows the check from the last word on, not only once the
+def test_the_review_is_announced_the_moment_the_last_word_stands(store):
+    """The page shows the review from the last word on, not only once the
     settled step, the allowance and the review checkpoints are through."""
     script = Script()
     loop = make_loop(store, script)
@@ -145,42 +158,41 @@ def test_the_check_is_announced_the_moment_the_last_word_stands(store):
     # Live only: never part of the saved turn.
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert "answer_check" not in json.dumps(saved, default=str)
-    assert review_is_bound(saved["agent_review"], ANSWER)
+    assert reviewed(saved["agent_review"], ANSWER)
 
 
-def test_no_check_is_announced_when_none_follows(store):
-    from app.services.agent_comparison import AgentPreferences
-    # Answer check off: the answer is final without judges.
-    script = Script()
-    loop = make_loop(store, script, preferences=AgentPreferences(judges="off"))
-    loop.factory = answer_factory(script)
-    assert not any(e["type"] == "answer_check" for e in loop.run())
-    # A direct answer without comparisons is never checked.
-    from test_agent_comparison import Script as Direct
-    direct = Direct(direct=True)
-    loop = make_loop(store, direct)
-    assert not any(e["type"] == "answer_check" for e in loop.run())
+def test_a_direct_answer_announces_its_review_too(store):
+    """Every answer is reviewed: until 2026-10-31 a direct answer was never
+    checked, and with the answer check off nothing was announced."""
+    script = Script(compares=0)
+    loop = make_loop(store, script)
+    loop.factory = answer_factory(script, direct=True)
+    events = list(loop.run())
+    assert [e for e in events if e["type"] == "answer_check"] == [{"type": "answer_check"}]
+    assert not any(e.get("name") == "compare_models" for e in events)
 
 
 @pytest.mark.parametrize("ending", ["length", "max_tokens", "cancelled", "timeout"])
-def test_incomplete_answer_is_saved_without_starting_judges(store, ending):
+def test_incomplete_answer_is_saved_without_starting_the_review(store, ending):
     script = Script()
-    loop = make_loop(store, script)
+    loop = make_loop(store, script, reviewers=True)
     loop.factory = answer_factory(script, ending=ending)
     events = []
     with pytest.raises((AnalysisBudgetExceeded, ProviderCancelled, httpx.ReadTimeout)):
         for event in loop.run():
             events.append(event)
-    # Nothing announces a check that never comes.
+    # Nothing announces a review that never comes.
     assert not any(e["type"] == "answer_check" for e in events)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "failed"
+    # The turn keeps the text the user saw (agent_runs.finish_run); it is no
+    # version for the reviewers.
     assert saved["consensus"] == ANSWER
     assert "".join(e["text"] for e in events if e["type"] == "delta") == ANSWER
     assert saved["agent_review"]["status"] == ("cancelled" if ending == "cancelled" else "missing")
-    assert saved["agent_review"]["versions"][-1]["text"] == ANSWER
+    assert saved["agent_review"]["versions"] == []
     assert not saved["agent_review"].get("checks")
-    assert loop.comparison.judge_calls == 0
+    assert not final_round(loop)
 
 
 def _empty_over_http(script, monkeypatch):
@@ -205,9 +217,9 @@ def _empty_over_http(script, monkeypatch):
     # refuses it itself (DelegationLoop._finish_merged).
     "scripted",
 ])
-def test_empty_answer_cannot_start_judges_or_complete_the_turn(store, monkeypatch, source):
+def test_empty_answer_cannot_start_the_review_or_complete_the_turn(store, monkeypatch, source):
     script = Script()
-    loop = make_loop(store, script)
+    loop = make_loop(store, script, reviewers=True)
     loop.cooldowns = ProviderCooldowns()  # never the process-wide gate in tests
     loop.factory = (_empty_over_http(script, monkeypatch) if source == "http"
                     else answer_factory(script, chunks=[]))
@@ -219,7 +231,7 @@ def test_empty_answer_cannot_start_judges_or_complete_the_turn(store, monkeypatc
     assert saved["status"] == "failed"
     assert not saved["consensus"]
     assert not saved["agent_review"].get("checks")
-    assert loop.comparison.judge_calls == 0
-    assert not any(e.get("name") == "judge_answer" for e in events)
+    assert not final_round(loop)
+    assert not any(e.get("name") == "audit_answer" for e in events)
     # The failure never claims an answer that does not exist.
     assert "has been saved" not in saved["agent_failure"]["error"]

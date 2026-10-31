@@ -21,6 +21,7 @@ from app.services.agent_gate import outward
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from test_agent_audit import (ANSWER, TOOL_CALL_REPLY, Audit, LookupArgs, audit_loop, audit_sessions,
                               decide_when_held, held, receipt_rounds, saved)
+from agent_reviewers import without_reviewers
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 
 
@@ -376,8 +377,8 @@ def read_args(url):
 def test_a_page_of_its_own_choice_is_read_at_once(store, monkeypatch):
     """GPT-6.1 Terra searched 15 times in four days and kept 1 source: its
     provider sends no hits to the app, so read_source refused what it found.
-    Since 2026-10-28 it reads any public page in audit mode; since
-    2026-10-29 without a gate round first."""
+    Since 2026-10-28 it reads any public page while reviewers follow the
+    work; since 2026-10-29 without a gate round first."""
     from test_agent_web_fetch import PAGE, fake_fetch
     from app.services.agent_read_source import LABEL_CHOSEN, LABEL_SEARCH
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
@@ -526,23 +527,26 @@ def test_a_memory_change_waits_only_once_outside_content_is_in_view():
 
 
 MEMORY_TEXT = "Is planning a trip to the Eiffel Tower."
-MEMORY_CHANGE = {"op": "add", "text": MEMORY_TEXT, "evidence": "Tell me about the Eiffel Tower"}
+MEMORY_CHANGE = {"op": "add", "text": MEMORY_TEXT}
 
 
-def remembering(store, *, live, judges="on"):
-    """An audit turn whose first step searched (every scripted step does) and
-    saves a memory with it, so outside content is in view for the change."""
+def remembering(store, *, live, reviewers=True):
+    """A turn whose first step searched (every scripted step does) and saves
+    a memory with it, so outside content is in view for the change.
+    ``reviewers=False``: they never start (agent_reviewers.InertAnswerAudit)."""
     from test_agent_memory import repo, set_profile
     set_profile(store.db, auto_memory=True)
     script = Audit(tool_steps=1, step_tools={0: "update_memory"}, step_args={0: {"changes": [MEMORY_CHANGE]}},
                    live=live)
-    loop = audit_loop(store, script, judges=judges, memory=repo(store).snapshot(UID))
+    loop = audit_loop(store, script, memory=repo(store).snapshot(UID))
+    if not reviewers:
+        without_reviewers(loop)
     return script, loop, lambda: [item["text"] for item in repo(store).get(UID)[0]]
 
 
 def test_a_memory_change_after_the_agents_search_runs_on_every_reviewers_go(store):
-    """Max, 2026-10-28: no lock after outside content in audit mode; the
-    reviewers check the change like an outward call. The evidence rule stays."""
+    """Max, 2026-10-28: no lock after outside content; the reviewers check
+    the change like an outward call."""
     script, loop, memories = remembering(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     events = list(loop.run())
@@ -568,14 +572,14 @@ def test_a_halted_memory_change_never_runs_when_the_user_writes_instead(store):
 
 def test_without_reviewers_memory_still_locks_after_outside_content(store):
     from app.services.agent_memory import MEMORY_LOCKED
-    script, loop, memories = remembering(store, live={}, judges="off")
+    script, loop, memories = remembering(store, live={}, reviewers=False)
     list(loop.run())
     assert loop.memory_locked is True and memories() == []
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert MEMORY_LOCKED in json.dumps(results)
 
 
-def test_in_audit_mode_a_memory_needs_no_quote(store):
+def test_a_memory_needs_no_quote(store):
     """Max, 2026-10-28: the model decides what is worth remembering, also a
     preference the user never put into words; the user sees and can undo
     every change, and outside content brings the reviewers' gate."""

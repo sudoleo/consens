@@ -13,8 +13,8 @@ from app.core.rate_limit import limiter
 from app.services import agent_delegation_config, prompt_catalog, prompt_config, agent_runs
 from app.services.llm import base, consensus_engine
 from app.services.llm.agent_client import resolve_agent_model
-from app.services.prompt_defaults import (AGENT_SYSTEM_PROMPT, ANSWER_SYSTEM_PROMPT, CONSENSUS_SYSTEM_PROMPT,
-                                          DEFAULT_PROMPTS)
+from app.services.prompt_defaults import (AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT, ANSWER_SYSTEM_PROMPT,
+                                          CONSENSUS_SYSTEM_PROMPT, DEFAULT_PROMPTS)
 
 
 class Document:
@@ -167,23 +167,26 @@ def test_legacy_clients_cannot_store_prompts_and_saving_cleans_old_documents(cli
 
 def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services import agent_comparison
-    from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_WRITE_NOTE
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "comparison", "agent_audit", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_vm_no_domains",
+        "agent", "comparison", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_vm_no_domains",
         "agent_plan",
         "agent_github", "agent_workspace_closed", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
-    # One Agent prompt: it steers and writes the answer itself (no answer step).
-    assert texts["agent"] == AGENT_SYSTEM_PROMPT and texts["agent"].endswith(AGENT_ANSWER_SECTION)
+    # One Agent prompt for every chat (since 2026-10-31): it works and writes
+    # the answer itself (no answer step), and the user's models review it.
+    assert texts["agent"] == AGENT_AUDIT_SYSTEM_PROMPT and texts["agent"].endswith(AGENT_AUDIT_ANSWER_SECTION)
     assert "call answer" not in texts["agent"] and "answer step" not in texts["agent"]
     agent = next(entry for entry in entries if entry["key"] == "agent")
-    assert "AGENT_WRITE_NOTE" in agent["used_for"] and AGENT_WRITE_NOTE.strip()
+    assert agent["label"] == "Agent: instructions" and agent["source"] == "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT"
+    # Nothing describes the removed comparison mode or its parts as current.
     assert not any(retired in entry["used_for"] for entry in entries
-                   for retired in ("AGENT_ANSWER_PROMPT", "AGENT_MERGED", "AGENT_ANSWER_APP_FACTS", "answer step"))
+                   for retired in ("AGENT_ANSWER_PROMPT", "AGENT_MERGED", "AGENT_ANSWER_APP_FACTS", "answer step",
+                                   "AGENT_WRITE_NOTE", "AGENT_READ_SOURCE_PROMPT", "audit_compare", "check_text",
+                                   "comparison mode", "audit mode"))
     assert texts["answers"] == ANSWER_SYSTEM_PROMPT and texts["consensus"] == CONSENSUS_SYSTEM_PROMPT
     assert texts["delegation_orchestrator"] == agent_delegation_config.ORCHESTRATOR_PROMPT
     assert texts["delegation_worker"] == agent_delegation_config.WORKER_PROMPT
@@ -192,12 +195,10 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     assert prompt_catalog.DATE_PLACEHOLDER in comparison and "Current date:" not in comparison
     assert "up to 3 search rounds" in comparison
     assert comparison.endswith(agent_comparison.DEPTH_GUIDANCE["full"])
-    # Audit instead of comparison: its own agent prompt and the reviewers'.
-    from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT
-    assert texts["agent_audit"] == AGENT_AUDIT_SYSTEM_PROMPT and texts["agent_audit"].endswith(AGENT_AUDIT_ANSWER_SECTION)
-    # Since 2026-10-28 the audit texts and their tool blocks name no comparison.
+    # Since 2026-10-28 the agent's texts and their tool blocks name no comparison:
+    # compare_models' description says what it is (AUDIT_COMPARE).
     from app.services import agent_memory, agent_watch
-    assert "comparison" not in texts["agent_audit"].lower()
+    assert "comparison" not in texts["agent"].lower()
     blocks = texts["agent_audit_blocks"]
     assert agent_watch.AUDIT_PROMPT in blocks and agent_memory.AUDIT_MEMORY_WRITE_PROMPT in blocks
     assert "{limit}" not in blocks and "comparison" not in blocks.lower()
@@ -206,7 +207,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     assert prompt_catalog.DATE_PLACEHOLDER in reviewer and "Current date:" not in reviewer
     assert "up to 2 search rounds in a round" in reviewer and "up to 3 in the final round" in reviewer
     assert '"marks"' in reviewer and '"entry"' in reviewer
-    # Agent VM: its own section, appended for admins who switched it on.
+    # Agent VM: its own section, appended when the agent has the workspace.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert texts["agent_vm"] == AGENT_VM_PROMPT and "vm_exec" in texts["agent_vm"]
     # Without Pro (2026-10-30) the same without request_domain.
@@ -233,7 +234,8 @@ def test_code_prompts_fit_the_prepare_round_trip():
 def test_agent_counts_consens_io_among_the_ai_options():
     # Chat review 2026-10-25: asked which AI suits a trip with live data, the
     # answer named only other services, although consens.io searches live.
-    assert "consens.io is one of the options: judge it by the same standard" in AGENT_SYSTEM_PROMPT
+    assert "When the user asks which AI or tool suits a task, consens.io is one option among others." in (
+        AGENT_AUDIT_SYSTEM_PROMPT)
 
 
 @pytest.mark.parametrize("token,status", [(None, 401), ("invalid", 401), ("member", 403)])
@@ -271,10 +273,14 @@ def test_runtime_uses_code_prompts_and_saved_timezone(config_store, monkeypatch)
         def now(cls, tz=None):
             return datetime(2026, 9, 16, 1, 0, tzinfo=timezone.utc).astimezone(tz)
     monkeypatch.setattr(base, "datetime", Clock)
-    agent = agent_runs.get_agent_system_prompt(resolve_agent_model("claude-haiku-4-5"))
-    assert agent.startswith(AGENT_SYSTEM_PROMPT)
-    assert "Tuesday, 2026-09-15" in agent and "21:00:00" in agent
-    assert "America/New_York (UTC-04:00)" in agent and "Claude Haiku 4.5" in agent
+    # The code prompt, and the date and model travelling with the message
+    # (agent_runs.get_agent_turn_context), never in the cached system prompt.
+    prompt = prompt_config.get_config()["prompts"]["agent"]
+    context = agent_runs.get_agent_turn_context(resolve_agent_model("claude-haiku-4-5"))
+    assert prompt == AGENT_AUDIT_SYSTEM_PROMPT and "Current date:" not in prompt
+    assert "Tuesday, 2026-09-15" in context and "21:00:00" in context
+    assert "America/New_York (UTC-04:00)" in context and "Claude Haiku 4.5" in context
+    agent = prompt + context
     answer = base.get_system_prompt()
     assert answer.endswith(ANSWER_SYSTEM_PROMPT)
     synthesis = consensus_engine._build_consensus_prompt("Question?", {"openai": "Actual answer"}, [])

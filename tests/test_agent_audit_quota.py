@@ -1,8 +1,7 @@
-"""Audit mode near the daily allowance (spec A-R2): once the agent paid a
-step, its closing answer and the reviewers' final rounds may overdraw the
-allowance, like the answer and the judges after paid comparisons
-(test_agent_answer_mode), and a long run's reserve counts what the
-reviewers take."""
+"""Reviewers near the daily allowance (spec A-R2): once the agent paid a
+step the reviewers followed, its closing answer and the reviewers' final
+rounds may overdraw the allowance, as the closing answer may after paid
+comparisons, and a long run's reserve counts what the reviewers take."""
 import pytest
 
 from app.services import agent_budget_config, agent_quota

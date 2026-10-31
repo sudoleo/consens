@@ -8,10 +8,11 @@ doing it. Six comparison answers and the judges then waited in that queue
 instead of reading their streams: requests left up to 77 s late, finished
 judge answers were cancelled after 90 s.
 
-This test plays a turn with six comparison models on a database where each
-round trip (a read, a batched read, a commit) takes ROUND_TRIP, one
-transaction of the account at a time, and measures what the server adds to
-the models' own time. It fails when a change puts database work back between
+This test plays a turn with six comparison models, which also review the
+agent's work and answer (agent_audit.py; the judges of comparison mode until
+2026-10-31), on a database where each round trip (a read, a batched read, a
+commit) takes ROUND_TRIP, one transaction of the account at a time, and
+measures what the server adds to the models' own time. It fails when a change puts database work back between
 a model's stream and the server reading it, or lets the bookkeeping queue grow
 with the number of parallel calls again.
 """
@@ -30,6 +31,7 @@ from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import AgentRunStore
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation
+from test_agent_comparison import REVIEWER
 from test_agent_runs import Database, UID, pending
 from test_chat_history import FakeTransaction
 
@@ -39,8 +41,8 @@ ROUND_TRIP = 0.01
 # A comparison answer streams this long, with a reasoning sentence every TICK.
 MODEL_SECONDS = 1.0
 TICK = 0.02
-# The chat model's answer and each judge call.
-ANSWER_SECONDS = JUDGE_SECONDS = 0.3
+# The chat model's answer and each reviewer's round.
+ANSWER_SECONDS = REVIEW_SECONDS = 0.3
 
 
 class SlowTransaction(FakeTransaction):
@@ -103,8 +105,7 @@ class Timeline:
             def stream(self, *, model, messages, **kwargs):
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 if self.step_id == "completion:0":
-                    args = {"question": "What should I pack for a marathon training camp?", "context": "",
-                            "status_update": "Comparing packing lists"}
+                    args = {"question": "What should I pack for a marathon training camp?", "context": ""}
                     self.tool_calls = [{"id": "call_0", "type": "function",
                                         "function": {"name": "compare_models", "arguments": json.dumps(args)}}]
                     self.finish_reason = "tool_calls"
@@ -115,18 +116,10 @@ class Timeline:
                     yield from self._paced([{"type": "delta", "text": self.text}], ANSWER_SECONDS)
                     timeline.answer_done = time.monotonic()
                     return
-                schema = (model.request_config.get("response_format") or {}).get("json_schema", {}).get("schema")
-                if schema:
-                    yield from self._paced([reasoning(self.step_id, i) for i in range(5)], JUDGE_SECONDS)
-                    if "sentences" in schema["properties"]:
-                        item = schema["properties"]["sentences"]["items"]["properties"]
-                        self.text = json.dumps({"sentences": [
-                            {"id": key, "classification": "claim", "counter_quotes": [],
-                             "models": {name: "supports" for name in item["models"]["properties"]}}
-                            for key in item["id"]["enum"]]})
-                    else:
-                        self.text = json.dumps({"differences": [], "best_model": "Model A"})
-                    self.finish_reason = "stop"
+                if messages[0]["content"].startswith(REVIEWER):
+                    # A reviewer's round, live or final: no objection.
+                    yield from self._paced([reasoning(self.step_id, i) for i in range(5)], REVIEW_SECONDS)
+                    self.text, self.finish_reason = json.dumps({"marks": []}), "stop"
                     yield {"type": "delta", "text": self.text}
                     return
                 with timeline.lock:
@@ -164,7 +157,7 @@ def run_turn(store):
     return loop, timeline, events, time.monotonic() - started
 
 
-def test_six_models_and_the_check_are_not_held_up_by_a_slow_database(slow_store):
+def test_six_models_and_their_review_are_not_held_up_by_a_slow_database(slow_store):
     """Measured 2026-10-21 on Windows (sleeps of 15.6 ms): before the journal
     9.2 s added to 1.6 s of model time, streams held up to 0.9 s, the last
     request out after 2.2 s; after it 2.3 s, 0.02 s and 0.6 s. With the
@@ -174,6 +167,7 @@ def test_six_models_and_the_check_are_not_held_up_by_a_slow_database(slow_store)
     turn = slow_store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert turn["status"] == "completed"
     assert turn["agent_review"]["status"] in {"succeeded", "partial"}
+    assert len(turn["agent_review"]["audit"]["reviewers"]) == 6
     assert len(timeline.dispatched) == 6
 
     # No stream waits for the database: the server reads the next event at
@@ -187,9 +181,9 @@ def test_six_models_and_the_check_are_not_held_up_by_a_slow_database(slow_store)
     latest = max(timeline.dispatched.values()) - timeline.compare_started
     assert latest < 1.2, f"the last comparison request left after {latest:.2f} s"
 
-    # The whole turn: the models' own time on the critical path plus the
-    # server's share.
-    models = MODEL_SECONDS + ANSWER_SECONDS + JUDGE_SECONDS
+    # The whole turn: the models' own time on the critical path (answers,
+    # the agent's answer, the reviewers' final round) plus the server's share.
+    models = MODEL_SECONDS + ANSWER_SECONDS + REVIEW_SECONDS
     overhead = wall - models
     assert overhead < 4.5, f"the server added {overhead:.2f} s to {models:.1f} s of model time"
 

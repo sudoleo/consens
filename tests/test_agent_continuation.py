@@ -146,7 +146,7 @@ def test_mid_answer_provider_timeout_preserves_text_and_safe_reason_in_history(s
     assert "private provider" not in json.dumps(saved, default=str)
 
 
-def test_many_comparisons_use_actual_call_reservations_without_fixed_review_hold(store):
+def test_many_comparisons_use_actual_call_reservations_without_a_fixed_hold(store):
     script = Script(compares=4)  # The per-turn maximum.
     loop = comparison_loop(store, script)
     loop.policy = AgentPolicy.for_chat(loop.config)
@@ -155,8 +155,11 @@ def test_many_comparisons_use_actual_call_reservations_without_fixed_review_hold
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 4
-    assert loop.comparison.judge_calls == 8  # Two judges per basis, one fixed synthesis.
-    assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["review_hold"] == 0
+    # Four steering steps, two answers each, one answer: no other paid call.
+    assert len(script.calls) == 4 + 4 * 2 + 1
+    # Every call reserved only its own bound and released it at settlement.
+    root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    assert "review_hold" not in root and agent_quota.snapshot(store.db, UID)["reserved"] == 0
 
 
 def test_consensus_and_legacy_analysis_budgets_remain_bounded():
@@ -166,10 +169,10 @@ def test_consensus_and_legacy_analysis_budgets_remain_bounded():
     assert not AgentPolicy.from_config(defaults()).account_budget_only
 
 
-def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_review(store):
+def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_the_answer(store):
     """The agent's plain text after the comparison is the answer and ends the
     message: the further comparison and revision it would send next never run."""
-    from app.services.agent_comparison import review_is_bound
+    from app.services.agent_comparison import answer_hash
     script = Script()
     base = type(script.factory())
     steps = []
@@ -182,7 +185,7 @@ def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_revie
             steps.append(index)
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
             if index in {0, 2}:
-                args = {"question": f"Check option {index}", "context": "Budget is 100.", "status_update": "New perspective"}
+                args = {"question": f"Check option {index}", "context": "Budget is 100."}
                 self.tool_calls = [{"id": str(index), "type": "function",
                                     "function": {"name": "compare_models", "arguments": json.dumps(args)}}]
                 self.finish_reason = "tool_calls"
@@ -200,9 +203,9 @@ def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_revie
     review = saved["agent_review"]
     assert steps == [0, 1]
     assert saved["status"] == "completed" and len(review["comparisons"]) == 1
-    assert len(review["versions"]) == 1 and len(review["checks"]) == 1
+    assert len(review["versions"]) == 1
     assert saved['consensus'] == 'The first option costs 100.'
-    assert review_is_bound(review, saved["consensus"])
+    assert review["answer_hash"] == answer_hash(saved["consensus"])
 
 
 def test_brief_database_outage_does_not_cancel_a_healthy_producer(store, monkeypatch):

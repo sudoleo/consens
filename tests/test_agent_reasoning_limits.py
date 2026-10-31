@@ -15,7 +15,6 @@ import threading
 import pytest
 
 from app.services import agent_delegation
-from app.services.agent_comparison import AgentPreferences, review_is_bound
 from app.services.agent_delegation import TURN_TIME_LIMIT, TURN_WRAP_UP_SECONDS
 from app.core.observability import provider_diagnostic
 from app.services.agent_provider_limits import (
@@ -27,11 +26,11 @@ from app.services.llm.agent_client import (
     reasoning_active, routing_output_limit,
 )
 from app.services.llm.engines import _ProviderHTTPStatusError
-from test_agent_chat_integrity import chat_loop
 from test_agent_comparison import THREE, Script, Straggler, make_loop
 from test_agent_loop import packet, transport
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_synthesis_context import _AnswerOverHttp
+from test_agent_turn_limits import chat_loop, reviewed
 
 
 SONNET = AgentModel(model="anthropic/claude-sonnet-5.5", reasoning_effort="max",
@@ -210,7 +209,7 @@ class ThoughtOutRouting(Script):
     """The first routing request(s) reason through their allowance."""
 
     def __init__(self, *, failures=1, partial_tool=False, **kwargs):
-        super().__init__(direct=True, **kwargs)
+        super().__init__(**kwargs)
         self.failures, self.partial_tool = failures, partial_tool
         self.routing = []
 
@@ -253,7 +252,7 @@ def test_thought_out_routing_step_is_retried_once_with_lighter_reasoning(store, 
     loop = _routing_loop(store, script, monkeypatch)
     events = list(loop.run())
     turn = saved(store, loop)
-    assert turn["status"] == "completed" and review_is_bound(turn["agent_review"], turn["consensus"])
+    assert turn["status"] == "completed" and reviewed(turn["agent_review"], turn["consensus"])
     first, retry = script.routing[:2]
     # Every step may write the answer: reasoning headroom and the answer
     # allowance (a bounded run reserves it whole). The retry claims its own step.
@@ -323,12 +322,13 @@ def test_a_thought_only_wrap_up_answer_is_written_again_with_lighter_reasoning(s
         with pytest.raises(ModelOutputLimit):
             list(loop.run())
         assert saved(store, loop)["agent_failure"] == {"code": "output_limit", "error": TURN_OUTPUT_LIMIT}
-        assert len(wrap_up) == 1 and loop.comparison.judge_calls == 0
+        # No answer, so nothing to review.
+        assert len(wrap_up) == 1 and loop.comparison.versions == []
         return
     events = list(loop.run())
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["consensus"] == "The first option costs 100."
-    assert review_is_bound(turn["agent_review"], turn["consensus"])
+    assert reviewed(turn["agent_review"], turn["consensus"])
     # The comparison, the thought-out last step, its retry at the lighter level.
     assert [step for step, *_ in wrap_up] == ["completion:1", "completion:2"]
     assert wrap_up[0][2] == answer_output_limit(loop.model) and wrap_up[1][1] == "low"
@@ -358,7 +358,7 @@ def test_rate_limited_answer_step_is_retried_once_and_the_429_costs_nothing(stor
     events = list(loop.run())
     turn = saved(store, loop)
     assert len(requests) == 2 and turn["status"] == "completed" and turn["consensus"] == answer
-    assert review_is_bound(turn["agent_review"], answer)
+    assert reviewed(turn["agent_review"], answer)
     assert any(e.get("kind") == "progress" and e["id"].endswith("/rate_limit") for e in events)
     rejected = [usage for usage in loop.costs.usages if usage and usage.get("source") == "provider_rejection"]
     assert len(rejected) == 1 and rejected[0]["estimated_cost_nano_usd"] == 0
@@ -385,7 +385,7 @@ def test_rate_limit_retry_respects_the_turn_deadline_and_stops(store):
         list(loop._pause(5))
 
 
-# --- "Answer start: all" leaves the answer its time -----------------------
+# --- Waiting for every model leaves the answer its time ------------------
 
 def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(store):
     loop = chat_loop(store, Script())
@@ -397,7 +397,7 @@ def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(sto
     loop.clock = lambda: now[0]
     assert loop._turn_limit() is None and loop.answer_time_left() == 1
     now[0] += 1  # exactly on the reserve
-    # A "max" answer and its checks would no longer fit before the hard stop.
+    # A "max" answer would no longer fit before the hard stop.
     assert loop._turn_limit() == TURN_TIME_LIMIT
     loop.model = low(SONNET)
     assert loop._answer_reserve() < agent_delegation.ANSWER_RESERVE_SECONDS["max"]
@@ -426,13 +426,19 @@ class AnswerContext(Straggler):
 
 def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
     script = AnswerContext(release_on_answer=False)
-    loop = chat_loop(store, script, models=THREE, preferences=AgentPreferences(quorum="all"))
+    loop = chat_loop(store, script, models=THREE)
     hard = loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS
-    # Once a comparison runs, the turn is just past the answer's reserve
-    # (before the soft limit and well before the hard stop).
+    # Once two answers of the comparison are in, the turn is just past the
+    # answer's reserve (before the soft limit and well before the hard stop).
+    # Without a check that needs two sides the wait ends at that time with
+    # whatever is in (until 2026-10-31 comparison mode waited for two).
     late = hard - loop._answer_reserve() + 1
     assert late < loop.policy.turn_seconds
-    loop.clock = lambda: loop.turn_started + (late if loop.comparison.comparisons else 0)
+
+    def answered():
+        comparisons = loop.comparison.comparisons
+        return bool(comparisons) and len(loop.comparison._raw.get(comparisons[-1]["id"], {})) >= 2
+    loop.clock = lambda: loop.turn_started + (late if answered() else 0)
     # Without the deadline the straggler would only end the wait here, and
     # then show up in the comparison result the answer is written from.
     timer = threading.Timer(5, script.release.set)
@@ -444,7 +450,7 @@ def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
         script.release.set()
     turn = saved(store, loop)
     comparison = turn["agent_review"]["comparisons"][0]
-    assert turn["status"] == "completed" and review_is_bound(turn["agent_review"], turn["consensus"])
+    assert turn["status"] == "completed" and reviewed(turn["agent_review"], turn["consensus"])
     assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
     assert "second option is cheaper" not in script.answer_context
     # Only the answer's time is left: one last step writes it without tools.

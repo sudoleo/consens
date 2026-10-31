@@ -1,7 +1,7 @@
 """A chat model step that breaks off in passing runs once more, and a turn
 that still breaks off leaves its work for "Retry" (since 2026-10-27).
 
-Twice on 2026-10-27 a step of DeepSeek V4.1 Flash in audit mode broke off
+Twice on 2026-10-27 a step of DeepSeek V4.1 Flash broke off
 after minutes of paid work in the VM and on the web (a call after its own
 searches carried a stream index the client refused), and the whole turn
 ended as "The model provider could not finish this request".
@@ -13,12 +13,13 @@ import pytest
 from app.services import agent_runs
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.llm.agent_client import measured_usage
+from agent_reviewers import without_reviewers
 from test_agent_audit import ANSWER, Audit, LookupArgs, audit_loop, saved
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
 
 class Breaking(Audit):
-    """The scripted audit turn of test_agent_audit, whose steps in ``breaks``
+    """The scripted turn of test_agent_audit, whose steps in ``breaks``
     ({step id: times}) break off before the user sees a word: the provider
     measured some input, then the stream could not be read."""
 
@@ -57,7 +58,7 @@ def with_note_tool(loop):
 
 def test_a_step_that_broke_off_runs_once_more_and_the_turn_completes(store):
     script = Breaking({"completion:0": 1}, search=False)
-    loop = audit_loop(store, script, judges="off")
+    loop = without_reviewers(audit_loop(store, script))
     events = list(loop.run())
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
@@ -78,7 +79,7 @@ def test_a_step_that_broke_off_runs_once_more_and_the_turn_completes(store):
 
 def test_a_turn_that_still_breaks_off_leaves_its_work_for_retry(store):
     script = Breaking({"completion:1": 1, "completion:2": 1}, search=False, tool_steps=1, step_tools={0: "note"})
-    loop = with_note_tool(audit_loop(store, script, judges="off"))
+    loop = with_note_tool(without_reviewers(audit_loop(store, script)))
     with pytest.raises(ValueError):
         list(loop.run())
     turn = saved(store, loop)
@@ -99,7 +100,7 @@ def test_a_turn_that_still_breaks_off_leaves_its_work_for_retry(store):
 
 def test_a_failed_turn_without_calls_keeps_its_plain_note(store):
     script = Breaking({"completion:0": 1, "completion:1": 1}, search=False)
-    loop = audit_loop(store, script, judges="off")
+    loop = without_reviewers(audit_loop(store, script))
     with pytest.raises(ValueError):
         list(loop.run())
     turn = saved(store, loop)

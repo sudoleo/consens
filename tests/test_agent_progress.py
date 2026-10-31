@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from test_agent_runs import store
 from test_agent_comparison import Script, make_loop
@@ -234,68 +232,48 @@ def test_live_and_saved_activity_never_contain_full_reasoning(store):
     assert all(s["progress_kind"] == "excerpt" for s in sessions)
 
 
-@pytest.mark.parametrize("updates", [
-    ["Ich vergleiche die Optionen mit deinem Budget von 100 Euro.",
-     "Die Antworten nennen dieselbe Preisgrenze. Ich prüfe, ob die Empfehlung ausreichend belegt ist."],
-    ["Je compare les options avec votre budget de 100 euros.",
-     "Les réponses indiquent le même prix. Je vérifie les preuves de la recommandation."],
-])
-def test_user_progress_is_ordered_persisted_and_does_not_add_model_calls(store, updates):
-    from app.services.prompt_defaults import AGENT_SYSTEM_PROMPT
-    assert "Include status_update in every compare_models and check_text call" in AGENT_SYSTEM_PROMPT
-    # Two comparisons, one update each; the third step writes the answer.
+def test_the_agents_words_beside_its_calls_are_its_progress(store):
+    """Since 2026-10-28 the agent's own text beside a call stands as its note
+    in the activity; until 2026-10-31 compare_models also carried a
+    status_update argument for it. Neither adds a model call, and neither
+    reaches the comparison models."""
+    # Two comparisons, a sentence beside each; the third step writes the answer.
     script = Script(compares=2)
-    original = script.factory
-
-    def factory():
-        value = original()
-        stream = value.stream
-
-        def with_progress(**kwargs):
-            yield from stream(**kwargs)
-            if value.step_id.startswith("completion:") and value.tool_calls:
-                for call in value.tool_calls:
-                    args = json.loads(call["function"]["arguments"])
-                    args["status_update"] = updates[int(value.step_id.split(":")[-1])]
-                    call["function"]["arguments"] = json.dumps(args, ensure_ascii=False)
-        value.stream = with_progress
-        return value
-
-    script.factory = factory
     loop = make_loop(store, script)
     events = list(loop.run())
-    # The agent's own words beside each call stand as notes (since 2026-10-28).
     notes = [e["text"] for e in events if e.get("kind") == "progress" and e["id"].endswith("/note")]
     assert notes == ["I will compare perspective 1.", "I will compare perspective 2."]
-    progress = [e for e in events if e.get("kind") == "progress" and not e["id"].endswith("/note")]
-    assert [e["text"] for e in progress] == updates
-    assert len({e["id"] for e in progress}) == 2
-    for update in progress:
-        following = events[events.index(update) + 1]
-        assert following["kind"] == "tool" and following["status"] == "running"
+    assert not [e for e in events if e.get("kind") == "progress" and not e["id"].endswith("/note")]
+    # Each note comes before its own call starts. Session updates of an
+    # earlier comparison may arrive in between (the journal saves them off the
+    # run's thread), so the next tool event decides, not the next event.
+    for note in [e for e in events if e.get("kind") == "progress"]:
+        following = next(e for e in events[events.index(note) + 1:] if e.get("kind") == "tool")
+        assert following["name"] == "compare_models" and following["status"] == "running"
     saved = store.get_turn(loop.uid, loop.chat_id, loop.turn_id)
-    assert [e["text"] for e in saved["agent_activity"]
-            if e["kind"] == "progress" and not e["id"].endswith("/note")] == updates
+    assert [e["text"] for e in saved["agent_activity"] if e["kind"] == "progress"] == notes
     assert saved["consensus"] == "The first option costs 100."
-    # Three orchestrator steps, two answers per comparison, two judges per check.
-    assert len(script.calls) == 11
-    assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == 770
-    assert all(update not in json.dumps(script.prompts) for update in updates)
+    # Three steps of the agent and two answers per comparison: nothing else is paid.
+    assert len(script.calls) == 7
+    assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == 490
+    assert all(note not in json.dumps(script.prompts) for note in notes)
 
 
-def test_progress_arguments_are_bounded_and_published_only_after_validation(store):
+def test_a_call_with_a_progress_argument_is_refused_without_a_progress_line(store):
+    """status_update is no argument of compare_models any more (until
+    2026-10-31), and check_text is gone: both calls are refused before
+    anything runs or shows."""
     loop = make_loop(store, Script())
     from app.services.llm.agent_client import AgentCompletion
     value = AgentCompletion()
     value.step_id = "completion:0"
     for index, name in enumerate(("compare_models", "check_text")):
-        # An overlong status alone is shortened now (agent_comparison), so an
-        # unknown field makes each call invalid.
-        args = {"status_update": "x" * 401, "unknown": True, "question": "Q", "context": ""}
+        args = {"status_update": "Comparing.", "question": "Q", "context": ""}
         call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}
         result = loop._execute(loop.registry, value, loop.cancellation, call)
         assert "error" in json.loads(result["content"])
     assert not any(e["kind"] == "progress" for e in loop.completion.activity)
+    assert loop.comparison.comparisons == []
 
 
 def test_stream_progress_counts_received_unicode_and_throttles_without_guessing_tokens(monkeypatch):

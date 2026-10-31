@@ -1,9 +1,10 @@
-"""Audit instead of comparison (AgentPreferences.audit, admin accounts only):
-the agent answers itself with its own search and gets no comparison tools;
-the comparison models follow its work log in rounds and review the fixed
+"""The agent's one mode (since 2026-10-31; from 2026-10-25 the setting "audit
+instead of comparison"): the agent answers itself with its own search; the
+user's chosen models follow its work log in rounds and review the fixed
 answer in a final round, marking passages and log entries with a note; the
-app places their quotes on the answer's sentences. Without the setting
-everything runs as before (test_agent_comparison, test_agent_answer_mode).
+app places their quotes on the answer's sentences. compare_models, which
+asks the same models the agent's question, has its own suite
+(test_agent_audit_compare).
 """
 import json
 import re
@@ -12,25 +13,26 @@ import threading
 import time
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 from app.services import agent_audit, agent_delegation, agent_memory, prompt_defaults
 from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS, locate_quote,
                                       parse_review, place_marks, review_entry, round_message, work_goes_on)
-from app.services.agent_comparison import (AUDIT_OFF_PROMPT, AgentPreferences, JudgeArgs, comparison_selection,
-                                           preference_prompt)
+from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, current_provider_cancellation
+from agent_reviewers import without_reviewers
 from test_agent_runs import AUTH, UID, api, pending, store, priced  # noqa: F401  (fixtures)
 
 
 @pytest.fixture(autouse=True)
 def _admin_allowance(monkeypatch):
-    """Audit mode is for admins, whose daily account (5M tokens) holds the
-    agent's five search rounds; the suites' 250k (conftest) would not."""
+    """An admin's daily account (5M tokens) holds the agent's five search
+    rounds; the suites' 250k (conftest) would not."""
     from app.services import agent_budget_config
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
 
@@ -62,7 +64,7 @@ TOOL_CALL_REPLY = {"tool_calls": [{"id": "r1", "type": "function",
 
 
 class Audit:
-    """A scripted audit-mode turn: the agent's first ``tool_steps`` steps
+    """A scripted turn of the agent: its first ``tool_steps`` steps
     (completion:N) call the tool ``lookup``, the next one answers, each after
     its own search. Every other call is a reviewer: its final round replies
     with ``reviews[family]``, a live round with ``live[family]`` (a text, an
@@ -144,7 +146,8 @@ class Audit:
         return Completion()
 
 
-class LookupArgs(JudgeArgs):
+class LookupArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     step: int = 0
 
 
@@ -165,7 +168,7 @@ def lookup(script):
     return ReadOnlyTool("lookup", "Look something up.", LookupArgs, run)
 
 
-def audit_loop(store, script, *, judges="on", audit="on", messages=None, memory=None):
+def audit_loop(store, script, *, messages=None, memory=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -175,7 +178,7 @@ def audit_loop(store, script, *, judges="on", audit="on", messages=None, memory=
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences(audit=audit, judges=judges), memory=memory)
+        agent_preferences=AgentPreferences(), memory=memory)
     if script.tool_steps:
         loop.registry = ToolRegistry([*loop.registry.tools.values(), lookup(script)],
                                      argument_limit=loop.registry.argument_limit)
@@ -249,8 +252,10 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
     turn = saved(store, loop)
     review = turn["agent_review"]
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    # No comparison: the agent is offered neither tool, and searches in every step.
-    assert script.offered and all("compare_models" not in names and "check_text" not in names
+    # The agent may ask the models (compare_models), never check a pasted
+    # text (check_text, comparison mode's until 2026-10-31), and it searches
+    # in every step.
+    assert script.offered and all("compare_models" in names and "check_text" not in names
                                   for names in script.offered)
     assert {step: rounds for step, rounds in script.searches.items() if step.startswith("completion:")} == {
         "completion:0": AGENT_SEARCH_ROUNDS}
@@ -261,7 +266,6 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
     assert any(e.get("type") == "answer_check" for e in events[:first_review])
     # Both comparison models reviewed it with their own search; no judge ran.
     assert script.searches["anthropic"] == script.searches["openai"] == REVIEW_SEARCH_ROUNDS
-    assert loop.comparison.judge_calls == 0
     assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
     assert [e["status"] for e in events if e.get("kind") == "tool" and e.get("name") == "audit_answer"] == [
         "running", "succeeded"]
@@ -1108,29 +1112,21 @@ def test_memory_stays_open_while_the_agent_has_not_searched(store):
     assert loop.memory_locked is False
 
 
-def test_with_the_answer_check_off_the_agent_answers_alone(store):
-    script = Audit()
-    loop = audit_loop(store, script, judges="off")
-    list(loop.run())
-    turn = saved(store, loop)
-    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    assert [step for step, _ in script.calls] == ["completion:0"]
-    assert "compare_models" not in loop.registry.tools and loop.comparison.auditor is None
-    assert not (turn.get("agent_review") or {}).get("audit")
-    assert AUDIT_OFF_PROMPT in loop.messages[0]["content"]
-
-
-def test_without_the_setting_the_agent_keeps_its_comparison_tools(store):
-    loop = audit_loop(store, Audit(), audit="off")
-    assert {"compare_models", "check_text"} <= set(loop.registry.tools)
-    assert loop.comparison.auditor is None and not loop.comparison.audit_mode
-    assert prompt_defaults.AGENT_ANSWER_SECTION in loop.messages[0]["content"]
-    assert prompt_defaults.AGENT_AUDIT_ANSWER_SECTION not in loop.messages[0]["content"]
+def test_every_chat_run_has_reviewers_and_compare_models_but_no_check_text(store):
+    """One mode since 2026-10-31: no setting turns the reviewers off or gives
+    the agent comparison mode's tools (check_text) and instructions."""
+    loop = audit_loop(store, Audit())
+    assert isinstance(loop.comparison.auditor, agent_audit.AnswerAudit) and loop.work_log is not None
+    assert "compare_models" in loop.registry.tools and "check_text" not in loop.registry.tools
+    assert set(loop.app_registry.tools) == {"audit_answer"}
+    assert loop.messages[0]["content"].count(prompt_defaults.AGENT_AUDIT_ANSWER_SECTION) == 1
+    assert prompt_defaults.DEFAULT_PROMPTS["agent"] == prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
+    assert "agent_audit" not in prompt_defaults.DEFAULT_PROMPTS
 
 
 # --- Prompts ----------------------------------------------------------------------
 
-def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkeypatch):
+def test_the_agents_prompt_has_its_writing_reading_and_memory_facts(store, monkeypatch):
     from test_agent_memory import repo, set_profile
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
     set_profile(store.db, auto_memory=True)
@@ -1145,15 +1141,18 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
     reader = loop.registry.tools["read_source"]
     assert f"At most {READS_PER_MESSAGE} per message" in reader.description
     assert set(reader.arguments.model_json_schema()["properties"]) == {"url"}
-    # Since 2026-10-28 the audit blocks name no comparison at all (no limit,
-    # no memory field, no free-mode text), and memory changes pass the
-    # reviewers once outside content is in view instead of coming first.
+    # Since 2026-10-28 the blocks name no comparison at all (no limit, no
+    # memory field, no free-mode text): compare_models' description says what
+    # it does. Memory changes pass the reviewers once outside content is in
+    # view instead of coming first.
     assert "comparison" not in system.lower() and "compare_models" not in system
     assert agent_memory.AUDIT_MEMORY_WRITE_PROMPT in system and "FREE" not in system
     assert "only after the reviewers let it" in " ".join(system.split()) and "call it first" not in system
-    assert "agent mode with audit" in system and "quotation marks" not in system
+    # One mode since 2026-10-31: no mode named, no answer check to switch off.
+    assert "agent mode with audit" not in system and "answer check" not in system
+    assert "Models the user chose review your work" in system and "quotation marks" not in system
     names = set(loop.registry.tools)
-    assert {"read_source", "update_memory"} <= names and not {"compare_models", "check_text"} & names
+    assert {"read_source", "update_memory", "compare_models"} <= names and "check_text" not in names
     # Since Paket 1 memory may change after a search too (reviewers' gate):
     # "call it first" was stale, and audit memory needs no quote (2026-10-28).
     assert "call it first" not in loop.registry.tools["update_memory"].description.lower()
@@ -1162,7 +1161,7 @@ def test_the_audit_prompt_has_its_writing_reading_and_memory_rules(store, monkey
 
 
 def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_other_page(store, monkeypatch):
-    """Harness review 2026-10-27: in audit mode no comparison answer cites a
+    """Harness review 2026-10-27: without a comparison no answer cites a
     page, so the agent could open nothing it found itself in this message,
     although the same results become readable as an earlier message's sources
     with the next one. Its own search results count now. Another page needs
@@ -1177,7 +1176,7 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     # Only the address since 2026-10-28: no purpose or point to justify a read.
     script = Audit(tool_steps=2, step_tools={0: "read_source", 1: "read_source"},
                    step_args={0: {"url": found}, 1: {"url": other}})
-    loop = audit_loop(store, script, judges="off")
+    loop = without_reviewers(audit_loop(store, script))
     list(loop.run())
     tool = loop.registry.tools["read_source"]
     # What it opens, not when to; since 2026-10-29 without a gate round first.
@@ -1194,8 +1193,8 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
 def test_a_reviewers_search_results_are_no_search_of_the_agent(store, monkeypatch):
     """Bug hunt 2026-10-28: the reviewers' rounds run through the same step,
     and their search results went into search_sources, which read_source
-    opens in audit mode as "your search in this message". Only the agent's
-    own steps count."""
+    opens as "your search in this message". Only the agent's own steps
+    count."""
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
     reviewer_page = "https://reviewer-find.example/page"
     script = Audit(tool_steps=1)
@@ -1220,9 +1219,9 @@ def test_a_reviewers_search_results_are_no_search_of_the_agent(store, monkeypatc
     assert reviewer_page not in urls
 
 
-def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
-    """Since 2026-10-28 audit mode has its own short blocks (Max: fewer rules
-    for how models behave). What protects the user stays in them."""
+def test_the_blocks_keep_the_protections_and_name_no_comparison():
+    """Since 2026-10-28 short blocks (Max: fewer rules for how models
+    behave). What protects the user stays in them."""
     from app.services import agent_files, agent_settings, agent_watch
     texts = (agent_memory.AUDIT_MEMORY_USE_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT,
              agent_memory.AUDIT_MEMORY_READ_ONLY_PROMPT, agent_memory.AUDIT_MEMORY_PAUSED_PROMPT,
@@ -1242,18 +1241,13 @@ def test_the_audit_blocks_keep_the_protections_and_name_no_comparison():
     # V4.1 Flash 1017 copied "[S1]" from here into the answer).
     assert "sources as links to their URLs" in system and "[S1]" not in system
     write = agent_memory.AUDIT_MEMORY_WRITE_PROMPT
-    # No evidence quote in audit mode, the sensitive categories keep their clause (GDPR art. 9).
+    # No evidence quote, the sensitive categories keep their clause (GDPR art. 9).
     assert "evidence" not in write and "sensitive" in write and "can undo it" in write
     assert "evidence" in agent_settings.AUDIT_PROMPT and "only the user starts" in agent_watch.AUDIT_PROMPT
     # Facts, no rules: the blocks name no "never" and no "do not" any more.
     for text in (agent_watch.AUDIT_PROMPT, agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED,
                  prompt_defaults.AGENT_VM_PROMPT, prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT):
         assert not re.search(r"(never|do not)", text, re.I), text[:80]
-
-
-def test_the_comparison_settings_say_nothing_in_audit_mode():
-    assert preference_prompt(AgentPreferences(audit="on", depth="quick", autonomy="free")) == ""
-    assert preference_prompt(AgentPreferences(audit="on", judges="off")) == AUDIT_OFF_PROMPT
 
 
 # --- Reading reviews and placing quotes -------------------------------------------

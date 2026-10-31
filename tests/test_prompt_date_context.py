@@ -33,7 +33,8 @@ def test_all_answer_stages_share_explicit_local_date_and_dst_offset(clock, insta
     synthesis = consensus_engine._build_consensus_prompt("What date is it?", {"openai": "An answer"}, [])
     differences = consensus_engine._build_differences_prompt({"openai": "An answer"}, "An answer", [])[0]
     provider = build_provider_payload("openai", question="What date is it?")["payload"]["messages"][0]["content"]
-    for prompt in (agent_runs.get_agent_system_prompt(AgentModel()), provider, synthesis, differences):
+    # The agent's context travels with its newest message (agent_runs.get_agent_turn_context).
+    for prompt in (agent_runs.get_agent_turn_context(AgentModel()), provider, synthesis, differences):
         assert f"Current date: {expected_date}." in prompt
         assert "Reference time at request start: 00:30:00." in prompt
         assert f"Reference timezone: Europe/Berlin (UTC{expected_offset})." in prompt

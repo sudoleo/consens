@@ -193,7 +193,7 @@ def _refusal(names, called="browser"):
 
 
 def test_an_unknown_tool_refusal_says_only_what_holds():
-    # read_source: no claim which pages it opens (in audit mode any public page).
+    # read_source: no claim which pages it opens (any public page).
     text = _refusal(["read_source", "find_pictures"])
     assert "Of these, read_source opens web pages." in text and "cited" not in text
     # A direct call of the browser while the workspace is closed names open_workspace.
@@ -577,18 +577,21 @@ def test_a_workspace_turn_counts_its_times_without_any_name(store, fake_vm, monk
     recorded = []
     monkeypatch.setattr(agent_audit_metrics, "record", recorded.append)
     script = Steps([[("vm_exec", {"command": "ls"})], [("browser", {"action": "read"})]])
-    loop = vm_loop(store, script, audit="off")
+    loop = vm_loop(store, script)
     list(loop.run())
-    # Outside audit mode too: the turn used the workspace.
+    # Every turn counts (until 2026-10-31 one outside audit mode only for its
+    # workspace): this one used the workspace.
     assert recorded == [loop]
     captured = agent_audit_metrics.capture(loop)
     run = captured["workspace_run"]
-    assert captured["audit"] is False and run["steps"] == 3 and run["outages"] == []
+    assert "audit" not in captured and run["steps"] == 3 and run["outages"] == []
     assert run["first"]["kind"] == "vm" and type(run["first"]["ms"]) is int and run["first"]["failed"] is False
     turn = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     counters = agent_audit_metrics.turn_counters(turn, captured)
-    # Its own fields only, never the audit counters.
-    assert set(counters) == {"ws_turns", "ws_steps", "ws_active_s", "ws_first_call_s", "ws_first_result_s"}
+    # Its workspace's own fields beside the turn's counters (its reviewers
+    # never started here, agent_reviewers.InertAnswerAudit).
+    assert {"ws_turns", "ws_steps", "ws_active_s", "ws_first_call_s", "ws_first_result_s"} <= set(counters)
+    assert counters["turns"] == {"completed": 1} and counters["workspace"] == {"open": 1}
     assert counters["ws_turns"] == {"completed": 1} and counters["ws_steps"] == {"le3": 1}
     assert list(counters["ws_first_call_s"]) == ["vm"]
     # Nothing that names the account, the chat, the turn or any text.
@@ -600,18 +603,18 @@ def test_a_turn_without_the_workspace_adds_no_workspace_fields(store, fake_vm, m
     from app.services import agent_audit_metrics
     recorded = []
     monkeypatch.setattr(agent_audit_metrics, "record", recorded.append)
-    loop = vm_loop(store, Steps(), audit="off")
+    loop = vm_loop(store, Steps())
     list(loop.run())
-    assert recorded == []
-    loop = vm_loop(store, Steps(), request_id="two")
-    list(loop.run())
-    # An audit turn counts as before, without workspace fields.
+    # The turn counts, without workspace fields: it never used the workspace.
     assert recorded == [loop] and "workspace_run" not in agent_audit_metrics.capture(loop)
+    turn = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    counters = agent_audit_metrics.turn_counters(turn, agent_audit_metrics.capture(loop))
+    assert counters["turns"] == {"completed": 1} and not any(key.startswith("ws_") for key in counters)
 
 
 def test_outages_failed_turns_and_wrap_ups_are_counted_by_code():
     from app.services.agent_audit_metrics import turn_counters
-    captured = {"audit": False, "wrap_up": "time", "ended_at": datetime.now(timezone.utc), "workspace_run": {
+    captured = {"wrap_up": "time", "ended_at": datetime.now(timezone.utc), "workspace_run": {
         "steps": 120, "active_s": 7300.0, "outages": ["vm_unavailable", "browser_off"],
         "first": {"kind": "browser", "ms": 59_000, "after_s": 12.0, "failed": True}}}
     counters = turn_counters({"status": "failed", "agent_failure": {"code": "run_limit"}}, captured)

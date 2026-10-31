@@ -2,9 +2,10 @@
 
 The daily token ledger stays the spending limit. A turn that loops on valid
 calls still ends: at most four comparisons, a step cap and a deadline, and no
-identical calls. A limit with a usable comparison ends in one last step whose
-tools are listed but not callable: the agent writes the answer from the
-comparisons it has (_merged_wrap_up). Without one the turn stops.
+identical calls. A limit ends in one last step whose tools are listed but
+not callable: the agent writes the answer from what it has (_merged_wrap_up),
+its own work carries it. Until 2026-10-31 comparison mode stopped instead
+when no comparison had two answers.
 """
 from dataclasses import replace
 import json
@@ -12,16 +13,29 @@ import json
 import pytest
 
 from app.services import agent_delegation
-from app.services.agent_comparison import AgentPreferences, comparison_selection, review_is_bound
-from app.services.agent_delegation import (DelegationLoop, TURN_REPEAT_LIMIT, TURN_STEP_LIMIT, TURN_TIME_LIMIT,
-                                           TURN_WRAP_UP_SECONDS)
+from app.services.agent_comparison import answer_hash, comparison_selection
+from app.services.agent_delegation import DelegationLoop, TURN_WRAP_UP_SECONDS
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
-from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation
-from test_agent_chat_integrity import chat_loop
+from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation
 from test_agent_comparison import Script, make_loop
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
+
+
+def chat_loop(store, script, **kwargs):
+    """make_loop with the chat's policy (AgentPolicy.for_chat): its turn
+    guards and no run budget."""
+    loop = make_loop(store, script, **kwargs)
+    loop.policy = AgentPolicy.for_chat(loop.config)
+    loop.costs.policy = loop.policy
+    loop.budget = AnalysisBudget(unlimited=True)
+    return loop
+
+
+def reviewed(review, text):
+    """The saved review is the reviewers' review of exactly ``text``."""
+    return review.get("mode") == "audit" and review.get("answer_hash") == answer_hash(text)
 
 
 def tool_result(loop, call_id):
@@ -30,8 +44,8 @@ def tool_result(loop, call_id):
 
 
 def routing_steps(script):
-    # Comparison answers and judges run as agent:<id> steps; every step of the
-    # agent, also the one that writes the answer, is a completion step.
+    # Comparison answers run as agent:<id> steps; every step of the agent,
+    # also the one that writes the answer, is a completion step.
     return [step for step, _ in script.calls if step.startswith("completion:")]
 
 
@@ -53,8 +67,9 @@ def test_chat_policy_sets_turn_guards_and_bounded_policy_keeps_its_snapshot():
     assert not any(key.startswith("turn_") for key in bounded.snapshot())
 
 
-@pytest.mark.parametrize("autonomy", ["guided", "free"])
-def test_prompt_states_the_per_message_comparison_limit(store, autonomy):
+def test_compare_models_states_the_per_message_comparison_limit(store):
+    """The limit stands in the tool's description (AUDIT_COMPARE), not in
+    the prompt; a bounded run has none."""
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -62,15 +77,11 @@ def test_prompt_states_the_per_message_comparison_limit(store, autonomy):
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=Script().factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences(autonomy=autonomy))
-    system = loop.messages[0]["content"]
-    assert "At most 4 comparisons per message." in system
-    assert "no elapsed-time limit" not in system
-    assert ("at most 4 for this message" in system) == (autonomy == "free")
-    bounded = make_loop(store, Script(), preferences=AgentPreferences(autonomy=autonomy))
-    assert "At most three comparisons" in bounded.messages[0]["content"]
-    assert "At most 4 comparisons" not in bounded.messages[0]["content"]
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+    assert loop.registry.tools["compare_models"].description.endswith(" At most 4 times per message.")
+    assert "comparisons per message" not in loop.messages[0]["content"]
+    bounded = make_loop(store, Script())
+    assert "At most" not in bounded.registry.tools["compare_models"].description
 
 
 def test_fifth_comparison_is_refused_and_the_answer_uses_the_first_four(store):
@@ -80,14 +91,13 @@ def test_fifth_comparison_is_refused_and_the_answer_uses_the_first_four(store):
     saved = saved_turn(store, loop)
     review = saved["agent_review"]
     assert saved["status"] == "completed" and len(review["comparisons"]) == 4
-    assert review_is_bound(review, saved["consensus"])
-    assert loop.comparison.judge_calls == 8
+    assert reviewed(review, saved["consensus"])
     assert "last comparison allowed" in tool_result(loop, "call_3")["instruction"]
     for refused in ("call_4", "call_5"):
         error = tool_result(loop, refused)["error"]
-        assert "maximum of 4 comparisons" in error and "write the answer now" in error
+        assert "maximum of 4 comparisons" in error and "go on from the comparisons you already have" in error
     # Nothing paid started for the refused calls: four comparisons of two answers.
-    assert len([s for s, _ in script.calls if not s.startswith("completion:")]) == 4 * 2 + 4 * 2
+    assert len([s for s, _ in script.calls if not s.startswith("completion:")]) == 4 * 2
 
 
 def test_step_cap_answers_from_existing_comparisons(store):
@@ -108,7 +118,7 @@ def test_step_cap_answers_from_existing_comparisons(store):
     list(loop.run())
     saved = saved_turn(store, loop)
     assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 3
-    assert review_is_bound(saved["agent_review"], saved["consensus"])
+    assert reviewed(saved["agent_review"], saved["consensus"])
     # Three steering steps, then one step writes the answer; no fourth steering step.
     assert len(routing_steps(script)) == 4
     assert [steering(kwargs) for kwargs in requests] == [True, True, True, False]
@@ -117,38 +127,34 @@ def test_step_cap_answers_from_existing_comparisons(store):
     assert requests[-1]["messages"][-1]["content"].startswith("App rule: this message has reached its limit.")
 
 
-def test_step_cap_without_a_usable_comparison_stops_and_keeps_partial_results(store):
+def test_step_cap_with_single_answers_still_ends_in_an_answer(store):
+    """One answer per comparison is advice like two: the agent's own work
+    carries the answer (until 2026-10-31 the turn stopped without one)."""
     script = Script(compares=10, fail_model=True)
     loop = chat_loop(store, script)
     loop.policy = replace(loop.policy, turn_steps=2, turn_comparisons=10)
-    with pytest.raises(AnalysisBudgetExceeded, match="step limit"):
-        list(loop.run())
+    list(loop.run())
     saved = saved_turn(store, loop)
-    assert saved["status"] == "failed"
-    assert saved["agent_failure"] == {"code": "run_limit", "error": TURN_STEP_LIMIT}
+    assert saved["status"] == "completed" and loop.completion.wrap_up["reason"] == "steps"
+    assert reviewed(saved["agent_review"], saved["consensus"])
     comparisons = saved["agent_review"]["comparisons"]
-    assert len(comparisons) == 2 and all(len(c["answers"]) == 1 for c in comparisons)
-    assert len(routing_steps(script)) == 2  # No answer step from single answers.
+    assert len(comparisons) == 2 and all(len(c["answers"]) == 1 and c["status"] == "partial" for c in comparisons)
+    # Two steering steps, then the step that writes the answer.
+    assert len(routing_steps(script)) == 3
 
 
 @pytest.mark.parametrize("fail_model", [False, True])
-def test_deadline_wraps_up_or_stops_without_sleeping(store, fail_model):
+def test_deadline_wraps_up_without_sleeping(store, fail_model):
     script = Script(compares=10, fail_model=fail_model)
     loop = chat_loop(store, script)
     # Time jumps past the soft deadline once the first comparison exists,
     # still inside the wrap-up grace before the hard stop.
     loop.clock = lambda: loop.turn_started + (loop.policy.turn_seconds + 1 if loop.comparison.comparisons else 0)
-    if fail_model:
-        with pytest.raises(AnalysisBudgetExceeded, match="time limit"):
-            list(loop.run())
-        saved = saved_turn(store, loop)
-        assert saved["status"] == "failed" and saved["agent_failure"]["error"] == TURN_TIME_LIMIT
-        assert len(saved["agent_review"]["comparisons"]) == 1
-        return
     list(loop.run())
     saved = saved_turn(store, loop)
     assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 1
-    assert review_is_bound(saved["agent_review"], saved["consensus"])
+    assert loop.completion.wrap_up["reason"] == "time"
+    assert reviewed(saved["agent_review"], saved["consensus"])
 
 
 def test_hard_deadline_stops_inside_a_step_only_in_account_mode(store):
@@ -170,6 +176,8 @@ def test_hard_deadline_stops_inside_a_step_only_in_account_mode(store):
 
 @pytest.mark.parametrize("fail_model", [False, True])
 def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
+    """With two answers or one per comparison alike, the turn ends in its
+    answer (until 2026-10-31 single answers ended it without one)."""
     script = Script(fail_model=fail_model)
     base = type(script.factory())
 
@@ -181,9 +189,7 @@ def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
             index = int(self.step_id.split(":")[-1])
             script.calls.append((self.step_id, model.model))
             self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
-            # Only the free-text progress line changes; the request is the same.
-            args = {"question": "Evaluate option 1", "context": "Budget is 100.", "reason": "Compare",
-                    "next_step": "more_work", "status_update": f"Checking again ({index})"}
+            args = {"question": "Evaluate option 1", "context": "Budget is 100."}
             self.tool_calls = [{"id": f"same_{index}", "type": "function",
                                 "function": {"name": "compare_models", "arguments": json.dumps(args)}}]
             self.finish_reason = "tool_calls"
@@ -191,25 +197,19 @@ def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
 
     loop = chat_loop(store, script)
     loop.factory = Looping
-    if fail_model:
-        with pytest.raises(AnalysisBudgetExceeded, match="same tool request"):
-            list(loop.run())
-        saved = saved_turn(store, loop)
-        assert saved["status"] == "failed" and saved["agent_failure"]["error"] == TURN_REPEAT_LIMIT
-    else:
-        list(loop.run())
-        saved = saved_turn(store, loop)
-        assert saved["status"] == "completed"
-        assert review_is_bound(saved["agent_review"], saved["consensus"])
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert saved["status"] == "completed" and loop.completion.wrap_up["reason"] == "repeat"
+    assert reviewed(saved["agent_review"], saved["consensus"])
     # Two runs, one refusal, then the fourth identical request ends the turn.
     assert len(saved["agent_review"]["comparisons"]) == 2
     error = tool_result(loop, "same_2")["error"]
     assert "identical compare_models call already ran 2 times" in error
-    # Never run; closed with a result in its batch, also without a last step
-    # that writes the answer (every call gets one, T2; providers reject a
-    # tool call without one).
+    # Never run; closed with a result in its batch before the last step that
+    # writes the answer (every call gets one, T2; providers reject a tool
+    # call without one).
     assert tool_result(loop, "same_3") == {"error": "Not run: this message reached its limit."}
-    assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 4 + (0 if fail_model else 1)
+    assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 4 + 1
 
 
 def planned(script, plan):
@@ -243,15 +243,16 @@ def test_an_answer_after_rejected_calls_is_no_repeat_and_completes_the_turn(stor
     events = list(loop.run())
     assert "error" in tool_result(loop, "s0_0") and "error" in tool_result(loop, "s1_0")
     saved = saved_turn(store, loop)
-    assert saved["status"] == "completed" and loop.comparison.direct
+    assert saved["status"] == "completed" and saved["agent_review"]["comparisons"] == []
     assert saved["assistant_response"] == "The first option costs 100."
     assert "".join(e["text"] for e in events if e["type"] == "delta") == "The first option costs 100."
 
 
 @pytest.mark.parametrize("fail_model", [False, True])
-def test_three_invalid_rounds_answer_from_a_usable_comparison(store, fail_model):
+def test_three_invalid_rounds_still_end_in_an_answer(store, fail_model):
     """Review 2026-10-12: three rejected calls (a malformed field) ended a
-    turn whose comparisons were paid, without an answer."""
+    turn whose comparisons were paid, without an answer. Since 2026-10-31
+    also a comparison with a single answer leads to one."""
     script = Script(fail_model=fail_model)
     requests = []
     compare = ("compare_models", {"question": "Evaluate option 1", "context": "Budget is 100."})
@@ -268,17 +269,11 @@ def test_three_invalid_rounds_answer_from_a_usable_comparison(store, fail_model)
             yield from super().stream(**kwargs)
 
     loop.factory = Recorded
-    if fail_model:
-        with pytest.raises(AnalysisBudgetExceeded, match="invalid tool requests"):
-            list(loop.run())
-        assert saved_turn(store, loop)["status"] == "failed"
-        # Single answers: no step writes an unchecked answer.
-        assert len(requests) == 4
-        return
     list(loop.run())
     saved = saved_turn(store, loop)
     assert all("error" in tool_result(loop, f"s{n}_0") for n in (1, 2, 3))
-    assert saved["status"] == "completed" and review_is_bound(saved["agent_review"], saved["consensus"])
+    assert saved["status"] == "completed" and reviewed(saved["agent_review"], saved["consensus"])
+    assert loop.completion.wrap_up["reason"] == "invalid"
     # The answer comes from one last step without callable tools.
     assert len(requests) == 5 and not steering(requests[-1])
     assert len(saved["agent_review"]["comparisons"]) == 1
@@ -302,17 +297,5 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
                                                  "vm_process_output", "vm_stop_process", "vm_view_image",
                                                  "update_plan", "browser"}
     plan = {"id": "p", "type": "function", "function": {"name": "update_plan", "arguments": json.dumps(
-        {"items": [{"content": "Run the tests", "status": "in_progress"}], "status_update": "Still testing"})}}
+        {"items": [{"content": "Run the tests", "status": "in_progress"}]})}}
     assert all(loop._identical_call(plan) is None for _ in range(5))
-
-
-def test_each_check_runs_two_differences_passes_in_production(store, monkeypatch):
-    from app.services import agent_comparison
-    monkeypatch.setattr(agent_comparison, "DIFFERENCES_PASSES", 2)
-    script = Script(compares=6)
-    loop = chat_loop(store, script)
-    list(loop.run())
-    saved = saved_turn(store, loop)
-    assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 4
-    # Per check: two differences passes and one coverage judge.
-    assert loop.comparison.judge_calls == 12
