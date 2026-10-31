@@ -356,3 +356,134 @@ def test_a_german_page_keeps_the_shared_question_in_its_titles(share_app):
     assert re.search(r"<title[^>]*>Price of gold \| consens\.io</title>", german)
     assert '<meta property="og:title" content="Price of gold" data-i18n-skip>' in german
     assert '<meta name="twitter:title" content="Price of gold" data-i18n-skip>' in german
+
+
+# ---------------------------------------------------------------------------
+# One mode (since 2026-10-31): the reviewers' notes on the answer
+# ---------------------------------------------------------------------------
+
+SENTENCE = "It sends science data every day. [S1]"
+
+
+def _audit_review(*, text=ANSWER, status="succeeded", claims=None):
+    claims = claims if claims is not None else [{
+        "anchor": SENTENCE, "audit": True, "kind": "wrong", "agree": [], "sentence_id": 2, "anchor_occurrence": 0,
+        "dissent": [
+            {"model": "OpenAI", "kind": "doubtful", "note": "NASA reports **weekly** downlinks.",
+             "source": "https://www.nasa.gov/webb-status", "entry": 7, "mark": 1, "target": "every day"},
+            {"model": "Gemini", "kind": "wrong", "note": "Data <img src=x onerror=alert(1)> comes daily only in tests.",
+             "source": "javascript:alert(1)", "mark": 2},
+        ]}]
+    return {
+        "version": 1, "mode": "audit", "status": status, "answer_hash": _digest(text), "answer_version": 1,
+        "comparisons": [], "versions": [{"id": 1, "text": text, "hash": _digest(text), "status": status}],
+        "audit": {
+            "reviewers": [
+                {"provider": "openai", "provider_label": "OpenAI", "model": {"label": "GPT-6 Luna"}, "status": "completed"},
+                {"provider": "gemini", "provider_label": "Gemini", "model": {"label": "Gemini 3.5 Flash"},
+                 "status": "completed"},
+                {"provider": "grok", "provider_label": "Grok", "model": {"label": "Grok 4.3"}, "status": "failed"},
+            ],
+            "claims": claims,
+            # Marks off the answer's sentences may tell what the run read or did.
+            "unplaced": [{"model": "OpenAI", "kind": "wrong", "note": "Quoted from the private file.", "quote": "x"}],
+            "process": [{"model": "Gemini", "kind": "doubtful", "note": "It opened the inbox of the user.", "entry": 3,
+                         "entry_kind": "tool", "entry_name": "gmail"}],
+        },
+    }
+
+
+def test_a_reviewed_answer_shares_the_notes_on_its_sentences_only():
+    payload = share_snapshots.build_agent_pending_result(UID, _agent_turn(agent_review=_audit_review()))
+
+    assert payload["review_notes"] == {
+        # Grok's review failed and noted nothing: it reviewed nothing.
+        "reviewers": [{"provider": "OpenAI", "model": "GPT-6 Luna"}, {"provider": "Gemini", "model": "Gemini 3.5 Flash"}],
+        "notes": [{"sentence": SENTENCE, "kind": "wrong", "items": [
+            {"provider": "OpenAI", "kind": "doubtful", "note": "NASA reports **weekly** downlinks.",
+             "source": "https://www.nasa.gov/webb-status"},
+            {"provider": "Gemini", "kind": "wrong", "note": "Data <img src=x onerror=alert(1)> comes daily only in tests."},
+        ]}],
+    }
+    stored = json.dumps(payload)
+    assert "private file" not in stored and "inbox" not in stored
+    # The models the agent asked answered its own question: none named.
+    assert payload["included_models"] == [] and payload["differences_data"] is None
+
+
+@pytest.mark.parametrize("review", [
+    # The review belongs to another version of the text.
+    _audit_review(text="An earlier draft."),
+    # No reviewer finished its final round.
+    _audit_review(status="failed"),
+    {**_audit_review(), "audit": {"reviewers": _audit_review()["audit"]["reviewers"]}},
+])
+def test_notes_that_are_not_of_this_text_are_left_out(review):
+    payload = share_snapshots.build_agent_pending_result(UID, _agent_turn(agent_review=review))
+
+    assert "review_notes" not in payload
+
+
+def test_a_stored_note_can_hold_nothing_else():
+    notes = share_snapshots.sanitize_review_notes({
+        "reviewers": [{"provider": "OpenAI", "model": "GPT-6 Luna", "uid": "x"}, {"provider": "Evil"}, "x",
+                      {"provider": "OpenAI"}],
+        "notes": [
+            {"sentence": "A.", "items": [
+                {"provider": "OpenAI", "kind": "wrong", "note": "Fine.", "source": "https://user:pw@example.org/"},
+                {"provider": "Nobody", "kind": "wrong", "note": "Dropped."},
+                {"provider": "OpenAI", "kind": "terrible", "note": "Dropped."},
+                {"provider": "OpenAI", "kind": "incomplete", "note": "  "},
+            ], "extra": True},
+            {"sentence": "", "items": [{"provider": "OpenAI", "kind": "wrong", "note": "No sentence."}]},
+            *({"sentence": f"S{index}.", "items": [{"provider": "OpenAI", "kind": "incomplete", "note": "n"}]}
+              for index in range(60)),
+        ],
+    })
+
+    assert notes["reviewers"] == [{"provider": "OpenAI", "model": "GPT-6 Luna"}]
+    assert notes["notes"][0] == {"sentence": "A.", "kind": "wrong",
+                                 "items": [{"provider": "OpenAI", "kind": "wrong", "note": "Fine."}]}
+    assert len(notes["notes"]) == share_snapshots.MAX_REVIEW_NOTES
+    assert share_snapshots.sanitize_review_notes({"reviewers": [], "notes": []}) is None
+    # Only an Agent answer's page reads them.
+    assert share_snapshots.public_share_payload({"review_notes": notes})["review_notes"] is None
+
+
+def test_a_reviewed_agent_answer_shows_who_reviewed_and_their_notes(share_app):
+    client, database, store = share_app
+    chat_id, turn_id = _saved_turn(database, store, assistant_response=ANSWER, agent_review=_audit_review())
+
+    _, shared = _share(client, chat_id, turn_id)
+    body = client.get(shared["path"]).text
+    text = html.unescape(body)
+
+    assert "Reviewed by" in body and "GPT-6 Luna" in body and "Gemini 3.5 Flash" in body and "Grok 4.3" not in body
+    assert "Models compared" not in body and "share-models-stack-mark" in body
+    assert '<button type="button" id="toggleDifferencesView" aria-pressed="false">Notes</button>' in body
+    assert "The reviewers noted 1 passage of this answer." in text
+    # The sentence heads its card in the colour of its most serious note.
+    assert '<details class="diff-card is-note is-major" open>' in body
+    assert '<span class="diff-answer-mark">It sends science data every day.</span>' in body
+    assert "NASA reports <strong>weekly</strong> downlinks." in body
+    assert 'class="share-note-source" href="https://www.nasa.gov/webb-status"' in body and ">nasa.gov</a>" in body
+    assert '<span class="share-note-kind">Doubtful</span>' in body and '<span class="share-note-kind">Wrong</span>' in body
+    assert "<img src=x" not in body and "javascript:" not in body
+    assert "2 more AI models followed the work, reviewed the answer" in text
+    assert "Answer model: Claude Sonnet 5.5. Reviewed by: GPT-6 Luna, Gemini 3.5 Flash." in text
+    for absent in ("private file", "inbox", "contradiction", "/100"):
+        assert absent not in text, absent
+    share = database.documents[(share_snapshots.SHARES_COLLECTION, shared["share_id"])]
+    assert [note["sentence"] for note in share["review_notes"]["notes"]] == [SENTENCE]
+
+
+def test_an_answer_nobody_objected_to_says_so_quietly(share_app):
+    client, database, store = share_app
+    chat_id, turn_id = _saved_turn(database, store, agent_review=_audit_review(claims=[]))
+
+    _, shared = _share(client, chat_id, turn_id)
+    body = client.get(shared["path"]).text
+
+    assert "2 AI models reviewed this answer and noted nothing." in body
+    assert "Reviewed by" in body
+    assert 'id="toggleDifferencesView"' not in body and 'id="diffTeaser"' not in body

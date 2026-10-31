@@ -1,5 +1,5 @@
 {
-  "sources": "de2f6a417248",
+  "sources": "a80205b1bb2e",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -291,7 +291,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.e7a73a4691eb.js",
+      "src": "/static/dist/app.b2fc20909e6e.js",
       "module": false,
       "defer": true
     }
@@ -299,7 +299,7 @@
   "styles": {
     "app": "/static/dist/app.0a3640044582.css",
     "landing": "/static/dist/landing.8eceeada0090.css",
-    "public": "/static/dist/public.4d364d7582c2.css"
+    "public": "/static/dist/public.e4e41d0aace6.css"
   },
   "style_sources": {
     "app": {
@@ -363,7 +363,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "fcb65c952b9c",
+      "hash": "67762427fc9b",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -378,8 +378,8 @@
   "previous_assets": [
     "app.bb318674678b.css",
     "app.1381b1bad0bd.css",
+    "app.e7a73a4691eb.js",
     "app.ba1e34ad7582.js",
-    "app.f4dfb83ae35a.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.b459c0937723.js",
@@ -390,7 +390,7 @@
     "head.c78603f2f004.js",
     "landing.d89bfa4d6086.css",
     "landing.5bd4c1019ec4.css",
-    "public.ad66794e0256.css",
-    "public.3cc36181a86f.css"
+    "public.4d364d7582c2.css",
+    "public.ad66794e0256.css"
   ]
 }

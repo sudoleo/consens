@@ -228,5 +228,17 @@
   "Compare": "Vergleich",
   "{answered} of {length}": "{answered} von {length}",
   "Questions about AI that several AI models answer again every week: the current answer, direct links to the sources, and every time it changed.": "Fragen zu KI, die mehrere KI-Modelle jede Woche neu beantworten: die aktuelle Antwort, direkte Links zu den Quellen und jede Änderung.",
-  "© 2026 consens.io": "© 2026 consens.io"
+  "© 2026 consens.io": "© 2026 consens.io",
+  "Reviewed by": "Geprüft von",
+  "Switch between answer and notes": "Zwischen Antwort und Anmerkungen wechseln",
+  "The reviewers noted 1 passage of this answer. <0>See their notes →</0>": "Die Prüfer haben 1 Stelle dieser Antwort angemerkt. <0>Anmerkungen ansehen →</0>",
+  "The reviewers noted {noted} passages of this answer. <0>See their notes →</0>": "Die Prüfer haben {noted} Stellen dieser Antwort angemerkt. <0>Anmerkungen ansehen →</0>",
+  "1 AI model reviewed this answer and noted nothing. That means no objection, not that it is confirmed.": "1 KI-Modell hat diese Antwort geprüft und nichts angemerkt. Das heißt: kein Einwand, nicht bestätigt.",
+  "{reviewers_count} AI models reviewed this answer and noted nothing. That means no objection, not that it is confirmed.": "{reviewers_count} KI-Modelle haben diese Antwort geprüft und nichts angemerkt. Das heißt: kein Einwand, nicht bestätigt.",
+  "1 passage noted": "1 Stelle angemerkt",
+  "{noted} passages noted": "{noted} Stellen angemerkt",
+  "by 1 AI reviewer.": "von 1 KI-Prüfer.",
+  "by {reviewers_count} AI reviewers.": "von {reviewers_count} KI-Prüfern.",
+  "1 more AI model followed the work, reviewed the answer and noted what it found wrong, doubtful or incomplete.": "1 weiteres KI-Modell hat die Arbeit verfolgt, die Antwort geprüft und angemerkt, was es für falsch, zweifelhaft oder unvollständig hielt.",
+  "{reviewers_count} more AI models followed the work, reviewed the answer and noted what they found wrong, doubtful or incomplete.": "{reviewers_count} weitere KI-Modelle haben die Arbeit verfolgt, die Antwort geprüft und angemerkt, was sie für falsch, zweifelhaft oder unvollständig hielten."
 }

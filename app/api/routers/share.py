@@ -746,6 +746,11 @@ def share_page(request: Request, slug_id: str):
         or len(payload["included_models"])
     )
     contradiction_count = sum(1 for d in differences if d.get("type") == "contradiction")
+    # An Agent answer's reviewers and their notes on its sentences (since
+    # 2026-10-31): the page's second view, in place of the differences.
+    review_view = check_page.review_cards(
+        payload["review_notes"], snapshots.PROVIDERS_BY_LABEL, render_inline_markdown,
+    ) if payload["review_notes"] and not watch_page else None
 
     # "Verwandte Fragen": nur indexierte, aktive Shares (read-only, gecacht).
     related_shares = []
@@ -837,6 +842,12 @@ def share_page(request: Request, slug_id: str):
         description_bits.append(watch_state["headline"])
     if model_count:
         description_bits.append(f"{model_count} AI models answered independently")
+    if review_view:
+        reviewers = len(review_view["reviewers"])
+        description_bits.append(f"Reviewed by {reviewers} AI model{'s' if reviewers != 1 else ''}")
+        noted = len(review_view["cards"])
+        if noted:
+            description_bits.append(f"{noted} passage{'s' if noted != 1 else ''} noted")
     if scoreboard["score"] is not None and not watch_page:
         description_bits.append(f"agreement {scoreboard['score']}/100")
     if contradiction_count and not watch_page:
@@ -910,6 +921,7 @@ def share_page(request: Request, slug_id: str):
         "differences_fallback_html": differences_fallback_html,
         "best_model_display": best_model_display,
         "has_differences_view": bool(differences or differences_fallback_html or differences_data),
+        "review_view": review_view,
         "model_count": model_count,
         "contradiction_count": contradiction_count,
         "scoreboard": scoreboard,

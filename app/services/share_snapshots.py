@@ -674,6 +674,102 @@ def build_pending_result(uid, question, consensus_md, differences_data,
 AGENT_ANSWER_MODE = "agent"
 
 
+# The reviewers' notes a share carries (since 2026-10-31): the kinds of
+# agent_audit.KINDS, most serious first, and bounds on what the page shows.
+REVIEW_KINDS = ("wrong", "doubtful", "incomplete")
+MAX_REVIEW_NOTES = 40
+MAX_REVIEW_ITEMS = 12
+MAX_REVIEW_SENTENCE_CHARS = 1000
+MAX_REVIEW_NOTE_CHARS = 600
+MAX_REVIEW_SOURCE_CHARS = 1000
+
+
+def _review_source(value):
+    """An http(s) link of a note without credentials, else ""."""
+    url = str(value or "").strip()
+    if not url or len(url) > MAX_REVIEW_SOURCE_CHARS:
+        return ""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ""
+    if parts.scheme not in {"http", "https"} or not parts.hostname or parts.username or parts.password:
+        return ""
+    return url
+
+
+def sanitize_review_notes(value):
+    """The reviewers' notes of a share in their one shape, or None.
+
+    ``{"reviewers": [{"provider", "model"?}], "notes": [{"sentence", "kind",
+    "items": [{"provider", "kind", "note", "source"?}]}]}``: who reviewed,
+    and per marked sentence of the answer (in its order) what each noted.
+    Built from the turn (build_agent_pending_result) and read back the
+    same way, so a stored document can hold nothing else.
+    """
+    if not isinstance(value, dict):
+        return None
+    reviewers = []
+    for row in value.get("reviewers") or []:
+        if not isinstance(row, dict):
+            continue
+        provider = str(row.get("provider") or "")
+        if provider not in PROVIDER_ORDER or any(item["provider"] == provider for item in reviewers):
+            continue
+        model = clean_model_label(row.get("model"))
+        reviewers.append({"provider": provider, **({"model": model} if model else {})})
+    if not reviewers:
+        return None
+    notes = []
+    for note in value.get("notes") or []:
+        if not isinstance(note, dict) or len(notes) >= MAX_REVIEW_NOTES:
+            continue
+        items = []
+        for item in note.get("items") or []:
+            if not isinstance(item, dict) or len(items) >= MAX_REVIEW_ITEMS:
+                continue
+            provider, kind = str(item.get("provider") or ""), item.get("kind")
+            text = _clip(item.get("note"), MAX_REVIEW_NOTE_CHARS)
+            if provider not in PROVIDER_ORDER or kind not in REVIEW_KINDS or not text:
+                continue
+            source = _review_source(item.get("source"))
+            items.append({"provider": provider, "kind": kind, "note": text, **({"source": source} if source else {})})
+        sentence = _clip(note.get("sentence"), MAX_REVIEW_SENTENCE_CHARS)
+        if sentence and items:
+            kind = min((item["kind"] for item in items), key=REVIEW_KINDS.index)
+            notes.append({"sentence": sentence, "kind": kind, "items": items})
+    return {"reviewers": reviewers, "notes": notes}
+
+
+def _agent_review_notes(review, text):
+    """The reviewers' notes on this exact answer, for its share; None without.
+
+    Only marks the reviewers placed on sentences of the answer: a mark on the
+    work (a step of the run) or one whose quote the answer does not hold
+    stays in the app, since it may tell what the run read or did. Nothing
+    when the review belongs to another text or did not end with a final
+    round (a stop, every reviewer failed).
+    """
+    review = review if isinstance(review, dict) else {}
+    audit = review.get("audit") if isinstance(review.get("audit"), dict) else {}
+    if (review.get("mode") != "audit" or review.get("status") not in {"succeeded", "partial"}
+            or review.get("answer_hash") != hashlib.sha256(text.encode("utf-8")).hexdigest()
+            or not isinstance(audit.get("claims"), list)):
+        return None
+    notes = [{
+        "sentence": claim.get("anchor"),
+        # Each reviewer's mark names its family (agent_audit.place_marks).
+        "items": [{"provider": item.get("model"), "kind": item.get("kind"), "note": item.get("note"),
+                   "source": item.get("source")} for item in claim.get("dissent") or [] if isinstance(item, dict)],
+    } for claim in audit["claims"] if isinstance(claim, dict)]
+    noted = {item["provider"] for note in notes for item in note["items"]}
+    reviewers = [{"provider": row.get("provider_label"),
+                  "model": (row.get("model") if isinstance(row.get("model"), dict) else {}).get("label")}
+                 for row in audit.get("reviewers") or []
+                 if isinstance(row, dict) and (row.get("status") == "completed" or row.get("provider_label") in noted)]
+    return sanitize_review_notes({"reviewers": reviewers, "notes": notes})
+
+
 def _agent_share_basis(review, text):
     """The comparison an Agent share shows, and its check of this exact text.
 
@@ -686,9 +782,9 @@ def _agent_share_basis(review, text):
     review = review if isinstance(review, dict) else {}
     if review.get("mode") == "audit":
         # Audit mode: the models the agent asked (compare_models, since
-        # 2026-10-31) answered its own question, not the user's, and the
-        # reviewers checked the answer. The share keeps saying only who
-        # answered, as before, until a share of an audit turn is designed.
+        # 2026-10-31) answered its own question, not the user's. The
+        # reviewers checked the answer: the share shows their notes
+        # (_agent_review_notes) instead of a comparison.
         return None, None
     comparisons = [
         comparison for comparison in review.get("comparisons") or []
@@ -721,10 +817,12 @@ def build_agent_pending_result(uid, turn):
     """The pending result of one completed Agent turn; None without an answer.
 
     Everything comes from the server-written turn: the question, the agent's
-    answer, the sources it and its comparison models cited, and, if it
-    compared, the models of that comparison and their check of this exact
-    text. A direct answer, or one whose check was off, has none of these, and
-    the page leaves them out.
+    answer, the sources it and its comparison models cited, and the
+    reviewers' notes on this exact text (since 2026-10-31,
+    _agent_review_notes). A turn saved before then in comparison mode
+    brings the models of its comparison and their check of this exact text
+    instead. A direct answer, or one whose check was off, has none of these,
+    and the page leaves them out.
     """
     if (not isinstance(turn, dict) or turn.get("execution_mode") != "agent"
             or turn.get("status") != "completed"):
@@ -756,6 +854,9 @@ def build_agent_pending_result(uid, turn):
     if payload is None:
         return None
     payload["answer_mode"] = AGENT_ANSWER_MODE
+    review_notes = _agent_review_notes(turn.get("agent_review"), text)
+    if review_notes:
+        payload["review_notes"] = review_notes
     settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
     label = clean_model_label(settings.get("label"))
     if label:
@@ -1004,6 +1105,9 @@ def _build_share_document(
         document["answer_mode"] = AGENT_ANSWER_MODE
         if payload.get("answer_model_label"):
             document["answer_model_label"] = clean_model_label(payload["answer_model_label"])
+        review_notes = sanitize_review_notes(payload.get("review_notes"))
+        if review_notes:
+            document["review_notes"] = review_notes
     if source_result_id:
         document["source_result_id"] = source_result_id
     if source_api_run_id:
@@ -2346,6 +2450,9 @@ def public_share_payload(data):
         "consensus_model": data.get("consensus_model") or "",
         "answer_mode": AGENT_ANSWER_MODE if data.get("answer_mode") == AGENT_ANSWER_MODE else "",
         "answer_model_label": clean_model_label(data.get("answer_model_label")),
+        # The reviewers' notes of an Agent answer (since 2026-10-31).
+        "review_notes": (sanitize_review_notes(data.get("review_notes"))
+                         if data.get("answer_mode") == AGENT_ANSWER_MODE else None),
         "answered_at": data.get("answered_at") or "",
         "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
     }
@@ -2355,7 +2462,7 @@ def build_citation(payload, canonical_url):
     """Server-Pendant zu buildConsensusCitation() – mit kanonischer Share-URL.
 
     An Agent answer is cited by its own model; the compared models follow
-    only when it compared.
+    only when it compared, its reviewers when they reviewed it.
     """
     included_models = payload.get("included_models") or []
     agent = payload.get("answer_mode") == AGENT_ANSWER_MODE
@@ -2376,6 +2483,9 @@ def build_citation(payload, canonical_url):
             parts.append("Answer model: %s." % model)
         if included_models:
             parts.append("Models compared: %s." % ", ".join(included_models))
+        reviewers = (payload.get("review_notes") or {}).get("reviewers") or []
+        if reviewers:
+            parts.append("Reviewed by: %s." % ", ".join(row.get("model") or row["provider"] for row in reviewers))
     else:
         parts.append("Models consulted: %s." % ", ".join(included_models))
     consensus_model = (payload.get("consensus_model") or "").strip()

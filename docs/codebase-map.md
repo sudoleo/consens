@@ -5979,7 +5979,8 @@ Runde nicht, geben die übrigen Einträge zuerst nach (`ROUND_TIERS` in
 zuletzt die Antworten. Das Werkzeug kennen sie aus `BRIEF_TOOLS` (verschwiegene
 Widersprüche der Antworten = unvollständig). Stopp vor der Antwort nach einem
 Vergleich: `AnswerAudit.close` setzt die Prüfer auf `stopped`. Shares von Turns
-mit Prüfern zeigen keine Vergleiche (`share_snapshots._agent_share_basis`).
+mit Prüfern zeigen keine Vergleiche (`share_snapshots._agent_share_basis`),
+sondern die Anmerkungen der Prüfer (siehe „Sharing“ → „Anmerkungen der Prüfer“).
 Anzeige: `agent-review.js` `adviceContexts`/`adviceCards` (siehe „Prüfung im
 Browser“). Messen: `scripts/audit_report.py` Abschnitt `compare` (Turns, die die
 Modelle fragten; die Schranke `COMPARE_GATE` ging mit `AGENT_AUDIT_COMPARE`).
@@ -8431,6 +8432,37 @@ keinen Abgleich.
   (`check_page.difference_cards`: kritisch zuerst, kleinere gebündelt,
   Seiten untereinander mit „vs“, Antwortseite vorn, „Show quote“ per
   `check-page.js`; CSS unter `#differencesView` in `public-pages.css`).
+  **Anmerkungen der Prüfer (seit 2026-10-31).** Im einen Modus trägt der
+  Snapshot einer geprüften Agent-Antwort `review_notes`
+  (`share_snapshots._agent_review_notes` → `sanitize_review_notes`): wer
+  geprüft hat (`reviewers`: Familie + Modellname; Prüfer, die ihre
+  Schlussrunde schafften oder eine Marke setzten) und je angemerktem Satz der
+  Antwort, in ihrer Reihenfolge, was jeder Prüfer anmerkte (`notes`:
+  `sentence` = Satzanker aus `audit.claims`, `kind` = schwerste Anmerkung,
+  `items` mit Familie, `kind` wrong/doubtful/incomplete, Worten und
+  http(s)-Quelle). Nur wenn die Prüfung an genau diesen Text gebunden ist
+  (`answer_hash`) und mit Schlussrunde endete (`succeeded`/`partial`).
+  Bewusst nicht geteilt: Marken auf der Arbeit (`audit.process`) und solche,
+  deren Zitat die Antwort nicht enthält (`audit.unplaced`), weil sie verraten
+  können, was der Lauf las oder tat; auch keine Log-Nummern oder zitierten
+  Wörter. Grenzen `MAX_REVIEW_NOTES` (40), `MAX_REVIEW_ITEMS` (12), Notiz
+  600 Zeichen; `public_share_payload` liest sie nur für Agent-Shares und
+  bereinigt erneut. Die Seite (`share.html`, `check_page.review_cards`) zeigt
+  „Reviewed by“ (zugeklappt wie „Models compared“, Klasse `share-reviewers`),
+  unter der Antwort den Hinweis „The reviewers noted N passages …“
+  (`#diffTeaser`) oder, ohne Anmerkung, eine ruhige Zeile „… noted nothing.
+  That means no objection, not that it is confirmed.“, und statt
+  „Differences“ die Ansicht „Notes“ (dieselben Knöpfe
+  `#toggleConsensusView`/`#toggleDifferencesView`, `#differencesView`): je
+  Satz eine Karte in der Farbe seiner schwersten Anmerkung wie in der App
+  (falsch rot `is-major`, zweifelhaft gelb `is-split`, unvollständig grau),
+  darunter Prüfer · Art, Worte, Quelle (`.share-note`); bis drei Karten
+  offen. Satz und Notizen sind Inhalt (`data-i18n-skip`, `lang`). „About
+  this answer“ nennt die Prüfer, die Zitierzeile „Reviewed by: …“
+  (`build_citation`), die Meta-Beschreibung „Reviewed by N AI models · M
+  passages noted“. Der Teilen-Dialog sagt seitdem „… the answer, what the
+  checking AIs noted and its sources“. Tests: `tests/test_agent_share.py`,
+  `tests/e2e/test_share_review_notes.py`.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit
   Slug. Pending-Backlink, Tagesquote und Share-Anlage bilden eine einzige

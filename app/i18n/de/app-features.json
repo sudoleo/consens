@@ -279,7 +279,7 @@
   "An attachment is still being added. Send again when it appears.": "Ein Anhang wird noch hinzugefügt. Sende erneut, sobald er erscheint.",
   "Cancel this run": "Diesen Lauf abbrechen",
   "Link copied to clipboard.": "Link in die Zwischenablage kopiert.",
-  "This creates a <0>public, read-only page</0> with the question, the answer, its differences and its sources.": "Damit entsteht eine <0>öffentliche, schreibgeschützte Seite</0> mit der Frage, der Antwort, ihren Unterschieden und ihren Quellen.",
+  "This creates a <0>public, read-only page</0> with the question, the answer, what the checking AIs noted and its sources.": "Damit entsteht eine <0>öffentliche, schreibgeschützte Seite</0> mit der Frage, der Antwort, den Anmerkungen der prüfenden KIs und den Quellen.",
   "Anyone with the link can view it, without an account.": "Alle mit dem Link können sie ansehen, auch ohne Konto.",
   "The page contains no account data and is not linked to you publicly.": "Die Seite enthält keine Kontodaten und ist öffentlich nicht mit dir verknüpft.",
   "It is a snapshot: later runs will not change it.": "Sie ist eine Momentaufnahme: Spätere Läufe ändern sie nicht.",

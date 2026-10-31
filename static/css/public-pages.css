@@ -1416,6 +1416,34 @@ canvas {
 #differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, #f6dcdd); }
 .dark-mode #differencesView .diff-answer-mark { --diff-paint: var(--cx-mark-note, color-mix(in srgb, var(--ink) 9%, transparent)); }
 .dark-mode #differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, rgba(255, 123, 114, 0.19)); color: #ffb3ab; }
+/* A reviewer's note (share.html "Notes", since 2026-10-31): doubtful in the
+   app's amber, incomplete in the grey above, wrong in the red above. Its
+   kind follows the reviewer's name in the line, in the colour of its mark;
+   its source closes the note. */
+#differencesView .diff-card.is-split .diff-answer-mark { --diff-paint: var(--cx-mark-split, #fae6c2); }
+.dark-mode #differencesView .diff-card.is-split .diff-answer-mark { --diff-paint: var(--cx-mark-split, rgba(242, 179, 42, 0.17)); }
+#differencesView .share-note.is-wrong .share-note-kind { color: #c0392b; }
+#differencesView .share-note.is-doubtful .share-note-kind { color: #a8650f; }
+.dark-mode #differencesView .share-note.is-wrong .share-note-kind { color: #ff8a7a; }
+.dark-mode #differencesView .share-note.is-doubtful .share-note-kind { color: #e8b968; }
+#differencesView .share-note-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+#differencesView .share-note-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  #differencesView .share-note-source:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+}
+/* Under an answer nobody objected to: one quiet line, no box. */
+.share-review-clean { margin: 14px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); }
 
 #differencesView .diff-position {
   display: flex;

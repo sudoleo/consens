@@ -371,10 +371,11 @@ def test_j04b_agent_answer_shares_from_under_it_and_from_the_chat_list(journey):
     j.page.goto(j.base + share['path'])
     expect(j.page.locator('.share-header .eyebrow')).to_have_text('Shared answer')
     expect(j.page.locator('#consensusView .share-md')).to_contain_text('Saved partial answer for ' + j.uid)
-    # The agent's one mode (since 2026-11): the share names who answered and
-    # shows no comparison, also where the agent asked other models
-    # (share_snapshots._agent_share_basis).
-    expect(j.page.locator('.share-models-compared')).to_have_count(0)
+    # The agent's one mode (since 2026-10-31): the share names who answered
+    # and shows no comparison, also where the agent asked other models
+    # (share_snapshots._agent_share_basis); its reviewers instead, when they
+    # finished (_agent_review_notes, tests/e2e/test_share_review_notes.py).
+    expect(j.page.get_by_text('Models compared')).to_have_count(0)
     expect(j.page.locator('#shareAboutHeading')).to_have_text('About this answer')
     assert '<b>0</b>' not in j.page.content()
     j.page.screenshot(path='test-results/agent-share-page.png', full_page=True)

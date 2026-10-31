@@ -90,7 +90,10 @@
         </ul>
       </div>
       {% endif %}
-      {% if consensus_model_view or consulted_models %}
+      {#- The reviewers' notes of an Agent answer (since 2026-10-31,
+          check_page.review_cards) take the place of the differences. -#}
+      {% set has_notes_view = review_view and review_view.cards %}
+      {% if consensus_model_view or consulted_models or review_view %}
       <div class="share-models">
         {% if consensus_model_view %}
         <div class="share-models-group">
@@ -131,9 +134,36 @@
           </div>
         </details>
         {% endif %}
+        {% if review_view %}
+        {#- Who reviewed the answer, folded like the models compared. -#}
+        <details class="wp-disclosure share-models-group share-models-compared share-reviewers">
+          <summary>
+            <span class="share-models-label">Reviewed by</span>
+            <span class="share-models-stack" aria-hidden="true">
+              {%- for m in review_view.reviewers %}{% if m.icon %}<span class="share-models-stack-mark"><img src="{{ m.icon }}" alt="" class="share-model-icon{% if m.mono %} is-mono{% endif %}" width="15" height="15" loading="lazy"></span>{% endif %}{% endfor -%}
+            </span>
+            <span class="wp-chevron chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="wp-disclosure-body">
+            <ul class="share-models-list">
+              {% for m in review_view.reviewers %}
+              <li class="share-model-chip" title="{{ m.name }}">
+                {% if m.icon %}<img src="{{ m.icon }}" alt="" class="share-model-icon{% if m.mono %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
+                <span class="share-model-name">{{ m.name }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </details>
+        {% endif %}
       </div>
       {% endif %}
-      {% if has_differences_view %}
+      {% if has_notes_view %}
+      <div class="share-toggle has-cue" role="group" aria-label="Switch between answer and notes">
+        <button type="button" id="toggleConsensusView" aria-pressed="true">Answer</button>
+        <button type="button" id="toggleDifferencesView" aria-pressed="false">Notes</button>
+      </div>
+      {% elif has_differences_view %}
       <div class="share-toggle has-cue" role="group" aria-label="{{ 'Switch between answer and differences' if is_agent else 'Switch between consensus and differences' }}">
         <button type="button" id="toggleConsensusView" aria-pressed="true">{% if is_agent %}Answer{% else %}Consensus{% endif %}</button>
         <button type="button" id="toggleDifferencesView" aria-pressed="false">Differences</button>
@@ -194,7 +224,16 @@
           <h2>{% if is_agent %}Answer{% else %}Consensus answer{% endif %}</h2>
           <div class="share-md" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ consensus_html | safe }}</div>
         </section>
-        {% if has_differences_view and contradiction_count %}
+        {% if has_notes_view %}
+        {%- set noted = review_view.cards | length -%}
+        <button type="button" id="diffTeaser" class="share-diff-teaser" data-umami-event="share_notes_teaser_click">
+          <span class="share-diff-teaser-icon" aria-hidden="true">&#9888;</span>
+          <span>{% if noted == 1 %}The reviewers noted 1 passage of this answer. <b>See their notes &rarr;</b>{% else %}The reviewers noted {{ noted }} passages of this answer. <b>See their notes &rarr;</b>{% endif %}</span>
+        </button>
+        {% elif review_view %}
+        {%- set reviewers_count = review_view.reviewers | length -%}
+        <p class="share-review-clean">{% if reviewers_count == 1 %}1 AI model reviewed this answer and noted nothing. That means no objection, not that it is confirmed.{% else %}{{ reviewers_count }} AI models reviewed this answer and noted nothing. That means no objection, not that it is confirmed.{% endif %}</p>
+        {% elif has_differences_view and contradiction_count %}
         <button type="button" id="diffTeaser" class="share-diff-teaser" data-umami-event="share_diff_teaser_click">
           <span class="share-diff-teaser-icon" aria-hidden="true">&#9888;</span>
           <span>{% if contradiction_count == 1 %}The models don't fully agree here &mdash; 1 contradiction found. <b>See where they disagree &rarr;</b>{% else %}The models don't fully agree here &mdash; {{ contradiction_count }} contradictions found. <b>See where they disagree &rarr;</b>{% endif %}</span>
@@ -202,7 +241,47 @@
         {% endif %}
       </div>
 
-      {% if has_differences_view %}
+      {% if has_notes_view %}
+      {#- A noted sentence of the answer heads its card, in the colour of its
+          most serious note, as in the app; below it what each reviewer noted,
+          in its words, with its source. Up to three cards arrive open. The
+          sentence and the notes are content: never translated. -#}
+      <div id="differencesView" class="share-view" hidden>
+        <section class="legal-panel">
+          <h2>Notes</h2>
+          {%- set noted = review_view.cards | length -%}
+          {%- set reviewers_count = review_view.reviewers | length %}
+          <p class="diff-verdict">
+            {% if noted == 1 %}<span>1 passage noted</span>{% else %}<span>{{ noted }} passages noted</span>{% endif %}
+            {%- if reviewers_count == 1 %} <span>by 1 AI reviewer.</span>{% else %} <span>by {{ reviewers_count }} AI reviewers.</span>{% endif %}
+          </p>
+          <div class="diff-cards">
+            {% for card in review_view.cards %}
+            <details class="diff-card {{ card.classes }}"{% if noted <= 3 %} open{% endif %}>
+              <summary class="diff-card-summary">
+                <span class="visually-hidden">{% if card.kind == 'wrong' %}Wrong{% elif card.kind == 'doubtful' %}Doubtful{% else %}Incomplete{% endif %}<span>: </span></span>
+                <span class="diff-card-claim is-answer-text" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}><span class="diff-answer-mark">{{ card.answer_html | safe }}</span></span>
+              </summary>
+              <div class="diff-card-body">
+                <div class="diff-sides">
+                  {% for item in card.notes %}
+                  <div class="diff-position share-note is-{{ item.kind }}">
+                    <div class="diff-position-meta">
+                      <span class="diff-position-label"><span class="diff-position-model" title="{{ item.model.name }}"><span class="diff-position-icon" aria-hidden="true">{% if item.model.icon %}<img src="{{ item.model.icon }}" alt=""{% if item.model.mono %} class="is-mono"{% endif %} width="16" height="16" loading="lazy">{% else %}{{ item.model.name[:1] }}{% endif %}</span><span class="diff-position-name">{{ item.model.name }}</span></span></span>
+                      <span class="share-note-kind">{% if item.kind == 'wrong' %}Wrong{% elif item.kind == 'doubtful' %}Doubtful{% else %}Incomplete{% endif %}</span>
+                    </div>
+                    <div class="diff-position-stance" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ item.note_html | safe }}</div>
+                    {% if item.source %}<a class="share-note-source" href="{{ item.source.url }}" target="_blank" rel="nofollow noopener noreferrer"><img class="share-source-favicon site-icon" src="/api/topics/favicon?d={{ item.source.domain | urlencode }}" alt="" loading="lazy" width="14" height="14" referrerpolicy="no-referrer">{{ item.source.domain }}</a>{% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </details>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+      {% elif has_differences_view %}
       <div id="differencesView" class="share-view" hidden>
         <section class="legal-panel">
           <h2>Differences</h2>
@@ -306,6 +385,10 @@
           {% if has_judge_check %}<span>A judge model then checked every sentence against their answers and flagged where they differ.</span>{% endif %}
           {% else %}
           <span>{% if date_display %}{{ answer_model or "An AI model" }} answered this question on {{ date_display }}.{% else %}{{ answer_model or "An AI model" }} answered this question.{% endif %}</span>
+          {% if review_view %}
+          {%- set reviewers_count = review_view.reviewers | length -%}
+          <span>{% if reviewers_count == 1 %}1 more AI model followed the work, reviewed the answer and noted what it found wrong, doubtful or incomplete.{% else %}{{ reviewers_count }} more AI models followed the work, reviewed the answer and noted what they found wrong, doubtful or incomplete.{% endif %}</span>
+          {% endif %}
           {% endif %}
         </p>
         {% else %}

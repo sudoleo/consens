@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from app.services import drift_signal
 from app.services.history_view import build_history_view, day_label
@@ -367,3 +368,37 @@ def difference_cards(differences, providers, render_inline):
     if len(smaller) >= 2 and len(smaller) < len(cards):
         return {"cards": [card for card in cards if card["rank"] == 0], "smaller": smaller}
     return {"cards": cards, "smaller": []}
+
+
+# A reviewer's note paints its sentence like the app (consensus-insights.js
+# AUDIT_CLASSES): wrong red, doubtful amber, incomplete grey.
+_NOTE_CLASSES = {"wrong": "is-note is-major", "doubtful": "is-note is-split", "incomplete": "is-note"}
+
+
+def review_cards(review_notes, providers, render_inline):
+    """The reviewers' notes of a shared Agent answer
+    (share_snapshots.sanitize_review_notes) as the page shows them: who
+    reviewed, and per noted sentence, in the answer's order, the sentence
+    in the colour of its most serious note and what each reviewer noted, in
+    its words, with its source. ``counts``: the noted sentences by that
+    note."""
+    def model_view(provider, models):
+        label = providers.get(provider)
+        return {"name": models.get(provider) or provider, "icon": label.icon_url if label else "",
+                "mono": provider in _MONO_PROVIDERS}
+
+    models = {row["provider"]: row.get("model", "") for row in review_notes["reviewers"]}
+    cards, counts = [], {"wrong": 0, "doubtful": 0, "incomplete": 0}
+    for note in review_notes["notes"]:
+        counts[note["kind"]] += 1
+        items = []
+        for item in note["items"]:
+            source = item.get("source") or ""
+            host = (urlsplit(source).hostname or "").removeprefix("www.") if source else ""
+            items.append({"kind": item["kind"], "model": model_view(item["provider"], models),
+                          "note_html": render_inline(item["note"]),
+                          "source": {"url": source, "domain": host} if source and host else None})
+        cards.append({"kind": note["kind"], "classes": _NOTE_CLASSES[note["kind"]],
+                      "answer_html": render_inline(_SOURCE_TAGS.sub("", note["sentence"]).strip()), "notes": items})
+    return {"reviewers": [model_view(row["provider"], models) for row in review_notes["reviewers"]],
+            "cards": cards, "counts": counts}

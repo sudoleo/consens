@@ -221,7 +221,7 @@
     title.textContent = "Share this answer publicly";
     body.innerHTML = `
       <p>This creates a <strong>public, read-only page</strong> with the question,
-      the answer, its differences and its sources.</p>
+      the answer, what the checking AIs noted and its sources.</p>
       <ul class="share-modal-notes">
         <li>Anyone with the link can view it, without an account.</li>
         <li>The page contains no account data and is not linked to you publicly.</li>

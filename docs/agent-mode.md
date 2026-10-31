@@ -382,7 +382,9 @@ Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
   Lauf, der vor der Antwort endet, behält die Leiste mit „Answers“; seine Prüfer
   stehen dann auf „stopped“. Das Seitenpanel öffnet eine Antwort wie jede
   Modellantwort. Geteilte Antworten zeigen keine Vergleiche
-  (`share_snapshots._agent_share_basis`), bis ein Share dafür entworfen ist.
+  (`share_snapshots._agent_share_basis`), sondern seit 2026-10-31 die
+  Anmerkungen der Prüfer (`share_snapshots._agent_review_notes`, Karten unter
+  „Notes“; codebase-map „Sharing“).
 - **Tempo:** `tests/test_agent_audit_tempo.py`
   `test_three_advisers_beside_three_reviewers_keep_their_tempo`: Daily (drei
   Modelle) als Berater und Prüfer zugleich, Server-Anteil je Beraterantwort
@@ -855,7 +857,9 @@ Eintrag nicht noch einmal an. Ohne Prüfer (siehe „Ohne Prüfer“) gibt es ke
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
-Entscheidung); geteilte Antworten (`/s/…`) zeigen keine Marken der Prüfer.
+Entscheidung). Geteilte Antworten (`/s/…`) zeigen die Anmerkungen der Prüfer
+seit 2026-10-31 als Karten je Satz unter „Notes“, nicht als Marken im Text;
+Marken auf der Arbeit und nicht platzierte bleiben in der App.
 
 Tests: `tests/test_agent_audit.py` (Turn, Live-Runden, Schlussrunde,
 Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
