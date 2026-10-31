@@ -2502,8 +2502,8 @@
             return claims.length > 0;
           }
 
-          // --- Audit statt Vergleich (Agent, Admins, seit 2026-10-25) ----------
-          // Die Vergleichsmodelle pruefen die fertige Antwort wie Reviewer
+          // --- Pruefer des Agenten (seit 2026-10-25, seit 2026-10-31 jede Antwort) ---
+          // Die gewaehlten Modelle pruefen die fertige Antwort wie Reviewer
           // (agent_audit.py): je markiertem Satz ein Claim mit `kind` (wrong,
           // doubtful, incomplete) und ihren Anmerkungen in `dissent` (model,
           // kind, note, source, target). Dieselben Marken wie sonst, falsch rot,

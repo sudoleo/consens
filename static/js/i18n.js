@@ -139,7 +139,7 @@
   }
 
   // "ctx|key" entries win where an element names its data-i18n-context
-  // ("agent freedom|Free" is not the plan Free).
+  // ("answer tabs|Review" is the place of a check, not the verb).
   function find(key, context) {
     if (context) {
       const hit = exact.get(context + "|" + key);

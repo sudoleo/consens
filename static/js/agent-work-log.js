@@ -1,5 +1,5 @@
-// The agent's work log in the activity sidebar (admins, audit mode since
-// 2026-10-25; agent_work_log.py, docs/agent-work-log.md). Folded until
+// The agent's work log in the activity sidebar (admins; every chat run
+// since 2026-10-31; agent_work_log.py, docs/agent-work-log.md). Folded until
 // opened; then it loads the entries in order and, while the turn runs,
 // follows them. Each entry shows who, what and where its content came from;
 // its content opens on demand, the whole of a long one with "Show all".
