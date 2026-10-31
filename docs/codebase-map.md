@@ -3191,7 +3191,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `resolution`), *Paused*, *First check pending*; `quoted` markiert einen Satz
   des Judges (`change_summary`, `resolution.reason`), der mit
   `data-i18n-skip` in seiner Sprache bleibt. Aufbau: ruhige Kennzahlenzeile (watching / moved / reached
-  this week / next check, Nullen weggelassen), Abschnitte *Watching* (neu
+  this week / next check, Nullen weggelassen; folgt seit 2026-10-31 den Karten,
+  `syncSummary`, also sofort nach Pausieren, Löschen und Undo), Abschnitte *Watching* (neu
   angelegte zuerst, dann Moved → Re-checking → Held → Watching → Pending,
   dann nach nächstem Check) / *Paused* / *Reached*, *Delivery*
   (Telegram-Verbindung und Morning Brief im `.switch`/`.slider`-Stil des

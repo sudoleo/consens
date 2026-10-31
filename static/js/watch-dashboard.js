@@ -577,6 +577,7 @@
       try { target?.focus({ preventScroll: true }); } catch (_) { target?.focus(); }
     }
     syncWatchInList(entry.watch);
+    if (!fromList) syncSummary();
     return entry;
   }
 
@@ -1207,6 +1208,7 @@
     const hadFocus = entry.item.contains(document.activeElement);
     page.pendingDeletes.set(entry.id, entry);
     collapse(entry.item, () => updateSectionCounts());
+    syncSummary();
     const notice = showUndoToast(watch.awaiting_first_run ? "Watch deleted, with its empty page" : "Watch deleted", {
       undo: () => {
         page.pendingDeletes.delete(entry.id);
@@ -1680,6 +1682,22 @@
       if (!visible && !section.hidden && !leaving(section)) collapse(section);
       else if (visible && (section.hidden || leaving(section))) expand(section);
     });
+    syncSummary();
+  }
+
+  // The summary follows the cards on the page: a pause, a deletion (already
+  // while its Undo runs) and an Undo change it at once, as they change the
+  // card and its section, not with the next list.
+  function syncSummary() {
+    const body = document.getElementById("watchDashBody");
+    if (!page.built || !body) return;
+    const watches = Array.from(page.cards.values())
+      .filter(entry => !page.pendingDeletes.has(entry.id)).map(entry => entry.watch);
+    const summary = body.querySelector(".wd-summary");
+    const next = renderSummary(document.createDocumentFragment(), watches);
+    if (summary && next) summary.replaceWith(next);
+    else if (summary) summary.remove();
+    else if (next) body.prepend(next);
   }
 
   // ------------------------------------------------------------------
@@ -1940,12 +1958,6 @@
       page.cards.delete(id);
       collapse(entry.item, () => { entry.item.remove(); updateSectionCounts(); });
     });
-    const summary = body.querySelector(".wd-summary");
-    const fresh = document.createDocumentFragment();
-    const next = renderSummary(fresh, watches);
-    if (summary && next) summary.replaceWith(next);
-    else if (summary) summary.remove();
-    else if (next) body.prepend(next);
     updateSectionCounts();
   }
 

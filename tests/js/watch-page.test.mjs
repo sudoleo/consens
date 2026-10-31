@@ -418,6 +418,29 @@ describe("Cards change in place (D6, J8, J13, J14)", () => {
     await vi.waitFor(() => expect(server.calls.some(call => call[0] === "DELETE" && call[1] === "/api/watch/w1")).toBe(true));
   });
 
+  it("counts a paused or deleted watch out of the summary at once, and back in with Undo", async () => {
+    // Bug hunt 2026-10-22: the summary only followed the next list, so it
+    // still said "2 watching" while the card already showed the pause.
+    const { window, document } = boot({ watches: [watch(), watch({ id: "w2", question: "Second?" })] });
+    await window.App.watchDashboard.render();
+    const watching = () => document.querySelector(".wd-summary .wd-summary-item:not(.is-next)")?.textContent;
+    const toast = () => document.querySelector("#appToasts .toast.is-shown");
+    expect(watching()).toBe("2watching");
+    const card = document.querySelector('.wd-item[data-watch-id="w1"]');
+    card.querySelector(".wd-action-toggle").click();
+    card.querySelector('.wd-settings-footer [data-action="pause"]').click();
+    await vi.waitFor(() => expect(card.dataset.state).toBe("paused"));
+    expect(watching()).toBe("1watching");
+    toast().querySelector(".toast-action").click();
+    await vi.waitFor(() => expect(card.dataset.state).not.toBe("paused"));
+    expect(watching()).toBe("2watching");
+
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    expect(watching()).toBe("1watching");
+    toast().querySelector(".toast-action").click();
+    expect(watching()).toBe("2watching");
+  });
+
   it("lists paused before reached and lets a reached watch be deleted (J21, J22)", async () => {
     const { window, document } = boot({ watches: [
       watch({ id: "r1", status: "resolved", resolution: { at: "2026-10-01T08:00:00+00:00", reason: "Out." } }),
