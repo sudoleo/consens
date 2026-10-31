@@ -602,31 +602,34 @@ Betreiberangaben werden als direkt lesbares HTML ausgegeben. Offene rechtliche
 Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
 Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
 und die App-CTA; Model guide und About liegen im Footer. Seit 2026-10-02
-erzählt die Landingpage Agent als Standard: Hero seit der Todo-Runde 3
-(2026-10-02) „Six models answer. See where they disagree.“, seit 2026-10-28
-„Several models answer.“ / „Mehrere KIs antworten.“ (Daily und Open Models
-fragen drei, High Quality sechs; Meta-Titel, Beschreibungen und die
-Markenkarte `og-home-v2.png` aus `og_image.BRAND_HEADLINE` ebenso ohne feste
-Zahl). Die alte Zeile „One agent does the work. Six models check it.“ hatte
-den Mechanismus verdreht: die Modelle antworten, ein unbeteiligter Judge
-prüft. Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip mehr
-(der Modus steckt im (+)), rechts der Modell-Chip „3 AIs cross-check ⌄“ wie in
-/app (seit 2026-10-23 nennt er, was die Vergleichsmodelle tun, keinen
-Modellnamen); seit 2026-10-30 wie der Start der App eine Fläche, eine Reihe:
-(+) · die drei Marken von Daily vor dem Chip · Reasoning Auto vor Senden
+erzählt die Landingpage Agent als Standard. Seit dem einen Modus des Agenten
+(Zweig one-mode, live mit seinem Deploy) lautet der Hero „One AI does the work.
+Several check it.“ / „Eine KI arbeitet, mehrere prüfen.“; Meta-Titel („The AI
+Agent Other AI Models Check“), Beschreibungen und die Markenkarte
+`og-home-v2.png` aus `og_image.BRAND_HEADLINE` (= Hero, neu gerendert) ebenso.
+Vorher (2026-10-02 bis zum einen Modus) „Six models answer …“ bzw. „Several
+models answer.“ mit Score und Judge, was der Agent nicht mehr tut.
+Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip
+(der Modus steckt im (+)), rechts „3 AIs cross-check“ neben den drei Marken von
+Daily, ohne Pfeil wie in /app; eine Fläche, eine Reihe:
+(+) · die drei Marken vor dem Chip · Reasoning Auto vor Senden
 (`partials/composer_marks_mockup.html`, `partials/composer_tools_mockup.html`).
-Das Wärmepumpen-Beispiel (Szene 01
-bis zu den Marken 6/6, 4/6) ist ein Lauf mit sechs Modellen und behält sechs
-Marken und „6 AIs cross-check“ (`{% set full_run = true %}`), ohne eigenes Fenster um
-Szene 01). Szene 02 (`#agent-mode`, `.lp-agent`) baut seit
-2026-10-02 einen Agent-Turn so nach, wie `agent-activity.js`/`agent-review.js`
-ihn zeichnen: Uhr „Working for …s“ → „Thought for 24s“, Agent-Notizen,
-„Comparing perspectives…“ mit sechs nacheinander fertig werdenden Modell-Icons,
-eine Live-Statuszeile (Writing answer… / Checking the answer…), gestreamte
-Antwort, danach Markierungen und Evidenzzeile („43/100 agreement ·
-Contradictions 2 · Answers 6“); keine Ladebalken mehr. Treiber
-`landing-scenes.js` (`buildRunScene`, Standbild bei reduced motion = fertiger
-Turn über `render.still`). Seit 2026-10-20 (Apple-Audit I1) faltet sich der Log
+Das Wärmepumpen-Beispiel ist ein Lauf mit drei Prüfern (Szene 01 zeigt keine
+sechs mehr). Szene 02 (`#agent-mode`, `.lp-agent`) baut einen Turn des einen
+Modus so nach, wie `agent-activity.js`/`agent-review.js` ihn zeichnen: die Marken
+der Prüfer neben der Uhr, der Agent fragt die drei KIs einmal, Uhr „Reviewing ·
+…s“, Statuszeile „Reviewing the answer…“, gestreamte Antwort, danach drei
+markierte Sätze (wrong / doubtful / incomplete) und „Notes 3 · Answers 3“, kein
+Score. Treiber `landing-scenes.js` (`buildRunScene`, `REVIEW_AT` 0.79,
+`data-reviewer`-Marken, `.lp-agent-answer.is-reviewing`, drei `data-mark`-Arten;
+Standbild bei reduced motion = fertiger Turn über `render.still`). Szene 03
+(„Decide“) in vier Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
+öffnet die Notizkarte `#lpNoteWalls` über `data-diff-open`), was die Farben
+heißen (`.lp-review`), was die anderen KIs antworteten (`.lp-answers`); statt der
+drei Score-Beispiele die Pause-Karte eines Prüfers vor einem riskanten Schritt
+(`.lp-pause`). `landing-insights.js` baut nur noch die Hover-Vorschau der
+markierten Stelle. Offen (Max' Entscheidung): Benchmark-Abschnitt und Model-Pulse-
+Block beschreiben die Consensus-Engine der Pipeline. Seit 2026-10-20 (Apple-Audit I1) faltet sich der Log
 zum Abschluss in die Uhrzeile (`.lp-agent-log.is-folded`, Höhenübergang über
 `.lp-agent-log-items`, statt `hidden`), der Platz für den höchsten Zustand ist am
 Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
@@ -716,11 +719,10 @@ consensus" und „Checking for contradictions" zum Ergebnis; die lokale synchron
 Widerspruchsauswertung hält ihren angekündigten Zustand dafür 1,1 Sekunden. Der
 Szenario ist seit 2026-10-02 eine Waermepumpe im Haus von 1978 mit den
 Original-Heizkoerpern (vorher: eine Kundennachricht umformulieren, was Max
-„laecherlich“ fand). Der Lauf hat drei strittige Stellen (kritischer
-Widerspruch zur Vorlauftemperatur 55 °C vs. 45 °C, kleiner zum Gaskessel als
-Reserve, eine abweichende Gewichtung zur Reihenfolge Heizlastberechnung vs.
-Wintertest) und 19 Claims; der Score 43/100 ist nicht gegriffen, sondern die
-Rechnung aus `consensus_scoring.py` auf genau diese Daten. Zahl und Einheit
+„laecherlich“ fand). Bis zum einen Modus trug der Lauf drei strittige Stellen,
+19 Claims und den daraus gerechneten Score 43/100 (`consensus_scoring.py`);
+seitdem zeigt der Agent-Ablauf die Marken der Prüfer, und die
+Consensus-/Differences-Fixtures der Demo sind entfallen. Zahl und Einheit
 (°C, kW, m²) trennt ein geschuetztes Leerzeichen, auch in Zitaten und Tests.
 Quellen gibt es bewusst keine – erfundene Belege waeren die schlechtere Demo,
 und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
@@ -729,24 +731,30 @@ Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurie
 `App.previewConsensusPreset('fast')`, einschliesslich aller sechs Familien
 und ihrer aktuellen Modelllabels (seit 2026-10-15; vorher Balanced). Eine eigene
 Open-Models-/Custom-Wahl wird dabei nur für die Vorführung durch Daily ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
-bei geaenderten Preset-Familien samt Claims, Zitaten und Differences konsistent
-auf die aktuelle Aufstellung abgebildet; es werden keine LLMs aufgerufen.
+bei geaenderten Preset-Familien konsistent auf die aktuelle Aufstellung
+abgebildet; es werden keine LLMs aufgerufen.
 Modell-Spinner setzen `responseState=pending` ohne Antworttext. Waehrend des
 Streams wird aus den lokalen HTML-Vorlagen reines Markdown in
 `dataset.consensusAnswer` geschrieben; der Leser interpretiert Ladeindikator-HTML
 nicht als Antwort. Alle sechs Texte enden mit `responseState=complete`.
 Die Demo verwendet bei deaktiviertem Agent Mode ebenfalls
 `enterDirectComparisonView()` statt eigener Hero-Klassen, damit die Antworten
-im gemeinsamen Thread-Layout sichtbar bleiben. Seit 2026-10-02 spielt sie bei
-der Moduswahl Agent (Default, auch für Gäste von der Landing) einen Agent-Turn
-(`runAgentDemoFlow`): `App.agentChat.demoView(true)` hält `#agentAnswer`
-sichtbar und setzt `body.single-agent-active.agent-demo-active` (auch ohne
-Agent-Zugang); die Demo rendert Aktivität über `App.agentActivity.render`, die
-Antwort per `renderMarkdownStream`, danach ein lokales `agent_review` mit
-einer Comparison und dem Demo-`differencesData` über `App.agentReview.render`
-(Marken, 43/100, Answers/Contradictions im Antwortleser). Die Aufrufe hinter
-dem Turn (sechs Vergleichsantworten, zwei Judges) reicht sie als ganzen
-Schnappschuss an `App.agentDelegation.demo({turnId, running, agents, usage})`:
+im gemeinsamen Thread-Layout sichtbar bleiben. Bei der Moduswahl Agent
+(Default, auch für Gäste von der Landing) spielt sie einen Turn des einen Modus
+(`runAgentDemoFlow`, Daily-Aufstellung): `App.agentChat.demoView(true)` hält
+`#agentAnswer` sichtbar und setzt `body.single-agent-active.agent-demo-active`
+(auch ohne Agent-Zugang); die Demo rendert Aktivität über
+`App.agentActivity.render`, die Antwort per `renderMarkdownStream`, danach ein
+lokales `agent_review` (`mode: "audit"`, `audit.reviewers`/`claims`, dazu
+`comparisons` der einmal befragten KIs) über `App.agentReview.render`: erst
+„Reviewing the answer…“ mit Schimmer, dann drei Marken (wrong: der Agent
+verwechselt die Hausdaten der Frage; doubtful; incomplete) und „Notes 3 ·
+Answers 3“; bis zum einen Modus spielte sie einen Vergleich mit Judges und
+Score 43/100. Die Aufrufe hinter dem Turn (Prüfer-Sitzungen `kind: "audit"` mit
+`messages`, Antworten `kind: "comparison"` mit `text`, das Werkzeugereignis
+`audit_answer`) reicht sie als ganzen Schnappschuss an
+`App.agentDelegation.demo({turnId, running, agents, usage})`; Fixtures
+`DEMO_DATA.answer` und `notes`, Deutsch in `demo-server.json`:
 dieselben Modell-Icons neben der Uhr, dieselbe Aktivitätsleiste und derselbe
 Lichtweg wie ein echter Lauf, ohne Request und ohne Stop; Tokenzahlen sind aus
 den Fixture-Texten geschätzt (~4 Zeichen/Token). `demo(null)` gibt alles frei
