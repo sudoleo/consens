@@ -966,10 +966,13 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     chart, notes, again, fake, big, missing = results(loop)
     assert "vm_share_file" in script.offered[0]
     assert chart["shown_as"] == "picture" and chart["file"]["mime"] == "image/png" and chart["file"]["name"] == "chart.png"
+    # A picture is placed in the answer text by its ref (2026-10-31), like show_image's.
+    assert chart["markdown"] == "![chart.png](picture:f1)" and "ref" not in chart["file"]
+    assert "the app shows it there" in chart["note"] and "markdown" not in notes
     assert notes["shown_as"] == "download" and notes["file"]["name"] == "Results.txt"
     assert notes["file"]["mime"] == "text/plain" and "Do not embed it as an image" in notes["note"]
-    # The same file again is the same download.
-    assert again["file"] == chart["file"]
+    # The same file again is the same download, at the same place.
+    assert again["file"] == chart["file"] and again["markdown"] == chart["markdown"]
     # A name never makes a file a picture.
     assert fake["shown_as"] == "download" and fake["file"]["mime"] == "application/octet-stream"
     assert big == {"error": f"{D}/big.bin is larger than 5 MB. Share a smaller file (compress, split or "
@@ -978,7 +981,8 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     saved = {file["name"]: file for file in files.list(UID, chat_id)}
     assert set(saved) == {"chart.png", "Results.txt", "fake.png"}
     assert {(file["kind"], file["turn_id"]) for file in saved.values()} == {("vm_file", loop.turn_id)}
-    assert saved["chart.png"]["origin"] == {"source": "vm", "path": "/tmp/chart.png"}
+    assert saved["chart.png"]["origin"] == {"source": "vm", "path": "/tmp/chart.png", "ref": "f1"}
+    assert saved["Results.txt"]["origin"] == {"source": "vm", "path": f"{D}/notes.txt"}
     assert files.download(UID, chat_id, chart["file"]["id"])[1] == png
     # The browser hears of each new file once (agent-workspace.js refreshes).
     shared = [file["name"] for event in events if event.get("type") == "resources" for file in event["files"]]

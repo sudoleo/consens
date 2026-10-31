@@ -458,7 +458,7 @@
   function sourcesOf(body, review, evidence, raw) {
     // A source pill carries a favicon and may stand for several sources.
     return safeSources([evidence, ...(evidence.events || []), {text: raw}, { sources: [...body.querySelectorAll('a[href]')]
-      .filter(a => !a.closest('code, pre') && (a.matches('.src-ref') || !a.querySelector('img, svg')))
+      .filter(a => !a.closest('code, pre, .md-picture') && (a.matches('.src-ref') || !a.querySelector('img, svg')))
       .flatMap(a => a.sourceGroup?.length ? a.sourceGroup.map(entry => entry.src).filter(Boolean)
         : [a.sourceData || {url: a.getAttribute('href'), title: a.textContent}]) },
       ...(review?.comparisons || []).flatMap(c => c.answers || []), ...(review?.versions || [])]);

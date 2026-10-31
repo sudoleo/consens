@@ -1400,9 +1400,17 @@ Server.
   veralteten Zahlen.
 - [ ] Agent-Aktivität bei 1920/1440 px mit offener und eingeklappter linker
   Navigation öffnen/schließen: die Spalte rückt neben die Leiste, nichts liegt
-  darunter. Unter 1200 px öffnet sie nie selbst; das Panel-Symbol neben den
-  Modell-Icons öffnet ein Sheet
-  mit Scrim, Escape/Scrim schließt und gibt den Fokus zurück.
+  darunter. Sie öffnet auf keiner Breite selbst, weder beim Senden noch einen
+  Moment danach (seit 2026-10-31); das Panel-Symbol neben den Modell-Icons
+  öffnet sie, unter 1200 px als Sheet
+  mit Scrim, Escape/Scrim schließt und gibt den Fokus zurück. Offen bleibt sie
+  bei der nächsten Nachricht im selben Chat stehen.
+- [ ] Audit-Lauf mit `show_image` (oder `vm_share_file` eines Bildes), dessen
+  Antwort `![…](picture:p1)` setzt: das Bild steht im Text an der Stelle, nicht
+  darunter; erscheint dort erst, wenn seine Zeile fertig gestreamt ist (keine
+  rohen `![`-Zeichen), blinkt nicht beim Prüfer-Markieren; ein nicht gesetztes
+  Bild steht erst nach dem Lauf unter dem Text. Deutsch: Download/„Weitere
+  Aktionen“ an einem Bild im Text deutsch.
 - [ ] Lauf mit Mail-Entwurf/Kalenderänderung: Aktivität zeigt „Email draft ready
   for review“ und „Waiting for your confirmation below“; nach dem Lauf steht über
   dem Composer „n items need your review · Review“, das Bookmark trägt einen

@@ -21,7 +21,8 @@
 // Never translated: script, style, textarea, pre, code, svg, math,
 // [translate="no"], .notranslate, [data-i18n-skip], editable text, and
 // the content regions in SKIP_SELECTOR (answers, questions, chat titles):
-// their words are the reader's or a model's, in their own language.
+// their words are the reader's or a model's, in their own language. The
+// app's controls inside one ([data-i18n-ui]) are translated again.
 // =====================================================================
 (function () {
   "use strict";
@@ -200,8 +201,17 @@
     return element.matches(SKIP_SELECTOR);
   }
 
+  // The app's own controls inside a content region (a picture the agent
+  // placed in its answer, agent-workspace.js) mark themselves
+  // [data-i18n-ui]: from there down to the next skipped element, words are
+  // ours again.
+  const UI_SELECTOR = "[data-i18n-ui]";
+
   function inSkipped(element) {
-    return !!(element && element.closest && element.closest(SKIP_SELECTOR));
+    const skip = element && element.closest ? element.closest(SKIP_SELECTOR) : null;
+    if (!skip) return false;
+    const ui = element.closest(UI_SELECTOR);
+    return !(ui && ui !== skip && skip.contains(ui));
   }
 
   function contextOf(node) {
@@ -485,7 +495,9 @@
       }
     }
     for (const element of deep) {
-      if (element.isConnected && !inSkipped(element.parentElement) && !skipped(element)) translateContainer(element, true);
+      if (element.isConnected && !skipped(element) && (element.matches(UI_SELECTOR) || !inSkipped(element.parentElement))) {
+        translateContainer(element, true);
+      }
     }
     for (const element of shallow) {
       if (element.isConnected && !inSkipped(element)) translateContainer(element, false);

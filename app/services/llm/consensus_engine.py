@@ -591,6 +591,10 @@ _SENTENCE_SPLIT_RE = re.compile(
     r"(?<=[.!?…])(?P<close>[\"'”’»)\]]*)(?:\[S?\d+(?:\s*,\s*S?\d+)*\])*[ \t]+"
 )
 _THEMATIC_BREAK_RE = re.compile(r"^[-*_\s]{3,}$")
+# Eine Zeile nur aus Bildern, die der Agent in seine Antwort setzt
+# ("![Unterschrift](picture:p2)", agent_web_images.picture_markdown), ist
+# kein Satz: in der App steht dort das Bild, kein Text als Anker.
+_PICTURE_LINE_RE = re.compile(r"^(?:!\[[^\]\n]*\]\(picture:[A-Za-z0-9_-]{1,64}\)\s*)+$")
 # Abgesetzte Formeln ("$$" / "\[ ... \]") stehen als eigener Block zwischen den
 # Absaetzen. Ihre Zeilen sind KEINE Saetze: die reine Formel ist als Anker im
 # gerenderten Text unauffindbar (dort ist sie ein KaTeX-Block) und landete
@@ -796,7 +800,7 @@ def _enumerate_consensus_sentences(consensus_answer: str, limit=MAX_CONSENSUS_SE
         # Headings and code remain outside the checkable sentence index.
         if in_fence or not stripped or stripped.startswith(("#", "|")):
             continue
-        if _THEMATIC_BREAK_RE.match(stripped):
+        if _THEMATIC_BREAK_RE.match(stripped) or _PICTURE_LINE_RE.match(stripped):
             continue
 
         prefix = _LINE_PREFIX_RE.match(line)

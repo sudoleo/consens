@@ -12,10 +12,12 @@
 //   shared from its VM, mail attachments the agent fetched in it, per-file
 //   upload progress, and a note when a file of the turn was only partly
 //   readable.
-// - The pictures the agent shared from its VM stand right under the answer
-//   text, above its evidence row (Notes, Watch, Share): .agent-answer-pictures,
-//   directly after the answer body. App.answerTail(body) is where that row
-//   and the answer check line go (agent-review.js, watch.js, share-dialog.js).
+// - The pictures the agent showed (vm_share_file, show_image) stand in the
+//   answer text where it placed them (.md-picture, fillPictures), the others
+//   right under the text, above its evidence row (Notes, Watch, Share):
+//   .agent-answer-pictures, directly after the answer body.
+//   App.answerTail(body) is where that row and the answer check line go
+//   (agent-review.js, watch.js, share-dialog.js).
 //   Each loads when its place comes near the screen, as the server's preview
 //   (?preview=1, at most 1600 px on a side, routers/agent_files.py); the
 //   viewer and the download get the original (runtime audit 2026-10-30 P2:
@@ -400,7 +402,7 @@
     const slot = body?._pictures;
     return slot?.isConnected && slot.parentNode === body.parentNode && !slot.hidden ? slot : body;
   }
-  // The answer's own place for its pictures, kept right after its text.
+  // The answer's own place for the pictures it does not place, kept right after its text.
   function picturesSlot(body) {
     if (!body) return null;
     if (!body._pictures) { body._pictures = node('div', 'agent-answer-pictures'); body._pictures.hidden = true; }
@@ -408,18 +410,59 @@
     if (body.parentNode && body.nextElementSibling !== slot) body.after(slot);
     return slot;
   }
-  // Drawn again only when its pictures (or a removal question) change, so a
-  // picture never blinks while the answer around it updates.
-  function fillPictures(body, chatId, shown, scope) {
-    const slot = shown.length ? picturesSlot(body) : body?._pictures;
+  // Pictures in the text (2026-10-31, Max: under the answer they were often
+  // in poor style): the agent writes ![what it shows](picture:p2) where one
+  // belongs, a place in the rendered answer (markdown-stream.js .md-picture)
+  // that takes the turn's picture with that origin.ref. The others stand
+  // under the text, once the answer is written: while it streams, a picture
+  // waits for its place instead of jumping from under the text into it.
+  // Every write of the answer (stream, full render, review marks) may bring
+  // new places; the body's observer fills them before the frame is drawn,
+  // always with the same figure, so a picture never loads or blinks again.
+  function fillPictures(body, chatId, shown, scope, hold = false) {
+    if (!body || (!shown.length && !body._pictureState)) return;
+    body._pictureState = { chatId, shown, scope, hold };
+    if (!body._pictureWatch && typeof MutationObserver === 'function') {
+      body._pictureWatch = new MutationObserver(() => placePictures(body));
+      body._pictureWatch.observe(body, { childList: true, subtree: true });
+    }
+    placePictures(body);
+  }
+  function placePictures(body) {
+    const { chatId, shown, scope, hold } = body._pictureState;
+    const figures = body._figures ||= new Map();
+    // Each figure is drawn again only when its picture or a removal question about it changes.
+    for (const file of shown) {
+      const key = `${scope}:file:${file.id}`;
+      const signature = JSON.stringify([chatId, scope, file.name, file.status, file.origin?.caption || '', confirmKey === key]);
+      const old = figures.get(file.id);
+      if (old?.signature === signature) continue;
+      const figure = pictureCard(chatId, file, scope);
+      if (old) { watcher?.unobserve(old.figure); if (old.figure.parentNode) old.figure.replaceWith(figure); }
+      figures.set(file.id, { signature, figure });
+    }
+    const ids = new Set(shown.map(file => file.id));
+    for (const [id, old] of figures) {
+      if (!ids.has(id)) { watcher?.unobserve(old.figure); old.figure.remove(); figures.delete(id); }
+    }
+    // A picture takes the first place that names it; a place that names none stays empty.
+    const byRef = new Map(shown.filter(file => file.origin?.ref).map(file => [file.origin.ref, file]));
+    const placed = new Set();
+    for (const place of body.querySelectorAll('.md-picture')) {
+      const file = byRef.get(place.dataset.picture);
+      const figure = file && !placed.has(file.id) ? figures.get(file.id).figure : null;
+      if (figure) placed.add(file.id);
+      if (figure ? place.firstChild !== figure || place.childNodes.length !== 1 : place.firstChild) {
+        place.replaceChildren(...(figure ? [figure] : []));
+      }
+    }
+    const rest = hold ? [] : shown.filter(file => !placed.has(file.id)).map(file => figures.get(file.id).figure);
+    const slot = rest.length ? picturesSlot(body) : body._pictures;
     if (!slot) return;
-    const signature = JSON.stringify([chatId, scope, shown.map(file => [file.id, file.name, file.status]),
-      shown.some(file => confirmKey === `${scope}:file:${file.id}`) ? confirmKey : '']);
-    if (slot.dataset.signature === signature) return;
-    slot.dataset.signature = signature;
-    for (const old of slot.children) watcher?.unobserve(old);
-    slot.replaceChildren(...shown.map(file => pictureCard(chatId, file, scope)));
-    slot.hidden = !shown.length;
+    if (rest.length !== slot.children.length || rest.some((figure, index) => slot.children[index] !== figure)) {
+      slot.replaceChildren(...rest);
+    }
+    slot.hidden = !rest.length;
   }
   function readDataUrl(blob) {
     return new Promise((resolve, reject) => {
@@ -457,7 +500,7 @@
     }
     return entry;
   }
-  // A picture the agent shared from its VM, under the answer at its width;
+  // A picture the agent shared from its VM, in or under the answer at its width;
   // a click opens it in the file viewer (attachments.js) with download and
   // removal. Its name, download and removal sit in the caption.
   // A picture from the web (show_image, agent_web_images.py): what it shows,
@@ -479,6 +522,8 @@
     const web = webSource(file);
     const name = web ? web.caption || web.host || file.name : file.name;
     const figure = node('figure', 'agent-vm-picture'); figure.dataset.filesKey = key;
+    // In the answer's text the page's words are its own (data-i18n-skip); this bar is ours (i18n.js).
+    figure.setAttribute('data-i18n-ui', '');
     const open = node('button', 'agent-vm-picture-open'); open.type = 'button';
     open.setAttribute('aria-label', `Open ${name}`);
     const img = node('img'); img.alt = name; img.decoding = 'async';
@@ -542,8 +587,13 @@
 
   function signature(turnInfo) {
     const origins = (data?.files || []).filter(file => file.origin?.message_id).map(mailOrigin);
-    return JSON.stringify([chat, revision, turnInfo.id, turnInfo.fileIds, error, confirmKey, origins,
+    return JSON.stringify([chat, revision, turnInfo.id, turnInfo.fileIds, error, confirmKey, origins, answerWriting(),
       historyRows().map(row => row.dataset.agentTurnResources)]);
+  }
+  // The live answer is still being written: its Agent run executes.
+  function answerWriting() {
+    const context = App.runRegistry?.visible?.();
+    return Boolean(context?.config?.executionMode === 'agent' && App.runRegistry?.isExecuting?.(context.runId));
   }
   function hideAll() {
     const resources = document.getElementById('agentAnswerResources');
@@ -566,8 +616,8 @@
     }
     const shared = files.filter(file => ['vm_file', 'web_image'].includes(file.kind) && file.turn_id === turnId);
     const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
-    // Under the answer text when there is one, else with the other files.
-    if (body) fillPictures(body, chatId, shown, scope);
+    // In and under the answer text when there is one, else with the other files.
+    if (body) fillPictures(body, chatId, shown, scope, live && answerWriting());
     else if (shown.length) {
       const gallery = node('div', 'agent-answer-pictures');
       for (const file of shown) gallery.append(pictureCard(chatId, file, scope));

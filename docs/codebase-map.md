@@ -6306,7 +6306,29 @@ Antworttext (bis es gezeichnet ist, ein Feld im Skelett-Ton mit wanderndem Licht
 alter Chats; eines, das nicht kommt, sagt „Picture couldn’t load“), über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
 dem Antwort-Body; `App.answerTail(body)` sagt agent-review.js, watch.js,
 share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffnet
-`App.attachments.openStored`), andere als Dateizeile. Ein Markdown-Bild mit
+`App.attachments.openStored`), andere als Dateizeile. **Im Text statt darunter
+(seit 2026-10-31, Max: „Bilder sollten in den Text eingebaut werden“):**
+`show_image` und `vm_share_file` (bei einem Bild) antworten mit `markdown`
+`![Unterschrift](picture:p2)` (`agent_web_images.picture_markdown`, `PLACE_NOTE`;
+Kennung `p1…` aus `find_pictures`, `f1…` je Nachricht für VM-Bilder) und
+speichern sie als `origin.ref`. `markdown-stream.js` macht daraus einen leeren
+Platz (`marked`-Renderer `image`, `<span class="md-picture" data-picture>`;
+eine Zeile nur aus Bildern wird `div.md-picture-line` in Antwortbreite statt
+eines Absatzes mit 66ch), lädt nichts, zeigt beim Streamen kein halbes
+`![…](` (`holdOpenImage`) und behält einen gefüllten Platz beim Morphen samt
+Inhalt (`PICTURE_NODES`). `agent-workspace.js` `fillPictures`/`placePictures`
+setzt das Bild der Turn mit dieser `ref` hinein (je Bild eine Figur, die nur
+bei Name/Status/Löschfrage neu entsteht), ein `MutationObserver` am Body füllt
+neue Plätze jedes Schreibens (Stream, Voll-Render, Prüfer-Marken) vor dem
+nächsten Frame; ein Platz ohne passendes Bild bleibt leer und nimmt keinen
+Raum (`.md-picture:empty`). Nicht gesetzte Bilder stehen erst unter dem Text,
+wenn der Lauf nicht mehr läuft (`answerWriting`), damit kein Bild von unten in
+den Text springt. Satzmarken, Quellen-Pills und `sourcesOf` überspringen
+`.md-picture` (`consensus-anchor.js`, `sources.js`, `agent-review.js`), die
+Prüfer-Satzzerlegung eine Zeile nur aus Bildern (`_PICTURE_LINE_RE`),
+öffentliche Seiten lassen sie ganz weg (`public_markdown._PICTURE_REF`). Die
+Figur trägt `data-i18n-ui`: `i18n.js` übersetzt die App-Knöpfe darin, obwohl
+die Antwort `data-i18n-skip` ist. Ein Markdown-Bild mit
 Dateinamen/VM-Pfad (`is-local-ref`, markdown-stream.js) blendet eine Antwort mit
 geteilten Bildern aus, statt „[Image not loaded]“ zu zeigen. Details: `docs/agent-mode.md`, „Agent VM“.
 
@@ -11689,28 +11711,23 @@ seit 2026-10-29 von 700 px an als Panel am rechten Rand in der Breite der
 Desktop-Leiste (UX-Audit E6, vorher 1066 px breit bei 1100), darunter von
 unten; Scrim und Sheet liegen über der Kopfleiste des Handys
 (`--z-header` + 1/+ 2, H3).
-`agent-delegation.js` stellt die Leiste ab 1200 px seit 2026-10-28 ohne
-eigene Wahl neben die Spalte (`panelDefaultClosed`; vom 17. bis 28.10. nur auf
-Klick); ein Schließen merkt `localStorage` `agent-panel:{uid}` für die nächsten
-Chats. Rechts neben den Modell-Icons steht, durch eine Haarlinie abgesetzt,
+`agent-delegation.js` öffnet die Leiste seit 2026-10-31 auf jeder Breite nur
+auf Klick (Max: „nur öffnen, wenn man auf das Icon klickt, es stört, dass die
+automatisch aufgeht“; vom 28. bis 31.10. stand sie ab 1200 px von selbst offen,
+im Audit-Modus schon mit der Nachricht, sonst einen Moment nach dem Senden mit
+dem `accepted` des Servers). Rechts neben den Modell-Icons steht, durch eine Haarlinie abgesetzt,
 `.agent-inline-controls`: das Arbeitsplatz-Symbol (`.agent-workspace-toggle`,
 atmet wie ein arbeitender Prüfer, solange ein VM-Schritt läuft) und zuletzt
 das Panel-Symbol (`.agent-sidebar-toggle`, `aria-label` „Activity · n“,
 `aria-controls="agentSidebar"`) oder ein Modell-Icon öffnet sie: unter 1200 px
 als Sheet mit Scrim, Fokusfalle und Escape, ab 1200 px daneben; offen rückt
 die Spalte nach links (`body.agent-sidebar-open`), statt unter der Leiste zu
-liegen. Nur explizites Öffnen/Schließen wird pro Turn gemerkt, **und seit
-2026-10-20 auch pro Chat** (`agent-panel:{uid}:{chatId}` in sessionStorage,
-Apple-Audit A9): ein neuer Turn übernimmt die Wahl des Chats, und solange eine
-Folgefrage ihren Turn noch nicht kennt (`project({chatId, running})` ohne
-`turnId`), bleibt eine offene Leiste mit „Starting…“ stehen, statt zu- und
-wieder aufzugehen (`chatPanelStaysOpen`: Wahl des Chats, sonst der Standard).
-Im Audit-Modus (`App.agentPreferences.auditing()`, Prüfer folgen immer) öffnet
-sie sich ab 1200 px seit 2026-10-30 schon mit der Nachricht, auch im neuen Chat
-ohne `chatId`: mit dem ersten Aufruf geöffnet, verengte sie die Spalte einen
-Moment nach dem Senden, und die neue Frage brach unter den Augen um. Die
-Spalte nimmt dabei ihre Breite ohne Gleiten an (`body.agent-panel-instant`,
-zwei Frames lang): ein Umbruch mitten im Gleiten war der Sprung. Sie geht auf demselben Weg, wie sie kam
+liegen. Offen bleibt sie nur, solange sie steht: eine Folgefrage im Chat der
+offenen Leiste (`openChat`, Apple-Audit A9) behält sie mit „Starting…“, bis ihr
+Turn bekannt ist (`project({chatId, running})` ohne `turnId`), und ihr neuer
+Turn übernimmt sie; ein anderer Chat, ein Reload oder der Weg zurück öffnen sie
+nie von selbst (keine gemerkte Wahl mehr in `localStorage`/`sessionStorage`,
+`agent-view:` hält nur Aufklappzustand und Scrollstand). Sie geht auf demselben Weg, wie sie kam
 (`setPanelVisible`, `.is-leaving` gleitet/blendet samt Scrim aus, erst danach
 `hidden`; C5). Logo-Einflug (`.agent-inline-model.is-arriving`) nur für Modelle,
 die während eines laufenden Turns dazukommen; ein gespeicherter Turn zeigt seine

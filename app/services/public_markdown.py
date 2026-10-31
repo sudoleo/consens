@@ -218,6 +218,9 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
                      attribute_filter=_same_origin_images_only)
 
 
+_PICTURE_REF = re.compile(r"^picture:[A-Za-z0-9_-]{1,64}$")
+
+
 def _same_origin_image(src) -> bool:
     """A path on this site, like isInlineImageSource in markdown-stream.js;
     "//host" and "/\\host" name another host."""
@@ -229,10 +232,20 @@ def _neutralize_remote_images(tokens):
     """An image of the answer that would load from elsewhere is the note the
     app shows instead (markdown-stream.js neutralizeRemoteMedia). Until
     2026-10-28 a public page loaded it: a model's or an injected picture told
-    its host who read the page, and when (audit)."""
-    for token in tokens:
+    its host who read the page, and when (audit). A picture the agent placed
+    in its answer (``picture:p2``, a file of the private chat the app shows
+    there) leaves nothing, and a line of only those leaves no paragraph."""
+    for position, token in enumerate(tokens):
         if token.type != "inline" or not token.children:
             continue
+        pictures = [child.type == "image" and _PICTURE_REF.match(str(child.attrGet("src") or "").strip())
+                    for child in token.children]
+        if any(pictures):
+            token.children = [child for child, picture in zip(token.children, pictures) if not picture]
+            if all(child.type == "softbreak" or (child.type == "text" and not child.content.strip())
+                   for child in token.children) and 0 < position < len(tokens) - 1:
+                tokens[position - 1].hidden = tokens[position + 1].hidden = True
+                token.children = []
         for index, child in enumerate(token.children):
             if child.type != "image" or _same_origin_image(child.attrGet("src")):
                 continue

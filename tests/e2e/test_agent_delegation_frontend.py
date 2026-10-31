@@ -51,13 +51,12 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         }""", {"chat": chat, "turn": turn, "agent": agent})
         page.locator('#questionInput').fill('Check sources')
         page.locator('#sendButton').click()
-        # A wide screen shows the panel beside the column by itself
-        # (2026-10-28); a narrow one never covers the chat: the toggle opens
-        # the sheet with its scrim.
+        # The panel opens only on request, on every width (2026-10-31, Max);
+        # on a narrow screen as a sheet with its scrim.
         expect(page.locator('.agent-sidebar-toggle')).to_be_visible()
+        expect(page.locator('#agentSidebar')).to_be_hidden()
+        page.locator('.agent-sidebar-toggle').click()
         if width < 1200:
-            expect(page.locator('#agentSidebar')).to_be_hidden()
-            page.locator('.agent-sidebar-toggle').click()
             expect(page.locator('.agent-sidebar-scrim')).to_be_visible()
         expect(page.locator('#agentSidebar')).to_be_visible()
         label = page.locator('.agent-session-tokens')
@@ -161,10 +160,9 @@ def test_agent_sidebar_real_app_and_saved_view(browser, phase4_server, width, da
         page.locator("#questionInput").fill(saved["question"])
         page.locator("#sendButton").click()
         sidebar = page.locator("#agentSidebar")
-        if width < 1200:
-            expect(page.locator(".agent-sidebar-toggle")).to_have_attribute("aria-expanded", "false")
-            expect(sidebar).to_be_hidden()
-            page.locator(".agent-sidebar-toggle").click()
+        expect(page.locator(".agent-sidebar-toggle")).to_have_attribute("aria-expanded", "false")
+        expect(sidebar).to_be_hidden()
+        page.locator(".agent-sidebar-toggle").click()
         expect(sidebar).to_be_visible()
         expect(page.locator(".agent-sidebar-toggle")).to_have_attribute("aria-expanded", "true")
         expect(page.locator(".agent-session")).to_have_count(len(agents))

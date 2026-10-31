@@ -308,9 +308,6 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
     --agent-chat-width: min(var(--app-container-width), calc(100vw - var(--app-sidebar-offset) - 346px - 48px));
     margin-left: calc((var(--app-sidebar-offset) + 100% - 346px - var(--agent-chat-width)) / 2);
   }
-  /* Opened with the message (agent-delegation.js, audit mode): the column is
-     at its width in the frame the question appears. */
-  body.single-agent-active.agent-panel-instant:not(.answer-reader-docked) .container { transition: none; }
 }
 /* The one scrim (foundation.css). An --ink tint dimmed in light mode but
    laid a pale veil over the chat in dark mode. Scrim and sheet stand above

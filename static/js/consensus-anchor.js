@@ -127,9 +127,11 @@
     // Zahlen). Ohne sie hier wurde ihr Text als Satzteil gewrappt und trug
     // dann die Unterstreichung der Passage — eine bernsteinfarbene Domain
     // sieht aus wie ein Fehler, nicht wie eine Quellenangabe.
+    // A picture the agent placed in its answer (.md-picture) is the app's,
+    // not a sentence: its caption and source are never marked.
     const MARK_SKIP_SELECTOR =
-      ".claim-badge, .source-link, .src-ref, .src-ref-sep, code, pre, .katex";
-    const UI_SKIP_SELECTOR = ".claim-badge, .source-link, .src-ref, .src-ref-sep";
+      ".claim-badge, .source-link, .src-ref, .src-ref-sep, .md-picture, code, pre, .katex";
+    const UI_SKIP_SELECTOR = ".claim-badge, .source-link, .src-ref, .src-ref-sep, .md-picture";
     // Inline-Code wird nie umwickelt, ist aber Satztext: der Anker traegt ihn
     // ("`npm` installs ..."), und der Server zaehlt gleiche Saetze mit ihm.
     // Ohne ihn in der flachen Sicht fand ein solcher Satz nie seine Stelle.

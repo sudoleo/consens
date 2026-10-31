@@ -103,6 +103,29 @@ describe("i18n.js on a German page", () => {
     for (const id of ["answer", "code", "edit", "title"]) expect(document.getElementById(id).textContent).toBe("New chat");
   });
 
+  // A picture the agent placed in its answer (agent-workspace.js): the bar
+  // under it is the app's, the caption and the site are the page's.
+  it("translates the app's controls inside an answer, but not the words in them that are content", async () => {
+    const { window, document } = germanPage('<main><div id=answer data-i18n-skip><p>Copy</p><span id=place></span></div></main>');
+    const figure = document.createElement("figure");
+    figure.setAttribute("data-i18n-ui", "");
+    const button = document.createElement("button");
+    button.textContent = "Copy"; button.title = "Settings";
+    const caption = document.createElement("span");
+    caption.setAttribute("data-i18n-skip", ""); caption.textContent = "New chat";
+    figure.append(button, caption);
+    document.getElementById("place").append(figure);
+    await settle(window);
+    expect(button.textContent).toBe("Kopieren");
+    expect(button.title).toBe("Einstellungen");
+    expect(caption.textContent).toBe("New chat");
+    expect(document.querySelector("#answer > p").textContent).toBe("Copy");
+    // What the bar writes later is translated too.
+    button.textContent = "Settings";
+    await settle(window);
+    expect(button.textContent).toBe("Einstellungen");
+  });
+
   it("follows a script that keeps changing the same label", async () => {
     const { window, document } = germanPage("<main><span id=s></span></main>");
     const span = document.getElementById("s");

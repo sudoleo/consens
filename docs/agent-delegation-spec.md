@@ -60,11 +60,11 @@ Workern bedarfsgesteuert. Delegation ist verfügbar, nicht verpflichtend.
 
 ## Frontend
 
-- Rechts gibt es eine **Agenten-Seitenleiste**. Ab 1200 px steht sie seit
-  2026-10-28 ohne eigene Wahl neben der Antwort (vom 17. bis 28.10. ging sie
-  nur auf Klick auf); wer sie einmal schließt, behält sie in den nächsten
-  Chats geschlossen. Darunter öffnet sie nur das Panel-Symbol oder ein
-  Modell-Icon. Öffnen und Schließen werden pro Turn und Chat gemerkt.
+- Rechts gibt es eine **Agenten-Seitenleiste**. Sie öffnet seit 2026-10-31
+  auf jeder Breite nur das Panel-Symbol oder ein Modell-Icon (vom 28. bis
+  31.10. stand sie ab 1200 px von selbst offen). Offen bleibt sie für die
+  nächste Nachricht desselben Chats; ein anderer Chat oder ein Reload öffnet
+  sie nie von selbst.
   Mobil erscheint eine passende ausklappbare Detailansicht.
 - Direkt neben dem bestehenden Reasoning-/Aktivitätspfad stehen die Modell-Icons
   der aktuell arbeitenden Agenten. Klick öffnet deren Details. Gleiche Modelle

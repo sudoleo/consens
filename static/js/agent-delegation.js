@@ -129,8 +129,10 @@
   const uid = () => window.auth?.currentUser?.uid || "";
   // Beside the column on wide screens (the column moves aside, agent-chat.css),
   // a sheet on narrower ones. On every width it opens only on request: the
-  // panel glyph or a model icon (2026-10-17, before that it opened by itself
-  // for a running turn on a wide screen).
+  // panel glyph or a model icon (2026-10-31, Max: "nur öffnen, wenn man auf
+  // das Icon klickt"; from 2026-10-28 it stood open by itself from 1200 px,
+  // in audit mode from Send on, otherwise a moment after Send). Opened, it
+  // stays for the chat's next message while it shows (openChat).
   const wideQuery = window.matchMedia?.('(min-width: 1200px)');
   const wide = () => !wideQuery || wideQuery.matches;
   function setText(el, value) { if (el.textContent !== window.App.t(value)) el.textContent = value; }
@@ -168,38 +170,21 @@
   function prefs(view) {
     if (current === view && sidebar) view.scroll = sidebar._list.scrollTop;
     try {
-      // Only an explicit open/close is remembered; the default follows the viewport.
-      sessionStorage.setItem(`agent-view:${view.key}`, JSON.stringify({ closed: view.manual ? view.closed : undefined,
-        expanded: [...view.expanded], scroll: view.scroll }));
+      sessionStorage.setItem(`agent-view:${view.key}`, JSON.stringify({ expanded: [...view.expanded], scroll: view.scroll }));
     } catch (_) { /* Storage may be unavailable. */ }
   }
-  // The panel the reader opened stays open for the chat, also over its next
-  // messages (Apple audit A9): a new turn starts with the chat's choice.
-  const chatKey = chatId => `agent-panel:${uid()}:${chatId}`;
-  function chatPanelOpen(chatId) {
-    try { return chatId ? sessionStorage.getItem(chatKey(chatId)) : null; } catch (_) { return null; }
-  }
-  function rememberChatPanel(view) {
-    try { sessionStorage.setItem(chatKey(view.chatId), view.closed ? "closed" : "open"); } catch (_) { /* Storage may be unavailable. */ }
-    // And across chats: the reader's last explicit choice (panelDefault).
-    try { localStorage.setItem(`agent-panel:${uid()}`, view.closed ? "closed" : "open"); } catch (_) { /* Storage may be unavailable. */ }
-  }
-  // Without a choice for the chat, the panel stands beside the answer where
-  // there is room for it (2026-10-28, Max: a central element, best always
-  // there) and stays closed on narrower screens, where it would be a sheet;
-  // a reader who closed it once keeps it closed in the next chats.
-  function panelDefaultClosed() {
-    let choice = null;
-    try { choice = localStorage.getItem(`agent-panel:${uid()}`); } catch (_) { /* Storage may be unavailable. */ }
-    return choice ? choice === "closed" : !wide();
-  }
+  // The chat whose panel the reader has open: it stays open over the chat's
+  // next message (Apple audit A9), never for another chat, and never comes
+  // back by itself once it closed (a reload, another chat and back).
+  let openChat = "";
+  const panelShown = () => Boolean(sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving"));
   function resetOwner() {
     if (owner === uid() && ownerUser === window.auth?.currentUser && ownerGeneration === App.authState?.generation) return;
     owner = uid();
     ownerUser = window.auth?.currentUser;
     ownerGeneration = App.authState?.generation;
     for (const view of views.values()) view.controller.abort();
-    views.clear(); current = null;
+    views.clear(); current = null; openChat = "";
     if (sidebar) { sidebar.hidden = true; clearRows(); App.agentWorkLog?.reset(sidebar._workLog); }
     if (scrim) scrim.hidden = true;
     if (inline) inline.remove();
@@ -212,11 +197,8 @@
     if (!views.has(key)) {
       let saved = {};
       try { saved = JSON.parse(sessionStorage.getItem(`agent-view:${key}`) || "{}"); } catch (_) {}
-      const chatChoice = chatPanelOpen(chatId);
-      if (typeof saved.closed !== 'boolean' && chatChoice) saved.closed = chatChoice === "closed";
       views.set(key, { key, uid: owner, user: ownerUser, authGeneration: ownerGeneration, chatId, turnId, agents: new Map(), details: new Map(), progress: new Map(),
-        controller: new AbortController(), expanded: new Set(saved.expanded || []),
-        closed: typeof saved.closed === 'boolean' ? saved.closed : panelDefaultClosed(), manual: typeof saved.closed === 'boolean',
+        controller: new AbortController(), expanded: new Set(saved.expanded || []), closed: true,
         scroll: saved.scroll || 0, loaded: false, loading: false, running: false, ended: false, settling: false, usage: null, lastSync: 0 });
       if (views.size > 24) {
         const old = [...views.values()].find(v => v.key !== current?.key && !v.running);
@@ -467,7 +449,8 @@
     }, 200);
   }
   function hide(manual = false) {
-    if (manual && current) { current.closed = true; current.manual = true; prefs(current); rememberChatPanel(current); }
+    if (manual) openChat = "";
+    if (manual && current) current.closed = true;
     setPanelVisible(false);
     document.body.classList.remove("agent-sidebar-open", "agent-sidebar-sheet");
     if (manual) {
@@ -485,8 +468,8 @@
     App.answerReader?.close({ focus: false });
     returnFocus = trigger;
     current.closed = false;
-    current.manual = true;
-    prefs(current); rememberChatPanel(current); render();
+    openChat = current.chatId;
+    render();
     // A reviewer's later session is shown in its first one's row.
     const grouped = [...reviewerRows(current).values()].find(entry => entry?.sessions?.includes(agentId));
     const row = sidebar._rows.get(grouped?.id || agentId);
@@ -988,34 +971,12 @@
       if (agent) openInReader(view, agent);
     }, true);
   }
-  // Whether the chat's next turn starts with the panel open: the reader's
-  // choice for the chat, else the default (panelDefaultClosed).
-  function chatPanelStaysOpen(chatId) {
-    const choice = chatPanelOpen(chatId);
-    return choice ? choice === "open" : !panelDefaultClosed();
-  }
   function project(spec) {
     resetOwner();
-    // A new message of a chat whose panel is open: the panel waits for the
-    // new turn's calls instead of closing and opening again (Apple audit A9).
-    // In audit mode, where reviewers always follow and the panel stands
-    // beside the column, it opens with the message itself (2026-10-30):
-    // opened with the turn's first call, it narrowed the column a moment
-    // after Send, and the new question broke onto another line under the eye.
-    const open = sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving");
-    if (!spec?.turnId && spec?.running && owner && chatPanelStaysOpen(spec.chatId)
-        && (spec.chatId && open || (wide() && App.agentPreferences?.auditing?.()))) {
-      if (!open) {
-        ensure();
-        setPanelVisible(true);
-        sidebar.setAttribute('role', 'complementary');
-        sidebar.removeAttribute('aria-modal');
-        // The column takes its new width in the frame the question appears,
-        // not in a glide: a question that breaks onto a new line half-way
-        // through the glide jumps (agent-chat.css .agent-panel-instant).
-        document.body.classList.add("agent-sidebar-open", "agent-panel-instant");
-        requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove("agent-panel-instant")));
-      }
+    // A new message of a chat whose panel the reader has open: the panel
+    // waits for the new turn's calls instead of closing and opening again
+    // (Apple audit A9). It never opens here by itself (2026-10-31).
+    if (!spec?.turnId && spec?.running && owner && spec.chatId && spec.chatId === openChat && panelShown()) {
       if (current) prefs(current);
       current = null; inline?.remove(); inline = null;
       clearRows();
@@ -1034,6 +995,9 @@
     const wasRunning = view.running;
     if (changed) {
       if (current) prefs(current);
+      // Open only where it stands open for this chat now; else closed until clicked.
+      view.closed = !(spec.chatId === openChat && panelShown());
+      if (view.closed) openChat = "";
       current = view; ensure(); clearRows();
     }
     mergeUsage(view, spec.usage);
@@ -1078,7 +1042,7 @@
     let view = views.get("demo");
     if (!view || view.turnId !== spec.turnId) {
       view = { key: "demo", local: true, uid: owner, chatId: "demo", turnId: spec.turnId, agents: new Map(), details: new Map(),
-        progress: new Map(), controller: new AbortController(), expanded: new Set(), closed: true, manual: false,
+        progress: new Map(), controller: new AbortController(), expanded: new Set(), closed: true,
         scroll: 0, loaded: true, loading: false, running: true, ended: false, settling: false, usage: null, lastSync: Date.now() };
       views.set("demo", view);
     }
@@ -1106,6 +1070,7 @@
   }
   window.addEventListener("consensio:run-registry-change", resetOwner);
   document.addEventListener("consensio:reader-opening", () => {
+    openChat = "";
     if (current) { current.closed = true; prefs(current); hide(); render(); }
   });
   // The newest reasoning line of each comparison model still answering, in

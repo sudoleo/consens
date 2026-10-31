@@ -1099,6 +1099,13 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
         self.assertEqual(sentences, [])
         self.assertEqual(numbered, "")
 
+    def test_a_line_of_placed_pictures_is_no_sentence(self):
+        # Dort steht in der App das Bild (agent_web_images.picture_markdown).
+        text = ("Der Turm ist 330 Meter hoch.\n\n![Der Eiffelturm bei Nacht im Winter](picture:p2) "
+                "![Karte von Paris mit dem Turm](picture:f1)\n\nEr wurde 1889 eröffnet.")
+        _numbered, sentences = _enumerate_consensus_sentences(text, limit=None)
+        self.assertEqual(sentences, ["Der Turm ist 330 Meter hoch.", "Er wurde 1889 eröffnet."])
+
 
 class SentenceAnchorTests(unittest.TestCase):
     """Der Anker kommt aus der Satznummer statt aus einer Abschrift - damit

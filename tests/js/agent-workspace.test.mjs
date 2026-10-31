@@ -356,6 +356,48 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // 2026-10-31, Max: pictures belong in the text, not all under it.
+  it('puts a picture where the agent placed it in the text, the others under it once the answer is written', async () => {
+    const web = (id, ref) => ({ id: id.repeat(32), name: `picture-${id}.webp`, mime: 'image/webp', size: 900, status: 'ready',
+      kind: 'web_image', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',
+      origin: { source: 'web', page: 'https://example.org/a', caption: `Picture ${id}`, ref } });
+    const PLACED = web('a', 'p1'), LOOSE = web('b', 'p2');
+    const files = [PLACED, LOOSE];
+    const { window, document, dom } = boot({ files });
+    window.fetch = vi.fn(async url => url.includes('/files/') && !url.endsWith('/files')
+      ? { ok: true, blob: async () => new window.Blob([new Uint8Array([82, 73, 70, 70])], { type: 'image/webp' }) } : reply(files));
+    // The answer is still being written: its run executes.
+    let running = true;
+    window.App.runRegistry.visible = () => ({ runId: 'r1', config: { executionMode: 'agent' }, metadata: { chatId: CHAT, agentTurnId: TURN_TWO } });
+    window.App.runRegistry.isExecuting = () => running;
+    const body = document.getElementById('agentAnswerBody');
+    body.innerHTML = '<p>Intro.</p><div class="md-picture-line"><span class="md-picture" data-picture="p1"></span></div>'
+      + '<span class="md-picture" data-picture="p9"></span>';
+    await window.App.agentWorkspace.refresh(CHAT);
+    const place = body.querySelector('[data-picture="p1"]');
+    const figure = place.querySelector('.agent-vm-picture');
+    expect(figure.querySelector('.agent-file-name').textContent).toBe('Picture a');
+    expect(figure.hasAttribute('data-i18n-ui')).toBe(true);
+    // A place that names no picture stays empty; the other picture waits.
+    expect(body.querySelector('[data-picture="p9"]').childNodes.length).toBe(0);
+    expect(body.nextElementSibling?.className === 'agent-answer-pictures' && !body.nextElementSibling.hidden).toBe(false);
+    // The answer is rendered again (stream, review marks): the same figure
+    // takes the new place before the frame is drawn.
+    body.innerHTML = '<p>Intro, longer.</p><div class="md-picture-line"><span class="md-picture" data-picture="p1"></span></div>';
+    await Promise.resolve();
+    expect(body.querySelector('[data-picture="p1"]').firstChild).toBe(figure);
+    // Written: the picture it did not place stands under the text.
+    running = false;
+    window.App.agentWorkspace.refresh(CHAT);
+    const slot = body.nextElementSibling;
+    expect(slot.className).toBe('agent-answer-pictures');
+    expect(slot.hidden).toBe(false);
+    expect([...slot.querySelectorAll('.agent-file-name')].map(el => el.textContent)).toEqual(['Picture b']);
+    expect(body.querySelector('[data-picture="p1"]').firstChild).toBe(figure);
+    expect(window.fetch.mock.calls.filter(([url]) => url.includes(PLACED.id))).toHaveLength(1);
+    dom.window.close();
+  });
+
   it('puts an archived turn\'s pictures under its own answer text, above its evidence row', async () => {
     const PICTURE = { id: 'e'.repeat(32), name: 'bunny.png', mime: 'image/png', size: 900, status: 'ready', kind: 'vm_file',
       turn_id: TURN_ONE, expires_at: '2099-10-29T10:00:00Z' };

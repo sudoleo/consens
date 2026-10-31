@@ -134,6 +134,39 @@ function syncTaskBoxes(el) {
   if (el?.querySelector?.(".md-task-box")) window.App?.taskChecks?.apply?.(el);
 }
 
+// --- Pictures in the answer -------------------------------------------------
+// The agent places a picture it showed (show_image, vm_share_file) with
+// "![what it shows](picture:p2)" (2026-10-31, Max: pictures always hung under
+// the answer, often in poor style). Here that is an empty place;
+// agent-workspace.js puts that picture of the turn into it, and a place that
+// names none of them takes no room (agent-workspace.css). Nothing loads from
+// the reference itself. A line of only pictures is a block of its own, as
+// wide as the answer, not a paragraph of reading width.
+const pictureReadyParsers = new WeakSet();
+const PICTURE_REF = /^picture:([A-Za-z0-9_-]{1,64})$/;
+
+function ensurePictureRefs(marked) {
+  if (typeof marked?.use !== "function" || pictureReadyParsers.has(marked)) return;
+  pictureReadyParsers.add(marked);
+  marked.use({ renderer: {
+    image(href) {
+      const match = PICTURE_REF.exec(String(href || "").trim());
+      return match ? `<span class="md-picture" data-picture="${match[1]}"></span>` : false;
+    }
+  } });
+}
+
+function liftPictureLines(root) {
+  root.querySelectorAll?.("p").forEach(line => {
+    const nodes = Array.from(line.childNodes).filter(node => node.nodeType !== Node.TEXT_NODE || node.data.trim());
+    if (!nodes.length || !nodes.every(node => node.nodeType === Node.ELEMENT_NODE && node.matches(".md-picture"))) return;
+    const block = (root.ownerDocument || document).createElement("div");
+    block.className = "md-picture-line";
+    block.append(...nodes);
+    line.replaceWith(block);
+  });
+}
+
 // --- Copying a code block -------------------------------------------------
 // Each code block carries a copy button in its corner (2026-10-26). An icon
 // without text, so the answer's text (claims, selections, the copied answer)
@@ -219,6 +252,7 @@ function renderMarkdownFragment(md) {
   }
   try {
     ensureTaskMarkers(window.marked);
+    ensurePictureRefs(window.marked);
     let fragment = window.DOMPurify.sanitize(window.marked.parse(prepared),
       { ...MODEL_HTML_CONFIG, RETURN_DOM_FRAGMENT: true });
     if (typeof fragment === "string") {
@@ -229,6 +263,7 @@ function renderMarkdownFragment(md) {
     }
     neutralizeRemoteMedia(fragment);
     const adopted = fragment.ownerDocument === document ? fragment : document.adoptNode(fragment);
+    liftPictureLines(adopted);
     enhanceTaskLists(adopted);
     nestModelHeadings(adopted);
     return adopted;
@@ -350,12 +385,17 @@ const CARRIED_PROPERTIES = ["sourceData", "sourceGroup"];
 // Claim marks carry their own listeners and state: they never become another
 // element, the new render's node takes their place.
 const MARK_NODES = ".cx-claim, .cx-spot, .claim-badge";
+// A picture's place keeps the picture agent-workspace.js put into it: the
+// same place in the next render is the same node, with what it holds.
+const PICTURE_NODES = ".md-picture";
 
 function sameNodeKind(live, next) {
   if (live.nodeType !== next.nodeType) return false;
   if (live.nodeType !== Node.ELEMENT_NODE) return true;
   return live.tagName === next.tagName && live.namespaceURI === next.namespaceURI
-    && !live.matches(MARK_NODES) && !next.matches(MARK_NODES);
+    && !live.matches(MARK_NODES) && !next.matches(MARK_NODES)
+    && live.matches(PICTURE_NODES) === next.matches(PICTURE_NODES)
+    && live.getAttribute("data-picture") === next.getAttribute("data-picture");
 }
 
 function morphNode(live, next) {
@@ -367,6 +407,7 @@ function morphNode(live, next) {
     else live.nodeValue = after;
     return;
   }
+  if (live.matches(PICTURE_NODES)) return;
   for (const attribute of Array.from(live.attributes)) {
     if (!next.hasAttribute(attribute.name)) live.removeAttribute(attribute.name);
   }
@@ -611,7 +652,18 @@ function holdOpenTask(text) {
   return match[4] ? `${text.slice(0, start)}${match[2]}[${match[3] || " "}] ​` : text.slice(0, start);
 }
 
+// A picture the agent places ("![…](picture:p2)") showed its raw marks until
+// its line was complete: an image still arriving waits for the next chunk.
+const OPEN_IMAGE = /!\[[^\]\n]*(?:\](?:\([^)\n]*)?)?$/;
+
+function holdOpenImage(text) {
+  if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
+  const match = text.match(OPEN_IMAGE);
+  return match ? text.slice(0, match.index) : text;
+}
+
 function renderStreamTail(text, decorate) {
+  text = holdOpenImage(text);
   const table = pendingTableStart(text);
   if (table === -1) return renderStreamFragment(closeOpenStrong(holdOpenTask(text)), decorate);
   const before = text.slice(0, table);

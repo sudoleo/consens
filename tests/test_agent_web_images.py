@@ -156,10 +156,12 @@ def test_the_agent_looks_first_and_only_what_it_shows_lands_under_the_answer(sto
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     loop = audit_loop(store, script)
     # No block of their own (2026-10-28): the descriptions say what they do,
-    # and the answer section that pictures in the Markdown do not show.
+    # and the answer section that a picture shows only where the agent places
+    # one it showed (2026-10-31).
     assert {"find_pictures", "show_image"} <= set(loop.registry.tools)
     assert "PICTURES" not in loop.messages[0]["content"]
-    assert "pictures in it are not shown" in prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
+    assert "a picture shows in it only where you place one you showed" in prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
+    assert "picture:<id>" in loop.registry.tools["show_image"].description
     assert set(loop.registry.tools["find_pictures"].arguments.model_json_schema()["properties"]) == {"urls"}
     assert set(loop.registry.tools["show_image"].arguments.model_json_schema()["properties"]) == {"picture", "caption"}
     events = list(loop.run())
@@ -176,15 +178,17 @@ def test_the_agent_looks_first_and_only_what_it_shows_lands_under_the_answer(sto
     # The same address again is the same picture, not fetched again.
     assert [entry["id"] for entry in again["pictures"]] == ["p1"]
     assert shown["status"] == "shown" and shown["page"] == PAGE and shown["picture"] == PICTURE
-    assert "do not embed or link it" in shown["note"]
-    assert twice["status"] == "shown" and "already under your answer" in twice["note"]
+    # It names what the agent writes where the picture belongs in its text.
+    assert shown["markdown"] == "![Jeef at Lobby Legends](picture:p1)"
+    assert agent_web_images.PLACE_NOTE in shown["note"] and "do not link it" in shown["note"]
+    assert twice["status"] == "shown" and "already shown" in twice["note"] and twice["markdown"] == shown["markdown"]
     assert "No picture p9 in this message" in unknown["error"]
     # Only the picture it showed is stored and announced; what it only looked at never is.
     saved = AgentFiles(store.db).list(UID, loop.chat_id)
     assert [(file["kind"], file["turn_id"], file["mime"]) for file in saved] == [
         ("web_image", loop.turn_id, "image/webp")]
     assert saved[0]["origin"] == {"source": "web", "url": PICTURE, "page": PAGE, "host": "liquipedia.net",
-                                  "caption": "Jeef at Lobby Legends"}
+                                  "caption": "Jeef at Lobby Legends", "ref": "p1"}
     assert PAGE not in saved[0]["name"] and saved[0]["name"].endswith(".webp")
     assert len([e for e in events if e.get("type") == "resources"]) == 1
     # The agent sees what it looked at, as data and smaller: p1 and p2, then p1 again.
@@ -205,6 +209,11 @@ def test_the_agent_looks_first_and_only_what_it_shows_lands_under_the_answer(sto
             and e.get("name") in {"find_pictures", "show_image"}]
     assert done == [("find_pictures", 2, "liquipedia.net", None), ("find_pictures", 1, "liquipedia.net", None),
                     ("show_image", None, "liquipedia.net", None), ("show_image", None, "liquipedia.net", None)]
+
+
+def test_the_place_of_a_picture_stays_one_markdown_image():
+    assert agent_web_images.picture_markdown("p2", " A [weird]\n caption ") == "![A (weird) caption](picture:p2)"
+    assert agent_web_images.picture_markdown("f1") == "![](picture:f1)"
 
 
 def test_looking_has_a_bound_per_message(store, monkeypatch):

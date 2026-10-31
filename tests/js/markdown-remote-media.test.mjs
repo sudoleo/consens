@@ -86,6 +86,51 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.querySelector("img")).toBeNull();
   });
 
+  // 2026-10-31: the agent places a picture it showed in its text.
+  it("turns a placed picture into an empty place that loads nothing", () => {
+    const output = render("Intro.\n\n![The tower at night](picture:p2)\n\nText ![x](picture:f1) on.\n\n![y](picture:bad:ref)");
+    const line = output.querySelector(".md-picture-line");
+    expect(line.tagName).toBe("DIV");
+    expect(line.previousElementSibling.textContent).toBe("Intro.");
+    expect([...line.children].map(place => [place.className, place.dataset.picture, place.childNodes.length]))
+      .toEqual([["md-picture", "p2", 0]]);
+    // In a sentence it keeps its paragraph.
+    expect(output.querySelector('p > .md-picture[data-picture="f1"]')).not.toBeNull();
+    // Anything else is an image like any other: a note, never a place.
+    expect(output.querySelectorAll(".md-picture")).toHaveLength(2);
+    expect(output.querySelector("img")).toBeNull();
+    expect(output.textContent).not.toContain("The tower at night");
+  });
+
+  it("keeps a filled place and what it holds through the next render", () => {
+    const { window, document } = boot();
+    const output = document.createElement("div");
+    const text = "Intro.\n\n![The tower](picture:p2)\n\nMore.";
+    window.injectMarkdown(output, text, []);
+    const place = output.querySelector(".md-picture");
+    const figure = document.createElement("figure");
+    place.append(figure);
+    window.morphMarkdown(output, text + " And more.");
+    expect(output.querySelector(".md-picture")).toBe(place);
+    expect(place.firstChild).toBe(figure);
+    // Another picture there is another place.
+    window.morphMarkdown(output, text.replace("p2", "p3"));
+    expect(output.querySelector(".md-picture").dataset.picture).toBe("p3");
+    expect(output.querySelector(".md-picture").childNodes.length).toBe(0);
+  });
+
+  it("shows no raw image marks while a placed picture streams in", () => {
+    const { window, document } = boot();
+    const output = document.createElement("div");
+    for (const shown of ["Intro.\n\n![The tow", "Intro.\n\n![The tower](pic", "Intro.\n\n![The tower](picture:p2"]) {
+      window.renderMarkdownStream(output, shown);
+      expect(output.textContent.trim()).toBe("Intro.");
+    }
+    window.renderMarkdownStream(output, "Intro.\n\n![The tower](picture:p2)");
+    expect(output.querySelector('.md-picture[data-picture="p2"]')).not.toBeNull();
+    expect(output.textContent.trim()).toBe("Intro.");
+  });
+
   it("keeps ordinary links clickable", () => {
     const output = render("[Source](https://example.org/page)");
     expect(output.querySelector("a")?.getAttribute("href")).toBe("https://example.org/page");

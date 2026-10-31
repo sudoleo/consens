@@ -64,8 +64,10 @@ describe("Agent sidebar", () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}));
     receive(w, agent(1, 'completed'));
     w.App.agentDelegation.project({chatId,turnId,running:false});
-    // On a wide screen it stands beside the answer by itself (2026-10-28).
+    // Only on request (2026-10-31): the reader opens it.
     const sidebar = d.getElementById('agentSidebar');
+    expect(sidebar.hidden).toBe(true);
+    d.querySelector('.agent-sidebar-toggle').click();
     expect(sidebar.hidden).toBe(false);
     // The follow-up starts: the server has not named its turn yet.
     w.App.agentDelegation.project({chatId,running:true});
@@ -78,27 +80,22 @@ describe("Agent sidebar", () => {
     expect(sidebar.classList.contains('is-leaving')).toBe(false);
     dom.window.close();
   });
-  // 2026-10-30: opened with the turn's first call, the panel narrowed the
-  // column a moment after Send and the new question broke onto another line.
-  it('opens with the message in audit mode, before the server named the turn', () => {
+  // 2026-10-31, Max: it opened by itself a moment after Send (from Send on
+  // in audit mode) and should open only when the reader clicks its icon.
+  it('never opens by itself: not on Send, not when the turn arrives, not in audit mode', () => {
     const {window:w,document:d,dom} = boot();
     w.App.agentPreferences = { auditing: () => true };
-    w.App.agentDelegation.project({running:true});
-    const sidebar = d.getElementById('agentSidebar');
-    expect(sidebar.hidden).toBe(false);
-    expect(d.body.classList.contains('agent-sidebar-open')).toBe(true);
-    expect(sidebar.querySelector('.agent-sidebar-progress').textContent).toBe('Starting…');
-    w.App.agentDelegation.project({chatId,turnId,running:true});
-    expect(sidebar.hidden).toBe(false);
-    expect(sidebar.classList.contains('is-leaving')).toBe(false);
-    dom.window.close();
-  });
-  it('waits for the turn outside audit mode', () => {
-    const {window:w,document:d,dom} = boot();
-    w.App.agentPreferences = { auditing: () => false };
-    w.App.agentDelegation.project({running:true});
+    w.App.agentDelegation.project({chatId,running:true});
     expect(d.getElementById('agentSidebar')?.hidden ?? true).toBe(true);
     expect(d.body.classList.contains('agent-sidebar-open')).toBe(false);
+    receive(w, agent());
+    w.App.agentDelegation.project({chatId,turnId,running:true});
+    const sidebar = d.getElementById('agentSidebar');
+    expect(sidebar.hidden).toBe(true);
+    expect(d.body.classList.contains('agent-sidebar-open')).toBe(false);
+    expect(d.querySelector('.agent-sidebar-toggle').getAttribute('aria-expanded')).toBe('false');
+    d.querySelector('.agent-sidebar-toggle').click();
+    expect(sidebar.hidden).toBe(false);
     dom.window.close();
   });
   it("shows a saved turn's model icons at once and lets only live arrivals settle in (Apple audit A10)", async () => {
@@ -369,10 +366,12 @@ describe("Agent sidebar", () => {
     await vi.waitFor(() => expect(w.App.agentChat.receiveBudget).toHaveBeenCalledWith(budget, 'owner'));
     dom.window.close();
   });
-  it("stands open on a wide screen without a choice, shares state with inline icons and respects manual close and duplicate events", async () => {
+  it("opens on a wide screen only on request, shares state with inline icons and respects manual close and duplicate events", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); w.App.agentDelegation.project({ chatId, turnId, running: true });
-    // Where there is room the panel stands beside the answer (2026-10-28, Max).
+    // Closed until the reader clicks its icon, also with room beside the column (2026-10-31, Max).
+    expect(d.getElementById("agentSidebar").hidden).toBe(true);
+    d.querySelector(".agent-sidebar-toggle").click();
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
     expect(d.body.classList.contains("agent-sidebar-open")).toBe(true);
     expect(d.getElementById("agentSidebar").getAttribute("role")).toBe("complementary");
@@ -407,15 +406,24 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  it("keeps the panel closed on a saved turn for a reader who closed it before, even with room beside the column", async () => {
+  it("never comes back by itself: another chat and back, or the next chat's message", async () => {
     const { window: w, document: d, dom } = boot(async () => ({ ok: true, json: async () => ({ agents: [agent(1, "completed")], status: "succeeded" }) }));
-    w.localStorage.setItem("agent-panel:owner", "closed");
     w.App.agentDelegation.project({ chatId, turnId, running: false });
     await vi.waitFor(() => expect(d.querySelectorAll(".agent-session")).toHaveLength(1));
-    expect(d.getElementById("agentSidebar").hidden).toBe(true);
-    expect(d.body.classList.contains("agent-sidebar-open")).toBe(false);
     d.querySelector(".agent-sidebar-toggle").click();
-    expect(d.getElementById("agentSidebar").hidden).toBe(false);
+    const sidebar = d.getElementById("agentSidebar");
+    expect(sidebar.hidden).toBe(false);
+    // Another chat: closed there, and its new message does not open it.
+    const other = "e".repeat(32);
+    w.App.agentDelegation.project({ chatId: other, turnId: "f".repeat(32), running: false });
+    w.App.agentDelegation.project({ chatId: other, running: true });
+    w.App.agentDelegation.project({ chatId: other, turnId: "9".repeat(32), running: true });
+    await new Promise(resolve => setTimeout(resolve, 260));
+    expect(sidebar.hidden).toBe(true);
+    // Back in the first chat it stays closed until clicked again.
+    w.App.agentDelegation.project({ chatId, turnId, running: false });
+    expect(sidebar.hidden).toBe(true);
+    expect(d.body.classList.contains("agent-sidebar-open")).toBe(false);
     dom.window.close();
   });
 

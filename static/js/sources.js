@@ -476,7 +476,7 @@ function linkifySourceTags(containerEl, sources) {
       sourceRunRegex.lastIndex = 0;
       let parent = node.parentElement;
       while (parent && parent !== containerEl) {
-        if (ignoredParents.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (ignoredParents.has(parent.tagName) || parent.classList.contains("md-picture")) return NodeFilter.FILTER_REJECT;
         parent = parent.parentElement;
       }
       return NodeFilter.FILTER_ACCEPT;
@@ -574,7 +574,7 @@ function linkifyAgentSources(containerEl, sources) {
   const canonical = canonicalAgentSourceUrl;
   const refs = new Map(sources.map((src, index) => [canonical(src.url), {src, token: String(index + 1)}]));
   refs.delete('');
-  const skip = 'a, code, pre, script, style, textarea, .katex, mjx-container';
+  const skip = 'a, code, pre, script, style, textarea, .katex, mjx-container, .md-picture';
   const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, {
     acceptNode: node => /\[S\d+(?:,\s*S?\d+)*\]/i.test(node.nodeValue || '') && !node.parentElement?.closest(skip)
       ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
@@ -616,7 +616,7 @@ function linkifyAgentSources(containerEl, sources) {
       if (mapped.some(Boolean)) fillSourceRef(link, mapped.map((entry, index) => entry || group[index]));
       continue;
     }
-    if (link.closest('code, pre, .katex, mjx-container') || link.querySelector('img, svg')) continue;
+    if (link.closest('code, pre, .katex, mjx-container, .md-picture') || link.querySelector('img, svg')) continue;
     const ref = refs.get(canonical(link.getAttribute('href')));
     if (!ref) continue;
     const label = link.textContent.trim();

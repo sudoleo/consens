@@ -1421,20 +1421,31 @@ class VMTools:
         if key not in self.shared:
             name = posixpath.basename(args.name.strip() or path) or "file"
             mime = file_mime(raw, name)
+            origin = {"source": "vm", "path": path}
+            # A picture is placed in the answer by its ref, like show_image's
+            # (agent_web_images.picture_markdown); f1, f2 … per message.
+            if mime.startswith("image/"):
+                origin["ref"] = f"f{sum(1 for item in self.shared.values() if 'ref' in item) + 1}"
             # The agent made it: nothing for the store to read out. The bytes
             # are served as a download only (routers/agent_files.py).
             meta = self.files.save(self.loop.uid, self.loop.chat_id, raw=raw, name=name, mime=mime,
                                    extraction={"status": "ready", "parts": [], "warnings": []},
                                    cancellation=cancellation,
-                                   extra={"kind": "vm_file", "turn_id": self.loop.turn_id,
-                                          "origin": {"source": "vm", "path": path}})
+                                   extra={"kind": "vm_file", "turn_id": self.loop.turn_id, "origin": origin})
             self.shared[key] = {field: meta[field] for field in ("id", "name", "mime", "size")}
+            if "ref" in origin:
+                self.shared[key]["ref"] = origin["ref"]
             outgoing = getattr(self.loop, "outgoing", None)
             if outgoing is not None:
                 outgoing.put_nowait({"type": "resources", "files": [meta]})
-        file = self.shared[key]
-        return self.session.announce({"path": path, "file": file,
-                                      "shown_as": "picture" if file["mime"].startswith("image/") else "download",
+        file = {field: value for field, value in self.shared[key].items() if field != "ref"}
+        ref = self.shared[key].get("ref")
+        if ref:
+            from app.services.agent_web_images import PLACE_NOTE, picture_markdown
+            return self.session.announce({"path": path, "file": file, "shown_as": "picture",
+                                          "markdown": picture_markdown(ref, file["name"]),
+                                          "note": PLACE_NOTE + " Do not link it."})
+        return self.session.announce({"path": path, "file": file, "shown_as": "download",
                                       "note": "The app shows it with your answer by itself. Do not embed it as an "
                                               "image, link it or say where it appears."})
 

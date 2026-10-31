@@ -881,11 +881,12 @@ schreiben, was auch den Kontext langer Läufe klein hält) und seit 2026-10-26
 Es kopiert eine Datei bis 5 MB in die private Dateiablage des Chats
 (`kind: "vm_file"` mit `turn_id`, zählt zum Speicher des Kontos, 30 Tage
 wie jede Datei), meldet sie per `resources`, und die App zeigt sie unter der
-Antwort: PNG, JPEG, WebP und GIF als Bild direkt unter dem Antworttext, über
-Notes · Watch · Share (nur nach den Bytes erkannt, nie nach dem Namen), alles
-andere als Dateizeile mit Download. Der Agent soll eine geteilte Datei weder
-als Bild einbetten noch verlinken noch ihren Ort beschreiben; tut er es doch,
-blendet die Antwort den nicht ladbaren Verweis aus. Ausgeliefert wird
+Antwort: PNG, JPEG, WebP und GIF als Bild im Antworttext, wo der Agent es mit
+dem `markdown` des Ergebnisses (`![name](picture:f1)`, seit 2026-10-31) setzt,
+sonst direkt unter dem Text über Notes · Watch · Share (nur nach den Bytes
+erkannt, nie nach dem Namen), alles andere als Dateizeile mit Download. Eine
+Datei verlinkt er nicht; ein Markdown-Bild mit Dateinamen oder VM-Pfad blendet
+die Antwort als nicht ladbaren Verweis aus. Ausgeliefert wird
 nur über die angemeldete Download-Route (`Content-Disposition: attachment`,
 `nosniff`); die VM hat keine öffentliche Adresse, und der Prompt verbietet
 Links auf VM-Dateien. Dieselbe Datei zweimal geteilt bleibt ein Eintrag. Der Prompt `AGENT_VM_PROMPT` (prompt_defaults.py, im Admin als
@@ -4709,10 +4710,18 @@ seit 2026-10-29:
   liegen nur im Prozess des Laufs, nie in der Ablage. Dieselbe Adresse oder
   dasselbe Bild (Hash) behält seine ID und wird nicht neu geholt. Eine Seite,
   die sperrt, kostet nur ihren eigenen Eintrag.
-- **Dann zeigen:** `show_image(picture, caption)` legt einen angesehenen
-  Kandidaten per ID unter die Antwort; erst jetzt wird gespeichert und
-  `resources` gesendet, und die Bildunterschrift entsteht, nachdem der Agent
-  das Bild gesehen hat. Eine unbekannte ID ist ein Werkzeugfehler.
+- **Dann zeigen:** `show_image(picture, caption)` zeigt einen angesehenen
+  Kandidaten per ID; erst jetzt wird gespeichert und `resources` gesendet, und
+  die Bildunterschrift entsteht, nachdem der Agent das Bild gesehen hat. Eine
+  unbekannte ID ist ein Werkzeugfehler.
+- **Im Text** (seit 2026-10-31, Max: unter der Antwort oft stilistisch
+  schlecht): das Ergebnis nennt `markdown` `![Unterschrift](picture:p1)`; der
+  Agent schreibt es auf eine eigene Zeile dort, wo das Bild hingehört, und die
+  App setzt das gespeicherte Bild (`origin.ref`) an diese Stelle. Ein Bild, das
+  er nicht setzt, steht nach dem Lauf wie bisher unter der Antwort. Der
+  Audit-Prompt sagt dazu nur den Fakt („a picture shows in it only where you
+  place one you showed, as that tool's result says“), `vm_share_file` setzt
+  Bilder genauso (`f1`, `f2` …).
 - Anlass (Max, 2026-10-29, „wer ist das gesicht von delay sports? zeig her“):
   Die Antwort stand nach 30 s, dann suchte der Agent fünf Minuten in 45
   Schritten nach einem Bild. Unter der Antwort hingen danach ein Platzhalter

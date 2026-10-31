@@ -325,7 +325,7 @@ BRIEF_HEAD = ("The app's instructions to the agent ({chars} characters of the ap
 BRIEF_TOOLS = (
     ("read_source", "read_source opens a web page that the user or a search result named."),
     ("find_pictures", "find_pictures fetches pictures of pages for the agent alone to look at; the user sees "
-                      "only the ones it shows with show_image, under the answer with their page."),
+                      "only the ones it shows with show_image, in or under the answer with their page."),
     ("prepare_", "A prepare_ tool changes nothing by itself: the user confirms or dismisses it on a card."),
     ("vm_", "The VM is the agent's own Linux workbench, as a user without sudo: installing packages there is "
             "normal work. It reaches package registries only; the user's own systems are not in it."),

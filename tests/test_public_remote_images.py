@@ -36,6 +36,14 @@ def test_a_file_name_of_the_agent_is_a_local_note_and_own_images_stay():
     assert '<img src="/api/topics/t1/image/abc" alt="figure">' in html
 
 
+def test_a_picture_the_agent_placed_leaves_nothing_on_a_public_page():
+    """The picture is a file of the private chat (agent_web_images,
+    2026-10-31): neither it nor a note or an empty paragraph shows."""
+    html = render_public_markdown("Intro.\n\n![Jeef](picture:p2)\n\nText ![x](picture:f1) on.")
+    assert "picture:" not in html and "Jeef" not in html and "Image not loaded" not in html
+    assert html.count("<p>") == 2 and "<p></p>" not in html and "Text  on." in html
+
+
 def test_alt_text_cannot_break_out_of_the_note():
     html = render_public_markdown('![<b onmouseover="x">bad</b>](https://tracker.example/p.png)')
     assert "<b" not in html and "&lt;b onmouseover=" in html
