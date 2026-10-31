@@ -168,7 +168,8 @@ Firestore-Prüfung umfasst auch gleichzeitigen Stop/Claim ohne lokalen
 Prozess-Lock sowie ältere Belegformate vor einem verwaisten Run. Kurze
 Netzwerkfristen und die sichtbare Warteanzeige werden in den Agent-JS- und
 Browsertests geprüft. Ergebnisse und Grenzen:
-[Agent-Zuverlässigkeitsaudit](agent-reliability-audit-2026-09-20.md).
+Agent-Zuverlässigkeitsaudit (`agent-reliability-audit-2026-09-20.md`, seit
+`efcb6658` nicht mehr im öffentlichen Repo).
 
 Die Abhängigkeiten sind nach Zweck getrennt:
 
@@ -268,13 +269,25 @@ im Workflow, mit Begründung im Kommentar daneben.
 
 ## Reguläre Suite
 
-Agent-Vergleiche: `tests/test_agent_comparison.py` führt den gemeinsamen
-Differences-/Coverage-Parser mit deterministischen Providern aus und prüft
-exakte Versionen, mehrere Teilgrundlagen, Ausfälle, Abbruch, UTC-Wechsel sowie
-atomare Tokenreservierungen. `tests/test_agent_answer_lifecycle.py` reproduziert
-einen frühen Judge-Aufruf mit bloßer Einleitung: Erst wenn der Schritt, in dem
-der Agent die Antwort selbst schreibt, mit vollständigem Text endet, dürfen die
-Judges starten, und sie prüfen genau den gezeigten Text. Geprüft werden Streaming,
+Seit 2026-10-31 hat der Agent einen Modus: Er antwortet selbst, die gewählten
+Modelle prüfen Arbeit und Antwort (`agent_audit.py`), `compare_models` fragt
+sie. Die Tests des früheren Vergleichsmodus (Judges auf der Agent-Antwort,
+Textprüfung, Coverage-Vorlauf, Antworttiefe/-start, Agent-Freiheit,
+Prüf-Schalter, Schreibnotiz, Memory-Feld an `compare_models`) sind mit ihm
+gegangen, ebenso `scripts/evaluate_agent_answers.py`, das den Vergleichsmodus
+live maß. `tests/agent_reviewers.py` hält Prüfer, die nie starten
+(`InertAnswerAudit`, `without_reviewers(loop)`, Fixture `inert_reviewers`):
+der Zustand „kein Prüfer konnte antworten“ für Läufe, deren Skript nur den
+Agenten spielt; Tests der Prüfung selbst skripten die Prüfer
+(`test_agent_audit.Audit`).
+`tests/test_agent_comparison.py` prüft `compare_models` und die Abrechnung
+bezahlter Schritte mit deterministischen Providern: exakte geprüfte Versionen,
+Ausfälle und Teilantworten, Abbruch, UTC-Wechsel, atomare Tokenreservierungen,
+ein Prüfer reicht, mehr als `MAX_RUN_FAMILIES` werden abgelehnt.
+`tests/test_agent_answer_lifecycle.py` reproduziert eine frühe Prüfung mit
+bloßer Einleitung: Erst wenn der Schritt, in dem der Agent die Antwort selbst
+schreibt, mit vollständigem Text endet, startet die Schlussrunde der Prüfer,
+und sie prüft genau den gezeigten Text. Geprüft werden Streaming,
 Event-Reihenfolge, gespeicherter Wortlaut, Hash-Bindung, leere Antworten,
 Tokenlimit und Nutzer-Stopp.
 `tests/test_agent_synthesis_context.py` prüft, woraus der Agent schreibt: volle
@@ -282,35 +295,27 @@ Antworten mit Quellenauszügen im eigenen Verlauf (Auszüge nur im Speicher, ein
 fehlschlagender Auszug kostet nie die bezahlte Antwort), gewählte Denkstufe und
 Antwortbudget samt Headroom, Denk-Auszüge nur im Fortschritt, die Wiederholung
 eines ausgedachten Schritts mit leichterer Stufe und keine gespeicherten
-Reasoning-Fortsetzungen. Sichtbarer Stream, gespeicherter Text und Judge-Bindung
+Reasoning-Fortsetzungen. Sichtbarer Stream, gespeicherter und geprüfter Text
 bleiben identisch.
 `tests/test_agent_chat_integrity.py` prüft mit der echten Chat-Policy die Reihenfolge
-mehrerer Tools in einem Batch, automatische bestehende Prüfungen bei fehlendem
-Toolcall, Protokollstillstand und gepufferte Direktantworten. Weitere Regressionen
+mehrerer Tools in einem Batch, Protokollstillstand und gepufferte
+Direktantworten. Weitere Regressionen
 decken fehlgeschlagene Turns im Folgekontext, gültige lange/mit „Error“ beginnende
 Vergleichstexte sowie tatsächliche Worker-Abläufe mit Annahme, Überarbeitung und
-geprüftem Ersatztext im Synthesekontext ab.
+geprüftem Ersatztext im Antwortkontext ab.
 `tests/test_agent_answer_mode.py` prüft, wie der Agent die Antwort als letzte
 Nachricht seiner Tool-Schleife selbst schreibt (seit 2026-10-14, kein Schalter):
-Prompt mit Schreib-, Lese- und Memory-Regeln ohne Verweis auf den früheren
-Antwortschritt, Werkzeugsatz ohne `answer`, Memory-Pflichtfeld an
-`compare_models`, Schreibnotiz (`AGENT_WRITE_NOTE`) nur nach brauchbaren
-Vergleichen, Direktantwort in einem Aufruf, Streaming-Sperre bis 300 Zeichen,
-Rücknahme einer Einleitung vor einem Toolcall samt Notiz, Recherche ohne
-Vergleich (eine Erinnerung, danach steht die Antwort), Antwort plus reines
-Memory-Speichern, 429-Wiederholung, abgeschnittene Antwort, Wrap-up an der
-Turn-Grenze mit `tool_choice: none`, Lesen, Watch, den HTTP-Weg und das
-Messskript offline (Zeitachse je Aufruf, 429, Stall, echter Stream-Pfad,
-Vergleich gegen eine gespeicherte Baseline), außerdem die Zulassung wie ein
-Steuer-Schritt: Ein Free-Konto behält nach einer ersten Nachricht seine
-Recherche, kurz vor dem Limit bekommt eine Direktantwort ihr ganzes Budget.
-Den Live-Lauf startet
-`.\venv\Scripts\python.exe scripts/evaluate_agent_answers.py --live --model <id>`
-(bezahlt; `--only`, `--baseline FILE --pairwise MODEL` gegen gespeicherte
-Antworten, etwa die des früheren getrennten Antwortschritts, `--out`, siehe
-agent-mode.md).
-Audit-Modus: `tests/test_agent_audit.py` (Prüfer, Runden, Fristen, Stop,
-Halts) und `tests/test_agent_gate.py` (Vorab-Prüfung); `tests/test_agent_audit_tempo.py`
+Prompt und Werkzeuge in jedem Chat, Werkzeugsatz ohne `answer`, Direktantwort
+in einem Aufruf, Streaming-Sperre bis 300 Zeichen,
+Rücknahme einer Einleitung vor einem Toolcall samt Notiz, Antwort nach eigener
+Recherche, Antwort plus reines Memory-Speichern, 429-Wiederholung,
+abgeschnittene Antwort, Wrap-up an der Turn-Grenze, Lesen, Watch und den
+HTTP-Weg, außerdem die Zulassung wie ein Steuer-Schritt: Ein Free-Konto
+behält nach einer ersten Nachricht seine Recherche, kurz vor dem Limit
+bekommt eine Direktantwort ihr ganzes Budget.
+Prüfer: `tests/test_agent_audit.py` (Prüfer, Runden, Fristen, Stop,
+Halts), `tests/test_agent_audit_compare.py` (`compare_models` und was die
+Prüfer davon lesen) und `tests/test_agent_gate.py` (Vorab-Prüfung); `tests/test_agent_audit_tempo.py`
 (seit 2026-10-29, Spezifikation A-L1 bis A-L3, rund 40 s) spielt Werkbank-Läufe
 mit drei und sechs Prüfern, gemessenen Latenzen aus Prod im Maßstab 1:40 und
 einer Datenbank mit Rundreisen ohne Modell-Calls: Server-Anteil je Runde,
@@ -344,8 +349,8 @@ HTML-Escaping, vollständigen Verlauf über das Hilfsereignisfenster hinaus,
 einen beim Abschluss geöffnet bleibenden Verlauf sowie erneutes manuelles Öffnen. Laufzeit-
 Tests decken Minutengrenzen, Token-Warten, Stop, Timer-Cleanup und gespeicherte
 Endzeitstempel inklusive ungültiger/fehlender Zeitangaben ab. Ungültige
-Vergleichsauswahl (0/1/7 Modelle) erhält den Entwurf und startet keine Requests;
-gültige Auswahl (2/6) wird vollständig übertragen.
+Prüferauswahl (0/7 Modelle) erhält den Entwurf und startet keine Requests;
+gültige Auswahl (1–6) wird vollständig übertragen.
 Geöffnete Live-Details werden bereits vor dem ersten Fortschrittsereignis geprüft;
 unvollständige finale Snapshots erhalten vorhandene Meldungen. Die Review-Tests
 prüfen Vergleichszweck, Teilstatus, veraltete Prüfungen und Links zu Originalantworten.
@@ -359,9 +364,10 @@ Sie öffnet den Verlauf auch während des ersten „Thinking…“ und lädt ein
 abgeschlossenen Turn erneut. `test_agent_comparison_frontend.py` prüft die
 zusätzlichen Details und Leser-Links live, gespeichert und in archivierten Turns,
 auch bei leerer `agent_activity` und vorhandenem Review. Auf Desktop und Mobil
-prüft sie außerdem den echten Modellpicker: 0/1 Modelle sperren Senden, Entwurf
-und Netzwerk bleiben bei Enter/direktem Aufruf unverändert; zwei Modelle geben
-Senden wieder frei.
+prüft sie außerdem den echten Modellpicker: kein Prüfer sperrt Senden, Entwurf
+und Netzwerk bleiben bei Enter/direktem Aufruf unverändert; ein Prüfer gibt
+Senden wieder frei. Den Vergleichs-Review mit Score und Marken zeigt sie nur
+noch für gespeicherte Turns des früheren Vergleichsmodus.
 Der Lauf prüft zudem kurze Ein-/Ausblend- und Höhenübergänge, einmalige Animation
 pro neuem Absatz/Antwortbeginn, schnelle Richtungswechsel, Abschluss bei offenem
 und geschlossenem Verlauf sowie Reduced Motion und Forced Colors ohne Bewegung.
@@ -370,7 +376,7 @@ und keine bezahlten Modellaufrufe; Screenshots über `AGENT_SCREENSHOTS`.
 Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und
 fremde Snapshots sowie Tool-Nennungen gegenüber bestätigten Aufrufen.
 Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne
-Doppelzählung), sofortige Judge-Details ohne weitere Requests und Skeleton/
+Doppelzählung), sofortige Prüfer- und gespeicherte Judge-Details ohne weitere Requests und Skeleton/
 Cache für Worker. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
 gedrosseltem Detailabruf, sanfter Öffnung und Reduced Motion auf Desktop/Mobil.
 `test_agent_progress.py` prüft außerdem den gedrosselten Unicode-Zeichenzähler,

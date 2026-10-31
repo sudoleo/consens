@@ -39,6 +39,31 @@ API v1 und kuratierte Topics.
   Settings-Hinweis des Agenten (`agent_settings.ELSEWHERE`: Modus Agent oder
   Compare im (+)-Menü eines neuen Chats) nennen keinen Consensus-Modus mehr.
 
+Agent hat einen Modus (31.10.2026): Jeder Chat-Lauf jedes Kontos ist, was
+bis dahin „Audit statt Vergleich“ hieß. Das Chatmodell arbeitet und antwortet
+selbst mit eigener Websuche in jedem Schritt (dazu der Arbeitsplatz, wo das
+Konto ihn hat), die gewählten Modelle (1 bis 6) prüfen als Prüfer seine Arbeit
+live und die fixierte Antwort, und der Agent darf sie mit `compare_models`
+fragen. Kein Judge prüft mehr eine Agent-Antwort.
+- Entfernt: der Vergleichsmodus des Agenten (Judges auf der Agent-Antwort,
+  `check_text`/Textprüfung, Coverage-Vorlauf und `coverage_preview`,
+  Model-Pulse-Stimmen und Differences-Statistik aus Agent-Läufen,
+  `agent_coverage_prefetch.py`), die Kontoeinstellung `agent_preferences`
+  (Antworttiefe, Antwortstart, Agent-Freiheit, Antwortprüfung, Way of working;
+  `static/js/agent-preferences.js`), die Zugänge `AGENT_AUDIT_ACCESS`,
+  `AGENT_AUDIT_COMPARE`, `audit_allowed`, `/user_status` `audit_access`,
+  `viewer-can-audit`/`.audit-only`, der Promptschlüssel `agent_audit`
+  (`DEFAULT_PROMPTS["agent"]` ist der bisherige Audit-Prompt) und die Skripte
+  `scripts/evaluate_agent_answers.py`, `scripts/probe_agent_routing.py`.
+- Bleibt: gespeicherte Turns des Vergleichsmodus rendern weiter (Score,
+  Differences-/Coverage-Marken, Karte eines geprüften Texts, Antwortprüfungs-
+  Zeile); die Consensus-Pipeline mit ihren Judges für Watches, Topics und API;
+  das direkte Compare; `model_pulse.py` und `differences_stats.py` ohne neue
+  Agent-Daten. `AGENT_VM_ACCESS=all` (oder das alte `pro`) gibt jedem Konto
+  den Arbeitsplatz, sonst nur Admins.
+- Details: „Agent · Beta“ und „Ein Modus: der Agent arbeitet, die Prüfer
+  prüfen“ in §4, „Kontoeinstellungen“.
+
 Google als Quelle (03.10.2026): Google ist in Consens eine **Quelle von Belegen,
 keine Hand**. Agent-Chats lesen Gmail und Kalender pro Nachricht und nehmen Dateien
 aus Google Drive als normale Anhänge; zurückgeschrieben wird standardmäßig nichts.
@@ -161,8 +186,8 @@ resumes it, `agent_tunnel.resume`), and `POST
 key the agent asked for with `ask_user` `secret` to `~/.secrets/<name>` on the
 workbench, never into the chat (`agent_secrets.py`).
 One view and one terminal per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429; since 2026-10-30 the first state carries `left_seconds`, the day's VM time left, and every end is logged with its code and side and counted anonymously in `ops_metrics/workspace-view-{day}`); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
-since 2026-10-27, `AGENT_VM_ACCESS=pro` for every account with audit) on a
-server with a VM provider.
+since 2026-10-27, `AGENT_VM_ACCESS=all` (or the older `pro`) for every account
+since 2026-10-31) on a server with a VM provider.
 `workspace-view.js` (bundle after `agent-github.js`, `window.App.workspaceView`:
 `open({ takeOver })`, `close`, `init`, `isOpen`, `showTab`, `holder`, `handBack`
 (also without an open view), `agentWaits(request)`, `agentStep(line)` (the
@@ -342,7 +367,7 @@ beachten ist. Bewusst kurz gehalten — keine vollständige Datei-/Funktionslist
 consens.io vergleicht Antworten mehrerer LLM-Provider nebeneinander und
 synthetisiert daraus einen **Consensus** plus eine strukturierte
 **Differences**-Analyse. Optional: Agent Mode (Auto-Consensus), separater
-**Agent · Beta** (Chatmodell mit dynamischen Vergleichs-/Judge-Tools, Admin/Pro), Datei-Anhänge
+**Agent · Beta** (Chatmodell mit eigener Websuche und Werkzeugen, die gewählten Modelle prüfen Arbeit und Antwort; jedes Konto), Datei-Anhänge
 (ab Plus), öffentliche Share-Seiten. Es gibt drei Kontostufen: **Free**,
 **Plus** und **Pro** (siehe §4 „Auth / Usage / Tier").
 
@@ -507,7 +532,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `agent.py` | `GET /agent/models` und `POST /agent`: Admin/Pro-geschützter Modellkatalog aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, Pro und Admins, seit 2026-10-25, siehe „Audit statt Vergleich“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/requests/{request_id}/notes` (Nachricht in den laufenden VM-Lauf, seit 2026-10-26; Browser: `agent-chat.js` `steer`, sichtbare Warteschlange `#agentQueue`, Ungelesenes geht danach als nächste Nachricht), `POST /agent/chats/{chat}/requests/{request_id}/hold` (Entscheidung des Nutzers, wenn ein Prüfer die Arbeit pausiert hat: `continue`/`stop`/`steer`, seit 2026-10-26; seit 2026-10-27 `deny` für eine Domain, um die der Agent bat, und seine eigene Frage; seit 2026-10-29 sonst 422 `invalid_action`, `agent_sessions.deniable`; seit 2026-10-30 `choose` mit `choice` (Index) auf der Auswahlkarte des Agenten, dort nur das, `stop` oder `steer`, `agent_sessions.check_answer`; siehe „Audit statt Vergleich“ → „Aussteuern“), `POST /agent/chats/{chat}/turns/{turn}/vm-restore` (Arbeitsplatz auf den Checkpoint vor dieser Nachricht, Konten mit VM (`vm_allowed`), seit 2026-10-26; seit 2026-10-27 nur Checkpoints, die `agent_workspace.restorable` erlaubt, sonst 409 `expired`), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` bzw. das Feld `memory` an `compare_models`/`check_text` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); dynamische Vergleichs-/Judge-Tools mit eigener Tokenquote (siehe Agent-Beta-Abschnitt). `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). |
+| `agent.py` | `GET /agent/models` und `POST /agent`: Modellkatalog (jedes angemeldete Konto, Premium-Modelle Pro) aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, seit 2026-10-31 jedes Turns, lesbar für seinen Besitzer, siehe „Ein Modus“ → „Arbeitsprotokoll“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/requests/{request_id}/notes` (Nachricht in den laufenden VM-Lauf, seit 2026-10-26; Browser: `agent-chat.js` `steer`, sichtbare Warteschlange `#agentQueue`, Ungelesenes geht danach als nächste Nachricht), `POST /agent/chats/{chat}/requests/{request_id}/hold` (Entscheidung des Nutzers, wenn ein Prüfer die Arbeit pausiert hat: `continue`/`stop`/`steer`, seit 2026-10-26; seit 2026-10-27 `deny` für eine Domain, um die der Agent bat, und seine eigene Frage; seit 2026-10-29 sonst 422 `invalid_action`, `agent_sessions.deniable`; seit 2026-10-30 `choose` mit `choice` (Index) auf der Auswahlkarte des Agenten, dort nur das, `stop` oder `steer`, `agent_sessions.check_answer`; siehe „Ein Modus“ → „Aussteuern“), `POST /agent/chats/{chat}/turns/{turn}/vm-restore` (Arbeitsplatz auf den Checkpoint vor dieser Nachricht, Konten mit VM (`vm_allowed`), seit 2026-10-26; seit 2026-10-27 nur Checkpoints, die `agent_workspace.restorable` erlaubt, sonst 409 `expired`), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); `compare_models` und die Prüfer der Antwort im gemeinsamen Tageskonto (siehe §4 „Agent · Beta“ und „Ein Modus“). `agent_preferences` im Body wird seit 2026-10-31 angenommen und ignoriert. `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `POST /app` (seit 2026-10-29: Ziel aller Formulare der App-Shell — Login, Feedback, Memory-Eintrag —, falls eines abgeschickt wird, bevor sein Skript es übernimmt; liest den Inhalt nie, 303 zurück auf `/app`. Vorher hatten die Formulare kein `method`, ein GET schrieb E-Mail und Passwort in Adresse, Verlauf und Render-Log), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback` und `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Best-answer-Votes schreibt seit 2026-10-25 nur noch der Agent (`persistence_guard.write_agent_vote`, einmal pro Turn); `POST /vote` des Browser-Consensus ist entfernt. |
 | `chat.py` | Kern-LLM-Flow für Compare: `/prepare` und die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`). Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. Eine Frage an `/ask_*` setzt keinen Chat fort: Kontextfelder (`context`, `chat_id`/`turn_id`/`context_version_id`) werden ignoriert. `/consensus` und `/resolve` sind seit 2026-10-25 entfernt; den Consensus fährt nur noch der Server (`consensus_pipeline`). |
 | `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
@@ -1107,10 +1132,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     `streamSSERequest` gibt keinen HTML-Body mehr als `data.error` weiter.
     `request-deadline.js` wirft bei Zeitüberschreitung einen `TimeoutError`.
   - **`App.words`**: das Glossar (Apple-Audit H9), ein Wort je Zustand:
-    die Prüfung heißt „Answer check“ (laufend „Checking the answer…“, fertig
-    „Checked“, teilweise „Partly checked“, sonst „Answer check pending|failed|
-    stopped|off“, „Not checked“), ein Lauf „Working“/„Failed“/„Stopped“
-    (auch Tab-Titel, Chatzeile, Stepper „Answer check“), ein Lauf, der auf
+    die Prüfung durch Judges heißt „Answer check“ (laufend „Checking the
+    answer…“, fertig „Checked“, teilweise „Partly checked“, sonst „Answer check
+    pending|failed|stopped|off“, „Not checked“; seit 2026-10-31 nur noch für
+    gespeicherte Vergleichsmodus-Turns und die Demo, die Prüfer eines Agent-Laufs
+    heißen „Reviewing the answer…“/„Reviewing…“ im Tab-Titel), die Prüfer sagen
+    `crossCheck(count)` („3 AIs cross-check“, ohne Modell „No cross-check“),
+    ein Lauf „Working“/„Failed“/„Stopped“
+    (auch Tab-Titel, Chatzeile), ein Lauf, der auf
     den Nutzer wartet, „Paused“ (`paused`) bzw. „Waiting for you“
     (`yourTurn`, Tab-Titel und Chatzeile, seit 2026-10-29), Verbrauch heißt
     „allowance“.
@@ -2037,88 +2066,56 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `cleanup_memory_change_logs`). Der Agent **schreibt nur nach Opt-in**:
   Settings → Memory → „Let Agent update memory“ (`auto_memory` im
   Profil-Dokument, Default aus, nur wirksam bei `enabled`). Dann entscheidet der
-  Orchestrator selbst, was er speichert, ändert oder löscht — ohne zusätzlichen
-  Modellaufruf: Änderungen reiten als **Pflichtfeld** `memory` auf dem ohnehin
-  fälligen `compare_models`- bzw. `check_text`-Aufruf (`[]` = bewusst nichts; ein optionales Feld
-  ließ GPT-6 Luna im ersten Praxistest einfach weg) (`agent_comparison.py` baut das Schema per
-  `create_model`, die Ausführung in `DelegationLoop._execute`; ein abgelehnter
-  Memory-Teil bricht den Vergleich nie ab, das Ergebnis steht unter `memory`
-  im Tool-Result und nie im gespeicherten Vergleich; gespeicherte wie abgelehnte
-  Versuche landen inhaltsfrei als Tool-Eintrag `update_memory` in `agent_activity`,
-  Ablehnungen mit Grundcode `reason` wie `evidence_not_found`, `invalid_id`,
-  `text_too_long`, `unavailable` — nie mit Evidence oder Memory-Text; das gilt
-  seit 2026-10-08 auch für ein abgelehntes eigenständiges `update_memory`).
-  Seit 2026-10-08 ist `MemoryChange` bewusst **nachsichtig** (alle Felder
-  optional/nullable, keine Schema-Längen, unbekannte Felder ignoriert, kein
-  `maxItems` auf `memory`): `id: null` beim Hinzufügen, ein zu langer Text
-  oder sechs Änderungen ließen vorher den ganzen `compare_models`-Aufruf an der
-  Schemaprüfung scheitern (drei abgelehnte Runden beenden den Turn). Alle
-  Regeln prüft jetzt `MemoryTools.apply`/`normalize_change` und meldet sie als
-  normale Memory-Ablehnung (`MemoryRefused`, ein `ValueError` mit `code`).
-  Dort endet auch jeder Speicherfehler (Firestore, Contention): geloggt wird
-  nur die Kategorie, das Modell liest „Memory could not be saved right now.
-  Nothing was saved.“ — vorher schlug der ganze Agent-Turn mit der
-  irreführenden Provider-Meldung fehl. Eine Nachricht, die nur
-  ums Merken/Vergessen bittet, nutzt das Tool `update_memory` und antwortet
-  danach mit kurzem Klartext; auch jede andere Antwort ohne Vergleich speichert
-  bei Bedarf über `update_memory` (`MEMORY_WRITE_PROMPT`: erst speichern, dann
-  antworten). Mit Vergleich fährt die Pflichtentscheidung `memory` auf
-  `compare_models`/`check_text`
-  (`memory_field`; jeder weitere Vergleich derselben Nachricht übergibt `[]`,
-  die erste Entscheidung gilt). Von 2026-10-11 bis 2026-10-14 saß sie auf dem
-  `answer`-Tool des getrennten Antwortschritts.
-  Seit 2026-10-12 nimmt das Feld jede Form an (`_memory_changes`: `null` oder
-  unlesbarer Text = keine Änderung, ein Objekt = eine Änderung, ein Eintrag ohne
-  Objekt = eine Änderung, die `apply` sichtbar ablehnt); vorher scheiterte der
-  ganze Aufruf. Angewandt wird es nach dem Werkzeug (`DelegationLoop._execute`),
-  nie bei einem abgelehnten Vergleich (`status: refused` oder Toolfehler).
-  Serverseitige Verträge: (1) jede Agent-Änderung trägt `evidence`, ein
-  wörtliches Zitat, das in einer **Nutzer**-Nachricht des Chats vorkommen muss
-  (`evidence_matches`, normalisiert nur Groß-/Kleinschreibung, Leerraum,
-  typografische Anführungen; seit 2026-10-07 mindestens `MIN_EVIDENCE_CHARS` = 12
-  Zeichen, kürzere Zitate nur als ganze Nachricht). Seit 2026-10-08 zählt ein
-  per „Ask about this“ zitierter Antwortabsatz nicht als Nutzerwort:
-  `user_words` schneidet ihn genau in dem Format ab, das `composer-quote.js`
-  anhängt (gemeinsamer Vertrag `tests/fixtures/composer_quote_format.json`,
-  in Python und vitest geprüft; eine reine „Please comment on this
-  passage…“-Nachricht fällt ganz weg; die Modelle sehen die Frage
-  unverändert). Seit 2026-10-12 entfernt `MemoryTools._user_messages` auch Links
-  (`_LINK`): eine gelesene Seite kennt ihre eigene URL und hätte sie als
-  „Zitat“ des Nutzers angeben können. Die Garantie ist genau: der Server belegt, dass der Nutzer die
-  zitierten Worte geschrieben hat, nicht, dass der Memory-Text dasselbe sagt
-  (Wortüberlappung würde sprachübergreifende Saves fälschlich ablehnen).
-  Text aus Webseiten, Dateien, Mails oder Tool-Ergebnissen kommt also nicht
-  mit seinem eigenen Zitat ins Gedächtnis; ein davon gelenkter Orchestrator
-  könnte aber eine umformulierte Erinnerung mit passenden Nutzerworten
-  belegen — Settings › Memory (Bearbeiten, Löschen, Undo) ist der Rückhalt (Memory-Poisoning); (2)
-  `looks_like_secret` weist Keys, Passwörter, Karten- (Luhn) und IBAN-Nummern
-  für jede Herkunft ab; (3) `FirestoreAgentMemoryRepository.apply` prüft in
-  derselben Transaktion Tombstone, `auto_memory`/`enabled` und dass der Turn
-  noch `pending` ist, schreibt alles-oder-nichts, dedupliziert gleiche Texte
-  (No-op) und hängt eine Kurzfassung an `turn.agent_memory`
-  (`{change_id, op, item_id, undone}`, höchstens 12 je Turn, über
-  `chat_store`-Allowlist im Turn-View; seit 2026-10-08 **ohne** `text`, damit
-  eine später gelöschte Erinnerung nicht in jedem Chat weiterlebt — der
-  Hinweis zeigt nur während des Laufs und bekommt die Texte aus dem
-  SSE-Event, Undo braucht nur `change_id`). Jede angewandte Änderung geht live als
-  SSE-Event `memory` (`{changes: [...]}`, mit Text) an den Browser. Gelesen wird pro Turn
-  genau einmal (`snapshot`: Profil + Einträge in einem `get_all`, fail-open,
-  bewusst ohne prozessweiten Cache, damit gelöschte Erinnerungen sofort aus dem
-  nächsten Prompt verschwinden). Prompt: `orchestrator_prompt` hängt
-  Memory-Daten plus die passende Regel (schreiben / nur lesen / pausiert /
-  seit 2026-10-08 getrennt: nicht lesbar = `MEMORY_UNAVAILABLE_PROMPT`, statt
-  einem eingeschalteten Nutzer „pausiert“ zu melden) **ans
-  Ende** des System-Prompts; der Agent schreibt die Antwort mit genau diesem
-  Block (bis 2026-10-14 bekam ein getrennter Antwortschritt die Daten über
-  `synthesis_prompt` ohne IDs und Schreibregeln). Balance (Max' Vorgabe):
-  `MEMORY_RELEVANCE_RULES` im Agent-Prompt (`MEMORY_USE_PROMPT`) — eine
-  Erinnerung zählt nur, wenn sie die Antwort gegenüber einem Fremden ändert,
-  wird still angewendet und nur aus drei Gründen ausgesprochen (Nachfrage,
-  sonst unverständliche Auswahl, Konflikt/veraltet), dann höchstens ein
-  Halbsatz; Schreiben nach dem Test „bessere Antwort in einem künftigen,
-  fremden Chat?“, `[]` ist der Normalfall. Vergleichsmodelle sehen Memory nicht
-  pauschal: der Orchestrator gibt relevante Punkte im `compare_models`-Kontext
-  weiter (gegen den gemeinsamen Bias, siehe Deckel oben). `/ask_*` rendert die
+  Agent selbst, was er speichert, ändert oder löscht, ohne zusätzlichen
+  Modellaufruf, über das Tool `update_memory` (`AuditUpdateMemoryArgs`:
+  `changes` mit `AuditMemoryChange` `{op, id, text}`, höchstens
+  `MAX_CHANGES_PER_CALL` je Aufruf, `MAX_CHANGES_PER_TURN` je Turn), auch neben
+  der Antwort (`agent_answer_mode.SIDE_TOOLS`). `AuditMemoryChange` ist bewusst
+  nachsichtig (Felder optional, unbekannte ignoriert): alle Regeln prüft
+  `MemoryTools.apply`/`normalize_change` und meldet sie als normale
+  Memory-Ablehnung (`MemoryRefused`, ein `ValueError` mit `code`); gespeicherte
+  wie abgelehnte Versuche landen inhaltsfrei als Tool-Eintrag `update_memory` in
+  `agent_activity`, Ablehnungen mit Grundcode `reason` wie `invalid_id`,
+  `text_too_long`, `untrusted_context`, `unavailable`, nie mit Memory-Text. Dort
+  endet auch jeder Speicherfehler (Firestore, Contention): geloggt wird nur die
+  Kategorie, das Modell liest „Memory could not be saved right now. Nothing was
+  saved.“ Bis 2026-10-31 (Vergleichsmodus) ritt die Entscheidung zusätzlich als
+  Pflichtfeld `memory` auf `compare_models`/`check_text` (`memory_field`), und
+  jede Änderung trug `evidence`, ein wörtliches Zitat aus einer Nutzernachricht
+  (`evidence_matches`, `MIN_EVIDENCE_CHARS`; mit Prüfern seit 2026-10-28 ohne).
+  Heute gilt: Sobald in einer Nachricht Fremdinhalt im Blick ist
+  (`outside_in_view`), läuft eine Änderung erst nach der Vorab-Prüfung der
+  Prüfer (`agent_gate.outward` „memory“), ohne Prüfer-Sitzung gar nicht
+  (`memory_locked`, `MEMORY_LOCKED`). `evidence_matches` und `user_words`
+  bleiben für das Einstellungs-Werkzeug und die Links des Nutzers
+  (`agent_read_source.user_urls`); `user_words` schneidet einen per „Ask about
+  this“ zitierten Antwortabsatz genau in dem Format ab, das
+  `composer-quote.js` anhängt (gemeinsamer Vertrag
+  `tests/fixtures/composer_quote_format.json`, in Python und vitest geprüft).
+  Weitere serverseitige Verträge: (1) `looks_like_secret` weist Keys,
+  Passwörter, Karten- (Luhn) und IBAN-Nummern für jede Herkunft ab; (2)
+  `FirestoreAgentMemoryRepository.apply` prüft in derselben Transaktion
+  Tombstone, `auto_memory`/`enabled` und dass der Turn noch `pending` ist,
+  schreibt alles-oder-nichts, dedupliziert gleiche Texte (No-op) und hängt eine
+  Kurzfassung an `turn.agent_memory` (`{change_id, op, item_id, undone}`,
+  höchstens 12 je Turn, über `chat_store`-Allowlist im Turn-View; seit
+  2026-10-08 **ohne** `text`, damit eine später gelöschte Erinnerung nicht in
+  jedem Chat weiterlebt — der Hinweis zeigt nur während des Laufs und bekommt
+  die Texte aus dem SSE-Event, Undo braucht nur `change_id`). Settings ›
+  Memory (Bearbeiten, Löschen, Undo) ist der Rückhalt gegen Memory-Poisoning.
+  Jede angewandte Änderung geht live als SSE-Event `memory` (`{changes: [...]}`,
+  mit Text) an den Browser. Gelesen wird pro Turn genau einmal (`snapshot`:
+  Profil + Einträge in einem `get_all`, fail-open, bewusst ohne prozessweiten
+  Cache, damit gelöschte Erinnerungen sofort aus dem nächsten Prompt
+  verschwinden). Prompt: `orchestrator_prompt` hängt Memory-Daten plus die
+  passenden Fakten (`AUDIT_MEMORY_WRITE_PROMPT` / `_READ_ONLY_` / `_PAUSED_` /
+  `_UNAVAILABLE_PROMPT`, dazu `AUDIT_MEMORY_USE_PROMPT`: bei Konflikt
+  entscheiden Frage und Belege) **ans Ende** des System-Prompts; seit
+  2026-10-28 Fakten statt Regeln, bis 2026-10-31 hatte der Vergleichsmodus
+  eigene (`MEMORY_*_PROMPT`, `MEMORY_RELEVANCE_RULES`). Vergleichsmodelle und
+  Prüfer sehen Memory nicht pauschal: der Agent gibt relevante Punkte im
+  `compare_models`-Kontext weiter, die Prüfer lesen die Kurzfassung seiner
+  Anweisungen samt Memory (`instructions_brief`). `/ask_*` rendert die
   Einträge über `render_profile(items=...)` nach der Notiz — seit 2026-10-08
   innerhalb des dokumentierten Deckels (`MAX_PROFILE_CHARS` +
   Stufen-Notizgrenze): höchstens `MAX_ITEMS_PROMPT_CHARS` = 3.000 Zeichen,
@@ -2172,16 +2169,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Ablauf ohne Provider im Browser prüfbar ist.
 - **Agent-Watch (`app/services/agent_watch.py`, `agent-watch.js`, seit
   2026-10-11)**: Der Agent legt keine Watch an, er bereitet sie vor, auch auf
-  „erinnere mich, wenn …“ (`ORCHESTRATOR_PROMPT` nennt Erinnern; eine Watch ist
-  der einzige Weg, den Nutzer später zu erreichen).
-  `prepare_watch` (registriert nur in Account-Mode-Turns mit Vergleich und ohne
+  „erinnere mich, wenn …“ (`agent_watch.AUDIT_PROMPT` sagt als Fakt, dass eine
+  Watch der einzige Weg ist, den Nutzer später zu erreichen; bis 2026-10-31
+  hatte der Vergleichsmodus ein Rezept, `ORCHESTRATOR_PROMPT`).
+  `prepare_watch` (registriert nur in Account-Mode-Chat-Turns ohne
   Google-Daten, `DelegationLoop(google_data=…)`) prüft Frage/Ziele/Intervall,
   fragt lesend `watch_service.creation_outlook` (schon beobachtet: jede Watch
   mit gleichem `question_hash`; freie Slots; Daily) und speichert einen
   Vorschlag als `turn.agent_watch` (`question` ≤ 200, `goals[≤3]`, `interval`;
   nur bei `pending`). Den Kartenhinweis (Antwort endet mit einem Satz zur
-  Karte; `already_watched`/`limit_reached` stattdessen benannt) trägt
-  `ORCHESTRATOR_PROMPT` selbst, den Status sieht der Agent im Toolergebnis (bis
+  Karte; `already_watched`/`limit_reached` stattdessen benannt) trägt das
+  Toolergebnis (`agent_watch.INSTRUCTIONS`), den Status sieht der Agent dort (bis
   2026-10-14: `prepared_watch` in der Evidenz des getrennten Antwortschritts
   plus `SYNTHESIS_PROMPT`); kein eigenes SSE-Event. `App.agentWatch.render(body,
   {key, proposal})` zeigt die Karte unter einer abgeschlossenen Antwort
@@ -2198,12 +2196,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   <Frage>“ bereitet einen Vorschlag vor.
 - **Agent-Einstellungen (`app/services/agent_settings.py`, `agent-settings.js`,
   seit 2026-10-17)**: Auf „stell X um“ schreibt der Agent keine Einstellung, er
-  bereitet sie vor. Zwei Werkzeuge, registriert auf jedem Account-Mode-Turn
-  mit Vergleich, auch mit Google-Daten (nur aufgezählte Werte):
+  bereitet sie vor. Zwei Werkzeuge, registriert auf jedem Account-Mode-Chat-Turn,
+  auch mit Google-Daten (nur aufgezählte Werte; Prompt-Block
+  `agent_settings.AUDIT_PROMPT`):
   `read_settings` (ohne Argumente; ein leerer Argument-String gilt in
   `ToolRegistry.validate` als `{}`) liefert, was für die nächste Nachricht
-  gilt (Modell/Stufe vom laufenden Turn, Vorlieben aus
-  `comparison.preferences`, Preset und Anzeige aus dem Kontodokument, einmal
+  gilt (Modell/Stufe vom laufenden Turn, Preset und Anzeige aus dem Kontodokument, einmal
   pro Turn gelesen, unlesbar = Standard), die Standards und die Wahl des
   Kontos samt Pro-Sperren, seit 2026-10-22 auch die Vergleichsmodelle mit
   Namen: `models_this_message` (was die Seite für diese Nachricht schickte,
@@ -2211,7 +2209,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `CONSENSUS_PRESET_MODELS`; live konnte der Agent nicht sagen, wie viele
   Modelle „Daily“ fragt); damit beantwortet der Agent „was ist eingestellt?“
   und fragt bei unklaren Wünschen („schneller“, „GPT“) mit echten Optionen
-  zurück, statt zu raten (`ORCHESTRATOR_PROMPT`). `prepare_settings_change`
+  zurück, statt zu raten. `prepare_settings_change`
   nimmt eine Liste `changes: [{setting, value}]` (nur das Genannte, jede
   Einstellung einmal, Werte je Einstellung geprüft; eine Probe mit neun
   optionalen Feldern ließ Claude alle mit erfundenen Werten füllen; Objekt-,
@@ -2220,15 +2218,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   läuft, `_Choice.strength`):
   Chatmodell (Name, wie der Nutzer ihn nennt: exakt, enthalten oder
   alle Wörter; mehrdeutig/unbekannt = Ablehnung mit Treffern bzw. ähnlichsten
-  Namen, nie geraten), Reasoning (Stufe oder `higher`/`lower`), Tiefe,
-  Antwortstart, Agent-Freiheit, Antwortprüfung (`answer_check` →
-  `agent_preferences.judges`), Vergleichs-Preset und die drei
-  Anzeige-Schalter. Es prüft mit denselben
+  Namen, nie geraten), Reasoning (Stufe oder `higher`/`lower`),
+  Vergleichs-Preset (`comparison_lineup`, die Prüfer) und die drei
+  Anzeige-Schalter (bis 2026-10-31 auch Tiefe, Antwortstart, Agent-Freiheit und
+  Antwortprüfung, Gruppe `PREFERENCES`; ein gespeicherter Vorschlag mit
+  `agent_preferences` bleibt lesbar und wird beim Anwenden einzeln abgelehnt).
+  Es prüft mit denselben
   Regeln wie `POST /agent` (`agent_model_options()`: `premium`,
   `reasoning_efforts`, `free_default_effort`; `PRO_REASONING_EFFORTS`;
   `pro_only` der Presets; Pro = `is_user_pro` wie im Picker, ohne Admin; in
   Chats mit Google-Daten zusätzlich `restricted_model`; nach Fremdinhalten
-  (`memory_locked`) nur mit `evidence`-Zitat aus der neuesten Nachricht): ein
+  (`outside_in_view`) nur mit `evidence`-Zitat aus der neuesten Nachricht): ein
   Premium-Modell ohne Pro wird abgelehnt (mit den freien Modellen derselben
   Familie), eine zu hohe Stufe auf die höchste erlaubte begrenzt, eine nicht
   angebotene auf die nächstgelegene (Gleichstand: die leichtere), Auto ohne
@@ -2247,7 +2247,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nicht im Schema. `App.agentSettings.render(body, {key, proposal})` zeigt die
   Karte unter einer abgeschlossenen Antwort (nach Memory-Hinweis und
   Watch-Karte): je Zeile „jetzt → neu“, „jetzt“ aus dieser Seite beim Rendern
-  (`App.agentChat.pick()`/`modelLabel`, `App.agentPreferences.get()`,
+  (`App.agentChat.pick()`/`modelLabel`,
   `App.activeConsensusPresetId()`, `App.userSettings.get`), Gleiches fällt
   weg (fährt der Chat das Modell schon, Zeile „Chat model in new chats“);
   nichts mehr offen = „Settings in place“. „Apply“ übernimmt nur die
@@ -2262,7 +2262,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `consensio.agentSettingsCards.v1` (≤ 100). Die Aktivitätszeile liest
   `outcome` (`SettingsTools.activity`). `claim_counts` heißt im Werkzeug
   `on`/`off` (ein Modell schickte `"false"` als Text). Begründung: [agent-settings-evaluation-2026-10-17.md](agent-settings-evaluation-2026-10-17.md).
-  `MOCK_LLM`: „Settings: depth=quick, reasoning=low“ bereitet das vor.
+  `MOCK_LLM`: „Settings: claim_counts=on, reasoning=low“ bereitet das vor.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
@@ -2324,7 +2324,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `- [ ]` steht sofort als Kästchen. Optik in `shell.css` (im Spiegelstrich-
   Listen steht das Kästchen an der Stelle des Punkts, die Wörter behalten ihre
   Spalte; nummerierte Listen behalten die Zahl), öffentlich `.share-md`.
-  Die Agent-Prompts (`prompt_defaults.py`, mit und ohne Audit) nennen das als
+  Der Agent-Prompt (`AGENT_AUDIT_ANSWER_SECTION`) nennt das als
   Fakt mit Bedeutung: ein Kästchen ist ein Schritt, den der Nutzer tut, keine
   Liste von Fakten oder Optionen (seit 2026-10-30; vorher „erscheinen als
   abhakbare Kästchen“ in einer Aufzählung von Formaten, und DeepSeek V4.1 Flash
@@ -2509,10 +2509,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   die Werkzeuge des Startbildschirms. Seit 2026-10-30 ist der Composer dort
   **eine Fläche, eine Reihe** (Max): `(+)` · `#composerTools` (Arbeitsplatz
   `#composerWorkspaceButton`) · `#composerModelPicker` (Anbieter-Marken der
-  nächsten Frage, im Audit mit „N KIs prüfen mit“) · Reasoning
-  `#composerReasoningToggle` (Gehirn + Stufe, seit 2026-10-31; im Audit
-  zwischen den Prüfer-Worten und dem Chip mit dem Chatmodell, sonst hinter dem
-  Chip; im Agent steuert die Stufe nur das Chatmodell, nie die Prüfer) ·
+  nächsten Frage, in Agent mit „N KIs prüfen mit“) · Reasoning
+  `#composerReasoningToggle` (Gehirn + Stufe, seit 2026-10-31; in Agent
+  zwischen den Prüfer-Worten und dem Chip mit dem Chatmodell, in Compare hinter
+  dem Chip; in Agent steuert die Stufe nur das Chatmodell, nie die Prüfer) ·
   Modell-Chip · Senden. Die frühere Leiste unter
   dem Feld samt „Attach“-Knopf ist weg; Dateien kommen über das (+).
   Werkzeuge und Marken gehören in jedem Modus zum Startbildschirm (Hero oder
@@ -4057,7 +4057,28 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 
 ## 4. Kern-Flows
 
-### Agent · Beta: dynamische Vergleiche und Tokenkontingent (2026-09-19)
+### Agent · Beta: ein Modus, Prüfer und Tokenkontingent (seit 2026-09-19, ein Modus seit 2026-10-31)
+
+**Ein Modus für jedes Konto (seit 2026-10-31, Max).** Eine KI, das gewählte
+Chatmodell, arbeitet: sie recherchiert in jedem Schritt mit eigener Websuche
+(`agent_audit.AGENT_SEARCH_ROUNDS` = 5 Runden je Schritt), nutzt ihre Werkzeuge
+und, wo das Konto ihn hat (`routers/agent.py::vm_allowed`), den Arbeitsplatz
+(Werkbank-VM und Browser), und schreibt die Antwort selbst. Die vom Nutzer
+gewählten Modelle (1 bis `MAX_RUN_FAMILIES`, `comparison_selection`) sind
+Prüfer: Sie folgen dem Arbeitsprotokoll live und prüfen die fixierte Antwort
+(`agent_audit.AnswerAudit`); dazu darf der Agent sie mit `compare_models`
+fragen (frische Sitzungen, höchstens `turn_comparisons` je Nachricht). Kein
+Judge läuft auf einer Agent-Antwort. Ablauf: „Ein Modus: der Agent arbeitet,
+die Prüfer prüfen“ unten. Bis 2026-10-31 gab es daneben (und bis 2026-10-25
+allein) einen Vergleichsmodus: der Agent verglich mit `compare_models`/
+`check_text`, schrieb die Antwort aus den Vergleichsantworten, und
+Differences-/Coverage-Judges prüften sie (Score, Satzmarken, vorläufige
+Marken, Model-Pulse-Stimme, Differences-Statistik), gesteuert über
+Kontoeinstellungen (`agent_preferences`: Antworttiefe, Antwortstart,
+Agent-Freiheit, Antwortprüfung, „Way of working“). Gespeicherte Turns dieses
+Modus bleiben lesbar (siehe „Gespeicherte Vergleichsmodus-Turns“ unten), nur
+ihre Erzeuger sind weg (Commits `474a953e`, `f5674f0e`, `4cccbc03`,
+`5497f74a`, `01d8a816`).
 
 **Prompt-Caching (seit 2026-10-04).** Der System-Prompt des Orchestrators ist
 über alle Nachrichten eines Chats byte-gleich: `AgentRunStore.messages` legt
@@ -4066,8 +4087,9 @@ stehen als App-Kontextblock (`with_app_context`, Marker
 `APP_CONTEXT_OPEN/CLOSE`) **vor** der neuesten Nutzerfrage, die
 Verlaufsnachrichten bleiben wörtlich. Vorher stand die Uhrzeit oben im System
 und machte jeden Cache ab dort bei jeder Nachricht ungültig.
-`DelegationLoop` hängt danach (wie bisher) Orchestrator-/Vergleichsregeln an
-und zuletzt Memory, sodass eine Memory-Änderung nur ab dort neu cached.
+`DelegationLoop` hängt danach die Werkzeug-Blöcke an (Dateien, Google, Watch,
+Einstellungen, Arbeitsplatz; Worker-Katalog nur mit Delegation) und zuletzt
+Memory, sodass eine Memory-Änderung nur ab dort neu cached.
 Was sich zwischen den Nachrichten eines Chats ändert, steht seit 2026-10-21
 ebenfalls im App-Kontextblock der neuesten Frage (`DelegationLoop._app_context`
 → `agent_runs.add_app_context`): die Dateiliste („Files available in this
@@ -4082,8 +4104,8 @@ Anfrage statt an `messages[0]`: so bleibt der Präfix der vorigen Schritte
 lesbar. Ausnahme: der Hinweis im Rückfall begrenzter Läufe (`_step`, bei
 `AgentTokenBudgetExceeded` ohne Kontomodus) hängt noch am System; Chats laufen
 im Kontomodus und erreichen ihn nicht.
-`answer_conversation` (der echte Verlauf für Memory-Belege, Passagensuche,
-lesbare Links) entfernt den App-Kontextblock (`strip_app_context`). `prompt_cache_control` setzt für
+`answer_conversation` (der echte Verlauf für Memory, Einstellungen, Gmail-
+Empfänger und lesbare Links) entfernt den App-Kontextblock (`strip_app_context`). `prompt_cache_control` setzt für
 `anthropic/`- und `qwen/`-Modelle OpenRouters automatisches
 `cache_control: {type: ephemeral}` (die übrigen Anbieter cachen Präfixe selbst),
 für jeden Schritt der Tool-Schleife einschließlich des Schritts, der die Antwort
@@ -4098,11 +4120,14 @@ Aufrufart: Schritte des Chatmodells lesen den Präfix im nächsten Schritt und
 (über die festen Cache-Punkte, siehe unten) in der nächsten Nachricht → Cache. Vergleichsantworten (`kind: comparison`) sind
 eine Anfrage, deren Suchrunden den eigenen Prompt wieder lesen (14 Tage bis
 2026-10-21: 21 von 49 Claude-Antworten lasen Cache, netto positiv) → Cache nur
-mit Suche. Judges sind einmalige Aufrufe (Retries, Hedges und Coverage-Fenster
-unterscheiden sich im Nutzerblock, an dem der automatische Breakpoint sitzt) →
-kein Cache. `DelegationLoop.worker_completion` setzt dafür
-`AgentCompletion.one_off` (Vergleich, Judge) und `AgentCompletion.stream`
-sendet `cache_control` nur, wenn `not one_off` oder die Anfrage Suchrunden hat.
+mit Suche. Die Live-Runden eines Prüfers setzen seine Sitzung fort → Cache
+(`one_off=False`); seine Schlussrunde ist `one_off` und cacht nur für ihre
+Suchrunden. Judges (bis 2026-10-31 auch auf Agent-Antworten, seitdem nur in der
+Consensus-Pipeline) waren einmalige Aufrufe (Retries, Hedges und
+Coverage-Fenster unterschieden sich im Nutzerblock) → kein Cache.
+`DelegationLoop.worker_completion` setzt dafür `AgentCompletion.one_off`, und
+`AgentCompletion.stream` sendet `cache_control` nur, wenn `not one_off` oder
+die Anfrage Suchrunden hat.
 Seitenlesungen (`PageFetch`, Responses-API) senden ohnehin keinen Marker.
 Messen: `scripts/cache_hit_rate.py` (nur lesend; pro Tag, Familie und
 Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
@@ -4127,10 +4152,10 @@ mit gleichem Präfix von 8,8k Tokens. Ergebnis:
 - Fehlt `openrouter:web_search` ganz, gibt es einen vollen Miss. Die Definition des
   Such-Tools selbst sind rund 2,5k Prompt-Tokens.
 
-Den Präfix brechen also nur Schritte mit `searches_enabled=False`: der Schritt nach
-`_consensus_search_handoff` (Recherche am Such-Cap) und der Abschluss am Turn-Limit
-(`_wrap_up`). Beide lassen das Tool bewusst weg, denn `tool_choice: none` würde
-auch `compare_models` sperren. Ungeprüft ist, ob `max_tool_calls: 0` bei stehendem
+Den Präfix bricht also nur ein Schritt des Agenten mit `searches_enabled=False`:
+der Abschluss am Turn-Limit (`_wrap_up`; bis 2026-10-31 auch der Schritt nach
+`_consensus_search_handoff` im Vergleichsmodus). Er lässt das Tool bewusst weg,
+denn `tool_choice: none` würde auch `compare_models` sperren. Ungeprüft ist, ob `max_tool_calls: 0` bei stehendem
 Tool die Suche zuverlässig sperrt. Erst prüfen, wenn `cache_hit_rate.py` nach dem
 Deploy diese Schritte als Kostenposten zeigt.
 
@@ -4146,8 +4171,8 @@ kann den Request aber nie ungültig machen) aus
 `openrouter_contract.provider_session_id`: ein SHA-256-Präfix über uid und
 Chat-ID, gleich für alle Nachrichten eines Chats, ohne beide im Klartext. OpenRouter bleibt damit ab dem ersten erfolgreichen
 Aufruf beim selben Endpunkt (pro Modell, Fallback bei Ausfall, vergessen nach
-10 min Leerlauf). Jeder Hilfsaufruf (Vergleichsantwort, Judge, delegierter
-Worker) bekommt seit 2026-10-21 eine eigene Session
+10 min Leerlauf). Jeder Hilfsaufruf (Vergleichsantwort, Prüfer-Sitzung,
+delegierter Worker) bekommt seit 2026-10-21 eine eigene Session
 (`provider_session_id(uid, chat_id, worker.id)` über
 `DelegationLoop.worker_completion` → `AgentCompletion.session_id`): Der Retry
 einer leer beendeten Antwort und der nächste Schritt eines Workers senden
@@ -4238,8 +4263,9 @@ vorigen, und Anthropics Rückblick (bis 20 Blöcke vom letzten Breakpoint)
 findet dessen Eintrag. Kein Treffer bei Fragen mit Dateien oder Google-Daten
 (der Dateiblock bzw. der Zusatzkontext aus `DelegationLoop._app_context` steht
 nicht im gespeicherten Kontext) und nach einer Kürzung des Verlaufs
-(`HISTORY_OMITTED_NOTE`). Memory-Belege und Vergleiche lesen die Fragen ohne
-Kontext (`answer_conversation` mit `strip_app_context`). Der Eintrag lebt fünf
+(`HISTORY_OMITTED_NOTE`). Was den echten Verlauf braucht (Einstellungen,
+lesbare Links, Gmail-Empfänger), liest die Fragen ohne Kontext
+(`answer_conversation` mit `strip_app_context`). Der Eintrag lebt fünf
 Minuten ab dem letzten Lesen; der zweite Schritt einer Nachricht frischt ihn
 auf. Test: `tests/test_agent_runs.py`
 (`test_the_next_message_repeats_the_question_exactly_as_it_was_sent`).
@@ -4247,9 +4273,12 @@ Nachmessen nach dem Deploy: `cache_hit_rate.py --days 2 --family anthropic`.
 
 **Zugang seit 2026-10-02: jedes angemeldete Konto.** `require_agent_access`
 verlangt nur noch eine UID (`/user_status` meldet `agent_access: true`); das
-Tageskonto begrenzt Agent pro Stufe. Pro bleiben die Premium-Modelle:
+Tageskonto begrenzt Agent pro Stufe. Seit 2026-10-31 läuft jedes Konto im einen
+Modus mit Prüfern; einen Zugang zum Audit (`audit_allowed`, `AGENT_AUDIT_ACCESS`,
+`/user_status` `audit_access`) gibt es nicht mehr. Nur der Arbeitsplatz hängt
+am Konto (`vm_allowed`, „Agent VM“ unten). Pro bleiben die Premium-Modelle:
 `require_model_access` lehnt in `POST /agent` ein Chatmodell oder
-Vergleichsmodell aus `cfg.PREMIUM_MODELS` für Free/Plus mit 403 ab (ein
+Vergleichsmodell (Prüfer) aus `cfg.PREMIUM_MODELS` für Free/Plus mit 403 ab (ein
 ausgefallener Tarif-/Rollendienst liefert sicher 503), `/agent/models` markiert
 sie mit `premium`, und `agent-chat.js` zeigt sie mit Pro-Badge, aber gesperrt
 (`locked()`/`selectable()`). Ebenso seit 2026-10-07 die Denkstufen High, Extra
@@ -4285,8 +4314,9 @@ liegt im geschützten Vorbereitungspfad und gibt bei Fehlern Kapazität/Turn fre
 Allowance-Recovery filtert vor dem 20er-Limit zusätzlich auf `policy.delegation`,
 damit alte Receipt-Formate ohne Producer-Lease keine aktuellen verwaisten Reserven
 verdecken. Admission wartet nur, wenn Input plus minimaler Output nach Freigabe
-der konkurrierenden Reserven überhaupt passen könnten. Die Vergleichsauswahl
-erzwingt auch serverseitig `MAX_RUN_FAMILIES` (sechs).
+der konkurrierenden Reserven überhaupt passen könnten. Die Auswahl der Prüfer
+erzwingt auch serverseitig 1 bis `MAX_RUN_FAMILIES` (sechs) Modelle
+(`agent_comparison.comparison_selection`, bis 2026-10-31 zwei bis sechs).
 
 `ProviderProgressWatchdog` begrenzt einzelne Agent-Providerstreams auf standardmäßig
 180 Sekunden **ohne Fortschritt** (`AGENT_PROVIDER_STALL_SECONDS`, 30–600).
@@ -4294,8 +4324,8 @@ Text, Reasoning, Tool-Deltas und steigende Tokenzähler erneuern die Frist; blo�
 SSE-Kommentare/Leerereignisse nicht. Der Socket-Guard prüft sie auch während
 ausstehender Reads. Das ist keine Gesamtlaufzeitgrenze und kein bezahlter Retry.
 Stop direkt vor Dispatch wird als `not_started` abgerechnet. Vergleichsantworten
-werden einzeln checkpointed; abgebrochene Synthesen bleiben mit ungeprüfter
-Antwortversion erhalten. Noch laufende gespeicherte Vergleiche werden terminal.
+werden einzeln checkpointed; eine abgebrochene Antwort bleibt als ungeprüfter
+Text erhalten. Noch laufende gespeicherte Vergleiche werden terminal.
 
 `request-deadline.js` stellt `App.withRequestDeadline` bereit (vor den Agent-
 Modulen in `bundles.json`): 15 Sekunden für Modellauswahl, Budget, Details, Stop,
@@ -4304,15 +4334,19 @@ ohne empfangene Bytes. `markdown-stream.js` meldet dafür auch Keepalive-Chunks
 über den optionalen `onProgress`-Hook. Abbruch, Auth-Fencing und reine Recovery
 bleiben erhalten. Die Aktivitätsprojektion hält die neuesten 64 Hilfsereignisse
 sowie alle Fortschrittsabsätze und zeigt Token-Warten samt Erklärung außerhalb der geschlossenen Details; die
-Taskzeile zeigt ebenfalls „Waiting for tokens“. Siehe
-[Audit und verbleibende Grenzen](agent-reliability-audit-2026-09-20.md).
+Taskzeile zeigt ebenfalls „Waiting for tokens“. Das zugehörige Audit
+(`agent-reliability-audit-2026-09-20.md`) liegt seit `efcb6658` nicht mehr im
+öffentlichen Repo.
 
 Agent · Beta ist ein eigener, pro Unterhaltung unveränderlicher execution_mode
 für alle angemeldeten Konten (bis 2026-10-01 nur Pro und Admins). Der alte Agent-Mode-Schalter gehört weiterhin zur
 unveränderten Consensus-Pipeline. POST /agent besitzt strikte owner-gebundene
 Chat-/Turn-/Request-Identitäten; recover_only startet niemals Modellaufrufe.
 Fertige Antworten sowie gespeicherte fehlgeschlagene Vergleichsantworten können
-mit exakt derselben Auswahl wiedergegeben werden. Recovery ist eine deduplizierte
+mit exakt derselben Auswahl wiedergegeben werden (Frage, Chatmodell und
+Denkstufe, Prüfer, Dateien, Google-Auswahl und -Zustimmung; seit 2026-10-31
+nicht mehr `agent_preferences`, die die Route selbst setzt, sodass ein Turn von
+vor dem Umbau oder vor einer Änderung des VM-Zugangs wiederherstellbar bleibt). Recovery ist eine deduplizierte
 Registry-Aktion am bestehenden Lauf; sie erzeugt weder einen neuen lokalen
 Bookmark-Eintrag noch einen Modellaufruf. Terminale Fehler liefern recoverable;
 ohne gespeicherte Antwort verschwindet der Link. Bei unbekanntem Transportstatus
@@ -4347,25 +4381,26 @@ Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reas
 sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
 
-Chatmodell und Vergleichsmodelle teilen sich seit 2026-10-01 EINEN Chip in
-`.composer-models` (`.agent-model-picker`). Seit 2026-10-23 sagt das Label,
-was die Vergleichsmodelle tun: „6 AIs cross-check“ („6 KIs prüfen mit“,
-`App.words.crossCheck`, unter 2 Modellen „No cross-check“); das Chatmodell
-steht im Tooltip („<Chatmodell> writes the answer, 6 AIs cross-check it.“)
-und im Menü. Vorher „<Chatmodell> +6“, das Neulingen nichts sagte. Im
-Audit-Modus nennt der Chip seit 2026-10-27 das Chatmodell, und die Prüfer
-haben ein eigenes Element (siehe „Audit statt Vergleich“). Der erste
-Frame (`app-bootstrap.js`) zeichnet dasselbe Label; `App.firstFrame` merkt
-sich den Namen des Chatmodells aus dessen Select. Er zählt die angehakten
+Chatmodell und Prüfer (die gewählten Vergleichsmodelle) teilen sich seit 2026-10-01 EINEN Chip in
+`.composer-models` (`.agent-model-picker`). Der Chip nennt das Chatmodell
+(seit 2026-10-31 immer; während die Liste lädt, den Namen aus
+`App.firstFrame.agentModel()`), sein Tooltip sagt, was die Prüfer tun
+(„<Chatmodell> writes the answer, 3 AIs cross-check it.“), und die Prüfer haben
+ein eigenes Element mit den Worten „3 AIs cross-check“ („3 KIs prüfen mit“,
+`App.words.crossCheck`, ohne Modell „No cross-check“; siehe „Ein Modus“ unten).
+Von 2026-10-23 bis 2026-10-31 trug im Vergleichsmodus der Chip selbst diese
+Worte, davor „<Chatmodell> +6“, das Neulingen nichts sagte. Der erste
+Frame (`app-bootstrap.js`) zeichnet Chip und Prüfer-Worte nach; `App.firstFrame`
+merkt sich den Namen des Chatmodells aus dessen Select. Er zählt die angehakten
 Familien in `#modelSelectionArea`; das Template hakt seit 2026-10-28 die des
 Standard-Presets an (`default_families` aus `pages.py`, vorher die ersten
-`MAX_RUN_FAMILIES`), sonst sprang der Chip mit drei Prüfern von 6 auf 3. `renderControls` verknüpft
+`MAX_RUN_FAMILIES`), sonst sprang die Zahl mit drei Prüfern von 6 auf 3. `renderControls` verknüpft
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
 Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
 unverknüpft zurück. Das Menü öffnet mit „Agent“ (Chatmodell, Reasoning) und
 „Compare with“ (n Modelle · Preset, Familienliste). Der Chip bleibt aktiv,
 solange der Companion es ist: Während eines Laufs ist nur die Chatmodell-Zeile
-gesperrt, die Vergleichsmodelle für die nächste Nachricht bleiben änderbar.
+gesperrt, die Prüfer für die nächste Nachricht bleiben änderbar.
 Die Chatmodell-Ebene zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
 Agent-Antworten haben keine Modellüberschrift über der Nachricht: weder die
 aktive bzw. wiederhergestellte Antwort in `agent-chat.js` noch archivierte
@@ -4389,13 +4424,14 @@ die tatsächlich für neue Calls verfügbaren und die reservierten Tokens.
 
 **Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
 bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
-comparisonOnly und zeigt im Agent-Modus ausschließlich Vergleichsmodelle
+comparisonOnly und zeigt im Agent-Modus ausschließlich die Prüfer-Modelle
 (Custom: Abschnitt „Comparison models“, ohne Consensus-Engine) — als Abschnitt
 „Compare with“ im Menü des einen Agent-Chips, nicht als eigener Chip. Es
 gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
 Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
 Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
-abgelehnt. Der Browser validiert zwei bis sechs Vergleichsmodelle, sperrt Senden
+abgelehnt. Der Browser validiert eines bis sechs Modelle (seit 2026-10-31 immer;
+vorher im Vergleichsmodus zwei bis sechs; Compare braucht weiter zwei), sperrt Senden
 bei ungültiger Auswahl und erhält auch bei direkten Aufrufen den Entwurf vor
 Chat-Erstellung/Netzwerkzugriff. Er sendet nie `null` als Ersatz für eine leere
 Auswahl. API-Aufrufe ohne Auswahl behalten das zentrale Default-Preset
@@ -4443,12 +4479,14 @@ Der injizierte AnalysisBudget ist nur für diesen Lauf zeit-/aufrufunbegrenzt;
 Consensus und Legacy-Aufrufer behalten ihre eigenen Grenzen. Seit 2026-10-05
 begrenzen weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, gesetzt nur in
 `for_chat`, im Snapshot sichtbar) eine Schleife gültiger Aufrufe: 4 Vergleiche
-(der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
+(`turn_comparisons`, der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
 Wrap-up plus 5 min (`TURN_WRAP_UP_SECONDS`) bis zum harten Stopp in `_check`, und
 höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`,
 derselbe Plan per `update_plan` und die VM-Werkzeuge ausgenommen). Wrap-up (`_merged_wrap_up`) = der Agent schreibt die Antwort in
-einem letzten Schritt ohne aufrufbare Tools aus einem Vergleich mit ≥2
-Antworten, danach Judges; sonst `AnalysisBudgetExceeded` mit
+einem letzten Schritt ohne aufrufbare Tools aus dem, was er hat (seit
+2026-10-31 ohne Bedingung an Vergleiche; vorher nur aus einem Vergleich mit ≥2
+Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
+(`_can_wrap_up`) stattdessen `AnalysisBudgetExceeded` mit
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
 Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
 nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
@@ -4469,191 +4507,157 @@ Reasoning-/Signaturblöcke für Tool-Fortsetzungen zurück; verschlüsselte Blö
 werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikation
 stehen in [agent-delegation.md](agent-delegation.md).
 
-**Vergleich und Prüfung.** agent_comparison.py registriert für den Agenten
-`compare_models` (Frage, Kontext, Tiefe; frei: Familien) und `check_text` (wie
-`compare_models` plus Passage) mit strikten Pydantic-Argumenten, in
-fester Reihenfolge (Prompt-Cache). Ein Tool, das die Steuerung beendet, gibt es
-nicht: die Antwort ist der Klartext eines Schritts ohne Toolcalls (bis
-2026-10-14 das Tool `answer` mit getrenntem Antwortschritt, unten). `judge_answer` ist
-`ComparisonTools.app_tools` (bis 2026-10-15 auch `check_contradictions`): der Server führt sie über
-`DelegationLoop.app_registry` aus (`_finish_review`, `_execute_stream(..., registry)`),
-das Modell sieht sie nicht. `ToolRegistry.validate` nimmt ein
-Array-/Objekt-Argument, das als JSON-Text kommt (Sonnet schickte `"memory": "[]"`
-und scheiterte dreimal an der Validierung), als den deklarierten Container
-(`_decode_stringified`); alles andere lehnt die Validierung ab. Seit 2026-10-07 steuert allein
-der Code-Prompt `prompt_defaults.AGENT_SYSTEM_PROMPT` (gespeicherte Admin-Prompts
-wirken nicht mehr; seit 2026-10-14 = Steuerteil `_AGENT_STEERING` plus
-Schreibregeln `AGENT_ANSWER_SECTION`). Seit 2026-10-11 entscheidet der Agent nach „COMPARE OR
-ANSWER DIRECTLY“, ob er vergleicht (Fakten, Aktuelles, Rat, Strittiges, Recherche,
-auf Wunsch; im Zweifel ja) oder direkt antwortet (Chat/App/frühere Antworten,
-Umformulieren/Übersetzen, Gruß/Rückfrage, Watch, eine gezeigte Seite lesen);
-beides in guided und free. Urteile (Meinung, Bewertung, Kritik, Empfehlung)
-werden seit 2026-10-22 immer verglichen, auch zu angehängten Dateien und bei
-„deine Meinung“; nur auf ausdrücklichen Wunsch ohne Vergleich. Sonst mit begründeten Annahmen weiterarbeiten. Die Schreibregeln (Journalist, Treue zur Substanz, eigene
-Beraterstimme, keine Superlative, Uneinigkeit nur wo sie die Entscheidung ändert,
-Quellenauszüge, `checked_text`, Antwort ohne Vergleich, bei „welche KI passt?“
-consens.io als eine Option nach gleichem Maßstab, seit 2026-10-25) stehen im Abschnitt
-„WRITING THE ANSWER“ (`AGENT_ANSWER_SECTION`), weil der Agent die Antwort selbst
-als letzte Nachricht seiner Tool-Schleife schreibt (unten). Die Judges startet
-der Server selbst (`_finish_merged` → `_finish_review`), außer der Nutzer hat
-die Antwortprüfung ausgeschaltet (`AgentPreferences.judges == "off"`: dann
-`ComparisonTools.skip_review`, Review-Status `off`); ist die Antwort
-fixiert, bekommt der Agent keinen weiteren Schritt mehr. `finalized=true`
-ist ein Protokollabschluss, kein Erfolgsbeleg für alle Teilprüfungen. Die
-Entscheidung vor dem ersten Vergleich bleibt promptgesteuert: kein zweiter
-LLM-Router, keine sprachabhängige Keyword-Klassifikation.
-Deaktivierte Worker
-liefern weder Worker-Katalog noch Delegationsprompt im Chatkontext. Auch
-Vergleichsmodelle, Judges und Worker erhalten eine knappe Rollen-/Produkterklärung.
-Vor dem ersten Vergleich darf der Orchestrator bis zu drei Runden suchen
-(`ORCHESTRATOR_SEARCH_ROUNDS`), nur um die Frage zu verstehen und zu formulieren;
-seine Funde und Quellen gibt er nicht in den `context` (seit 2026-10-06), jedes
-Vergleichsmodell recherchiert selbst. Beendet der Server-Suchloop einen Request
-mit recherchiertem Text ohne Client-Tool, führt `_consensus_search_handoff`
-einmalig ohne Quellenliste in die Client-Tool-Orchestrierung zurück.
-Das Modell entscheidet selbst,
-ob es die ganze Frage oder mehrere begründete Teilfragen vergleicht. Es
-liefert einen neutralen Auftrag mit nötigem Kontext; alle Vergleichsmodelle
-sehen dieselbe isolierte Aufgabe, keinen Chatverlauf und keine Antworten anderer
-Vergleichsmodelle. Der Produktprompt verpflichtet das Chatmodell ausdrücklich,
-Bezüge wie „davon“ aufzulösen und relevante frühere Anforderungen in Frage/Kontext
-zu übernehmen; unabhängige Fragen brauchen keinen unnötigen Gesprächsrückblick.
-Im freien Modus (`AgentPreferences.autonomy == "free"`) wählt es zusätzlich pro
-Vergleich die Familien (`free_compare_args`: Enum der Turn-Auswahl, mindestens zwei,
-Duplikate in `_choose`; jeder Vergleich speichert `asked`).
-`ComparisonTools.compare` startet alle gefragten Vergleichsmodelle gleichzeitig in eigenen
-Threads (`compare_slots`, je Aufruf eine `ComparisonCancellation`) und wartet nur
-bis Quorum plus Nachfrist (`quorum_size`, `QUORUM_GRACE`, `MIN_GRACE_SECONDS`);
-Standard ist seit 2026-10-07 `all` (jedes Modell, auch bei `quick`), weil eine
-späte Antwort nicht mehr in die Prüfung kommt; `balanced` wartet nur bei `full`
-auf alle. Seit 2026-10-08 endet jedes Warten mit mindestens zwei Antworten,
-sobald `DelegationLoop.answer_time_left()` ≤ 0 ist: Zeit bis zum harten Stopp
-minus `ANSWER_RESERVE_SECONDS` nach Denkstufe des Chatmodells (none 120 s … max
-600 s); Nachzügler werden dann wie beim Quorum spät/`late_cutoff`. Dieselbe
-Reserve zieht `_turn_limit` vor (Wrap-up, bevor eine „max“-Antwort nicht mehr
-vor den harten Stopp passt).
+**Werkzeuge des Agenten und `compare_models`.** agent_comparison.py
+registriert für den Agenten `compare_models` (`AuditCompareArgs`: Frage,
+Kontext, `file_ids`, Tiefe `quick`/`full`; kein Fortschrittsabsatz, kein
+Memory-Feld) mit der Beschreibung `AUDIT_COMPARE`, im Kontomodus samt
+„At most {turn_comparisons} times per message“, in fester Reihenfolge
+(Prompt-Cache). Ein Tool, das die Steuerung beendet, gibt es nicht: die
+Antwort ist der Klartext eines Schritts ohne Toolcalls (bis 2026-10-14 das
+Tool `answer` mit getrenntem Antwortschritt, unten). `audit_answer` ist
+`ComparisonTools.app_tools` (bis 2026-10-31 `judge_answer`, bis 2026-10-15
+auch `check_contradictions`): der Server führt es über
+`DelegationLoop.app_registry` aus (`_finish_review`,
+`_execute_stream(..., registry)`), das Modell sieht es nicht.
+`ToolRegistry.validate` nimmt ein Array-/Objekt-Argument, das als JSON-Text
+kommt (Sonnet schickte `"memory": "[]"` und scheiterte dreimal an der
+Validierung), als den deklarierten Container (`_decode_stringified`); alles
+andere lehnt die Validierung ab. Seit 2026-10-07 steuert allein der Code-Prompt
+(gespeicherte Admin-Prompts wirken nicht), seit 2026-10-31
+`DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT` (Aufbau unter
+„Prompt-Aufteilung im Agenten“ unten). Ob der Agent sucht, liest, die Modelle
+fragt, den Arbeitsplatz nutzt oder direkt antwortet, entscheidet er selbst:
+kein zweiter LLM-Router, keine sprachabhängige Keyword-Klassifikation.
+Deaktivierte Worker liefern weder Worker-Katalog noch Delegationsprompt im
+Chatkontext. Auch Vergleichsmodelle, Prüfer und Worker erhalten eine knappe
+Rollen-/Produkterklärung. Bis 2026-10-31 hatte der Vergleichsmodus dazu
+`check_text` (siehe „Eingefügten Text prüfen“), Familienwahl je Vergleich im
+freien Modus (`free_compare_args`), eigene Suche nur vor dem ersten Vergleich
+(`ORCHESTRATOR_SEARCH_ROUNDS`, `_consensus_search_handoff`, `_tool_reminder`),
+die Regel „COMPARE OR ANSWER DIRECTLY“ und je nach Antwortstart ein Quorum
+(`quorum_size`, `QUORUM_GRACE`).
+
+`ComparisonTools.compare` fragt jedes gewählte Modell gleichzeitig in eigenen
+Threads (eigene Slots je Vergleich, je Aufruf eine `ComparisonCancellation`),
+jedes in einer frischen Sitzung (`ComparisonTools.call`, nie die Sitzung eines
+Prüfers: wer den Lauf kennt, antwortet nicht unabhängig). Es wartet auf jede
+Antwort (`_await_answers`; Max 2026-10-07: das sorgfältigste Modell ist oft das
+langsamste), höchstens bis `DelegationLoop.answer_time_left()` ≤ 0 ist: Zeit
+bis zum harten Stopp minus `ANSWER_RESERVE_SECONDS` nach Denkstufe des
+Chatmodells (none 120 s … max 600 s) und, solange Prüfer folgen,
+`REVIEW_RESERVE_SECONDS`; Nachzügler werden dann `late` bzw. am Ende
+`late_cutoff`. Dieselbe Reserve zieht `_turn_limit` vor (Wrap-up, bevor eine
+„max“-Antwort samt Prüfung nicht mehr vor den harten Stopp passt). Ist die
+Antwort schon in Arbeit (`ComparisonTools.text`) oder `turn_comparisons`
+erreicht, lehnt `compare` ab, ohne etwas Bezahltes zu starten.
 `_rebuild` normalisiert Quellen wie zuvor `fan_out_provider_answers` (das der
-Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models` und
-`late`. `judge()` prüft seit 2026-10-07 nur Antworten ohne `late`.
-`judge_transport` filtert die Judge-Temperatur wie der Consensus-Pfad
-(`_effective_temperature`, OpenAI gpt-5 und neuer, Gemini, Mistral-Reasoning).
-Die Judges sehen jede Antwort als `<response label="Model A">…</response>`-Block
-(`_response_block`), nicht mehr als `- Model A:`-Zeile.
-`freeze_for_synthesis` legt `synthesis_providers` fest,
-`finish_comparisons` stoppt vor den Judges verbliebene Nachzügler (`late_cutoff`)
-und fixiert `basis_hash`; `close` beendet sie am Laufende (`stopped`). Was ein
-gestopptes oder mitten im Stream ausgefallenes Modell bis dahin geschrieben hat
-(`Worker.partial_text` aus `_step`), bleibt als
-`failed_models[].partial_text` erhalten: nur für den Leser, nie in Synthese,
-`answers`/`basis_hash`, Judges oder dem Tool-Ergebnis an den Orchestrator.
-Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und `partial: true`.
-Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst diese Teiltexte weg. Vergleichsmodelle
-erhalten keine Delegations-/Vergleichstools, aber Websuche
-(`call(..., kind="comparison", search_rounds=…)` → `_step(searches_enabled=True)`;
+Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models`
+und `late`; eine von mehreren Antworten ist seit 2026-10-31 ein Teilvergleich
+(`partial`), kein Fehlschlag. `_freeze` hält beim Ergebnis fest, was der Agent
+las (`synthesis_providers`), `finish_comparisons` stoppt vor der Prüfung
+verbliebene Nachzügler (`late_cutoff`) und fixiert `basis_hash`; `close`
+beendet sie am Laufende (`stopped`). Was ein gestopptes oder mitten im Stream
+ausgefallenes Modell bis dahin geschrieben hat (`Worker.partial_text` aus
+`_step`), bleibt als `failed_models[].partial_text` erhalten: nur für den
+Leser, nie in `answers`/`basis_hash` oder dem Tool-Ergebnis an den Agenten.
+Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und
+`partial: true`. Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst
+diese Teiltexte weg, dann der Text gelesener Seiten, dann Zitate und lange
+Notizen der Prüfer (`trim_marks`). Vergleichsmodelle erhalten keine
+Delegations-/Vergleichstools, aber Websuche
+(`call(..., search_rounds=…)` → `_step(searches_enabled=True)`;
 `SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich;
 ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
-`comparison_system_prompt` das aktuelle Datum. Judges suchen nie; der
-Orchestrator sucht vor dem ersten Vergleich nur für sich selbst. Sobald ein Vergleich
-bezahlte Antworten hat (bis 2026-10-14: schon ab seinem Start), dürfen der
-Schlussschritt, der die Antwort ohne Tools schreibt (`_merged_wrap_up`,
-`closing`), und die Judges das Tageslimit überziehen
+`comparison_system_prompt` das aktuelle Datum. `_merged_result` ist das
+Toolergebnis: die vollen Antworttexte anonym und gemischt (`random.Random(cid)`:
+der Agent wägt Begründung und Belege, nicht Namen), je mit ihren Quellen-URLs
+und ggf. `truncated`, `missing_answers` (Familie, Modell, Grund), die
+Quellenliste mit Auszügen (`source_entries`, unten) und ein Hinweis: die
+Antworten decken nur seine Frage, der Rest der Aufgabe bleibt seine, Nutzer und
+Prüfer lesen sie mit (Max, 2026-10-31: ein Lauf endet nicht mit den Antworten).
+Kein Judge läuft auf ihnen. Leere, abgebrochene oder Tool-Antworten gelten als
+fehlgeschlagen; eine am Ausgabelimit abgeschnittene Antwort ist bezahlte,
+markierte Evidenz (`keep_truncated`). Strukturierte Transportfehler werden am
+Fehlerfeld erkannt, nicht am Wort „Error“ im Antworttext; nur
+Legacy-Stringadapter behalten ihre Fehlerkonvention.
+
+Sobald die Nachricht bezahlte Arbeit hat (Antworten eines Vergleichs,
+`_paid_comparison`, oder ein Schritt des Agenten, dem Prüfer folgten,
+`_paid_audit`, seit 2026-10-29, A-R2), dürfen der Schlussschritt, der die
+Antwort ohne Tools schreibt (`_merged_wrap_up`, `closing`), und die
+Schlussrunden der Prüfer (`_final_review`) das Tageslimit überziehen
 (`_admit_chat_step` → `claim(overdraft=True)`). Ein Steuer-Schritt läuft auch
 danach nur im Kontingent; weist es ihn vor seinem Claim ab, schreibt der Agent
 die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
-`TURN_ALLOWANCE_LIMIT`), ohne bezahlte Vergleiche nicht. Bis 2026-10-28 überzog
+`TURN_ALLOWANCE_LIMIT`), ohne bezahlte Arbeit nicht. Bis 2026-10-28 überzog
 nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
-(Sicherheitsaudit). Im Audit-Modus (seit 2026-10-29, A-R2) steht ein bezahlter
-Schritt des Agenten für den bezahlten Vergleich (`_paid_audit`): Schlussschritt
-und `_closing_index` wie oben, dazu die Schlussrunden der Prüfer
-(`_final_review`); `_long_run_limit` hält zusätzlich zweimal den bisherigen
-Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`). Jeder Schritt des Agenten im
-Kontomodus kann die Antwort schreiben und wird mit dem Steuer-Budget zugelassen
-(`_routing_model`); sein Antwortbudget darüber (`_answer_output`) reserviert er
-einmal statt pro Suchrunde (`RunCosts.estimate(answer_output=…)`), und nur dieser
-Teil darf schon vor einem Vergleich überziehen (`claim(overdraft=<Tokens>)` →
+(Sicherheitsaudit). `_long_run_limit` hält zusätzlich zweimal den bisherigen
+Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`).
+Jeder Schritt des Agenten im Kontomodus kann die Antwort schreiben und wird mit
+dem Steuer-Budget zugelassen (`_routing_model`); sein Antwortbudget darüber
+(`_answer_output`) reserviert er einmal statt pro Suchrunde
+(`RunCosts.estimate(answer_output=…)`), und nur dieser Teil darf schon vor
+bezahlter Arbeit überziehen (`claim(overdraft=<Tokens>)` →
 `agent_quota.reserve`): eine Direktantwort kurz vor dem Limit wird nicht
-abgeschnitten, und Recherche geht nicht früher verloren. Suchkonfiguration (`search_tools`: eine für alle
-Modelle, Engine `auto`, nur Grok fest Exa), Reservierung
-(`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte stehen
-ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze ist die Completion-Grenze des
-Modells, begrenzt durch `_output_shares` (fairer Anteil am freien Tageskontingent
-über `agent_quota.remaining_allowance`, je Modell zu dessen Output-Preis in
-Tokens umgerechnet). `depth=quick` gibt eine kurze Längenvorgabe,
-`full` keine. Technische Token-, Kontext- und Snapshotgrenzen gelten weiter. Leere, abgebrochene oder Tool-Antworten gelten als fehlgeschlagen.
-Strukturierte Transportfehler werden am Fehlerfeld erkannt, nicht am Wort
-„Error“ im Antworttext; nur Legacy-Stringadapter behalten ihre Fehlerkonvention.
-Mindestens zwei vollständige Antworten sind eine brauchbare Prüfgrundlage.
+abgeschnitten, und Recherche geht nicht früher verloren. Suchkonfiguration
+(`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa),
+Reservierung (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte
+stehen ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“.
+Die Output-Grenze einer Vergleichsantwort ist die Completion-Grenze des
+Modells, begrenzt durch `_output_shares` (fairer Anteil am freien
+Tageskontingent über `agent_quota.remaining_allowance`,
+`COMPARISON_BUDGET_SHARE`, je Modell zu dessen Output-Preis umgerechnet, und
+am Platz des Review-Snapshots, `REVIEW_ANSWER_CHARS`). `depth=quick` gibt eine
+kurze Längenvorgabe (`DEPTH_GUIDANCE`), `full` keine. Technische Token-,
+Kontext- und Snapshotgrenzen gelten weiter.
 
-**Die Antwort schreibt der Agent selbst (seit 2026-10-14).** Mit Vergleichs-Tools
-(`DelegationLoop.merged`, gesetzt, sobald `comparison_models` übergeben ist, auch
-in begrenzten Läufen) ist der Klartext eines Schritts ohne Toolcalls die
-Antwort; ein reiner Delegationslauf ohne Vergleichs-Tools endet weiter mit
-seinem gestreamten Text. Nach einem Vergleich schreibt derselbe Aufruf, der die
-Antworten liest, die Antwort (Vergleiche plus ein Agent-Aufruf); eine
-Direktantwort ist ein einziger Aufruf. Nach jedem Vergleich sieht der Agent die
-Antworten und entscheidet selbst: weiter vergleichen, eine Quelle lesen oder
-schreiben (`next_step` gibt es seit 2026-10-11 nicht mehr, `CompareArgs`
-ignoriert `reason`/`next_step` versteckt). `ComparisonTools._merged_result` ist
-das Toolergebnis jedes `compare_models`/`check_text`: die vollen Antworttexte mit
-ihren Quellen-URLs (keine gekürzte Routing-Fassung), `missing_answers` (Familie,
-Modell, Grund), die Quellenliste mit Auszügen (`source_entries`, unten), nach
-`check_text` zusätzlich `passage_check` und `checked_text`, dazu eine Anweisung
-(schreiben, sobald die Antworten reichen; nur Fehlendes neutral nachvergleichen;
-mit `read_source` zuerst der Lesehinweis). Die Tiefe steht nicht darin, sie
-steuerte nur die Vergleichsmodelle. Der Vergleich ist damit fixiert (`_freeze`:
-die Antwort ruht auf genau diesen Antworten, Nachzügler sind `late`). Hat ein
-Vergleich des Schritts mindestens zwei Antworten geliefert, hängt `run` danach
-`prompt_defaults.AGENT_WRITE_NOTE` als eigene Nutzer-Nachricht an: die nächste
-Nachricht ist die vollständige Antwort aus allen Ergebnissen (wie Claude Codes
-Erinnerungen am Ort der Arbeit, nicht nur im System-Prompt).
-Streaming (`_orchestrate` → `_step(answer_candidate=True)`, `_candidate_delta`;
+**Die Antwort schreibt der Agent selbst (seit 2026-10-14).** In jedem
+Chat-Lauf (`DelegationLoop.merged`, gesetzt, sobald `comparison_models`
+übergeben ist, auch in begrenzten Läufen) ist der Klartext eines Schritts ohne
+Toolcalls die Antwort; ein reiner Delegationslauf ohne Vergleichs-Tools endet
+weiter mit seinem gestreamten Text. Eine Direktantwort ist ein einziger
+Aufruf; nach Recherche, gelesenen Seiten oder einem Vergleich schreibt
+derselbe Aufruf, der die Ergebnisse liest, die Antwort. Streaming
+(`_orchestrate` → `_step(answer_candidate=True)`, `_candidate_delta`;
 Konstanten in `agent_answer_mode.py`): Text erscheint ab `ANSWER_HOLD_CHARS`
-(300) Zeichen, nie nach Beginn eines Toolcalls und vor dem ersten Vergleich nie
-nach eigenen Suchtreffern; kürzerer Text (Gruß, Rückfrage) erscheint, wenn der
-Schritt endet. `hold` (`_hold_answer`: ungeprüfte Worker, Mailbox oder eigene
-Recherche ohne Vergleich) blendet ihn ganz aus. Folgt doch ein Toolcall, nimmt
-`_retract` den Text per Status `retract` mit `clear_response` zurück und zeigt
-seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der Zeitleiste
-(`NOTE_CHARS` = 8000, Zeilen bleiben; auch nie gestreamter kurzer Text). Schon
-gezeigter Text wandert, sobald der Client den Aufruf meldet (Status
-`tool_call` aus `AgentCompletion.stream`, `_move_preamble`); folgen
-nur `SIDE_TOOLS` (`update_memory`, `prepare_watch`), bleibt der Text die Antwort
-(`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
-(`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach einem Batch mit
-einem Ergebnis eines Werkzeugs außerhalb von `MEMORY_KEEPING_TOOLS` (seit 2026-10-27
-jedes, Fehler eingeschlossen; nur vor dem Lauf abgelehnte Aufrufe nicht) und nach
-eigener Websuche in jedem Modus gilt Fremdinhalt als im Blick
-(`outside_in_view`): `memory_locked` sperrt dann jede weitere
-Memory-Änderung der Nachricht (`agent_memory.MEMORY_LOCKED`), außer im
-Audit-Modus mit Prüfern, wo `update_memory` seit 2026-10-28 durch die
-Vorab-Prüfung geht (`agent_gate.outward(call, memory_exposed=…)` → „memory“). Eigene Recherche ohne Vergleich:
-`_consensus_search_handoff` (oben), danach hält `_tool_reminder` eine Antwort
-über `DIRECT_REPLY_CHARS` (800) Zeichen einmal zurück (`TOOL_REMINDERS`);
-kürzere Rückfragen stehen sofort, nach der Erinnerung steht auch eine lange
-Antwort. Ungeprüfte Worker-Ergebnisse halten die Antwort zurück (`_retract`
-plus Aufforderung zu `review_agent`). `_finish_merged` gleicht den sichtbaren
-Text an (`_show_answer`, auch nach `_drop_presearch_text`), fixiert ihn
-(`freeze_for_synthesis`, `capture`) und führt nach Vergleichen über
-`_finish_review` `judge_answer`
-über `app_registry` als eigene sichtbare Zeile aus („Checked the answer“). Mit
-ausgeschalteter Antwortprüfung (`judges: off`, seit 2026-10-17) schließt
-`skip_review` die Antwort ohne Judge ab: je Vergleich ein an Text und Grundlage
-gebundener Check mit Status `off` ohne `differences_data`; `review_is_bound`
-und `finish_run` zählen `off` zu `REVIEW_DONE`, die Seite zeigt „Answer check
-off“ (`agent-review.js`). Ohne
-Vergleich setzt er `ComparisonTools.direct`: keine Judges; `capture()` fixiert
-den Text ohne Version, eine Review (`snapshot`-Status `direct`, Standard ohne
-Vergleiche) entsteht nur mit gelesenen Seiten. Festgeschrieben und geprüft wird
-nur ein vollständiger, nicht leerer Schritt ohne Toolcalls. Endet er am
-Tokenlimit (`length`) oder bricht ab, bleibt schon sichtbarer Text nach
-Vergleichen als ungeprüfte Teilantwort (`capture` nach dem Settlement, keine
-Judges) und ohne Vergleich als Text des fehlgeschlagenen Turns erhalten,
-gespeichert wird genau der gesehene Text (`value.published`); nie
-sichtbarer Text (kurz, zurückgehalten oder zurückgenommen) wird nicht
-gespeichert, außer eine kurze Antwort am Ausgabelimit (`_keep_cut_answer`
-zeigt und speichert sie). Schon gezeigter Antworttext bleibt auch, wenn der
-Schritt danach sucht (`_drop_presearch_text` schneidet nur Ungezeigtes). Turn-Grenzen: `_merged_wrap_up` (oben) schreibt die Antwort in
-einem letzten Schritt mit gelisteten, nicht aufrufbaren Tools
+(300) Zeichen und nie nach Beginn eines Toolcalls; kürzerer Text (Gruß,
+Rückfrage) erscheint, wenn der Schritt endet. `hold` (`_hold_answer`:
+ungeprüfte Worker oder Mailbox) blendet ihn ganz aus. Folgt doch ein
+Toolcall, nimmt `_retract` den Text per Status `retract` mit `clear_response`
+zurück und zeigt seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der
+Zeitleiste (`NOTE_CHARS` = 8000, Zeilen bleiben; auch nie gestreamter kurzer
+Text). Schon gezeigter Text wandert, sobald der Client den Aufruf meldet
+(Status `tool_call` aus `AgentCompletion.stream`, `_move_preamble`); folgen nur
+`SIDE_TOOLS` (`update_memory`, `prepare_watch`, `prepare_settings_change`,
+`update_plan` mit fertigem Plan, `prepare_pull_request`), bleibt der Text die
+Antwort (`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
+(`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach
+einem Batch mit einem Ergebnis eines Werkzeugs außerhalb von
+`MEMORY_KEEPING_TOOLS` (seit 2026-10-27 jedes, Fehler eingeschlossen; nur vor
+dem Lauf abgelehnte Aufrufe nicht) und nach eigener Websuche gilt Fremdinhalt
+als im Blick (`outside_in_view`, App-Eintrag `memory_locked`): Mit Prüfern geht
+`update_memory` dann seit 2026-10-28 durch die Vorab-Prüfung
+(`agent_gate.outward(call, memory_exposed=…)` → „memory“), ohne Prüfer sperrt
+`memory_locked` jede weitere Memory-Änderung der Nachricht
+(`agent_memory.MEMORY_LOCKED`). Ungeprüfte Worker-Ergebnisse halten die Antwort
+zurück (`_retract` plus Aufforderung zu `review_agent`). `_finish_merged`
+fixiert die Antwort (`answer_fixed`: kein Halt eines Prüfers mehr, ein später
+endet mit ihr), gleicht den sichtbaren Text an (`_show_answer`, auch nach
+`_drop_presearch_text`), schreibt den App-Eintrag `answer_fixed` (Hash, Länge),
+fixiert die Grundlage (`freeze_for_synthesis`, `capture`: Version `required`)
+und lässt über `_finish_review` das App-Tool `audit_answer` die Prüfer starten
+(„Ein Modus“ unten). Jede Antwort wird so geprüft, auch eine Direktantwort
+ohne Vergleich (bis 2026-10-31 bekam eine Direktantwort im Vergleichsmodus
+keine Prüfung, `ComparisonTools.direct`). Festgeschrieben wird nur ein
+vollständiger, nicht leerer Schritt ohne Toolcalls. Endet er am Tokenlimit
+(`length`) oder bricht ab, bleibt schon sichtbarer Text als Text des Turns
+erhalten (ungeprüft); gespeichert wird genau der gesehene Text
+(`value.published`), nie sichtbarer Text (kurz, zurückgehalten oder
+zurückgenommen) nicht, außer eine kurze Antwort am Ausgabelimit
+(`_keep_cut_answer` zeigt und speichert sie). Schon gezeigter Antworttext
+bleibt auch, wenn der Schritt danach sucht (`_drop_presearch_text` schneidet
+nur Ungezeigtes). Turn-Grenzen: `_merged_wrap_up` (oben) schreibt die Antwort
+in einem letzten Schritt mit gelisteten, nicht aufrufbaren Tools
 (`allow_tools=False` → `tool_choice: none`, der Prompt-Cache bleibt), mit der
 gewählten Denkstufe und dem Antwortbudget; offene Toolcalls bekommen vorher ein
 Ergebnis (`_close_open_calls`). Bis 2026-10-14 beendete das Tool `answer` die
@@ -4661,14 +4665,14 @@ Steuerung, und ein getrennter, toolfreier Antwortschritt desselben Modells
 (`_write_synthesis` mit `synthesis_messages`, `AGENT_ANSWER_PROMPT`/
 `AGENT_DIRECT_ANSWER_PROMPT`, App-Fakten und `turn_summary`) schrieb aus einer
 Evidenz-Nachricht, ohne Prompt-Cache und mit Gespräch und Antworten ein zweites
-Mal gelesen (Git-Tag `agent-separate-answer-last`). Messung und Begründung:
-[agent-mode.md](agent-mode.md), „Die Antwort schreibt der Agent selbst (seit
-2026-10-14)“; `scripts/evaluate_agent_answers.py` misst den Weg live, auf Wunsch
-gegen gespeicherte Antworten (`--baseline`, `--pairwise`), und zeigt je
-Provider-Aufruf, wohin die Zeit geht (Zulassung, erster Token, Stille,
-Settlement).
+Mal gelesen (Git-Tag `agent-separate-answer-last`). Bis 2026-10-31 hängte der
+Vergleichsmodus nach jedem Vergleich mit ≥2 Antworten `AGENT_WRITE_NOTE` als
+eigene Nutzer-Nachricht an („jetzt die vollständige Antwort aus allen
+Ergebnissen“); gemessen wurde der Weg mit `scripts/evaluate_agent_answers.py`
+(mit dem Modus entfernt). Messung und Begründung: [agent-mode.md](agent-mode.md),
+„Die Antwort schreibt der Agent selbst (seit 2026-10-14)“.
 
-Jeder Schritt des Agenten mit Vergleichs-Tools bekommt das Steuer-Budget `routing_output_limit`
+Jeder Schritt des Agenten in einem Chat-Lauf (mit Vergleichs-Tools) bekommt das Steuer-Budget `routing_output_limit`
 (`_routing_model`, seit 2026-10-08: `AGENT_MAX_OUTPUT_TOKENS` +
 `ROUTING_REASONING_HEADROOM` = 16.384 bei denkenden Modellen; Prod: Sonnet „max“
 brauchte 3.808/3.998 von 4.096 im ersten Schritt; die Reservierung wächst je
@@ -4690,8 +4694,8 @@ Endet ein Agent-Schritt ohne verwertbares Ergebnis (`_output_limited`:
 das für Agent-Schritte (nicht Worker) als erledigten, bezahlten Schritt
 (`_thought_only`), damit der nächste Claim nicht an einem fehlgeschlagenen
 Vorgänger scheitert; eine Vergleichsantwort mit `retry_empty` ebenso
-(`value.empty_answer`), und `AgentComparison.call` versucht sie genau einmal unter
-`agent:<id>:1` erneut (gpt-oss-120b: 1 von 13 gleichen Aufrufen endete nach
+(`value.empty_answer`), und `ComparisonTools.worker_request` versucht sie (wie
+eine Prüferrunde mit Suche) genau einmal unter `agent:<id>:1` erneut (gpt-oss-120b: 1 von 13 gleichen Aufrufen endete nach
 Denken und Suche ohne Wort).
 `run` wiederholt ihn genau einmal mit `lighter_reasoning` (`RETRY_EFFORTS`:
 bewusst zuerst `low`, dann minimal → none, nie eine Stufe über der aktuellen)
@@ -4700,7 +4704,7 @@ gestreamter Text wird zurückgenommen); die leichtere Stufe bleibt für weitere
 Schritte des Turns (`routing_lighter`, auch im Antwortbudget), der Wrap-up
 wiederholt ebenso einmal. Ohne leichtere Stufe oder bei erneutem Leerlauf endet
 der Turn mit `output_limit` und `TURN_OUTPUT_LIMIT` (Rat: niedrigere Denkstufe
-oder anderes Chatmodell). **429 nach bezahlten Vergleichen:** `_orchestrate`
+oder anderes Chatmodell). **429 nach Vergleichen:** `_orchestrate`
 (und der Wrap-up) ruft dann `_answer_attempt`, das einen kostenlosen 429
 (`_free_rate_limit`: HTTP-Ablehnung, `provider_rejection`, kein Text;
 `_step(retry_rate_limit=True)` settled ihn als erledigten Nullschritt) oder eine
@@ -4709,46 +4713,16 @@ Index) genau einmal nach Retry-After bzw. `RATE_LIMIT_RETRY_SECONDS` (3 s)
 wiederholt, nur bis `RATE_LIMIT_RETRY_MAX_SECONDS` (10 s) und mit mindestens
 60 s bis zum harten Stopp; `_pause` bleibt abbrechbar, der Retry umgeht die
 selbst gesetzte Sperre (`check_cooldown=False`). `_admit_chat_step` kürzt für
-Vergleichsantworten und für Agent-Schritte nach einem Vergleich bei Konkurrenz
-die Output-Grenze (`clamp_floor`), statt zu warten. Die Judges indexieren im
-Chat bis zu `CHAT_MAX_CONSENSUS_SENTENCES` Sätze; `_run_coverage_windows` teilt
-Coverage in parallele Fenster (`COVERAGE_WINDOW`, im Agent `AGENT_COVERAGE_WINDOW`
-= 16 Sätze).
-**Prüfung beim Schreiben (seit 2026-10-17):** Jede gezeigte Antwort-Delta ruft
-`ComparisonTools.answer_progress(value.published)` (`DelegationLoop._step` nach
-`_candidate_delta`). `agent_coverage_prefetch.CoveragePrefetch` startet für je 16
-feste Sätze (`consensus_engine.settled_sentence_count`: nur Zeilen, auf die
-noch eine vollständige Zeile folgt) ein Coverage-Fenster über
-`judge_transport` (gemessen, Turn-Abbruch, Google-Routing) mit dem bisher
-geschriebenen Text (`prefetch_coverage_window`, Stimmen nach Modellname statt
-Label). `judge()` übergibt sie als `coverage_prefetch` an `query_differences`;
-`_run_coverage_with_prefetch` startet sofort die nicht laufenden Sätze,
-sammelt die frühen Fenster ein, übernimmt nur wortgleiche Sätze an derselben
-Nummer (`_adopt_prefetched`, neue Labels) und fragt den Rest erneut. Ein
-anderer Prüfbestand (`judge_basis`: Antworten, Frage, gelesene Seiten) verwirft
-alles. `_retract` und ein Schnitt in `_show_answer` stoppen laufende Fenster
-(`discard_answer_progress`, noch wartende Fenster starten gar nicht mehr),
-`judge()`/`skip_review()` schließen den Pool, `ComparisonTools.close()` wartet
-am Laufende auf laufende Fenster (sonst Settle-Konflikt in `finish_run`).
-Nur Chat-Läufe (`account_budget_only`); neu gerechnet wird nur nach einem
-Zeilenumbruch. Das Einsammeln endet mit der Frist der Prüfung
-(`_ComparisonWindows.results` beachtet deren Stopp). `JUDGE_PARALLEL` = 12.
-Coverage-Meta trägt `prefetched` (übernommene Sätze); `duration_ms` misst die
-Zeit nach Antwortende.
-**Vorläufige Marken (seit 2026-10-18):** `judge()` gibt `query_differences`
-`coverage_progress=partial(ComparisonTools.preview_coverage, comparison_id,
-answer_hash)` mit. `_CoverageProgress` sammelt die Voten jedes fertigen
-Fensters (übernommene frühe Fenster in Fertig-Reihenfolge,
-`_ComparisonWindows.results` per `wait(FIRST_COMPLETED)`, Rest- und Neufrage-Fenster
-über `_run_coverage_windows(progress=…)`, ein einzelnes Fenster in
-`_run_coverage_judge`) und baut daraus Claims nur für beantwortete Sätze
-(`_coverage_claims(only=…)` + `_verify_claims`); ein fehlschlagender Empfänger
-kostet die Prüfung nie (`_report_coverage`). `preview_coverage` legt sie als
-Event `coverage_preview` (`answer_hash`, `comparison_id`, alle Claims bisher,
-`models_compared`, `checked`, `sentences`) in `outgoing`, nur solange die
-Review dieses exakten Texts `running` ist; nie gespeichert, kein Score, keine
-Differences. Der Live-Puffer hält das neueste als Sticky-Frame. Im Browser
-siehe `agent-review.js::preview` (unten).
+Vergleichsantworten und Prüferrunden (`SEARCHING_KINDS`) bei Konkurrenz die
+Output-Grenze (`clamp_floor` = `cfg.MAX_TOKENS`), statt zu warten.
+**Prüfung beim Schreiben und vorläufige Marken (2026-10-17/18 bis 2026-10-31,
+entfernt).** Im Vergleichsmodus startete jede gezeigte Antwort-Delta
+Coverage-Fenster über den schon festen Sätzen
+(`agent_coverage_prefetch.CoveragePrefetch`, `answer_progress`,
+`AGENT_COVERAGE_WINDOW` = 16 Sätze), und fertige Fenster gingen als SSE
+`coverage_preview` an die Seite (vorläufige Marken, nie gespeichert). Beides
+ging mit den Judges auf Agent-Antworten (Commits `474a953e`, `f5674f0e`); die
+Prüfer markieren erst in ihrer Schlussrunde.
 Im Toolergebnis eines Vergleichs nennen die Antworten ihre Quellen nur per URL
 (seit 2026-10-10); `sources` führt jede zitierte Quelle einmal mit `cited_by`,
 `supports` (gestützte Antwortsätze) und `excerpt` (Originalauszug), gebaut von
@@ -4768,51 +4742,57 @@ Suchergebnissen“). Die Suchzahl liest `measured_usage` über
 bricht nichts ab: Die echte Zahl wird gebucht, gebundene Suchbudgets werden
 negativ, und `/health/metrics` zählt `search_overrun:<modell>` (agent-mode.md,
 „Websuche“).
-Das Orchestrator-Tool `read_source` (seit 2026-10-11 standardmäßig an,
+Das Tool `read_source` des Agenten (seit 2026-10-11 standardmäßig an,
 `AGENT_READ_SOURCES=0` schaltet ab; `agent_read_source.SourceReader`, nur
-Kontomodus, nicht bei Google-Daten) öffnet vor der Antwort, seit 2026-10-11 auch ohne Vergleich, eine von einer
-Vergleichsantwort zitierte URL, eine gespeicherte Quelle früherer Nachrichten
-(`AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`), im
-Audit-Modus seit 2026-10-27 einen eigenen Suchtreffer dieser Nachricht
-(`DelegationLoop.search_sources`, nur Schritte des Agenten, nie Prüferrunden,
-`LABEL_SEARCH`, `AuditReadSourceArgs`) oder eine
-URL aus den Nachrichten des Nutzers (`user_urls` über `agent_memory.user_words`; nie
-Links nur aus Antworttext, seit 2026-10-12 auch nicht aus einem per „Ask about
-this“ zitierten Antwortabsatz),
-über einen abgerechneten Helferschritt (`DelegationLoop._step(...,
-server_tools=[engines.web_fetch_tool(...)], completion=PageFetch())`, Responses
-API, Text aus dem Output-Item `openrouter:web_fetch`; über Chat Completions
-käme er nicht an). Der Text geht als Toolergebnis an den Agenten (er zählt
-dort wie ein Quellenauszug, `AGENT_READ_SOURCE_PROMPT`), als `read_sources` in
-den Review-Snapshot und als eigene
-`<page label="Page n">`-Blöcke an den Coverage-Judge
-(`query_differences(read_sources=...)`, `claims[].read_sources`, keine Stimme).
-Ablehnungen und nicht lesbare Seiten sind Ergebnisse (`refused`/`failed`), keine
-Toolfehler, damit sie nicht als `invalid_tool_rounds` den Turn beenden; nach
-einem gelesenen Abruf lehnt `compare_models` ab. `ReadOnlyTool.activity` liefert
-dem Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` reserviert
-die Seite, `_admit_chat_step` rechnet bei einem Abruf mit der vollen kleinsten
-Reservierung. Lesen geht seit 2026-10-11 auch ohne Vergleich (`purpose:
-"user_request"`, danach direkt die Antwort); danach bleibt `compare_models` gesperrt.
-Seit 2026-10-18 ist auch eine Quelle, auf die der Nutzer die Antwort beschränkt
-(„nur die offizielle Seite“), ein Lesegrund (`user_request`, Regel in
-`AGENT_READ_SOURCE_PROMPT`): deren zitierte Seiten statt Kopien anderswo.
-Details: [agent-mode.md](agent-mode.md), „Quellen nachlesen“.
-**Prompt-Aufteilung im Agenten:** `AGENT_SYSTEM_PROMPT` ist der einzige
-Prompt des Agenten: Steuerung (`_AGENT_STEERING`: Vergleichen oder direkt
-antworten, Aufgabe formulieren: „was die Frage festlegt, nicht was sie
-beantwortet“, Suche, Tiefe, `check_text`, status_update) und seit 2026-10-14 die
-Schreibregeln (`AGENT_ANSWER_SECTION`, „WRITING THE ANSWER“). Zur Laufzeit
-folgen Vergleichseinstellungen, Lesen (`AGENT_READ_SOURCE_REPLACEMENTS`/
-`AGENT_READ_SOURCE_PROMPT`), Dateien/Dokumente/Google, Watch
-(`agent_watch.ORCHESTRATOR_PROMPT` samt Kartenhinweis), Einstellungen
-(`agent_settings.ORCHESTRATOR_PROMPT`) und zuletzt Memory
-(`agent_memory.orchestrator_prompt`); ein anderer System-Prompt (Tests, Proben)
-bekommt die Schreibregeln angehängt, falls sie fehlen. Das frühere
-zweite Protokoll `agent_comparison.PROMPT`, das alte `SYNTHESIS_PROMPT` und der
-Widerspruchs-Hinweis `agent_contradictions.PROMPT` sind entfallen, weil der
-Server die Prüfungen selbst startet (`_finish_review`).
-`JudgeArgs.finalize` steht nicht mehr im Schema, wird aber still akzeptiert.
+Kontomodus, nicht bei Google-Daten, nur vor der Antwort) öffnet eine von einer
+Vergleichsantwort dieser Nachricht zitierte URL, einen eigenen Suchtreffer
+dieser Nachricht (`DelegationLoop.search_sources`, nur Schritte des Agenten,
+nie Prüferrunden, `LABEL_SEARCH`), eine gespeicherte Quelle früherer
+Nachrichten (`AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`),
+eine URL aus den Nachrichten des Nutzers (`user_urls` über
+`agent_memory.user_words`; nie Links nur aus Antworttext, seit 2026-10-12 auch
+nicht aus einem per „Ask about this“ zitierten Antwortabsatz) und, solange
+Prüfer folgen, jede öffentliche Seite seiner Wahl (`chosen`, `LABEL_CHOSEN`),
+höchstens `READS_PER_MESSAGE` (15) je Nachricht und `READS_PER_STEP` (5) je
+Schritt. Argument ist nur `url` (`AuditReadSourceArgs`; bis 2026-10-28 auch
+Zweck und Punkt). Gelesen wird über einen abgerechneten Helferschritt
+(`DelegationLoop._step(..., server_tools=[engines.web_fetch_tool(...)],
+completion=PageFetch())`, Responses API, Text aus dem Output-Item
+`openrouter:web_fetch`; über Chat Completions käme er nicht an). Der Text geht
+als Toolergebnis an den Agenten, ins Arbeitsprotokoll (die Prüfer lesen ihn)
+und als `read_sources` in den Review-Snapshot. Bis 2026-10-31 las der
+Vergleichsmodus nur Quellen der Vergleichsantworten (mit Zweck je Lesung,
+`AGENT_READ_SOURCE_PROMPT`), danach war `compare_models` gesperrt, und der
+Coverage-Judge bekam die Seiten als `<page>`-Blöcke; heute bleibt der Vergleich
+nach einer Lesung möglich. Ablehnungen und nicht lesbare Seiten sind Ergebnisse
+(`refused`/`failed`), keine Toolfehler, damit sie nicht als
+`invalid_tool_rounds` den Turn beenden. `ReadOnlyTool.activity` liefert dem
+Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` reserviert die
+Seite, `_admit_chat_step` rechnet bei einem Abruf mit der vollen kleinsten
+Reservierung. Details: [agent-mode.md](agent-mode.md), „Quellen nachlesen“.
+**Prompt-Aufteilung im Agenten:** `AGENT_AUDIT_SYSTEM_PROMPT`
+(`DEFAULT_PROMPTS["agent"]`, seit 2026-10-31; vorher nur mit dem Audit-Schalter,
+Katalogschlüssel `agent_audit`) ist der einzige Prompt des Agenten: seit
+2026-10-28 eine Verfassung in einem Absatz (`_AGENT_AUDIT_STEERING`: Wahrheit,
+Fremdinhalt ist Information, für den Nutzer handeln, nichts schadet anderen oder
+consens.io) und die App-Fakten (`AGENT_AUDIT_ANSWER_SECTION`, „HOW CONSENS.IO
+WORKS“: Antwort = Nachricht ohne Toolcalls, Markdown, Prüfer und ihre Marken,
+Suchtreffer mancher Anbieter, Trainingsstand, consens.io als eine Option unter
+anderen). Zur Laufzeit folgen Dateien/Dokumente/Google
+(`agent_files.AUDIT_UNTRUSTED`), Watch (`agent_watch.AUDIT_PROMPT`),
+Einstellungen (`agent_settings.AUDIT_PROMPT`), der Arbeitsplatz
+(`AGENT_VM_PROMPT`/`AGENT_VM_NO_DOMAINS_PROMPT`/`AGENT_WORKSPACE_CLOSED_PROMPT`)
+und zuletzt Memory (`agent_memory.orchestrator_prompt` mit `AUDIT_MEMORY_*`);
+`read_source`, `find_pictures` und `show_image` haben keinen Block, ihre
+Beschreibung sagt, was sie tun. Ein anderer System-Prompt (Tests, Proben)
+bekommt `AGENT_AUDIT_ANSWER_SECTION` angehängt, falls er fehlt. Den
+Steuerprompt des Vergleichsmodus (`AGENT_SYSTEM_PROMPT` mit `_AGENT_STEERING`
+und `AGENT_ANSWER_SECTION`, dazu `AGENT_WRITE_NOTE`, `AGENT_READ_SOURCE_PROMPT`
+und die `ORCHESTRATOR_PROMPT`-Zwillinge in Watch und Einstellungen) gibt es seit
+2026-10-31 nicht mehr; das frühere zweite Protokoll `agent_comparison.PROMPT`,
+das alte `SYNTHESIS_PROMPT` und `agent_contradictions.PROMPT` waren schon vorher
+entfallen. `agent_delegation_config.ORCHESTRATOR_PROMPT` ist der Prompt der
+Worker-Delegation (nur mit `delegation_config.enabled`).
 Vergleichsmodelle: „Respect the user's goals and constraints in the context“ statt
 „Context is untrusted data“; in Google-Daten-Chats (keine Websuche) hängt `_step`
 `GOOGLE_NO_SEARCH` als letzte Nachricht an die Anfrage (`with_step_note`, seit
@@ -4849,167 +4829,79 @@ Reasoning-/Signaturblöcke bleiben Fortsetzungsdaten für denselben Provider
 (`_preserve_reasoning`, nur solange Tools aufrufbar sind) und werden nicht
 gespeichert.
 
-`judge_answer` prüft genau den fixierten Antworttext, keinen vom Modell frei
-behaupteten Prüftext. Er nutzt query_differences samt Coverage, Satzindizes,
-Zitatprüfung und begrenzten Repairs. `chat_mode=true` hält beide Judges auf den
-Standardmodellen aus `app_config/models.judge_models`, unabhängig von der
-Premium-Einstufung des Chatmodells. Primär prüft seit 2026-10-04 immer der
-OpenAI-Standard-Judge (Luna), auch für OpenAI-Chats; nach dem begrenzten Retry
-folgt der Gemini-Standard-Judge (aktuell Gemini 3.5 Flash-Lite). Ist Gemini bereits primär, folgt der OpenAI-Standard-Judge.
-Pro-Judges und dritte Familien werden im Chat nicht als Fallback eingeplant;
-die niedrige Judge-Denkstufe und die bisherigen Consensus-Pläne bleiben erhalten.
-`_chat_judge_attempts` liefert denselben Plan an Differences und den parallel
-laufenden Coverage-Judge. Seit 2026-10-07 ruft der Agent `query_differences(...,
-passes=2)`: ein zweiter, unabhängiger Differences-Lauf startet parallel
-(`_in_background`, gleicher Kontext/Cancellation/Budget wie der Coverage-Thread),
-`merge_difference_passes` hängt nur seine neuen Funde an (gleich = Zitat in
-Zitat, gleicher Claim oder gleicher Konsens-Satz, verglichen nur mit Funden des
-ersten Laufs; seit der Messung vom 2026-10-07 ohne die frühere Bedingung
-„gleiche Modelle“: 79 bewertete Lauf-Paare, Duplikate 14 → 5, kein echter Fund
-verloren; die Zusatzfunde des zweiten Laufs sind zu ~64 % echt, gegenüber
-~82 % in einem einzelnen Lauf, und senken den Score im Mittel um 5–11 Punkte),
-der Score wird danach
-in `_apply_coverage` neu berechnet; `judges.differences` trägt `passes` und
-`second_pass_added`. Judge-Audit (20 Fragen, 230 blind bewertete Funde): ein
-Luna-Lauf fand 60–68 % der echten Streitpunkte, zwei zusammen 78 %, Median
-+1,6 s. Fällt ein Lauf aus, trägt der andere. Der zweite Lauf versucht nur den primären Judge (Luna) samt Retry; fällt Luna aus, weicht allein der erste Lauf auf Gemini aus, der teurere Fallback läuft also nie doppelt. Der zweite Lauf hat eine eigene, an die Turn-Cancellation gekoppelte
-`ProviderCancellation` (Nutzer-Stopp beendet beide); `judge_transport` reicht
-die Cancellation des Threads an `ComparisonTools.call` weiter. Liegt der erste
-Lauf vor, bekommt der zweite nur noch eine Nachfrist
-(`_second_pass_grace`: halbe Dauer des ersten, 8–30 s) und wird danach
-abgebrochen (`judges.differences.second_pass_failed`); endet der erste Lauf mit
-einem Fehler, wird der zweite vor dem Warten auf den Thread gestoppt. Bei
-endlichem Aufrufbudget mit weniger als vier freien Aufrufen bleibt es bei
-einem Lauf. `JUDGE_PARALLEL` ist 7 (zwei Differences-Läufe plus bis zu vier
-Coverage-Fenster). Die „Answer check“-Zeile (`agent-delegation.js`, `span`)
-misst eine Prüfung vom ersten Start bis zum letzten Ende statt die Dauer
-paralleler Läufe zu addieren; `differences_stats` behält `passes` und
-`second_pass_added`. Ebenfalls seit 2026-10-07 nennt
-`query_differences` dem Judge die Sprache der Konsensantwort ausdrücklich
-(`_answer_language`, Funktionswörter für EN/DE/FR/ES/IT/PT/NL, sonst leer und
-die allgemeine Regel): Luna schrieb Funde sonst teils spanisch/französisch
-unter englischen Antworten. Die echten Agent-Tests simulieren Luna-Ausfälle,
-leere Antworten und Cooldowns mit Standard- und Pro-Gemini-Chatmodellen.
-llm/task_transport.py injiziert nur den gemessenen Providertransport via
-ContextVar; der Coverage-Thread übernimmt den Kontext. Außerhalb dieser Bindung
-bleibt der Consensus-Transport unverändert. Jeder Judge-/Retry-/Repair-Aufruf
-hat einen eigenen Agent-Schrittbeleg; der Producer wartet auch beim Abbruch
-auf die Settlement-Abschlüsse. `_collect_coverage` wartet bei einem gebundenen
-unbegrenzten Budget ohne Timeout statt mit `float('inf')`, das Thread-Wartefunktionen
-überlaufen lässt; endliche Consensus-Deadlines bleiben begrenzt. Der
-Werkzeug-Thread von `judge_answer` (`_execute_stream`) bindet das Turn-Budget
-nicht (Thread-lokal): `query_differences` öffnet dort seine eigene
-180-s-Analysefrist, die Judge-Calls selbst laufen über `call` mit dem
-Turn-Budget. Nach Ablauf dieser Frist wird Coverage beendet statt abgewartet
-(siehe `JUDGE_ATTEMPT_SECONDS` unter „Consensus & Differences“).
-Ein konfiguriertes Chatmodell ohne Engine-Alias
-verwendet seine Familie nur zur Judge-Policy-Auswahl, niemals zur Synthese.
-
-Bis 2026-10-15 reihte das Tool `check_contradictions` (`agent_contradictions.py`)
-nach `judge_answer` je Vergleich eine Quellenprüfung der Widersprüche als
-Hintergrundjob auf dem Agent-Tageskonto ein; sie ist mit der ganzen
-Quellenprüfung entfernt (siehe „Quellenprüfung entfernt“). Einen Faktenstreit
-klärt der Agent vor dem Schreiben mit `read_source`.
+**Judges auf Agent-Antworten (bis 2026-10-31).** Im Vergleichsmodus prüfte das
+App-Tool `judge_answer` den fixierten Antworttext mit `query_differences` samt
+Coverage (`chat_mode=true`: Standard-Judges aus `app_config/models.judge_models`,
+Luna primär, Gemini als Rückfall; seit 2026-10-07 zwei Differences-Läufe,
+`merge_difference_passes`, Judge-Audit: ein Luna-Lauf 60–68 %, zwei zusammen
+78 % der echten Streitpunkte), schrieb Model-Pulse-Stimmen
+(`persistence_guard.agent_best_model_choice`, `write_agent_vote`) und
+Differences-Statistik aus Agent-Läufen. Mit dem Modus sind diese Erzeuger weg
+(`f5674f0e`: `chat_mode`, zweite Differences-Runde, Seiten im Coverage-Prompt,
+Coverage-Fenster mit Vorlauf, `check_text_coverage`, Priority-Lane der
+Agent-Judges); die Consensus-Pipeline (Watches, Topics, API) läuft mit ihren
+Judges unverändert. `model_pulse.py` und `differences_stats.py` lesen weiter,
+bekommen aber keine neuen Agent-Daten (wie sie künftig gespeist werden,
+entscheidet Max). Bis 2026-10-15 reihte zusätzlich `check_contradictions`
+(`agent_contradictions.py`) je Vergleich eine Quellenprüfung ein; sie ist mit
+der ganzen Quellenprüfung entfernt (siehe „Quellenprüfung entfernt“).
 
 `agent-review.js`: `context.mark` baut das markierte DOM nur bei geändertem Text,
-Check, Quellen oder `_agentRenderSerial` neu (sonst würde jede Live-Aktualisierung
+Review, Quellen oder `_agentRenderSerial` neu (sonst würde jede Live-Aktualisierung
 die Animation neu starten); `revealMarks` setzt eine laufende Animation nach einem
 neuen DOM über negative Verzögerungen fort — seit 2026-10-03 auch, wenn der
 neue Render selbst kein `reveal` verlangt (`reveal: false`), solange derselbe
 `answer_hash` noch im Reveal-Fenster ist; vorher standen dann alle Marken schlagartig da. `query-send.js::setSendButtonRunning`
 tauscht das Icon nur bei echtem Zustandswechsel (`data-icon`) und setzt beim Start
-eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`). `agent-chat.js::project` rendert den Review schon während des
-Laufs, sobald er `succeeded`/`partial` ist;
-davor setzt `setAnswerChecking` `.is-answer-checking` (Schimmer) auf
-`#agentAnswerBody`. Seit 2026-10-21 steht dabei an der Stelle der späteren
-Evidenzzeile die leise Statuszeile `p.agent-check-status` („Checking the
-answer…“, `App.words.checking`, `role="status"`; Ränder und Höhe wie
-`.agent-review`: 36 px, 44 px bei `pointer: coarse`, bis 640 px 92 px bzw.
-56 px ohne Agreement-Score und im Audit, `.is-audit`), die einzige Anzeige bei reduced-motion und
-forced-colors; die Evidenzzeile ersetzt sie im selben Render. Im Audit-Modus
-rendert `project` die Leiste schon, sobald die Review die fixierte Antwort als
-Version hält (`reviewing`): `renderAudit` baut sie dann mit wartendem „Notes“
-und „Reviewing the answer…“ am Ende und nimmt `body._checkStatus` weg
-(UX-Audit 2026-10-29, B3). Der Prüfzustand
-beginnt mit dem letzten Wort: `_step` sendet das SSE-Ereignis `answer_check`
-(live, nie gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
+eines Laufs einmal `is-launching` (drei Bögen fächern aus, `shell.css`).
+`agent-chat.js::project` rendert die Leiste unter der Antwort schon während des
+Laufs, sobald die Review die fixierte Antwort als Version hält: `renderAudit`
+baut sie mit wartendem „Notes“ und „Reviewing the answer…“ am Ende (UX-Audit
+2026-10-29, B3). Davor setzt `setAnswerChecking` `.is-answer-checking`
+(Schimmer) auf `#agentAnswerBody` und an die Stelle der späteren Leiste die
+leise Statuszeile `p.agent-check-status` („Reviewing the answer…“,
+`role="status"`; Ränder und Höhe wie `.agent-review`), die einzige Anzeige bei
+reduced-motion und forced-colors; `renderAudit` nimmt sie
+(`body._checkStatus`) im selben Render weg. Der Prüfzustand beginnt mit dem
+letzten Wort: `_step` sendet das SSE-Ereignis `answer_check` (live, nie
+gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
 (Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
-nach Vergleichen, Answer Check an, keine offenen Worker oder Mailbox), noch vor
-Settlement, Kontingent-Snapshot und den Review-Checkpoints von
-`freeze_for_synthesis`/`capture` (zusammen mehrere Firestore-Schreibvorgänge,
-bis dahin startete der Schimmer erst mit dem Review mit `versions`). Der
-Handler merkt sich den Text (`context.metadata.answerCheckText`); `project`
-zeigt die Prüfung, solange genau dieser Text steht und noch keine Version
-vorliegt, danach übernimmt `review.status` `required`/`running`. Ein
-zurückgenommener oder geänderter Text löscht die Ankündigung, das Laufende
-beendet den Zustand; ein Reload ohne Live-Frames sieht nur den gespeicherten
-Review. `renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
+keine offenen Worker oder Mailbox), noch vor Settlement, Kontingent-Snapshot und
+den Review-Checkpoints von `freeze_for_synthesis`/`capture`. Der Handler merkt
+sich den Text (`context.metadata.answerCheckText`); `project` zeigt die
+Prüfung, solange genau dieser Text steht und noch keine Version vorliegt,
+danach übernimmt `review.status` `required`/`running`. Ein zurückgenommener
+oder geänderter Text löscht die Ankündigung, das Laufende beendet den Zustand;
+ein Reload ohne Live-Frames sieht nur den gespeicherten Review.
+`renderAnswer` (`renderAnswerBody`) zählt `_agentRenderSerial` hoch, damit ein
 neu gerenderter Text seine Marken wieder erhält; `revealMarks` animiert sie nur
 beim ersten Auftreten je `answer_hash` (`evidence.reveal`). Veraltete
-Antwort-/Grundlagenbindungen werden nicht angezeigt.
-Seit 2026-10-18 legt der Handler `coverage_preview` das neueste Event je
-Vergleich in `context.metadata.coveragePreview` (ein `activity`-Status mit
-`clear_response` leert es). `project` ruft, solange der Lauf läuft und die
-Review noch nicht fertig ist, `agentReview.preview(body, checking ? liveReview :
-null, previews, evidence)`: Sie markiert nur bei exakt gebundenem Text
-(`answer_hash`, Versionstext = `dataset.markdown`, Status `required`/`running`)
-die Claims des Vergleichs, den die Evidenzzeile zeigen wird
-(`_selectedBasis` oder der erste), mit `differences: []`, losgelöster
-Fallback-Box (keine „Key claims“) und ohne Score. **Neutral seit 2026-10-21**
-(Max: erst wurde ein Satz gelb, das Gelb verschwand, dann wurde ein ganz
-anderer rot): `renderStoredConsensusClaims(…, { provisional: true })` setzt
-jeden verankerten Claim als `.cx-claim.is-provisional` ohne Stufenklasse,
-Badge, `.cx-spot` und „Key claims“; der Highlights-Filter lässt sie immer
-stehen (außer „No highlights“). Aussehen: nur eine leise gepunktete Linie in
-Tinte (`--cx-provisional-line`, hell/dunkel, `forced-colors`: `GrayText`),
-keine Fläche, kein Platzbedarf. Hover (nur echter Zeiger) zeigt kein Urteil
-(„Compared with N model answers“ / „The result appears once the whole answer
-is checked“), Klick öffnet nichts, kein Tabstopp. Neue Marken bekommen
-`.is-mark-arriving` (die Linie blendet ein), `body._shownMarks` merkt die
-Satztexte je `answer_hash`, `.has-provisional-marks` kennzeichnet den Zustand.
-Ohne passende Vorschau nimmt `preview` die Marken einmal wieder ab
-(`_previewMarks.first` erkennt, ob ihr DOM noch steht). `context.mark`
-ersetzt sie im selben Task durch die finalen (nie ein Moment ohne Marken) und
-setzt den Zustand zurück; finale Marken auf vorher vorläufigen Sätzen tragen
-kurz `.was-provisional` (`handOver`): die Linie bleibt, bis ihre Farbe per
-`revealMarks` anstreicht (`--cx-reveal-delay`), und blendet dann aus; ein Satz,
-den das Ergebnis nicht färbt, verliert sie sofort weich. Weil die vorläufigen
-Marken keine Farbe zeigten, streicht `revealMarks` jede farbige Marke an
-(kein `.is-mark-shown` mehr). Bei `prefers-reduced-motion` (und
-`forced-colors`) gibt es keine Animation: die Farben stehen sofort da.
-`settleHandOver` räumt die Klasse am Ende des Anstreichens bzw. nach
-`HAND_OVER_MS` ab.
+Antwortbindungen werden nicht angezeigt. Bis 2026-10-31 zeigte der
+Vergleichsmodus vor den Judges „Checking the answer…“ und vorläufige Marken
+(`agentReview.preview`, `.cx-claim.is-provisional`, `coverage_preview`); beides
+ist weg.
 
-Die serverseitigen Antwortversionen enthalten Text, SHA-256, Vergleichs-IDs und
-Prüfungen; jede Prüfung bindet zusätzlich den Hash der konkreten Antworten
-inklusive Quellen/Modellmetadaten. finish_run validiert diese Bindungen erneut.
-Mehrere Teilvergleiche werden getrennt gegen dieselbe Synthese geprüft; ihre
-Stimmen werden nicht zu einem künstlich größeren Panel addiert. Die erste fertige
-Synthese wird serverseitig festgeschrieben: spätere Orchestrator-Deltas werden
-weder veröffentlicht noch als Teilantwort gespeichert. `capture` erhält den
-exakten Text und seine Hash-/Prüfbindung; neue Vergleiche nach der Synthese werden
-abgewiesen. Die Judges schließen auch bei
-`finalize=false` ab (das Feld bleibt zur Kompatibilität akzeptiert). Teilweise,
-fehlgeschlagene oder übersprungene Prüfungen bleiben ehrlich gekennzeichnet,
-lösen aber keine automatische Überarbeitung aus. Nach vollständigem Protokoll-
-Abschluss werden auch weitere Toolcalls derselben Modellantwort nicht ausgeführt.
-Eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
-Text neben einem Toolcall bleibt Planung und öffnet keine Syntheseversion
+Die serverseitige Antwortversion enthält Text, SHA-256 und die IDs der
+Vergleiche der Nachricht. Die erste fertige Antwort wird serverseitig
+festgeschrieben (`capture`): spätere Deltas des Agenten werden weder
+veröffentlicht noch als Teilantwort gespeichert, und `compare_models` lehnt
+danach ab. Die Prüfer prüfen genau diesen Text (die Review trägt
+`answer_hash`); `finish_run` setzt eine Review, die bei Erfolg noch
+`required`/`running` sagt, auf `failed` (bis 2026-10-31 verlangte es im
+Vergleichsmodus je Vergleich einen an Text und Grundlage gebundenen Check,
+`review_is_bound`/`REVIEW_DONE`). Teilweise oder fehlgeschlagene Prüfungen
+bleiben ehrlich gekennzeichnet, lösen aber keine automatische Überarbeitung
+aus; eine gewünschte Überarbeitung beginnt mit einer neuen Nutzernachricht.
+Nach dem Abschluss werden auch weitere Toolcalls derselben Modellantwort nicht
+ausgeführt. Text neben einem Toolcall bleibt Notiz und öffnet keine Version
 (`_retract`, höchstens als Fortschrittszeile `note`; Ausnahme nur reine
-`SIDE_TOOLS`). Weitere Teilvergleiche bleiben möglich, bis der Agent die Antwort
-schreibt. Danach führt der Server `judge_answer` über `app_registry` aus (bei
-`judges: off` stattdessen `skip_review`). Abrechnung, Bindungen und
-bestehende Fallback-Judges bleiben identisch; zusätzliche Erinnerungsrunden sind
-nicht nötig. Drei aufeinanderfolgende Tool-Batches ohne einen gültig ausgeführten
-Toolcall brechen als Protokollstillstand ab; gültige Arbeit begrenzen nur die
-weichen Schutzgrenzen pro Turn (4 Vergleiche, 24 Schritte, 15 min, keine
-identischen Wiederholungen; in einem Turn mit VM-Arbeit 200 Schritte und 2 h,
-Wrap-up vor Tageskonto- und Fensterende, alte VM-Ausgabe kompaktiert; siehe
-oben bei `AgentPolicy.for_chat`), die nach
-Möglichkeit noch eine geprüfte Antwort liefern. Ungeprüfte Antworten werden nie erfolgreich
-abgeschlossen. Ohne Vergleich
-ist keine automatische Prüfung erforderlich. Ein ausdrücklicher Prüfwunsch kann
-zuerst mit compare_models eine Grundlage einholen.
+`SIDE_TOOLS`). Drei aufeinanderfolgende Tool-Batches ohne einen gültig
+ausgeführten Toolcall brechen als Protokollstillstand ab; gültige Arbeit
+begrenzen nur die weichen Schutzgrenzen pro Turn (4 Vergleiche, 24 Schritte,
+15 min, keine identischen Wiederholungen; in einem Turn mit VM-Arbeit 200
+Schritte und 2 h, Wrap-up vor Tageskonto- und Fensterende, alte VM-Ausgabe
+kompaktiert; siehe oben bei `AgentPolicy.for_chat`), die nach Möglichkeit noch
+eine Antwort samt Prüfung liefern.
 
 **Journal, Abbruch und Verlauf.**
 `AgentRunStore.messages` übernimmt sowohl abgeschlossene als auch fehlgeschlagene
@@ -5040,7 +4932,7 @@ completion:N- und agent:<uuid>:N-Belegen, Producer-Token, Lease,
 Budget-/Tarifsnapshot und Status (ein agent:-Beleg seit 2026-10-29 mit der Art
 seiner Sitzung, `session_kind`, die das Löschen des Chats übersteht). Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
-Belege von Prüfer-Aufrufen (Audit-Modus) tragen seit 2026-10-29 `round`
+Belege von Prüfer-Aufrufen tragen seit 2026-10-29 `round`
 (`live`, `gate`, `final`, `repair`, `hedge`; `settle` aus
 `completion.review_round`, gesetzt über `worker_completion(review_round=…)`).
 Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
@@ -5067,7 +4959,7 @@ hintereinander laufen, darf keine davon zwischen einem Modell-Stream und dem
 Server stehen, und jede liest ihre Dokumente in einem Rundgang:
 - `AgentSessionStore._read_all` liest per `Transaction.get_all` alle Dokumente
   einer Transaktion auf einmal (Claim, Settlement, `publish_agents`,
-  `save_review`, `protect_review`; der Löschungs-Tombstone kommt über
+  `save_review`; bis 2026-10-31 auch `protect_review`; der Löschungs-Tombstone kommt über
   `persistence_guard.deletion_ref` und `ensure_account_write_allowed(snapshot=)`
   mit). Vorher war jeder Lesezugriff ein eigener Rundgang, ein Claim las neun
   Dokumente nacheinander. Seit 2026-10-30 liest das Settlement auch den
@@ -5113,7 +5005,7 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   (`AgentSessionStore._agent_transaction`, `lock_time`: Transaktionen,
   Warten, Halten, längstes Warten; die Route macht einen Store je Turn). Am
   Turn-Ende Metrik `agent_account_lock:waited`/`:held` und eine Logzeile nur
-  mit Zahlen („Agent account lock …“, `report_lock_time`), im Audit-Modus
+  mit Zahlen („Agent account lock …“, `report_lock_time`), mit Prüfern
   dazu `agent_account_lock:final_rounds` (Warten vom Fixieren bis zum Ende
   der Schlussrunden). Ob die Claims der Schlussrunde in eine Transaktion
   gebündelt werden (A-T5), entscheidet diese Zahl.
@@ -5145,14 +5037,15 @@ kurze temporäre DB-Ausfälle bis 60 Sekunden. Abgelaufene oder ersetzte Produce
 dürfen keine Lease erneuern. Eine Chat-Löschung löscht keine
 entstandenen Kosten; Account-Tombstones sperren verspätete Writes.
 
-agent_review wird vor Vergleich/Judge und nach Änderungen zusammen mit dem
-exakten Antworttext auf dem Turn gespeichert. Terminale Abbrüche wandeln einen
+agent_review wird bei jedem Vergleich, jeder Antwortversion, Prüferrunde und
+gelesenen Seite (`ComparisonTools.checkpoint`) zusammen mit dem exakten
+Antworttext auf dem Turn gespeichert. Terminale Abbrüche wandeln einen
 laufenden Prüfstatus in cancelled/failed/missing um. Agent-Bookmarks dürfen
 zusätzlich alle fehlgeschlagenen Turns darstellen, auch ohne Hauptantwort.
 `_save_interrupted` speichert deren Bookmark inklusive Chat-Bindung auch nach
 einem Fehler vor dem ersten Modellaufruf oder vor Eintritt in den SSE-Generator.
 Frage, Aktivität, Fehler und vorhandene Vergleichsantworten bleiben über den
-Turn abrufbar; API- und UI-Verlaufsfilter verlangen für failed Agent-Turns keine Synthese.
+Turn abrufbar; API- und UI-Verlaufsfilter verlangen für failed Agent-Turns keine Antwort.
 Consensus-Bookmarks bleiben auf completed beschränkt. Recovery gibt nur den
 vorhandenen Snapshot zurück, ohne erneut zu vergleichen oder zu belasten.
 Bei pending prüft `recover_only` zuerst auf eine abgelaufene Producer-Lease und
@@ -5234,7 +5127,8 @@ Speicher (`FRAME_OVERHEAD_BYTES` = 256 je Frame plus der für Nachzügler
 aufgehobene Text). Frames werden als gültiges JSON gespeichert (NaN → `null`,
 einzelne Surrogates ersetzt). Liest jemand hinter dem behaltenen Fenster,
 bekommt er zuerst die neuesten verworfenen Frames mit bleibendem Zustand
-(`STICKY_TYPES`: accepted, started, review, coverage_preview, memory, quota, resources) und dann
+(`STICKY_TYPES`: accepted, started, review, memory, quota, resources, hold; bis
+2026-10-31 auch coverage_preview) und dann
 `reset` mit dem Antworttext bis dorthin (Deltas angehängt, bei `activity`
 `status` + `clear_response` geleert), im Tail als eigene Frames bzw.
 `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert nichts
@@ -5366,17 +5260,17 @@ ein unveränderter leerer Composer; neuere Texte/Zitate/Anhänge bleiben erhalte
 Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
-`agent-preferences.js` (nach `agent-review.js`) speichert Tiefe, Quorum,
-Agent freedom (`autonomy`: `guided`/`free`), Answer check (`judges`:
-`on`/`off`, `#agentJudgesSelect`) und für Admins Audit instead of comparison
-(`audit`: `off`/`on`, `#agentAuditSelect`) und Agent VM (`vm`: `off`/`on`,
-`#agentVmSelect`), je in einer `.admin-only`-Zeile (Details in
-`docs/agent-mode.md`), als
-Kontoeinstellung `agent_preferences` (nur gewählte Felder), gibt den Reiter `agentSettingsSection` über
-`App.settingsTabs.setTabAvailable` nur bei `agentChat.canUse()` frei (Aufruf aus
-`agentChat.renderShell`) und liefert `App.agentPreferences.get()` für das Feld
-`agent_preferences` von POST `/agent` (`AgentPreferences` in `agent_comparison.py`,
-Werte in `agent_settings.agent_preferences`).
+Der Reiter „Agent · Beta“ (`#agentSettingsSection`) hält seit 2026-10-31 nur
+den Arbeitsplatz (Zeile samt VM-Zeit des Tages, `#agentVmTime`) und GitHub;
+`workspace-view.js` `syncSettings` (aus `firebase.js` und `agent-chat.js`) gibt
+ihn über `App.settingsTabs.setTabAvailable` nur frei, wenn `agentChat.canUse()`
+gilt und `/user_status` `vm_time` meldet (das Konto hat den Arbeitsplatz). Bis
+2026-10-31 speicherte `agent-preferences.js` dort Antworttiefe, Antwortstart
+(Quorum), Agent freedom (`autonomy`), Answer check (`judges`), „Way of working“
+(`audit`) und Agent VM (`vm`) als Kontoeinstellung `agent_preferences` und
+schickte sie mit POST `/agent`; Datei, Zeilen und Einstellung sind entfernt
+(`user-settings.js` `dropRetired` räumt die alten localStorage-Schlüssel ab,
+der Server ignoriert das Feld, siehe „Kontoeinstellungen“).
 Agent-Antworten haben seit 2026-10-04 keinen eigenen Copy-Button mehr
 (`agent-answer-actions.js` entfernt, User-Vorgabe); kopiert wird per Auswahl
 oder im Antwortleser. Folgefragen verwenden direkt den Composer, ohne
@@ -5386,7 +5280,8 @@ und lesbare ARIA-Namen samt Anzahl; der Antwortleser-Vertrag bleibt unverändert
 **Die Leiste unter einer Agent-Antwort ist ein Bauteil** (UX-Audit
 2026-10-29, B1–B11): `section.agent-review` mit `evidenceNav()`
 (`consensus-footer-tabs agent-evidence-links agent-evidence-grid`) für
-Nur-Quellen, Vergleich und Audit; Watch und Teilen hängen sich dahinter
+Nur-Quellen, Prüfung (`renderAudit`) und gespeicherte Vergleichsmodus-Turns;
+Watch und Teilen hängen sich dahinter
 (`watch.js`, `share-dialog.js`), ohne Leiste in `.agent-watch-pill-row`, die
 dieselben Abstände trägt. Abstände aus der Skala (`foundation.css`
 `--space-*`): `--space-4` vom Antworttext, `--space-3` zwischen den Zellen,
@@ -5429,27 +5324,23 @@ ohne Linie über die Spalte (`.agent-activity-timeline`): je Eintrag ein Punkt
 auf einer dünnen Schiene, die jeder Eintrag selbst zeichnet (vom Abstand
 darüber bis zu seinem Ende; der erste beginnt, der letzte endet am Punkt).
 Schritte stehen in den Worten des Live-Laufs (`historyTitle`: „Searched the
-web“, „Read source“, „Checked the answer“; Fehlschläge weiter „Web search ·
-Failed“), ihre Quellen als die Pillen der Antwort (`createSourceRef` aus
+web“, „Read source“, „Reviewed the answer“; gespeicherte Vergleichsmodus-Turns
+„Checked the answer“; Fehlschläge weiter „Web search · Failed“), ihre Quellen als die Pillen der Antwort (`createSourceRef` aus
 `sources.js`, Zeile `.agent-activity-sources`, Vorschau beim Hover). Läuft der
 Turn ohne aktives Tool, ist `.agent-activity-current` (`role="status"`) der
-letzte Eintrag. Die Vergleiche (`agent-review.js` `renderActivity`) sind die
-nächsten Einträge (Überschrift nur für Screenreader, der Punkt eines Funds in
-Ampelfarbe); am Ende steht leise `.agent-activity-run-details` mit
+letzte Eintrag. Vergleiche und Prüfer (`agent-review.js` `adviceCards` und
+`renderAuditActivity`; in gespeicherten Vergleichsmodus-Turns `renderActivity`)
+sind die nächsten Einträge (Überschrift nur für Screenreader, der Punkt eines
+Funds in Ampelfarbe); am Ende steht leise `.agent-activity-run-details` mit
 `label(settings)` (Modell, Reasoning nur wenn nicht Standard). Der Container
 `.agent-answer-activity` ist `flow-root`, damit beim Auf- und Zuklappen nichts
 darunter springt (`tests/e2e/test_agent_activity_motion_frontend.py`).
-`ProgressArgs.status_update` ergänzt die Tools
-`compare_models`, `check_text` und `read_source` um maximal 400 Zeichen (bis 2026-10-14 auch `answer`);
-für ältere Aufrufer ist das Feld optional. Der injizierte Produktprompt verlangt
-es bei jedem dieser Aufrufe: ein bis zwei konkrete Sätze in der Sprache der
-aktuellen Frage bzw. der gewünschten Antwort, mit Arbeitszweck oder Befund und
-nächstem Prüfschritt. Keine privaten Gedankengänge, Toolnamen oder unbelegten
-Erfolgsmeldungen. Es entstehen keine zusätzlichen Status-Tools oder Modellrunden.
-`DelegationLoop._execute` veröffentlicht den validierten Text vor dem zugehörigen
-Toolstart als `activity` mit `kind: progress` und stabiler Schritt-/Toolcall-ID.
-Die Meldungen werden in `agent_activity` gespeichert, nicht in der Synthese oder
-den neutralen Vergleichsaufträgen. Provider-Reasoning des Chat-Steuerungsmodells
+Was der Agent neben einem Toolcall schreibt, ist seine Notiz zur Arbeit
+(`_retract` → `note`, siehe „Die Antwort schreibt der Agent selbst“) und wird in
+`agent_activity` gespeichert, nicht in der Antwort oder den neutralen
+Vergleichsaufträgen. Bis 2026-10-31 hatten `compare_models`, `check_text` und
+`read_source` dafür ein Feld `status_update` (`ProgressArgs`, bis 400 Zeichen,
+als `activity` `kind: progress` vor dem Toolstart). Provider-Reasoning des Chat-Steuerungsmodells
 wird nicht mehr als Live-Status oder Chatverlauf projiziert; vollständige private
 Fortsetzungsdaten bleiben im laufenden Provider-Protokoll.
 
@@ -5471,9 +5362,11 @@ zugehörigen Ergebnissen bedienbar.
 Der Abschluss-Snapshot ergänzt die bereits empfangenen Aktivitäten anhand ihrer
 IDs; gespeicherte Zustände überschreiben passende Live-Einträge, ein unvollständiger
 Snapshot löscht keine vorher sichtbaren Fortschrittsmeldungen aus dem lokalen Turn.
-`agentReview.renderActivity` ergänzt im Disclosure die gespeicherten Vergleichsziele,
-Begründungen und Modellnamen sowie gebundene Prüfergebnisse und bis zu drei erkannte
-Unterschiede. Neu gebaut wird es nur, wenn sich Gezeigtes ändert: Die Signatur
+`agentReview.renderActivity` ergänzt im Disclosure die Prüfer
+(`renderAuditActivity`) und davor die Vergleiche des Agenten (`adviceCards`:
+Frage, Modelle, Antworten und Quellen, ohne Prüfung); in gespeicherten
+Vergleichsmodus-Turns die Vergleichsziele, Begründungen und Modellnamen sowie
+gebundene Prüfergebnisse und bis zu drei erkannte Unterschiede. Neu gebaut wird es nur, wenn sich Gezeigtes ändert: Die Signatur
 enthält statt der wachsenden Antwort nur, ob eine Prüfung an ihr hängt, und von
 Modelltexten nur, ob es sie gibt; vorher ersetzte jeder 100-ms-Takt die Karten,
 und Klicks auf ihre Schaltflächen gingen verloren (seit 2026-10-20, Apple-Audit D7).
@@ -5528,8 +5421,9 @@ gespeicherte Zeilen an (≤ 180 Zeichen, abgeschnittene „…“-Zeilen fallen 
 Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
-und Judge-Aufrufe (kind). Der Stapel dedupliziert identische API-Modelle, die
-Seitenleiste behält jeden Aufruf. Ausnahme Audit-Prüfer (seit 2026-10-26):
+und Prüfer-Aufrufe (kind `comparison`/`audit`; gespeicherte Vergleichsmodus-Turns
+auch `judge`). Der Stapel dedupliziert identische API-Modelle, die
+Seitenleiste behält jeden Aufruf. Ausnahme Prüfer (seit 2026-10-26):
 Die Sitzungen eines Prüfers (neue nach gescheiterter Runde oder vollem
 Gespräch) bilden eine Zeile unter der ID seiner ersten (`reviewerRows`;
 Zustand der arbeitenden bzw. letzten Sitzung, Tokens und `span` über alle,
@@ -5563,8 +5457,9 @@ Leiste auf der Zeile dieses Modells: geschlossen, per `reveal()` in Sicht, mit
 kurzem Ton (`summary.is-pointed`); vorher klappte es Reasoning und Antwort
 gleich mit auf.
 Seit 2026-10-09 öffnet ein Klick auf eine geschlossene Vergleichsmodell-Zeile
-stattdessen den Answer-Reader auf genau dieser Antwort, „Answer check“ dort die
-Differences (`openInReader` in `agent-delegation.js`; Kontext über
+stattdessen den Answer-Reader auf genau dieser Antwort, in gespeicherten
+Vergleichsmodus-Turns „Answer check“ dort die Differences (`openInReader` in
+`agent-delegation.js`; Kontext über
 `comparison_id` der Sitzung und `App.agentReview.contextFor`). Eine offene
 Zeile klappt dagegen wie jede andere zu (vor 2026-10-14 öffnete auch ihr
 Faltzeichen den Reader, sie ließ sich nicht mehr schließen). Die Agent-Leiste
@@ -5611,8 +5506,8 @@ frieren ein, auch bei verspäteter Projektion. Der Reparatur-Poll liefert aktive
 Sitzungsdauern anhand der Serverzeit. Nach abgelaufener Prozess-Lease bleibt die
 letzte dauerhaft bestätigte Dauer als `duration_incomplete`/„≥“ erhalten; ein
 späterer Reload wird nicht als zusätzliche Modelllaufzeit gezählt.
-Judge-Details werden aus dem bestehenden öffentlichen Sitzungs-Snapshot sofort
-gerendert (Zweck, Fortschritt, Status, Tokenaufschlüsselung), ohne Detail- oder
+Judge-Details gespeicherter Vergleichsmodus-Turns werden aus dem bestehenden
+öffentlichen Sitzungs-Snapshot sofort gerendert (Zweck, Fortschritt, Status, Tokenaufschlüsselung), ohne Detail- oder
 Nachrichtenabfrage. Worker-/Vergleichsdetails laden weiter nur bei Bedarf,
 zeigen sofort einen Skeleton und nutzen den vorhandenen message_seq-Cache.
 Live-SSE ersetzt regelmäßige Vollabfragen: erst nach zehn Sekunden ohne Session-
@@ -5628,12 +5523,45 @@ MODEL_FAMILIES inklusive apiPrefix auf; unbekannte Modelle erhalten ein Initial.
 Die Icons sind 15px groß. Im Composer öffnet das Chatmodellmenü über die
 optionale `secondarySelect`-Ebene von model-picker.js auch die Reasoning-Wahl.
 Ein gesperrter Agent-Modusschalter und die frühere Tokenzeile bleiben verborgen.
-Die Aktivitätsliste enthält auch weitere Vergleichs-/Judge-Runden über 64 Sitzungen;
+Die Aktivitätsliste enthält auch weitere Vergleichs-/Prüferrunden über 64 Sitzungen;
 Parallelitäts- und Nachrichtengrößen bleiben begrenzt. agent-review.js steht in bundles.json vor
 thread-history.js und rendert live aus review-SSE-Ereignissen oder gespeichertem
 agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
-`agent_comparison.py::review_issues` persistiert `checks[].issues` mit getrennten
-Gründen für ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
+
+**Prüfung im Browser (Review mit `mode: "audit"`).** Seit 2026-10-25 (Audit),
+seit 2026-10-31 für jeden neuen Turn, rendert `agent-review.js` `render` eine
+Review mit Prüfern über `renderAudit`, auch eine vor der fixierten Antwort
+gestoppte mit Befunden (`auditReadable`) oder mit Antworten der gefragten
+Modelle (`advised`): erst wenn alle Prüfer fertig sind und nur auf genau dieser
+Version markiert `window.renderStoredAuditMarks(body, review.audit, fallback,
+sources, {openNotes})` (consensus-insights.js) die Sätze mit `.is-audit` und
+`is-major`/`is-split`/`is-minor` je Art, die Karte (`auditCard`) zeigt je Prüfer
+Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
+Fallback-Liste („Other notes“). Die Leiste bietet Notes, Answers (nur mit
+`compare_models`, öffnet den ersten Vergleich mit Antworten, `adviceContexts`:
+ein Leser-Kontext je Vergleich unter `agent-evidence:{id}`) und Sources; der
+Leser-Kontext der Prüfung (`agent-audit:<answer_hash>`) hat `sections:
+['differences', 'sources']` und `labels: {differences: 'Notes'}`:
+`model-answer-reader.js` benennt Abschnittsknopf und Titel nach `labels` (sonst
+Answers/Differences/Sources). Kein Score, keine Unterschiedskarten.
+`auditMarks` zählt und listet eine Markierung über mehrere Sätze einmal
+(`dissent[].mark`). `renderAuditActivity` zeigt eine Karte „Reviewed by …“
+(eine Zeile, UX-Audit A6), die auch bei `cancelled`/`missing` endet, die
+Seitenleiste Prüfer (`kind: "audit"`) als „Reviewer“ ohne ihren Auftrag.
+`failureNote` sieht eine fixierte Antwort mit Prüfern als vollständig an,
+gleich was aus ihrer Prüfung wurde (`reviewedAnswer`). Fehlerwörter der Prüfung:
+`auditReasons`.
+
+**Gespeicherte Vergleichsmodus-Turns (bis 2026-10-31 erzeugt).** Turns ohne
+`mode: "audit"`, deren Review `comparisons` mit `checks` trägt, rendern weiter
+über den Vergleichspfad von `agent-review.js` (Score, Differences-/Coverage-
+Marken, Unterschiedskarten, Antwortprüfungs-Zeile, „Answer check off“ mit
+`OFF_NOTE` für damals abgeschaltete Prüfung, Karte eines geprüften eingefügten
+Texts über `passage-check.js`); der Server liefert sie unverändert
+(`chat_store.turn_detail`). Was im Folgenden bis „Tageskonto und Kosten“ von
+Score, Judges, Coverage, Prüfstatus und Vergleichsgrundlagen spricht, betrifft
+diesen Pfad; Leser, Quellen-Pillen und Satzmarken teilen beide. Die damals gespeicherten `checks[].issues` trennen Gründe für
+ausgefallene Modelle, fehlende Judge-Ergebnisse und unvollständige
 Satz-/Kontextabdeckung. `comparisons[].failed_models[].failure` enthält nur den
 sicheren Fehler aus `agent_failure`, niemals rohe Provider-Antworten. Eine
 fehlende Modellantwort hält den Gesamtstatus `partial`. Im Leser erscheint ein
@@ -5696,23 +5624,7 @@ Darstellung mit ihrer eigenen Quellenliste. agent_runs.py persistiert Provider-/
 auf `turn.sources`; alte Turns nutzen weiterhin `agent_activity`. Ohne Vergleich
 öffnet der Sources-Footer einen Leser mit ausschließlich dem Quellen-Tab.
 Pro Vergleich verwendet es die gemeinsamen renderStoredConsensusClaims und
-renderStoredDifferenceCards. Eine Review mit `mode: "audit"` (Audit statt
-Vergleich, seit 2026-10-25) rendert `renderAudit`: erst wenn alle Prüfer fertig
-sind und nur auf genau dieser Version markiert
-`window.renderStoredAuditMarks(body, review.audit, fallback, sources,
-{openNotes})` (consensus-insights.js) die Sätze mit `.is-audit` und
-`is-major`/`is-split`/`is-minor` je Art, die Karte (`auditCard`) zeigt je Prüfer
-Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
-Fallback-Liste („Other notes“). Die Leiste bietet Notes und Sources; der
-Leser-Kontext (`agent-audit:<answer_hash>`) hat `sections: ['differences',
-'sources']` und `labels: {differences: 'Notes'}`: `model-answer-reader.js`
-benennt Abschnittsknopf und Titel nach `labels` (sonst Answers/Differences/
-Sources). Kein Score, keine Unterschiedskarten. `auditMarks` zählt und listet
-eine Markierung über mehrere Sätze einmal (`dissent[].mark`). `renderActivity`
-zeigt eine Karte „Reviewed by …“ (eine Zeile, UX-Audit A6), die auch bei `cancelled`/`missing`
-endet, die Seitenleiste Prüfer (`kind: "audit"`) als „Reviewer“ ohne ihren
-Auftrag. `failureNote` sieht eine fixierte Audit-Antwort als vollständig an
-(`reviewedAnswer`). Ein kompakter Footer öffnet Widersprüche, formatierte
+renderStoredDifferenceCards. Ein kompakter Footer öffnet Widersprüche, formatierte
 Einzelantworten und Quellen im gemeinsamen model-answer-reader.js. Dessen
 openContext/refreshContext verwenden explizite Vergleichs-Snapshots mit eigenem
 renderPanel/contextGroup; globale Consensus-Ziele werden nicht ausgeliehen.
@@ -5750,8 +5662,7 @@ GET/PUT /api/admin/agent-budget und POST /api/admin/agent-budget/reset mit
 Admin-Rollenprüfung, strikter Eingabe und erwarteter revision. Jede Änderung
 schreibt eine Audit-Revision. Reset wechselt reset_epoch für alle Agent-Konten,
 ohne Nutzer-Scan oder Löschung der Usage-Historie. Laufende Calls settlen in ihrer
-ursprünglichen Generation; nur ungenutzte Review-Holds wandern vor weiteren
-Claims/Prüfungen mit. Veraltete Admin-Requests scheitern mit 409, DB-Fehler werden
+ursprünglichen Generation. Veraltete Admin-Requests scheitern mit 409, DB-Fehler werden
 nicht als erfolgreiche Änderungen ausgegeben. Gezählt wird ausschließlich
 Provider-Input + Provider-Output. Cached input und cache writes sind Teil des
 Inputs; reasoning ist Teil des Outputs. Provider-Gesamtkosten haben Vorrang vor
@@ -5806,9 +5717,8 @@ als verbraucht und werden im Panel als Schätzung bis zur Messung benannt.
 gezielt den aktuellen Ledger; erst `--apply` führt denselben Recovery-Pfad aus.
 Das Skript prüft das Projekt, verweigert Emulator-/Unit-Test-Kontexte und startet
 weder Modellaufrufe noch einen globalen Reset.
-Auch Abbrüche, Fehler und Judge-Wiederholungen zählen. Tageswechsel migrieren
-nur ungenutzte Prüfreserven; bereits gestartete Calls werden ihrem Claim-Tag
-zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.
+Auch Abbrüche, Fehler und Wiederholungen (Prüfer-Reparatur, Hedge) zählen.
+Bereits gestartete Calls werden ihrem Claim-Tag zugeordnet. Andere parallele Chats können reserviertes Budget nicht ausgeben.
 `agent_tokens.py` zählt Chatkontext, vollständige Tool-Fortsetzungen, Schemas
 und strukturierte Antwortformate lokal mit tiktoken/cl100k. Die unveränderten
 Vokabeldaten samt Lizenz liegen komprimiert in `llm/tokenizer_data/`; Laden
@@ -5823,7 +5733,7 @@ von der lokalen Reservierung. Begrenzter Suchkontext zählt erst in Folgeaufrufe
 nicht bereits vor der Suche. Legacy-Aufrufer behalten ihre konservativen Grenzen.
 
 `DelegationLoop._admit_chat_step` verwendet diesen Pfad gemeinsam für Chat,
-Worker, Vergleichsmodelle und Judges. Konkurrenz durch aktive Reservierungen
+Worker, Vergleichsmodelle und Prüfer. Konkurrenz durch aktive Reservierungen
 führt zu abbrechbarem Warten mit lokalem Settlement-Signal und Poll-Backoff
 (maximal drei Sekunden), auch über getrennte Runs/Prozesse. Die vorhandene
 Lease-Recovery bereinigt verwaiste Produzenten; fehlgeschlagene idempotente
@@ -5844,9 +5754,10 @@ Suchreserve. Der Systemkontext macht fehlende neue Recherche ausdrücklich;
 Modellfenster und Tageskontingent bleiben verbindlich. Der
 abgelehnte Versuch schreibt keinen Beleg und startet keinen bezahlten Aufruf.
 
-Im Chat entfallen pauschale Reserven für hypothetische Synthese-/Judge-Aufrufe;
-alle tatsächlich anstehenden Aufrufe reservieren weiterhin atomar im Tagesledger.
-Die alten Review-Holds bleiben für Legacy-Läufe korrekt abrechenbar. Modellfenster,
+Im Chat entfallen pauschale Reserven für hypothetische Folgeaufrufe; alle
+tatsächlich anstehenden Aufrufe reservieren atomar im Tagesledger. Den
+Review-Hold des Vergleichsmodus (`review_hold`, freigegeben in `finish_run`
+über `agent_quota.release`) gibt es seit 2026-10-31 nicht mehr. Modellfenster,
 Output-, Speicher- und Parallelitätsgrenzen bleiben technische Anforderungen:
 standardmäßig zwei parallele Unteraufrufe, 120.000 Zeichen Chatverlauf
 (`agent_runs.CONTEXT_CHAR_LIMIT`), bis zu 600 kB Review-Snapshot. Kein
@@ -5875,63 +5786,67 @@ Es gibt keinen neuen Suchdienst. Provider-Routing/ZDR bleiben bestehen.
 Nur bestätigte Zähler/Quellen erzeugen Suchaktivität. Kosten-/Tokenwerte bleiben
 bei unvollständiger Provider-Usage ausdrücklich unvollständig.
 
-Validierung: test_agent_comparison.py prüft echte gemeinsame Judge-Prompts/Parser
-mit deterministischen Providern, mehrere Grundlagen, Versionen, Teilausfälle,
-fehlende Calls, Abbruch, UTC-Wechsel und atomare Kontingente. Ergänzend bestehende
-Agent-/Consensus-Tests, agent-review.test.mjs sowie die gebaute Desktop-/Mobil-
-Ansicht in test_agent_comparison_frontend.py; siehe [testing.md](testing.md).
+Validierung: `tests/test_agent_comparison.py` prüft `compare_models` und die
+Abrechnung bezahlter Schritte mit deterministischen Providern (mehrere
+Vergleiche, Teilausfälle, Nachzügler, Abbruch, UTC-Wechsel, atomare
+Kontingente); `tests/test_agent_audit*.py` die Prüfer. `Script`/`make_loop`
+bauen Turns des einen Modus für viele Suiten; deren Prüfer starten nur, wenn ein
+Test sie verlangt (`tests/agent_reviewers.py`: `InertAnswerAudit`,
+`without_reviewers`, Fixture `inert_reviewers`, der Zustand „kein Prüfer konnte
+antworten“ ohne Schalter in der App). Ergänzend bestehende Agent-/Consensus-
+Tests, `agent-review.test.mjs` (Prüfung und gespeicherter Vergleichspfad) sowie
+die gebaute Desktop-/Mobil-Ansicht in `test_agent_comparison_frontend.py` und
+`test_agent_audit_frontend.py`; siehe [testing.md](testing.md).
 
-### Audit statt Vergleich (Agent, Pro und Admins, seit 2026-10-25; mit `AGENT_AUDIT_ACCESS=all` alle)
+### Ein Modus: der Agent arbeitet, die Prüfer prüfen (jedes Konto seit 2026-10-31; als „Audit statt Vergleich“ seit 2026-10-25)
 
-Einstellung `agent_preferences.audit` (`off`/`on`, auf der Einstellungsseite
-„Way of working: Comparison/Audit“), seit 2026-10-26 für Pro-Konten und Admins
-wirksam (`routers/agent.py::audit_allowed`, `/user_status` `audit_access`,
-Body-Klasse `viewer-can-audit`, `.audit-only`; vorher nur Admins).
-`effective_preferences` setzt sie sonst vor der Request-Identität auf `off`,
-und mit `on` immer `judges: on` und `vm: on`, wo das Konto die VM hat
-(`vm_allowed`: seit 2026-10-27 nur Admins, `AGENT_VM_ACCESS=pro` öffnet sie
-wieder für jedes Konto mit Audit; ohne Audit keine VM). Seit 2026-10-30 öffnet
-`AGENT_AUDIT_ACCESS=all` Audit (und damit VM und Browser) für jedes Konto
-(`agent_vm.audit_for_all`, auch in `/user_status`), gehalten vom Tageskonto (jede
-Browser-Aktion ist ein Modellschritt) und der VM-Zeit (`agent_vm_time.daily_limit`:
-Pro 2 h, sonst `BASE_DAILY_SECONDS` = 20 min, Admins ohne Grenze). Domains über die
-Paketquellen hinaus (`request_domain`) bleiben Pro und Admins (`domains_allowed`,
+Jeder Chat-Lauf des Agenten hat Prüfer (`agent_audit.AnswerAudit`), ohne
+Schalter und für jedes Konto, Free eingeschlossen (Max, 2026-10-31). Von
+2026-10-25 bis 2026-10-31 war das die Einstellung „Way of working: Audit“
+(`agent_preferences.audit`, zuerst Admins, ab 2026-10-26 Pro, ab 2026-10-30 mit
+`AGENT_AUDIT_ACCESS=all` jedes Konto; `audit_allowed`, `effective_preferences`,
+`/user_status` `audit_access`, Body-Klasse `viewer-can-audit`, `.audit-only`);
+alles davon ist entfernt, ebenso `AGENT_AUDIT_COMPARE` und `audit_compare` (ab
+2026-10-31 früh die Freigabe von `compare_models` im Audit). Die Route setzt,
+womit eine Nachricht läuft, selbst: `AgentPreferences` hält nur noch `vm`
+(`extra="ignore"`: `depth`, `quorum`, `autonomy`, `judges` und `audit` alter
+Turns und offener Tabs fallen still weg), `vm` ist `on`, wo das Konto den Arbeitsplatz hat
+(`vm_allowed`, siehe „Agent VM“), `AgentRequest.agent_preferences` wird
+angenommen und ignoriert und ist kein Teil der Request-Identität.
+VM-Zeit (`agent_vm_time.daily_limit`): Pro 2 h, sonst `BASE_DAILY_SECONDS` =
+20 min, Admins ohne Grenze. Domains über die Paketquellen hinaus
+(`request_domain`) bleiben Pro und Admins (`domains_allowed`,
 `DelegationLoop(domains=…)`, sonst ohne `DomainTools` und mit
-`AGENT_VM_NO_DOMAINS_PROMPT`, Admin-Katalog `agent_vm_no_domains`): ein Skript auf der
-Werkbank erreicht sie ohne Modellschritt, das hält kein Tageskonto auf. Der
-Prüfer-Brief nennt `request_domain` nur, wo es das Werkzeug gibt. Die Seite zeigt dann nur, was gilt
-(`#agentSettingsSection.is-audit`: Vergleichszeilen weg, GitHub da). Mit `on` schickt die Route
-`AGENT_AUDIT_SYSTEM_PROMPT` (`DEFAULT_PROMPTS["agent_audit"]`) statt des
-Agent-Prompts (seit 2026-10-28 schlank: nur App-Fakten, App-Verträge, Sicherheit
-und Wahrheit; eigene Audit-Blöcke `agent_watch.AUDIT_PROMPT`,
-`agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
-`agent_files.AUDIT_UNTRUSTED`, Admin-Katalog `agent_audit_blocks`; seit dem
-Aufräumen am 2026-10-28 abends jeder Fakt einmal: `read_source`/`find_pictures`/`show_image`
-ohne eigenen Block, ihre zwei App-Fakten in `AGENT_AUDIT_ANSWER_SECTION`,
-`AGENT_VM_PROMPT` nur Werkzeug-übergreifendes, ein Name „workspace“,
-`AuditReadSourceArgs` nur `url`),
-`ComparisonTools.audit_mode` bietet kein `check_text` und `compare_models` nur
-mit `audit_compare` (siehe „Vergleich im Audit“ unten),
-und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
-streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
-Die Vergleichsmodelle sind hier Prüfer, also reicht eines
-(`comparison_selection(..., audit=True)`: 1 bis `MAX_RUN_FAMILIES`, sonst 2;
-im Browser `App.agentPreferences.auditing()` für Chip, Menü und Senden, seit
-2026-10-26). Seit 2026-10-27 haben die Prüfer im Composer ein eigenes
-Bedienelement: Der Agent-Chip nennt im Audit-Modus das Chatmodell
-(`model-picker.js` `syncCustomModelPicker`, während die Liste lädt
-`App.firstFrame.agentModel()`), im Startbildschirm steht „2 AIs cross-check“
+`AGENT_VM_NO_DOMAINS_PROMPT`, Admin-Katalog `agent_vm_no_domains`): ein Skript
+auf der Werkbank erreicht sie ohne Modellschritt, das hält kein Tageskonto auf.
+Der Prüfer-Brief nennt `request_domain` nur, wo es das Werkzeug gibt. Prompt:
+`DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT` (seit 2026-10-28
+schlank: nur App-Fakten, App-Verträge, Sicherheit und Wahrheit; Blöcke
+`agent_watch.AUDIT_PROMPT`, `agent_settings.AUDIT_PROMPT`,
+`agent_memory.AUDIT_MEMORY_*`, `agent_files.AUDIT_UNTRUSTED`, Admin-Katalog
+`agent` und `agent_audit_blocks` „Agent: tool blocks“; den Katalogschlüssel
+`agent_audit` gibt es nicht mehr; seit dem Aufräumen am 2026-10-28 abends jeder
+Fakt einmal: `read_source`/`find_pictures`/`show_image` ohne eigenen Block,
+ihre App-Fakten in `AGENT_AUDIT_ANSWER_SECTION`, `AGENT_VM_PROMPT` nur
+Werkzeug-übergreifendes, ein Name „workspace“, `AuditReadSourceArgs` nur `url`).
+Der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`), Text
+streamt sofort. Die gewählten Modelle sind Prüfer, also reicht eines
+(`comparison_selection`: 1 bis `MAX_RUN_FAMILIES`; im Browser seit 2026-10-31
+immer, vorher `App.agentPreferences.auditing()`). Seit 2026-10-27 haben die
+Prüfer im Composer ein eigenes Bedienelement: Der Agent-Chip nennt das
+Chatmodell (`model-picker.js` `syncCustomModelPicker`, während die Liste lädt
+`App.firstFrame.agentModel()`), im Startbildschirm steht „3 AIs cross-check“
 (`#composerModelLabel`) neben den Marken der Leiste (`#composerModelPicker`),
 im Chat (ohne Leiste) stehen dieselben Marken vor dem Chip
 (`#composerReviewers`, `agent-mode.js` `renderReviewers`), seit 2026-10-28
 mit den Worten daneben („3 AIs cross-check“, `#composerReviewersLabel`; bis 700 px
 und neben der offenen Aktivität die Kurzform „3 AIs“ aus `data-short`, dieselbe
-Grenze wie die Leiste des Startbildschirms, seit 2026-10-29, UX-Audit E4/E5) und einem Titel, der sagt, was Prüfer tun. Beide öffnen die
-Prüfer-Ebene des Agent-Menüs, das aus dem geklickten Knopf kommt
-(`openModelPicker(…, { anchor })`, `fitComposerPicker`, `aria-expanded` am
-Anker, der Chip bleibt in Ruhe). Der erste Frame zeichnet das nach
-`App.firstFrame` (`look.audit`).
-Ab dem Start des Laufs folgt jedes Vergleichsmodell dem Arbeitsprotokoll
+Grenze wie die Leiste des Startbildschirms, seit 2026-10-29, UX-Audit E4/E5) und
+einem Titel, der sagt, was Prüfer tun. Beide öffnen die Prüfer-Ebene des
+Agent-Menüs, das aus dem geklickten Knopf kommt (`openModelPicker(…, { anchor })`,
+`fitComposerPicker`, `aria-expanded` am Anker, der Chip bleibt in Ruhe). Der
+erste Frame (`app-bootstrap.js`) zeichnet Chip und Worte nach (`App.firstFrame`).
+Ab dem Start des Laufs folgt jeder Prüfer dem Arbeitsprotokoll
 (`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
 Thread, eine Sitzung Art `audit`, Runden über
 `ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde je
@@ -5985,7 +5900,7 @@ Gate-Runden haben seit 2026-10-29 Vorrang und eine Frist (`ready_gate` ruft
 `_gate_wait`/`_domain_wait` halten die Turn-Uhr an (`_gate_pause`);
 `gate_trace` (Zeit und Urteile je Prüfer ohne Texte) steht im `checked`-Eintrag
 und am Hold einer Gate- oder Domain-Karte.
-Die Judges laufen nicht. Ein Fehler kostet nur
+Kein Judge läuft. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
 `REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
@@ -6018,7 +5933,10 @@ nutzte, in eigenen `ws_*`-Feldern (I6). Messen: `scripts/audit_report.py` (nur l
 Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
 Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer bringen Fremdinhalt in den Blick
 (`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
-Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne sie sperrt `memory_locked`. Mit `judges: off` gibt es keine Prüfer (`auditor` `None`).
+Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne Prüfer-Sitzung sperrt `memory_locked`.
+Einen Schalter ohne Prüfer gibt es nicht mehr (bis 2026-10-31 `judges: off`,
+dann `auditor` `None`); Tests, deren Skript nur den Agenten spielt, setzen
+Prüfer ein, die nie starten (`tests/agent_reviewers.py`).
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
 `window.renderStoredAuditMarks`; seit 2026-10-27 nennt Notes den Schritt
 eines Befunds zur Arbeit über `App.agentActivity.toolName` („Command“,
@@ -6028,48 +5946,33 @@ Fixieren der Antwort wartet auf das Laufende (`agent-chat.js`
 `readsMessages`). Browser-Test der ganzen Ansicht:
 `tests/e2e/test_agent_audit_frontend.py`; Tempo, Langlauf und Last ohne
 Modell-Calls: `tests/test_agent_audit_tempo.py`. Details: `docs/agent-mode.md`,
-„Audit statt Vergleich“.
+„Ein Modus: der Agent arbeitet, die gewählten Modelle prüfen“.
 
-**Vergleich im Audit** (seit 2026-10-31, Paket 1 von „ein Modus für Vergleich
-und Audit“, Details `docs/agent-mode.md` „Vergleich im Audit“): Mit
-`audit_compare` (Route: `routers/agent.py::audit_compare_allowed`, Admins,
-`AGENT_AUDIT_COMPARE=all` jedes Konto mit Audit; am Turn
-`agent_settings.audit_compare`; `DelegationLoop(audit_compare=…)` →
-`ComparisonTools(compare=…)`, nur mit Prüfern: `auditor`) hat der Audit-Agent `compare_models` mit
-`AuditCompareArgs` (Frage, Kontext, Dateien, Tiefe; kein `status_update`, kein
-Memory-Feld) und der Beschreibung `AUDIT_COMPARE` samt Grenze
-`turn_comparisons`. Gefragt werden die gewählten Modelle, also die Prüfer-Modelle,
-aber immer in frischen Sitzungen (`ComparisonTools.call`), nie in den
-Prüfergesprächen; Tiefe, Antwortstart und Freiheit gelten fest
-(`auto`/`all`/`guided`). Kein Judge: `answer_progress` startet keinen
-Coverage-Vorlauf, `_finish_review` ruft weiter `audit_answer`, `audit()` stoppt
-vorher Nachzügler (`finish_comparisons`, ein Fehler dabei kostet nur diesen
-Stand). `_await_quorum` hört im Audit bei abgelaufener `answer_time_left` sofort
-auf (sonst erst ab zwei Antworten), und Schritte nach einem Vergleich bekommen im
-Audit kein `clamp_floor`. Das Ergebnis (`_merged_result`) sagt
-dem Agenten, dass die Antworten nur seine Frage abdecken und der Rest der Aufgabe
-seine bleibt; kein `AGENT_WRITE_NOTE` danach (Max: der Lauf endet nicht mit den
-Antworten). Nach `read_source` bleibt der Vergleich möglich (im Audit liest der
-Agent in jedem Schritt). `review_is_bound` bindet eine Audit-Review nur an den
-Antwort-Hash, `finish_run` verlangt im Audit keinen Check je Vergleich und
-speichert bei Fehlern den Text wie ohne Vergleich. Die Prüfer lesen das Ergebnis
-als Eintrag `tool`/`compare_models` mit `data: agent` (`TOOL_DATA`) strukturiert bis
-`COMPARISON_ENTRY_CHARS` (vorher als ein Text bei 12.000 Zeichen abgeschnitten:
-nur die erste Antwort); passt die Runde nicht, geben die übrigen Einträge zuerst
-nach (`ROUND_TIERS` in `fitted_round`, `review_entry(compared_limit=…)`), dann die
-Auszüge der Seiten, zuletzt die Antworten. Das Werkzeug kennen sie aus
-`BRIEF_TOOLS` (verschwiegene Widersprüche der Antworten = unvollständig). Ohne
-Prüfer (`judges: off`) gibt es im Audit kein `compare_models`. Stopp vor der
-Antwort nach einem Vergleich: `AnswerAudit.close` setzt die Prüfer auf `stopped`.
-Shares von Audit-Turns zeigen keine Vergleiche (`share_snapshots._agent_share_basis`).
-Anzeige: `agent-review.js` `adviceContexts` (ein Leser-Kontext je Vergleich unter
-`agent-evidence:{id}`, Antworten und Quellen, ohne Prüfung), Zelle „Answers“ in der
-Audit-Zeile (öffnet den ersten Vergleich mit Antworten; ein Audit-Turn ohne
-Version, aber mit Antworten, bleibt in `renderAudit`, `advised`), `adviceCards` vor
-der Prüferkarte in der Aktivität (`comparisonCard` teilt sich beide Modi). Messen: `scripts/audit_report.py`
-Abschnitt `compare` (Tor `COMPARE_GATE` = 10 saubere Läufe). Tests: `tests/test_agent_audit_compare.py`,
-Tempo mit drei Beratern neben drei Prüfern in `tests/test_agent_audit_tempo.py`,
-`tests/js/agent-review.test.mjs`, `tests/e2e/test_agent_audit_frontend.py`.
+**compare_models und die Prüfer** (seit 2026-10-31, Details `docs/agent-mode.md`
+„Die gewählten Modelle fragen“): Der Agent hat `compare_models` in jedem
+Chat-Lauf (Mechanik unter „Werkzeuge des Agenten und `compare_models`“ oben).
+Gefragt werden die gewählten Modelle, also die Prüfer-Modelle, aber immer in
+frischen Sitzungen (`ComparisonTools.call`), nie in den Prüfergesprächen (Max,
+2026-10-30: wer den Lauf kennt, antwortet weder unabhängig noch ohne Rückkanal
+zum Agenten). Kein Judge, kein `AGENT_WRITE_NOTE` danach; `audit()` stoppt vor
+der Schlussrunde Nachzügler (`finish_comparisons`, ein Fehler dabei kostet nur
+diesen Stand). Nach `read_source` bleibt der Vergleich möglich. `finish_run`
+verlangt keinen Check je Vergleich und speichert bei Fehlern den gestreamten
+Text. Die Prüfer lesen das Ergebnis als Eintrag `tool`/`compare_models` mit
+`data: agent` (`TOOL_DATA`) strukturiert bis `COMPARISON_ENTRY_CHARS` (vorher als
+ein Text bei 12.000 Zeichen abgeschnitten: nur die erste Antwort); passt die
+Runde nicht, geben die übrigen Einträge zuerst nach (`ROUND_TIERS` in
+`fitted_round`, `review_entry(compared_limit=…)`), dann die Auszüge der Seiten,
+zuletzt die Antworten. Das Werkzeug kennen sie aus `BRIEF_TOOLS` (verschwiegene
+Widersprüche der Antworten = unvollständig). Stopp vor der Antwort nach einem
+Vergleich: `AnswerAudit.close` setzt die Prüfer auf `stopped`. Shares von Turns
+mit Prüfern zeigen keine Vergleiche (`share_snapshots._agent_share_basis`).
+Anzeige: `agent-review.js` `adviceContexts`/`adviceCards` (siehe „Prüfung im
+Browser“). Messen: `scripts/audit_report.py` Abschnitt `compare` (Turns, die die
+Modelle fragten; die Schranke `COMPARE_GATE` ging mit `AGENT_AUDIT_COMPARE`).
+Tests: `tests/test_agent_audit_compare.py`, Tempo mit drei Beratern neben drei
+Prüfern in `tests/test_agent_audit_tempo.py`, `tests/js/agent-review.test.mjs`,
+`tests/e2e/test_agent_audit_frontend.py`.
 
 **Aussteuern** (seit 2026-10-26, Details `docs/agent-mode.md` „Aussteuern“):
 Eine Live-Runde darf `halt` setzen (`HALT_KINDS`: safety, harm, off_goal,
@@ -6165,16 +6068,17 @@ browser“/„Hand back“ nach `App.workspaceView.holder`, „Not now“;
 Minuten), Aktivität `agent-activity.js`
 (`askHeads`, „Waiting for you“), `tab-status.js` („Waiting for you“).
 
-**Arbeitsprotokoll** (`docs/agent-work-log.md`, seit 2026-10-25): Im
-Audit-Modus hält `DelegationLoop.work_log` (`agent_work_log.WorkLog`) live
+**Arbeitsprotokoll** (`docs/agent-work-log.md`, seit 2026-10-25, seit
+2026-10-31 in jedem Chat-Lauf jedes Kontos): `DelegationLoop.work_log`
+(`agent_work_log.WorkLog`) hält live
 fest, was der Agent sieht und tut; die Prüfer lesen es aus dem Speicher
 (`last`, `entries_after`, `wait_for`, `wake`). Die Hooks:
 `run` (start, end), `_step` (`context`: das Gespräch des Akteurs nach
 Position samt Verlauf, dazu was nur die Anfrage trägt; `step` im finally nach
 der Abrechnung), `_execute` (`tool`, nicht für `app_registry`), `_retract`,
 `_lock_memory`, `_finish_merged` (`answer_fixed`). `_log_actor` zählt nur den
-Agenten (`completion:N`) und seine Worker ohne `kind`; Prüfer, Judges und
-Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`
+Agenten (`completion:N`) und seine Worker ohne `kind`; Prüfer, Vergleichsantworten
+und Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`
 (`AgentSessionStore.save_work_log`, eigene Transaktion, liest nur Löschmarke,
 Turn (`pending`) und Chat (aktiv), nie den Root-Beleg), lange Inhalte als
 `work-log/{uid}/{chat}/{turn}/{seq}` in `PrivateObjects`; der Turn trägt
@@ -6182,8 +6086,10 @@ Turn (`pending`) und Chat (aktiv), nie den Root-Beleg), lange Inhalte als
 `turn_detail` daraus `agent_work_log`. Löschen: `_delete_chat_tree` ruft je
 Turn `delete_turn_log` (nur genannte Inhalte, ohne Protokoll kein Aufruf des
 Objektspeichers); Aufräumen stündlich (`cleanup_expired_work_logs`). Lesen:
-`read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (Pro
-und Admins mit Audit, `audit_allowed`; Turn eines aktiven Chats). Anzeige: `agent-work-log.js`
+`read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (seit
+2026-10-31 der Besitzer des Turns, `require_agent_access`, der Turn wird unter
+seinem Konto gesucht; vorher Pro und Admins mit Audit; Turn eines aktiven
+Chats). Anzeige: `agent-work-log.js`
 (`App.agentWorkLog.render`, `reset` beim Kontowechsel) als letzter Abschnitt
 der Sitzungsliste in der Seitenleiste, `.admin-only` (vom 26. bis 29.10.
 `.audit-only`, also jedem Pro-Konto mit Rohnamen und JSON; UX-Audit F5: die
@@ -6191,18 +6097,23 @@ Aktivität erzählt Pro denselben Lauf in Worten; ein Turn nur mit Protokoll
 öffnet für Nicht-Admins kein leeres Panel, `shownLog`), lädt erst beim Öffnen,
 folgt laufenden Turns nur, solange der Abschnitt sichtbar ist.
 
-### Agent VM (Agent, mit Audit, seit 2026-10-25)
+### Agent VM (seit 2026-10-25)
 
-`agent_preferences.vm` folgt seit 2026-10-26 `audit` (eigene Zeile entfernt;
-`routers/agent.py::effective_preferences`, im Browser `agent-preferences.js`
-`get`). Mit `on` (und einem Anbieter: `agent_vm.configured()`, sonst kein
+Wer sie hat: `routers/agent.py::vm_allowed` = `agent_vm.open_to_all()`
+(`AGENT_VM_ACCESS=all`, oder das alte `pro`, das seit 2026-10-31 dasselbe heißt)
+oder Admin; seit dem Sicherheitsaudit des Arbeitsplatzes (2026-10-27) ohne die
+Variable nur Admins. `/user_status` meldet `vm_time` genau dann (mit
+konfiguriertem Anbieter), Body-Klasse `viewer-has-workspace` folgt allein
+`vm_time`. Die Route setzt damit `AgentPreferences.vm` (bis 2026-10-26 eine
+eigene Einstellung, bis 2026-10-31 an `audit` gebunden, `effective_preferences`).
+Mit `on` (und einem Anbieter: `agent_vm.configured()`, sonst kein
 VM-Werkzeug, kein Prompt und kein `vm_time` in `/user_status`, seit
 2026-10-26) registriert
 `DelegationLoop` auf Account-Turns ohne Google-Daten `agent_vm_tools.VMTools`
 (`vm_exec`, `vm_read_file`, `vm_write_file`, `vm_edit_file`, `vm_share_file`,
 `vm_install_packages`, Prozesse, `browser`, `request_domain`, GitHub) und hängt
-`AGENT_VM_PROMPT` vor dem Memory-Block an; in beiden Modi. **Arbeitsplatz auf
-Abruf** (seit 2026-10-29 Standard für Pro und Admins, Notaus
+`AGENT_VM_PROMPT` vor dem Memory-Block an. **Arbeitsplatz auf
+Abruf** (seit 2026-10-29 Standard für jedes Konto mit VM, Notaus
 `AGENT_WORKSPACE_ON_DEMAND=off`): `routers/agent.py::workspace_closed` lässt eine Nachricht ohne diese
 Werkzeuge beginnen (`DelegationLoop(workspace_closed=True)`): an ihrer Stelle nur
 `open_workspace` (`agent_vm_tools.OpenWorkspaceArgs`, `task`) und
@@ -6307,7 +6218,7 @@ laufen unter einem Limit (60 s, höchstens 300 s, nie über `answer_time_left`)
 mit VM-seitigem `timeout`; Ausgaben gehen gekürzt (Ende bleibt) an das Modell.
 Jeder Aufruf ist ein Tool-Event mit `command`/`path`, live `output`
 (`ReadOnlyTool.reports`, `_execute` übergibt `report`), am Ende `exit_code`,
-`duration_ms`, `timed_out` oder `outcome`; im Audit-Modus steht das Ergebnis
+`duration_ms`, `timed_out` oder `outcome`; das Ergebnis steht
 als `tool`-Eintrag mit Herkunft `vm` im Arbeitsprotokoll. Der Turn speichert
 `agent_vm` (`checkpoint`, `calls`, `commands`, `seconds`; seit 2026-10-30
 `phases`, `cold`, `browser_calls`, `browser_seconds`, bei Ausfall
@@ -6404,172 +6315,36 @@ und `GET /agent/workspace` (`guard`); offene Ansicht/Terminal enden binnen
 automatische Indizes; je 31 Tage nach der letzten Zählung, eine Sperre bleibt;
 `retention_maintenance.py`; mit dem Konto gelöscht). Details: `docs/agent-mode.md`, „Sicherheitsregeln des Arbeitsplatzes“.
 
-### Eingefügten Text prüfen (Agent, seit 2026-10-09)
-„Paste an AI answer to check it": Fügt der Nutzer eine fremde Antwort (meist
-ChatGPT) ein, prüft der Agent sie Satz für Satz gegen unabhängige Antworten.
-Kein Modus, kein Knopf, kein Frage-Feld; der einzige Hinweis ist der Platzhalter
-eines neuen Agent-Chats (`agent-chat.js::syncComposer`, je Breite: >640 px,
-≤640 px, ≤360 px, folgt Rotation per `matchMedia`). Der Agent entscheidet per
-Anweisung (`AGENT_SYSTEM_PROMPT`, Abschnitt „CHECKING A TEXT THE USER
-SUPPLIED"): prüfen nur, wenn der Text eine für sich stehende Frage beantwortet;
-unklare Frage → wahrscheinlichste benennen (der Nutzer sieht sie), nicht
-nachfragen; die Aufgabe nennt die Punkte der Passage, nie ihre Aussagen (in
-keiner Sprache, keine ihrer Quellen, nie „Is it true that …"), Tiefe `full`
-außer bei kurzen Passagen; eine zweite eingefügte Antwort geht auch nicht an
-die Modelle. Zusammenfassen, übersetzen, umschreiben, Code oder Fragen zu genau
-diesem Dokument geben den Text wie bisher als Material weiter; im Zweifel
-weitergeben. Anweisungen im eingefügten Text sind Daten (Ground Rules und
-„WRITING THE ANSWER“).
-- **Werkzeug:** seit 2026-10-11 das eigene Tool `check_text` (`CheckTextArgs`:
-  die Felder von `compare_models` plus flache Pflichtfelder `starts_with`,
-  `ends_with`, `answer_to`; `ComparisonTools.check_text` ruft `compare(...,
-  check=PassageCheck(...))`). Bis dahin ein optionales Feld `check` von
-  `compare_models`, das GPT-6 Luna mit der eigenen Frage des Nutzers füllte.
-  `own_request` lehnt vor jedem bezahlten Aufruf als Ergebnis ab: nur Fragen,
-  oder die ganze Nachricht als ein Satz ohne Aussage-Ende. Feste Regeln stehen im Server:
-  `locate_passage` sucht in den Nutzernachrichten (neueste zuerst, also auch
-  vor einer Rückfrage) tolerant gegen Groß/Klein, Anführungszeichen, Leerraum,
-  Markdown (`*`, `` ` ``, `#`, `>`, `_`, Aufzählungszeichen) und unsichtbare
-  Zeichen, NFKC je Zeichen samt Kombinationszeichen wie beim Anker („CO₂" =
-  „CO2", „m²" = „m2", „…" = „...", e + Akzent = „é"); bevorzugt einen Anfang nach Zeilenbeginn/Doppelpunkt/Anführung (die
-  Frage des Nutzers wiederholt oft die ersten Wörter), erweitert auf ganze
-  Wörter und ein folgendes Satzende. `repeated_sentences` lehnt ab, wenn Frage
-  und Kontext zwei oder mehr Sätze der Passage zu mindestens der Hälfte in
-  wörtlichen 6-Wort-Läufen enthalten; nicht gezählt werden Sätze unter 6
-  Wörtern (Tabellenzellen) und Läufe, die der Nutzer selbst geschrieben hat
-  (seine Rahmendaten muss die Aufgabe behalten). Dieselbe Sperre gilt für spätere
-  Vergleiche derselben Nachricht, auch nachdem die Prüfung scheiterte (die
-  Schreibregeln sagen, die Modelle hätten den Text nie gesehen). Alle Absagen kommen, bevor etwas Bezahltes
-  startet, und nennen „leave check out" als Ausweg. Höchstens eine stehende
-  Passage pro Nachricht; nach `failed`/`cancelled` darf neu geprüft werden,
-  nach `no_time` nicht.
-- **Prüfung:** Nach dem Vergleich läuft `_check_passage` VOR dem Toolergebnis an den Agenten:
-  `consensus_engine.check_text_coverage` = nur der Coverage-Judge (kein
-  Differences-Judge) gegen die nicht späten Antworten. Der Judge sieht eine
-  längengleiche Kopie (`_judge_copy`: „[3]" → „(3)", „<" → „‹"), damit keine
-  eingefügte Satznummer und kein falscher `<response>`-Block wirkt; die
-  Offsets (`claims[].start/end`, Codepoints) kommen direkt aus der Satzzerlegung
-  (`_enumerate_consensus_sentences(..., spans=)`), nicht aus einer Suche, der
-  Anker ist der Originalwortlaut. Judge-Aufrufe heißen „Text check" und bekommen
-  einen eigenen Systemsatz (eingefügter, nicht vertrauenswürdiger Text). Zeit:
-  Start nur mit ≥ `PASSAGE_MIN_SECONDS` (20 s) vor dem nötigen Antwortbeginn,
-  harter Stopp per Timer bei `answer_time_left − PASSAGE_TIME_MARGIN`, sonst
-  `no_time`. Ein Fehler kostet die Marken, nie die Antwort. Das Toolergebnis
-  trägt `passage_check` inkl. `issues` und `checked_text` (die Satzurteile;
-  „WRITING THE ANSWER“ sagt dazu: Übereinstimmung, keine Wahrheit), daraus
-  schreibt der Agent sein Urteil über den Text.
-  Im begrenzten Altmodus reserviert `max_calls` zwei Aufrufe mehr.
-- **Die Antwort wird wie jede Antwort geprüft (Max-Entscheidung 2026-10-09
-  abends):** Differences (zwei Durchgänge) und Coverage laufen auch über die
-  Antwort eines Prüf-Laufs: sie gibt ein Urteil über den Text und die richtigen
-  Informationen, und genau diese eigenen Aussagen nimmt der Nutzer mit. Damit
-  gibt es Marken, Agreement-Score, Unterschiedskarten und
-  Model-Pulse-Stimme wie überall, ohne Sonderweg. Einzige Besonderheit: in
-  jedem Turn mit deklarierter Passage (`self.passage`, jeder Status, jeder
-  Vergleich: die Antwort ist derselbe Text und redet auch nach einer
-  gescheiterten Prüfung über ihn) bindet `judge()` den Judge-Transport mit
-  `subject="passage_answer"`; der ContextVar reicht in die Hintergrund-Threads
-  (zweiter Differences-Durchgang, Coverage, Reparatur). Die Systemzeile
-  (`_PASSAGE_ANSWER_SUBJECT`) sagt dem Judge, dass die Antwort die Aussagen
-  des Texts wiederholt: Zustimmung behauptet die Aussage, Widerlegung die
-  Korrektur, nur ein bloßer Bericht ist `not_a_claim` (keine Differenz daran
-  verankern); Differenzen zwischen den Antworten weiter vollständig. Ohne diese Zeile las „Dein Text sagt X, das stimmt
-  nicht" sich als Behauptung X. Zwischenstand von 7303e034 bis zu dieser
-  Änderung (beide 2026-10-09): die Antwort-Judges entfielen, gespeicherte
-  Checks tragen `skipped: "passage_checked"` ohne `differences_data`;
-  `agent-review.js` erklärt sie weiter („This comparison checked your text …"),
-  `agent-activity.js` sagt dort „Checked your text",
-  `agent-delegation.js` nennt die Zeile „Text check", solange nur der
-  Text-Judge lief oder läuft.
-- **Daten:** `agent_review.passage_check` = `{version, status
-  (waiting|running|succeeded|partial|failed|cancelled), comparison_id,
-  answer_to, text, hash, basis_hash, providers, claims[], models_compared,
-  sentences, issues[], judges}`. Bewusst NEBEN `checks`, weil `review_is_bound`
-  Checks und Vergleiche eins zu eins paart. Änderungen unter `self.lock`
-  (`settle`). Über 600 kB verliert die gespeicherte Kopie zuerst Gegenzitate und
-  Judge-Details. `close()`, `agent_runs.finish_run` und `agent-chat.js::cancelRun`
-  setzen ein hängendes `waiting/running` auf `failed`/`cancelled`. Die Passage
-  wird nicht in `comparisons[]` gespeichert. `agent_memory.MemoryTools` zählt die
-  Passage im laufenden Turn nie als eigene Worte (`_user_messages` lässt die
-  deklarierte Passage weg; `memory` an `check_text` wird erst nach dem Werkzeug
-  angewandt, wenn die Passage schon deklariert ist); für spätere Turns gilt die
-  Memory-Anweisung („nichts aus eingefügtem Text"), ein echter Ausschluss wäre
-  eine zusätzliche Firestore-Abfrage pro Lauf.
-- **Oberfläche (seit 2026-10-09 eine Karte über der Antwort):**
-  `static/js/passage-check.js` (`App.passageCheck.apply(answerBody, review,
-  {live})`, in bundles.json nach `agent-review.js`) setzt `.passage-check`
-  direkt VOR den Antwortkörper (`#agentAnswerBody` bzw.
-  `.thread-history-answer-body`, Referenz `body._passageCard`). Die
-  Nutzernachricht bleibt unverändert so, wie sie abgeschickt wurde (der Agent
-  entscheidet erst im Lauf, ob er prüft; eine nachträglich umgebaute Blase
-  sprang, und nur manchmal). Kein Kasten, kein Versalien-Etikett, kein Grau
-  als Füllung (Max 2026-10-09: „billig, oldschool HTML"): Kopf ist EIN Satz in
-  Lesefarbe, halbfett, Ampelfarbe nur auf seiner Zahl („Models disagree with
-  4 of 28 statements in your text" für widersprochen UND geteilt; ohne
-  Widerspruch nie bloß „alles gut": „No model contradicts your text; 20 of 28
-  statements are confirmed" bzw. „…, but none of its 9 statements is
-  confirmed"; „All 28 statements in your text hold up"; mit nicht erreichten
-  Sätzen `sentences_unchecked`/`unindexed_sentences` heißt es „checked
-  statements"); darunter ein 3-px-Satzstreifen (Sätze in Lesereihenfolge, je
-  Lauf eines Urteils ein Segment mit `flex-grow` = Satzzahl, Ampelfarbe,
-  `aria-hidden`, passt auch bei 320 Sätzen aufs Handy) und eine Legende mit
-  Farbpunkten in denselben Farben (`--pc-holds`/`--pc-unconfirmed`; Zähler als Knöpfe, Klick:
-  erster Satz dieses Urteils, sonst klappt der Volltext auf; bei nur einem
-  Urteil entfällt sie, der Satz sagt es schon), rechts „Show full text". Dann
-  der Text auf einer Schiene wie ein Zitat der Antwort. Zugeklappt stehen
-  dort nur widersprochene/geteilte Sätze (höchstens 8) wörtlich, darunter in
-  Lesefarbe (nicht grau, seit 2026-10-09 abends) „N of M models disagree –
-  Modell: „was es stattdessen sagt"" (erstes Gegenzitat, Markdown entfernt,
-  ≤ 180 Zeichen; Klick auf die Zeile öffnet dieselbe Karte wie der Satz).
-  Keine Faltzeilen zwischen den Zitaten; ohne Zitat keine leere Schiene; mehr
-  als 8 widersprochene Sätze → „N more in the full text" (klappt auf). Der
-  Toggle trägt `aria-controls` auf die Schiene. Seit 2026-10-21 startet die
-  Karte immer zugeklappt, unter jeder Highlights-Einstellung (Max: erst
-  zählen die Unterschiede); nur ein Klick des Nutzers klappt sie auf, ein
-  Wechsel der Einstellung malt nur neu (vorher öffnete „All checks“ auf dem
-  Volltext und klappte mit, `card._passageChosen` gibt es nicht mehr). Zeigt
-  dieselbe Karte den Text eines anderen Turns, klappt sie wieder zu.
-  „Show full text" zeigt die ganze Passage
-  mit `cx-claim pc-claim`-Marken (hält/geteilt/widersprochen/unbestätigt =
-  `is-unanimous`/`is-split`/`is-major`/`is-thin`; widersprochen = mehr Gegen-
-  als Fürstimmen), gemalt nach der Highlights-Einstellung
-  (`body[data-consensus-highlight-mode]`, Standard seit 2026-10-19
-  „concerns"); bestrittene Worte
-  (`dissent[].target`) tragen wie in der Antwort allein die Farbe (`.cx-spot`,
-  `spotRanges`); der Rest ist
-  `is-quiet` und zeigt unter Zeiger/Fokus nur neutrales Grau, nie seine
-  Urteilsfarbe. Zitierte Sätze sind immer gemalt. Seit 2026-10-21 zeigt ein
-  gemalter Satz mit echter Maus (oder per Tab) dieselbe Hover-Vorschau wie ein
-  Satz der Antwort (`App.claimPopover.attachPreview(span, claim, models)` in
-  `mark()`, Hover-only-Gruppe ohne eigenen Klick); `is-quiet` zeigt keine.
-  Der Klick schließt die Vorschau (Dokument-Capture), solange die Karte offen
-  ist, erscheint keine, und die Fokus-Rückgabe beim Schließen bringt sie nicht
-  zurück. Klick/Enter auf einen Satz
-  öffnet die gemeinsame Karte (`App.claimPopover`, Seite des Texts „In your
-  text“), deren Logos über `App.agentReview.contextFor` in die Antwort führen, während des Laufs über einen
-  Minimal-Kontext aus `review.comparisons`. Darunter „Checked against N models
-  that answered „…" without seeing your text.", eine an beiden Enden
-  auslaufende Haarlinie trennt zur Antwort. Eingefügtes Markdown wird Text
-  (`displayText`: Fett/Kursiv, Überschriften, Zitatzeichen, Code-Zäune,
-  Inline-Code, Links → Linktext, Tabellen mit „·"; ob ein Stück eine Zeile
-  beendet, entscheidet der ganze Text, sonst liefen Tabellenzellen, die je ein
-  eigener Satz sind, zusammen). Die Antwort selbst trägt Marken und Score wie
-  jede Antwort (siehe oben). Die Signatur ist
-  kanonisch (Firestore liefert Maps ohne Reihenfolge), ein Laufende zeichnet
-  nichts neu, der aufgeklappte Zustand bleibt (zeigt dieselbe Karte den Text
-  eines anderen Turns, klappt sie zu); abgehängte Karten fallen bei jedem
-  `apply` aus der Beobachterliste. Aufgerufen aus `agent-chat.js`
-  (live, gespeichert, und leerend für Consensus/neuen Chat), `run-view.js`
-  (leerend) und `thread-history.js::buildHistoryTurn`. Der Aufklapp-Link der
-  Nachricht heißt seit 2026-10-09 „Show more"/„Show less" und steht in der
-  Blase (`.thread-ask-bubble`).
-- **Länge:** Im Agent-Modus prüft `validateInputText` die Zeichengrenze des
-  Servers (`consensus_max_question_chars`, 8.000; Codepoints nach NFKC wie
-  `normalize_question`) statt der Wortgrenze; der doppelte Klick-Validator in
-  `app-init.js` ist entfallen (jede Absage kam zweimal).
-- **Tests:** `tests/test_agent_passage_check.py`, `tests/js/passage-check.test.mjs`,
-  `tests/js/claim-hover-preview.test.mjs` (Hover-Vorschau aller Marken),
-  `tests/e2e/test_passage_check_frontend.py`.
+### Eingefügten Text prüfen (2026-10-09 bis 2026-10-31, entfernt)
+
+„Paste an AI answer to check it“: Im Vergleichsmodus prüfte der Agent eine
+eingefügte fremde Antwort Satz für Satz gegen unabhängige Antworten, über das
+Tool `check_text` (`CheckTextArgs`: die Felder von `compare_models` plus
+`starts_with`, `ends_with`, `answer_to`; serverseitig `locate_passage`,
+`repeated_sentences`, dann nur der Coverage-Judge über den Text,
+`consensus_engine.check_text_coverage`, `subject="passage_answer"` für die
+Judges der Antwort). Der einzige Hinweis war der Platzhalter eines neuen
+Agent-Chats. Mit dem Vergleichsmodus gingen Werkzeug, Prompt-Abschnitt
+„CHECKING A TEXT THE USER SUPPLIED“, Live-Karte und Platzhalter (seit
+2026-10-31 `App.askPlaceholder` = „Ask anything“); ein eingefügter Text ist
+heute Material wie jedes andere, und die Prüfer prüfen die Antwort des
+Agenten. Was bleibt: Gespeicherte Turns tragen `agent_review.passage_check`
+(`{version, status, comparison_id, answer_to, text, hash, basis_hash,
+providers, claims[], models_compared, sentences, issues[], judges}`, neben
+`checks`), und `static/js/passage-check.js` (`App.passageCheck.apply(answerBody,
+review)`, in `bundles.json` nach `agent-review.js`, aufgerufen aus
+`agent-chat.js`, `run-view.js` und `thread-history.js::buildHistoryTurn`) zeigt
+ihre Karte über der Antwort: Kopfsatz mit Ampelzahl, Satzstreifen, Legende,
+widersprochene Sätze wörtlich mit Gegenzitat, „Show full text“ mit
+`cx-claim pc-claim`-Marken nach der Highlights-Einstellung und Hover-Vorschau
+(`App.claimPopover`). Ein Turn, den der Reaper erst nach dem Deploy beendet,
+setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
+(`agent_runs.finish_run`). Länge: Im Agent-Modus prüft `validateInputText`
+(`app-init.js`) weiter die Zeichengrenze des Servers
+(`consensus_max_question_chars`, 8.000) statt der Wortgrenze. Tests:
+`tests/js/passage-check.test.mjs`, `tests/js/claim-hover-preview.test.mjs`,
+`tests/e2e/test_passage_check_frontend.py` (gespeicherte Karte);
+`tests/test_agent_passage_check.py` ist mit dem Werkzeug gelöscht.
 
 ### Browser-Run-Lifecycle und Sichtwechsel
 
@@ -7010,8 +6785,9 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   ein Test hält beide gegen die Pläne). Eine langsame Synthese kostet die
   Judges also keine Zeit mehr. `AnalysisBudget.snapshot()` einer Phase meldet
   die Summe aller Phasen des Laufs (`analysis_runtime`). Ein schon gebundenes
-  Budget (Agent) regiert dagegen jede Phase weiter; ein Engine-Einstieg ohne
-  Lauf öffnet sein eigenes Budget (Agent-Judges je Prüfung im Tool-Thread).
+  Budget regiert dagegen jede Phase weiter; ein Engine-Einstieg ohne
+  Lauf öffnet sein eigenes Budget (bis 2026-10-31 die Agent-Judges je Prüfung
+  im Tool-Thread).
   `ANALYSIS_MAX_CALLS` (3–12) gilt für alle übrigen Budgets. Der davor liegende Antwort-Fan-out bleibt
   durch seine bestehenden Provider-Limits geschützt.
 - Nicht streamende Engine-Aufrufe und Analyse-SSE verwenden HTTPX-Tasks auf
@@ -7025,24 +6801,23 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   rückwirkend erstattet werden.
 - Jeder Judge-Versuch hat seit 2026-10-15 eine eigene Zeitgrenze
   `JUDGE_ATTEMPT_SECONDS` (90 s): Coverage samt Repair, Differences in
-  `query_differences.run_pass` (beide Pässe),
+  `query_differences`,
   außerdem der Visual-Judge der Watch-/Topic-Bilder (`pick_watch_visual`; Prod
   2026-10-15: zwei hängende Luna-Versuche à 120 s Lese-Timeout hielten die
   Bildsuche eines Topics vier Minuten auf, bevor die nächste Familie in rund
   2 s antwortete).
-  Gemessen: Coverage (Agent-Belege) Median 13 s, p90 21 s; Differences
+  Gemessen: Coverage (Agent-Belege bis 2026-10-31) Median 13 s, p90 21 s; Differences
   (`differences_stats` seit 2026-08, 500+ Läufe) Median 2–6 s, p99 ≤ 21 s,
   Maximum 59 s, Pro-Stufe höchstens 27 s.
   `_attempt_time_limit` gibt dem Versuch eine eigene, mit dem Aufrufer
   verknüpfte Cancellation. Läuft sie ab (`_AttemptTimedOut`), wird der Versuch
   beendet, sein Retry übersprungen und der nächste Eintrag des Plans
-  (`_coverage_attempts`/`_differences_attempts`, Chat: Gemini) übernimmt. Der
-  zweite Differences-Pass kennt nur den primären Judge und endet dann ohne Ausweichen, nie
-  doppelt; ein Nutzer-Stopp beendet beide Judges weiterhin ohne Ausweichen.
+  (`_coverage_attempts`/`_differences_attempts`) übernimmt; ein Nutzer-Stopp
+  beendet beide Judges weiterhin ohne Ausweichen.
   Innerhalb dieser Grenze startet `_hedged_judge_call` seit 2026-10-18 nach
   `JUDGE_HEDGE_SECONDS` (15 s) eine identische zweite Anfrage an dasselbe
-  Modell, wenn die erste noch läuft (Coverage-Fenster, Coverage-Repair,
-  Differences in `run_pass`). Die erste Antwort
+  Modell, wenn die erste noch läuft (Coverage, Coverage-Repair,
+  Differences). Die erste Antwort
   gewinnt, die andere wird über ihre eigene, verknüpfte Cancellation beendet;
   die erste Anfrage bleibt im aufrufenden Thread (sonst unverändertes
   Verhalten), das Duplikat läuft im Thread `<Aufrufer>-judge-hedge`. Ein
@@ -7051,26 +6826,23 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   15 s plus eine normale Judge-Dauer statt 90 s bis zum Familienwechsel.
   Seit 2026-10-21 bekommt `_hedged_judge_call(call, fallback=, won=)` nach
   `JUDGE_FALLBACK_SECONDS` (30 s) zusätzlich denselben Check auf der nächsten
-  Familie des Plans (`_next_family`: Coverage-Fenster und `run_pass`, Chat:
-  Gemini); die erste Antwort gewinnt, `won["fallback"]` lässt Repair und
-  `_judge_metadata` den Judge nennen, der wirklich geantwortet hat. Der zweite
-  Differences-Pass hat keine andere Familie im Plan, der Fallback läuft also nie
-  doppelt; Coverage-Repair hedgt nur dasselbe Modell. Jede weitere Anfrage läuft
+  Familie des Plans (`_next_family`: Coverage und Differences); die erste
+  Antwort gewinnt, `won["fallback"]` lässt Repair und `_judge_metadata` den
+  Judge nennen, der wirklich geantwortet hat; Coverage-Repair hedgt nur
+  dasselbe Modell. Jede weitere Anfrage läuft
   in einer eigenen Kopie des Aufrufer-Kontexts (ein `Context` darf nur in einem
   Thread zugleich laufen).
   Gegen eine durchweg langsame Spur hilft der Hedge nicht (Chat-Review
   2026-10-19: jeder Luna-Call 20–24 s auf OpenAIs Standard-Spur, 8 Duplikate,
-  keins gewann). Deshalb fragen die Agent-Judges (`judge_transport`) per
-  `JUDGE_SERVICE_TIER_BY_PROVIDER` bei der OpenAI-Familie `service_tier:
-  "priority"` an (OpenRouter-Endpunkt `openai/fast`, doppelter Preis, ~2 ct
-  pro geprüfter Antwort; fällt ohne Priority-Endpunkt auf die Standard-Spur
-  zurück). Andere Familien bleiben auf der Standard-Spur (Anthropics Priority
-  ist der teure Fast-Mode); der Consensus-Pfad (`_call_engine_text`) bleibt
-  unverändert.
+  keins gewann). Bis 2026-10-31 fragten die Agent-Judges deshalb bei der
+  OpenAI-Familie `service_tier: "priority"` an (`JUDGE_SERVICE_TIER_BY_PROVIDER`,
+  OpenRouter-Endpunkt `openai/fast`); mit den Agent-Judges ist die
+  Priority-Lane entfernt, der Consensus-Pfad (`_call_engine_text`) blieb immer
+  auf der Standard-Spur.
   Der Coverage-Thread hat eine eigene, verknüpfte Cancellation
   (`_coverage_in_background` → `(pool, future, stop)`); läuft die Frist von
-  `_collect_coverage` ab, wird er beendet statt abgewartet. Anlass: Agent-
-  Judges laufen über den Task-Transport mit dem Turn-Budget statt der
+  `_collect_coverage` ab, wird er beendet statt abgewartet. Anlass (damals):
+  Agent-Judges liefen über den Task-Transport mit dem Turn-Budget statt der
   180-s-Analysefrist; ein Luna-Coverage-Call mit 243 s überlebte die Frist,
   der Agent wartete beim Aufräumen 64 s darauf und verwarf ihn dann — die
   Antwort hatte keine einzige grüne Marke (`coverage_unavailable`).
@@ -7378,7 +7150,7 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist die
   erste verfügbare der Prioritätsliste (OpenAI zuerst) — seit 2026-10-04
   auch für Engines derselben Familie. Der frühere Fremd-Familien-Zwang schob
-  OpenAI-Läufe (Agent-Default Luna) auf Gemini Flash-Lite, das teurer und
+  OpenAI-Läufe (damals Agent-Default Luna) auf Gemini Flash-Lite, das teurer und
   deutlich schwächer ist; ein starker Judge wiegt bei der Belegprüfung mehr
   als die Familienfremdheit (User-Entscheidung). Die Stufe folgt der Engine — Standard-Engine → Standard-Judge
   (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), Pro-Engine → Pro-Judge über die
@@ -7434,10 +7206,9 @@ Firestore-Collections (`source_check_jobs*`, `source_check_cache`,
   prüft sie in `_verify_claims` mit derselben exakten Regel wie Zitate gegen
   den Satz (`_verified_target`, eine Spanne „A … B“ zählt über ihre beiden
   Enden; ohne Buchstabe oder Ziffer fällt sie weg) und leert den Rest; bei
-  der Prüfung eingefügter Texte zeigt sie danach auf den eingefügten Text,
-  nicht auf die Judge-Kopie (`_judge_copy` schreibt `<`/`[1]` anders, aber
-  längengleich); `parse_coverage_payload` liefert sie als
-  `targets`, die Vorab-Fenster tragen sie mit (`_adopt_prefetched`).
+  der Prüfung eingefügter Texte (bis 2026-10-31) zeigte sie auf den
+  eingefügten Text, nicht auf die Judge-Kopie; `parse_coverage_payload` liefert
+  sie als `targets`.
   Echttest mit dem Prod-Judge: 92 % der Ziele standen wörtlich im Satz.
   Ergebnis landet als `differences_data.claims` (unveränderte Feldform plus
   `coverage`, `dissent[].target` nur wenn vorhanden; `sanitize_differences_data`
@@ -7516,6 +7287,9 @@ Wert beim Lesen fallen, ein PATCH damit landet in `rejected`). Die Pipeline
 selbst laeuft weiter auf dem Server: Watches (`watch_scheduler.py`), die
 nutzergebundene API v1 (`api_consensus_runner.py`) und kuratierte Topics
 (`topic_pipeline.py`) rufen `consensus_pipeline.run_consensus_pipeline`.
+Innerhalb von Agent gibt es seit 2026-10-31 keine Wahl mehr: jeder Lauf hat
+Prüfer (siehe „Ein Modus“ in §4); die Kontoeinstellung „Way of working“
+(Vergleich oder Audit, `agent_preferences.audit`) ist entfernt.
 Andere Tabs, der Server und das Abmelden melden Aenderungen ueber
 `consensio:settings-change`, das `run-mode.js` als
 `consensio:run-mode-change` weitergibt. Der einmalige Reset vom 2026-10-12
@@ -7632,9 +7406,9 @@ ein Kuchen (Tagesrest) in einem feinen Ring statt eines offenen Bogens, der wie
 ein Ladekreisel aussah (`#quotaRingArc` r=3.5, stroke-width 7, gleiche
 dashoffset-Logik in `sidebar-quota.js`). Unter dem Feld steht nur der
 Hinweissatz. Pro Modus gibt es genau EINEN
-Modell-Chip; er nennt nur, wer antwortet („6 models“ in Compare,
-„6 AIs cross-check“ in Agent: was die Vergleichsmodelle tun, das Menü trägt
-Chatmodell und Vergleich), nie den Modusnamen. Die Consensus-Engine (früher
+Modell-Chip; er nennt nur, wer antwortet („6 models“ in Compare, in Agent
+das Chatmodell, daneben die Prüfer mit „3 AIs cross-check“; das Menü trägt
+Chatmodell und Prüfer), nie den Modusnamen. Die Consensus-Engine (früher
 „6 models · Daily“ und der Abschnitt „Consensus engine“ unter Custom) wählt
 seit 2026-10-25 niemand mehr; `#consensusModelDropdown` (Name historisch)
 bleibt der Host des Preset-Pickers, seine Optionen nur Anker der
@@ -8315,14 +8089,12 @@ alle Felder optional = nur Gewähltes, `FirestoreUserSettingsRepository`) unter
 der letzten Änderung je Einstellung) und `updated_at`.
 `GET /api/my/settings` → `{settings, revision, field_revisions}` (`revision` 0 =
 nie gespeichert; ein beschädigter Wert gilt als 1). `PATCH /api/my/settings` mit
-`{settings: {name: wert | null}}` (1 bis 11 Namen) ändert nur die genannten
-Einstellungen (`null` = zurück zum Default; `compare_models` ist eine Einheit und
-wird als Ganzes ersetzt; `agent_preferences` wird seit 2026-10-17 feldweise
-zusammengeführt, `FIELDWISE_SETTINGS`: eine offene Seite einer älteren Version
-kennt ein neueres Feld wie `judges` nicht und darf es mit ihrer nächsten
-Änderung nicht löschen; einzeln entfernt wird nie ein Feld, `null` setzt die
-ganze Einstellung zurück. Der Browser lässt ein unbekanntes Feld aus dem Konto
-ebenso einzeln weg, `user-settings.js`) und prüft **Einstellung für Einstellung**
+`{settings: {name: wert | null}}` (1 bis `MAX_PATCH_FIELDS` Namen = die elf
+Einstellungen plus die ausgemusterten aus `RETIRED_SETTINGS`, damit der
+Erst-Upload eines alten Tabs nicht als Ganzes abgelehnt wird) ändert nur die
+genannten Einstellungen (`null` = zurück zum Default; `compare_models` ist eine
+Einheit und wird als Ganzes ersetzt; bis 2026-10-31 wurde `agent_preferences`
+feldweise zusammengeführt, `FIELDWISE_SETTINGS`) und prüft **Einstellung für Einstellung**
 (`validate_changes`): Unbekannte Namen und Werte außerhalb der Regeln kommen in
 `rejected` zurück, die übrigen werden trotzdem gespeichert (eine Version mehr
 oder weniger im Browser verliert so nicht die ganze Änderung). 422 nur für eine
@@ -8335,9 +8107,7 @@ verlässt, macht den Datensatz nicht unlesbar; gespeicherte Altwerte, die nicht
 mehr validieren, fallen je Einstellung weg.
 
 Die Einstellungen: `run_mode`, `agent_model` (`{model_id, reasoning_effort}`),
-`agent_preferences` (`depth`/`quorum`/`autonomy`/`judges`/`audit`, nur gewählte; `audit` wirkt für
-Pro und Admins und bringt `vm` und `judges` mit, `routers/agent.py::effective_preferences`),
-`compare_models` (`{Familienlabel: {enabled, model}}`),
+`compare_models` (`{Familienlabel: {enabled, model}}`, in Agent die Prüfer),
 `consensus_model`, `consensus_preset`, `system_prompt` (höchstens 12.000 Zeichen
 / 32.000 Bytes; ein Lauf akzeptiert 64 mehr für die Datumszeile, die
 `query-send.js` voranstellt, `chat.py`), `agreement_display`,
@@ -8347,6 +8117,13 @@ highlights, seit 2026-10-25; fehlt = aus; `consensus-insights.js` bindet
 `components-consensus-visuals.css`), `letter_animations` (Display → Letter
 animations; fehlt = an, `false` = aus; `app-ui.js` bindet
 `#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie).
+**Ausgemustert (2026-10-31):** `agent_preferences` (Antworttiefe, Antwortstart,
+Agent-Freiheit, Antwortprüfung, Way of working, VM) mit dem Vergleichsmodus des
+Agenten: ein alter Tab, der sie noch schickt, bekommt sie einzeln in
+`rejected`, die übrigen Einstellungen werden gespeichert; gespeicherte Reste
+fallen beim Lesen (`sanitize_settings`) und mit der nächsten Änderung weg. Der
+Browser entfernt die alten localStorage-Schlüssel
+(`consensio.agentPreferences.v1/.v2`, `user-settings.js` `dropRetired`).
 **Bewusst im Browser** bleiben Theme,
 Sidebar-Breite/-Zustand, `agentShellExpected` (vor dem ersten Paint nötig,
 gerätebezogen), der Fragen-Entwurf (würde bei jedem Tastendruck schreiben), der
@@ -8378,11 +8155,11 @@ Consensus-Wahl nicht auf Agent zurückdreht. Jeder Browser startet so einmal mit
 Agent und dem App-Preset Daily; Compare-Wahlen und Modell-IDs aus der Zeit davor
 werden nicht hochgeladen (ein noch offener Tab der Vorversion kann bis zum
 Neuladen Modellwahlen schreiben; alte IDs scheitern an den Options-Prüfungen und
-richten keinen Fehler an). System-Prompt, Display, Agent-Einstellungen/-Modell
-und Check sources bleiben. Das App-Preset steht in
+richten keinen Fehler an). System-Prompt, Display, Agent-Modell (und damals
+Agent-Einstellungen und Check sources) bleiben. Das App-Preset steht in
 `cfg.APP_DEFAULT_CONSENSUS_PRESET` (`fast` = Daily, an die Seite als
-`default_consensus_preset`); API und der Rückfall eines Agent-Vergleichs ohne
-Auswahl nehmen `cfg.DEFAULT_CONSENSUS_PRESET` (seit 2026-10-15 ebenfalls Daily).
+`default_consensus_preset`); API und der Rückfall eines Agent-Laufs ohne
+Prüferauswahl nehmen `cfg.DEFAULT_CONSENSUS_PRESET` (seit 2026-10-15 ebenfalls Daily).
 Die Demo zeigt Daily über `App.previewConsensusPreset` nur an (bis zum Neuladen oder zur
 nächsten eigenen Wahl), sie speichert es nicht.
 
@@ -8427,8 +8204,8 @@ verlassen den Browser (auch noch nicht zugestellte Änderungen), die eines Gasts
 Module wenden Werte aus `server`/`tab`/`signout` selbst an (Modus, Modellwahl
 über `applyAccountModelPreferences` samt Überschriften und
 Anhang-Verträglichkeit, Agent-Modell — ein Tab, dessen Modellliste die Wahl
-nicht kennt, lädt die Liste vor jeder Korrektur neu —, Agent-Einstellungen,
-Check sources, Display, offener System-Prompt-Editor ohne eigenen Entwurf).
+nicht kennt, lädt die Liste vor jeder Korrektur neu —, Display, offener
+System-Prompt-Editor ohne eigenen Entwurf).
 
 Tests: `tests/test_user_settings.py` (Schema, Teil-Annahme, Repository,
 `field_revisions`, Route, Konto-Limit, Kontolöschung, Gleichlauf der Regeln mit
@@ -9036,14 +8813,14 @@ app/services/llm/
 app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
-  agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, Evidence-Prüfung (im Audit-Modus seit 2026-10-28 ohne, AuditMemoryChange), Secret-Prüfung, Undo-Log, Prompts, update_memory-Tool
-  agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Agent-Prompt samt Kartenhinweis; startet nie eine Watch
+  agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
+  agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
-  agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen, Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Agent-Prompt samt Rückfrage-Regeln; schreibt nie eine Einstellung
-  agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS), Erinnerung (TOOL_REMINDERS) und SIDE_TOOLS
+  agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen (Chatmodell, Reasoning, Vergleichs-Preset der Prüfer, Anzeige), Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Prompt-Block AUDIT_PROMPT; schreibt nie eine Einstellung (bis 2026-10-31 auch Agent-Vorlieben, Gruppe PREFERENCES)
+  agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
-  agent_audit.py             Audit statt Vergleich (Admin-Einstellung agent_preferences.audit, seit 2026-10-25): AnswerAudit lässt die Vergleichsmodelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (Locator von check_text), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
+  agent_audit.py             Die Prüfer jedes Agent-Laufs (seit 2026-10-25 als Audit, seit 2026-10-31 der eine Modus für jedes Konto): AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS, BRIEF_TOOLS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
   agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
   agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
@@ -9055,15 +8832,14 @@ app/services/
   agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27, zwei VMs): Konto-Dokument users/{uid}/chat_state/agent_workspace mit name, browser und Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab; claim liefert die Domains des Chats), prepare (Werkbank bei neuer VERSION: workspace_vm/workbench/*, setup.sh als root mit dl.google.com nur um das Setup herum (_open_for_setup: gelesene Regeln + CHROME_RULE, danach genau die gelesenen zurück), alten Dienst view entfernen), prepare_browser/open_browser (Browser-VM, BROWSER_VERSION aus BROWSER_FILES inkl. harden.sh, policy.json und openbox-Konfiguration; seit 2026-10-29 setzt nur eine neue Version die Netzregeln, BROWSER_RULES sind Teil der Version), Übernahme (set_control: control im Konto-Dokument mit returned_at beim Zurückgeben + control.json auf der Browser-VM; seit 2026-10-29 friert nichts mehr auf der Werkbank ein; control_state, user_has_browser), reset_browser (Profil auf der Browser-VM), delete_for_account (Tunnel zu, beide VMs über die Namen aus der UID, Datensatz danach, Wächter und Spuren über workspace_guard.delete_for_account), remember_values/listed (Listen auf dem Datensatz: tunnel_ports, secret_names), restorable/raise_restore_floor (Restore nur für eigene, höchstens 14 Tage alte Checkpoints nach der letzten Abmeldung oder Chat-Löschung); Ordnernamen (make_chat_dir benennt nach dem Titel um, record_folder merkt den Namen am Chat; .consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
   workspace_guard.py         Sicherheitsregeln des Arbeitsplatzes auf dem Server (seit 2026-10-30): note_visit/note_browser_call/note_view_bytes/note_net/note_policy (nie blockierend, ein Thread zählt je Konto in einer Transaktion), classify (Cloudflares Security- und Family-Resolver: malware/adult/clean, Cache 24 h), Spur workspace_trail/{uid}_{tag} (Hosts, Stunden, Bytes; 31 Tage, cleanup_expired_trails), Wächter workspace_guard/{uid} (open/closed bis morgen/locked), RULES/judge/decide (je Website, nur Nutzerverhalten sperrt, zweites Schließen in 7 Tagen sperrt, Admins nur gemeldet), _shut, status (Cache 20 s, Lesefehler schließt nie), unlock mit baseline, Telegram ohne Konto; Details docs/agent-mode.md „Sicherheitsregeln des Arbeitsplatzes“
   workspace_vm/              Läuft in den VMs (LF per .gitattributes). tunnel.py (beide VMs, localhost-Brücke seit 2026-10-29: listen auf der Browser-VM lauscht auf 127.0.0.1/::1 nur auf genannten Ports, connect auf der Werkbank öffnet 127.0.0.1, sonst ::1, und nennt die lauschenden Ports seines Nutzers; Rahmen über stdin/stdout an agent_tunnel, Flusssteuerung, nie blockierend; end_others nur für Python-Prozesse derselben Datei und desselben Modus; nur Standardbibliothek). workbench/: agent-run (jeder Befehl des Agenten: Mount-Namespace ohne api.sock/Checkpoints/Logs, setpriv auf den Nutzer agent mit no-new-privs, timeout), setup.sh (Nutzer agent ohne sudo, /home/sprite 750, Umzug aus dem alten Home, alter Browser weg samt Xvfb/x11vnc/openbox, ripgrep, poppler-utils und headless Chrome für den Agenten (ohne Googles apt-Quelle), Laufzeit-Shims vorbereitet; beendet seit 2026-10-29 das alte pause.py und taut seine cgroups auf, legt tunnel.py nach /usr/local/lib/consens/ für den Agenten-Nutzer). browser/: browser.py (das eine Programm des Werkzeugs browser: JSON rein und raus, Playwright über CDP, Seite als Text mit Refs, Hauptinhalt zuerst, find mit denselben Refs, Seitenkopf mit „Cookies saved for this site: yes|no“ aus den Cookies; click/drag an x,y seit 2026-10-30 mit Element und Box unter jedem Punkt und den Änderungen danach, nächste zuerst, auf Canvas/Frame/Video mit Bildvergleich um den Punkt: HIT_JS, look_at, hit_report; jede Aktion auf der Seite vorn seit 2026-10-30 mit dieser Beobachtung (eine Ref in einem Frame dort), Warten auf die Ruhe der Seite statt 2 s networkidle (quiet, Traffic, QUIET_JS; Navigation lädt wie bisher, loaded), danach Kopf und nur die seit dem letzten Blick geänderten Zeilen (after_text, changes/outline mit Frames und Überlagerung, last-look.json; ganze Liste nach Navigation, bei read und wenn mehr als die Hälfte neu ist; scroll nennt die Lage und listet zuerst, was im Blick ist, IN_VIEW_JS), Fehler mit der letzten aussagekräftigen Call-Log-Zeile und der Seite (on_failure, failure_text; veraltete Ref mit ganzer Liste, StaleRef), download nur Name/Bytes/Content-Type, 0 Byte refused; Server-Aktion rest kürzt den Wach-Hold auf REST_FOR; read seit 2026-10-30 mit dem, was über der Seite liegt, zuerst und den Elementen von Frames unter ihrer Zeile (with_frames; die Aktion read liest alle Frames, das Lesen nach einer Aktion nur Frames über der Seite, find keine; element sucht einen Frame-Ref nur in dem Frame, aus dem er stammt, remember_frames/frame-refs.json, nie in einem der eigenen VM); seit 2026-10-30 hält ein residenter Helfer (`--serve`, Unix-Socket ~/.consens/browser/serve.sock mit 0600, serve.lock, SERVE_IDLE, VERSION = Hash der Datei) Playwrights Treiber, verbindet sich mit Chrome nur je Aufruf (ready/disconnect, KEPT; verbunden lenkt Playwright Downloads um und schließt Dialoge), ein Aufruf ohne Helfer läuft selbst und startet einen; `free` (sonst beschäftigt: Aufruf läuft nach 1 s selbst), `took` und erst auf `go` des Aufrufs gehandelt, der Helfer verbindet mit einem Neustart wie ein Aufruf ohne ihn (connect), ein Aufruf wartet höchstens READY_SECONDS 35 s auf `took`, `declined`/`stale` = Aufruf läuft selbst, nie zweimal, ein Aufruf, der vor seiner Antwort endet, beendet Helfer und Aktion: through_server/exchange/serve_one/serve), display.sh (Xvfb, openbox, Chrome mit dauerhaftem Profil und Software-WebGL (SwiftShader, seit 2026-10-28; ein Chrome ohne startet einmal neu), x11vnc nur auf dem Unix-Socket vnc.sock, ohne TCP), setup.sh (einmalige Installation, Chrome-Richtlinie ohne Passwörter/Karten), relay.py (Live-Ansicht: Zustände auf stderr, dann VNC zwischen stdin/stdout; nur Standardbibliothek); browser.py liest seit 2026-10-29 keine Seite der eigenen VM (own_computer, localhost nur auf local_ports)
-  agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; Admin-Einstellung agent_preferences.vm, nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Netzregeln mit den Domains des Chats, Checkpoint der Nachricht, Anhänge in den input-Ordner des Chats, Policy am Ende zurück), vm_install_packages (apt als root für den Agenten ohne sudo, seit 2026-10-27), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge; OpenWorkspaceArgs/OPEN_WORKSPACE für den Arbeitsplatz auf Abruf (seit 2026-10-29, DelegationLoop._open_workspace)
+  agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image (vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; nur wo das Konto die VM hat (routers/agent.py vm_allowed), nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Netzregeln mit den Domains des Chats, Checkpoint der Nachricht, Anhänge in den input-Ordner des Chats, Policy am Ende zurück), vm_install_packages (apt als root für den Agenten ohne sudo, seit 2026-10-27), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge; OpenWorkspaceArgs/OPEN_WORKSPACE für den Arbeitsplatz auf Abruf (seit 2026-10-29, DelegationLoop._open_workspace)
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min)
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import (öffentliche Repos auch ohne App), prepare_pull_request (seit 2026-10-29 nur angeboten, wenn die App eingerichtet ist; sonst auch AGENT_GITHUB_IMPORT_PROMPT statt AGENT_GITHUB_PROMPT; Vorschlag am Turn agent_pull_request; seit 2026-10-27 Diff im Backend aus den Bytes der Datei-API gegen Tree und Blobs des Import-Commits von GitHub, die VM nennt nur die Pfade) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
   agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Bilder (older_pictures, seit 2026-10-30): gesammelt ab mehr als 10 sichtbaren auf die neuesten 3 und mit jeder Kompaktierung, nie die des aktuellen Batches; Ersatztext nach Herkunft (picture_gone). Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
-  agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, nur Audit-Modus): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie; seit 2026-10-30 Messfelder ENTRY_FIELDS: started_at/duration_ms an tool, gate_ms an checked/paused), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
-  agent_coverage_prefetch.py Coverage-Fenster der Agent-Antwort schon beim Schreiben (je 16 feste Sätze, über judge_transport); judge() übernimmt wortgleiche Sätze, fragt nur den Rest (seit 2026-10-17); fertige Fenster gehen als vorläufige Marken (coverage_preview) an die Seite (seit 2026-10-18)
-  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): Orchestrator liest nach dem Vergleich eine zitierte oder im Chat verlinkte URL über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge als Helfer), Grenzen 5/Nachricht 3/Schritt, Seitentext im Toolergebnis (der Agent schreibt daraus), read_sources für Review und Coverage-Judge; im Audit-Modus seit 2026-10-28 jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN, nur mit Prüfern, vorher durch die Vorab-Prüfung), SourceReader.knows für das Gate
-  agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, Audit-Modus, wo read_source läuft): find_pictures nimmt bis zu 6 Adressen je Aufruf (18 je Nachricht), holt davon 3 gleichzeitig (FETCHES_AT_ONCE, das DNS-Tor der Quellen hat 4 Plätze), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht
+  agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, seit 2026-10-31 jeder Chat-Lauf, lesbar für den Besitzer des Turns): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie; seit 2026-10-30 Messfelder ENTRY_FIELDS: started_at/duration_ms an tool, gate_ms an checked/paused), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
+  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): der Agent liest vor der Antwort eine öffentliche Seite über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge-Modell als Helfer): zitiert von einer Vergleichsantwort, eigener Suchtreffer, Quelle früherer Nachrichten, Link des Nutzers oder, solange Prüfer folgen, jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN); Grenzen READS_PER_MESSAGE 15 / READS_PER_STEP 5, Seitentext im Toolergebnis und im Arbeitsprotokoll, read_sources in der Review; SourceReader.knows für das Gate
+  agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, in jedem Chat-Lauf, wo read_source läuft): find_pictures nimmt bis zu 6 Adressen je Aufruf (18 je Nachricht), holt davon 3 gleichzeitig (FETCHES_AT_ONCE, das DNS-Tor der Quellen hat 4 Plätze), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht
   usage_repository.py        Run-Belege auf dem Tageskonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
   run_metering.py            OperationBooking: Meter um eine Pipeline-Operation binden, Summe genau einmal buchen
   agent_quota.py             Gemeinsames UTC-Tageskonto in Mikro-Euro (Agent-Reserve/Settle, Pipeline-Admission/Holds/Buchung, account_tier)
@@ -9072,7 +8848,7 @@ app/services/
   agent_budget_config.py     Admin-Konfiguration des Kontos: tier_limits, run_estimates, Revision/Reset
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
-  persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets + Agent-Votes (einmal pro Turn)
+  persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets; agent_best_model_choice liest gespeicherte Agent-Checks für scripts/backfill_model_pulse.py (Model-Pulse-Stimmen aus Agent-Turns bis 2026-10-31)
   registration.py            Nicht-enumerierender Firebase-Mailbox-Setup-Pfad
   follow_challenges.py       Gehashte persistente Resend-/Empfänger-/Globalbudgets für Double-Opt-in
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
@@ -9105,7 +8881,7 @@ app/services/
   topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
   topic_pipeline.py          Topic-spezifische Projektion auf die neutrale Consensus-Pipeline
   topic_benchmarks.py        Benchmark-Abbildung für Modell-Topics aus der Artificial-Analysis-API (Snapshot am Run, Attribution)
-  differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
+  differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6); seit 2026-10-31 ohne Schreiber in der App
 ```
 
 Wichtige Verträge im Backend:
@@ -9498,11 +9274,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   multi-worker-feste Bookmark-Anzahl/-Bytes sowie Feedback-Cooldown/-Tageszahl;
   weder UID noch E-Mail stehen im Dokumentpfad. `model_votes/{sha256(uid:result)}`
   bindet genau einen Vote an Owner, Pending Result und serverseitigen Gewinner.
-  Erst derselbe Firestore-Commit erhöht `leaderboard/{provider}`. Seit
-  2026-10-02 zählen auch Agent-Turns: `AgentRunStore.finish_run` schreibt bei
+  Erst derselbe Firestore-Commit erhöht `leaderboard/{provider}`. Von
+  2026-10-02 bis 2026-10-31 zählten auch Agent-Turns (seitdem prüft kein Judge
+  mehr eine Agent-Antwort, es entsteht kein Agent-Vote; wie der Model Pulse
+  künftig gespeist wird, entscheidet Max): `AgentRunStore.finish_run` schrieb bei
   erfolgreichem, geprüftem Turn (`agent_review.status` succeeded/partial) in
   derselben Transaktion `model_votes/{sha256(uid:agent:chat:turn:BestModel)}`
-  (`source: "agent"`, `vote_subject_id: agent:{turn}`) und erhöht
+  (`source: "agent"`, `vote_subject_id: agent:{turn}`) und erhöhte
   `leaderboard/{family}.BestModel` — Pick aus dem Check der breitesten
   Comparison (`persistence_guard.agent_best_model_choice`, Alias Claude →
   Anthropic). Unter `MOCK_LLM=1` wird nichts geschrieben. Seit 2026-10-03
@@ -9606,12 +9384,12 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `global_worker` trägt `claimed_until`, `owner` (zufälliges Token je Tick) und
   `acquired_at`; nur der Eigentümer darf erneuern oder freigeben (R30).
 - `ops_metrics/agent-audit-{YYYY-MM-DD}` (seit 2026-10-29, A-M1) — anonyme
-  Tageszähler der Audit-Turns (`agent_audit_metrics`): je Turn am Ende ein
+  Tageszähler der Turns mit Prüfern (`agent_audit_metrics`, seit 2026-10-31 jeder Agent-Turn): je Turn am Ende ein
   Merge aus Increments (`turns`, `reviews`, `reviewers.n{k}`,
   `reviewer_status`, Buckets `total_s`, `answer_s`, `marks_s`, `gate_s`,
   `final_s.{modell}`, `backlog_entries`, `halts.{art}.{entscheidung}`,
   `failures.{turn|reviewer|review}.{code}`), seit 2026-10-30 dazu `wrap_up.{grund}`
-  und je Turn mit Arbeitsplatz (auch ohne Audit) `ws_turns`, `ws_steps`,
+  und je Turn mit Arbeitsplatz `ws_turns`, `ws_steps`,
   `ws_active_s`, `ws_first_call_s.{browser|vm}`, `ws_first_result_s`,
   `ws_failures.{code}`; ohne UID, Chat, Turn oder Text;
   übersteht das Löschen der Chats. Nur Server (Rules deny-all), kein Index.
@@ -9655,11 +9433,15 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `schema_version`) — **niemals** Frage-/Antwort-/Claim-Texte, Zitate, UID
   oder IP (anonym i. S. v. ErwGr. 26 DSGVO). Schema + Datenschutz-Regeln in
   `app/services/differences_stats.py`; geschrieben aus `chat.py::consensus`
-  (`source: "app"`) und seit 2026-10-15 aus `ComparisonTools.record_stats`
-  nach `judge_answer`, ein Dokument je geprüftem Agent-Vergleich (`source:
+  (`source: "app"`, bis 2026-10-25 mit dem Consensus-Modus) und von
+  2026-10-15 bis 2026-10-31 aus `ComparisonTools.record_stats` nach
+  `judge_answer`, ein Dokument je geprüftem Agent-Vergleich (`source:
   "agent"`, bei einem geprüften eingefügten Text `"agent_text"`;
-  `consensus_model` = Chatmodell). Vorher schrieb nur Consensus, mit Agent als
-  Standard (seit 2026-10-02) fiel der Datensatz von ~90 auf 2 Läufe pro Woche.
+  `consensus_model` = Chatmodell). Seit dem einen Agent-Modus (2026-10-31)
+  schreibt die App keine neuen Dokumente: `differences_stats.py` (Schema und
+  `record_differences_stats`) bleibt ohne Aufrufer in der App stehen, die
+  vorhandenen Dokumente bleiben; wie der Datensatz künftig gespeist wird,
+  entscheidet Max.
   Fire-and-forget, Mock-Läufe schreiben nicht.
 - `feedback`, `pro_waitlist`, `leaderboard`. Feedback speichert nur den
   validierten Inhalt und die UID; Abuse-Grenzen liegen separat in
@@ -9738,12 +9520,12 @@ alte Gemini-ADC-JSON ist entfernt.
   in der normalen `.env` deaktiviert.
 - Agent VM: `SPRITES_TOKEN` (Fly.io Sprites, nur im Backend, nie in einer
   VM); ohne ihn melden die VM-Werkzeuge „not available“ (`agent_vm.backend`).
-  `AGENT_VM_ACCESS`: leer = VM nur für Admins (seit 2026-10-27), `pro` = für
-  jedes Konto mit Audit (`agent_vm.open_to_pro`, `routers/agent.py::vm_allowed`).
-  `AGENT_AUDIT_ACCESS`: leer = Audit für Pro und Admins, `all` = für jedes
-  Konto (seit 2026-10-30, `agent_vm.audit_for_all`, `routers/agent.py::audit_allowed`,
-  `/user_status` `audit_access`); mit `AGENT_VM_ACCESS=pro` bekommt dann jedes
-  Konto VM und Browser.
+  `AGENT_VM_ACCESS`: leer = VM (Arbeitsplatz mit Browser, Live-Ansicht,
+  Restore) nur für Admins (seit 2026-10-27), `all` = für jedes Konto
+  (`agent_vm.open_to_all`, `routers/agent.py::vm_allowed`); `pro`, der Wert
+  vor 2026-10-31, heißt dasselbe. `request_domain` bleibt Pro und Admins
+  (`domains_allowed`). `AGENT_AUDIT_ACCESS` und `AGENT_AUDIT_COMPARE` gibt es
+  seit 2026-10-31 nicht mehr (ein Modus für jedes Konto).
   `AGENT_WORKSPACE_ON_DEMAND`: leer (Standard) = jede Nachricht mit VM
   beginnt ohne die Werkzeuge des Arbeitsplatzes und öffnet ihn mit
   `open_workspace`; `off` = Notaus, alle von Anfang an (`agent_vm.on_demand`,
@@ -9947,8 +9729,8 @@ zweite Meinung aus Modellen mit offenen Gewichten (Beleg je Modell:
 `hugging_face_id` im OpenRouter-Katalog) mit demselben Schreiber wie Daily.
 Seit 2026-10-28 prüfen Daily (GPT Luna, Claude Haiku, DeepSeek Flash) und
 Open Models (Qwen3.8 27B, DeepSeek V4.1 Flash, GLM 5.3 Flash) mit drei
-Modellen statt sechs: Im Audit-Modus wartet jeder Schritt nach außen auf alle
-Prüfer, sechs machten Aktionen zäh. High Quality bleibt bei sechs. Free-Presets haben je Familie praktisch nur ein aktuelles
+Modellen statt sechs: Die Modelle sind die Prüfer, jeder Schritt nach außen
+wartet auf alle, sechs machten Aktionen zäh. High Quality bleibt bei sechs. Free-Presets haben je Familie praktisch nur ein aktuelles
 Modell, ein zweites Free-Preset unterscheidet sich deshalb nur in der
 Aufstellung. Bis 2026-10-22 stand dort gpt-oss-120b (OpenAI, also das Labor
 des Schreibers; las nur Text und nannte in der Live-Probe trotz Suche
@@ -10882,7 +10664,7 @@ ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
   übersetzte Attribute (Tabs: `data-tab`, nicht `data-short`); Modell- und
   Nutzerinhalt trägt `data-i18n-skip` (Markdown-Container setzen es selbst),
   Namen `translate="no"`; mehrdeutige Wörter per `data-i18n-context`
-  (`agent freedom|Free`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
+  (`watch schedule|Daily`, `watch-fields.js`). Einzahl/Mehrzahl als ganze Sätze, nie `"model" + "s"`.
   Auf Share-, Watch- und Topic-Seiten tragen Frage (`#shareQuestion`) und
   Antwort (`.share-md`) seit 2026-10-25 `data-i18n-skip` und, wenn klar,
   `lang` (a11y-Audit L1): Topics `"en"`, Shares und Watches
@@ -10928,8 +10710,9 @@ zählen nicht):
   „login“/„logout“/„sign in“; „email“; typografisch ’ und ….
 - **Keine internen Namen:** kein „Luna“ (das Memory-Modell), keine „judges“,
   „drawers“, kein Build-Hash in Settings (der steht nur im Tooltip des
-  GitHub-Zeichens). Die Titel „Differences judge“/„Coverage judge“ sind
-  Schlüssel, die `agent-delegation.js` zu „Answer check“ faltet.
+  GitHub-Zeichens). Die Titel „Differences judge“/„Coverage judge“ gespeicherter
+  Vergleichsmodus-Turns sind Schlüssel, die `agent-delegation.js` zu „Answer
+  check“ faltet.
 - **Tokens und Dollar nur für Admins:** `.admin-only` (Agent-Verbrauchszeile
   `.agent-usage`, Sidebar-Summe, Token je Agent-Zeile, Token-Aufschlüsselung,
   Token-Zahlen im Kontingent-Panel) blendet `style.css` aus, solange
@@ -10972,10 +10755,11 @@ zählen nicht):
   `dataset.question` (die whitespace-kollabierte Frage). `renderThreadQuestion`
   (Gleichheit, Disclosure-State), die Verlaufs-Idempotenz in
   `thread-history.js` (`turnKey`) und der Reader-Fallback lesen dieses
-  Feld, weil eine geprüfte Passage (`passage-check.js`) den `textContent`
-  verändert. Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
+  Feld (eingeführt, als eine geprüfte Passage den `textContent` der Blase noch
+  umbaute; seit 2026-10-09 steht ihre Karte über der Antwort). Wer den Text einer Blase direkt setzt, setzt `dataset.question` mit
   (`clearPendingThreadQuestion` löscht es). Zugehörige `window.App`-Schnitt-
-  stellen: `passageCheck.{apply, restore, verdict, from}`, `claimPopover.{open(claim,
+  stellen: `passageCheck.{apply, verdict, from}` (nur gespeicherte Turns bis
+  2026-10-31), `claimPopover.{open(claim,
   anchor, models, navigation, {spans, sideLabel}), close, attachPreview(span, claim,
   models, {sideLabel}), hidePreview}` (aus `consensus-insights.js`), `agentReview.contextFor`,
   `syncThreadAskClamp`. Globale `.cx-claim`-Schleifen in `consensus-insights.js`
@@ -11480,8 +11264,8 @@ ihn in den Modi `pdf-text` und `docx-text` (siehe Attachments). Word-XML liest
 expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
 Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur
 gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
-Vergleiche erhalten die Auswahl, Worker nur explizite `file_ids`; Judges
-erhalten die vorhandene Vergleichsevidenz. Private Bilddaten
+Vergleiche erhalten die Auswahl (oder ihre `file_ids`), Worker nur explizite
+`file_ids`; Prüfer bekommen die Dateien der Nachricht mit. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
 Tokenreservierung und tatsächlicher Usage-Abrechnung. Seit 2026-10-15 (Audit
 A6) steht der Dateiblock des Hauptmodells direkt hinter der Frage der Nachricht
@@ -11514,13 +11298,13 @@ hält Gedankenauszüge je Event (`compact`) und schreibt Attribute nur bei
 Änderung (gleichwertige Schreibvorgänge erzwangen eine Stilberechnung des
 ganzen Baums). Der Glanz der laufenden Zeile ist eine Transform-Animation
 (`label-shine`, P3). Evidence-Links
-(`agentReview.render`) entstehen erst am Ende eines Laufs. Endet der Lauf mit
-genau dem Text, den die Live-Prüfung schon vollständig samt Claim-Marken
+(`agentReview.render`) entstehen am Ende eines Laufs, die Leiste der Prüfung
+schon, sobald die Review die fixierte Antwort als Version hält. Endet der Lauf
+mit genau dem Text, den die Live-Prüfung schon vollständig samt Marken
 gerendert hat, schaltet `renderAnswer` nur `renderMode` auf `full` und behält
 dieses DOM (sonst fielen alle Marken weg und wurden neu aufgebaut: Flackern).
-Vorläufige Coverage-Marken (`agentReview.preview`, seit 2026-10-18, seit
-2026-10-21 neutral ohne Urteil) zeichnet `project` schon, während die feste
-Antwort geprüft wird.
+Vorläufige Coverage-Marken (`agentReview.preview`, 2026-10-18 bis 2026-10-31)
+gibt es mit den Judges nicht mehr.
 Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
 Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
 die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen
@@ -11585,8 +11369,8 @@ Rückkehr oder „Try now“ = `App.retryAccountStatus()`) und zeigt im Composer
 „Your account could not be reached. Trying again…“ (`App.agentAccessCheck`);
 nur eine Ablehnung (4xx) setzt `allowed: false` (Apple-Audit B8). `auth-unavailable`
 löst die Erwartung auf.
-Seit 2026-10-02 führt die Evidenzzeile `.agent-review` mit einem dezenten
-Agreement-Score (`.agent-agreement`, „72 /100 agreement“): Wert aus
+Gespeicherte Vergleichsmodus-Turns: Seit 2026-10-02 führt die Evidenzzeile
+`.agent-review` mit einem dezenten Agreement-Score (`.agent-agreement`, „72 /100 agreement“): Wert aus
 `check.differences_data.agreement` der gewählten Vergleichsbasis (wechselt mit
 „Evidence for“), gleiche Stufenwörter wie der Consensus-Verdict, nur die Zahl in
 Ampelfarbe, kein Balken; ohne bewertbare Abdeckung (`coverage_status:
@@ -11628,8 +11412,8 @@ merkt sich, was es geschrieben hat (`el._plainMarkdown`);
 `window.isPlainMarkdown(el, md)` ist wahr, solange `el` genau das noch
 unmarkiert zeigt. `agent-review.js` `mark()` markiert dann direkt statt
 denselben Text ein zweites Mal zu rendern (Apple-Audit D5: jeder geöffnete
-Agent-Turn lief zweimal durch Markdown). Vorläufige und endgültige Marken
-(`preview()`, `mark()`) und das Abnehmen der Marken legen sich über den Text
+Agent-Turn lief zweimal durch Markdown). Die Marken (`mark()`, bis 2026-10-31
+auch vorläufige über `preview()`) und das Abnehmen der Marken legen sich über den Text
 (`overText`): Rückmorph auf den schlichten Render, Marken, Pills, Auswahl
 zurück – vorher ersetzte jede Prüf-Aktualisierung die ganze Antwort (A6).
 Optional `renderMarkdownStream(el, md, { decorate })`: `decorate(holder)`
@@ -11645,8 +11429,8 @@ haben keinen horizontalen Innen-/Außenabstand mehr, der Überstand ist ein
 innere Seite weg), Filter/Ausblenden setzen auch `box-shadow: none`. Die
 Fortschrittszeilen über der Antwort (`.agent-progress`) weichen, sobald
 Antworttext steht und kein Tool läuft (eine Präambel vor einem laufenden Tool
-zählt nicht); die App-Prüfungen der fertigen Antwort
-(`judge_answer`, `answerChecks`) holen sie nicht zurück –
+zählt nicht); die App-Prüfung der fertigen Antwort (`audit_answer`, bis
+2026-10-31 `judge_answer`/`answerChecks`) holt sie nicht zurück –
 bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Seit 2026-10-30
 (Max: „das Bild springt die ganze Zeit, wenn das Reasoning erscheint“) übergeben
 sie an die Antwort (`handoff`): Sie blenden in `HANDOFF_MS` (160 ms) aus, und
@@ -11756,8 +11540,8 @@ unten; Scrim und Sheet liegen über der Kopfleiste des Handys
 `agent-delegation.js` öffnet die Leiste seit 2026-10-31 auf jeder Breite nur
 auf Klick (Max: „nur öffnen, wenn man auf das Icon klickt, es stört, dass die
 automatisch aufgeht“; vom 28. bis 31.10. stand sie ab 1200 px von selbst offen,
-im Audit-Modus schon mit der Nachricht, sonst einen Moment nach dem Senden mit
-dem `accepted` des Servers). Rechts neben den Modell-Icons steht, durch eine Haarlinie abgesetzt,
+mit Prüfern schon mit der Nachricht, im Vergleichsmodus einen Moment nach dem
+Senden mit dem `accepted` des Servers). Rechts neben den Modell-Icons steht, durch eine Haarlinie abgesetzt,
 `.agent-inline-controls`: das Arbeitsplatz-Symbol (`.agent-workspace-toggle`,
 atmet wie ein arbeitender Prüfer, solange ein VM-Schritt läuft) und zuletzt
 das Panel-Symbol (`.agent-sidebar-toggle`, `aria-label` „Activity · n“,
@@ -11793,7 +11577,9 @@ tickte. Pfeil und Logos stehen beim Ticken innerhalb einer Einheit und am
 Laufende still (Chevron bei 9 s und 10 s bzw. bei 1 min und „Thought for“ auf
 demselben Pixel), der Wortlaut bleibt.
 Zeilenstatus hängt per `aria-describedby` am Eintrag; Texte/Titel werden nur bei
-Änderung geschrieben. Judge-Aufrufe (`kind: "judge"`) erscheinen nicht einzeln:
+Änderung geschrieben. Judge-Aufrufe gespeicherter Vergleichsmodus-Turns
+(`kind: "judge"`; seit 2026-10-31 startet kein Agent-Lauf mehr einen, nur die
+Demo spielt sie noch) erscheinen nicht einzeln:
 `checkRow` fasst alle Versuche, Wiederholungen und Backup-Judges zu einer Zeile
 „Answer check“ (`id: answer-check`, ohne Detail-Request) zusammen. Ihr Status
 ist das Ergebnis der Checks (`completed`, sobald jeder Check einmal fertig ist;
@@ -11803,10 +11589,9 @@ Der Helfer eines Quellen-Abrufs (`kind: "source"`, „Read source · host“) is
 eine eigene Zeile mit Modell, Tokens und ggf. Grund und zählt im Chip und in
 „n of m done“ mit, bekommt aber kein Modell-Icon (er ist keine Stimme der
 Antwort).
-Lief bisher nur der Judge eines eingefügten Texts („Text check"; die
-Antwort-Judges folgen nach dem Schreiben, gespeicherte Turns vom 2026-10-09
-haben keine), heißt die Zeile „Text check" und verweist auf die Karte über der
-Antwort.
+Lief in einem gespeicherten Turn nur der Judge eines eingefügten Texts („Text
+check"; gespeicherte Turns vom 2026-10-09 haben keine Antwort-Judges), heißt
+die Zeile „Text check" und verweist auf die Karte über der Antwort.
 Eine ausgefallene Vergleichsantwort heißt `No answer`; beendete Aufrufe ohne
 gemessene Tokens zeigen keine Tokenzeile.
 

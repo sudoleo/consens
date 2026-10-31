@@ -104,7 +104,7 @@ Quellen nur als validierte HTTP(S)-Links. Escape, native Details/Buttons und
 Reduced Motion werden unterstützt. Stop beendet den ganzen Run.
 
 Zusätzlich transportiert `delegation_progress` flüchtige numerische Zwischenstände
-für Worker, Vergleichsmodelle und Judges. `version`, `chat_id`, `turn_id`,
+für Worker, Vergleichsmodelle und Prüfer (bis 2026-10-31 auch Judges). `version`, `chat_id`, `turn_id`,
 `agent_id`, `session_seq` und eine eigene monotone `seq` binden den Stand an die
 aktive Sitzung; `chars`, optionale gemessene `usage` und `streaming` beschreiben
 den laufenden Modellaufruf. Reguläre Updates werden auf 500 ms begrenzt, Start

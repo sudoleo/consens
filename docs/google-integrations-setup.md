@@ -53,8 +53,9 @@ their refresh tokens after 7 days, the sheet then shows "Needs reconnection").
    least privilege. Keep old keys available until all retained credentials have
    been re-encrypted by refresh/reconnection; losing all old keys requires users
    to reconnect. Do not commit or print keys in deployment diagnostics.
-4. Model routing. Every model call in a chat with Google data (agent, comparison,
-   synthesis, Differences and Coverage judges) requires OpenRouter's zero data
+4. Model routing. Every model call in a chat with Google data (agent,
+   compare_models answers, reviewers; until 2026-10-31 also the comparison
+   mode's Differences and Coverage judges) requires OpenRouter's zero data
    retention **and** `data_collection: "deny"`; existing provider routing of a model
    is kept. OpenRouter fails such a call closed when no endpoint qualifies; that
    model then fails like any unavailable model and the run continues with the
