@@ -3892,7 +3892,7 @@ body .theme-toggle:focus-visible {
 .composer-agent-state { color: var(--ink-3); font-size: inherit; font-weight: var(--font-weight-regular); }
 .composer-tools, .composer-models { --mode-active: var(--agree); }
 .composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
-/* Audit: the reviewers say what they do next to their marks ("2 AIs
+/* Agent: the reviewers say what they do next to their marks ("2 AIs
    cross-check"), in the words of the tools beside them. On the start screen
    the marks stand before the chip (#composerModelPicker in .composer-models). */
 .composer-mode-models .composer-tool-label { order: 1; color: var(--ink); font-weight: 500; }

@@ -256,6 +256,14 @@
   }
   .chat-input-container .input-action-btn-primary::before { inset: 4px; }
   .chat-input-container .input-action-btn-primary::after { inset: 3px; }
+  /* Hit areas side by side, never over each other: (+) and the reviewers'
+     chip each reach 4px out, so 8px stand between them (the row's gap and
+     this margin; 4px + 4px from 360px down). The reviewers' chip is at
+     least as wide as (+); the model chip, wide by its name, reaches out
+     only up and down, so the reviewers keep their 4px beside it. */
+  .chat-input-container .composer-models { margin-left: 2px; }
+  .composer-models > .composer-mode-models { min-width: 36px; justify-content: center; }
+  .chat-input-container .agent-model-picker .model-picker-display::before { inset: var(--hit-slop) 0; }
   /* The ring keeps its place around the circle (3px out, shell.css). */
   .chat-input-container .input-action-btn-primary:focus-visible { outline-offset: -1px; }
 }
@@ -389,12 +397,16 @@
   .chat-input-container .demo-chip-label-short { display: none; }
   /* Round like (+) and Send, not a narrow oval around the mark. */
   .chat-input-container .demo-chip.demo-action { width: 36px; min-width: 36px; padding: 0; justify-content: center; }
-  /* The chat model's name ("DeepSeek V4.1 Flash") beside the reviewers'
-     "3 AIs" at 320px: the row and the chip give up a little air, (+) and
-     Send keep their size. Inter sets the name 3px wider in Linux Chromium
-     than on Windows; 4px gaps leave room for both. */
+  /* The chat model's name beside the reviewers' "3 AIs": the row and the
+     chip give up a little air, (+) and Send keep their size. At 320px a name
+     as long as "DeepSeek V4.1 Flash" ends in an ellipsis (its tooltip and
+     the menu name it whole): the reviewers' words and every control's 44px
+     to the finger come first. From 360px it stays whole. */
   .chat-input-container { column-gap: 4px; }
   .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { gap: 4px; padding-inline: 4px; }
+}
+@media (pointer: coarse) and (max-width: 360px) {
+  .chat-input-container .composer-models { margin-left: 4px; }
 }
 
 /* ---- Phones in a thread: collapsed to (+), the field and Send ------------

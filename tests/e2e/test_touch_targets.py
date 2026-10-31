@@ -81,12 +81,15 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
             "next_cursor": None}))
         _pro_account(page)
         page.evaluate("() => window.loadBookmarks()")
-        # The start screen: (+), the models, Send or the demo and an example
-        # question; Reasoning is in the (+) menu on a phone, and the chip's
-        # words say who answers (no marks beside it). The drawing stays 36 px.
+        # The start screen: (+), the reviewers and the chat model, Send or the
+        # demo and an example question; Reasoning is in the (+) menu on a
+        # phone. The reviewers keep their words ("3 AIs"), up to 380px
+        # without their marks. The drawing stays 36 px.
         expect(page.locator("#composerReasoningToggle")).to_be_hidden()
-        expect(page.locator("#composerModelPicker")).to_be_hidden()
-        for selector in ("#attachTrigger", ".composer-models .model-picker-display:visible",
+        reviewers = page.locator("#composerModelPicker")
+        expect(reviewers.locator(".composer-tool-label")).to_be_visible()
+        expect(reviewers.locator(".composer-model-icons")).to_be_visible(visible=width > 380)
+        for selector in ("#attachTrigger", "#composerModelPicker", ".composer-models .model-picker-display:visible",
                          ".composer-starter:not([hidden])"):
             assert_tappable(page, selector)
         assert_tappable(page, "#attachTrigger", drawn=[36, 36])

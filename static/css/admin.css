@@ -134,6 +134,8 @@ button[class=""] {
 .prompt-config-editor { border-top: 1px solid var(--input-border); margin-top: 18px; padding-top: 12px; }
 .prompt-config-editor summary { padding: 8px 0; cursor: pointer; font-weight: 600; }
 .prompt-catalog { margin-top: 24px; }
+/* The descriptions name code (AGENT_AUDIT_ANSWER_SECTION), wider than a phone's line. */
+.prompt-catalog-entry .section-hint { overflow-wrap: anywhere; }
 .prompt-catalog-source { margin: 0 0 10px; font-size: 12px; color: var(--sidebar-text-muted); overflow-wrap: anywhere; }
 .prompt-catalog-text { box-sizing: border-box; max-height: 70vh; overflow: auto; margin: 0 0 12px; padding: 14px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--input-bg); color: var(--text-color); font: 13px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .prompt-config-panel :is(input, summary, pre):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

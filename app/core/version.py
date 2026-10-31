@@ -60,8 +60,8 @@ def _read(path: Path) -> str:
         return ""
 
 
-def _from_git_dir() -> str:
-    git_dir = _REPO_ROOT / ".git"
+def _from_git_dir(root: Path = _REPO_ROOT) -> str:
+    git_dir = root / ".git"
     # Worktrees und Submodule schreiben statt eines Verzeichnisses eine Datei
     # mit "gitdir: <pfad>". Ein Schritt reicht, tiefer wird es nicht.
     if git_dir.is_file():
@@ -70,7 +70,7 @@ def _from_git_dir() -> str:
             return ""
         git_dir = Path(pointer.split(":", 1)[1].strip())
         if not git_dir.is_absolute():
-            git_dir = (_REPO_ROOT / git_dir).resolve()
+            git_dir = (root / git_dir).resolve()
 
     head = _read(git_dir / "HEAD")
     if not head:
@@ -78,13 +78,21 @@ def _from_git_dir() -> str:
     if not head.startswith("ref:"):
         return _clean(head)  # detached HEAD
 
+    # Ein Worktree hat nur sein HEAD; die Zweige liegen im gemeinsamen
+    # Verzeichnis des Haupt-Checkouts ("commondir"). Ohne diesen Schritt war
+    # die Kennung in jedem Worktree mit Zweig leer (und app-update.js fragte
+    # nie nach einem neuen Build).
+    common = _read(git_dir / "commondir")
+    common_dir = (git_dir / common).resolve() if common else git_dir
+
     ref = head.split(":", 1)[1].strip()
-    sha = _clean(_read(git_dir / ref))
-    if sha:
-        return sha
+    for base in dict.fromkeys((git_dir, common_dir)):
+        sha = _clean(_read(base / ref))
+        if sha:
+            return sha
 
     # Frisch geklonte Checkouts haben lose Refs gepackt.
-    for line in _read(git_dir / "packed-refs").splitlines():
+    for line in _read(common_dir / "packed-refs").splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1] == ref:
             return _clean(parts[0])

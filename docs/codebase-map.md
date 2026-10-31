@@ -5850,7 +5850,12 @@ im Chat (ohne Leiste) stehen dieselben Marken vor dem Chip
 mit den Worten daneben („3 AIs cross-check“, `#composerReviewersLabel`; bis 700 px
 und neben der offenen Aktivität die Kurzform „3 AIs“ aus `data-short`, dieselbe
 Grenze wie die Leiste des Startbildschirms, seit 2026-10-29, UX-Audit E4/E5) und
-einem Titel, der sagt, was Prüfer tun. Beide öffnen die Prüfer-Ebene des
+einem Titel, der sagt, was Prüfer tun. Bis 380 px bleiben nur die Worte
+(ohne Marken). Auf Touch hat jedes Bedienelement der Reihe 44 px, ohne
+Überlappung: zwischen (+) und Prüfer-Chip 8 px, der Prüfer-Chip mindestens 36 px
+breit, der Modell-Chip greift nur nach oben und unten aus (`composer.css`). Bei
+320 px endet ein langer Modellname deshalb mit einer Ellipse (Tooltip und Menü
+nennen ihn ganz), ab 360 px steht er ganz (seit 2026-10-31). Beide öffnen die Prüfer-Ebene des
 Agent-Menüs, das aus dem geklickten Knopf kommt (`openModelPicker(…, { anchor })`,
 `fitComposerPicker`, `aria-expanded` am Anker, der Chip bleibt in Ruhe). Der
 erste Frame (`app-bootstrap.js`) zeichnet Chip und Worte nach (`App.firstFrame`).
@@ -9512,7 +9517,9 @@ alte Gemini-ADC-JSON ist entfernt.
 - Build-Kennung in der App-Fußzeile: `app/core/version.py` löst den laufenden
   Commit auf — zuerst aus den Host-Variablen (`RENDER_GIT_COMMIT`, `GIT_COMMIT`,
   `SOURCE_VERSION`, `COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`), sonst durch Lesen von
-  `.git/HEAD` (kein `git`-Subprozess). `/app` reicht ihn als `app_commit` plus
+  `.git/HEAD` (kein `git`-Subprozess; in einem Worktree mit Zweig den Zweig aus
+  dem gemeinsamen Verzeichnis `commondir`, seit 2026-10-31, vorher blieb er dort
+  leer). `/app` reicht ihn als `app_commit` plus
   `repo_url` ins Template; ist er leer, blendet das Template die Zeile aus. Die
   früher handgepflegte Versionsnummer (`v1.11.1`) ist damit ersetzt. Derselbe
   Wert steht als `data-app-build` in `#appBootstrapConfig`, und

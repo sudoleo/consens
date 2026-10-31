@@ -1023,7 +1023,12 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         expect(label).to_have_text("DeepSeek V4.1 Flash")
         expect(page.locator(".agent-model-picker .model-picker-display")).to_have_attribute(
             "title", re.compile(r"^DeepSeek V4\.1 Flash writes the answer"))
-        assert label.evaluate("el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth + 1")
+        if width > 360:
+            assert label.evaluate("el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth + 1")
+        else:
+            # Beside the reviewers' "3 AIs" a name this long may end in an
+            # ellipsis at 320px (composer.css); the tooltip names it whole.
+            assert label.evaluate("el => el.clientWidth >= 80 && getComputedStyle(el).textOverflow === 'ellipsis'")
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
         expect(page.locator("#appToasts .toast")).to_have_count(0, timeout=12000)
         _snapshot(page, f"agent-repaired-selection-{width}")
