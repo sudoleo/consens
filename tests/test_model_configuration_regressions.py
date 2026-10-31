@@ -273,10 +273,10 @@ class ExistingModelFlowTests(unittest.TestCase):
             self.assertLessEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
             self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
             self.assertTrue(preset["consensus_model"])
-        # Daily: three quick reviewers from three labs (2026-10-28).
+        # Daily: two fast reviewers from two labs other than the default chat
+        # model's (2026-11-01, before that also Luna).
         self.assertEqual(presets["fast"]["models"], {
-            "openai": cfg.OPENAI_LUNA_MODEL, "anthropic": cfg.DEFAULT_ANTHROPIC_MODEL,
-            "deepseek": cfg.DEEPSEEK_FLASH_MODEL,
+            "anthropic": cfg.DEFAULT_ANTHROPIC_MODEL, "deepseek": cfg.DEEPSEEK_FLASH_MODEL,
         })
         # Open Models (ID balanced): only open-weight models, same writer as Daily.
         self.assertEqual(presets["balanced"]["label"], "Open Models")
@@ -287,10 +287,14 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertFalse(set(presets["balanced"]["models"].values()) & cfg.PREMIUM_MODELS)
         self.assertEqual(presets["balanced"]["consensus_model"], cfg.OPENAI_LUNA_MODEL)
         self.assertEqual(cfg.DEFAULT_CONSENSUS_PRESET, "fast")
-        self.assertEqual(presets["thorough"]["models"]["openai"], cfg.OPENAI_SOL_MODEL)
+        # The API keeps three answers: one failed model must not fail its run.
+        self.assertEqual(cfg.API_CONSENSUS_PRESET, "balanced")
+        # High Quality: three strong reviewers from three labs (2026-11-01, six before).
+        self.assertEqual(presets["thorough"]["models"], {
+            "anthropic": cfg.ANTHROPIC_PRO_MODEL, "gemini": cfg.GEMINI_PRO_MODEL, "grok": cfg.GROK_PRO_MODEL,
+        })
         self.assertEqual(presets["thorough"]["label"], "High Quality")
-        self.assertIn(cfg.OPENAI_SOL_MODEL, cfg.PREMIUM_MODELS)
-        self.assertEqual(len(presets["thorough"]["models"]), cfg.MAX_RUN_FAMILIES)
+        self.assertTrue(set(presets["thorough"]["models"].values()) <= cfg.PREMIUM_MODELS)
         self.assertTrue(presets["thorough"]["pro_only"])
 
     def test_saved_open_models_trade_gpt_oss_for_qwen(self):

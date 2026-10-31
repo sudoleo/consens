@@ -10,12 +10,13 @@
 //   3) Presets: der Modell-Chip (#consensusModelDropdown, Name historisch)
 //      zeigt primaer die Presets Daily/Open Models/High Quality
 //      (window.CONSENSUS_PRESETS) plus "Custom" fuer die einzelnen Modelle.
-//      Ein Preset setzt die sechs Modelle fuer Compare und Agents Vergleiche.
+//      Ein Preset setzt die Pruefer des Agenten (die auch compare_models
+//      beantworten) und die Antwortmodelle von Compare.
 //      Die Consensus-Engine, die es frueher mitsetzte, waehlt seit
 //      2026-10-25 niemand mehr im Browser; ihr Wert bleibt nur der Anker
 //      der Preset-Aufloesung. High Quality bleibt Pro-only.
 //   4) Verknuepfte Picker (linkModelPicker): ein Chip, ein Menue fuer zwei
-//      Selects. Agent nutzt es fuer Chatmodell + Vergleichsmodelle: Uebersicht
+//      Selects. Agent nutzt es fuer Chatmodell + Pruefer: Uebersicht
 //      mit Abschnitten, jede Zeile fuehrt in die Ebenen ihres eigenen Pickers.
 // Extrahiert aus templates/index.html (initApp-Closure), verhaltenserhaltend.
 // Exporte:
@@ -713,11 +714,12 @@
     customLabel.appendChild(customName);
     const customHint = document.createElement("span");
     customHint.className = "model-picker-preset-hint";
-    const selectedOption = select.options[select.selectedIndex];
-    const modelCount = window.App.getSelectedModelCount?.() || 0;
-    customHint.textContent = customActive
-      ? `${window.App.t(modelCount === 1 ? "1 model" : `${modelCount} models`)} · ${window.App.getModelOptionLabel(selectedOption)}`
-      : "Choose each model yourself";
+    // Active: who is chosen, as the overview row names them. The consensus
+    // engine this select still carries is nobody's choice since 2026-10-25.
+    const families = window.App.modelPrefs
+      .filter(pref => document.getElementById(pref.checkId)?.checked)
+      .map(pref => pref.label || pref.key);
+    customHint.textContent = customActive && families.length ? families.join(", ") : "Choose each model yourself";
     customLabel.appendChild(customHint);
     customItem.appendChild(customLabel);
 
@@ -1054,8 +1056,8 @@
   function renderCustomOverview(select, state) {
     renderBackRow(select, state, "Presets", "presets");
 
-    // Next to an Agent answer these models review, they do not answer: one is
-    // enough (Compare needs two).
+    // Next to an Agent answer these models review it (and answer when the
+    // agent asks them): one is enough (Compare needs two).
     const comparisonOnly = select.dataset.comparisonOnly === "true";
     // The count stands in the label's line from the start. A requirement
     // that appeared above the rows only below the minimum moved every row
@@ -1069,7 +1071,7 @@
     requirement.textContent = selectedCount < minimum
       ? (minimum === 1 ? `At least 1 · ${selectedCount} selected` : `At least 2 · ${selectedCount} selected`)
       : selectedCount === 1 ? "1 model selected" : `${selectedCount} models selected`;
-    appendSectionLabel(state.menu, comparisonOnly ? "Comparison models" : "Answering models", requirement);
+    appendSectionLabel(state.menu, comparisonOnly ? "Reviewers" : "Answering models", requirement);
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
   }
 
@@ -1342,7 +1344,7 @@
   function openModelPicker(select, { secondary = false, level = secondary ? "secondary" : null, trigger = null, anchor = null } = {}) {
     let state = getModelPickerState(select);
     // A guest cannot choose models yet. Every way into the composer's
-    // pickers (the chip, Reasoning, Comparison models, a notice) is this
+    // pickers (the chip, Reasoning, Reviewers, a notice) is this
     // door: it asks for the login with the reason instead of opening a menu
     // whose choices need an account (Apple-Audit H2, H3).
     if (state && window.App.isGuest?.() && state.host.closest(".chat-input-container")) {
@@ -1412,7 +1414,7 @@
     const composer = state.host.closest('.input-section');
     if (composer) composerPickerResize?.observe(composer);
     fitComposerPicker(state);
-    // A shortcut (Reasoning, Comparison models, a notice) lands inside the
+    // A shortcut (Reasoning, Reviewers, a notice) lands inside the
     // level it named, ready for the keyboard.
     if (level) focusPickerMenu(state);
   }
@@ -1421,7 +1423,7 @@
   // Either picker may not exist yet (the Agent picker is built once its
   // catalog loads); the link waits and applies when both do (pendingLinks,
   // declared above syncCustomModelPicker, which reads it).
-  function linkModelPicker(primary, companion, { ownLabel = "Agent", companionLabel = "Compare with", ariaLabel = "Models" } = {}) {
+  function linkModelPicker(primary, companion, { ownLabel = "Agent", companionLabel = "Reviewers", ariaLabel = "Models" } = {}) {
     if (!primary) return;
     const state = getModelPickerState(primary);
     const current = state?.companion || null;

@@ -238,8 +238,9 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
         answers = preset["answers"]
         if not preset["consensus"]:
             findings.append((f"{preset_id}:engine:missing", f"{label}: keine Consensus-Engine gespeichert"))
-        # Daily and Open Models review with three since 2026-10-28; fewer
-        # than two is no comparison.
+        # The presets choose the Agent's reviewers: Daily two since
+        # 2026-11-01, Open Models and High Quality three; fewer than two is
+        # no comparison in Compare.
         if len(answers) < conf.cfg.MIN_PRESET_FAMILIES:
             findings.append((f"{preset_id}:families:{len(answers)}",
                              f"{label}: nur {len(answers)} Familie(n) belegt, mindestens {conf.cfg.MIN_PRESET_FAMILIES}"))

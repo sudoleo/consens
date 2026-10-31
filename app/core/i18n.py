@@ -217,7 +217,7 @@ class Catalog:
         One level deep, so "{0} Model agreement …" also translates the
         sentence that fills {0}; the space around the value stays. English
         prose without an entry is no value (None): "{n} questions" must not
-        turn "Quick synthesis for everyday questions" into half German.
+        turn "Answers to everyday questions" into half German.
         Nor is half an element: "{answered} of {length}" must not take a
         line of spans, each side ending inside one, and leave the entries of
         its pieces unused.

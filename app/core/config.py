@@ -538,33 +538,39 @@ ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
 # Seit 2026-10-28 haben Daily und Open Models drei Modelle statt sechs (Max):
 # im Audit-Modus pruefen sie die Arbeit des Agenten, und jede Aktion mit
 # Aussenwirkung wartet, bis alle "go" sagen; sechs Pruefer machten das zaeh.
+# Seit dem einen Modus (2026-10-31) waehlt ein Preset die Pruefer des Agenten
+# (und die Modelle, die compare_models fragt); die Hinweise sagen, wie sie
+# pruefen, keine Zahl, denn die Aufstellung kommt aus Firestore.
 # Ein Preset hat so viele Modelle wie seine Basis (_normalize_preset_answers).
 CONSENSUS_PRESET_DEFINITIONS = [
     {
         "id": "fast",
         "label": "Daily",
-        "hint": "Quick synthesis for everyday questions",
+        "hint": "Fast reviewers from different labs",
         "pro_only": False,
     },
     {
         "id": "balanced",
         "label": "Open Models",
-        "hint": "Three open models, for a second opinion",
+        "hint": "Only open models review",
         "pro_only": False,
     },
     {
         "id": "thorough",
         "label": "High Quality",
-        "hint": "The expensive models from end to end, the priciest run there is",
+        "hint": "The strongest models review, slower and pricier",
         "pro_only": True,
     },
 ]
 
 _BASE_CONSENSUS_PRESET_MODELS = {
-    # Luna, Haiku und DeepSeek Flash: drei Labore, alle schnell und guenstig.
+    # Haiku und DeepSeek Flash seit 2026-11-01 (Max): zwei Pruefer aus zwei
+    # Laboren, die nicht das des Standard-Chatmodells sind (GPT-6.1 Terra).
+    # Luna fiel raus: OpenAI wie Terra, und in der Schlussrunde der Langsamste
+    # (Prod 14 Tage: p90 40 s gegen 15 s Haiku und 13 s DeepSeek); die Marken
+    # unter der Antwort und jede Aktion mit Aussenwirkung warten auf alle.
     "fast": {
         "answers": {
-            "openai": OPENAI_LUNA_MODEL,
             "anthropic": DEFAULT_ANTHROPIC_MODEL,
             "deepseek": DEEPSEEK_FLASH_MODEL,
         },
@@ -584,13 +590,13 @@ _BASE_CONSENSUS_PRESET_MODELS = {
         },
         "consensus": OPENAI_LUNA_MODEL,
     },
+    # Drei starke Pruefer aus drei Laboren statt sechs seit 2026-11-01: sechs
+    # teure Modelle pruefen jeden Schritt und jede Aktion wartet auf alle; ohne
+    # OpenAI, aus dem das Standard-Chatmodell kommt.
     "thorough": {
         "answers": {
-            "openai": OPENAI_SOL_MODEL,
-            "mistral": MISTRAL_PRO_MODEL,
             "anthropic": ANTHROPIC_PRO_MODEL,
             "gemini": GEMINI_PRO_MODEL,
-            "deepseek": DEEPSEEK_PRO_MODEL,
             "grok": GROK_PRO_MODEL,
         },
         "consensus": "Gemini-Pro",
@@ -612,10 +618,14 @@ CONSENSUS_PRESET_MODELS = {
     }
     for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
 }
-# Lineup of the API and the fallback lineup of an Agent comparison. Daily since
-# 2026-10-15: "balanced" became Open Models, a second opinion rather than a
-# default, and Daily carried the same models as the old Balanced.
+# The Agent's reviewers when a message names none. Daily since 2026-10-15:
+# "balanced" became Open Models, a second opinion rather than a default, and
+# Daily carried the same models as the old Balanced.
 DEFAULT_CONSENSUS_PRESET = "fast"
+# The lineup of the consensus API. Open Models since 2026-11-01, when Daily
+# went to two reviewers: a consensus needs two finished answers, and with
+# three one failed model does not fail the run.
+API_CONSENSUS_PRESET = "balanced"
 # The preset the app's model picker starts from. Daily since 2026-10-12, when
 # every browser was reset once to Agent + Daily (static/js/user-settings.js).
 APP_DEFAULT_CONSENSUS_PRESET = "fast"

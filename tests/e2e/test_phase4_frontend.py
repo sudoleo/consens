@@ -912,8 +912,8 @@ def test_compare_is_direct_answers_only(browser, phase4_server):
         page.fill("#questionInput", "Give me direct answers only.")
         page.evaluate("() => window.sendQuestion()")
 
-        # The families of the default preset Daily (three since 2026-10-28).
-        for response_id in ("openaiResponse", "claudeResponse", "deepseekResponse"):
+        # The families of the default preset Daily (two since 2026-11-01).
+        for response_id in ("claudeResponse", "deepseekResponse"):
             expect(page.locator(f"#{response_id}")).to_contain_text(
                 "Direct answer from", timeout=10000
             )
@@ -931,7 +931,7 @@ def test_compare_is_direct_answers_only(browser, phase4_server):
         )
         assert consensus_requests == []
         assert {body["modelName"] for body in model_bookmark_bodies} == {
-            "OpenAI", "Anthropic", "DeepSeek",
+            "Anthropic", "DeepSeek",
         }
         assert all(
             body["question"] == "Give me direct answers only."

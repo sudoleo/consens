@@ -45,7 +45,7 @@
   const EFFORTS = { default: 'Auto', none: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium',
     high: 'High', xhigh: 'Extra high', max: 'Max' };
   const SETTINGS = {
-    consensus_preset: ['Comparison models', { fast: 'Daily', balanced: 'Open Models', thorough: 'High Quality', custom: 'Custom' },
+    consensus_preset: ['Reviewers', { fast: 'Daily', balanced: 'Open Models', thorough: 'High Quality', custom: 'Custom' },
       () => App.activeConsensusPresetId?.() || App.userSettings.get('consensus_preset')],
     consensus_highlights: ['Answer highlights', { all: 'All checks', contradictions: 'Contradictions only',
       concerns: 'Disagreements & issues', critical: 'Critical contradictions', none: 'No highlights' },

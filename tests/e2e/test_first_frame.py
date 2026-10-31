@@ -119,7 +119,7 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         page.goto(phase4_server + "/app")
         _settled(page)
         expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("DeepSeek V4.1 Flash")
-        expect(page.locator("#composerModelLabel")).to_have_text("3 AIs cross-check")
+        expect(page.locator("#composerModelLabel")).to_have_text("2 AIs cross-check")
         expect(page.locator("#agentModelControls .model-picker-display")).to_have_attribute("title", re.compile(r"^DeepSeek V4\.1 Flash writes the answer"))
         page.reload()
         _settled(page)

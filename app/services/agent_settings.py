@@ -71,7 +71,7 @@ DISPLAY = {
 }
 # Tool value -> account value where they differ.
 ACCOUNT_VALUES = {"claim_counts": {"on": True, "off": False}}
-LINEUP_LABEL = "Comparison models"
+LINEUP_LABEL = "Reviewers"
 # Said with every Pro limit on a level: no other model or setting lifts it
 # (a live probe offered "pick another model in Settings" as a way around).
 PRO_LEVELS_NOTE = "High, Extra high and Max need Pro on every model; no other model or setting lifts this."
@@ -104,8 +104,9 @@ VALUES = {
     "reasoning": ("default (Auto), none (Off), minimal, low, medium, high, xhigh (Extra high), max; or higher / "
                   "lower for one level more or less than now",
                   ("default", "none", "minimal", "low", "medium", "high", "xhigh", "max", "higher", "lower")),
-    "comparison_lineup": ("fast (Daily), balanced (Open Models: six open-weight models), thorough (High Quality: the "
-                          "expensive models)", ("fast", "balanced", "thorough")),
+    "comparison_lineup": ("the reviewers, who also answer compare_models: fast (Daily: fast reviewers from "
+                          "different labs), balanced (Open Models: only open-weight models), thorough (High "
+                          "Quality: the strongest models, slower and pricier)", ("fast", "balanced", "thorough")),
     "answer_highlights": ("all, contradictions, concerns, critical, none (no highlights)",
                           ("all", "contradictions", "concerns", "critical", "none")),
     "claim_counts": ("on, off: model support counts next to claims", ("on", "off")),

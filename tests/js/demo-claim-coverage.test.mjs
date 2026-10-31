@@ -44,9 +44,9 @@ describe("the demo's one-mode turn (2026-10-31)", () => {
 
   it("has one note of each kind for the Daily lineup", () => {
     const data = readDemoData();
-    const daily = data.buildForModels(["OpenAI", "Anthropic", "DeepSeek"]);
+    const daily = data.buildForModels(["Anthropic", "DeepSeek"]);
     expect(daily.notes.map(note => [note.model, note.kind])).toEqual([
-      ["OpenAI", "wrong"], ["DeepSeek", "doubtful"], ["Anthropic", "incomplete"],
+      ["Anthropic", "wrong"], ["DeepSeek", "doubtful"], ["Anthropic", "incomplete"],
     ]);
   });
 

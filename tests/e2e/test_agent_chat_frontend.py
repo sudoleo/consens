@@ -42,7 +42,7 @@ def _open_agent_level(page, level, tap=False):
     """Open the one Agent chip and enter a section of its menu.
 
     The chip carries the chat model and the comparison models; its menu opens
-    on an overview ("Agent" and "Compare with"). ``level`` is ``models`` (the
+    on an overview ("Agent" and "Reviewers"). ``level`` is ``models`` (the
     provider overview or flat model list), ``secondary`` (reasoning) or
     ``companion`` (the comparison models).
     """

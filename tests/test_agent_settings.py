@@ -222,7 +222,7 @@ def test_a_card_saved_with_a_retired_setting_is_read_without_harm(store):
 def test_high_quality_is_pro_and_the_other_lineups_are_open(store, pro, status):
     loop = settings_loop(store, pro=pro)
     result = prepare(loop, comparison_lineup="thorough")
-    entry = change(result, "Comparison models")
+    entry = change(result, "Reviewers")
     assert entry["status"] == status and entry["to"] == "High Quality"
     if not pro:
         assert entry["reason"] == "High Quality is available on Pro." and proposal(store, loop) is None
@@ -369,7 +369,7 @@ def test_settings_already_saved_are_said_not_put_on_a_card(store):
     loop = settings_loop(store, account={"consensus_preset": "balanced", "agreement_display": "off"})
     result = prepare(loop, comparison_lineup="balanced", agreement_score="off")
     assert result["status"] == "unchanged" and proposal(store, loop) is None
-    assert change(result, "Comparison models") == {"setting": "Comparison models", "from": "Open Models",
+    assert change(result, "Reviewers") == {"setting": "Reviewers", "from": "Open Models",
                                                    "to": "Open Models", "status": "unchanged"}
 
 

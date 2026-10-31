@@ -1349,16 +1349,21 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Familien ohne gespeichertes Modell (eine gespeicherte Pro-Wahl, die vor dem
   Laden der Stufe gesperrt erscheint, bleibt so erhalten). Der Consensus-Picker hat seit 2026-07-18
   eine Preset-Ebene (Daily/Open Models/High Quality + Custom): Presets kommen aus
-  `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set genau
-  sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
+  `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set die
+  Prüfer des Agenten (zugleich die Modelle von `compare_models`; in Compare die
+  Antwortmodelle) plus die Consensus-Engine, die im Browser niemand mehr wählt.
+  Die Hinweise sagen seit 2026-11-01, wie die Prüfer prüfen („Fast reviewers from
+  different labs“, „Only open models review“, „The strongest models review,
+  slower and pricier“), ohne Zahl, weil die Aufstellung aus Firestore kommt;
+  Custom zeigt aktiv die gewählten Familien statt der Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
   ein Pro-Badge neben dem Namen. Rechts in der Namenszeile jeder Preset-Zeile
   stehen die Anbieterzeichen seiner Antwortmodelle als Stapel
   (`createPresetMarks`, über `App.createModelMark`; einfarbig, Farbe bei Hover,
   Tooltip mit den Modellnamen, `aria-hidden`); alle Preset-Zeilen halten die
   Haken-Spalte frei, damit die Stapel bündig stehen. Eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
-  Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt. Die High-Quality-Basis nutzt OpenAI GPT-5.6 Sol; gespeicherte
-  Legacy-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in
+  Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt. Gespeicherte
+  High-Quality-Werte mit GPT-5.5 werden bei der Normalisierung migriert. Zustand in
   `consensus_preset` ("custom" = explizite Modellwahl, ausgeloest durch
   jedes change-Event am Dropdown); `consensus_model` bleibt die
   Custom-Wahl. Bestandsnutzer mit gespeicherter Modellwahl migrieren zu
@@ -4409,8 +4414,8 @@ Chatmodell und Prüfer (die gewählten Vergleichsmodelle) teilen sich seit 2026-
 `.composer-models` (`.agent-model-picker`). Der Chip nennt das Chatmodell
 (seit 2026-10-31 immer; während die Liste lädt, den Namen aus
 `App.firstFrame.agentModel()`), sein Tooltip sagt, was die Prüfer tun
-(„<Chatmodell> writes the answer, 3 AIs cross-check it.“), und die Prüfer haben
-ein eigenes Element mit den Worten „3 AIs cross-check“ („3 KIs prüfen mit“,
+(„<Chatmodell> writes the answer, 2 AIs cross-check it.“), und die Prüfer haben
+ein eigenes Element mit den Worten „2 AIs cross-check“ („2 KIs prüfen mit“,
 `App.words.crossCheck`, ohne Modell „No cross-check“; siehe „Ein Modus“ unten).
 Von 2026-10-23 bis 2026-10-31 trug im Vergleichsmodus der Chip selbst diese
 Worte, davor „<Chatmodell> +6“, das Neulingen nichts sagte. Der erste
@@ -4422,7 +4427,8 @@ Standard-Presets an (`default_families` aus `pages.py`, vorher die ersten
 `#consensusModelDropdown` über `App.linkModelPicker` in dessen Menü; der
 Consensus-Chip (`.consensus-model`) ist im Agent-Modus `hidden` und kehrt außerhalb
 unverknüpft zurück. Das Menü öffnet mit „Agent“ (Chatmodell, Reasoning) und
-„Compare with“ (n Modelle · Preset, Familienliste). Der Chip bleibt aktiv,
+„Reviewers“/„Prüfer“ (n Modelle · Preset, Familienliste; bis 2026-11-01 „Compare
+with“, obwohl der Knopf davor schon „KIs prüfen mit“ sagte). Der Chip bleibt aktiv,
 solange der Companion es ist: Während eines Laufs ist nur die Chatmodell-Zeile
 gesperrt, die Prüfer für die nächste Nachricht bleiben änderbar.
 Die Chatmodell-Ebene zeigt zuerst eine kompakte Anbieterübersicht mit Modellzahl.
@@ -4449,8 +4455,8 @@ die tatsächlich für neue Calls verfügbaren und die reservierten Tokens.
 **Auswahl und Orchestrierung.** agent-chat.js trennt Chatmodell/Denkstufe vom
 bestehenden Consensus-Preset-/Model-Picker: consensusModelDropdown erhält
 comparisonOnly und zeigt im Agent-Modus ausschließlich die Prüfer-Modelle
-(Custom: Abschnitt „Comparison models“, ohne Consensus-Engine) — als Abschnitt
-„Compare with“ im Menü des einen Agent-Chips, nicht als eigener Chip. Es
+(Custom: Abschnitt „Reviewers“, ohne Consensus-Engine) — als Abschnitt
+„Reviewers“ im Menü des einen Agent-Chips, nicht als eigener Chip. Es
 gibt keine zweite Presetliste, keine Auto/Immer/Aus-Einstellung und keinen
 Synthesemodell-Picker. Die eingefrorene comparison_models-Auswahl kommt als
 Provider→interne Modell-ID mit POST /agent; unbekannte Familien/Modelle werden
@@ -7399,8 +7405,8 @@ immer rechts außen. Alle Picker der Zeile teilen eine Optik (ruhiges Label mit
 Chevron). Das (+)-Menü `#attachMenu` hat seit
 2026-10-02 eine Zeilenanatomie (`composer.css`, „The (+) menu“): 16-px-Icon ·
 Label (höchstens eine kurze Zeile darunter) · Wert mit Chevron oder Schalter;
-„Add files“ ohne Stufen-Badge, Comparison models zeigt die Anzahl. Ab 701 px
-steht jede Einstellung nur einmal: Arbeitsplatz und Vergleichsmodelle stehen
+„Add files“ ohne Stufen-Badge, Reviewers (Prüfer) zeigt die Anzahl. Ab 701 px
+steht jede Einstellung nur einmal: Arbeitsplatz und Prüfer stehen
 auf dem Startbildschirm in der Reihe des Feldes (`#composerTools`,
 `#composerModelPicker`), das (+)-Menü trägt dort den Modus, Dateien und
 Reasoning (seit 2026-10-31 ohne Knopf in der Reihe; die Stufe steht grau neben
@@ -8270,10 +8276,12 @@ keinen Abgleich.
   kein Pro-403 mehr); unbekannte Felder werden abgelehnt. Gespeichert wird der
   Schalter weiter als `request.deep_think` (Idempotenz alter Runs), die Antwort
   trägt `reasoning` und `deep_think` mit demselben Wert. Der Server wählt die
-  sechs Antwortmodelle und die Consensus-Engine aus dem konfigurierten
-  Daily-Preset (`cfg.DEFAULT_CONSENSUS_PRESET`) — mit und ohne Reasoning dieselben. Kosten, Limits, Modelle
+  Antwortmodelle und die Consensus-Engine aus dem konfigurierten
+  Open-Models-Preset (`cfg.API_CONSENSUS_PRESET`, seit 2026-11-01; vorher Daily,
+  das seitdem nur noch zwei Prüfer hat und mit einem ausgefallenen Modell keinen
+  Konsens mehr ergäbe) — mit und ohne Reasoning dieselben. Kosten, Limits, Modelle
   oder Modellanzahl sind keine Request-Felder.
-- API-v1-Runs verwenden bewusst immer die sechs Familien des Daily-Presets,
+- API-v1-Runs verwenden bewusst immer alle Familien dieses Presets,
   einschließlich DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Der
   frühere DeepSeek-Ausschluss in Antwort-Fan-out, Consensus-Engine/Fallback und
   Differences-Judges ist entfernt — er war nirgends sichtbar und hat nach einem
@@ -9804,10 +9812,20 @@ High Quality bleibt unabhaengig von der Konfiguration Pro-only. Open Models
 (seit 2026-10-15, vorher das mit Daily deckungsgleiche „Balanced“) ist eine
 zweite Meinung aus Modellen mit offenen Gewichten (Beleg je Modell:
 `hugging_face_id` im OpenRouter-Katalog) mit demselben Schreiber wie Daily.
-Seit 2026-10-28 prüfen Daily (GPT Luna, Claude Haiku, DeepSeek Flash) und
-Open Models (Qwen3.8 27B, DeepSeek V4.1 Flash, GLM 5.3 Flash) mit drei
-Modellen statt sechs: Die Modelle sind die Prüfer, jeder Schritt nach außen
-wartet auf alle, sechs machten Aktionen zäh. High Quality bleibt bei sechs. Free-Presets haben je Familie praktisch nur ein aktuelles
+Seit 2026-10-28 prüfen Daily und Open Models (Qwen3.8 27B, DeepSeek V4.1 Flash,
+GLM 5.3 Flash) mit drei Modellen statt sechs: Die Modelle sind die Prüfer, jeder
+Schritt nach außen wartet auf alle, sechs machten Aktionen zäh. Seit 2026-11-01
+(Max) prüft Daily mit zwei: Claude Haiku 5.5 und DeepSeek V4.1 Flash, zwei Labore,
+keins das des Standard-Chatmodells (GPT-6.1 Terra). GPT-6 Luna fiel raus: OpenAI
+wie Terra und in der Schlussrunde der Langsamste (Prod 14 Tage: p90 40 s gegen
+15 s Haiku, 13 s DeepSeek). High Quality prüft seitdem mit drei starken Modellen
+aus drei Laboren (Basis Anthropic, Gemini, Grok; vorher sechs). Die Basis greift
+nur ohne gespeichertes Set: Prod (`preset_models`, Revision 13) speichert Daily
+noch mit drei und High Quality mit sechs Modellen und wird zum Deploy des einen
+Modus über den Admin-Speicherpfad umgestellt (Daily: Haiku 5.5 + DeepSeek V4.1
+Flash; High Quality: Opus 5.5, Gemini 3.8 Flash, Grok 4.7). Die API läuft seitdem
+auf Open Models (`API_CONSENSUS_PRESET`), damit ein Konsens nicht an einem
+ausgefallenen von zwei Modellen scheitert. Free-Presets haben je Familie praktisch nur ein aktuelles
 Modell, ein zweites Free-Preset unterscheidet sich deshalb nur in der
 Aufstellung. Bis 2026-10-22 stand dort gpt-oss-120b (OpenAI, also das Labor
 des Schreibers; las nur Text und nannte in der Live-Probe trotz Suche

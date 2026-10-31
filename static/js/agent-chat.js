@@ -302,11 +302,11 @@
     effort.parentElement.hidden = true;
     document.getElementById("agentModelsRetry")?.toggleAttribute("hidden", catalogStatus !== "failed");
     App.initCustomModelPicker?.(select, { grouped: true, secondarySelect: effort, secondaryLabel: 'Reasoning' });
-    // One chip, one menu: the chat model above, the models it is compared
-    // with below (model-picker.js, linked pickers). The comparison chip of
-    // Consensus/Compare steps back while linked.
+    // One chip, one menu: the chat model above, its reviewers below (the
+    // models that also answer compare_models; model-picker.js, linked
+    // pickers). The comparison chip of Compare steps back while linked.
     const comparison = document.getElementById("consensusModelDropdown");
-    App.linkModelPicker?.(select, comparison, { ownLabel: "Agent", companionLabel: "Compare with", ariaLabel: "Agent and comparison models" });
+    App.linkModelPicker?.(select, comparison, { ownLabel: "Agent", companionLabel: "Reviewers", ariaLabel: "Agent and reviewers" });
     // A locked chat model (its list still loading) closes only its own
     // levels; the comparison models stay open to change for the next message.
     if (select.disabled) App.collapseExpandedModelPicker?.(select, { ownLevelsOnly: true });
@@ -460,7 +460,7 @@
     const comparisonPicker = document.getElementById("consensusModelDropdown");
     if (comparisonPicker) {
       comparisonPicker.dataset.comparisonOnly = String(look);
-      comparisonPicker.setAttribute("aria-label", look ? "Comparison models" : "Answering models");
+      comparisonPicker.setAttribute("aria-label", look ? "Reviewers" : "Answering models");
       // Agent shows one chip: the comparison models live in the Agent menu.
       const chip = comparisonPicker.closest(".consensus-model");
       if (chip) chip.hidden = look;

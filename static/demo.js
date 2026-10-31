@@ -183,11 +183,12 @@ const DEMO_DATA = demoInPageLanguage({
 
   // What the reviewers note on that answer, in the review's own shape
   // (agent_audit.place_marks): the sentence it concerns (anchor), the
-  // quoted words in it (target), its kind and the reviewer's note. Each
-  // reviewer one note; a reviewer the Daily lineup does not have stays out.
+  // quoted words in it (target), its kind and the reviewer's note. Daily's
+  // two reviewers (Claude, DeepSeek since 2026-11-01) carry one note of each
+  // kind between them; a reviewer the lineup does not have stays out.
   notes: [
     {
-      model: "OpenAI",
+      model: "Anthropic",
       kind: "wrong",
       anchor: "The walls and windows were renewed in 2015, and that matters more than the year the house was built.",
       target: "walls and windows were renewed in 2015",

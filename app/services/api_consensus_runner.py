@@ -76,7 +76,7 @@ def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
     switch: it no longer changes any model (answers or consensus engine),
     only the reasoning effort and output cap of the answer calls.
     """
-    preset = cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]
+    preset = cfg.CONSENSUS_PRESET_MODELS[cfg.API_CONSENSUS_PRESET]
     preset_answers = dict(preset["answers"])
     # Nur die Familien, die das Preset auch besetzt.
     providers = {
@@ -99,7 +99,7 @@ def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
     if cfg.is_premium_consensus_model(consensus_model) and not is_pro:
         raise PermissionError("Configured consensus model requires Pro")
     return {
-        "preset": cfg.DEFAULT_CONSENSUS_PRESET,
+        "preset": cfg.API_CONSENSUS_PRESET,
         "providers": providers,
         "consensus_model": consensus_model,
         "deep_think": bool(deep_think),

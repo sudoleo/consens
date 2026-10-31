@@ -109,8 +109,10 @@ Bei Abruffehlern bleiben zuletzt geladene Metadaten und der eingecheckte
 agent_model_catalog.json als Rückfall verfügbar. Nicht auflösbare Modell-IDs
 bleiben mit einem Hinweis deaktiviert sichtbar; es werden keine Preise erfunden.
 
-Der vorhandene Consensus-Preset-/Model-Picker erscheint daneben als Compare.
-Er wählt die Prüfer (die Vergleichsmodelle) aus derselben Konfiguration; Agent
+Der vorhandene Consensus-Preset-/Model-Picker erscheint im Menü des Agent-Chips
+als Abschnitt „Reviewers“/„Prüfer“. Er wählt die Prüfer (die zugleich
+`compare_models` beantworten) aus derselben Konfiguration; Standard seit
+2026-11-01: Daily mit Claude Haiku 5.5 und DeepSeek V4.1 Flash. Agent
 bietet keine zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker
 an. Manuelle Familien-/Modellwahl bleibt möglich. Eins bis sechs Modelle müssen
 gewählt sein (bis 2026-10-31 im Vergleichsmodus zwei bis sechs; Compare braucht

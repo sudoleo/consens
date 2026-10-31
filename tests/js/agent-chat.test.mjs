@@ -3376,38 +3376,38 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const menu = d.querySelector('.agent-model-picker .model-picker-menu');
     expect(d.querySelector('.consensus-model').hidden).toBe(true);
     // The chip names the chat model, its reasoning level quiet beside it
-    // (2026-10-31); what the comparison models do is in its tooltip and name
+    // (2026-10-31); what the reviewers do is in its tooltip and name
     // (and under the field, agent-mode.js).
     expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
     expect(trigger.querySelector('.model-picker-display-level').textContent).toBe('Auto');
     expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
-    expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash Auto writes the answer, 2 AIs cross-check it');
+    expect(trigger.getAttribute('aria-label')).toBe('Agent and reviewers: DeepSeek V4.1 Flash Auto writes the answer, 2 AIs cross-check it');
     expect(trigger.textContent).not.toMatch(/Agent|Compare/);
 
     trigger.click();
-    expect([...menu.querySelectorAll('.model-picker-section-label')].map(el => el.textContent)).toEqual(['Agent', 'Compare with']);
+    expect([...menu.querySelectorAll('.model-picker-section-label')].map(el => el.textContent)).toEqual(['Agent', 'Reviewers']);
     expect([...menu.querySelectorAll('[data-picker-level]')].map(el => el.dataset.pickerLevel)).toEqual(['models', 'secondary', 'companion']);
     expect(menu.querySelector('[data-picker-level="models"]').textContent).toContain('DeepSeek V4.1 Flash');
     expect(menu.querySelector('[data-picker-level="companion"]').textContent).toContain('2 models · Daily');
-    expect(menu.getAttribute('aria-label')).toBe('Agent and comparison models');
+    expect(menu.getAttribute('aria-label')).toBe('Agent and reviewers');
 
     // Right enters a section's level, Left returns to the overview.
     const compare = menu.querySelector('[data-picker-level="companion"]');
     compare.focus();
     key(w, compare, 'ArrowRight');
     expect(menu.querySelector('[data-preset="daily"]')).not.toBeNull();
-    expect(menu.querySelector('.model-picker-back-option').textContent).toBe('Compare with');
+    expect(menu.querySelector('.model-picker-back-option').textContent).toBe('Reviewers');
     expect(menu.contains(d.activeElement)).toBe(true);
     key(w, d.activeElement, 'ArrowLeft');
     expect(menu.querySelector('[data-picker-level="companion"]')).not.toBeNull();
     expect(menu.contains(d.activeElement)).toBe(true);
 
-    // Custom: the comparison rows, no consensus engine. A toggle keeps focus
+    // Custom: the reviewers' rows, no consensus engine. A toggle keeps focus
     // on its row and the chip counts along.
     menu.querySelector('[data-picker-level="companion"]').click();
     menu.querySelector('.model-picker-custom-option').click();
-    expect(menu.textContent).toContain('Comparison models');
+    expect(menu.textContent).toContain('Reviewers');
     expect(menu.textContent).not.toContain('Consensus engine');
     const gemini = menu.querySelector('[data-focus-key="toggle:Gemini"]');
     gemini.focus();
@@ -3441,7 +3441,7 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
     const menu = d.querySelector('.agent-model-picker .model-picker-menu');
 
-    // (+) "Comparison models" and the composer notice open the comparison level.
+    // (+) "Reviewers" and the composer notice open the reviewers' level.
     w.App.openModelPicker(consensus);
     expect(menu.classList.contains('is-open')).toBe(true);
     expect(menu.querySelector('[data-preset="daily"]')).not.toBeNull();

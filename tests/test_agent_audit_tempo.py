@@ -81,7 +81,7 @@ FINAL = {"openai": (13, 40), "xiaomi": (9, 14), "qwen": (20, 25), "glm": (8, 15)
 # docs/agent-mode.md "Tempo"): Luna 29, Haiku 28, DeepSeek V4.1 Flash 18.
 ADVICE = {"openai": 29, "anthropic": 28, "deepseek": 18}
 THREE = {"openai": "gpt-5.6-luna", "xiaomi": "mimo-v2.6-pro", "qwen": "qwen3.8-27b"}
-# The Daily preset, three reviewers (the default since 2026-10-28).
+# Daily's three reviewers from 2026-10-28 to 2026-11-01 (two since): the load case.
 DAILY = {"openai": "gpt-5.6-luna", "anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}
 SIX = {**THREE, "glm": "glm-5.3-flash", "deepseek": "deepseek-v4.1-flash", "anthropic": "claude-haiku-4-5"}
 STEPS = 40

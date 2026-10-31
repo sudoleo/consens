@@ -84,7 +84,7 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
         card = page.locator("#agentAnswer .agent-settings-card")
         expect(card).to_be_visible()
         expect(card).to_have_attribute("data-state", "proposal")
-        expect(card.locator("dt")).to_have_text(["Reasoning", "Comparison models", "Inline claim counts"])
+        expect(card.locator("dt")).to_have_text(["Reasoning", "Reviewers", "Inline claim counts"])
         expect(card.locator("dd")).to_have_text(["Auto → Low", "Daily → Open Models", "Off → On"])
         expect(card.locator(".agent-settings-note")).to_have_text(NOTE)
         # The card sits under the answer it is introduced by and fits the screen.

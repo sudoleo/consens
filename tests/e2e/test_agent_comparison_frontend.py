@@ -132,7 +132,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
         page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         page.locator('.agent-model-picker .model-picker-custom-option').tap()
-        expect(page.locator('.agent-model-picker .model-picker-menu')).to_contain_text('Comparison models')
+        expect(page.locator('.agent-model-picker .model-picker-menu')).to_contain_text('Reviewers')
         _snapshot(page, f'agent-toolbar-models-touch-{width}')
         selected = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="true"]')
         while selected.count() > 0:

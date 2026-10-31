@@ -62,7 +62,7 @@ describe("Agent settings card", () => {
     expect(body.nextElementSibling).toBe(card());
     expect(card().querySelector(".agent-settings-title").textContent).toBe("Change settings");
     // The chat model and level are already in place: no row for them.
-    expect(rows()).toEqual(["Comparison models: Daily → Open Models", "Inline claim counts: Off → On"]);
+    expect(rows()).toEqual(["Reviewers: Daily → Open Models", "Inline claim counts: Off → On"]);
     expect(card().querySelector(".agent-settings-note").textContent).toContain("Max is available on Pro");
     expect(card().querySelector(".agent-settings-apply").hidden).toBe(false);
   });
