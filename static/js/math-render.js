@@ -78,7 +78,7 @@
     );
   }
 
-  // Manche Modelle schreiben Formeln ganz ohne Trennzeichen: "O(2^{εn})",
+  // Manche Modelle schreiben Formeln ganz ohne Trennzeichen: "O(2^{\epsilon n})",
   // "2^{n^{o(1)}}", "s_{k}" (DeepSeek V4.1 Flash, 2026-10-31) - im Text
   // standen dann Klammern und Dach als Quelltext. Ein Exponent oder Index in
   // TeX-Klammern kommt in normalem Text nicht vor; als Formel gilt deshalb
