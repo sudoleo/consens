@@ -7,20 +7,21 @@ the answers, it does not end with them. Without the switch audit mode offers
 no comparison (test_agent_audit).
 """
 import json
+import time
 
 import pytest
 
 from app.api.routers import agent as agent_router
 from app.services import agent_audit, prompt_defaults
 from app.services.agent_audit import COMPARISON_ENTRY_CHARS, ENTRY_CHARS, review_entry
-from app.services.agent_comparison import AgentPreferences, JudgeArgs, comparison_selection, review_is_bound
+from app.services.agent_comparison import AgentPreferences, comparison_selection, review_is_bound
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
-from app.services.llm.provider_runtime import ProviderCancellation
-from test_agent_audit import ANSWER, Audit, round_entries, saved
+from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, current_provider_cancellation
+from test_agent_audit import ANSWER, Audit, LookupArgs, round_entries, saved
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixtures)
 
 
@@ -50,6 +51,8 @@ class Advised(Audit):
         self.advice = dict(ADVICE if advice is None else advice)
         # (family, messages, OpenRouter session) of every adviser's request.
         self.asked = []
+        # Called when an adviser starts to wait ("wait" in ``advice``).
+        self.on_wait = None
 
     def factory(self):
         completion = super().factory()
@@ -63,13 +66,23 @@ class Advised(Audit):
             completion.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
             if isinstance(script.advice[family], BaseException):
                 raise script.advice[family]
+            if script.advice[family] == "wait":
+                # Still answering: until it is stopped, at most a few seconds.
+                if script.on_wait:
+                    script.on_wait()
+                stop, deadline = current_provider_cancellation(), time.monotonic() + 5
+                while not stop.cancelled and time.monotonic() < deadline:
+                    time.sleep(.01)
+                if stop.cancelled:
+                    raise ProviderCancelled("stopped")
+                script.advice[family] = "A late answer."
             completion.text, completion.finish_reason = script.advice[family], "stop"
             yield {"type": "delta", "text": completion.text}
         completion.stream = advise
         return completion
 
 
-def advised_loop(store, script, *, judges="on", audit_compare=True):
+def advised_loop(store, script, *, judges="on", audit_compare=True, on_note=None):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -83,10 +96,12 @@ def advised_loop(store, script, *, judges="on", audit_compare=True):
 
     def note(args, *, cancellation):
         notes.append(args)
+        if on_note:
+            on_note()
         return {"text": "Noted."}
-    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("note", "Take a note.", JudgeArgs, note)],
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("note", "Take a note.", LookupArgs, note)],
                                  argument_limit=loop.registry.argument_limit)
-    script.loop = loop
+    script.loop, script.notes = loop, notes
     return loop
 
 
@@ -125,6 +140,7 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     # The run went on after the answers: a further tool, then the answer.
     assert [step for step, _ in script.calls if step.startswith("completion:")] == [
         "completion:0", "completion:1", "completion:2"]
+    assert len(script.notes) == 1 and "error" not in tool_results(loop, "note")[0]
     [result] = tool_results(loop, "compare_models")
     assert sorted(answer["text"] for answer in result["answers"]) == sorted(ADVICE.values())
     assert "still yours to do" in result["instruction"] and "write the answer" not in result["instruction"]
@@ -162,17 +178,54 @@ def test_without_the_switch_audit_mode_offers_no_comparison(store):
     assert saved(store, loop)["status"] == "completed"
 
 
-def test_with_the_answer_check_off_the_comparison_still_advises_and_the_turn_completes(store):
-    script = Advised()
+def test_without_reviewers_audit_mode_offers_no_comparison(store):
+    """The answer check off (the route turns it on for audit,
+    effective_preferences): nobody would read the answers, and a stopped
+    answer would lose its text with them (review 2026-10-31)."""
+    script = Audit()
     loop = advised_loop(store, script, judges="off")
     list(loop.run())
+    assert loop.comparison.auditor is None
+    assert script.offered and all("compare_models" not in names for names in script.offered)
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_comparison_past_the_answers_time_stops_waiting_even_for_one_model(store):
+    """In comparison mode a comparison waits at its deadline until two models
+    answered (its check needs two); in audit mode nothing needs them, and one
+    model may be all the user chose: it stops waiting at once, and the turn
+    still ends with its answer instead of running into its hard stop."""
+    script = Advised(advice={"anthropic": "wait", "openai": "wait"})
+    loop = advised_loop(store, script)
+    left = {"seconds": 10_000.0}
+    loop.answer_time_left = lambda: left["seconds"]
+    script.on_wait = lambda: left.update(seconds=0.0)
+    started = time.monotonic()
+    list(loop.run())
+    assert time.monotonic() - started < 4
+    [result] = tool_results(loop, "compare_models")
+    assert result["instruction"].startswith("No model answered.")
+    assert "under your answer" not in result["instruction"]
     turn = saved(store, loop)
-    review = turn["agent_review"]
-    # Nobody reviews: the comparison stands as "off", bound to the answer.
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
-    assert loop.comparison.auditor is None and loop.comparison.judge_calls == 0
-    assert review["status"] == "off" and review_is_bound(review, ANSWER)
-    assert script.rounds == {}
+    # The answer stopped them: their failures say so.
+    [comparison] = turn["agent_review"]["comparisons"]
+    assert {m["failure"]["code"] for m in comparison["failed_models"]} == {"late_cutoff"}
+
+
+def test_a_stop_after_the_comparison_ends_the_reviewers_as_stopped(store):
+    """Stopped before the answer, without live marks: the comparison saved
+    the review with its reviewers at work; they end "stopped", not "failed,
+    run_interrupted" (review 2026-10-31)."""
+    script = Advised(then=True)
+    loop = advised_loop(store, script, on_note=lambda: script.loop.cancellation.cancel())
+    with pytest.raises(ProviderCancelled):
+        list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "failed" and turn["error_code"] == "cancelled"
+    review = turn["agent_review"]
+    assert review["mode"] == "audit" and review["status"] == "cancelled" and len(review["comparisons"]) == 1
+    assert {row["status"] for row in review["audit"]["reviewers"]} == {"stopped"}
 
 
 def test_one_answer_is_said_and_the_work_goes_on(store):
@@ -206,6 +259,62 @@ def test_the_agent_may_still_compare_after_it_read_a_page(store):
     [result] = tool_results(loop, "compare_models")
     assert "error" not in result and len(result["answers"]) == 2
     assert "read_source" not in result["instruction"]
+
+
+def test_a_failed_save_while_stopping_stragglers_costs_neither_the_review_nor_the_answer(store, monkeypatch):
+    script = Advised()
+    loop = advised_loop(store, script)
+
+    def broken():
+        raise RuntimeError("storage down")
+    monkeypatch.setattr(loop.comparison, "finish_comparisons", broken)
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert turn["agent_review"]["status"] == "succeeded"
+
+
+def test_the_share_of_an_audit_turn_shows_no_comparison():
+    """The models the agent asked answered its own question, not the user's:
+    a share keeps saying only who answered (share_snapshots, review 2026-10-31)."""
+    from app.services import share_snapshots
+    review = {"mode": "audit", "answer_hash": "h", "checks": [], "comparisons": [
+        {"id": "c1", "answers": [{"provider": "openai", "text": "330 metres."},
+                                 {"provider": "anthropic", "text": "324 metres."}]}]}
+    assert share_snapshots._agent_share_basis(review, ANSWER) == (None, None)
+
+
+def answer_shape(n):
+    """A compare_models result as _merged_result writes it: answers with the
+    addresses they cite and the cited pages with excerpts."""
+    return {"comparison": 1, "question": QUESTION, "context": "", "status": "succeeded",
+            "answers": [{"text": f"Answer {i}: " + "z" * 9_000, "sources": [f"https://example.org/{i}/{j}" for j in range(8)]}
+                        for i in range(n)],
+            "missing_answers": [],
+            "sources": [{"url": f"https://example.org/page/{j}", "title": f"Page {j}", "cited_by": 2,
+                         "supports": ["The tower is 330 metres tall."], "excerpt": "e" * 700} for j in range(26)],
+            "instruction": "..."}
+
+
+def test_a_round_too_long_for_its_conversation_shortens_the_other_entries_before_the_answers():
+    """Review 2026-10-31: one tier for every entry cut a 60,000-character
+    comparison to 1,500 characters, and with its pages to the start of its
+    first answer. Now the other entries give way first, then the pages'
+    excerpts; every answer stays in the round."""
+    from app.services.agent_audit import fitted_round
+    compare = ({"seq": 4, "actor": "agent", "kind": "tool", "name": "compare_models", "data": "agent",
+                "format": "text"}, json.dumps(answer_shape(5)))
+    step = ({"seq": 5, "actor": "agent", "kind": "step", "name": "m", "data": "agent", "format": "json"},
+            json.dumps({"reasoning": "r" * 5_000, "text": "", "tool_calls": [{"name": "note"}]}))
+    full = fitted_round(2, [compare, step], 10**6)
+    for room in (50_000, 20_000):
+        message = fitted_round(2, [compare, step], room)
+        assert message is not None and len(message) <= room < len(full)
+        entries = json.loads(message.split("\n", 1)[1])["entries"]
+        answers = entries[0]["content"]["answers"]
+        assert [answer["text"][:9] for answer in answers] == [f"Answer {i}:" for i in range(5)]
+        # The other entry gave way first.
+        assert len(json.dumps(entries[1]["content"])) < 5_000
 
 
 def test_a_comparison_entry_shows_every_answer_to_the_reviewers():

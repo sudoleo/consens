@@ -1644,7 +1644,10 @@ class DelegationLoop(AgentLoop):
             claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
             try:
                 if self.policy.account_budget_only:
-                    answering = answer_candidate and bool(self.comparison and self.comparison.comparisons)
+                    # Not in audit mode: there every step researches, and
+                    # one after a comparison waits for its search as before.
+                    answering = answer_candidate and bool(self.comparison and self.comparison.comparisons
+                                                          and not self.comparison.audit_mode)
                     clamp_floor = (cfg.MAX_TOKENS if answering or getattr(worker, "kind", None) in SEARCHING_KINDS
                                    else None)
                     model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(

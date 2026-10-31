@@ -1010,6 +1010,48 @@ it('offers the answers of the models the agent asked beside the notes, without a
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].key).toBe('agent-audit:audit-hash');
   dom.window.close();
 });
+it('keeps an audit turn stopped before its answer in the audit row, with the answers the agent asked for', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = '';
+  // Stopped after the models answered, before the answer: no version, no notes.
+  const stopped = { ...advisedReview('cancelled'), versions: [], audit: { reviewers: auditReview().audit.reviewers } };
+  w.App.agentReview.render(body, stopped, { key: 't1', question: 'Q' });
+  const row = d.querySelector('.agent-review');
+  expect([row.hidden, row.classList.contains('is-audit')]).toEqual([false, true]);
+  // Never the comparison mode's check row ("Review", "Answer check stopped").
+  expect([...row.querySelectorAll('.agent-evidence-link')].map(b => b.dataset.section)).toEqual(['answers', 'sources']);
+  expect(row.textContent).not.toContain('Answer check');
+  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
+  dom.window.close();
+});
+it('opens the first comparison that has answers', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = advisedReview();
+  review.comparisons.unshift({ id: 'c0', question: 'First try', status: 'failed', answers: [],
+    failed_models: [{ label: 'GPT', model: 'openai/gpt', failure: { code: 'provider_timeout' } }] });
+  w.App.agentReview.render(body, review, { sources: [], question: 'Q', key: 't1' });
+  d.querySelector('.agent-evidence-link[data-section="answers"]').click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].key).toBe('agent-evidence:c1');
+  dom.window.close();
+});
+it('lets the activity open the row\'s context, with the turn\'s sources, after an equal review arrives', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const evidence = { sources: [{ url: 'https://example.org/a', title: 'A' }, { url: 'https://example.org/b', title: 'B' }],
+    question: 'Q', key: 't1' };
+  w.App.agentReview.render(body, advisedReview(), evidence);
+  // The run's end: the same review as a new object.
+  const saved = advisedReview();
+  w.App.agentReview.render(body, saved, evidence);
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, saved, 'Exact answer.');
+  details.querySelector('.agent-activity-insight button').click();
+  const context = w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  expect(context.key).toBe('agent-evidence:c1');
+  expect(context.renderPanel('sources').querySelectorAll('li')).toHaveLength(3);
+  dom.window.close();
+});
 it('lists the comparisons of an audit turn before its review, with their answers to read', () => {
   const {window: w, document: d, dom} = setup();
   const details = d.createElement('div');

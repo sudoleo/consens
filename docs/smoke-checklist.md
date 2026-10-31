@@ -213,8 +213,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       mir danach eine Tabelle der Kosten in der Werkbank.“ → in der Aktivität
       „Vergleich 1 · 3 Modellantworten“ ohne Prüfstatus, danach arbeitet der
       Agent weiter (Werkbank-Schritt) statt sofort zu antworten. Unter der
-      Antwort „Notizen“ und „Antworten 3“; „Antworten“ öffnet die drei
-      Antworten, kein Score, keine Widerspruchs-Marken der Judges. Seitenpanel:
+      Antwort „Anmerkungen“ (oder „Keine Einwände“) und „Antworten 3“;
+      „Antworten“ öffnet die drei Antworten, kein Score, keine
+      Widerspruchs-Marken der Judges. Einmal nach den Antworten stoppen → die
+      Audit-Zeile mit „Antworten“ bleibt, keine „Antwortprüfung gestoppt“-Zeile. Seitenpanel:
       ein Vergleichsmodell anklicken → seine Antwort im Leser. Arbeitsprotokoll
       (Admin): Eintrag `compare_models` mit allen drei Antworten. Ein Pro-Konto
       ohne Admin bekommt kein `compare_models`, bis `AGENT_AUDIT_COMPARE=all`

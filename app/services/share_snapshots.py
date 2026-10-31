@@ -683,6 +683,12 @@ def _agent_share_basis(review, text):
     answers (review_is_bound) counts as none.
     """
     review = review if isinstance(review, dict) else {}
+    if review.get("mode") == "audit":
+        # Audit mode: the models the agent asked (compare_models, since
+        # 2026-10-31) answered its own question, not the user's, and the
+        # reviewers checked the answer. The share keeps saying only who
+        # answered, as before, until a share of an audit turn is designed.
+        return None, None
     comparisons = [
         comparison for comparison in review.get("comparisons") or []
         if isinstance(comparison, dict) and comparison.get("answers")

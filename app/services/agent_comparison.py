@@ -372,7 +372,9 @@ class AuditCompareArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     question: str = Field(min_length=1, max_length=2000)
     context: str = Field(default="", max_length=8000)
-    file_ids: list[str] = Field(default_factory=list, max_length=5)
+    file_ids: list[str] = Field(default_factory=list, max_length=5, description=
+        "Files of this chat the models get. Without, they get the files of the user's message and those you "
+        "opened.")
     depth: Literal["quick", "full"] = Field(default="full", description=
         "quick: each model answers briefly, after one search round. full: as thoroughly as the question needs, "
         "with up to three search rounds.")
@@ -384,9 +386,9 @@ class AuditCompareArgs(BaseModel):
 # a reviewer that knows the run answers neither independently nor without
 # a channel back to the agent.
 AUDIT_COMPARE = ("Ask the models the user chose for this chat the same question. Each answers on its own, in a "
-                 "fresh conversation with its own web search, and sees only question and context: never your "
-                 "work, your sources or the reviews. You get their answers and the pages they cite; the user can "
-                 "read them under your answer.")
+                 "fresh conversation with its own web search, and sees only question, context and the files "
+                 "(file_ids): never your work, your sources or the reviews. You get their answers and the pages "
+                 "they cite; the user can read them under your answer.")
 
 
 # --- Checking a passage the user supplied ("paste an AI answer to check it") --
@@ -678,9 +680,11 @@ class ComparisonTools:
                 self.auditor = AnswerAudit(self)
             self.app_tools = [ReadOnlyTool("audit_answer", "Have the user's comparison models review the fixed answer.",
                                            JudgeArgs, self.audit)]
-            if compare:
+            if compare and self.auditor is not None:
                 # Every chosen model, every answer awaited, the depth the
-                # agent's (AgentPreferences.audit).
+                # agent's (AgentPreferences.audit). Only with reviewers, who
+                # read the answers (the route turns the answer check on for
+                # audit, routers/agent.py effective_preferences).
                 self.preferences = self.preferences.model_copy(
                     update={"depth": "auto", "quorum": "all", "autonomy": "guided"})
                 limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
@@ -1332,10 +1336,14 @@ class ComparisonTools:
             # the one question, the rest of the user's request is still to do
             # (Max, 2026-10-31: a run must not just end once they answered).
             # No judge checks the answer against them.
-            parts = ["These answers cover only the question you asked; the rest of the user's request is still "
-                     "yours to do.", "The user can read them under your answer, and the reviewers read them too."]
-            if len(answers) < 2:
-                parts.insert(0, "Only one model answered." if answers else "No model answered.")
+            if not answers:
+                parts = ["No model answered."]
+            else:
+                parts = ["These answers cover only the question you asked; the rest of the user's request is still "
+                         "yours to do.", "The user can read them under your answer"
+                         + (", and the reviewers read them too." if self.auditor is not None else ".")]
+                if len(answers) == 1:
+                    parts.insert(0, "Only one model answered.")
             if last:
                 parts.append("This was the last comparison allowed for this message.")
             instruction = " ".join(parts)
@@ -1445,7 +1453,9 @@ class ComparisonTools:
                 # took up to 299 s). With two answers the answer starts;
                 # stragglers then become late answers as with any quorum.
                 left = time_left() if time_left else None
-                if left is not None and left <= 0 and len(self._raw[cid]) >= 2:
+                # In audit mode at once: no check needs two answers, and one
+                # model may be all the user chose.
+                if left is not None and left <= 0 and (self.audit_mode or len(self._raw[cid]) >= 2):
                     logging.info("Agent comparison stops waiting for %d stragglers before the turn deadline",
                                  total - len(finished))
                     break
@@ -1717,8 +1727,12 @@ class ComparisonTools:
             raise ValueError("No answer to review.")
         if not self.finalized:
             # A model still answering a comparison stops; the reviewers read
-            # the answers the agent had, as the judges would (judge()).
-            self.finish_comparisons()
+            # the answers the agent had, as the judges would (judge()). Its
+            # save failing costs that record, never the review or the answer.
+            try:
+                self.finish_comparisons()
+            except Exception as exc:
+                logging.warning("Agent audit comparisons not finished category=%s", safe_exception(exc))
             self.auditor.run(cancellation)
         return {"status": self.review["status"], "answer_hash": answer_hash(self.text), "finalized": True}
 

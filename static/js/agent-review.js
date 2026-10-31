@@ -292,8 +292,10 @@
       const button = node('button', 'consensus-tab', 'Read model answers'); button.type = 'button';
       button.disabled = !answers.length;
       button.addEventListener('click', () => {
+        // The row's context (with the turn's sources) first; built here only
+        // before the row exists.
         const current = host._activityReview, key = `agent-evidence:${comparison.id}`;
-        const context = activityContexts.get(current)?.find(c => c.key === key)
+        const context = activityContexts.get(current)?.find(c => c.key === key) || contextsByKey.get(key)
           || adviceContexts(current).find(c => c.key === key);
         if (context) App.answerReader?.openContext(context, { section: 'answers', trigger: button });
       });
@@ -407,6 +409,9 @@
   // comparison mode, so the agent panel opens a model's answer the same way
   // (agent-delegation.js openInReader). Without the turn's sources (the
   // activity, before the row) those the answers cite.
+  function advised(review) {
+    return (review?.comparisons || []).some(c => (c.answers || []).length);
+  }
   function adviceContexts(review, turnSources = null) {
     const comparisons = (review?.comparisons || []).filter(c => (c.answers || []).length || (c.failed_models || []).length);
     const sources = turnSources || safeSources(comparisons.flatMap(c => c.answers || []));
@@ -988,6 +993,9 @@
     // Stopped or not reviewed, with notes from the run (auditReadable): the
     // row offers them, also under an answer that was never fixed.
     const notesOnly = !done && auditReadable(review);
+    // Stopped before an answer was fixed, without notes, after the models
+    // the agent asked had answered: the row offers their answers.
+    const adviceOnly = !review.versions?.length && !notesOnly && advised(review);
     // The reviewers still work on the fixed answer: the row stands already
     // as it will, Notes waiting in grey (UX audit B3).
     const pending = exact && !AUDIT_ENDED.has(review.status);
@@ -997,9 +1005,14 @@
       host.setAttribute('aria-label', 'Answer evidence');
     } else if (empty) placeRow(body, host, raw);
     const signature = JSON.stringify(['audit', review, raw, exact, turnSources, body._agentRenderSerial || 0]);
-    if (host.dataset.signature === signature) { window.linkifyAgentSources?.(body, turnSources); return; }
+    if (host.dataset.signature === signature) {
+      // An equal review object (the run's end): the activity's buttons find
+      // the same contexts, with the turn's sources.
+      if (host._advice) activityContexts.set(review, host._advice);
+      window.linkifyAgentSources?.(body, turnSources); return;
+    }
     host.dataset.signature = signature; host._hasReview = true;
-    host.hidden = !(exact || notesOnly);
+    host.hidden = !(exact || notesOnly || adviceOnly);
     host.classList.add('is-audit');
     // The check line of agent-chat.js gives its place to the row.
     if (pending) { body._checkStatus?.remove(); body._checkStatus = null; }
@@ -1029,9 +1042,12 @@
     body._markSignature = null;
     const count = auditCount(review.audit);
     // The answers the agent asked for (compare_models), read in their own
-    // reader context; the first comparison opens, the others in its picker.
+    // reader context; the first comparison with an answer opens, the others
+    // in its picker.
     const advice = adviceContexts(review, turnSources);
+    host._advice = advice;
     const answered = (review.comparisons || []).reduce((n, c) => n + (c.answers || []).length, 0);
+    const firstAnswered = advice.find(c => c.answers.some(a => a.status === 'complete')) || advice[0];
     // Notes waiting; "No objections" when the reviewers found nothing (B4);
     // Notes without a number when there was no review to count.
     const cells = [];
@@ -1045,7 +1061,7 @@
       if (pending && section === 'differences') {
         button.disabled = true; button.classList.add('is-pending');
       } else if (section === 'answers') {
-        button.addEventListener('click', () => App.answerReader?.openContext(advice[0], { section, trigger: button }));
+        button.addEventListener('click', () => App.answerReader?.openContext(firstAnswered, { section, trigger: button }));
       } else button.addEventListener('click', () => open(section, { trigger: button }));
       tabs.append(button);
     }
@@ -1061,8 +1077,10 @@
     const raw = body.dataset.markdown ?? version?.text;
     const turnSources = sourcesOf(body, review, evidence, raw);
     let host = body._agentReview;
-    // Also a review stopped before any answer was fixed, when it kept notes from the run.
-    if (isAudit(review) && (review.versions?.length || auditReadable(review))) {
+    // Also a review stopped before any answer was fixed, when it kept notes
+    // from the run or the models the agent asked had answered (compare_models):
+    // an audit turn never shows the comparison mode's check row.
+    if (isAudit(review) && (review.versions?.length || auditReadable(review) || advised(review))) {
       renderAudit(body, review, evidence, host, raw, turnSources);
       return;
     }

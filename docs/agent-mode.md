@@ -293,10 +293,32 @@ seine Antwort wäre ein Rückkanal zum Agenten.
   nicht alles passt. Die Kurzfassung (`BRIEF_TOOLS`) erklärt das Werkzeug: Ein
   verschwiegener Widerspruch der Antworten, der für den Nutzer zählt, macht die
   Antwort unvollständig.
-- **Anzeige:** Unter der Antwort neben „Notizen“ die Zelle „Antworten“ (ein
-  Leser-Kontext je Vergleich, Antworten und Quellen, keine Prüfung); in der
-  Aktivität die Karten der Vergleiche vor der Prüferkarte, nur mit „Modellantworten
-  lesen“. Das Seitenpanel öffnet eine Antwort wie im Vergleichsmodus.
+- **Nur mit Prüfern:** `compare_models` gibt es im Audit nur, wenn Prüfer laufen
+  (`ComparisonTools.auditor`; die Route schaltet die Antwortprüfung im Audit
+  ohnehin an). Ohne Prüfer läse niemand die Antworten, und ein abgebrochener
+  Text ginge mit ihnen verloren (Gegenprüfung 2026-10-31).
+- **Zeit:** Läuft die Zeit bis zur Antwort ab (`answer_time_left`), hört ein
+  Vergleich im Audit sofort auf zu warten, auch ohne zwei Antworten (im
+  Vergleichsmodus erst ab zwei, weil die Prüfung zwei braucht). Ein Modell, das
+  noch schreibt, stoppt mit der fixierten Antwort (`late_cutoff`). Schritte nach
+  einem Vergleich werden im Audit zugelassen wie davor (kein `clamp_floor`).
+- **Lesen der Prüfer:** Passt eine Runde nicht ins Gespräch, geben zuerst die
+  übrigen Einträge nach (`agent_audit.ROUND_TIERS`), dann die Auszüge der Seiten
+  (die Liste bleibt mit Adresse und Zahl der Antworten, die sie nennen, oder
+  wird zur Zahl), zuletzt die Antworten selbst, jede gleich gekürzt. Vorher fiel
+  eine solche Runde für alle Einträge auf 1.500 Zeichen, und vom Vergleich blieb
+  der Anfang der ersten Antwort. Die Modelle bekommen neben Frage und Kontext die
+  Dateien (`file_ids`, sonst die der Nachricht und die geöffneten); das sagen
+  Beschreibung und Kurzfassung.
+- **Anzeige:** Unter der Antwort neben „Anmerkungen“ (bzw. „Keine Einwände“) die
+  Zelle „Antworten“ (ein Leser-Kontext je Vergleich, Antworten und Quellen, keine
+  Prüfung; es öffnet der erste Vergleich mit Antworten); in der Aktivität die
+  Karten der Vergleiche vor der Prüferkarte, nur mit „Modellantworten lesen“.
+  Ein Lauf, der vor der Antwort endet, behält die Audit-Zeile mit „Antworten“,
+  nie die Prüfzeile des Vergleichsmodus; seine Prüfer stehen dann auf
+  „gestoppt“. Das Seitenpanel öffnet eine Antwort wie im Vergleichsmodus. Geteilte
+  Audit-Antworten zeigen keine Vergleiche (`share_snapshots._agent_share_basis`),
+  bis ein Share für Audit entworfen ist.
 - **Tempo:** `tests/test_agent_audit_tempo.py`
   `test_three_advisers_beside_three_reviewers_keep_their_tempo`: Daily (drei
   Modelle) als Berater und Prüfer zugleich, Server-Anteil je Beraterantwort

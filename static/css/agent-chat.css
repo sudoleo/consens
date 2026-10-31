@@ -703,7 +703,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    steps aside (display: contents) so all share the row; the score keeps
    its own line above, the review's state takes the free columns. Four
    columns (a review: Notes, Sources, Watch, Share), five for a comparison's
-   three links: German words like „Anmerkungen“ need the width at 320px.
+   three links and for a review with the answers the agent asked for (Notes,
+   Answers, Sources): German words like „Anmerkungen“ need the width at 320px.
    A word wider than its column („Contradictions“ is 84px, a fifth of a
    390px phone 60px) keeps its width and the cells after it move up, never
    over its edge or off the screen: a cell is its column at most, its word

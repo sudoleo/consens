@@ -1,8 +1,9 @@
 """Audit instead of comparison: the agent works, the comparison models review.
 
-An Agent setting (AgentPreferences.audit, admin accounts only, since
-2026-10-25). The agent gets no comparison tools: it answers itself, with its
-own web search in every step, and its answer streams at once. Each of the
+An Agent setting (AgentPreferences.audit, since 2026-10-25; who may use it:
+routers/agent.py audit_allowed). The agent answers itself, with its own web
+search in every step, and its answer streams at once (compare_models only
+since 2026-10-31, see below). Each of the
 user's comparison models reviews the agent's work while it happens: it
 follows the agent's live work log (agent_work_log.py, docs/agent-work-log.md)
 in rounds, one session per reviewer, and once the answer is fixed it gives
@@ -335,7 +336,8 @@ BRIEF_HEAD = ("The app's instructions to the agent ({chars} characters of the ap
 BRIEF_TOOLS = (
     ("compare_models", "compare_models asks the models the user chose the agent's question, each in a fresh "
                        "conversation of its own: they answer independently, with their own web search, and see "
-                       "only question and context, never the agent's work or the reviews. Their answers are "
+                       "only question, context and the message's files, never the agent's work or the reviews. "
+                       "Their answers are "
                        "evidence: where they disagree on something that matters to the user, an answer that "
                        "leaves it out is incomplete."),
     ("read_source", "read_source opens a web page that the user or a search result named."),
@@ -416,7 +418,12 @@ def session_budget(model):
     return min(SESSION_CHARS, int(room * SESSION_SHARE * CHARS_PER_TOKEN))
 
 
-def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None):
+def compared_entry(entry):
+    """Whether a log entry is a compare_models result (COMPARISON_ENTRY_CHARS)."""
+    return entry.get("kind") == "tool" and entry.get("name") == "compare_models"
+
+
+def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None, compared_limit=None):
     """One log entry as a reviewer reads it (JSON-ready), its content within
     ``limit``. A step's or the run's structured content stays structured,
     without its token usage, but with the web searches it ran (``searches``):
@@ -424,15 +431,19 @@ def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None):
     2026-10-23), and a step without hits then read as one that never
     searched (2026-10-27). ``brief`` ({seq, content}, AnswerAudit.brief):
     the agent's instructions read as their brief. ``answer``: the fixed
-    answer, which the final round gives once, not again in its step."""
+    answer, which the final round gives once, not again in its step.
+    ``compared_limit``: the limit of a compare_models result instead
+    (ROUND_TIERS); without it COMPARISON_ENTRY_CHARS where ``limit`` is the
+    full one."""
     item = {key: entry[key] for key in ("seq", "actor", "kind", "name", "data") if entry.get(key)}
     if entry.get("kind") == "context" and entry.get("name") == "system":
         limit = max(limit, SYSTEM_ENTRY_CHARS) if limit >= ENTRY_CHARS else limit
     # A tool result is the JSON text the agent got; cut as one text, the
     # first answer of a comparison hid the others (COMPARISON_ENTRY_CHARS).
-    compared = entry.get("kind") == "tool" and entry.get("name") == "compare_models"
+    compared = compared_entry(entry)
     if compared:
-        limit = max(limit, COMPARISON_ENTRY_CHARS) if limit >= ENTRY_CHARS else limit
+        limit = (compared_limit if compared_limit is not None
+                 else max(limit, COMPARISON_ENTRY_CHARS) if limit >= ENTRY_CHARS else limit)
     content = text
     if brief is not None and entry.get("seq") == brief["seq"]:
         content = brief["content"]
@@ -450,19 +461,28 @@ def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None):
             if (answer is not None and entry.get("kind") == "step" and isinstance(content.get("text"), str)
                     and content["text"].strip() and content["text"].strip() == str(answer).strip()):
                 content["text"] = ANSWER_IN_STEP
+            if compared and len(_dumps(content)) > limit and isinstance(content.get("sources"), list):
+                # The answers give way last: the pages' excerpts first, then
+                # the list of pages (each answer keeps the addresses it cites).
+                pages = [{key: source[key] for key in ("url", "title", "cited_by") if key in source}
+                         if isinstance(source, dict) else source for source in content["sources"]]
+                content["sources"] = (pages if len(_dumps(pages)) <= limit // 4
+                                      else f"[{len(pages)} pages, each answer lists those it cites]")
     item["content"] = _fit(content, limit)
     return item
 
 
-def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None, earlier=None, opening=None, brief=None):
+def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None, earlier=None, opening=None, brief=None,
+                  compared_limit=None):
     """The user message of one round: the new log entries (as JSON, data) and,
     in the final round, the fixed answer. A round in a new conversation, the
     last one being full, also gets ``earlier``, the reviewer's marks so far,
     and either ``opening``, the run's beginning before the entries since its
     last round, or (``opening`` None, a final round) the whole log as
-    ``entries``. ``brief``: see review_entry."""
+    ``entries``. ``brief``, ``compared_limit``: see review_entry."""
     def log(items):
-        return _dumps({"entries": [review_entry(entry, text, limit, brief=brief, answer=answer)
+        return _dumps({"entries": [review_entry(entry, text, limit, brief=brief, answer=answer,
+                                                compared_limit=compared_limit)
                                    for entry, text in items]})
     head = f"Round {number}." if answer is None else "Final round. The agent's answer is fixed."
     new = ("New entries of the work log; the agent is still working:" if answer is None
@@ -493,12 +513,27 @@ def opening_entries(entries):
     return opening
 
 
+# How a round's entries are read shorter when it does not fit: (limit of an
+# entry, limit of a compare_models result). In a round with such a result the
+# other entries give way first and the answers of the models the agent asked
+# last: one tier for all cut a 60,000-character result to 1,500 characters
+# and, with its sources, to the start of its first answer.
+ROUND_TIERS = ((ENTRY_CHARS, COMPARISON_ENTRY_CHARS), (TIGHT_ENTRY_CHARS, COMPARISON_ENTRY_CHARS),
+               (TIGHT_ENTRY_CHARS, ENTRY_CHARS), (MIN_ENTRY_CHARS, ENTRY_CHARS),
+               (MIN_ENTRY_CHARS, TIGHT_ENTRY_CHARS), (MIN_ENTRY_CHARS, MIN_ENTRY_CHARS))
+
+
 def fitted_round(number, entries, room, *, answer=None, earlier=None, opening=None, brief=None):
     """The round's message within ``room`` characters, its entries read
-    shorter as needed; None when even the shortest does not fit."""
-    for limit in (ENTRY_CHARS, TIGHT_ENTRY_CHARS, MIN_ENTRY_CHARS):
+    shorter as needed (ROUND_TIERS); None when even the shortest does not
+    fit."""
+    if any(compared_entry(entry) for entry, _ in [*entries, *(opening or [])]):
+        tiers = ROUND_TIERS
+    else:
+        tiers = [(limit, None) for limit in (ENTRY_CHARS, TIGHT_ENTRY_CHARS, MIN_ENTRY_CHARS)]
+    for limit, compared_limit in tiers:
         message = round_message(number, entries, limit=limit, answer=answer, earlier=earlier, opening=opening,
-                                brief=brief)
+                                brief=brief, compared_limit=compared_limit)
         if len(message) <= room:
             return message
     return None
@@ -2301,7 +2336,18 @@ class AnswerAudit:
         status = (tools.review or {}).get("status", "required" if tools.versions else None)
         stopped = tools.loop.cancellation.cancelled
         if status is None and stopped:
-            return self._stopped_early() or self._unsaved
+            if self._stopped_early():
+                return True
+            if tools.comparisons:
+                # A comparison saved the review with its reviewers at work:
+                # they stopped with the run (agent_runs.finish_run would call
+                # them failed, run_interrupted).
+                with tools.lock:
+                    for state in self.reviewers.values():
+                        if state["status"] in {"waiting", "running"}:
+                            state["status"] = "stopped"
+                return True
+            return self._unsaved
         if status not in {"required", "running"}:
             return self._unsaved
         with tools.lock:

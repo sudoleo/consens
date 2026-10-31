@@ -97,9 +97,10 @@ AGENT_WRITE_NOTE = (
 AGENT_SYSTEM_PROMPT = _AGENT_STEERING + "\n\n" + AGENT_ANSWER_SECTION
 
 
-# Audit instead of comparison (Agent setting for admins since 2026-10-25,
-# agent_audit.py): no comparison tools; the agent researches and answers
-# itself, and the user's comparison models follow its work and review the
+# Audit instead of comparison (Agent setting since 2026-10-25,
+# agent_audit.py): the agent researches and answers itself (compare_models
+# only since 2026-10-31, agent_comparison.AUDIT_COMPARE, its facts in the
+# tool's description), and the user's comparison models follow its work and review the
 # fixed answer (agent_audit.py, docs/agent-work-log.md). The
 # route sends this prompt instead of AGENT_SYSTEM_PROMPT for such a message.
 # Since 2026-10-28 (evening) the audit-mode prompt is a constitution, one

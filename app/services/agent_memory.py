@@ -824,7 +824,8 @@ comparison: memory is unavailable right now, so nothing was saved; they can try
 again in a moment or add it in Settings > Memory."""
 
 
-# Audit mode (agent_audit.py, no comparison tools): since 2026-10-28 facts,
+# Audit mode (agent_audit.py; its compare_models carries no memory field,
+# agent_comparison.AuditCompareArgs): since 2026-10-28 facts,
 # not rules. The model decides what is worth remembering; the user sees and
 # can undo every change, and with outside content in view a change waits for
 # the reviewers (agent_gate.outward "memory"; without reviewers memory locks,
@@ -853,8 +854,9 @@ on the app's side); nothing can be saved right now."""
 def orchestrator_prompt(snapshot: MemorySnapshot, *, comparisons: bool = True) -> str:
     """Memory data plus the rules that fit the user's switches.
 
-    ``comparisons=False``: the turn has no comparison tools (audit mode) and
-    gets the audit rules (AUDIT_MEMORY_*)."""
+    ``comparisons=False``: an audit-mode turn, whose memory changes go through
+    update_memory alone, never along with a comparison; it gets the audit
+    rules (AUDIT_MEMORY_*)."""
     if not snapshot.available:
         return MEMORY_UNAVAILABLE_PROMPT if comparisons else AUDIT_MEMORY_UNAVAILABLE_PROMPT
     if not snapshot.enabled:
