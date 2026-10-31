@@ -14,6 +14,9 @@ from test_agent_chat_frontend import CATALOG, _choose_mode
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json, _route_account_settings  # noqa: F401 (fixture)
 
 NOTE = "DeepSeek V4.1 Flash offers Low (High, Max on Pro); Low is the closest."
+# A proposal saved before 2026-10-31 may still name the Agent's comparison
+# options (agent_preferences, gone with its comparison mode): the card leaves
+# them out.
 PROPOSAL = {"settings": {"agent_model": {"model_id": CATALOG["default_model_id"], "reasoning_effort": "low"},
                          "agent_preferences": {"depth": "quick", "judges": "off"}, "consensus_preset": "balanced",
                          "claim_counts": True},
@@ -42,17 +45,6 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
         first = len(requests) == 1
         text = ("Low is the closest level for your account; apply it with the card below."
                 if first else "A brief answer.")
-        # The second message ran with the answer check off: its comparison is
-        # bound to the answer, nothing judged (agent_comparison.skip_review).
-        review = None if first else {
-            "version": 1, "status": "off", "answer_hash": "h", "answer_version": 1,
-            "versions": [{"id": 1, "text": text, "hash": "h", "status": "off"}],
-            "comparisons": [{"id": "c1", "basis_hash": "b1", "question": "What does it cost?", "status": "succeeded",
-                             "answers": [{"provider": p, "provider_label": label, "model": {"label": label},
-                                          "text": "It costs 100.", "sources": []}
-                                         for p, label in (("openai", "GPT"), ("anthropic", "Claude"))]}],
-            "checks": [{"comparison_id": "c1", "basis_hash": "b1", "answer_hash": "h", "status": "off",
-                        "differences_data": None}]}
         turn = {"id": turn_id, "turn_id": turn_id, "question": body["question"], "status": "completed",
                 "position": len(requests), "mode": "Agent", "execution_mode": "agent", "consensus": text,
                 "differences": "", "differences_data": None, "model_answers": {}, "sources": [],
@@ -60,7 +52,7 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
                                     "status": "succeeded"}] if first else [],
                 "agent_settings": {"model_id": body["model_id"], "reasoning_effort": body["reasoning_effort"],
                                    "label": "DeepSeek V4.1 Flash"},
-                **({"agent_settings_proposal": PROPOSAL} if first else {"agent_review": review})}
+                **({"agent_settings_proposal": PROPOSAL} if first else {})}
         meta = {"id": body["bookmark_id"], "title": "Settings", "query": body["question"], "mode": "Agent",
                 "has_consensus": True}
         stream = "event: delta\ndata: " + json.dumps({"text": text}) + "\n\n"
@@ -92,10 +84,8 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
         card = page.locator("#agentAnswer .agent-settings-card")
         expect(card).to_be_visible()
         expect(card).to_have_attribute("data-state", "proposal")
-        expect(card.locator("dt")).to_have_text(["Reasoning", "Answer depth", "Answer check", "Comparison models",
-                                                 "Inline claim counts"])
-        expect(card.locator("dd")).to_have_text(["Auto → Low", "Automatic → Always brief", "On → Off",
-                                                 "Daily → Open Models", "Off → On"])
+        expect(card.locator("dt")).to_have_text(["Reasoning", "Comparison models", "Inline claim counts"])
+        expect(card.locator("dd")).to_have_text(["Auto → Low", "Daily → Open Models", "Off → On"])
         expect(card.locator(".agent-settings-note")).to_have_text(NOTE)
         # The card sits under the answer it is introduced by and fits the screen.
         answer_box = page.locator("#agentAnswerBody").bounding_box()
@@ -110,15 +100,13 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
         # Every owner shows it at once: the picker, Settings and the answer display.
         assert page.evaluate("() => App.agentChat.pick()") == {"model_id": CATALOG["default_model_id"],
                                                                "reasoning_effort": "low"}
-        expect(page.locator("#agentDepthSelect")).to_have_value("quick")
-        expect(page.locator("#agentJudgesSelect")).to_have_value("off")
         expect(page.locator("#claimCountsSwitch")).to_be_checked()
         page.wait_for_function("() => document.body.classList.contains('claim-counts-visible')")
         # Saved to the account, in the form the real route takes.
         page.evaluate("async () => { await App.userSettings.flush(); }")
         assert account["rejected"] == []
         assert account["settings"]["agent_model"] == {"model_id": CATALOG["default_model_id"], "reasoning_effort": "low"}
-        assert account["settings"]["agent_preferences"] == {"depth": "quick", "judges": "off"}
+        assert "agent_preferences" not in account["settings"]
         assert account["settings"]["claim_counts"] is True
         assert account["settings"]["consensus_preset"] == "balanced"
         # The model picker took the lineup at once, as from the account.
@@ -133,17 +121,7 @@ def test_agent_settings_card_applies_the_change_and_the_next_message_carries_it(
                                "document.querySelector('#agentAnswerBody')?.textContent.includes('A brief answer')")
         assert len(requests) == 2
         assert requests[1]["reasoning_effort"] == "low"
-        assert requests[1]["agent_preferences"]["depth"] == "quick"
-        assert requests[0]["agent_preferences"]["judges"] == "on" and requests[1]["agent_preferences"]["judges"] == "off"
-        # No line under the answer (the reader switched the check off), no
-        # review link, and no "Sources 0": only the model answers.
-        status = page.locator("#agentAnswer .agent-review-status")
-        expect(status).to_have_attribute("data-state", "off")
-        expect(status).to_be_hidden()
-        expect(page.locator("#agentAnswer .agent-review [data-section]")).to_have_count(1)
-        expect(page.locator('#agentAnswer .agent-review [data-section="answers"]')).to_be_visible()
-        expect(page.locator("#agentAnswer .agent-agreement")).to_have_count(0)
-        _shot(page, f"agent-answer-check-off-{width}-{'dark' if dark else 'light'}")
+        assert all("agent_preferences" not in request for request in requests)
         assert requests[1]["comparison_models"] == open_models != requests[0]["comparison_models"]
         # A turn without a proposal has no card.
         expect(page.locator("#agentAnswer .agent-settings-card")).to_have_count(0)

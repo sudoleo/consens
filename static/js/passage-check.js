@@ -1,8 +1,10 @@
 // =====================================================================
 // passage-check.js
-// "Paste an AI answer to check it": the Agent checked a passage of the
-// user's own message against independent answers (review.passage_check,
-// see app/services/agent_comparison.py). This module puts the result at
+// A pasted text the Agent checked: until 2026-10-31 (the comparison mode,
+// check_text) it checked a passage of the user's own message against
+// independent answers (review.passage_check, see
+// app/services/agent_comparison.py). Saved turns keep their card; no run
+// checks a text any more. This module puts the result at
 // the top of the ANSWER as one card: the result as one sentence ("4 of 28
 // statements in your text are contradicted"), the text as a strip of its
 // sentences in reading order and a legend; then the sentences that do not
@@ -47,7 +49,8 @@
   // What a dissenting model says instead, quoted under the sentence.
   const INSTEAD_CHARS = 180;
   const DONE = new Set(["succeeded", "partial"]);
-  const LIVE = new Set(["waiting", "running"]);
+  // A check saved while it still ran (its run ended before it did).
+  const UNFINISHED = new Set(["waiting", "running"]);
   const ANSWER_TO_CHARS = 140;
   const cards = new Set();
   let serial = 0;
@@ -106,10 +109,9 @@
   }
 
   // What the card shows, independent of key order: a saved turn comes back
-  // from Firestore with its maps in another order than the live frames had.
-  function signatureOf(check, live) {
-    return JSON.stringify([DONE.has(check.status) ? "done" : live ? "live" : check.status,
-      check.status, check.text, check.answerTo, check.models.slice().sort(),
+  // from Firestore with its maps in any order.
+  function signatureOf(check) {
+    return JSON.stringify([check.status, check.text, check.answerTo, check.models.slice().sort(),
       check.issues.map(issue => [issue.code, issue.count]).sort(),
       check.claims.map(claim => [claim.start, claim.end, verdict(claim), claim.agree.slice().sort(),
         claim.dissent.map(item => [item.model, item.quote, item.target]).sort()])]);
@@ -373,8 +375,8 @@
     return notes.length ? notes.join(" · ") + "." : "";
   }
 
-  function failureText(check, live) {
-    if (LIVE.has(check.status) && !live) return "The check of your text did not finish.";
+  function failureText(check) {
+    if (UNFINISHED.has(check.status)) return "The check of your text did not finish.";
     if (check.status === "cancelled") return "The check of your text was stopped.";
     if (check.issues.some(issue => issue.code === "insufficient_answers")) {
       return "Your text could not be checked: too few models answered.";
@@ -476,12 +478,10 @@
     return row;
   }
 
-  function head(check, live) {
+  function head(check) {
     const row = node("div", "passage-check-head");
     if (!DONE.has(check.status)) {
-      row.append(node("p", "passage-check-status", LIVE.has(check.status) && live
-        ? (check.status === "running" ? "Checking each sentence of your text…" : "Checking your text against independent answers…")
-        : failureText(check, live)));
+      row.append(node("p", "passage-check-status", failureText(check)));
       return row;
     }
     if (!check.claims.length) {
@@ -493,14 +493,12 @@
   }
 
   // Under the rail: where the check comes from, in one quiet line.
-  function foot(check, live) {
-    const running = LIVE.has(check.status) && live;
-    if (!check.answerTo || !(DONE.has(check.status) || running)) return null;
+  function foot(check) {
+    if (!check.answerTo || !DONE.has(check.status)) return null;
     const note = issueNote(check);
     const row = node("div", "passage-check-foot");
-    row.append(node("p", "passage-check-note", (running
-      ? `Checking it as an answer to ${quotedQuestion(check.answerTo)} The models answer without seeing your text.`
-      : `Checked against ${check.models.length} models that answered ${quotedQuestion(check.answerTo).replace(/\.$/, "")} `
+    row.append(node("p", "passage-check-note",
+      (`Checked against ${check.models.length} models that answered ${quotedQuestion(check.answerTo).replace(/\.$/, "")} `
         + "without seeing your text.") + (note ? ` ${note}` : "")));
     return row;
   }
@@ -525,16 +523,16 @@
     }
   }
 
-  function render(card, check, live) {
+  function render(card, check) {
     const done = DONE.has(check.status);
-    card.dataset.state = done ? "done" : LIVE.has(check.status) && live ? "running" : "failed";
-    const parts = [head(check, live)];
+    card.dataset.state = done ? "done" : "failed";
+    const parts = [head(check)];
     if (done && check.claims.length) {
       const body = node("div", "passage-check-body");
       body.id = `passage-check-body-${++serial}`;
       parts.push(body);
     }
-    const footer = foot(check, live);
+    const footer = foot(check);
     if (footer) parts.push(footer);
     card.replaceChildren(...parts);
     syncBody(card);
@@ -609,7 +607,7 @@
   // removes a stale one. Called on every projection; unchanged input does
   // nothing (no rebuilt DOM, no lost focus, no detached anchor of an open
   // claim card).
-  function apply(body, review, options = {}) {
+  function apply(body, review) {
     if (!body) return;
     const check = from(review);
     if (!check || !body.parentNode) {
@@ -626,8 +624,7 @@
     // Right above the answer, also after other rows were put there.
     if (card.nextElementSibling !== body) body.before(card);
     card._passageReview = review || null;
-    const live = Boolean(options.live);
-    const signature = signatureOf(check, live);
+    const signature = signatureOf(check);
     // History cards are rebuilt on every chat switch; the old ones hold a
     // whole review each.
     for (const other of cards) if (!other.isConnected) cards.delete(other);
@@ -640,7 +637,7 @@
     }
     card._passageSignature = signature;
     card._passageCheck = check;
-    render(card, check, live);
+    render(card, check);
   }
 
   // The Highlights setting changes which verdicts the full text paints, live.

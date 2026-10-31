@@ -126,11 +126,12 @@ describe("single-model agent chat", () => {
     d.getElementById('questionInput').value='Please compare these options.';
     w.fetch.mockClear();
     await w.App.agentChat.send();
-    if (count < 2 || count > 6) {
+    // The comparison models review the work: one is enough.
+    if (count < 1 || count > 6) {
       expect(w.fetch).not.toHaveBeenCalled();
       expect(w.streamSSERequest).not.toHaveBeenCalled();
       expect(d.getElementById('questionInput').value).toBe('Please compare these options.');
-      expect(w.App.showPopup).toHaveBeenCalledWith(expect.stringContaining('comparison models'));
+      expect(w.App.showPopup).toHaveBeenCalledWith('Select between one and 6 reviewers before sending.');
     } else {
       expect(w.streamSSERequest).toHaveBeenCalledTimes(1);
       expect(Object.keys(w.streamSSERequest.mock.calls[0][1].comparison_models)).toHaveLength(count);
@@ -1378,8 +1379,9 @@ describe("single-model agent chat", () => {
     expect(window.App.runMode.availability().agent).toMatchObject({ visible: true, enabled: true });
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.getElementById("agentModelControls").hidden).toBe(false);
+    // The chip names the chat model; the reviewers have their words under the field.
     const chip = document.querySelector(".agent-model-picker .model-picker-display");
-    expect(chip.querySelector(".model-picker-display-text").textContent).toBe("2 AIs cross-check");
+    expect(chip.querySelector(".model-picker-display-text").textContent).toBe("Claude Sonnet 5.5");
     expect(chip.title).toBe("Claude Sonnet 5.5 writes the answer, 2 AIs cross-check it.");
     expect(chip.disabled).toBe(false);
     // No "Log in to use Agent." under the field, no model list to load.
@@ -1615,8 +1617,8 @@ describe("single-model agent chat", () => {
 
   it("sends a message into a response that reads them and lets it go once the run read it", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => false };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
@@ -1659,8 +1661,8 @@ describe("single-model agent chat", () => {
   // it stayed queued and went out again after the response, paid twice.
   it("never sends a message again that the run read before its id came back", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => false };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
@@ -1694,8 +1696,8 @@ describe("single-model agent chat", () => {
 
   it("keeps a message for the next turn once the answer is fixed and under review", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
@@ -1724,8 +1726,8 @@ describe("single-model agent chat", () => {
   // above the field until the user decides; the agent never learns of it.
   it("shows a reviewer's pause above the field and takes the user's decision", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -1828,8 +1830,8 @@ describe("single-model agent chat", () => {
   // says the step could not be checked.
   it("asks before a step runs when reviewers stopped it or none could check it", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -1884,8 +1886,8 @@ describe("single-model agent chat", () => {
   // the words already typed into its reply.
   it("draws a pause again when another reviewer's halt joins it", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -1922,8 +1924,8 @@ describe("single-model agent chat", () => {
   // "Don't allow" tells the agent no.
   it("asks the user about a domain with the reviewers' verdict and the agent's reason", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -1986,8 +1988,8 @@ describe("single-model agent chat", () => {
     // 2026-10-30, chess.com: "against a person or a bot?" on a card that
     // only said Allow or Don't allow, and the agent guessed from "allowed".
     const { window, document } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -2024,8 +2026,8 @@ describe("single-model agent chat", () => {
 
   it("hands the user the browser, asks before a step and waits while they have the browser", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -2124,8 +2126,8 @@ describe("single-model agent chat", () => {
   // alone, by POST, and the field is no form; "Not now" declines.
   it("takes a key in the card's own field and sends it to the workspace alone", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -2207,8 +2209,8 @@ describe("single-model agent chat", () => {
   // failed (C12); a pause decided elsewhere closes the card.
   it("sends a decision within a deadline, keeps Stop free and closes a pause that is over", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -2259,8 +2261,8 @@ describe("single-model agent chat", () => {
   // and the server sends the same pause with both reasons.
   it("adds a second halt's reason to the open card without losing words or a decision", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -2309,8 +2311,8 @@ describe("single-model agent chat", () => {
 
   it("ends a running review with the failed run instead of reviewing on", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     let handlers, fail;
@@ -2324,14 +2326,13 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(handlers).toBeDefined());
     const run = window.App.runRegistry.visible();
     handlers.review.receive({ review: { mode: "audit", status: "running", answer_version: 1, answer_hash: "h",
-      versions: [{ id: 1, text: "Answer", hash: "h" }], passage_check: { status: "running" },
+      versions: [{ id: 1, text: "Answer", hash: "h" }],
       audit: { reviewers: [{ provider: "anthropic", provider_label: "Claude", status: "running" }] } } });
     expect(run.metadata.agentReview.status).toBe("running");
     fail();
     await vi.waitFor(() => expect(run.status).toBe("failed"));
     // As a reload will show it (agent_runs.finish_run): no "Reviewing the answer…" left.
     expect(run.metadata.agentReview.status).toBe("failed");
-    expect(run.metadata.agentReview.passage_check.status).toBe("failed");
     expect(document.getElementById("agentAnswerActivity").textContent).not.toContain("Reviewing the answer…");
     dom.window.close();
   });
@@ -2341,8 +2342,8 @@ describe("single-model agent chat", () => {
   // words: Enter puts them, as dots, into the card's key field.
   it("puts the field's words into the open key card instead of sending them", async () => {
     const { window, document, dom } = boot({ setup(w) {
-      w.App.agentPreferences = { get: () => ({ depth: "auto", quorum: "all", autonomy: "guided", judges: "on", audit: "on", vm: "on" }),
-        auditing: () => true };
+      // The account has the workspace: a running response reads messages.
+      w.document.body.classList.add("viewer-has-workspace");
     } });
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
@@ -2821,7 +2822,7 @@ describe("single-model agent chat", () => {
     w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
     w.resetMarkdownStream = vi.fn();
     w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
     const frames = [];
     w.requestAnimationFrame = fn => frames.push(fn);
     let handlers, resolve;
@@ -2843,7 +2844,7 @@ describe("single-model agent chat", () => {
     expect(body.textContent).toBe('First part. More. Last.');
     expect(w.renderMarkdownStream).toHaveBeenLastCalledWith(body, 'First part. More. Last.', { decorate: expect.any(Function) });
     // The fixed text (the review holds it as its version) is rendered in full,
-    // into the nodes on screen, while the judges still check it.
+    // into the nodes on screen, while the reviewers still check it.
     const version = { id: 1, text: 'First part. More. Last.', hash: 'h' };
     handlers.review.receive({ review: { status: 'running', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
     w.App.agentChat.project(run);
@@ -2860,7 +2861,7 @@ describe("single-model agent chat", () => {
     await selectAgent(w);
     w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
     w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
     const reveal = { active: () => true, stream: vi.fn(), settle: vi.fn((_el, _text, render) => render()) };
     w.App.streamReveal = reveal;
     w.App.agentActivity.reveal = vi.fn();
@@ -2894,7 +2895,7 @@ describe("single-model agent chat", () => {
     await selectAgent(w);
     w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
     w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
     // The pace still has words to show: the full render waits for them.
     let finish = null;
     w.App.streamReveal = { active: () => true, stream: vi.fn(), settle: vi.fn((_el, _text, render) => { finish = render; }) };
@@ -2965,41 +2966,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('never shimmers an answer whose check is off, also while it passes "required"', async () => {
-    const { window: w, document: d, dom } = boot();
-    await selectAgent(w);
-    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
-    w.resetMarkdownStream = vi.fn();
-    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
-    w.App.agentPreferences = { get: () => ({ depth: 'auto', quorum: 'all', autonomy: 'guided', judges: 'off' }), sync() {} };
-    let handlers, resolve;
-    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
-    d.getElementById('questionInput').value = 'Question';
-    const pending = w.App.agentChat.send();
-    await vi.waitFor(() => expect(handlers).toBeDefined());
-    expect(w.streamSSERequest.mock.calls[0][1].agent_preferences.judges).toBe('off');
-    const run = w.App.runRegistry.visible();
-    const body = d.getElementById('agentAnswerBody');
-    handlers.delta.append('Answer.');
-    const version = { id: 1, text: 'Answer.', hash: 'h' };
-    // capture() saves the fixed answer as "required" just before skip_review saves "off".
-    handlers.review.receive({ review: { status: 'required', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
-    w.App.agentChat.project(run);
-    expect(body.classList.contains('is-answer-checking')).toBe(false);
-    handlers.review.receive({ review: { status: 'off', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
-    w.App.agentChat.project(run);
-    expect(body.classList.contains('is-answer-checking')).toBe(false);
-    expect(body.classList.contains('is-answer-check-done')).toBe(false);
-    // Final at once: the evidence row shows while the run still finishes.
-    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.objectContaining({ status: 'off' }), expect.anything());
-    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
-      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
-    await pending;
-    dom.window.close();
-  });
-
-  it('lets the fixed answer shimmer while it is checked and shows its marks as soon as the check ends', async () => {
+  it('lets the fixed answer shimmer while the reviewers review it and shows their marks as soon as they are done', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
@@ -3016,12 +2983,15 @@ describe("single-model agent chat", () => {
     const body = d.getElementById('agentAnswerBody');
     handlers.delta.append('Answer.');
     const version = { id: 1, text: 'Answer.', hash: 'h' };
-    handlers.review.receive({ review: { status: 'running', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    const review = { mode: 'audit', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [], audit: { reviewers: [] } };
+    handlers.review.receive({ review: { ...review, status: 'running' } });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(true);
-    expect(w.App.agentReview.render).not.toHaveBeenCalledWith(body, expect.objectContaining({ status: 'running' }), expect.anything());
-    // Checks done while the run still finishes: marks now, with the reveal.
-    handlers.review.receive({ review: { status: 'succeeded', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] } });
+    // The row stands while the reviewers work (agent-review.js renderAudit, UX audit B3).
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.objectContaining({ status: 'running' }),
+      expect.objectContaining({ reveal: true }));
+    // Reviews done while the run still finishes: marks now, with the reveal.
+    handlers.review.receive({ review: { ...review, status: 'succeeded' } });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(false);
     expect(body.classList.contains('is-answer-check-done')).toBe(true);
@@ -3044,7 +3014,7 @@ describe("single-model agent chat", () => {
     w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
     // The evidence row replaces the line in the same render: none is left when it is drawn.
     const linesAtRender = [];
-    w.App.agentReview = { renderActivity: vi.fn(), preview: vi.fn(),
+    w.App.agentReview = { renderActivity: vi.fn(),
       render: vi.fn((_body, review) => { if (review) linesAtRender.push(d.querySelectorAll('.agent-check-status').length); }) };
     let handlers, resolve;
     w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
@@ -3074,20 +3044,21 @@ describe("single-model agent chat", () => {
     handlers.answer_check.receive({ type: 'answer_check' });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(true);
-    expect(line().textContent).toBe('Checking the answer…');
+    expect(line().textContent).toBe('Reviewing the answer…');
     expect(line().getAttribute('role')).toBe('status');
     expect(body.nextElementSibling).toBe(line());
     // The review's checkpoints carry it on: first without a version, then holding the text.
-    handlers.review.receive({ review: { status: 'running', comparisons: [{ id: 'c' }] } });
+    handlers.review.receive({ review: { mode: 'audit', status: 'running', comparisons: [], audit: { reviewers: [] } } });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(true);
     const version = { id: 1, text: 'Answer.', hash: 'h' };
-    const required = { status: 'required', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] };
+    const required = { mode: 'audit', status: 'required', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [],
+      audit: { reviewers: [] } };
     handlers.review.receive({ review: required });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(true);
     expect(d.querySelectorAll('.agent-check-status')).toHaveLength(1);
-    // Checked: the evidence row takes its place.
+    // Reviewed: the evidence row's words take its place.
     handlers.review.receive({ review: { ...required, status: 'succeeded' } });
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(false);
@@ -3107,7 +3078,7 @@ describe("single-model agent chat", () => {
     w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
     w.resetMarkdownStream = vi.fn();
     w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
     let handlers, resolve;
     w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
     d.getElementById('questionInput').value = 'Question';
@@ -3124,59 +3095,6 @@ describe("single-model agent chat", () => {
     w.App.agentChat.project(run);
     expect(body.classList.contains('is-answer-checking')).toBe(false);
     expect(d.querySelector('.agent-check-status')).toBeNull();
-    dom.window.close();
-  });
-
-  it('hands provisional marks to the answer only while its check runs, and forgets them with a taken-back text', async () => {
-    const { window: w, document: d, dom } = boot();
-    await selectAgent(w);
-    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
-    w.resetMarkdownStream = vi.fn();
-    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
-    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), preview: vi.fn() };
-    let handlers, resolve;
-    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
-    d.getElementById('questionInput').value = 'Question';
-    const pending = w.App.agentChat.send();
-    await vi.waitFor(() => expect(handlers).toBeDefined());
-    const run = w.App.runRegistry.visible();
-    const body = d.getElementById('agentAnswerBody');
-    // Text taken back (a tool call followed) takes any marks with it.
-    handlers.delta.append('Let me check one more source.');
-    handlers.coverage_preview.receive({ answer_hash: 'x', comparison_id: 'c', claims: [] });
-    expect(Object.keys(run.metadata.coveragePreview)).toEqual(['c']);
-    handlers.activity.receive({ version: 1, id: 'step', kind: 'status', status: 'working', clear_response: true });
-    expect(run.metadata.coveragePreview).toBeNull();
-    // A malformed frame changes nothing.
-    handlers.coverage_preview.receive({ answer_hash: 'h', claims: [] });
-    handlers.coverage_preview.receive({ answer_hash: 'h', comparison_id: 'c', claims: 'none' });
-    expect(run.metadata.coveragePreview).toBeNull();
-    // While the answer streams there is nothing to mark.
-    handlers.delta.append('Answer.');
-    w.App.agentChat.project(run);
-    expect(w.App.agentReview.preview).toHaveBeenLastCalledWith(body, null, null, expect.anything());
-    const version = { id: 1, text: 'Answer.', hash: 'h' };
-    const running = { status: 'running', answer_version: 1, answer_hash: 'h', versions: [version], comparisons: [{ id: 'c' }] };
-    handlers.review.receive({ review: running });
-    const event = { answer_hash: 'h', comparison_id: 'c', claims: [{ anchor: 'Answer.', agree: ['A', 'B'], dissent: [] }] };
-    handlers.coverage_preview.receive(event);
-    w.App.agentChat.project(run);
-    expect(body.classList.contains('is-answer-checking')).toBe(true);
-    const [marked, review, previews, evidence] = w.App.agentReview.preview.mock.lastCall;
-    expect(marked).toBe(body);
-    expect(review).toBe(running);
-    expect(previews.c).toBe(event);
-    expect(evidence.key).toBe(run.runId);
-    // The final review takes over the marks; previews are no longer drawn.
-    w.App.agentReview.preview.mockClear();
-    handlers.review.receive({ review: { ...running, status: 'succeeded' } });
-    w.App.agentChat.project(run);
-    expect(w.App.agentReview.preview).not.toHaveBeenCalled();
-    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.objectContaining({ status: 'succeeded' }),
-      expect.objectContaining({ reveal: true }));
-    resolve({ ok: true, data: { response: 'Answer.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
-      turn: { id: 'b'.repeat(32), consensus: 'Answer.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
-    await pending;
     dom.window.close();
   });
 
@@ -3393,22 +3311,15 @@ function bootLinked({ initComparison = true, ...options } = {}) {
 describe('one Agent chip for the chat model and its comparison models', () => {
   const key = (w, el, name) => el.dispatchEvent(new w.KeyboardEvent('keydown', { key: name, bubbles: true }));
 
-  // In audit mode the comparison models review the agent's work, and one is
-  // enough; a comparison needs two (agent-preferences.js auditing, 2026-10-26).
-  it('lets one reviewer suffice in audit mode and counts in the label line', async () => {
+  // The comparison models review the agent's work, and one is enough
+  // (2026-10-26; for every account since 2026-10-31).
+  it('lets one reviewer suffice and counts in the label line', async () => {
     const { window: w, document: d, dom } = bootLinked();
-    let audit = false;
-    w.App.agentPreferences = { auditing: () => audit };
     await selectAgent(w);
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
     const menu = d.querySelector('.agent-model-picker .model-picker-menu');
     const chipText = () => trigger.querySelector('.model-picker-display-text').textContent;
     d.getElementById('compareClaude').checked = false;
-    w.syncCustomModelPickers();
-    expect(chipText()).toBe('No cross-check');
-    expect(w.App.agentChat.sendBlocker().message).toBe('Select between two and 6 comparison models to send your message.');
-
-    audit = true;
     w.syncCustomModelPickers();
     // The reviewers have their own control under the field (agent-mode.js),
     // so the chip names the chat model (Max, 2026-10-27).
@@ -3456,9 +3367,9 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
     const menu = d.querySelector('.agent-model-picker .model-picker-menu');
     expect(d.querySelector('.consensus-model').hidden).toBe(true);
-    // The chip says what the comparison models do; the chat model is named
-    // in its tooltip and menu.
-    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('2 AIs cross-check');
+    // The chip names the chat model; what the comparison models do is in its
+    // tooltip and name (and under the field, agent-mode.js).
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
     expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
     expect(trigger.getAttribute('aria-label')).toBe('Agent and comparison models: DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it');
@@ -3493,7 +3404,7 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     gemini.click();
     expect(d.getElementById('compareGemini').checked).toBe(true);
     expect(d.activeElement.dataset.focusKey).toBe('toggle:Gemini');
-    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('3 AIs cross-check');
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 3 AIs cross-check it.');
     expect(w.localStorage.getItem('pref_consensus_preset')).toBe('custom');
 
     // Escape closes the one menu and returns to the one chip.
@@ -3555,9 +3466,10 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     const trigger = d.querySelector('.agent-model-picker .model-picker-display');
     // The words of the waiting link stand already (the first frame drew
     // them, Apple-Audit B1); they do not leave until the link is made.
-    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('2 AIs cross-check');
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
     w.App.initCustomModelPicker(d.getElementById('consensusModelDropdown'), { presets: true });
-    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('2 AIs cross-check');
+    expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
     trigger.click();
     expect(d.querySelector('.agent-model-picker [data-picker-level="companion"]')).not.toBeNull();
     // Unlinking a link that never applied is a no-op, not an error.
@@ -3794,7 +3706,7 @@ describe("agent turns that outlive their connection", () => {
       settings: { model_id: CATALOG.default_model_id, reasoning_effort: "default", label: "DeepSeek V4.1 Flash" },
       body: { chat_id: CHAT, question: "Resumed question", client_request_id: "req-resume", bookmark_id: "b_agent_resume",
         recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
-        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        file_ids: [],
         google_selection: null, google_data_consent: false } };
     const { window: w, dom } = bootFollow({
       before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
@@ -3858,7 +3770,9 @@ describe("agent turns that outlive their connection", () => {
     const asked = w.streamSSERequest.mock.calls[0][1];
     expect(asked).toMatchObject({ recover_only: true, chat_id: CHAT, question: "Second", client_request_id: "req-elsewhere",
       bookmark_id: "b_agent_chat", model_id: "gpt-5.6-sol", reasoning_effort: "low",
-      comparison_models: { openai: "gpt-5.4-mini" }, agent_preferences: turn.agent_settings.agent_preferences });
+      comparison_models: { openai: "gpt-5.4-mini" } });
+    // The comparison options a turn of an older server still names are not sent again (2026-10-31).
+    expect(asked).not.toHaveProperty("agent_preferences");
     await vi.waitFor(() => expect(liveCalls(w)[0]).toBe(`/agent/chats/${CHAT}/live?request_id=req-elsewhere&after=0`));
     const host = d.getElementById("agentHold");
     await vi.waitFor(() => expect(host.hidden).toBe(false));
@@ -3875,7 +3789,7 @@ describe("agent turns that outlive their connection", () => {
     const record = { at: Date.now(), title: "Paused question", followup: false,
       body: { chat_id: CHAT, question: "Paused question", client_request_id: "req-compare", bookmark_id: "b_agent_compare",
         recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
-        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        file_ids: [],
         google_selection: null, google_data_consent: false } };
     const { window: w, dom } = bootFollow({
       before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
@@ -3922,7 +3836,7 @@ describe("agent turns that outlive their connection", () => {
       settings: { model_id: CATALOG.default_model_id, reasoning_effort: "default", label: "DeepSeek V4.1 Flash" },
       body: { chat_id: CHAT, question: "Question", client_request_id: "req-queue", bookmark_id: "b_agent_queue",
         recover_only: false, model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {},
-        agent_preferences: { depth: "auto", quorum: "all", autonomy: "guided" }, file_ids: [],
+        file_ids: [],
         google_selection: null, google_data_consent: false },
       queue: [{ text: "Danach bitte kürzer", state: "queued" }, { text: "Schon gelesen", state: "waiting", noteId: "n1" },
         { text: "Unterwegs gewesen", state: "sending" }] };

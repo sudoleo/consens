@@ -30,10 +30,10 @@
                                models. Their marks stand before it: on the
                                start screen always (#composerModelPicker),
                                in a chat the reviewers' (.composer-reviewers).
-                               In audit mode the chip names the chat model,
-                               and Reasoning (brain and level, start screen
+                               In Agent the chip names the chat model, and
+                               Reasoning (brain and level, start screen
                                from 701px) stands between the reviewers'
-                               words and it; otherwise after the chip
+                               words and it; in Compare after the chip
      .input-actions-container  Demo (onboarding only), Send
    Every setting has one place: what the row shows, the (+) menu leaves out
    (see "Each setting in one place").
@@ -147,7 +147,7 @@
 }
 
 .agent-model-picker { display: flex; justify-content: flex-start; min-width: 0; max-width: 230px; flex: 1 1 auto; }
-/* Audit in a chat: the reviewers' marks before the chip, which names the
+/* Agent in a chat: the reviewers' marks before the chip, which names the
    chat model (agent-mode.js renderReviewers). The start screen shows every
    mode's marks there instead (#composerModelPicker). Built like the chip
    beside it. */
@@ -365,10 +365,9 @@
   .chat-input-container > .input-actions-container { order: 4; margin-left: 0; }
   .agent-model-picker { max-width: 100%; }
   .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display { padding-inline: 8px; }
-  /* The chip already says in words who answers ("3 AIs cross-check"), and
-     its words come first here. The marks stay where they have words of their
-     own (the reviewers in audit mode, as in a chat) or stand in for the chip
-     a guest does not get. */
+  /* The chip already says in words who answers, and its words come first
+     here. The marks stay where they have words of their own (Agent's
+     reviewers, as in a chat) or stand in for the chip a guest does not get. */
   body:not(.is-guest) .composer-models > .composer-mode-models:not(:has(> .composer-tool-label:not([hidden]))) { display: none; }
 }
 /* The narrowest phones: the onboarding Demo button keeps its play mark and

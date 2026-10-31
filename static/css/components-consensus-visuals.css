@@ -380,8 +380,6 @@
   /* Bernstein-Note der Badges und der kurze Aufblitz einer geoeffneten Karte. */
   --cx-major-line: var(--partial);
   --cx-flash: rgba(208, 161, 64, 0.16);
-  /* Die vorlaeufige Marke: neutral, nur Tinte (siehe .is-provisional). */
-  --cx-provisional-line: color-mix(in srgb, var(--ink) 34%, transparent);
 }
 
 .dark-mode {
@@ -401,7 +399,6 @@
   --cx-ink-major: #ffb3ab;
   --cx-major-line: var(--partial);
   --cx-flash: rgba(245, 197, 111, 0.15);
-  --cx-provisional-line: color-mix(in srgb, var(--ink) 38%, transparent);
 }
 
 @supports (color: oklch(from red l c h)) {
@@ -434,32 +431,6 @@
   text-decoration: none;
 }
 
-/* Die vorlaeufige Marke (agent-review.js preview, seit 2026-10-21): ein
-   schon verglichener Satz, dessen Pruefung noch laeuft. Sie sagt nur DASS er
-   verglichen wurde, nie wie: keine Flaeche, keine Ampelfarbe, nur eine leise
-   gepunktete Linie in Tinte, hell wie dunkel. Eine Flaeche haette fast jeden
-   Satz eingefaerbt; die Farbe kommt erst mit der fertigen Pruefung
-   (Max 2026-10-21). Die Linie braucht keinen Platz (kein Umbruch). Beim
-   Uebergang behaelt die finale Marke die Linie, bis ihre Farbe kommt
-   (.was-provisional, agent-chat.css). */
-.cx-claim:is(.is-provisional, .was-provisional) {
-  text-decoration-line: underline;
-  text-decoration-style: dotted;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.24em;
-  text-decoration-color: transparent;
-}
-
-body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
-  text-decoration-color: var(--cx-provisional-line);
-}
-
-@media (forced-colors: active) {
-  body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
-    text-decoration-color: GrayText;
-  }
-}
-
 /* Linien unter den Marken. Die Flaeche allein trennt Widerspruch und
    Uneinigkeit nur ueber den Farbton, fuer etwa jeden zwoelften Mann kaum
    (a11y-Audit, Abschnitt 6). Die Kontoeinstellung mark_lines
@@ -469,8 +440,7 @@ body:not(.consensus-markers-hidden) .cx-claim.is-provisional {
    und duenne Lage gepunktet, jede in der Farbe ihrer Stufe. Im Kontrastmodus
    faellt die Flaeche weg (Canvas); dort stehen die Linien immer, die Farbe
    setzt das System (V2). Eine benannte Stelle traegt die Linie statt ihres
-   Satzes, wie sonst die Farbe; eine eben noch vorlaeufige Marke behaelt bis
-   zum Anstreichen ihre eigene Linie. Ohne Einstellung bleibt --cx-underline
+   Satzes, wie sonst die Farbe. Ohne Einstellung bleibt --cx-underline
    leer und die Regel zeichnet nichts. */
 body.marks-underlined {
   --cx-underline: underline;
@@ -488,8 +458,8 @@ body.marks-underlined {
 .cx-claim.is-split { --cx-line: var(--partial); }
 .cx-claim.is-major { --cx-line: var(--dispute); }
 
-body:not(.consensus-markers-hidden) .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot, .was-provisional),
-body:not(.consensus-markers-hidden) .cx-claim.has-spot:not(.is-marker-filtered, .was-provisional) .cx-spot {
+body:not(.consensus-markers-hidden) .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot:not(.is-marker-filtered) .cx-spot {
   text-decoration-line: var(--cx-underline, none);
   text-decoration-style: dotted;
   text-decoration-thickness: 1px;
@@ -497,13 +467,13 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot:not(.is-marker-filtered, 
   text-underline-offset: 0.22em;
 }
 
-body:not(.consensus-markers-hidden) .cx-claim:is(.is-minor, .is-split):not(.is-marker-filtered, .has-spot, .was-provisional),
-body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-minor, .is-split):not(.is-marker-filtered, .was-provisional) .cx-spot {
+body:not(.consensus-markers-hidden) .cx-claim:is(.is-minor, .is-split):not(.is-marker-filtered, .has-spot),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-minor, .is-split):not(.is-marker-filtered) .cx-spot {
   text-decoration-style: dashed;
 }
 
-body:not(.consensus-markers-hidden) .cx-claim.is-major:not(.is-marker-filtered, .has-spot, .was-provisional),
-body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-filtered, .was-provisional) .cx-spot {
+body:not(.consensus-markers-hidden) .cx-claim.is-major:not(.is-marker-filtered, .has-spot),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-filtered) .cx-spot {
   text-decoration-style: solid;
   text-decoration-thickness: 2px;
 }
@@ -564,8 +534,8 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-f
   --cx-mark-strong: color-mix(in srgb, var(--cx-mark-note-strong), var(--ink) 8%);
 }
 
-body:not(.consensus-markers-hidden) .cx-claim.is-audit.is-minor:not(.is-marker-filtered, .has-spot, .was-provisional),
-body:not(.consensus-markers-hidden) .cx-claim.is-audit.has-spot.is-minor:not(.is-marker-filtered, .was-provisional) .cx-spot {
+body:not(.consensus-markers-hidden) .cx-claim.is-audit.is-minor:not(.is-marker-filtered, .has-spot),
+body:not(.consensus-markers-hidden) .cx-claim.is-audit.has-spot.is-minor:not(.is-marker-filtered) .cx-spot {
   text-decoration-line: underline;
   text-decoration-style: dashed;
   text-decoration-thickness: 1px;

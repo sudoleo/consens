@@ -218,9 +218,9 @@ describe("result card of a checked pasted text", () => {
     expect(popover).toHaveBeenCalledTimes(3);
   });
 
-  it("opens the model's answer from the claim card even while the run is still live", () => {
+  it("opens the model's answer from the claim card", () => {
     const { window, body, card, popover, openContext } = boot();
-    window.App.passageCheck.apply(body, review(), { live: true });
+    window.App.passageCheck.apply(body, review());
     card().querySelector(".pc-claim").click();
     const navigation = popover.mock.calls[0][3];
     expect(navigation.canOpen("Claude")).toBe(true);
@@ -232,43 +232,36 @@ describe("result card of a checked pasted text", () => {
     expect(options).toMatchObject({ section: "answers", model: "Claude", quote: "Radiators work." });
   });
 
-  it("says what runs while the models answer, then turns into the result", () => {
+  // No run checks a text since 2026-10-31: a check saved while it still ran
+  // (its run ended first) says it did not finish, and nothing else.
+  it("says that a check saved while it still ran did not finish", () => {
     const { window, body, card } = boot();
-    const waiting = review({ status: "waiting", claims: undefined, models_compared: undefined });
-    window.App.passageCheck.apply(body, waiting, { live: true });
-    expect(card().dataset.state).toBe("running");
-    expect(card().querySelector(".passage-check-status").textContent).toBe("Checking your text against independent answers…");
-    expect(card().querySelector(".passage-check-note").textContent).toBe(
-      "Checking it as an answer to “Do heat pumps make sense in old buildings?” The models answer without seeing your text.");
-    expect(card().querySelector(".passage-check-toggle")).toBeNull();
-    expect(card().querySelector(".passage-check-legend")).toBeNull();
-    window.App.passageCheck.apply(body, review({ status: "running", claims: undefined }), { live: true });
-    expect(card().querySelector(".passage-check-status").textContent).toBe("Checking each sentence of your text…");
-    window.App.passageCheck.apply(body, review(), { live: true });
+    for (const status of ["waiting", "running"]) {
+      window.App.passageCheck.apply(body, review({ status, claims: undefined, models_compared: undefined }));
+      expect(card().dataset.state).toBe("failed");
+      expect(card().textContent).toBe("The check of your text did not finish.");
+      expect(card().querySelector(".passage-check-toggle")).toBeNull();
+    }
+    window.App.passageCheck.apply(body, review());
     expect(card().dataset.state).toBe("done");
     expect(card().querySelectorAll(".passage-check-quote")).toHaveLength(1);
-
-    // A run that ended without the check says so.
-    window.App.passageCheck.apply(body, waiting, { live: false });
-    expect(card().dataset.state).toBe("failed");
-    expect(card().textContent).toBe("The check of your text did not finish.");
   });
 
-  it("does not redraw a finished check when the run ends or the saved turn comes back reordered", () => {
+  it("does not redraw a finished check when the saved turn comes back reordered", () => {
     const { window, body, card } = boot();
     const done = review();
-    window.App.passageCheck.apply(body, done, { live: true });
+    window.App.passageCheck.apply(body, done);
     const first = card().querySelector(".pc-claim");
-    window.App.passageCheck.apply(body, done, { live: false });
-    window.App.passageCheck.apply(body, reordered(done), { live: false });
+    window.App.passageCheck.apply(body, done);
+    window.App.passageCheck.apply(body, reordered(done));
     expect(card().querySelector(".pc-claim")).toBe(first);
   });
 
-  it("keeps the unfolded text open when the run ends", () => {
+  it("keeps the unfolded text open when the same check comes back with more to say", () => {
     const { window, body, card } = boot();
-    window.App.passageCheck.apply(body, review(), { live: true });
+    window.App.passageCheck.apply(body, review());
     card().querySelector(".passage-check-toggle").click();
-    window.App.passageCheck.apply(body, review({ issues: [{ code: "models_unavailable", count: 1 }] }), { live: false });
+    window.App.passageCheck.apply(body, review({ issues: [{ code: "models_unavailable", count: 1 }] }));
     expect(card().querySelectorAll(".passage-check-text .pc-claim")).toHaveLength(3);
     expect(card().querySelector(".passage-check-toggle").textContent).toBe("Show less");
     expect(card().querySelector(".passage-check-note").textContent).toBe(NOTE + " 1 model did not answer.");

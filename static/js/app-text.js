@@ -220,10 +220,10 @@
     yourTurn: "Waiting for you",
     // What is used up by a message.
     allowance: "allowance",
-    // The Agent chip says what the comparison models do, not their names:
-    // "Claude Sonnet 5.5 +6" meant nothing to a reader new to AI models.
-    // One is enough in audit mode, where they review (agent-preferences.js).
-    crossCheck: (count, minimum = 2) => count < minimum ? "No cross-check"
+    // The Agent's reviewers say what they do, not their names: "Claude
+    // Sonnet 5.5 +6" meant nothing to a reader new to AI models. One is
+    // enough (agent_comparison.comparison_selection).
+    crossCheck: count => count < 1 ? "No cross-check"
       : count === 1 ? "1 AI cross-checks" : `${count} AIs cross-check`
   });
 

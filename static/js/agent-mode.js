@@ -437,19 +437,18 @@
       ? `${counts.ready}/${counts.total}${counts.unavailable ? ` · ${counts.unavailable}!` : ""}` : "";
   }
 
-  // In audit mode the comparison models review the agent’s work and get a
+  // With Agent the comparison models review the agent’s work and have a
   // control of their own (Max, 2026-10-27): their marks stand before the
-  // chip, which then names the chat model (model-picker.js), and say "2 AIs
+  // chip, which names the chat model (model-picker.js), and say "2 AIs
   // cross-check" (#composerModelPicker on the start screen,
   // #composerReviewers in a chat). Both open the reviewers' level of the
   // Agent menu.
-  function renderReviewers(beta, start, count) {
-    const auditing = beta && window.App.agentPreferences?.auditing?.() === true;
-    const words = auditing ? window.App.words.crossCheck(count, 1) : "";
+  function renderReviewers(reviewing, start, count) {
+    const words = reviewing ? window.App.words.crossCheck(count) : "";
     // Where the words do not fit, their short form ("3 AIs"), the same in the
     // chat and on the start screen: the marks never stand without a word on a
     // phone (UX audit E4, E5). An attribute is not translated by i18n.js.
-    const short = !auditing ? "" : count === 1 ? "1 AI" : `${count} AIs`;
+    const short = !reviewing ? "" : count === 1 ? "1 AI" : `${count} AIs`;
     const shortText = window.App.t?.(short) ?? short;
     // One write, and only of a change: i18n.js translates what is written.
     const write = (node, name, value) => {
@@ -461,9 +460,9 @@
     const picker = document.getElementById("composerModelPicker");
     const label = document.getElementById("composerModelLabel");
     if (label) {
-      label.hidden = !auditing;
-      if (auditing) write(label, "text", words);
-      if (auditing) label.dataset.short = shortText; else delete label.dataset.short;
+      label.hidden = !reviewing;
+      if (reviewing) write(label, "text", words);
+      if (reviewing) label.dataset.short = shortText; else delete label.dataset.short;
     }
     if (picker) {
       // On the start screen the marks stand before the chip in every mode
@@ -472,12 +471,12 @@
       picker.hidden = !start;
       if (wasHidden && !picker.hidden) revealBar(picker);
       // The name holds the words on screen (WCAG 2.5.3).
-      write(picker, "aria-label", auditing ? words : "Configure models for your next question");
-      write(picker, "title", auditing ? "Choose the reviewers of the agent’s work" : "Configure models");
+      write(picker, "aria-label", reviewing ? words : "Configure models for your next question");
+      write(picker, "title", reviewing ? "Choose the reviewers of the agent’s work" : "Configure models");
     }
     const reviewers = document.getElementById("composerReviewers");
     if (!reviewers) return;
-    reviewers.hidden = !auditing || start;
+    reviewers.hidden = !reviewing || start;
     if (reviewers.hidden) return;
     write(reviewers, "aria-label", words);
     // What the icons are, said beside them and in the tooltip (2026-10-28,

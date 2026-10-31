@@ -225,57 +225,6 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     assert j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']['used'] == 5 * 150
 
 
-def test_j02c_answer_check_off_in_settings_ends_the_turn_without_any_judge(journey):
-    """Settings › Agent · Beta › Answer check Off, through the real producer
-    and Firestore: the comparison runs, no judge is called, the turn
-    completes as reviewed ("off") and the answer says so, also after a reload."""
-    j = journey
-    j.open()
-    j.page.evaluate("() => { const sidebar = document.querySelector('.sidebar');"
-                    " if (sidebar?.classList.contains('collapsed')) document.getElementById('toggleSidebarButton').click(); }")
-    j.page.click('#editSystemPromptBtn')
-    j.page.click('#settingsTabAgent')
-    expect(j.page.locator('#agentJudgesSelect')).to_have_value('on')
-    j.page.select_option('#agentJudgesSelect', 'off')
-    j.page.keyboard.press('Escape')
-    expect(j.page.locator('#systemPromptModal')).not_to_be_visible()
-    j.page.evaluate('async () => { await App.userSettings.flush(); }')
-    j.page.locator('#attachTrigger').click()
-    j.page.locator('#runModeControl [data-value="agent"]').click()
-    question = 'Answer check off ' + j.uid
-    j.page.fill('#questionInput', question)
-    with j.page.expect_request(lambda r: r.url == j.base + '/agent' and r.method == 'POST') as started:
-        j.page.click('#sendButton')
-    assert started.value.post_data_json['agent_preferences']['judges'] == 'off'
-    j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")',
-                             arg=question, timeout=60000)
-    j.producer_finished()
-    state = j.settled()
-    assert state['collections']['settings']['app']['data']['values']['agent_preferences'] == {'judges': 'off'}
-    [chat] = state['collections']['chats'].values()
-    [turn] = chat['children']['turns'].values()
-    data = turn['data']
-    assert data['status'] == 'completed' and data['agent_settings']['agent_preferences']['judges'] == 'off'
-    review = data['agent_review']
-    assert review['status'] == 'off' and [c['status'] for c in review['checks']] == ['off']
-    # The compare step, the three comparison answers of Daily and the
-    # answer: no judge call.
-    assert len(state['calls']) == 5, state['calls']
-    # No line under the answer: the reader switched the check off.
-    status = j.page.locator('#agentAnswer .agent-review-status')
-    expect(status).to_have_attribute('data-state', 'off')
-    expect(status).to_be_hidden()
-    expect(j.page.locator('#agentAnswer .agent-agreement')).to_have_count(0)
-    j.page.screenshot(path=f'test-results/{j.uid}-answer-check-off.png')
-    # Saved and reopened: still off and quiet, and the setting stays off.
-    j.page.reload(wait_until='domcontentloaded')
-    j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
-    j.page.evaluate('id => window.openBookmark(id)', next(iter(state['collections']['bookmarks'])))
-    expect(j.page.locator('.agent-review-status').last).to_have_attribute('data-state', 'off', timeout=15000)
-    expect(j.page.locator('.agent-review-status').last).to_be_hidden()
-    assert j.page.evaluate('() => App.agentPreferences.get().judges') == 'off'
-
-
 def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey):
     j = journey
     j.control('seed', {'gate': True})

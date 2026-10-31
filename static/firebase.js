@@ -423,12 +423,11 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       if (data.is_admin === true) window.consensioAnalytics?.excludeOperator?.();
       // Token and cost figures (.admin-only) are for the operator only (Apple-Audit H4).
       document.body.classList.toggle("viewer-is-admin", data.is_admin === true);
-      // Audit with its own VM (Pro and admins): its settings, work log and restore.
-      document.body.classList.toggle("viewer-can-audit", data.audit_access === true);
-      // Its workspace, when the server has a VM provider (vm_time comes with it).
-      document.body.classList.toggle("viewer-has-workspace", data.audit_access === true && Boolean(data.vm_time));
+      // The account's workspace (Linux computer for the Agent): vm_time comes
+      // only with it. Its settings, restore and composer button follow.
+      document.body.classList.toggle("viewer-has-workspace", Boolean(data.vm_time));
       window.App.vmTime = data.vm_time || null;
-      window.App.agentPreferences?.sync?.();
+      window.App.workspaceView?.syncSettings?.();
       // 1. Konto sofort zeigen: das Tokenkonto des Tages.
       window.App.state.set("isUserPro", data.is_pro, "userTier");
       window.App.tokenBudget?.apply?.(data.token_budget, { uid: user.uid, authoritative: true });
@@ -929,7 +928,9 @@ onIdTokenChanged(auth, async (user) => {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
         window.App?.accountTier?.set?.("free");
-        document.body.classList.remove("viewer-is-admin", "viewer-can-audit", "viewer-has-workspace");
+        document.body.classList.remove("viewer-is-admin", "viewer-has-workspace");
+        window.App.vmTime = null;
+        window.App.workspaceView?.syncSettings?.();
         publishAuthState(null);
         // Only now is the session known to be gone. The field was drawn
         // above while the page still expected the account this browser

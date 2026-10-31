@@ -101,7 +101,6 @@ describe("the local copy", () => {
   it("keeps every setting under the storage keys the app used before", () => {
     const { settings, local } = open();
     settings.set("run_mode", "compare");
-    settings.set("agent_preferences", { quorum: "fast" });
     settings.set("agent_model", { model_id: "openai/gpt-6-luna", reasoning_effort: "low" });
     settings.set("compare_models", { OpenAI: { enabled: false }, Gemini: { model: "gemini-3.6-flash" } });
     settings.set("consensus_model", "Gemini");
@@ -113,7 +112,6 @@ describe("the local copy", () => {
     expect(Object.fromEntries(Object.keys(local).filter(key => key !== SYNC_KEY).map(key => [key, local.getItem(key)]))).toEqual({
       [RESET_KEY]: "2026-10-12",
       runMode: "compare",
-      "consensio.agentPreferences.v2": JSON.stringify({ quorum: "fast" }),
       "consensio.agentModel.v1": JSON.stringify({ model_id: "openai/gpt-6-luna", reasoning_effort: "low" }),
       pref_check_OpenAI: "false",
       pref_select_Gemini: "gemini-3.6-flash",
@@ -154,7 +152,6 @@ describe("the local copy", () => {
     ["claim_counts", "true"],
     ["letter_animations", "off"],
     ["agent_model", { model_id: "openai gpt", reasoning_effort: "low" }],
-    ["agent_preferences", { depth: "deep" }],
     ["compare_models", { "Open<AI>": { enabled: true } }],
     ["compare_models", { OpenAI: { enabled: "yes" } }],
     ["consensus_model", "gpt 5"],
@@ -183,6 +180,21 @@ describe("the local copy", () => {
     const { settings } = open();
     expect(() => settings.set("theme", "dark")).toThrow(/Unknown account setting/);
     expect(() => settings.onChange("theme", () => {})).toThrow(/Unknown account setting/);
+    // The Agent's comparison options left with its comparison mode (2026-10-31).
+    expect(() => settings.get("agent_preferences")).toThrow(/Unknown account setting/);
+  });
+
+  // agent_preferences is no setting any more: what a browser stored of it
+  // goes, in both of its formats, and nothing else does.
+  it("drops the retired Agent choices this browser still holds", () => {
+    const { settings, local } = open({ storage: {
+      "consensio.agentPreferences.v2": JSON.stringify({ depth: "quick", audit: "on" }),
+      "consensio.agentPreferences.v1": JSON.stringify({ depth: "auto", quorum: "fast" }),
+      "consensio.agentModel.v1": JSON.stringify({ model_id: "gpt-6-luna", reasoning_effort: "low" }),
+    } });
+    expect(local.getItem("consensio.agentPreferences.v2")).toBeNull();
+    expect(local.getItem("consensio.agentPreferences.v1")).toBeNull();
+    expect(settings.get("agent_model")).toEqual({ model_id: "gpt-6-luna", reasoning_effort: "low" });
   });
 });
 
@@ -193,7 +205,6 @@ describe("the one-time reset to Agent and the default preset", () => {
     pref_consensus_preset: "custom",
     // Not part of the reset: the user's own choices without model IDs.
     systemPrompt: "Answer in German.", "consensio.showClaimCounts.v1": "true",
-    "consensio.agentPreferences.v2": JSON.stringify({ depth: "quick" }),
     "consensio.agentModel.v1": JSON.stringify({ model_id: "gpt-6-luna", reasoning_effort: "low" }),
     theme: "dark",
   };
@@ -211,7 +222,6 @@ describe("the one-time reset to Agent and the default preset", () => {
     expect(settings.get("compare_models")).toBeUndefined();
     expect(settings.get("system_prompt")).toBe("Answer in German.");
     expect(settings.get("claim_counts")).toBe(true);
-    expect(settings.get("agent_preferences")).toEqual({ depth: "quick" });
     expect(settings.get("agent_model")).toEqual({ model_id: "gpt-6-luna", reasoning_effort: "low" });
     expect(local.getItem("theme")).toBe("dark");
     expect(local.getItem(RESET_KEY)).toBe("2026-10-12");
@@ -226,15 +236,6 @@ describe("the one-time reset to Agent and the default preset", () => {
   it("reads a stored mode it does not know as the default", () => {
     const { settings } = open({ storage: { runMode: "bogus" } });
     expect(settings.get("run_mode")).toBeUndefined();
-  });
-
-  it("keeps only the Agent choices v1 stored beyond its defaults", () => {
-    const { settings, local } = open({ storage: {
-      "consensio.agentPreferences.v1": JSON.stringify({ depth: "auto", quorum: "fast", autonomy: "guided" }),
-    } });
-    expect(settings.get("agent_preferences")).toEqual({ quorum: "fast" });
-    expect(local.getItem("consensio.agentPreferences.v1")).toBeNull();
-    expect(local.getItem("consensio.agentPreferences.v2")).toBe(JSON.stringify({ quorum: "fast" }));
   });
 
   it.each([
@@ -344,18 +345,18 @@ describe("sync with the account", () => {
     expect(server.patches()).toEqual([]);
   });
 
-  it("keeps the Agent choices it knows when the account holds a newer one", async () => {
-    // A page of this version and an account saved by a newer one: only the
-    // unknown field is left out (the server merges agent_preferences field by field).
-    const server = fakeServer({ settings: { agent_preferences: { autonomy: "free", judges: "off", future: "x" } },
+  it("ignores the retired Agent choices an account still holds", async () => {
+    // Saved before 2026-10-31 (agent_preferences, the comparison mode's
+    // options), or still pending from a page of the version before: neither
+    // reaches this browser nor goes back to the account.
+    const server = fakeServer({ settings: { agent_preferences: { autonomy: "free", judges: "off" }, claim_counts: true },
       revision: 3 });
-    const { settings, start } = open({ server, storage: { [SYNC_KEY]: JSON.stringify({ owner: UID, pending: [] }) } });
+    const { settings, local, start } = open({ server,
+      storage: { [SYNC_KEY]: JSON.stringify({ owner: UID, pending: ["agent_preferences"], base: 3 }) } });
     await start();
-    expect(settings.get("agent_preferences")).toEqual({ autonomy: "free", judges: "off" });
+    expect(settings.get("claim_counts")).toBe(true);
+    expect(local.getItem("consensio.agentPreferences.v2")).toBeNull();
     expect(server.patches()).toEqual([]);
-    // A value it cannot read for a field it knows still refuses the change.
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(settings.set("agent_preferences", { autonomy: "free", judges: "maybe" })).toBe(false);
   });
 
   it("keeps a change made before the account answered and sends it", async () => {

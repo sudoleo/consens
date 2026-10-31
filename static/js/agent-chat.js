@@ -420,7 +420,8 @@
   // `force` it returns at once when nothing it shows has changed, so the
   // registry listener and the run projector can call it on every update.
   function renderShell(force = false) {
-    App.agentPreferences?.sync?.();
+    // The Agent's settings tab follows its access (workspace-view.js).
+    App.workspaceView?.syncSettings?.();
     const visibleRun = registry.visible()?.runId || null;
     if (visibleRun !== framedRunId) { framedRunId = visibleRun; viewEpoch++; frameKey = ''; }
     const signature = shellInputs();
@@ -518,8 +519,7 @@
           ? () => restoreVm(basis.chatId, basis.currentTurn.id || basis.turnId) : null });
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
         { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
-      App.passageCheck?.apply(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
-        { live: basis.currentTurn?.status === "pending" });
+      App.passageCheck?.apply(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review);
       App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
       });
@@ -600,8 +600,6 @@
     }
     if (body.dataset.markdown === text && body.dataset.renderMode === mode) return;
     const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
-    // Provisional marks the reader saw belong to one text (agent-review.js).
-    if (body.dataset.markdown !== text) body._shownMarks = null;
     body.dataset.markdown = text;
     body.dataset.renderMode = mode;
     const reveal = App.streamReveal?.active() ? App.streamReveal : null;
@@ -642,18 +640,15 @@
       streaming && window.renderMarkdownStream ? 'stream' : 'full');
     renderError(typeof error === 'string' ? { text: error } : error);
   }
-  // While the judges check the fixed answer a quiet sheen passes over it, so
-  // the reader sees below the fold that something is still happening. It
+  // While the reviewers review the fixed answer a quiet sheen passes over it,
+  // so the reader sees below the fold that something is still happening. It
   // fades out instead of switching off when the marks arrive. Where the
-  // evidence row will stand, one quiet line says it in words: the only sign
-  // with reduced motion or forced colors, and as tall as that row, so the row
-  // takes its place in the same frame without a jump (agent-chat.css).
-  // In audit mode the reviewers do it, in the activity's words (agent-activity.js
-  // reviewStage): one word for one state on screen at a time.
-  function setAnswerChecking(body, checking, { fade = true, audit = false } = {}) {
-    const words = audit ? 'Reviewing the answer…' : App.words?.checking || 'Checking the answer…';
-    // Announced before the review said its mode: the line takes the review's words.
-    if (checking && body?._checkStatus && body._checkStatus.textContent !== App.t(words)) body._checkStatus.textContent = words;
+  // evidence row will stand, one quiet line says it in the activity's words
+  // (agent-activity.js reviewStage), one word for one state on screen at a
+  // time: the only sign with reduced motion or forced colors, and as tall as
+  // that row, so the row takes its place in the same frame without a jump
+  // (agent-chat.css).
+  function setAnswerChecking(body, checking, { fade = true } = {}) {
     if (!body || body.classList.contains('is-answer-checking') === checking) return;
     body.classList.toggle('is-answer-checking', checking);
     clearTimeout(body._answerCheckFade);
@@ -663,10 +658,9 @@
     body._checkStatus = null;
     if (!checking) return;
     const line = document.createElement('p');
-    // Audit: as tall as the review's row (no score line above it on a phone).
-    line.className = audit ? 'agent-check-status is-audit' : 'agent-check-status';
+    line.className = 'agent-check-status';
     line.setAttribute('role', 'status');
-    line.textContent = words;
+    line.textContent = 'Reviewing the answer…';
     // Under the answer's pictures, where the evidence row will stand.
     (App.answerTail?.(body) || body).after(line);
     body._checkStatus = line;
@@ -839,7 +833,7 @@
     const retry = !running && context.metadata.requestSent && !context.metadata.restoreDraft;
     // The streamed text is fixed once the review holds it as a version: from
     // then on it is shown in full, so an answer that ends in a table shows
-    // the table while the judges still check it.
+    // the table while the reviewers still check it.
     const settled = running && !state.text && Boolean(state.streamText)
       && Boolean(context.metadata.agentReview?.versions?.some(version => version?.text === state.streamText));
     // Its checklists can be ticked once the answer is saved as a turn.
@@ -895,34 +889,21 @@
     // since drops the announcement.
     if (context.metadata.answerCheckText && context.metadata.answerCheckText !== shownText) context.metadata.answerCheckText = null;
     const announced = running && !fixed && Boolean(shownText.trim()) && context.metadata.answerCheckText === shownText;
-    // With the answer check off the run's fixed answer passes "required" on
-    // its way to "off" for a moment; nothing is checked, so no sheen.
-    const checking = announced || (fixed && context.config.agentPreferences?.judges !== 'off'
-      && ['required', 'running'].includes(liveReview.status));
-    // "off": the answer check is switched off, the fixed answer is final.
-    const checked = fixed && ['succeeded', 'partial', 'off'].includes(liveReview.status);
-    setAnswerChecking(answerBody, checking, { audit: liveReview?.mode === 'audit'
-      || (!liveReview && context.config.agentPreferences?.audit === 'on') });
+    const checking = announced || (fixed && ['required', 'running'].includes(liveReview.status));
+    setAnswerChecking(answerBody, checking);
     if (checking) context.metadata.revealMarks = true;
-    // In audit mode the row under the fixed answer stands while the reviewers
-    // work, Notes waiting and Sources already counted (agent-review.js; UX
+    // The row under the fixed answer stands while the reviewers work, Notes
+    // waiting and Sources already counted (agent-review.js renderAudit; UX
     // audit B3): the end of the review changes a word, not the row.
-    const reviewing = fixed && liveReview?.mode === 'audit';
-    if (!running || framed || checked || reviewing) {
-      const live = running && !checked && !reviewing;
+    if (!running || framed || fixed) {
+      const live = running && !fixed;
       App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
           key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
     }
-    // Sentences whose Coverage window is done are marked quietly while the
-    // check still waits for Differences (coverage_preview); the final review
-    // replaces them, and without a check they come off again.
-    if (running && !checked) App.agentReview?.preview?.(answerBody, checking ? liveReview : null,
-      context.metadata.coveragePreview, { sources: state.completedTurn?.sources, events: context.metadata.agentActivity,
-        key: context.runId, question: context.question });
-    // A pasted text the Agent checks: "Checking ..." above the answer while
-    // the models answer, the result card as soon as the check is in.
-    App.passageCheck?.apply(answerBody, state.completedTurn?.agent_review || liveReview, { live: running });
+    // A pasted text the Agent checked (turns saved before 2026-10-31): the
+    // result card above the answer.
+    App.passageCheck?.apply(answerBody, state.completedTurn?.agent_review || liveReview);
     // Memory changes appear as soon as Agent made them, not only at the end.
     App.agentMemory?.render(answerBody, { key: context.runId, running,
       changes: state.completedTurn?.agent_memory || context.metadata.agentMemory || [] });
@@ -952,12 +933,10 @@
     const delegated = context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation;
     // Before the server named the new turn, a chat whose activity panel is
     // open keeps it open, waiting (agent-delegation.js, Apple audit A9).
-    // Audit mode writes a work log (admins only, agent-work-log.js).
-    const workLog = Boolean(state.completedTurn?.agent_work_log)
-      || (context.config.agentPreferences?.audit === "on" && document.body.classList.contains("viewer-can-audit"));
+    // Every run writes a work log (admins only, agent-work-log.js).
     App.agentDelegation?.project(delegated ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
-      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running, workLog }
+      usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running, workLog: true }
       : running ? { chatId: context.metadata.chatId || context.basis?.chatId, running: true } : null);
   }
   // A refusal's sentence (the server's {error, code}), or one of ours; never
@@ -1030,7 +1009,6 @@
           bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
           reasoning_effort: settings.reasoning_effort || 'default',
           comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
-          agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
@@ -1057,19 +1035,17 @@
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => [pref.provider, document.getElementById(pref.selectId)?.value]));
   }
-  // A comparison needs two models; in audit mode they review the work, and
-  // one is enough (agent-preferences.js auditing).
-  function comparisonMinimum() { return App.agentPreferences?.auditing?.() ? 1 : 2; }
+  // The comparison models review the agent's work: one is enough
+  // (agent_comparison.comparison_selection).
   function comparisonLimit() { return Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6; }
   function comparisonRequirement(suffix) {
     const limit = comparisonLimit();
-    return comparisonMinimum() === 1
-      ? (suffix === 'send' ? `Select between one and ${limit} reviewers to send your message.` : `Select between one and ${limit} reviewers before sending.`)
-      : (suffix === 'send' ? `Select between two and ${limit} comparison models to send your message.` : `Select between two and ${limit} comparison models before sending.`);
+    return suffix === 'send' ? `Select between one and ${limit} reviewers to send your message.`
+      : `Select between one and ${limit} reviewers before sending.`;
   }
   function hasValidComparisonSelection(value = comparisonSelection()) {
     const models = Object.values(value);
-    return models.length >= comparisonMinimum() && models.length <= comparisonLimit()
+    return models.length >= 1 && models.length <= comparisonLimit()
       && models.every(id => typeof id === 'string' && id.trim());
   }
   function sendBlocker() {
@@ -1275,9 +1251,7 @@
     // 2026-10-29 C3, C11): words go to the agent with the card's answer
     // (steer), or, for a key, into the card's key field. Short enough for
     // a phone beside the reviewers (H2: "Write your next message…" ended
-    // mid-word). A new chat names the one thing nobody would guess: a pasted
-    // AI answer gets checked (the Agent decides; there is no extra mode or
-    // button).
+    // mid-word). A new chat has the words of every empty field (App.askPlaceholder).
     input.placeholder = running ? runningPlaceholder(openHold(registry.visible())) : basis?.chatId && !basis.continuationUnavailable
       ? 'Ask a follow-up' : App.askPlaceholder?.() ?? input.placeholder;
   }
@@ -1429,12 +1403,13 @@
           ...(noteId ? { noteId } : {}), ...(unsure && !noteId ? { unsure: true } : {}) };
       });
   }
-  // Once the answer is fixed (a version under review) the run takes no more
-  // steps: a message then waits for its end like any other (2026-10-27;
-  // before, it went to the run as "Read before the next step" and came back
-  // only when the review was done).
+  // A running response reads messages where the account has the workspace
+  // (routers/agent.py add_agent_note). Once the answer is fixed (a version
+  // under review) the run takes no more steps: a message then waits for its
+  // end like any other (2026-10-27; before, it went to the run as "Read
+  // before the next step" and came back only when the review was done).
   function readsMessages(context) {
-    return (context?.config?.agentPreferences?.audit === "on" || context?.config?.agentPreferences?.vm === "on")
+    return document.body.classList.contains("viewer-has-workspace")
       && !context?.metadata?.agentReview?.versions?.length;
   }
   // What Send does now: null when it stops the response (an empty field).
@@ -2289,15 +2264,7 @@
     context.consensus.status = "canceled";
     context.consensus.error = null;
     context.bookmark.status = "canceled";
-    if (context.metadata.agentReview) {
-      const review = { ...context.metadata.agentReview, status: "cancelled" };
-      // A pasted text still being checked reads "stopped" at once, as it
-      // will after a reload (agent_runs.finish_run).
-      if (["waiting", "running"].includes(review.passage_check?.status)) {
-        review.passage_check = { ...review.passage_check, status: "cancelled" };
-      }
-      context.metadata.agentReview = review;
-    }
+    if (context.metadata.agentReview) context.metadata.agentReview = { ...context.metadata.agentReview, status: "cancelled" };
     else if (context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
     // Only the person's Stop ends the turn; a logout or account switch
     // leaves it running to its saved answer.
@@ -2388,7 +2355,6 @@
       body: { chat_id: chatId, question: turn.question, client_request_id: requestId, bookmark_id: bookmarkId,
         recover_only: false, model_id: selection.model_id ?? null, reasoning_effort: selection.reasoning_effort || "default",
         comparison_models: settings.comparison_selection ?? null,
-        agent_preferences: settings.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
         file_ids: settings.file_ids || [], google_selection: settings.google_selection || null,
         google_data_consent: settings.google_data_consent === true } };
     followingElsewhere.add(requestId);
@@ -2423,7 +2389,6 @@
           useOwnKeys: false, providers: [],
           agentSettings: { model_id: body.model_id, reasoning_effort: body.reasoning_effort },
           comparisonModels: body.comparison_models || {},
-          agentPreferences: body.agent_preferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
           googleSelection: body.google_selection || null, googleDataConsent: body.google_data_consent === true },
         metadata: { draftQuestion: "", quotedContext: "", fileIds: body.file_ids || [], agentActivity: [],
           agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true },
@@ -2584,22 +2549,11 @@
         renderHold();
         registry.update(context.runId, () => {});
       } },
-      // Provisional marks of the fixed answer: the newest per comparison,
-      // every claim so far (agent-review.js preview). Never saved.
-      coverage_preview: { receive(event) {
-        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
-        if (typeof event.comparison_id !== "string" || !Array.isArray(event.claims)) return;
-        context.metadata.coveragePreview = { ...context.metadata.coveragePreview, [event.comparison_id]: event };
-        registry.update(context.runId, () => {});
-      } },
       activity: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         App.agentActivity?.receive(context.metadata.agentActivity, event);
         delivered(context, event);
-        if (event.kind === "status" && event.clear_response) {
-          context.consensus.streamText = "";
-          context.metadata.coveragePreview = null;
-        }
+        if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
         if (event.settings) context.metadata.agentSettings = event.settings;
         if (event.kind === "usage") context.metadata.agentUsage = event.usage;
         scheduleFlush();
@@ -2796,9 +2750,7 @@
     if (review && !["succeeded", "partial", "off", "failed", "cancelled", "missing"].includes(review.status)) {
       context.metadata.agentReview = { ...review, status: review.status === "required" ? "missing" : "failed",
         ...(Array.isArray(review.comparisons) ? { comparisons: review.comparisons.map(comparison => comparison?.status === "running"
-          ? { ...comparison, status: "failed" } : comparison) } : {}),
-        ...(["waiting", "running"].includes(review.passage_check?.status)
-          ? { passage_check: { ...review.passage_check, status: "failed" } } : {}) };
+          ? { ...comparison, status: "failed" } : comparison) } : {}) };
     }
     if (asked) App.trackAnswer?.(context, "failed");
     registry.setStatus(context.runId, "failed", { message: context.consensus.error.message });
@@ -2852,7 +2804,6 @@
           bookmarkTitle: basis?.title || question,
           config: { executionMode: "agent", agentMode: true, autoConsensus: false,
             deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
-            agentPreferences: recovery?.config.agentPreferences || App.agentPreferences?.get?.() || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
             googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
             googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
           metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
@@ -2927,7 +2878,6 @@
         model_id: settings.model_id,
         reasoning_effort: settings.reasoning_effort || "default",
         comparison_models: comparisonModels,
-        agent_preferences: context.config.agentPreferences || { depth: "auto", quorum: "all", autonomy: "guided", judges: "on" },
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
@@ -3012,10 +2962,6 @@
     }
     render();
   });
-  // The placeholder has a length per width; a rotated phone gets the right one.
-  for (const query of ['(max-width: 360px)', '(max-width: 640px)']) {
-    window.matchMedia?.(query)?.addEventListener?.('change', () => syncComposer());
-  }
   window.addEventListener('consensio:agent-actions-change', () => { syncPendingReview(); window.updateQuestionInputAccess?.(); });
   // Google selection/consent changes (chips, sheet, consent box) change the
   // send blocker, so the notice and Send state must follow immediately.

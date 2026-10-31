@@ -100,12 +100,12 @@ def test_sentence_marks_speak_through_their_underline_in_contrast_mode_and_on_re
                 styles[selector] = style.group(1)
             if "text-decoration-line: var(--cx-underline, none)" in body:
                 lines.append(selector)
-    # Off without the switch, and a mark still handing over keeps its own line.
-    assert lines and all(".was-provisional" in selector for selector in lines)
+    # Off without the switch, for every mark of a verdict and every named spot.
+    assert lines and all(".is-marker-filtered" in selector for selector in lines)
 
     def style_of(kind: str) -> str:
         hits = [value for selector, value in styles.items()
-                if f".is-{kind}" in selector and ".cx-spot" not in selector and ".is-provisional" not in selector]
+                if f".is-{kind}" in selector and ".cx-spot" not in selector]
         return hits[-1]
 
     # A contradiction must not read like an agreement.

@@ -58,7 +58,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
               window.__answerCheck = () => emit('answer_check', {type:'answer_check'});
               window.__finishProgress = (sparse = false) => {
                 const response = 'Die erste Option passt zu deinem Budget.';
-                window.__tool('judge', 'judge_answer', 'succeeded');
+                window.__tool('review', 'audit_answer', 'succeeded');
                 emit('final', {response, chat_id:'a'.repeat(32), turn_id:'b'.repeat(32),
                   turn:{id:'b'.repeat(32), status:'completed', execution_mode:'agent', consensus:response,
                     created_at:'2026-09-20T10:00:00Z', completed_at:'2026-09-20T10:01:13Z',
@@ -99,10 +99,10 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.evaluate("() => { window.__firstProgress = document.querySelector('.agent-progress p'); }")
         page.evaluate("() => window.__tool('comparison', 'compare_models', 'succeeded')")
         page.evaluate("text => window.__progress('p2', text)", updates[1])
-        page.evaluate("() => window.__tool('judge', 'judge_answer', 'running')")
+        page.evaluate("() => window.__tool('review', 'audit_answer', 'running')")
         expect(preview.locator("p")).to_have_text(updates)
         expect(preview.locator(':scope > *')).to_have_text([
-            updates[0], 'Compared perspectives', updates[1], 'Checking the answer…'])
+            updates[0], 'Compared perspectives', updates[1], 'Reviewing the answer…'])
         expect(preview.locator('.agent-current-status')).to_have_count(1)
         if quiet != 'colors':
             # Current typography uses the same secondary ink for trace and steps.
@@ -134,7 +134,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         expect(details.locator(".agent-activity-update")).to_have_text(updates)
         # The steps in the live run's words; the running one is what it does now.
         expect(details.locator('.agent-activity-tool strong')).to_have_text([
-            'Compared perspectives', 'Checking the answer…'])
+            'Compared perspectives', 'Reviewing the answer…'])
         _snapshot(page, f'agent-live-expanded-{snapshot_variant}')
         if quiet != 'colors':
             assert details.locator('.agent-activity-update').first.evaluate('el => getComputedStyle(el).color') == trace_color
@@ -161,7 +161,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         check = page.locator("#agentAnswer .agent-check-status")
         expect(check).to_have_count(0)
         page.evaluate("() => window.__answerCheck()")
-        expect(check).to_have_text("Checking the answer…")
+        expect(check).to_have_text("Reviewing the answer…")
         expect(check).to_be_visible()
         expect(page.locator("#agentAnswerBody")).to_have_class(re.compile(r"\bis-answer-checking\b"))
         body_box, check_box = page.locator("#agentAnswerBody").bounding_box(), check.bounding_box()

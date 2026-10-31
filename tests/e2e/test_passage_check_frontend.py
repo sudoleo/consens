@@ -1,6 +1,8 @@
-"""A pasted AI answer the Agent checked: a result card above the answer, built frontend, no providers."""
+"""A pasted AI answer the Agent checked: a result card above the answer, built frontend, no providers.
+
+Only turns saved before 2026-10-31 have one: the comparison mode checked a
+pasted text (check_text); the one mode since has no such check."""
 import hashlib
-import json
 import re
 
 import pytest
@@ -27,31 +29,27 @@ def _claim(sentence, agree, dissent=()):
             "coverage": "split" if dissent else "supported" if len(agree) >= 2 else "thin"}
 
 
-def _review(status="succeeded"):
+def _review():
     digest = hashlib.sha256(ANSWER.encode()).hexdigest()
     answers = [{"provider": p, "provider_label": label, "model": {"model": model, "label": name},
                 "text": "Heat pumps work with low flow temperatures. Larger radiators are often enough.", "sources": []}
                for p, label, model, name in MODELS]
-    passage = {"version": 1, "status": status, "comparison_id": "c1", "text": PASTED, "hash": "h",
-               "answer_to": "Do heat pumps make sense in old buildings?"}
-    if status == "succeeded":
-        passage.update(models_compared=[m[1] for m in MODELS], issues=[], claims=[
-            _claim("Heat pumps work in old buildings when the flow temperature stays below 55 degrees.",
-                   ["OpenAI", "DeepSeek", "Gemini"]),
-            _claim("You always need **underfloor heating** for that.", ["Gemini"], ["OpenAI", "DeepSeek"]),
-            _claim("The state pays up to 70 percent of the costs.", ["OpenAI"])])
-    review = {"status": "succeeded" if status == "succeeded" else "required", "answer_version": 1 if status == "succeeded" else 0,
-              "answer_hash": digest, "passage_check": passage,
-              "versions": [{"id": 1, "text": ANSWER, "hash": digest, "status": "succeeded"}] if status == "succeeded" else [],
-              "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Do heat pumps make sense in old buildings?",
-                               "reason": "Check the pasted answer", "context": "", "status": "succeeded", "answers": answers}]}
-    if status == "succeeded":
-        review["checks"] = [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
-                             # The answer's own statement, judged like any answer's.
-                             "differences_data": {"claims": [{"anchor": ANSWER, "agree": ["OpenAI"], "coverage": "split",
-                                                              "dissent": [{"model": "Gemini", "quote": "Underfloor heating is needed."}]}],
-                                                  "differences": [], "models_compared": [m[1] for m in MODELS]}}]
-    return review
+    passage = {"version": 1, "status": "succeeded", "comparison_id": "c1", "text": PASTED, "hash": "h",
+               "answer_to": "Do heat pumps make sense in old buildings?",
+               "models_compared": [m[1] for m in MODELS], "issues": [], "claims": [
+                   _claim("Heat pumps work in old buildings when the flow temperature stays below 55 degrees.",
+                          ["OpenAI", "DeepSeek", "Gemini"]),
+                   _claim("You always need **underfloor heating** for that.", ["Gemini"], ["OpenAI", "DeepSeek"]),
+                   _claim("The state pays up to 70 percent of the costs.", ["OpenAI"])]}
+    return {"status": "succeeded", "answer_version": 1, "answer_hash": digest, "passage_check": passage,
+            "versions": [{"id": 1, "text": ANSWER, "hash": digest, "status": "succeeded"}],
+            "comparisons": [{"id": "c1", "basis_hash": "basis", "question": "Do heat pumps make sense in old buildings?",
+                             "reason": "Check the pasted answer", "context": "", "status": "succeeded", "answers": answers}],
+            "checks": [{"comparison_id": "c1", "basis_hash": "basis", "answer_hash": digest, "status": "succeeded",
+                        # The answer's own statement, judged like any answer's.
+                        "differences_data": {"claims": [{"anchor": ANSWER, "agree": ["OpenAI"], "coverage": "split",
+                                                         "dissent": [{"model": "Gemini", "quote": "Underfloor heating is needed."}]}],
+                                             "differences": [], "models_compared": [m[1] for m in MODELS]}}]}
 
 
 SAVED = {"id": TURN, "turn_id": TURN, "question": QUESTION, "status": "completed", "execution_mode": "agent", "mode": "Agent",
@@ -65,18 +63,8 @@ def _setup(page, requests):
     page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
     page.route("**/chats", lambda r: _json(r, {"chat": {"id": CHAT, "execution_mode": "agent"}}))
     page.route("**/agent/models", lambda r: _json(r, CATALOG))
-
-    def respond(route):
-        body = route.request.post_data_json
-        requests.append(body)
-        final = {"chat_id": CHAT, "turn_id": TURN, "response": ANSWER, "turn": SAVED,
-                 "bookmark_meta": {"id": body["bookmark_id"], "title": "Heat pumps", "query": QUESTION, "mode": "Agent",
-                                   "has_consensus": True}}
-        events = [("started", {"chat_id": CHAT, "turn_id": TURN}), ("review", {"review": _review("waiting")}),
-                  ("delta", {"text": ANSWER}), ("review", {"review": SAVED["agent_review"]}), ("final", final)]
-        route.fulfill(content_type="text/event-stream",
-                      body="".join(f"event: {name}\ndata: {json.dumps(data)}\n\n" for name, data in events))
-    page.route("**/agent", respond)
+    # Nothing is sent: the chat is a saved one.
+    page.route("**/agent", lambda r: (requests.append(r.request.post_data_json), _json(r, {"error": "Unexpected request"}, 500)))
 
 
 # A colour-mix comes back as color(srgb 0..1), a plain colour as rgb(0..255).
@@ -101,14 +89,21 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
-        # The only hint at the feature: the placeholder of a new chat.
-        expected = "Ask, or paste an AI answer to check" if width <= 640 else "Ask anything, or paste an AI answer to check it"
-        expect(page.locator("#questionInput")).to_have_attribute("placeholder", expected)
+        # No hint at the feature any more: a new chat just asks.
+        expect(page.locator("#questionInput")).to_have_attribute("placeholder", "Ask anything")
 
-        page.locator("#questionInput").fill(QUESTION)
-        page.locator("#sendButton").click()
-        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
-        assert requests[0]["question"] == QUESTION
+        # The saved chat, opened (bookmark path), the thread question set again
+        # afterwards; the composer leaves the start screen as for any open chat.
+        page.evaluate("""turn => {
+            App.runRegistry.showSavedView({type: 'bookmark'}, {chatId: 'a'.repeat(32), turnId: turn.id, executionMode: 'agent',
+                question: turn.question, consensus: turn.consensus, currentTurn: turn});
+            App.setThreadQuestion(turn.question);
+            window.exitHeroMode();
+        }""", SAVED)
+        page.wait_for_function("() => !document.body.classList.contains('is-hero') && "
+                               "!document.body.classList.contains('composer-animating') && "
+                               "!document.body.classList.contains('composer-gliding')")
+        expect(page.locator("#agentAnswerBody")).to_contain_text(ANSWER)
 
         # The message stays as it was sent: plain text with its paragraphs, no marks.
         ask = page.locator("#threadAsk")
@@ -208,15 +203,6 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         _snapshot(page, f"passage-check-full-{width}")
         expect(card.locator(".passage-check-toggle")).to_have_text("Show less")
 
-        # Restoring the saved chat (bookmark path) keeps the card, even when
-        # the thread question is set again afterwards.
-        page.evaluate("""turn => {
-            App.runRegistry.showSavedView({type: 'bookmark'}, {chatId: 'a'.repeat(32), turnId: turn.id, executionMode: 'agent',
-                question: turn.question, consensus: turn.consensus, currentTurn: turn});
-            App.setThreadQuestion(turn.question);
-        }""", SAVED)
-        expect(page.locator("#agentAnswer > .passage-check")).to_have_count(1)
-        expect(page.locator("#agentAnswerBody .cx-claim")).to_have_count(1)
         # As an earlier turn of the chat, the card stays with its answer.
         page.evaluate("turn => App.followup.renderStoredTurns([turn])", SAVED)
         history = page.locator("#threadHistory .thread-history-turn").first
@@ -226,6 +212,7 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         assert history_card.evaluate("el => el.nextElementSibling.classList.contains('thread-history-answer-body')")
         expect(history.locator(".thread-history-answer-body .cx-claim")).to_have_count(1)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert requests == []
         assert errors == []
     finally:
         context.close()

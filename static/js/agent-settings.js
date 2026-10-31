@@ -5,7 +5,10 @@
 // /api/my/settings) and the owner modules show it at once (source "agent").
 // "Now" is read from this page when the card renders, never from the
 // proposal: a change made in another tab or in Settings is what it compares
-// with. Only the settings below can be applied, whatever a proposal holds.
+// with. Only the settings below can be applied, whatever a proposal holds:
+// one saved before 2026-10-31 may still name agent_preferences (the Agent's
+// comparison options, gone with its comparison mode), which is left out, and
+// a card with nothing else is not shown.
 // agent-chat.js passes the saved turn's proposal only for a completed answer.
 (function () {
   'use strict';
@@ -41,12 +44,6 @@
   // agent-chat.js effortCopy; agent_settings.py names the same).
   const EFFORTS = { default: 'Auto', none: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium',
     high: 'High', xhigh: 'Extra high', max: 'Max' };
-  const PREFERENCES = {
-    depth: ['Answer depth', { auto: 'Automatic', quick: 'Always brief', full: 'Always thorough' }],
-    quorum: ['Answer start', { all: 'After every model', balanced: 'Every model on thorough questions', fast: 'As soon as half answered' }],
-    autonomy: ['Agent freedom', { guided: 'Guided', free: 'Free' }],
-    judges: ['Answer check', { on: 'On', off: 'Off' }],
-  };
   const SETTINGS = {
     consensus_preset: ['Comparison models', { fast: 'Daily', balanced: 'Open Models', thorough: 'High Quality', custom: 'Custom' },
       () => App.activeConsensusPresetId?.() || App.userSettings.get('consensus_preset')],
@@ -57,7 +54,7 @@
     agreement_display: ['Agreement score', { full: 'Score and summary', summary: 'Summary only', off: 'Hidden' },
       () => App.userSettings.get('agreement_display') || 'full'],
   };
-  const NAMES = ['agent_model', 'agent_preferences', ...Object.keys(SETTINGS)];
+  const NAMES = ['agent_model', ...Object.keys(SETTINGS)];
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -115,13 +112,6 @@
           add('Reasoning in new chats', EFFORTS[account.reasoning_effort || 'default'], EFFORTS[effort]);
         } else {
           add('Chat model in new chats', modelLabel(account.model_id), modelLabel(value.model_id));
-        }
-      } else if (name === 'agent_preferences') {
-        const now = App.agentPreferences?.get?.() || {};
-        for (const [field, [label, labels]] of Object.entries(PREFERENCES)) {
-          // "Free" as Agent freedom, not the plan (docs/i18n.md, context).
-          const say = word => (field === 'autonomy' && word ? window.App.t(word, null, 'agent freedom') : word);
-          if (value[field] !== undefined) add(label, say(labels[now[field]]), say(labels[value[field]]));
         }
       } else {
         const [label, labels, current] = SETTINGS[name];
@@ -189,9 +179,8 @@
         if (App.agentChat?.applyPick?.(value) !== true) failed.push(name);
         continue;
       }
-      const next = name === 'agent_preferences' ? { ...(App.userSettings.get(name) || {}), ...value } : value;
       // set() is false for a value already in place, so only a refusal counts.
-      if (!App.userSettings.set(name, next, { source: 'agent' }) && !App.userSettings.accepts(name, next)) failed.push(name);
+      if (!App.userSettings.set(name, value, { source: 'agent' }) && !App.userSettings.accepts(name, value)) failed.push(name);
     }
     if (failed.length) {
       view.message = 'Some settings could not be applied. Change them in Settings.';

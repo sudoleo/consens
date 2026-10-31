@@ -19,7 +19,8 @@
     read_settings: ['Settings', 'Checking your settings…', 'Checked your settings'],
     prepare_settings_change: ['Settings', 'Preparing a settings change…', 'Prepared a settings change for you to apply'],
     judge_answer: ['Answer check', 'Checking the answer…', 'Checked the answer'],
-    // Audit instead of comparison: the comparison models review the answer.
+    // The comparison models review the answer (judge_answer and check_text:
+    // the comparison mode, turns saved before 2026-10-31).
     audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
@@ -173,7 +174,9 @@
   // chat list (run-view.js) and the tab title (tab-status.js), UX audit E1/E2:
   // before, the head said "Working for" while the reviewers checked the
   // answer and while the run waited for the user, and the chat list
-  // "Thinking" or a cut "Writing ans…" at the same moment.
+  // "Thinking" or a cut "Writing ans…" at the same moment. "Checking" is the
+  // comparison mode's answer check, which only the demo still plays (demo.js;
+  // a run's review is the reviewers', mode "audit").
   const PHASE_WORDS = Object.freeze({ working: 'Working', reviewing: 'Reviewing', checking: 'Checking',
     paused: 'Paused', asking: 'Waiting for you' });
   function phase({ asking = false, held = false, review = null } = {}) {
@@ -1346,10 +1349,10 @@
       const usageEl = document.createElement("p");
       usageEl.className = "agent-usage admin-only";
       // The VM back to its checkpoint before this message (agent-chat.js
-      // restoreVm, admins): a quiet action under the usage line.
+      // restoreVm, accounts with the workspace): a quiet action under the usage line.
       const vmRestoreEl = document.createElement("button");
       vmRestoreEl.type = "button";
-      vmRestoreEl.className = "agent-vm-restore audit-only";
+      vmRestoreEl.className = "agent-vm-restore workspace-only";
       vmRestoreEl.textContent = "Restore the workspace to before this message";
       vmRestoreEl.hidden = true;
       // The page the browser opened last, under the run's line: it stays while
@@ -1424,6 +1427,7 @@
     // returns with a new responding status after it.
     const afterLatest = latest ? events.slice(events.indexOf(latest) + 1) : [];
     const writing = latest ? latest.status === "responding" && !afterLatest.some(item => item.kind === "tool") : responding;
+    // "Checking the answer…": the demo's answer check (demo.js, see phase).
     const reviewStage = review?.status === "running" ? (review.mode === "audit" ? "Reviewing the answer…" : "Checking the answer…")
       : review?.comparisons?.some(c => c.status === "running") ? "Comparing perspectives…" : null;
     const waiting = running && latest?.status === 'waiting';

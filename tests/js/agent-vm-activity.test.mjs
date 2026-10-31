@@ -300,7 +300,7 @@ describe("VM calls in the activity", () => {
     expect(host.querySelector(".agent-activity-current").textContent).toBe("Reconnecting…");
   });
 
-  it("offers the admin to restore the VM to before a finished message", () => {
+  it("offers to restore the workspace to before a finished message", () => {
     const { host, activity } = setup();
     const turn = { status: "completed", agent_activity: [], assistant_response: "Done.",
       agent_vm: { commands: 2, seconds: 3, checkpoint: "v2" } };
@@ -308,8 +308,8 @@ describe("VM calls in the activity", () => {
     activity.renderTurn(host, turn, { vmRestore: () => { restored += 1; } });
     const button = host.querySelector(".agent-vm-restore");
     expect(button.hidden).toBe(false);
-    // Audit with its VM is Pro and admins (style.css .audit-only).
-    expect(button.classList.contains("audit-only")).toBe(true);
+    // Only an account with the workspace has one (style.css .workspace-only).
+    expect(button.classList.contains("workspace-only")).toBe(true);
     expect(button.textContent).toBe("Restore the workspace to before this message");
     button.click();
     expect(restored).toBe(1);

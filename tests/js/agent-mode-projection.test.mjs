@@ -227,10 +227,10 @@ describe("agent mode panel projection", () => {
     expect(status.dataset.compact).toBe('2/2');
     dom.window.close();
   });
-  // Audit (Max, 2026-10-27): the reviewers say what they do next to their
+  // With Agent (Max, 2026-10-27) the reviewers say what they do next to their
   // marks under the field; in a chat, where the bar steps aside, their marks
   // stand before the chip, which names the chat model (model-picker.js).
-  it("gives the reviewers their own control in audit mode", () => {
+  it("gives the reviewers their own control with Agent", () => {
     const { window, document, dom } = loadScripts(["static/js/app-text.js", "static/js/user-settings.js",
       "static/js/run-mode.js", "static/js/agent-mode.js"], {
       body: BODY + `<button id="composerReviewers" hidden><span id="composerReviewerIcons"></span><span id="composerReviewersLabel"></span></button>`,
@@ -243,9 +243,8 @@ describe("agent mode panel projection", () => {
         window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
       }
     });
-    let audit = false;
-    window.App.agentPreferences = { auditing: () => audit };
-    window.App.agentChat = { isSelected: () => true, looksAgent: () => true,
+    let agent = false;
+    window.App.agentChat = { isSelected: () => agent, looksAgent: () => agent,
       modeState: () => ({ family: "agent", canUse: true, pending: false }) };
     const picker = document.getElementById("composerModelPicker");
     const label = document.getElementById("composerModelLabel");
@@ -256,7 +255,7 @@ describe("agent mode panel projection", () => {
     expect(reviewers.hidden).toBe(true);
     expect(picker.getAttribute("aria-label")).toBe("Configure models for your next question");
 
-    audit = true;
+    agent = true;
     window.App.renderComposerMode();
     expect(label.hidden).toBe(false);
     expect(label.textContent).toBe("1 AI cross-checks");
@@ -284,7 +283,7 @@ describe("agent mode panel projection", () => {
     expect(mark.getAttribute("aria-hidden")).toBe("true");
     expect(mark.hasAttribute("role")).toBe(false);
 
-    audit = false;
+    agent = false;
     window.App.renderComposerMode();
     expect(reviewers.hidden).toBe(true);
     expect(label.hidden).toBe(true);

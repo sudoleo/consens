@@ -32,7 +32,7 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         field = page.locator("#questionInput")
         starters = page.locator("#composerStarters")
         expect(field).to_be_enabled()
-        expect(field).to_have_attribute("placeholder", "Ask anything, or paste an AI answer to check it")
+        expect(field).to_have_attribute("placeholder", "Ask anything")
         # Agent's composer of a new chat, as an account has it (H3): its chip
         # names the default model; choosing one asks for the login.
         expect(page.locator("#agentModelControls .model-picker-display")).to_be_visible()
@@ -97,7 +97,7 @@ def test_a_guest_on_a_phone_gets_the_sentence_and_one_row_of_examples(browser, p
     try:
         page.set_viewport_size({"width": 375, "height": 812})
         expect(page.locator(".hero-greeting")).to_be_visible()
-        expect(page.locator("#questionInput")).to_have_attribute("placeholder", "Ask, or paste an AI answer to check")
+        expect(page.locator("#questionInput")).to_have_attribute("placeholder", "Ask anything")
         layout = page.evaluate("""() => {
           const row = document.getElementById('composerStarters');
           const tops = new Set([...row.children].map(button => Math.round(button.offsetTop)));

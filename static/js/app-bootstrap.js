@@ -41,14 +41,11 @@
     window.umami.track(eventName, safeData);
   };
 
-  // The words of an empty new chat, for every account and for guests: they
-  // name the one thing nobody would guess, that a pasted AI answer gets
-  // checked. One length per width (agent-chat.js follows a rotated phone).
+  // The words of an empty new chat, for every account and for guests. Until
+  // 2026-10-31 they named the check of a pasted AI answer, which left with
+  // the Agent's comparison mode.
   window.App = window.App || {};
-  window.App.askPlaceholder = function (width = window.innerWidth || 1024) {
-    return width <= 360 ? "Ask or check an AI answer"
-      : width <= 640 ? "Ask, or paste an AI answer to check" : "Ask anything, or paste an AI answer to check it";
-  };
+  window.App.askPlaceholder = () => "Ask anything";
 
   function read(key, store = "localStorage") {
     try { return window[store].getItem(key); } catch (_) { return null; }
@@ -152,16 +149,13 @@
     if (!state?.known) return;
     const agent = document.getElementById("agentModelDropdown");
     const look = { uid: state.uid || "", at: Date.now() };
-    // Only words drawn from the loaded model list, never its placeholder.
-    // The chip itself says what the comparison models do, so the chat
-    // model's name comes from its select.
+    // Only words drawn from the loaded model list, never its placeholder:
+    // the chip names the chat model, and the reviewers say their words
+    // under the field (agent-mode.js renderReviewers).
     if (agent?.dataset.catalog === "ready") {
       look.agentModel = text(agent.selectedOptions?.[0]);
       look.agentEffort = text(document.getElementById("agentReasoningEffort")?.selectedOptions?.[0]);
     }
-    // In audit mode the chip names the chat model and the reviewers say
-    // their words under the field (agent-mode.js renderReviewers).
-    if (window.App.agentPreferences?.auditing?.() === true) look.audit = true;
     try { window.localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private mode */ }
   }
   window.App.firstFrame = Object.freeze({
@@ -407,13 +401,9 @@
       // agent-chat.js keeps the reasoning select hidden: it lives in the chip's menu.
       const effortWrapper = document.getElementById("agentReasoningEffort")?.parentElement;
       if (effortWrapper) effortWrapper.hidden = true;
-      const crossCheck = window.App.words.crossCheck(checkedFamilies().length);
-      if (rememberedLook()?.audit === true) {
-        // The chat model's name; its tooltip and full name follow with the
-        // model list (model-picker.js).
-        const model = window.App.firstFrame.agentModel();
-        seedPickerChip(agentControls.querySelector(".agent-model-picker"), model);
-      } else seedPickerChip(agentControls.querySelector(".agent-model-picker"), crossCheck, crossCheck);
+      // The chat model's name; its tooltip and full name follow with the
+      // model list (model-picker.js).
+      seedPickerChip(agentControls.querySelector(".agent-model-picker"), window.App.firstFrame.agentModel());
     }
     const consensusChip = once("consensusChip", document.querySelector(".consensus-model .select-wrapper select") && document.querySelector(".consensus-model"));
     if (consensusChip) {
@@ -443,9 +433,9 @@
       // The reviewers' words stand before their marks in the markup (CSS
       // puts them after), so they are parsed by now.
       const label = document.getElementById("composerModelLabel");
-      if (label && agentLook && rememberedLook()?.audit === true) {
+      if (label && agentLook) {
         const count = checkedFamilies().length;
-        const words = window.App.words.crossCheck(count, 1);
+        const words = window.App.words.crossCheck(count);
         label.textContent = words;
         // The short form a narrow bar shows (agent-mode.js renderReviewers).
         const short = count === 1 ? "1 AI" : `${count} AIs`;

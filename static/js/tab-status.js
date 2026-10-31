@@ -12,7 +12,6 @@
   // The reviewers check the written answer: the word of the activity's head
   // and the chat list (agent-activity.js phase, UX audit E2).
   const REVIEWING = "Reviewing…";
-  const CHECKING = "Checking…";
   const FAILED = "Failed";
   // A reviewer paused the work and the user decides (agent-chat.js renderHold).
   const PAUSED = window.App?.words?.paused || "Paused";
@@ -64,8 +63,7 @@
       return run.metadata.hold.ask ? YOUR_TURN : PAUSED;
     }
     if (status === "starting" || status === "running") {
-      const review = run?.metadata?.agentReview;
-      return review?.status !== "running" ? WORKING : review.mode === "audit" ? REVIEWING : CHECKING;
+      return run?.metadata?.agentReview?.status === "running" ? REVIEWING : WORKING;
     }
     if (status === "succeeded") return READY;
     if (status === "failed") return FAILED;
@@ -94,7 +92,7 @@
     const next = label(waitingRun() || visibleRun());
     // A run that finished before the page was hidden is not news; one that
     // waits for the user still is.
-    if (next && ![WORKING, REVIEWING, CHECKING, PAUSED, YOUR_TURN].includes(next) && shown === null) return;
+    if (next && ![WORKING, REVIEWING, PAUSED, YOUR_TURN].includes(next) && shown === null) return;
     apply(next);
   }
 

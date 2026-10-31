@@ -115,17 +115,18 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         _routes(page)
         page.goto(phase4_server + "/app")
         _settled(page)
-        expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("3 AIs cross-check")
+        expect(page.locator("#agentModelControls .model-picker-display-text")).to_have_text("DeepSeek V4.1 Flash")
+        expect(page.locator("#composerModelLabel")).to_have_text("3 AIs cross-check")
         expect(page.locator("#agentModelControls .model-picker-display")).to_have_attribute("title", re.compile(r"^DeepSeek V4\.1 Flash writes the answer"))
         page.reload()
         _settled(page)
         frames = _frames(page)
-        # One face from the first frame to the end: Agent's chip with what
-        # the comparison models do, Reasoning "Auto", no demo, no
-        # Consensus chip, a quiet Send (B1); "Chat" and "New chat" (B10).
+        # One face from the first frame to the end: Agent's chip with the
+        # chat model, Reasoning "Auto", no demo, no Consensus chip, a quiet
+        # Send (B1); "Chat" and "New chat" (B10).
         assert len(frames) == 1, frames
         first = frames[0]
-        assert first["agent"] == "chip:3 AIs cross-check", first
+        assert first["agent"] == "chip:DeepSeek V4.1 Flash", first
         assert first["consensus"] == "hidden" and first["demo"] == "-" and first["send"] == "disabled", first
         assert first["reasoning"] == "Auto" and first["marks"] == 3, first
         assert first["tab"] == "Chat" and first["newChat"] == "New chat", first
@@ -213,15 +214,17 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
         field = page.locator("#questionInput")
         expect(field).to_be_enabled()
         expect(field).to_have_attribute("aria-disabled", "false")
-        expect(field).to_have_attribute("placeholder", re.compile("AI answer"))
+        expect(field).to_have_attribute("placeholder", "Ask anything")
         assert not page.evaluate("document.documentElement.classList.contains('agent-shell-expected')")
         assert page.evaluate("document.body.classList.contains('is-guest')")
         frames = _frames(page)
-        # The chip says what the comparison models do, for the remembered
-        # account and the guest alike; the guest's buttons in the end.
-        assert frames[0]["agent"] == "chip:3 AIs cross-check", frames
+        # The chat model a guest's chip names: the deployment's default (pages.py).
+        default = page.evaluate("document.querySelector('[data-agent-default-label]').dataset.agentDefaultLabel")
+        # The chip names the chat model, for the remembered account and the
+        # guest alike; the guest's buttons in the end.
+        assert frames[0]["agent"].startswith("chip:"), frames
         last = frames[-1]
-        assert last["guestButtons"] and last["agent"] == "chip:3 AIs cross-check", last
+        assert last["guestButtons"] and last["agent"] == f"chip:{default}", last
         assert last["reasoning"] == "Auto" and last["consensus"] == "hidden", last
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         field.type("Still here")
@@ -233,8 +236,8 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
 def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
     """H3 (Max): a guest sees Agent's composer of a new chat as an account
-    does by default, from the first frame to the end: the chip with what
-    the comparison models do, Agent's greeting, Reasoning
+    does by default, from the first frame to the end: the chip with the
+    default chat model, Agent's greeting, Reasoning
     "Auto"; the demo offer stays a guest's (B13). One face, also on reload."""
     context = _context(browser, width, height, uid=None, mobile=mobile)
     page = context.new_page()
@@ -252,7 +255,9 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         assert len(frames) == 1, frames
         first = frames[0]
         assert first["demo"] == "demo" and first["send"] == "hidden" and first["guestButtons"], first
-        assert first["agent"] == "chip:3 AIs cross-check", first
+        # The chat model a guest's chip names: the deployment's default (pages.py).
+        default = page.evaluate("document.querySelector('[data-agent-default-label]').dataset.agentDefaultLabel")
+        assert first["agent"] == f"chip:{default}", first
         assert first["consensus"] == "hidden", first
         assert first["reasoning"] == "Auto" and first["marks"] == 3, first
         assert first["greeting"] == "What do you want to be sure about?", first
