@@ -340,7 +340,7 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=False, chat_sources=None, workspace_closed=False,
-                 domains=True, **kwargs):
+                 domains=True, audit_compare=False, **kwargs):
         super().__init__(**kwargs)
         # Domains beyond the package registries for the workbench
         # (request_domain): Pro and admins, routers/agent.py domains_allowed,
@@ -462,7 +462,8 @@ class DelegationLoop(AgentLoop):
                    for m in self.models.values()]
         self.messages[0] = dict(self.messages[0])
         # Audit instead of comparison (AgentPreferences.audit, agent_audit.py):
-        # the route sends AGENT_AUDIT_SYSTEM_PROMPT and no comparison tools exist.
+        # the route sends AGENT_AUDIT_SYSTEM_PROMPT, and compare_models exists
+        # only with ``audit_compare`` (routers/agent.py audit_compare_allowed).
         audit = bool(self.merged and agent_preferences is not None and agent_preferences.audit == "on")
         if self.merged:
             from app.services.prompt_defaults import AGENT_ANSWER_SECTION, AGENT_AUDIT_ANSWER_SECTION
@@ -493,12 +494,13 @@ class DelegationLoop(AgentLoop):
                             and not google_selection and not google_data)
             self.comparison = ComparisonTools(self, comparison_models,
                                               preferences=agent_preferences, memory_changes=self.memory.writable,
-                                              read_sources=read_sources)
+                                              read_sources=read_sources, compare=audit_compare)
             limit = self.policy.turn_comparisons if self.policy.account_budget_only else BOUNDED_COMPARISONS
             # The steering prompt (messages[0]) carries the workflow. The agent
             # writes the answer; the app runs every check itself (_finish_review).
             self.messages[0]["content"] += preference_prompt(self.comparison.preferences, limit)
-            # A comparison limit only where there are comparisons (not in audit mode).
+            # A comparison limit in the prompt only in comparison mode; in
+            # audit mode compare_models' description says it (AUDIT_COMPARE).
             if not audit and not self.policy.account_budget_only:
                 self.messages[0]["content"] += "\nAt most three comparisons before the single checked answer per message."
             elif not audit and limit:
@@ -1877,10 +1879,12 @@ class DelegationLoop(AgentLoop):
                     # debt the next reservations see.
                     self.search_remaining += searches - count
             if (stream_answer and value.published and value.text and self.comparison
-                    and self.comparison.comparisons and not value.tool_calls and not value._tool_parts
+                    and self.comparison.comparisons and not self.comparison.audit_mode
+                    and not value.tool_calls and not value._tool_parts
                     and (status != "succeeded" or value.finish_reason in {"length", "max_tokens"})):
                 # Persist the partial answer the user saw, only after the
-                # mandatory settlement.
+                # mandatory settlement. In audit mode the turn keeps it
+                # (agent_runs.finish_run), with or without comparisons.
                 self.comparison.capture(value.published)
         # A reviewer's round runs through this step too; what it found is no
         # search of the agent's, which read_source may open (audit mode).
@@ -3115,7 +3119,7 @@ class DelegationLoop(AgentLoop):
             return
         yield from self._show_answer(value)
         self.completion.text = value.text
-        if self.comparison is not None and self.comparison.comparisons:
+        if self.comparison is not None and self.comparison.comparisons and not self.comparison.audit_mode:
             self.comparison.capture(value.text)
 
     def _close_open_calls(self):
@@ -3504,9 +3508,11 @@ class DelegationLoop(AgentLoop):
                             yield from self._wrap_up(TURN_INVALID_LIMIT, steps, value)
                             status = "succeeded"
                             break
-                        if compared and not answered_with_tools:
+                        if compared and not answered_with_tools and not self.comparison.audit_mode:
                             # The next step writes from these answers: name the
                             # deliverable there, as Claude Code's reminders do.
+                            # Not in audit mode: there they advise, and the
+                            # work goes on (agent_comparison._merged_result).
                             from app.services.prompt_defaults import AGENT_WRITE_NOTE
                             self.messages.append({"role": "user", "content": AGENT_WRITE_NOTE})
                         # Once the answer is fixed only its check remains, and the

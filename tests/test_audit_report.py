@@ -110,6 +110,23 @@ def test_the_spec_tables_and_targets_from_turns_receipts_and_counters():
     assert OWN not in text and GUEST not in text and "c1" not in text
 
 
+def test_the_turns_that_asked_the_models_count_toward_the_compare_gate():
+    """compare_models in audit mode (2026-10-31): its gate counts real turns
+    that completed, were reviewed and got answers in every comparison."""
+    source = data()
+    asked = {**turn(reviewers=[LUNA, FLASH]), "audit_compare": True, "comparisons": ["succeeded", "partial"]}
+    source["turns"].update({
+        (OWN, "c1", "t4"): asked,
+        (OWN, "c1", "t5"): {**asked, "comparisons": ["failed"]},
+        (OWN, "c1", "t6"): {**turn(reviewers=[LUNA]), "audit_compare": True, "comparisons": []}})
+    result = report(source)
+    assert result["compare"] == {"offered": 3, "turns": 2, "turn_status": {"completed": 2},
+                                 "comparisons": {"succeeded": 1, "partial": 1, "failed": 1},
+                                 "reviews": {"succeeded": 2}, "clean": 1, "needed": 10}
+    assert "Compare in audit: offered in 3 turns, used in 2" in render(result)
+    assert "gate 1/10 clean turns" in render(result)
+
+
 def test_quantiles_by_nearest_rank():
     assert quantiles([]) == {"n": 0, "p50": None, "p90": None, "max": None}
     assert quantiles([5, 1, None, 3, 2, 4, 10, 9, 8, 7, 6]) == {"n": 10, "p50": 5.5, "p90": 9, "max": 10}

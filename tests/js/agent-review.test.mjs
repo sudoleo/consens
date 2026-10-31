@@ -969,6 +969,75 @@ it('shows the review in the duration disclosure and opens its notes', () => {
   expect(options.section).toBe('differences');
   dom.window.close();
 });
+// compare_models in audit mode (since 2026-10-31): the models the agent asked
+// advise it, no judge checks their answers, the reviewers review the answer.
+function advisedReview(status = 'succeeded') {
+  const review = auditReview(status);
+  review.comparisons = [{ id: 'c1', basis_hash: 'b1', question: 'How tall is the tower?', status: 'partial',
+    answers: [
+      { provider: 'openai', provider_label: 'OpenAI', model: { label: 'GPT', model: 'openai/gpt' }, text: '330 metres.',
+        sources: [{ url: 'https://example.org/tower', title: 'Tower' }] },
+      { provider: 'anthropic', provider_label: 'Anthropic', model: { label: 'Claude' }, text: '324 metres.', sources: [] }],
+    failed_models: [{ label: 'Gemini', model: 'google/gemini', failure: { code: 'output_limit' }, partial_text: 'It is about' }] }];
+  review.versions[0].comparison_ids = ['c1'];
+  return review;
+}
+it('offers the answers of the models the agent asked beside the notes, without a check', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = advisedReview();
+  w.App.agentReview.render(body, review, { sources: [{ url: 'https://example.org', title: 'Source' }], question: 'Q', key: 't1' });
+  // The reviewers' marks, no judge's and no score.
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
+  expect(d.querySelector('.agent-agreement')).toBeNull();
+  const buttons = [...d.querySelectorAll('.agent-evidence-link')];
+  // The turn's sources include the pages the answers cite (agent_runs.agent_sources).
+  expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 2', 'Answers 2', 'Sources 2']);
+  buttons[1].click();
+  const [context, options] = w.App.answerReader.openContext.mock.calls.at(-1);
+  expect(options.section).toBe('answers');
+  expect([context.key, context.check, context.sections]).toEqual(['agent-evidence:c1', undefined, ['answers', 'sources']]);
+  expect(context.answers.map(a => [a.label, a.status, a.text])).toEqual([
+    ['GPT', 'complete', '330 metres.'], ['Claude', 'complete', '324 metres.'], ['Gemini', 'incomplete', 'It is about']]);
+  expect(context.answers[2].error).toBe(
+    'Stopped before it finished: it used its whole output allowance before finishing. Not used for the answer.');
+  expect(context.renderPanel('sources').querySelectorAll('li')).toHaveLength(2);
+  // The agent panel opens a model's answer under the comparison's key, as in comparison mode.
+  expect(w.App.agentReview.contextFor(null, 'c1')).toBe(context);
+  // The notes keep their own context.
+  buttons[0].click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].key).toBe('agent-audit:audit-hash');
+  dom.window.close();
+});
+it('lists the comparisons of an audit turn before its review, with their answers to read', () => {
+  const {window: w, document: d, dom} = setup();
+  const details = d.createElement('div');
+  const running = auditReview('running');
+  running.comparisons = [{ id: 'c1', status: 'running', question: 'How tall is the tower?', answers: [] }];
+  w.App.agentReview.renderActivity(details, running, '');
+  expect(details.hidden).toBe(false);
+  expect(details.textContent).toContain('Comparison 1 · Collecting answers…');
+  expect(details.textContent).toContain('Waiting for independent model answers.');
+  const waiting = [...details.querySelectorAll('button')].find(b => b.textContent === 'Read model answers');
+  expect(waiting.disabled).toBe(true);
+  const review = advisedReview();
+  w.App.agentReview.renderActivity(details, review, 'Exact answer.');
+  const cards = [...details.querySelectorAll('.agent-activity-insight')];
+  expect(cards).toHaveLength(2);
+  expect(cards[0].textContent).toContain('Comparison 1 · 2 model answers');
+  expect(cards[0].textContent).toContain('Models: GPT, Claude');
+  expect(cards[0].textContent).toContain('Stopped before finishing: Gemini (kept as incomplete)');
+  // No check: neither its status nor its review to explore.
+  expect(cards[0].querySelector('.agent-activity-check')).toBeNull();
+  expect(cards[0].textContent).not.toContain('Explore');
+  expect(cards[1].textContent).toContain('Reviewed by GPT, Claude, Gemini');
+  // Before the answer's row exists: the button builds the comparison's context.
+  cards[0].querySelector('button').click();
+  expect(w.App.answerReader.openContext).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'agent-evidence:c1' }),
+    expect.objectContaining({ section: 'answers' }));
+  dom.window.close();
+});
 it('counts and lists a mark over several sentences once', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';

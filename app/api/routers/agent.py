@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+import os
 import re
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException, Request, Query
@@ -115,6 +116,19 @@ def vm_allowed(uid):
         raise HTTPException(
             status_code=503, detail="Account tier is temporarily unavailable. Please retry."
         ) from None
+
+
+# compare_models in audit mode (since 2026-10-31, the first of four steps to
+# one mode of comparison and audit): the user's chosen models answer the
+# agent's question, the reviewers read their answers, no judge runs. Admins
+# first; AGENT_AUDIT_COMPARE=all gives it to every account with audit.
+def audit_compare_allowed(uid):
+    if os.getenv("AGENT_AUDIT_COMPARE", "").strip().lower() == "all":
+        return True
+    try:
+        return is_user_admin(uid)
+    except TierStatusUnavailable:
+        return False
 
 
 # Domains beyond the package registries for the workbench (request_domain):
@@ -456,6 +470,7 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models, audit=preferences.audit == "on")
+        audit_compare = preferences.audit == "on" and audit_compare_allowed(uid)
         memory = _memory_snapshot(uid)
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
@@ -481,6 +496,8 @@ def run_agent(request: Request, payload: AgentRequest):
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
                             "agent_preferences": preferences.model_dump(),
+                            # compare_models in audit mode (audit_compare_allowed).
+                            **({"audit_compare": True} if audit_compare else {}),
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
                             "answer_mode": "merged",
@@ -504,7 +521,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources,
-                         domains=preferences.vm == "on" and domains_allowed(uid),
+                         domains=preferences.vm == "on" and domains_allowed(uid), audit_compare=audit_compare,
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         # Every view follows the run through this buffer (POST tail, GET .../live).

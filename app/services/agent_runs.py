@@ -528,7 +528,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     or (status == "succeeded" and last.get("status") != "succeeded")):
                 raise TurnStatusConflict("Agent step has not settled")
             review = (turn.to_dict() or {}).get("agent_review")
-            if status == "succeeded" and review and review.get("comparisons"):
+            # In audit mode no judge checks the comparisons (agent_audit.py):
+            # its review ends below as the reviewers left it.
+            if status == "succeeded" and review and review.get("comparisons") and review.get("mode") != "audit":
                 from app.services.agent_comparison import REVIEW_DONE, review_is_bound
                 if not review_is_bound(review, completion.text) or review.get("status") not in REVIEW_DONE:
                     raise TurnStatusConflict("The exact answer version has not been reviewed")
@@ -587,8 +589,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         "code": "cancelled" if status == "cancelled" else "agent_failed",
                         "error": "Response stopped. Available results have been saved." if status == "cancelled" else "The response could not be completed. Available results have been saved."}
                     # Without a comparison (a direct answer that read pages
-                    # has a review too) the streamed text is all there is.
-                    if completion.text and not (review or {}).get("comparisons"):
+                    # has a review too) the streamed text is all there is; in
+                    # audit mode always, its comparisons only advised.
+                    if completion.text and (not (review or {}).get("comparisons")
+                                            or (review or {}).get("mode") == "audit"):
                         patch["assistant_response"] = completion.text
                     if review:
                         # A crash/stop cannot leave a saved review looking live.

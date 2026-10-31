@@ -5910,7 +5910,8 @@ Aufräumen am 2026-10-28 abends jeder Fakt einmal: `read_source`/`find_pictures`
 ohne eigenen Block, ihre zwei App-Fakten in `AGENT_AUDIT_ANSWER_SECTION`,
 `AGENT_VM_PROMPT` nur Werkzeug-übergreifendes, ein Name „workspace“,
 `AuditReadSourceArgs` nur `url`),
-`ComparisonTools.audit_mode` bietet keine Vergleichstools an,
+`ComparisonTools.audit_mode` bietet kein `check_text` und `compare_models` nur
+mit `audit_compare` (siehe „Vergleich im Audit“ unten),
 und der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`, Text
 streamt sofort; kein `_consensus_search_handoff`, kein `_tool_reminder`).
 Die Vergleichsmodelle sind hier Prüfer, also reicht eines
@@ -6028,6 +6029,39 @@ Fixieren der Antwort wartet auf das Laufende (`agent-chat.js`
 `tests/e2e/test_agent_audit_frontend.py`; Tempo, Langlauf und Last ohne
 Modell-Calls: `tests/test_agent_audit_tempo.py`. Details: `docs/agent-mode.md`,
 „Audit statt Vergleich“.
+
+**Vergleich im Audit** (seit 2026-10-31, Paket 1 von „ein Modus für Vergleich
+und Audit“, Details `docs/agent-mode.md` „Vergleich im Audit“): Mit
+`audit_compare` (Route: `routers/agent.py::audit_compare_allowed`, Admins,
+`AGENT_AUDIT_COMPARE=all` jedes Konto mit Audit; am Turn
+`agent_settings.audit_compare`; `DelegationLoop(audit_compare=…)` →
+`ComparisonTools(compare=…)`) hat der Audit-Agent `compare_models` mit
+`AuditCompareArgs` (Frage, Kontext, Dateien, Tiefe; kein `status_update`, kein
+Memory-Feld) und der Beschreibung `AUDIT_COMPARE` samt Grenze
+`turn_comparisons`. Gefragt werden die gewählten Modelle, also die Prüfer-Modelle,
+aber immer in frischen Sitzungen (`ComparisonTools.call`), nie in den
+Prüfergesprächen; Tiefe, Antwortstart und Freiheit gelten fest
+(`auto`/`all`/`guided`). Kein Judge: `answer_progress` startet keinen
+Coverage-Vorlauf, `_finish_review` ruft weiter `audit_answer`, `audit()` stoppt
+vorher Nachzügler (`finish_comparisons`). Das Ergebnis (`_merged_result`) sagt
+dem Agenten, dass die Antworten nur seine Frage abdecken und der Rest der Aufgabe
+seine bleibt; kein `AGENT_WRITE_NOTE` danach (Max: der Lauf endet nicht mit den
+Antworten). Nach `read_source` bleibt der Vergleich möglich (im Audit liest der
+Agent in jedem Schritt). `review_is_bound` bindet eine Audit-Review nur an den
+Antwort-Hash, `finish_run` verlangt im Audit keinen Check je Vergleich und
+speichert bei Fehlern den Text wie ohne Vergleich. Die Prüfer lesen das Ergebnis
+als Eintrag `tool`/`compare_models` mit `data: agent` (`TOOL_DATA`) strukturiert bis
+`COMPARISON_ENTRY_CHARS` (vorher als ein Text bei 12.000 Zeichen abgeschnitten:
+nur die erste Antwort) und kennen das Werkzeug aus `BRIEF_TOOLS` (verschwiegene
+Widersprüche der Antworten = unvollständig). Mit `judges: off` gibt es keine
+Prüfer: `skip_review` bindet die Vergleiche wie im Vergleichsmodus. Anzeige:
+`agent-review.js` `adviceContexts` (ein Leser-Kontext je Vergleich unter
+`agent-evidence:{id}`, Antworten und Quellen, ohne Prüfung), Zelle „Answers“ in der
+Audit-Zeile, `adviceCards` vor der Prüferkarte in der Aktivität
+(`comparisonCard` teilt sich beide Modi). Messen: `scripts/audit_report.py`
+Abschnitt `compare` (Tor `COMPARE_GATE` = 10 saubere Läufe). Tests: `tests/test_agent_audit_compare.py`,
+Tempo mit drei Beratern neben drei Prüfern in `tests/test_agent_audit_tempo.py`,
+`tests/js/agent-review.test.mjs`, `tests/e2e/test_agent_audit_frontend.py`.
 
 **Aussteuern** (seit 2026-10-26, Details `docs/agent-mode.md` „Aussteuern“):
 Eine Live-Runde darf `halt` setzen (`HALT_KINDS`: safety, harm, off_goal,

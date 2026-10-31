@@ -85,11 +85,13 @@ class AgentPreferences(BaseModel):
     # (check_text) is still checked: that check is the answer. In audit mode
     # "off" skips the reviewers too: the agent answers alone.
     judges: AgentJudges = "on"
-    # Audit instead of comparison (since 2026-10-25, admin accounts only;
-    # the route turns it off for everyone else): no comparison tools, the
-    # agent answers itself with its own search, and the comparison models
-    # follow its work and review its fixed answer (agent_audit.py). Depth, answer start and
-    # Agent freedom only steer comparisons, so they do nothing in this mode.
+    # Audit instead of comparison (since 2026-10-25; the route turns it off
+    # for accounts without it, routers/agent.py audit_allowed): the agent
+    # answers itself with its own search, and the comparison models follow
+    # its work and review its fixed answer (agent_audit.py). Since 2026-10-31
+    # it may ask them its question too (compare_models, AUDIT_COMPARE), with
+    # every model and every answer, whatever depth, answer start and Agent
+    # freedom say: the settings page does not offer them in this mode.
     audit: AgentAudit = "off"
     # Agent VM (since 2026-10-25, admin accounts only; the route turns it off
     # for everyone else): the agent gets its own Linux VM for the chat, with
@@ -247,6 +249,10 @@ REVIEW_DONE = frozenset({"succeeded", "partial", "failed", "off"})
 
 def review_is_bound(review, text):
     digest = answer_hash(text)
+    if review.get("mode") == "audit":
+        # The reviewers review the fixed answer as a whole, the comparisons
+        # it rests on included (agent_audit.py): no judge check of each.
+        return review.get("answer_hash") == digest
     comparisons = review.get("comparisons") or []
     checks = review.get("checks") or []
     if review.get("answer_hash") != digest or len(checks) != len(comparisons):
@@ -356,6 +362,31 @@ def free_compare_args(models):
     return create_model("FreeCompareArgs", __base__=CompareArgs, models=(
         list[Literal[tuple(models)]], Field(min_length=2, max_length=len(models), description=
             f"Families to ask in this comparison, at least two different ones: {labels}.")))
+
+
+class AuditCompareArgs(BaseModel):
+    """compare_models in audit mode (since 2026-10-31): what the models are
+    asked. No progress paragraph: there the agent's own text beside a call
+    is its note on the work (AGENT_AUDIT_ANSWER_SECTION). No memory field: a
+    change goes through update_memory and the reviewers' gate."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    question: str = Field(min_length=1, max_length=2000)
+    context: str = Field(default="", max_length=8000)
+    file_ids: list[str] = Field(default_factory=list, max_length=5)
+    depth: Literal["quick", "full"] = Field(default="full", description=
+        "quick: each model answers briefly, after one search round. full: as thoroughly as the question needs, "
+        "with up to three search rounds.")
+
+
+# The tool's description in audit mode: what it is, as facts (the audit
+# prompt is a constitution, no list of when to use a tool). The models are
+# the reviewers' models, but never their conversations (Max, 2026-10-30):
+# a reviewer that knows the run answers neither independently nor without
+# a channel back to the agent.
+AUDIT_COMPARE = ("Ask the models the user chose for this chat the same question. Each answers on its own, in a "
+                 "fresh conversation with its own web search, and sees only question and context: never your "
+                 "work, your sources or the reviews. You get their answers and the pages they cite; the user can "
+                 "read them under your answer.")
 
 
 # --- Checking a passage the user supplied ("paste an AI answer to check it") --
@@ -594,7 +625,9 @@ def comparison_selection(value=None, *, audit=False):
 
 
 class ComparisonTools:
-    def __init__(self, loop, models, *, preferences=None, memory_changes=False, read_sources=False):
+    def __init__(self, loop, models, *, preferences=None, memory_changes=False, read_sources=False, compare=False):
+        """``compare``: compare_models in audit mode too (routers/agent.py
+        audit_compare_allowed); comparison mode always has it."""
         self.loop, self.models = loop, models
         # The agent writes the answer itself (agent_answer_mode): no answer
         # tool, full answers and source excerpts in every comparison result.
@@ -631,9 +664,11 @@ class ComparisonTools:
         self.reader = None
         # Coverage windows of the answer while it streams (answer_progress).
         self.prefetch = None
-        # Audit instead of comparison (AgentPreferences.audit): no comparison
-        # tools; with the answer check on, the comparison models follow the
-        # agent's work log and review its fixed answer (agent_audit.AnswerAudit).
+        # Audit instead of comparison (AgentPreferences.audit): with the answer
+        # check on, the comparison models follow the agent's work log and
+        # review its fixed answer (agent_audit.AnswerAudit). No judge runs,
+        # also not on the answers of compare_models (since 2026-10-31, with
+        # ``compare``): they advise the agent, the reviewers read them.
         self.audit_mode = self.preferences.audit == "on"
         self.auditor = None
         if self.audit_mode:
@@ -643,6 +678,14 @@ class ComparisonTools:
                 self.auditor = AnswerAudit(self)
             self.app_tools = [ReadOnlyTool("audit_answer", "Have the user's comparison models review the fixed answer.",
                                            JudgeArgs, self.audit)]
+            if compare:
+                # Every chosen model, every answer awaited, the depth the
+                # agent's (AgentPreferences.audit).
+                self.preferences = self.preferences.model_copy(
+                    update={"depth": "auto", "quorum": "all", "autonomy": "guided"})
+                limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
+                self.tools = [ReadOnlyTool("compare_models", AUDIT_COMPARE + (
+                    f" At most {limit} times per message." if limit else ""), AuditCompareArgs, self.compare)]
             return
         arguments = free_compare_args(models) if self.free else CompareArgs
         if memory_changes:
@@ -884,7 +927,10 @@ class ComparisonTools:
     def answer_progress(self, text):
         """The answer as far as the user sees it while it streams: settled
         sentences start their Coverage windows now, not after the last word
-        (agent_coverage_prefetch). Never breaks the answer itself."""
+        (agent_coverage_prefetch). Never breaks the answer itself. Not in
+        audit mode: no judge checks that answer, its comparisons included."""
+        if self.audit_mode:
+            return
         try:
             if self.prefetch is None:
                 from app.services.agent_coverage_prefetch import CoveragePrefetch
@@ -1035,7 +1081,8 @@ class ComparisonTools:
                     logging.warning("Agent comparison could not publish a partial answer")
             if getattr(cancellation, "cutoff", False):
                 message = COMPARISON_FAILURES["late_cutoff"] + (
-                    " The answer and its check use the other answers." if self.preferences.judges == "on"
+                    " The answer and its check use the other answers."
+                    if self.preferences.judges == "on" and not self.audit_mode
                     else " The answer uses the other answers.")
             elif kind == "comparison" and not isinstance(exc, ProviderCancelled):
                 # One model inside a comparison cannot be retried on its own, so
@@ -1055,10 +1102,14 @@ class ComparisonTools:
             raise ValueError("Files are not available")
         if self.text:
             raise ValueError("The answer is already being written. Do not call further tools.")
-        if self.reader is not None and any(r.get("status") == "completed" for r in self.reader.reads):
+        if (not self.audit_mode and self.reader is not None
+                and any(r.get("status") == "completed" for r in self.reader.reads)):
             # Page text is in the orchestrator's context now: a new task could
             # carry its findings (or what a page tells it) to the answer models,
-            # which must answer independently.
+            # which must answer independently. Not in audit mode: there the
+            # agent searches and reads in every step, the models see only its
+            # question (AUDIT_COMPARE), and the reviewers read that question
+            # in the log.
             raise ValueError("A source was read in this message, so no comparison is possible any more. "
                              "Write the answer now from what you have.")
         if not loop.policy.account_budget_only and (len(self.comparisons) >= BOUNDED_COMPARISONS or self.versions):
@@ -1105,8 +1156,9 @@ class ComparisonTools:
                                                     + (2 if passage is not None else 0)) > loop.policy.max_calls:
             raise ValueError("Remaining calls are reserved for synthesis and judges")
         comparison = {"id": uuid4().hex, **args.model_dump(include={"question", "context", "file_ids", "depth"}),
-                      # The purpose line under "Comparison n" is the progress paragraph.
-                      "reason": " ".join(args.status_update.split())[:500],
+                      # The purpose line under "Comparison n" is the progress
+                      # paragraph (none in audit mode, AuditCompareArgs).
+                      "reason": " ".join(getattr(args, "status_update", "").split())[:500],
                       "asked": asked, "status": "running", "answers": [], "failed_models": []}
         self.comparisons.append(comparison)
         if passage is not None:
@@ -1275,7 +1327,19 @@ class ComparisonTools:
             logging.warning("Agent comparison result continues without source excerpts category=%s",
                             safe_exception(exc))
             sources = []
-        if len(answers) < 2:
+        if self.audit_mode:
+            # Advice for the agent, never the end of its work: they answered
+            # the one question, the rest of the user's request is still to do
+            # (Max, 2026-10-31: a run must not just end once they answered).
+            # No judge checks the answer against them.
+            parts = ["These answers cover only the question you asked; the rest of the user's request is still "
+                     "yours to do.", "The user can read them under your answer, and the reviewers read them too."]
+            if len(answers) < 2:
+                parts.insert(0, "Only one model answered." if answers else "No model answered.")
+            if last:
+                parts.append("This was the last comparison allowed for this message.")
+            instruction = " ".join(parts)
+        elif len(answers) < 2:
             # One answer cannot be checked against another (review_issues:
             # insufficient_answers): never promise a check.
             instruction = ("Fewer than two models answered, so this comparison cannot be checked. "
@@ -1291,7 +1355,7 @@ class ComparisonTools:
             instruction = ("When these answers suffice, write the answer; the app checks it. Compare again only for "
                            "what is still missing, as a neutral question without findings from these answers or "
                            "excerpts.")
-        if self.reader is not None and self.reader.cited():
+        if not self.audit_mode and self.reader is not None and self.reader.cited():
             instruction = ("If the user asked you to read or check a source, if these answers disagree on a fact that "
                            "matters, or if the answer needs exact wording, first read the source that decides it with "
                            "read_source (only URLs listed in the answers' or earlier messages' sources, or written by "
@@ -1652,6 +1716,9 @@ class ComparisonTools:
         if self.auditor is None or not self.text:
             raise ValueError("No answer to review.")
         if not self.finalized:
+            # A model still answering a comparison stops; the reviewers read
+            # the answers the agent had, as the judges would (judge()).
+            self.finish_comparisons()
             self.auditor.run(cancellation)
         return {"status": self.review["status"], "answer_hash": answer_hash(self.text), "finalized": True}
 

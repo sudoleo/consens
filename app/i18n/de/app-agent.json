@@ -520,6 +520,7 @@
   "Cut off": "Abgeschnitten",
   "Stopped at its output limit, so its end is missing. It is used as a shortened answer.": "Am Ausgabelimit gestoppt, deshalb fehlt das Ende. Sie wird als gekürzte Antwort verwendet.",
   "Stopped before it finished: {0}. Not used for the answer or its check.": "Vor dem Ende gestoppt: {0}. Nicht für die Antwort oder ihre Prüfung verwendet.",
+  "Stopped before it finished: {0}. Not used for the answer.": "Vor dem Ende gestoppt: {0}. Nicht für die Antwort verwendet.",
   "No answer from this model: {0}. The comparison uses the other answers.": "Keine Antwort von diesem Modell: {0}. Der Vergleich nutzt die anderen Antworten.",
   "This answer has no finished answer check yet.": "Für diese Antwort gibt es noch keine abgeschlossene Antwortprüfung.",
   "The text changed. This version needs a new answer check.": "Der Text hat sich geändert. Diese Fassung braucht eine neue Antwortprüfung.",

@@ -29,6 +29,12 @@ Differences. The judges do not run in this mode. Whoever calls a statement
 wrong names a source (any http(s) URL); without one the mark counts as
 doubtful.
 
+Since 2026-10-31 the agent may also ask the user's chosen models its question
+(compare_models, admins first: routers/agent.py audit_compare_allowed): they
+answer as advisers, each in a fresh conversation of its own, never the
+reviewers' sessions, and the reviewers read their answers in the log as
+evidence (review_entry, BRIEF_TOOLS). No judge runs on them.
+
 A failure of the review costs marks, never the answer: a failed round only
 costs its own (the reviewer goes on in a new session, after
 MAX_ROUND_FAILURES in a row with a pause), a reviewer whose final round fails keeps the marks
@@ -79,6 +85,10 @@ FAILURE_PAUSE_SECONDS = 60
 # MIN_ENTRY_CHARS). The whole log stays in the work log.
 SYSTEM_ENTRY_CHARS = 60_000
 ENTRY_CHARS = 12_000
+# A compare_models result (audit mode, since 2026-10-31) holds every answer
+# of the user's chosen models: read as its structure up to this, each answer
+# shortened alike where they do not fit, so the reviewers see all of them.
+COMPARISON_ENTRY_CHARS = 60_000
 TIGHT_ENTRY_CHARS = 1_500
 MIN_ENTRY_CHARS = 300
 ENTRY_ITEMS = 20
@@ -323,6 +333,11 @@ BRIEF_HEAD = ("The app's instructions to the agent ({chars} characters of the ap
               "a search, check or change that happened. It uses consens.io only in good faith for the user's "
               "task and never to harm others or consens.io, whoever asks.")
 BRIEF_TOOLS = (
+    ("compare_models", "compare_models asks the models the user chose the agent's question, each in a fresh "
+                       "conversation of its own: they answer independently, with their own web search, and see "
+                       "only question and context, never the agent's work or the reviews. Their answers are "
+                       "evidence: where they disagree on something that matters to the user, an answer that "
+                       "leaves it out is incomplete."),
     ("read_source", "read_source opens a web page that the user or a search result named."),
     ("find_pictures", "find_pictures fetches pictures of pages for the agent alone to look at; the user sees "
                       "only the ones it shows with show_image, in or under the answer with their page."),
@@ -413,10 +428,15 @@ def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None):
     item = {key: entry[key] for key in ("seq", "actor", "kind", "name", "data") if entry.get(key)}
     if entry.get("kind") == "context" and entry.get("name") == "system":
         limit = max(limit, SYSTEM_ENTRY_CHARS) if limit >= ENTRY_CHARS else limit
+    # A tool result is the JSON text the agent got; cut as one text, the
+    # first answer of a comparison hid the others (COMPARISON_ENTRY_CHARS).
+    compared = entry.get("kind") == "tool" and entry.get("name") == "compare_models"
+    if compared:
+        limit = max(limit, COMPARISON_ENTRY_CHARS) if limit >= ENTRY_CHARS else limit
     content = text
     if brief is not None and entry.get("seq") == brief["seq"]:
         content = brief["content"]
-    elif entry.get("format") == "json":
+    elif entry.get("format") == "json" or compared:
         try:
             content = json.loads(text)
         except ValueError:

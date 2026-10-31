@@ -63,6 +63,10 @@ UNDECIDED = {"timeout", "ended", "waiting", "open"}
 # The release (spec section 1): turns in all, with three reviewers, and
 # workspace runs over ten minutes.
 RELEASE = {"turns": 100, "three_reviewers": 30, "long_workspace_runs": 10}
+# compare_models in audit mode (since 2026-10-31, docs/agent-mode.md "Vergleich
+# im Audit"): this many real turns without an error before
+# AGENT_AUDIT_COMPARE=all opens it beyond the admins.
+COMPARE_GATE = 10
 
 
 # --- Reading (network) --------------------------------------------------------
@@ -134,6 +138,9 @@ def _turn(turn):
             "failed_at": turn.get("failed_at"), "updated_at": turn.get("updated_at"),
             "model": settings.get("model"), "preferences": settings.get("agent_preferences") or {},
             "comparison_models": len(settings.get("comparison_models") or {}),
+            # compare_models offered (audit_compare) and the comparisons it ran, by status.
+            "audit_compare": bool(settings.get("audit_compare")),
+            "comparisons": [c.get("status") for c in review.get("comparisons") or [] if isinstance(c, dict)],
             "review": {"mode": review.get("mode"), "status": review.get("status"), "reviewers": reviewers,
                        "issues": [i.get("code") for i in audit.get("issues") or [] if isinstance(i, dict)]}
             if review else None,
@@ -478,6 +485,17 @@ def report(data):
                 f"Max' decision (cost share {quota['reviewer_cost_share']})", None),
     ]
     long_runs = sum(1 for r in completed if r["info"].get("vm") and (_seconds(r["created"], r["end"]) or 0) > 600)
+    # The turns that asked the models (compare_models in audit mode); clean:
+    # completed, reviewed, every comparison with answers of at least two.
+    compared = [r for r in rows if r["info"].get("comparisons")]
+    comparing = {"offered": sum(1 for r in rows if r["info"].get("audit_compare")), "turns": len(compared),
+                 "turn_status": dict(Counter(_status(r["info"]) for r in compared)),
+                 "comparisons": dict(Counter(s for r in compared for s in r["info"]["comparisons"])),
+                 "reviews": dict(Counter((r["info"]["review"] or {}).get("status") for r in compared)),
+                 "clean": sum(1 for r in compared if r["info"].get("status") == "completed"
+                              and (r["info"]["review"] or {}).get("status") in {"succeeded", "partial"}
+                              and all(s in {"succeeded", "partial"} for s in r["info"]["comparisons"])),
+                 "needed": COMPARE_GATE}
     return {
         "since": data["since"].isoformat() if isinstance(data.get("since"), datetime) else data.get("since"),
         "data": {"audit_turns": len(rows), "own": sum(r["own"] for r in rows), "other": sum(not r["own"] for r in rows),
@@ -499,6 +517,7 @@ def report(data):
         "targets": targets,
         "release": {"turns": len(rows), "three_reviewers": reviewers.get(3, 0), "long_workspace_runs": long_runs,
                     "needed": RELEASE},
+        "compare": comparing,
     }
 
 
@@ -558,6 +577,10 @@ def render(result):
     add(f"\nRelease: {release['turns']}/{release['needed']['turns']} turns, "
         f"{release['three_reviewers']}/{release['needed']['three_reviewers']} with three reviewers, "
         f"{release['long_workspace_runs']}/{release['needed']['long_workspace_runs']} workspace runs over 10 min")
+    compare = result["compare"]
+    add(f"Compare in audit: offered in {compare['offered']} turns, used in {compare['turns']} "
+        f"(turns {compare['turn_status']}, comparisons {compare['comparisons']}, reviews {compare['reviews']}); "
+        f"gate {compare['clean']}/{compare['needed']} clean turns")
     return "\n".join(out)
 
 

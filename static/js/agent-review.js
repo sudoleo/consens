@@ -213,21 +213,8 @@
     // stays for screen readers only.
     host.append(node('h3', 'visually-hidden', 'Comparison details'));
     comparisons.forEach((comparison, index) => {
-      const card = node('section', 'agent-activity-insight');
-      const answers = comparison.answers || [], missing = comparison.failed_models || [];
-      // Whole sentences: the page translates a text as one (docs/i18n.md).
-      const number = index + 1, count = answers.length;
-      card.append(node('h4', '', comparison.status === 'running' ? `Comparison ${number} · Collecting answers…`
-        : count === 1 ? `Comparison ${number} · 1 model answer` : `Comparison ${number} · ${count} model answers`));
-      if (comparison.question) card.append(node('p', 'agent-activity-focus', comparison.question));
-      if (comparison.reason) card.append(node('p', '', comparison.reason));
-      const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
-      if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
-      const unfinished = missing.filter(m => m.partial_text), silent = missing.filter(m => !m.partial_text);
-      if (silent.length) card.append(node('p', '', `Did not respond: ${silent.map(m => m.label || m.model).join(', ')}`));
-      if (unfinished.length) card.append(node('p', '', `Stopped before finishing: ${unfinished.map(m => m.label || m.model).join(', ')} (kept as incomplete)`));
-      const pending = comparison.pending_models || [];
-      if (pending.length) card.append(node('p', '', `Still answering: ${pending.map(m => m.label || m.model).join(', ')}`));
+      const card = comparisonCard(comparison, index);
+      const answers = comparison.answers || [];
       const check = currentCheck(review, comparison, raw);
       const issues = checkIssues(comparison, check);
       const state = check?.status || (['running', 'failed', 'cancelled', 'missing'].includes(review.status) ? review.status : 'required');
@@ -269,6 +256,48 @@
         actions.append(button);
       }
       card.append(actions); host.append(card);
+    });
+  }
+  // A comparison's card in the activity: which models answered what, and
+  // who did not. Its check (comparison mode) or its button follow.
+  function comparisonCard(comparison, index) {
+    const card = node('section', 'agent-activity-insight');
+    const answers = comparison.answers || [], missing = comparison.failed_models || [];
+    // Whole sentences: the page translates a text as one (docs/i18n.md).
+    const number = index + 1, count = answers.length;
+    card.append(node('h4', '', comparison.status === 'running' ? `Comparison ${number} · Collecting answers…`
+      : count === 1 ? `Comparison ${number} · 1 model answer` : `Comparison ${number} · ${count} model answers`));
+    if (comparison.question) card.append(node('p', 'agent-activity-focus', comparison.question));
+    if (comparison.reason) card.append(node('p', '', comparison.reason));
+    const names = answers.map(a => a.model?.label || a.provider_label || a.provider).filter(Boolean);
+    if (names.length) card.append(node('p', 'agent-activity-models', `Models: ${names.join(', ')}`));
+    const unfinished = missing.filter(m => m.partial_text), silent = missing.filter(m => !m.partial_text);
+    if (silent.length) card.append(node('p', '', `Did not respond: ${silent.map(m => m.label || m.model).join(', ')}`));
+    if (unfinished.length) card.append(node('p', '', `Stopped before finishing: ${unfinished.map(m => m.label || m.model).join(', ')} (kept as incomplete)`));
+    const pending = comparison.pending_models || [];
+    if (pending.length) card.append(node('p', '', `Still answering: ${pending.map(m => m.label || m.model).join(', ')}`));
+    return card;
+  }
+  // The comparisons of an audit-mode turn (compare_models): their answers
+  // advise the agent, no judge checks them, so a card offers only to read
+  // them. Before the review's card: they came while the agent worked.
+  function adviceCards(host, review) {
+    (review.comparisons || []).forEach((comparison, index) => {
+      const card = comparisonCard(comparison, index);
+      const answers = comparison.answers || [];
+      if (comparison.status === 'running' && !answers.length) {
+        card.append(node('p', 'agent-activity-check', 'Waiting for independent model answers.'));
+      }
+      const actions = node('div', 'agent-activity-insight-actions');
+      const button = node('button', 'consensus-tab', 'Read model answers'); button.type = 'button';
+      button.disabled = !answers.length;
+      button.addEventListener('click', () => {
+        const current = host._activityReview, key = `agent-evidence:${comparison.id}`;
+        const context = activityContexts.get(current)?.find(c => c.key === key)
+          || adviceContexts(current).find(c => c.key === key);
+        if (context) App.answerReader?.openContext(context, { section: 'answers', trigger: button });
+      });
+      actions.append(button); card.append(actions); host.append(card);
     });
   }
   // The links a markdown text carries, parsed once per text. Every open of a
@@ -352,6 +381,47 @@
     }
     panel.append(sources.length ? list : node('p', 'agent-review-note', 'No source URLs were supplied for this answer.'));
     return panel;
+  }
+  // One comparison's answers as the reader lists them. ``audit``: the
+  // answers of compare_models in audit mode, which no judge checks.
+  function readerAnswers(comparison, audit = false) {
+    return [
+      ...(comparison.answers || []).map(a => ({ provider: a.provider_label || a.provider, model: a.model?.model, label: a.model?.label || a.provider,
+        text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete",
+        ...(a.truncated ? { badge: 'Cut off', note: 'Stopped at its output limit, so its end is missing. It is used as a shortened answer.' } : {}) })),
+      // Text a model wrote before it stopped stays readable, marked, and
+      // outside the answer and its check.
+      ...(comparison.failed_models || []).map((m, i) => m.partial_text
+        ? { provider: `unavailable-${i}`, model: m.model, label: m.label, text: m.partial_text, status: "incomplete",
+            sources: safeSources([{ text: m.partial_text }]), sourceReferences: 'agent',
+            error: audit ? `Stopped before it finished: ${failureReason(m.failure)}. Not used for the answer.`
+              : `Stopped before it finished: ${failureReason(m.failure)}. Not used for the answer or its check.` }
+        : { provider: `unavailable-${i}`, model: m.model, label: m.label,
+        text: "", status: comparison.status === "cancelled" ? "canceled" : "error",
+        error: `No answer from this model: ${failureReason(m.failure)}. The comparison uses the other answers.`, sources: [] })
+    ];
+  }
+  // The answers of compare_models in audit mode (since 2026-10-31): one
+  // reader context per comparison, its answers and the sources, no review
+  // (the reviewers' notes have their own, auditContext). Under the keys of
+  // comparison mode, so the agent panel opens a model's answer the same way
+  // (agent-delegation.js openInReader). Without the turn's sources (the
+  // activity, before the row) those the answers cite.
+  function adviceContexts(review, turnSources = null) {
+    const comparisons = (review?.comparisons || []).filter(c => (c.answers || []).length || (c.failed_models || []).length);
+    const sources = turnSources || safeSources(comparisons.flatMap(c => c.answers || []));
+    const contexts = comparisons.map(comparison => {
+      const question = String(comparison.question || '');
+      const context = { key: `agent-evidence:${comparison.id}`, question, scopeLabel: 'Comparison focus',
+        contextLabel: question.length > 64 ? question.slice(0, 61) + '…' : question,
+        sections: ['answers', 'sources'], contextGroup: () => contexts, answers: readerAnswers(comparison, true),
+        renderPanel: () => sourcePanel(sources, readUrls(review)) };
+      contextsByKey.delete(context.key); contextsByKey.set(context.key, context);
+      return context;
+    });
+    while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
+    activityContexts.set(review, contexts);
+    return contexts;
   }
   // The glyphs of the row under an answer. The reviewers' notes have their
   // own (a note in the margin): the fork means a contradiction between
@@ -797,13 +867,21 @@
   // the row's count (B5) and the glossary's words ("reviewer", I1).
   function renderAuditActivity(host, review) {
     const audit = review.audit, reviewers = audit.reviewers || [];
-    host.hidden = !reviewers.length;
+    const comparisons = review.comparisons || [];
+    host.hidden = !reviewers.length && !comparisons.length;
     host._activityReview = review;
     const total = auditCount(audit), passages = auditPassages(audit);
-    const signature = JSON.stringify(['audit', review.status, review.answer_hash, reviewers, total, passages]);
+    // The comparisons by what their cards show: an answer's text only through being there.
+    const shown = JSON.stringify(comparisons, (key, value) => UNSHOWN_TEXT.has(key) && typeof value === 'string'
+      ? value !== '' : key === 'sources' ? undefined : value);
+    const signature = JSON.stringify(['audit', review.status, review.answer_hash, reviewers, total, passages, shown]);
     if (host._activitySignature === signature) return;
     host._activitySignature = signature;
     host.replaceChildren();
+    if (comparisons.length) {
+      host.append(node('h3', 'visually-hidden', 'Comparison details'));
+      adviceCards(host, review);
+    }
     if (!reviewers.length) return;
     host.append(node('h3', 'visually-hidden', 'Review details'));
     const card = node('section', 'agent-activity-insight');
@@ -950,20 +1028,28 @@
     });
     body._markSignature = null;
     const count = auditCount(review.audit);
+    // The answers the agent asked for (compare_models), read in their own
+    // reader context; the first comparison opens, the others in its picker.
+    const advice = adviceContexts(review, turnSources);
+    const answered = (review.comparisons || []).reduce((n, c) => n + (c.answers || []).length, 0);
     // Notes waiting; "No objections" when the reviewers found nothing (B4);
     // Notes without a number when there was no review to count.
     const cells = [];
     if (pending) cells.push(['differences', 'Notes', null, 'notes']);
     else if (done && !count && review.status !== 'failed') cells.push(['differences', 'No objections', null, 'clear']);
     else if (done || notesOnly) cells.push(['differences', 'Notes', count || null, 'notes']);
+    if (advice.length && answered) cells.push(['answers', 'Answers', answered, 'answers']);
     if (turnSources.length) cells.push(['sources', 'Sources', turnSources.length, 'sources']);
     for (const [section, label, number, glyph] of cells) {
       const button = evidenceButton(section, label, number, glyph);
       if (pending && section === 'differences') {
         button.disabled = true; button.classList.add('is-pending');
+      } else if (section === 'answers') {
+        button.addEventListener('click', () => App.answerReader?.openContext(advice[0], { section, trigger: button }));
       } else button.addEventListener('click', () => open(section, { trigger: button }));
       tabs.append(button);
     }
+    for (const context of advice) App.answerReader?.refreshContext(context);
     if (body.classList.contains('thread-history-answer-body')) historyReviewers(body, review, open);
     else { body._agentModels?.remove(); body._agentModels = null; }
     App.answerReader?.refreshContext(context);
@@ -1041,20 +1127,7 @@
         check, modelCount: answers.length, ...(off ? { sections: ['answers', 'sources'] } : {}),
         contextLabel: comparison.question.length > 64 ? comparison.question.slice(0, 61) + "…" : comparison.question,
         contextGroup: () => contexts,
-        answers: [
-          ...answers.map(a => ({ provider: a.provider_label || a.provider, model: a.model?.model, label: a.model?.label || a.provider,
-            text: a.text, sources: safeSources([a]), sourceReferences: 'agent', status: "complete",
-            ...(a.truncated ? { badge: 'Cut off', note: 'Stopped at its output limit, so its end is missing. It is used as a shortened answer.' } : {}) })),
-          // Text a model wrote before it stopped stays readable, marked, and
-          // outside the answer and its check.
-          ...(comparison.failed_models || []).map((m, i) => m.partial_text
-            ? { provider: `unavailable-${i}`, model: m.model, label: m.label, text: m.partial_text, status: "incomplete",
-                sources: safeSources([{ text: m.partial_text }]), sourceReferences: 'agent',
-                error: `Stopped before it finished: ${failureReason(m.failure)}. Not used for the answer or its check.` }
-            : { provider: `unavailable-${i}`, model: m.model, label: m.label,
-            text: "", status: comparison.status === "cancelled" ? "canceled" : "error",
-            error: `No answer from this model: ${failureReason(m.failure)}. The comparison uses the other answers.`, sources: [] })
-        ] };
+        answers: readerAnswers(comparison) };
       const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
       const navigation = {
         canOpen: name => !!findAnswer(name),

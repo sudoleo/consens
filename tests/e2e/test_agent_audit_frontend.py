@@ -169,6 +169,47 @@ def test_a_reviewed_answer_shows_its_marks_notes_and_reviewers(browser, phase4_s
         context.close()
 
 
+ADVICE = [("openai", "OpenAI", LUNA, "The Colosseum opened in 80 AD; a standard ticket costs 24 euros."),
+          ("xiaomi", "Xiaomi", MIMO, "It opened in 80 AD. Tickets cost 18 euros, the Forum included.")]
+
+
+def test_a_reviewed_answer_with_a_comparison_offers_the_models_answers(browser, phase4_server):
+    """compare_models in audit mode (2026-10-31): the models the agent asked
+    stand beside the reviewers' notes, their answers to read, no check."""
+    events = finished_events()
+    advised = review()
+    advised["comparisons"] = [{
+        "id": "e" * 32, "question": "When did the Colosseum open, and what does a ticket cost?", "status": "succeeded",
+        "basis_hash": "b" * 64, "answers": [
+            {"provider": provider, "provider_label": label, "model": model, "text": text, "hash": "h",
+             "sources": [{"url": TICKETS, "title": "Tickets"}]} for provider, label, model, text in ADVICE],
+        "failed_models": []}]
+    advised["versions"][0]["comparison_ids"] = ["e" * 32]
+    events = [(name, {**data, "review": advised} if name == "review" and data["review"]["status"] == "succeeded"
+               else {**data, "turn": {**data["turn"], "agent_review": advised}} if name == "final" else data)
+              for name, data in events]
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events)
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        answers = page.locator('#agentAnswer .agent-evidence-link[data-section="answers"]')
+        expect(answers).to_be_visible()
+        expect(answers).to_have_attribute("aria-label", "Answers 2")
+        expect(page.locator('#agentAnswer .agent-evidence-link[data-section="differences"]')).to_be_visible()
+        answers.click()
+        reader = page.locator("#modelAnswerReader")
+        expect(reader).to_contain_text("a standard ticket costs 24 euros")
+        page.wait_for_timeout(500)
+        _snapshot(page, "audit-advice-answers-1280")
+        page.keyboard.press("Escape")
+        page.locator("#agentAnswer .agent-activity > summary").click()
+        card = page.locator("#agentAnswer .agent-activity-insight").first
+        expect(card).to_contain_text("Comparison 1 · 2 model answers")
+        expect(card).not_to_contain_text("Explore")
+        assert errors == []
+    finally:
+        context.close()
+
+
 def test_the_review_runs_under_a_fixed_answer(browser, phase4_server):
     events = [("started", {"chat_id": CHAT, "turn_id": TURN, "delegation": True})]
     events += [("activity", event) for event in ACTIVITY]

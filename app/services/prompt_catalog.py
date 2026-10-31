@@ -86,8 +86,10 @@ _ENTRIES = (
      "agent_comparison.py:comparison_system_prompt()", _comparison),
     ("agent_audit", "Agent: audit mode instructions",
      "System prompt of the Agent model instead of \"Agent: instructions\" when an admin switched on Audit instead "
-     "of comparison (agent_audit.py): no comparison tools, the agent researches with its own web search in every "
-     "step and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION). Since 2026-10-28 it says only what the model "
+     "of comparison (agent_audit.py): the agent researches with its own web search in every step and writes the "
+     "answer itself (AGENT_AUDIT_ANSWER_SECTION). compare_models only with audit_compare (since 2026-10-31, admins "
+     "or AGENT_AUDIT_COMPARE=all; its description agent_comparison.py:AUDIT_COMPARE, no judge, no write note "
+     "after it). Since 2026-10-28 it says only what the model "
      "cannot know, the app's contracts and the rules of safety and truth. At runtime the audit versions of the "
      "source reading, Watch, settings, memory, file, document and Google instructions are appended (\"Agent audit: "
      "tool blocks\").",

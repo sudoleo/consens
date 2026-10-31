@@ -72,7 +72,11 @@ Ergebnis steht als `tool`-Eintrag darin.
   dieses Laufs und die Frage selbst, nie das Arbeitsprotokoll-Résumé eines
   früheren VM-Turns im Verlauf (`agent_work_record`, Herkunft `vm`); was der Lauf danach als Nutzernachricht
   anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
-  Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`).
+  Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`). Das Ergebnis von
+  `compare_models` (seit 2026-10-31 im Audit) sind die Antworten anderer Modelle
+  mit ihren Seiten: `agent`. Prüfer lesen es als Struktur bis
+  `agent_audit.COMPARISON_ENTRY_CHARS`, nicht als einen bei `ENTRY_CHARS`
+  abgeschnittenen Text.
 - `format`: `text`, oder `json` für `start`, `step`, `app` mit Daten und `end`.
 - Messwerte neben dem Inhalt (seit 2026-10-30, `ENTRY_FIELDS`, nur Zahlen und
   Zeiten): `started_at`/`duration_ms` an `tool`, `gate_ms` an `checked` und am

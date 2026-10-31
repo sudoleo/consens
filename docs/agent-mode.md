@@ -246,6 +246,67 @@ Ein Skript auf der Werkbank erreicht freigegebene Domains ohne Modellschritt, ta
 Anfragen in einem Befehl, die kein Tageskonto bremst. Der Rest dieses Abschnitts
 beschreibt den Stand davor, wo er nur von Admins oder Pro spricht.
 
+#### Vergleich im Audit (seit 2026-10-31, zuerst Admins)
+
+Paket 1 von „ein Modus für Vergleich und Audit“ (Konzept-Deck 2026-10-30, Max'
+Entscheidungen 2026-10-31: die Judges des Vergleichs fallen weg, weil die Prüfer
+prüfen; der Lauf darf nach den Vergleichsantworten nicht einfach enden; der Score
+entfällt; Model Pulse und Differences-Datensatz sind technische Schuld, nach dem
+Umbau umzustellen). Der Audit-Agent bekommt `compare_models`: Die vom Nutzer
+gewählten Modelle beantworten seine Frage, jedes in einem frischen Gespräch mit
+eigener Websuche, und sehen nur Frage und Kontext, nie seine Arbeit, seine Quellen
+oder die Prüfungen. Es sind dieselben Modelle wie die Prüfer, aber nie deren
+Gespräche: Ein Prüfer, der den Lauf kennt, antwortet nicht mehr unabhängig, und
+seine Antwort wäre ein Rückkanal zum Agenten.
+
+- **Freigabe:** `routers/agent.py::audit_compare_allowed`: Admins, mit
+  `AGENT_AUDIT_COMPARE=all` jedes Konto mit Audit. Der Turn trägt
+  `agent_settings.audit_compare`. Rückweg: Variable leeren. Tor laut Deck: 10
+  echte Läufe ohne Fehler, bevor der Schalter für alle aufgeht;
+  `scripts/audit_report.py` zählt sie in der Zeile „Compare in audit“ (angeboten,
+  genutzt, Status der Turns, Vergleiche und Reviews, saubere Läufe gegen
+  `COMPARE_GATE`).
+- **Werkzeug:** `AuditCompareArgs` (`question`, `context`, `file_ids`, `depth`
+  quick/full), ohne `status_update` (im Audit ist der Text neben einem Aufruf die
+  Notiz) und ohne Memory-Feld (Memory geht über `update_memory` und das Gate).
+  Die Beschreibung (`AUDIT_COMPARE`) nennt nur Fakten und die Grenze
+  `turn_comparisons` (4). Jeder Vergleich fragt alle gewählten Modelle und wartet
+  auf alle Antworten; Tiefe, Antwortstart und Freiheit der Einstellungen gelten
+  im Audit nicht (die Seite bietet sie dort nicht an).
+- **Kein Judge:** keine Differences, kein Coverage-Vorlauf (`answer_progress`),
+  kein Score, kein Model-Pulse-Pick, kein `differences_stats`. Die Prüfer prüfen
+  die Antwort wie jede andere; `audit_answer` stoppt vorher Nachzügler
+  (`finish_comparisons`). `review_is_bound` bindet eine Audit-Review an den
+  Antwort-Hash, `finish_run` verlangt keinen Check je Vergleich.
+- **Der Lauf geht weiter:** Das Ergebnis sagt dem Agenten, dass die Antworten nur
+  seine Frage abdecken und der Rest der Aufgabe seine bleibt, dass der Nutzer sie
+  unter der Antwort lesen kann und die Prüfer sie lesen. Kein `AGENT_WRITE_NOTE`
+  („die nächste Nachricht ist die Antwort“) im Audit. Ein gelesener Text
+  (`read_source`) sperrt den Vergleich im Audit nicht: Der Agent liest dort in
+  jedem Schritt, die Modelle sehen nur seine Frage, und die Prüfer lesen sie im
+  Protokoll.
+- **Prüfer:** Das Ergebnis steht im Arbeitsprotokoll als `tool`-Eintrag
+  `compare_models` (`data: agent`). Bis 2026-10-31 las ein Prüfer jedes
+  Werkzeug-Ergebnis als einen Text, abgeschnitten bei `ENTRY_CHARS` (12.000
+  Zeichen): Von drei Antworten sah er oft nur die erste. Jetzt liest er es als
+  Struktur bis `COMPARISON_ENTRY_CHARS` (60.000), jede Antwort gleich gekürzt, wo
+  nicht alles passt. Die Kurzfassung (`BRIEF_TOOLS`) erklärt das Werkzeug: Ein
+  verschwiegener Widerspruch der Antworten, der für den Nutzer zählt, macht die
+  Antwort unvollständig.
+- **Anzeige:** Unter der Antwort neben „Notizen“ die Zelle „Antworten“ (ein
+  Leser-Kontext je Vergleich, Antworten und Quellen, keine Prüfung); in der
+  Aktivität die Karten der Vergleiche vor der Prüferkarte, nur mit „Modellantworten
+  lesen“. Das Seitenpanel öffnet eine Antwort wie im Vergleichsmodus.
+- **Tempo:** `tests/test_agent_audit_tempo.py`
+  `test_three_advisers_beside_three_reviewers_keep_their_tempo`: Daily (drei
+  Modelle) als Berater und Prüfer zugleich, Server-Anteil je Beraterantwort
+  median 0,03 s (Prod-Skala ~1,2 s), je Live-Runde 0,03–0,05 s, Konto-Lock
+  44–49 % des Laufs gehalten (vorher 60 % mit drei Prüfern bei 40 Schritten).
+  Nach dem Livegang an echten Läufen nachmessen (`scripts/audit_report.py`).
+- **Noch nicht (Pakete 2–4):** Satzurteil der Prüfer, ein Modus für alle,
+  `check_text` und die Judges des Agenten entfernen. Model Pulse und
+  Differences-Datensatz bekommen aus Audit-Antworten keine Daten.
+
 Einstellungen → Agent · Beta → **Audit instead of comparison**
 (`AgentPreferences.audit`: `off` = Standard, `on`; Zeile `.admin-only`,
 `#agentAuditSelect`). Der Server nimmt `on` nur von Admin-Konten an

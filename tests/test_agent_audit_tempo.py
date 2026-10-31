@@ -20,6 +20,8 @@ measure what the server adds to the models' own time:
   the review counts all of it. It also measures what the work log holds in
   memory (docs/agent-work-log.md).
 - A-L3: three audit turns with three reviewers each at once in one process.
+- Advisers (compare_models in audit mode, 2026-10-31): the same three
+  models answer the agent's question while they review its run.
 
 Measured times are printed (pytest -s), with their Prod equivalent; the
 assertions keep a wide margin to them, as CI runners are slower than a
@@ -71,6 +73,9 @@ AGENT_STEP, TOOL, ANSWER_STREAM, TICK = prod(2), prod(1), prod(3), prod(.5)
 LIVE = {"openai": (4, 8), "xiaomi": (4, 10), "qwen": (3, 6), "glm": (3, 6), "deepseek": (3, 6), "anthropic": (3, 6)}
 FINAL = {"openai": (13, 40), "xiaomi": (9, 14), "qwen": (20, 25), "glm": (8, 15), "deepseek": (2, 14),
          "anthropic": (8, 15)}
+# Seconds of Prod a comparison answer took (median, 18.-21.10.,
+# docs/agent-mode.md "Tempo"): Luna 29, Haiku 28, DeepSeek V4.1 Flash 18.
+ADVICE = {"openai": 29, "anthropic": 28, "deepseek": 18}
 THREE = {"openai": "gpt-5.6-luna", "xiaomi": "mimo-v2.6-pro", "qwen": "qwen3.8-27b"}
 # The Daily preset, three reviewers (the default since 2026-10-28).
 DAILY = {"openai": "gpt-5.6-luna", "anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}
@@ -207,11 +212,14 @@ class Turn:
     to 53 s); ``hang``: reviewers whose first final request hangs until it is
     stopped (the hedge answers); ``stuck``: whose every final request hangs.
     ``live``: replies of live rounds by family, ``reply(messages, number)``
-    (a dict, or an exception to raise). ``timed=False``: no model takes time."""
+    (a dict, or an exception to raise). ``timed=False``: no model takes time.
+    ``compare_step``: the step that asks the models instead (compare_models
+    in audit mode); each answers after its ADVICE median."""
 
     def __init__(self, reviewers, *, uid=UID, steps=STEPS, gate_step=None, long_live=None, hang=(), stuck=(),
-                 output=200, live=None, timed=True):
+                 output=200, live=None, timed=True, compare_step=None):
         self.reviewers, self.uid, self.steps, self.gate_step = dict(reviewers), uid, steps, gate_step
+        self.compare_step, self.advised = compare_step, []
         self.long_live, self.hang, self.stuck = long_live, set(hang), set(stuck)
         self.output, self.live, self.timed = output, dict(live or {}), timed
         self.lock = threading.Lock()
@@ -247,9 +255,24 @@ class Turn:
                     # A closing step without tools (a turn limit) writes the answer.
                     index = int(self.step_id.split(":")[1])
                     yield from script.agent(self, index if kwargs.get("allow_tool_calls", True) else script.steps)
+                elif messages[0]["content"].startswith("You are an independent answer model"):
+                    yield from script.adviser(self, script.family(model))
                 else:
                     yield from script.reviewer(self, script.family(model), messages)
         return Completion()
+
+    def adviser(self, value, family):
+        """A comparison model answering the agent's question, its reasoning
+        lines while it works."""
+        with self.lock:
+            self.advised.append(family)
+        deadline, tick = time.monotonic() + prod(ADVICE[family]), 0
+        while time.monotonic() < deadline or not tick:
+            self.sleep(min(TICK, max(0., deadline - time.monotonic())))
+            tick += 1
+            yield reasoning(value.step_id, tick)
+        value.text, value.finish_reason = f"{family} says the tower is 330 metres tall.", "stop"
+        yield {"type": "delta", "text": value.text}
 
     def family(self, model):
         return next(provider for provider, selected in self.loop.comparison.models.items()
@@ -273,6 +296,8 @@ class Turn:
                 value._results_at = 0
             if index == self.gate_step:
                 name, args = "update_memory", {"changes": [{"op": "add", "text": "Builds a site in the workspace."}]}
+            elif index == self.compare_step:
+                name, args = "compare_models", {"question": "How tall is the Eiffel Tower?"}
             else:
                 name, args = "vm_exec", {"command": f"make step-{index}"}
             value.tool_calls = [{"id": f"call_{index}", "type": "function",
@@ -362,7 +387,7 @@ def tempo_loop(store, script, *, model="claude-haiku-4-5"):
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection(script.reviewers, audit=True),
-        agent_preferences=AgentPreferences(audit="on", judges="on"))
+        agent_preferences=AgentPreferences(audit="on", judges="on"), audit_compare=script.compare_step is not None)
     loop.registry = ToolRegistry([*loop.registry.tools.values(), *tools(script)],
                                  argument_limit=loop.registry.argument_limit)
     loop._long_run = lambda: True
@@ -561,6 +586,49 @@ def test_final_requests_that_all_hang_end_at_the_final_rounds_time(slow_store, s
     # Its hedge came and hung as well.
     assert rows[0]["hedged"] is True and script.calls["openai"]["final"] == 2
     assert agent_audit.FINAL_ROUND_SECONDS <= marks < agent_audit.FINAL_ROUND_SECONDS + 1
+    assert alive == []
+
+
+# --- Advisers beside the reviewers (compare_models in audit mode, 2026-10-31) -----
+
+def test_three_advisers_beside_three_reviewers_keep_their_tempo(slow_store, scaled, measured):
+    """Package 1 of one mode for comparison and audit: the Daily preset's
+    three models answer the agent's question while the same three review the
+    run, six sessions of one account at once behind its lock (spec A-T5: 60 %
+    of the turn with three reviewers, 85 % with six). The advisers' requests
+    and the reviewers' rounds keep the server's share they have without
+    them. Measured 2026-10-31 (Windows, 4 cores, three runs): server per
+    adviser request median 0.03 s (max 0.06 s), per live round median
+    0.03-0.05 s, marks 0.41-0.45 s after the last word (Luna's final
+    round), the account lock held 44-49 % of the 2.5 s turn and waited for
+    0.7 s in all, the longest wait 0.03 s."""
+    script = Turn(DAILY, steps=8, compare_step=2)
+    loop = tempo_loop(slow_store, script)
+    watch_marks(slow_store, [script])
+    before = set(threading.enumerate())
+    turn = play(slow_store, script)
+    alive = alive_after(before)
+    values = summary(script)
+    advice = [server for kind, server, _ in script.requests if kind is None]
+    report("Advisers beside three reviewers", {**values, "server per adviser request": {
+        "median": statistics.median(advice), "max": max(advice)}, "account lock": slow_store.lock_time()})
+    review = turn["agent_review"]
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert review["mode"] == "audit" and review["status"] == "succeeded"
+    assert {row["status"] for row in review["audit"]["reviewers"]} == {"completed"}
+    [comparison] = review["comparisons"]
+    assert comparison["status"] == "succeeded" and sorted(script.advised) == sorted(DAILY)
+    # The work went on after the answers: every step ran.
+    assert len(script.agent_spans) == script.steps + 1
+    # Each reviewer read the advisers' answers in a live round.
+    for family in DAILY:
+        assert any('"name": "compare_models"' in message and "says the tower is 330 metres" in message
+                   for message in script.messages[family])
+    assert len(advice) == len(DAILY) and max(advice) < .5
+    assert values["server per live round"]["median"] < .25 and values["server per live round"]["max"] < 1
+    assert values["server per agent step"]["median"] < .3
+    assert values["marks after the last word"] < prod(FINAL["openai"][1]) + 1
+    assert loop.comparison.judge_calls == 0
     assert alive == []
 
 

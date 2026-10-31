@@ -73,6 +73,9 @@ TOOL_DATA = {
     "browser": "web", "ask_user": "web",
     # Pictures of the web the server fetched (agent_web_images.py).
     "find_pictures": "web", "show_image": "web",
+    # The answers of the user's chosen models with their pages (audit mode,
+    # since 2026-10-31): model output.
+    "compare_models": "agent",
 }
 # Measurements an entry may carry beside its content (since 2026-10-30): a
 # tool result's start and duration (``tool``, audit I4), a gate's wait on its

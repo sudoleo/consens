@@ -207,6 +207,21 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       scripts/audit_report.py --days 1` → die Läufe stehen mit Zeiten drin.
       Automatisiert: `test_agent_audit.py`, `test_agent_audit_tempo.py`,
       `agent-live.test.mjs`, `agent-chat.test.mjs`.
+- [ ] Vergleich im Audit (2026-10-31, Admin-Konto, Audit an, Daily mit drei
+      Modellen, echter Provider; `docs/agent-mode.md` „Vergleich im Audit“):
+      „Was sagen andere KIs dazu: Lohnt sich eine Wärmepumpe im Altbau? Mach
+      mir danach eine Tabelle der Kosten in der Werkbank.“ → in der Aktivität
+      „Vergleich 1 · 3 Modellantworten“ ohne Prüfstatus, danach arbeitet der
+      Agent weiter (Werkbank-Schritt) statt sofort zu antworten. Unter der
+      Antwort „Notizen“ und „Antworten 3“; „Antworten“ öffnet die drei
+      Antworten, kein Score, keine Widerspruchs-Marken der Judges. Seitenpanel:
+      ein Vergleichsmodell anklicken → seine Antwort im Leser. Arbeitsprotokoll
+      (Admin): Eintrag `compare_models` mit allen drei Antworten. Ein Pro-Konto
+      ohne Admin bekommt kein `compare_models`, bis `AGENT_AUDIT_COMPARE=all`
+      gesetzt ist. Tor für den Schalter: 10 solche Läufe ohne Fehler
+      (`scripts/audit_report.py --days 7`).
+      Automatisiert: `test_agent_audit_compare.py`, `test_agent_audit_tempo.py`,
+      `agent-review.test.mjs`, `test_agent_audit_frontend.py`.
 - [ ] Agent VM (2026-10-25, Admin-Konto, echter Provider, `SPRITES_TOKEN`
       gesetzt): Settings › Agent · Beta › Agent VM auf On (die Zeile fehlt für
       Nicht-Admins). Mit einer CSV im Anhang: „Rechne den Mittelwert der
