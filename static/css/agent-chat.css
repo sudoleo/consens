@@ -376,19 +376,20 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
 }
 .agent-answer-error-actions button:focus-visible, .agent-progress-review-jump:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 #agentAnswerResources:empty { display: none; }
-/* The one "waiting on you" signal: a compact notice above the composer. */
-.agent-review-notice { align-items: center; gap: 8px 10px; padding: 6px 6px 6px 12px; margin: 0 0 6px; text-align: left; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--partial) 40%, var(--line));
-  border-radius: var(--radius-sm); background: var(--partial-bg); color: var(--ink); }
+/* The one "waiting on you" signal: a compact notice above the composer.
+   Its colour is the dot; the line itself has no box (Max, 2026-10-31). */
+.agent-review-notice { align-items: center; gap: 8px 10px; padding: 4px 0 4px 6px; margin: 0 0 6px; text-align: left; box-sizing: border-box; border: 0;
+  background: transparent; color: var(--ink); }
 .agent-review-notice[hidden] { display: none; }
 .agent-review-notice-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--partial); }
 .agent-review-notice #agentReviewMessage { flex: 1 1 auto; min-width: 0; font-weight: 500; }
-.agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid color-mix(in srgb, var(--partial) 45%, var(--line));
+.agent-composer-notice.agent-review-notice button { text-decoration: none; padding: 4px 12px; min-height: 32px; border: 1px solid var(--line);
   border-radius: var(--radius-xs); background: var(--ground); color: var(--ink); font-weight: 500; }
 @media (hover: hover) and (pointer: fine) {
   .agent-composer-notice.agent-review-notice button:hover { background: var(--hover); }
 }
 .agent-progress-review { margin: -6px 0 16px; }
-.agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: color-mix(in srgb, var(--partial) 45%, var(--line)); background: var(--partial-bg); }
+.agent-progress-review-jump { gap: 7px; color: var(--agent-ink, var(--ink)); border-color: var(--line); background: transparent; }
 .agent-progress-review-jump::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--partial); flex: none; }
 /* Leading dot, so it never collides with the row's hover/touch delete control. */
 .sidebar .bookmark.needs-review p::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--partial); vertical-align: middle; }
@@ -468,11 +469,12 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
 /* It leaves the way it came (agent-chat.js leaveHold, C18). */
 .agent-hold-card.is-leaving { opacity: 0; transform: translateY(3px); pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .agent-hold-card { transition: none; } }
+/* The glyph carries the colour; its round stays the neutral tone. */
 .agent-hold-glyph {
   display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
-  background: var(--partial-bg); color: var(--partial);
+  background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--partial);
 }
-.agent-ask-card:is(.is-browser, .is-secret, .is-choice, .is-takeover) .agent-hold-glyph { background: color-mix(in srgb, var(--agree) 14%, transparent); color: var(--agree); }
+.agent-ask-card:is(.is-browser, .is-secret, .is-choice, .is-takeover) .agent-hold-glyph { color: var(--agree); }
 .agent-hold-glyph svg { width: 16px; height: 16px; }
 .agent-hold-body { display: grid; min-width: 0; }
 .agent-hold-alert { display: grid; gap: var(--space-1); }

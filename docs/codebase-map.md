@@ -11269,7 +11269,16 @@ Dateiliste unter der Antwort mehr:
   Version 2 oder „Expired“. Größe und Ablaufdatum stehen im Tooltip der
   Downloads, mehrere Dokumente trennt eine Haarlinie, frühere Versionen
   bleiben eingeklappt; am Handy (≤420 px) rücken die Formate unter den
-  Titel. Live- und archivierte Turns sehen gleich aus (`documentCard`). Dazu die in dieser Turn geholten
+  Titel. Live- und archivierte Turns sehen gleich aus (`documentCard`).
+  Die Dokumentzeilen gehören zur Antwort: Sie stehen nicht in
+  `#agentAnswerResources`, sondern in `.agent-answer-documents` direkt nach
+  dem Antworttext und dessen Bilderplatz (`documentsSlot`, `fillDocuments`)
+  und damit VOR der Belegzeile (Notes · Sources · Watch · Share), weil
+  `App.answerTail(body)` jetzt erst die Dokumente, dann die Bilder, dann den
+  Text liefert. Symbol und Titel sind ein Knopf, der die PDF-Fassung der
+  Version in der Dateivorschau öffnet (`App.attachments.openStored` mit
+  `removable: false`: dort nur „Download“, entfernt wird eine Version über
+  ⋯). Ohne bereites PDF bleibt die Zeile ein reiner Download. Dazu die in dieser Turn geholten
   Mail-Anhänge („From email: Betreff (Absender)“, Fallback
   `App.agentGoogle?.evidenceFor`) und die Dateien, die der Agent aus seiner VM
   geteilt hat (`kind: "vm_file"`): andere als Dateizeile; Bilder stehen nicht

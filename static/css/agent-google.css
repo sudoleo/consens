@@ -60,7 +60,10 @@
   display: inline-flex; align-items: center; min-width: 0; max-width: 100%;
   border: 1px solid var(--line-soft); border-radius: var(--radius-pill); background: var(--raise);
 }
-.agent-google-chip.is-incomplete { border-color: color-mix(in srgb, var(--partial) 55%, var(--line)); background: var(--partial-bg); }
+/* Incomplete: an amber dot before its words, the chip keeps its tone. */
+.agent-google-chip.is-incomplete .agent-google-chip-main::before {
+  content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--partial);
+}
 .agent-google-chip.is-info { background: transparent; border-style: dashed; border-color: var(--line); }
 .agent-google-chip-main, .agent-google-chip-remove {
   display: inline-flex; align-items: center; gap: 6px; min-height: 30px; margin: 0; border: 0; background: transparent;
@@ -195,14 +198,15 @@
 .agent-action-title:focus { outline: none; }
 .agent-action-title:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 3px; }
 .agent-action-meta { margin: 2px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); }
+/* A state is its dot and quiet words, no tinted pill (Max, 2026-10-31). */
 .agent-action-badge {
-  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: var(--radius-pill);
-  background: var(--raise); color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); line-height: 1.5; white-space: nowrap;
+  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 0;
+  background: transparent; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: 500; line-height: 1.5; white-space: nowrap;
 }
 .agent-action-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.agent-action-badge[data-tone="pending"] { background: var(--partial-bg); color: var(--partial); }
-.agent-action-badge[data-tone="succeeded"] { background: var(--agree-bg); color: var(--agree); }
-.agent-action-badge:is([data-tone="failed"], [data-tone="unknown"]) { background: var(--dispute-bg); color: var(--dispute); }
+.agent-action-badge[data-tone="pending"]::before { background: var(--partial); }
+.agent-action-badge[data-tone="succeeded"]::before { background: var(--agree); }
+.agent-action-badge:is([data-tone="failed"], [data-tone="unknown"]) { color: var(--dispute); }
 .agent-action-badge:is([data-tone="expired"], [data-tone="rejected"], [data-tone="superseded"], [data-tone="executing"]) { color: var(--ink-3); }
 .agent-action-toggle {
   flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 0; margin: -5px -6px -5px -4px;

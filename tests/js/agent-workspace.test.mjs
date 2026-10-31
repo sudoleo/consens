@@ -32,12 +32,20 @@ const UPLOAD = { id: 'a'.repeat(32), name: 'offer.pdf', mime: 'application/pdf',
   expires_at: '2099-10-29T10:00:00Z', warnings: ['Page 4 is a scanned image and was not read.'] };
 
 describe('private Agent workspace', () => {
-  it('renders one document card per document after the answer, grouped by version and without raw IDs', async () => {
+  it('renders one document row per document under the answer text, grouped by version and without raw IDs', async () => {
     const { window, document, dom } = boot({ files: [UPLOAD, ...DOCS] });
     await window.App.agentWorkspace.refresh(CHAT);
+    // Part of the answer (Max, 2026-10-31): right after its text and its
+    // pictures' place, so the evidence row (App.answerTail) follows them.
+    const body = document.getElementById('agentAnswerBody');
+    const docs = body.nextElementSibling.nextElementSibling;
+    expect(body.nextElementSibling.classList.contains('agent-answer-pictures')).toBe(true);
+    expect(docs.classList.contains('agent-answer-documents')).toBe(true);
+    expect(docs.hidden).toBe(false);
+    expect(window.App.answerTail(body)).toBe(docs);
     const resources = document.getElementById('agentAnswerResources');
-    expect(resources.previousElementSibling.id).toBe('agentAnswerBody');
-    const cards = resources.querySelectorAll('.agent-doc-card');
+    expect(resources.querySelector('.agent-doc-card')).toBeNull();
+    const cards = docs.querySelectorAll('.agent-doc-card');
     expect(cards).toHaveLength(1);
     const card = cards[0];
     expect(card.querySelector('.agent-doc-title > span').textContent).toBe('Decision brief');
@@ -54,6 +62,12 @@ describe('private Agent workspace', () => {
     expect(card.querySelector('.agent-doc-earlier').open).toBe(false);
     const labels = [...card.querySelectorAll('.agent-doc-downloads > .agent-files-chip')].map(b => b.getAttribute('aria-label'));
     expect(labels.slice(0, 2)).toEqual(['Download Decision brief-v2.docx, version 2', 'Download Decision brief-v2.pdf, version 2']);
+    // Mark and title open the version's PDF in the file viewer; its removal
+    // stays with the version, not in the preview.
+    window.App.attachments = { openStored: vi.fn() };
+    card.querySelector('button.agent-doc-main').click();
+    expect(window.App.attachments.openStored).toHaveBeenCalledWith({ fileId: '6'.repeat(32), name: 'Decision brief-v2.pdf',
+      mime: 'application/pdf', size: 41000, removable: false });
     // Remove never sits next to Download: it lives behind the overflow menu.
     expect([...card.querySelectorAll('button')].some(b => /^Remove/.test(b.textContent) && !b.closest('[role=menu]'))).toBe(false);
     // No chat-wide list under the answer: uploads live on their message.
@@ -66,7 +80,7 @@ describe('private Agent workspace', () => {
   it('shows only the documents of the displayed turn under the answer', async () => {
     const { window, document, dom } = boot({ files: DOCS, turn: TURN_ONE });
     await window.App.agentWorkspace.refresh(CHAT);
-    const card = document.querySelector('#agentAnswerResources .agent-doc-card');
+    const card = document.querySelector('.agent-answer-documents .agent-doc-card');
     // A first version says nothing under its title; its name says it.
     expect(card.getAttribute('aria-label')).toBe('Decision brief, version 1');
     expect(card.querySelector('.agent-doc-meta')).toBeNull();
@@ -75,6 +89,8 @@ describe('private Agent workspace', () => {
     const other = boot({ files: DOCS, turn: 'f'.repeat(32) });
     await other.window.App.agentWorkspace.refresh(CHAT);
     expect(other.document.getElementById('agentAnswerResources').hidden).toBe(true);
+    expect(other.document.querySelector('.agent-answer-documents:not([hidden])')).toBeNull();
+    expect(other.window.App.answerTail(other.document.getElementById('agentAnswerBody')).id).toBe('agentAnswerBody');
     expect(other.document.getElementById('agentWorkspace')).toBeNull();
     other.dom.window.close();
     dom.window.close();
@@ -328,7 +344,7 @@ describe('private Agent workspace', () => {
     expect(row.querySelector('.agent-doc-card').getAttribute('aria-label')).toBe('Decision brief, version 1');
     expect(row.textContent).not.toContain('Version 2');
     expect(row.querySelector('.agent-files-badge')).toBeNull();
-    const live = document.querySelector('#agentAnswerResources .agent-doc-card');
+    const live = document.querySelector('.agent-answer-documents .agent-doc-card');
     expect(live.textContent).toContain('Version 2');
     // A turn without files keeps an empty, hidden row.
     const empty = document.createElement('div'); document.getElementById('threadHistory').append(empty);

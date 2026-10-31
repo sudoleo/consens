@@ -1411,10 +1411,10 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   gap: 12px;
   margin: 2px 6px 14px;
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--partial) 30%, transparent);
-  border-left: 2px solid var(--partial);
+  /* Neutral tone; the amber is the icon's (Max, 2026-10-31: no yellow box). */
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--partial-bg);
+  background: var(--raise);
 }
 
 .verify-banner[hidden] {

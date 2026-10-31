@@ -387,7 +387,10 @@
         row.append(question, confirm, cancel);
         cancel.focus();
       });
-      row.append(download, remove);
+      // A created document's PDF is removed with its version, from the
+      // document's own row (agent-workspace.js): its preview only downloads.
+      if (att.removable === false) row.append(download);
+      else row.append(download, remove);
       return row;
     }
 

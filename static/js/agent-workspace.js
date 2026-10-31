@@ -6,12 +6,16 @@
 // - Uploads sit as chips on the user message they were sent with
 //   (attachments.js). A chip opens the stored file through openFile(), with
 //   download and removal in the preview.
+// - The documents created or revised in a turn (one row per document_id)
+//   belong to its answer: right under its text and pictures, above the
+//   evidence row (.agent-answer-documents, documentsSlot; Max 2026-10-31:
+//   "die Antwort endet mit diesen Punkten"). A click opens the PDF in the
+//   file viewer.
 // - #agentAnswerResources (after the live answer) and one resources row per
-//   archived Agent turn (renderTurnResources) show the documents created or
-//   revised in that turn (one card per document_id), the files the agent
+//   archived Agent turn (renderTurnResources) show the files the agent
 //   shared from its VM, mail attachments the agent fetched in it, per-file
 //   upload progress, and a note when a file of the turn was only partly
-//   readable.
+//   readable (and the documents of a turn without an answer body).
 // - The pictures the agent showed (vm_share_file, show_image) stand in the
 //   answer text where it placed them (.md-picture, fillPictures), the others
 //   right under the text, above its evidence row (Notes, Watch, Share):
@@ -319,18 +323,31 @@
     card.dataset.filesKey = key; card.dataset.documentId = group.id;
     card.setAttribute('aria-label', `${group.title}, version ${current.number}`);
     const head = node('div', 'agent-doc-head');
+    // Its PDF opens in the file viewer (attachments.js), as an upload does
+    // (Max, 2026-10-31: "warum kann ich erzeugte Dokumente nicht in der
+    // Vorschau angucken?"); without one ready, the row only downloads.
+    const pdf = current.files.find(file => (file.mime === 'application/pdf' || /\.pdf$/i.test(file.name || ''))
+      && ['ready', 'partial'].includes(file.status) && expiry(file) !== 'Expired');
+    const main = node(pdf ? 'button' : 'div', 'agent-doc-main');
     const mark = node('span', 'agent-doc-mark'); mark.append(icon('document'));
-    const titles = node('div', 'agent-doc-titles');
-    const title = node('h3', 'agent-doc-title');
+    const titles = node('span', 'agent-doc-titles');
+    const title = node('span', 'agent-doc-title');
     title.append(node('span', '', group.title));
     title.title = group.title;
     titles.append(title);
     const expired = expiry(current.files[0] || {}) === 'Expired';
     const note = [current.number > 1 ? `Version ${current.number}` : '', expired ? 'Expired' : ''].filter(Boolean);
-    if (note.length) titles.append(node('p', 'agent-doc-meta', note.map(part => App.t(part)).join(' · ')));
+    if (note.length) titles.append(node('span', 'agent-doc-meta', note.map(part => App.t(part)).join(' · ')));
+    main.append(mark, titles);
+    if (pdf) {
+      main.type = 'button';
+      main.title = App.t(`Open ${group.title}`);
+      main.addEventListener('click', () => App.attachments?.openStored?.({ fileId: pdf.id, name: pdf.name, mime: 'application/pdf',
+        size: pdf.size, removable: false }));
+    }
     const chips = node('div', 'agent-doc-downloads');
     for (const file of current.files) chips.append(downloadChip(chatId, file, `, version ${current.number}`, true));
-    head.append(mark, titles, chips);
+    head.append(main, chips);
     const removeLabel = `Remove version ${current.number}…`;
     head.append(overflow(key, `More actions for ${group.title}, version ${current.number}`, [{ label: removeLabel, danger: true,
       run: () => askToRemove(key) }]));
@@ -401,8 +418,30 @@
     return wrap;
   }
   function answerTail(body) {
-    const slot = body?._pictures;
-    return slot?.isConnected && slot.parentNode === body.parentNode && !slot.hidden ? slot : body;
+    for (const slot of [body?._documents, body?._pictures]) {
+      if (slot?.isConnected && slot.parentNode === body.parentNode && !slot.hidden) return slot;
+    }
+    return body;
+  }
+  // The answer's documents, right after its pictures' place (which stands
+  // right after the text), so the evidence row follows them.
+  function documentsSlot(body) {
+    const pictures = picturesSlot(body);
+    if (!pictures) return null;
+    if (!body._documents) {
+      body._documents = node('div', 'agent-resources agent-answer-documents'); body._documents.hidden = true;
+    }
+    const slot = body._documents;
+    if (pictures.parentNode && pictures.nextElementSibling !== slot) pictures.after(slot);
+    return slot;
+  }
+  function fillDocuments(body, cards) {
+    if (!body) return;
+    if (!cards.length && !body._documents) return;
+    const slot = documentsSlot(body);
+    if (!slot) return;
+    slot.replaceChildren(...cards);
+    slot.hidden = !cards.length;
   }
   // The answer's own place for the pictures it does not place, kept right after its text.
   function picturesSlot(body) {
@@ -601,7 +640,10 @@
     const resources = document.getElementById('agentAnswerResources');
     if (resources) { resources.replaceChildren(); resources.hidden = true; }
     fillPictures(document.getElementById('agentAnswerBody'), '', [], 'answer');
-    for (const row of historyRows()) { row.replaceChildren(); row.hidden = true; fillPictures(row._answerBody, '', [], 'turn'); }
+    fillDocuments(document.getElementById('agentAnswerBody'), []);
+    for (const row of historyRows()) {
+      row.replaceChildren(); row.hidden = true; fillPictures(row._answerBody, '', [], 'turn'); fillDocuments(row._answerBody, []);
+    }
     rendered = '';
   }
   // What one turn produced: its documents (versions up to this turn), the
@@ -609,13 +651,16 @@
   // and the mail attachments it fetched.
   // Uploads are on the message.
   function turnResources(box, chatId, files, turnId, scope, live, body) {
-    if (!turnId) { fillPictures(body, chatId, [], scope); return; }
+    if (!turnId) { fillPictures(body, chatId, [], scope); fillDocuments(body, []); return; }
+    const cards = [];
     for (const group of groupDocuments(files)) {
       const mine = group.list.filter(version => version.turn === turnId);
       if (!mine.length) continue;
       const card = documentCard(chatId, group, { upTo: mine[0].number, scope });
-      if (card) box.append(card);
+      if (card) cards.push(card);
     }
+    // Part of the answer: under its text, above its evidence row.
+    if (body) fillDocuments(body, cards); else box.append(...cards);
     const shared = files.filter(file => ['vm_file', 'web_image'].includes(file.kind) && file.turn_id === turnId);
     const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
     // In and under the answer text when there is one, else with the other files.
@@ -637,7 +682,7 @@
     row.replaceChildren();
     const turnId = row.dataset.agentTurnResources;
     if (chat && data) turnResources(row, chat, data.files || [], turnId, `turn:${turnId}`, false, row._answerBody);
-    else fillPictures(row._answerBody, chat, [], `turn:${turnId}`);
+    else { fillPictures(row._answerBody, chat, [], `turn:${turnId}`); fillDocuments(row._answerBody, []); }
     row.hidden = !row.childElementCount;
   }
   function project() {

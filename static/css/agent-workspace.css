@@ -27,15 +27,28 @@
 .agent-doc-card { position: relative; box-sizing: border-box; min-width: 0; padding: 6px 0; color: var(--ink); }
 .agent-doc-card + .agent-doc-card { border-top: 1px solid var(--line-soft); padding-top: 12px; }
 .agent-doc-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* Mark and title together open the PDF (agent-workspace.js): one target that
+   takes the hover tone, as a row in Finder does. */
+.agent-doc-main {
+  display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; margin: -4px 0 -4px -6px; padding: 4px 6px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; font: inherit; text-align: left;
+}
+button.agent-doc-main { cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard); }
+@media (hover: hover) and (pointer: fine) {
+  button.agent-doc-main:hover { background: var(--hover); }
+}
+button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* The answer's documents, between its text (and pictures) and its evidence row. */
+.agent-answer-documents { margin: 14px 0 10px; }
 .agent-doc-mark {
   display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px;
   border-radius: var(--radius-xs, 8px); background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-2);
 }
 .agent-doc-mark .agent-files-icon { width: 17px; height: 17px; }
-.agent-doc-titles { flex: 1; min-width: 0; }
+.agent-doc-titles { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .agent-doc-title { display: flex; margin: 0; color: var(--ink); font-size: var(--font-size-ui); font-weight: 500; line-height: 1.4; }
 .agent-doc-title > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agent-doc-meta { margin: 1px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.4; }
+.agent-doc-meta { display: block; margin: 1px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.4; }
 .agent-doc-downloads { display: flex; flex: none; align-items: center; gap: 2px; }
 
 .agent-files-chip {
@@ -55,7 +68,10 @@
   display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 8px; border-radius: var(--radius-pill, 999px);
   font-size: var(--font-size-xs); font-weight: 600; line-height: 1.5; white-space: nowrap;
 }
-.agent-files-badge.is-warning { padding: 0 7px 0 5px; background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); }
+/* A state is a coloured glyph beside quiet words, never a tinted pill (Max,
+   2026-10-31: "hast du sowas schon mal bei Apple gesehen?"). */
+.agent-files-badge.is-warning { padding: 0; background: transparent; color: var(--ink-2); font-weight: 500; }
+.agent-files-badge.is-warning .agent-files-icon { color: var(--partial); }
 .agent-files-badge .agent-files-icon { width: 12px; height: 12px; }
 
 /* Earlier versions stay one click away and never grow the row by default. */
@@ -143,9 +159,11 @@
 .agent-file-origin { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-file-warning { color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: var(--font-size-xs); line-height: 1.5; }
 
+/* A file of the turn read only in part: a line of the answer with its
+   glyph, no yellow box. */
 .agent-resource-notice {
-  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm, 10px);
-  background: var(--partial-bg); color: var(--ink); font-size: var(--font-size-ui); line-height: 1.5;
+  display: flex; align-items: flex-start; gap: 10px; padding: 2px 0;
+  color: var(--ink); font-size: var(--font-size-ui); line-height: 1.5;
 }
 .agent-resource-notice > .agent-files-icon { margin-top: 2px; color: color-mix(in srgb, var(--partial) 80%, var(--ink)); }
 .agent-resource-notice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
@@ -252,9 +270,10 @@
   .attachment-chip.is-loading .attachment-chip-size { animation: none; }
 }
 .attachment-chip-warning {
-  align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: var(--radius-pill, 999px);
-  background: var(--partial-bg); color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: var(--font-size-xs); font-weight: 600; line-height: 1.5;
+  display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; margin-top: 2px;
+  color: var(--ink-2); font-size: var(--font-size-xs); font-weight: 500; line-height: 1.5;
 }
+.attachment-chip-warning::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--partial); }
 
 :is(.agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost, .agent-doc-earlier > summary):focus-visible {
   outline: var(--focus-ring); outline-offset: 2px;

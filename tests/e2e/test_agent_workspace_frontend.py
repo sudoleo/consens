@@ -166,7 +166,8 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
           executionMode:'agent', question:'Revise the decision brief', consensus:'I revised the decision brief (version 2).',
           currentTurn:{id: turn, status:'completed', execution_mode:'agent', consensus:'I revised the decision brief (version 2).',
           agent_settings:{model_id:'deepseek/deepseek-v4.1-flash', file_ids:['""" + '7' * 32 + """']}}});""", [CHAT, TURN_TWO])
-        card = page.locator('#agentAnswerResources .agent-doc-card')
+        # Part of the answer: under its text, above Watch and Share.
+        card = page.locator('#agentAnswerBody ~ .agent-answer-documents .agent-doc-card')
         expect(card).to_have_count(1)
         expect(card).to_contain_text('Decision brief')
         # One quiet row in the answer (Max, 2026-10-31): no badge, no hint.

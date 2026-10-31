@@ -612,7 +612,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Agent-Dateien/Dokumente bei 1440/390 px, Hell/Dunkel: Upload zeigt je Datei
       eine Fortschrittszeile, ein abgelehnter Upload bleibt mit Grund am Chip.
       Dokumentzeile (Titel, DOCX/PDF rechts, kein Kasten, kein grüner Badge,
-      „Version n“ erst ab Version 2) steht NACH der Antwort und nur bei
+      „Version n“ erst ab Version 2) steht direkt unter dem Antworttext, VOR
+      Notes/Sources/Watch/Share; Klick auf Titel öffnet das PDF in der
+      Vorschau (nur „Download“, kein „Remove from chat“). Sie steht nur bei
       der Turn, die sie erzeugt hat (auch bei archivierten Turns im Verlauf);
       frühere Versionen eingeklappt; keine chatweite Dateiliste unter der
       Antwort. Hochgeladene Dateien stehen als Chip an ihrer Nachricht; Klick
