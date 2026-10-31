@@ -2577,8 +2577,8 @@ class DelegationLoop(AgentLoop):
     def _answer_attempt(self, model, messages, index, steps, registry, *, rate_limit=True, **step_args):
         """One step of the chat model, with one retry.
 
-        ``rate_limit`` (a step after paid comparisons): the comparisons are
-        already paid, a 429 before any output is free (_free_rate_limit), and
+        ``rate_limit`` (a step after a comparison of this message): its
+        answers are paid or under way, a 429 before any output is free (_free_rate_limit), and
         providers do rate-limit. The retry waits for Retry-After
         (RATE_LIMIT_RETRY_SECONDS without one) and is skipped when the
         provider asks for longer than RATE_LIMIT_RETRY_MAX_SECONDS or the

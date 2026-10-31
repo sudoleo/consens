@@ -174,7 +174,7 @@ comparison**, ab 2026-10-26 **Way of working** (`audit`, mit der VM). Heute:
 - `POST /agent` nimmt `agent_preferences` an und ignoriert es; die Route setzt
   selbst, womit eine Nachricht läuft. `AgentPreferences` hält nur noch `vm`
   (`extra="ignore"`: `depth`, `quorum`, `autonomy`, `judges` und `audit` alter
-  Turns und offener Tabs fallen still weg, `stored_preferences`). Die
+  Turns und offener Tabs fallen still weg). Die
   Präferenzen sind kein Teil der Request-Identität mehr: Ein Turn von vor dem
   Umbau oder von vor einer Änderung des VM-Zugangs lässt sich weiter
   wiederherstellen. Der Browser schickt sie nicht mehr (auch nicht beim Folgen,

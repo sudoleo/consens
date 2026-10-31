@@ -521,8 +521,8 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal", "agent_vm", "agent_pull_request"):
             if field in source:
                 result[field] = source[field]
-        # The turn has a work log (agent_work_log, audit mode): its view
-        # loads it through its own endpoint.
+        # The turn has a work log (agent_work_log, every chat run since
+        # 2026-10-31): its view loads it through its own endpoint.
         if source.get("work_log_expires_at"):
             result["agent_work_log"] = {"incomplete": bool(source.get("work_log_incomplete"))}
         # How long it waited for the user (agent_holds stays on the document):

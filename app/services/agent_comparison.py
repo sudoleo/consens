@@ -71,12 +71,6 @@ class AgentPreferences(BaseModel):
     vm: AgentVM = "off"
 
 
-def stored_preferences(value):
-    """A saved turn's preferences in today's form: a field it predates takes
-    its default, a retired one is dropped."""
-    return AgentPreferences.model_validate(value or {}).model_dump()
-
-
 DEPTH_GUIDANCE = {
     "quick": " Answer briefly: the direct answer and the key reasons, in about 1500 characters, "
              "unless the task clearly needs more.",

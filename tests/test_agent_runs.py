@@ -14,7 +14,7 @@ from app.core import config as cfg
 from app.api.routers import agent, chat_history
 from app.core.rate_limit import limiter, api_uid_limiter
 from app.services import agent_runs, persistence_guard
-from app.services.agent_comparison import AgentPreferences, stored_preferences
+from app.services.agent_comparison import AgentPreferences
 from app.services.agent_runs import APP_CONTEXT_OPEN, AgentRunStore, strip_app_context
 from app.services.chat_store import ChatStore, TurnStatusConflict
 from app.services.llm import agent_client
@@ -376,8 +376,7 @@ LEGACY_PREFERENCES = {"depth": "quick", "quorum": "fast", "autonomy": "free", "j
 
 
 def test_old_preferences_read_in_todays_form():
-    assert stored_preferences(LEGACY_PREFERENCES) == {"vm": "on"}
-    assert stored_preferences(None) == stored_preferences({}) == {"vm": "off"}
+    assert AgentPreferences.model_validate(LEGACY_PREFERENCES).model_dump() == {"vm": "on"}
     assert AgentPreferences.model_validate({"audit": "on", "judges": "off"}).model_dump() == {"vm": "off"}
 
 

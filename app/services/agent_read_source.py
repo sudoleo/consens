@@ -456,8 +456,9 @@ class SourceReader:
                 entry = (self.cited().get(key) if key else None) or self.chosen(args.url)
                 if entry is None:
                     raise ValueError("read_source opens only a public http(s) address here: a result of this "
-                                     "message's web search, a source of an earlier message of this chat or "
-                                     "one the user wrote, copied exactly.")
+                                     "message's web search, a source the models you asked cite (compare_models), "
+                                     "a source of an earlier message of this chat or one the user wrote, copied "
+                                     "exactly.")
                 tried = next((r for r in self.reads if r["status"] in {"completed", "failed"}
                               and key in {url_key(r["url"]), url_key(r.get("cited_url"))}), None)
                 if tried is not None and tried["status"] == "failed":
