@@ -683,6 +683,7 @@ MAX_REVIEW_ITEMS = 12
 MAX_REVIEW_SENTENCE_CHARS = 1000
 MAX_REVIEW_NOTE_CHARS = 600
 MAX_REVIEW_SOURCE_CHARS = 1000
+MAX_WITHHELD_NOTES = 1000
 
 
 # A reviewer saw what the agent saw, the user's workspace and its browser
@@ -759,7 +760,11 @@ def sanitize_review_notes(value):
         if sentence and items:
             kind = min((item["kind"] for item in items), key=REVIEW_KINDS.index)
             notes.append({"sentence": sentence, "kind": kind, "items": items})
-    return {"reviewers": reviewers, "notes": notes}
+    # How many marks stay in the app (_agent_review_notes): the page must not
+    # call the answer unobjected then.
+    withheld = value.get("withheld")
+    withheld = min(withheld, MAX_WITHHELD_NOTES) if type(withheld) is int and withheld > 0 else 0
+    return {"reviewers": reviewers, "notes": notes, **({"withheld": withheld} if withheld else {})}
 
 
 def _agent_review_notes(review, text):
@@ -770,7 +775,9 @@ def _agent_review_notes(review, text):
     it may tell what the run read or did. A mark on the work names its log
     entry (the reviewers' prompt), even where its quote also stands in the
     answer. Nothing when the review belongs to another text or did not end
-    with a final round (a stop, every reviewer failed).
+    with a final round (a stop, every reviewer failed). ``withheld`` counts
+    the marks left out: the page then says nothing of an answer nobody
+    objected to.
     """
     review = review if isinstance(review, dict) else {}
     audit = review.get("audit") if isinstance(review.get("audit"), dict) else {}
@@ -785,12 +792,16 @@ def _agent_review_notes(review, text):
                    "source": item.get("source")}
                   for item in claim.get("dissent") or [] if isinstance(item, dict) and not item.get("entry")],
     } for claim in audit["claims"] if isinstance(claim, dict)]
+    withheld = sum(isinstance(item, dict) and bool(item.get("entry"))
+                   for claim in audit["claims"] if isinstance(claim, dict) for item in claim.get("dissent") or [])
+    withheld += sum(isinstance(item, dict) for key in ("unplaced", "process")
+                    for item in (audit.get(key) if isinstance(audit.get(key), list) else []))
     noted = {item["provider"] for note in notes for item in note["items"]}
     reviewers = [{"provider": row.get("provider_label"),
                   "model": (row.get("model") if isinstance(row.get("model"), dict) else {}).get("label")}
                  for row in audit.get("reviewers") or []
                  if isinstance(row, dict) and (row.get("status") == "completed" or row.get("provider_label") in noted)]
-    return sanitize_review_notes({"reviewers": reviewers, "notes": notes})
+    return sanitize_review_notes({"reviewers": reviewers, "notes": notes, "withheld": withheld})
 
 
 def _agent_share_basis(review, text):

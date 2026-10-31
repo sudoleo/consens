@@ -401,4 +401,4 @@ def review_cards(review_notes, providers, render_inline):
         cards.append({"kind": note["kind"], "classes": _NOTE_CLASSES[note["kind"]],
                       "answer_html": render_inline(_SOURCE_TAGS.sub("", note["sentence"]).strip()), "notes": items})
     return {"reviewers": [model_view(row["provider"], models) for row in review_notes["reviewers"]],
-            "cards": cards, "counts": counts}
+            "cards": cards, "counts": counts, "withheld": review_notes.get("withheld", 0)}

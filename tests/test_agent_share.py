@@ -408,6 +408,8 @@ def test_a_reviewed_answer_shares_the_notes_on_its_sentences_only():
              "source": "https://www.nasa.gov/webb-status"},
             {"provider": "Gemini", "kind": "wrong", "note": "Data <img src=x onerror=alert(1)> comes daily only in tests."},
         ]}],
+        # The mark naming entry 14, the unplaced one and the one on the work.
+        "withheld": 3,
     }
     stored = json.dumps(payload)
     assert "private file" not in stored and "inbox" not in stored and "notes.txt" not in stored
@@ -483,7 +485,9 @@ def test_a_reviewed_agent_answer_shows_who_reviewed_and_their_notes(share_app):
 
 def test_an_answer_nobody_objected_to_says_so_quietly(share_app):
     client, database, store = share_app
-    chat_id, turn_id = _saved_turn(database, store, agent_review=_audit_review(claims=[]))
+    review = _audit_review(claims=[])
+    review["audit"].update(unplaced=[], process=[])
+    chat_id, turn_id = _saved_turn(database, store, agent_review=review)
 
     _, shared = _share(client, chat_id, turn_id)
     body = client.get(shared["path"]).text
@@ -491,6 +495,21 @@ def test_an_answer_nobody_objected_to_says_so_quietly(share_app):
     assert "2 AI models reviewed this answer and noted nothing." in body
     assert "Reviewed by" in body
     assert 'id="toggleDifferencesView"' not in body and 'id="diffTeaser"' not in body
+
+
+def test_notes_kept_in_the_chat_are_no_answer_nobody_objected_to(share_app):
+    """A mark on the work or one the answer does not hold stays in the app;
+    the page then must not say the reviewers noted nothing."""
+    client, database, store = share_app
+    chat_id, turn_id = _saved_turn(database, store, agent_review=_audit_review(claims=[]))
+
+    _, shared = _share(client, chat_id, turn_id)
+    body = client.get(shared["path"]).text
+
+    assert "noted nothing" not in body and "no objection" not in body
+    assert "Reviewed by" in body and 'id="diffTeaser"' not in body
+    for absent in ("private file", "inbox"):
+        assert absent not in html.unescape(body), absent
 
 
 @pytest.mark.parametrize("url, kept", [

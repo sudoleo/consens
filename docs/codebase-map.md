@@ -8472,7 +8472,9 @@ keinen Abgleich.
   wenn ihr Zitat zugleich in der Antwort steht (sie tragen eine Log-Nummer
   `entry`; `audit.process` ganz), und solche, deren Zitat die Antwort nicht
   enthält (`audit.unplaced`), weil sie verraten können, was der Lauf las oder
-  tat (Gegenprüfung 2026-10-31); auch keine Log-Nummern oder zitierten Wörter. Grenzen `MAX_REVIEW_NOTES` (40), `MAX_REVIEW_ITEMS` (12), Notiz
+  tat (Gegenprüfung 2026-10-31); auch keine Log-Nummern oder zitierten Wörter.
+  Wie viele es sind, zählt `withheld` (nur die Zahl): mit ihnen fehlt die
+  ruhige Zeile „noted nothing“, denn es gab Einwände. Grenzen `MAX_REVIEW_NOTES` (40), `MAX_REVIEW_ITEMS` (12), Notiz
   600 Zeichen; `public_share_payload` liest sie nur für Agent-Shares und
   bereinigt erneut. Die Seite (`share.html`, `check_page.review_cards`) zeigt
   „Reviewed by“ (zugeklappt wie „Models compared“, Klasse `share-reviewers`),

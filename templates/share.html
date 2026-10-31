@@ -230,7 +230,9 @@
           <span class="share-diff-teaser-icon" aria-hidden="true">&#9888;</span>
           <span>{% if noted == 1 %}The reviewers noted 1 passage of this answer. <b>See their notes &rarr;</b>{% else %}The reviewers noted {{ noted }} passages of this answer. <b>See their notes &rarr;</b>{% endif %}</span>
         </button>
-        {% elif review_view %}
+        {% elif review_view and not review_view.withheld %}
+        {#- Marks that stay in the chat (on the work, or not placed) are
+            objections all the same: no "noted nothing" then. -#}
         {%- set reviewers_count = review_view.reviewers | length -%}
         <p class="share-review-clean">{% if reviewers_count == 1 %}1 AI model reviewed this answer and noted nothing. That means no objection, not that it is confirmed.{% else %}{{ reviewers_count }} AI models reviewed this answer and noted nothing. That means no objection, not that it is confirmed.{% endif %}</p>
         {% elif has_differences_view and contradiction_count %}
