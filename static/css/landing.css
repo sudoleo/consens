@@ -929,9 +929,10 @@ img { display: block; max-width: 100%; }
 .lp-icon-btn svg,
 .lp-attach svg { width: 15px; height: 15px; }
 
-/* The picker of the /app composer row (composer.css): a quiet label with a
-   chevron. The models chip says how many AIs cross-check the answer, and
-   stands on the right, next to Send. */
+/* The reviewers' words beside their marks, as #composerModelPicker on the
+   /app start screen (composer.css, agent-mode.js renderReviewers): how
+   many AIs check the agent's work, in the ink of the row, no chevron (the
+   chevron belongs to the chat model's chip, which the mockups leave out). */
 .lp-run-chip {
   display: inline-flex;
   align-items: center;
@@ -952,17 +953,8 @@ img { display: block; max-width: 100%; }
 
 .lp-run-chip { margin-left: auto; }
 
-.lp-run-chip i {
-  width: 1em;
-  height: 1em;
-  color: var(--ink-3);
-  background: currentColor;
-  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
-  mask: var(--chevron-mask) center / contain no-repeat;
-}
-
-/* Its step lights the chevron, never a frame: the picker in /app has none. */
-.lp-run-chip.is-lit i { opacity: 1; }
+/* Its step fills it one tone, as /app answers a hover: never a frame. */
+.lp-run-chip.is-lit { background: var(--hover); }
 
 .lp-send {
   display: inline-flex;
@@ -1147,23 +1139,25 @@ img { display: block; max-width: 100%; }
 .lp-agent-model img { width: 13px; height: 13px; object-fit: contain; }
 .lp-agent-count { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
 
+/* The reviewers beside the clock, as the run's model icons in /app
+   (agent-delegation.js): faint until they follow the work. */
+.lp-agent-clock .lp-agent-reviewers { padding-left: 9px; }
+
 /* The answer: reading size, as in /app. It streams in, a sheen passes over
-   it while the judges check it, and the marks stroke on when they are back. */
+   it while the reviewers review it, and their marks stroke on when they are
+   back. */
 .lp-agent-answer { position: relative; }
 .lp-agent-answer p { margin: 0; color: var(--ink); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
 .lp-agent-answer [data-stream]:empty { display: none; }
-.lp-agent-answer.is-checking {
+.lp-agent-answer.is-reviewing {
   -webkit-mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
   mask-image: linear-gradient(105deg, #000 40%, rgba(0, 0, 0, 0.55) 50%, #000 60%);
   -webkit-mask-size: 250% 100%;
   mask-size: 250% 100%;
   animation: lpAgentMask var(--dur-beat) var(--ease-linear) infinite;
 }
-.lp-agent-answer .claim-badge { opacity: 0; transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-state); }
-.lp-agent-answer.is-marked .claim-badge { opacity: 1; }
-
-/* The three sentences under the verdict, each wearing the result of the
-   check on it once it is back. */
+/* The three sentences under the verdict, each wearing the reviewers' note
+   on it once the review is back. */
 .lp-run-claims {
   display: grid;
   gap: 10px;
@@ -1172,8 +1166,8 @@ img { display: block; max-width: 100%; }
   list-style: none;
 }
 
-/* Inline flow, not a flex row: the count belongs to the END of the sentence
-   the way it does in /app. */
+/* Inline flow, not a flex row: the mark belongs to the sentence the way it
+   does in /app. */
 .lp-run-claims li {
   min-width: 0;
   color: var(--ink);
@@ -1181,13 +1175,8 @@ img { display: block; max-width: 100%; }
   line-height: var(--line-height-ui);
 }
 .lp-run-claims li:has(> .cx-claim:empty) { display: none; }
-
-/* The counts are a picture here, not a control — section 03 is where they
-   open — so they lose the pointer and sit on the sentence's baseline. */
-.lp-run-claims .claim-badge {
-  cursor: default;
-  transform: translateY(-1px);
-}
+/* A picture here, not a control: section 03 is where a mark opens. */
+.lp-run-claims .cx-claim { cursor: default; }
 
 .lp-agent-answer .lp-run-result-open {
   margin-top: 13px;
@@ -1195,7 +1184,8 @@ img { display: block; max-width: 100%; }
   font-size: var(--font-size-sm);
 }
 
-/* The evidence row under a checked answer: the score, then the links. */
+/* The evidence row under a reviewed answer: Notes, then the Answers of the
+   AIs the agent asked. No score since 2026-10-31. */
 .lp-agent-evidence {
   display: flex;
   flex-wrap: wrap;
@@ -1210,9 +1200,6 @@ img { display: block; max-width: 100%; }
   transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-layer), transform var(--dur-layer) var(--ease-out) var(--dur-layer);
 }
 .lp-agent-evidence.is-visible { opacity: 1; transform: none; }
-.lp-agent-agreement { display: inline-flex; align-items: baseline; gap: 3px; color: var(--ink-3); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
-.lp-agent-agreement b { color: var(--partial); font-size: var(--font-size-ui); font-weight: 600; }
-.lp-agent-agreement::after { content: ""; align-self: center; width: 1px; height: 14px; margin-left: 13px; background: var(--line); }
 .lp-agent-link { display: inline-flex; align-items: center; gap: 6px; }
 .lp-agent-link b { color: var(--ink-3); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
 .lp-agent-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -1325,7 +1312,7 @@ img { display: block; max-width: 100%; }
   .lp-agent-note,
   .lp-agent-step,
   .lp-agent-step.is-current > :first-child::after,
-  .lp-agent-answer.is-checking,
+  .lp-agent-answer.is-reviewing,
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
   .lp-agent-log { transition: none; }
@@ -1614,10 +1601,6 @@ img { display: block; max-width: 100%; }
 
 /* Landing-only illustration behavior around the shared controls. */
 .claim-badge { flex-shrink: 0; }
-.lp-mark-key .claim-badge { cursor: default; }
-@media (hover: hover) and (pointer: fine) {
-  .lp-mark-key .claim-badge:hover { background: transparent; color: var(--ink-2); }
-}
 .claims-fallback-row .claim-badge { margin: 0; }
 
 /* --------------------------------------------------------------------------
@@ -2204,7 +2187,6 @@ img { display: block; max-width: 100%; }
   box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
 }
 
-.lp-excerpt .consensus-verdict { margin-bottom: 0; }
 .lp-excerpt .consensus-main-text > p:first-child { margin-top: 0; }
 .lp-excerpt .consensus-main-text > p:last-child { margin-bottom: 0; }
 
@@ -2219,12 +2201,64 @@ img { display: block; max-width: 100%; }
 .lp-excerpt .diff-card { border-top: 0; }
 
 /* --------------------------------------------------------------------------
-   The same lens on other questions
+   Step 01: who reviewed it. The review's card in the activity and the row
+   under the answer (agent-review.js), in their own words: the reviewers'
+   marks and names, the tally in the colours of its kinds, no score.
+   -------------------------------------------------------------------------- */
+.lp-review { display: grid; gap: 10px; }
+.lp-review p { margin: 0; }
+.lp-review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+.lp-review-marks { display: inline-flex; align-items: center; padding-left: 8px; }
+.lp-review-marks .lp-composer-model { border-color: var(--surface); background: var(--surface); }
+.lp-review-tally { color: var(--ink-3); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.lp-review-tally [data-kind] { font-weight: var(--font-weight-medium); }
+.lp-review-tally [data-kind="wrong"] { color: var(--dispute); }
+.lp-review-tally [data-kind="doubtful"] { color: var(--partial); }
+.lp-review-tally [data-kind="incomplete"] { color: var(--ink-2); }
+.lp-review-note { color: var(--ink-3); font-size: var(--font-size-xs); }
+.lp-review .lp-agent-evidence { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
 
-   Three more full consensus boxes said one thing: the reading changes a lot
-   from question to question. That is a score, a headline and a line — the
-   score is the measurement, so it gets the colour and the weight, and the
-   sentence beside it stays quiet.
+/* A reviewer's note behind a mark: the shared card list, its label the
+   reviewer and the kind, its text the note. */
+.lp-note-card .diff-position-label { color: var(--dispute); }
+
+/* --------------------------------------------------------------------------
+   Step 04: the answers of the AIs the agent asked, one line each, as the
+   reader lists them under Answers.
+   -------------------------------------------------------------------------- */
+.lp-answers { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.lp-answers li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.lp-answers li:first-child { padding-top: 0; border-top: 0; }
+.lp-answers li:last-child { padding-bottom: 0; }
+.lp-answers-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+.lp-answers-who .lp-composer-model { margin-left: 0; border-color: var(--surface); background: var(--surface); }
+.lp-answers-text { color: var(--ink-2); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
+
+/* --------------------------------------------------------------------------
+   Before a risky step: a reviewer's pause, the card above the field in /app
+   (agent-chat.js holdCard, agent-chat.css .agent-hold-card) in its own
+   words: a quiet amber glyph, the title, the kind and the reviewer's
+   reason, the step that has not run yet, and the one button.
    -------------------------------------------------------------------------- */
 .lp-examples { margin-top: clamp(48px, 6vw, 84px); }
 
@@ -2238,88 +2272,44 @@ img { display: block; max-width: 100%; }
   text-transform: uppercase;
 }
 
-.lp-example-list {
+.lp-pause { display: grid; gap: 12px; max-width: 620px; }
+.lp-pause-card {
   display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--lift), 0 0 0 1px var(--line-soft);
 }
-
-.lp-example {
+.lp-pause-glyph {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(14px, 2.5vw, 26px);
-  padding: 18px 2px;
-  border-top: 1px solid var(--line-soft);
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--partial) 14%, transparent);
+  color: var(--partial);
 }
-
-.lp-example:last-child { border-bottom: 1px solid var(--line-soft); }
-
-.lp-example-score {
-  display: grid;
-  justify-items: start;
-  gap: 6px;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-solid);
-}
-
-.lp-example-score b {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-}
-
-.lp-example-score i {
-  margin-left: 2px;
-  color: var(--ink-3);
+.lp-pause-glyph svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.lp-pause-body { display: grid; gap: 6px; min-width: 0; }
+.lp-pause-body p { margin: 0; }
+.lp-pause-title { color: var(--ink); font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+.lp-pause-reason { color: var(--ink); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
+.lp-pause-by { color: var(--ink-3); white-space: nowrap; }
+.lp-pause-step { display: grid; gap: 2px; margin-top: 4px !important; color: var(--ink); font-size: var(--font-size-sm); }
+.lp-pause-step span { color: var(--ink-3); font-size: var(--font-size-xs); }
+.lp-pause-btn {
+  justify-self: start;
+  margin-top: 8px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--ground);
   font-size: var(--font-size-xs);
-  font-style: normal;
+  font-weight: var(--font-weight-semibold);
 }
-
-.lp-example-score.is-ok b { color: var(--agree); }
-.lp-example-score.is-warn b { color: var(--partial); }
-
-.lp-example-meter {
-  display: block;
-  width: 100%;
-  height: 3px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  overflow: hidden;
-}
-
-.lp-example-meter span {
-  display: block;
-  width: calc(var(--val, 0) * 1%);
-  height: 100%;
-  border-radius: inherit;
-  background: currentColor;
-}
-
-.lp-example-score.is-ok .lp-example-meter span { background: var(--agree); }
-.lp-example-score.is-warn .lp-example-meter span { background: var(--partial); }
-
-.lp-example-body {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.lp-example-q {
-  color: var(--text-primary);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: var(--tracking-tight);
-}
-
-.lp-example-note {
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
-}
+.lp-pause-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
 
 /* --------------------------------------------------------------------------
    Why section — three columns of a flat list
@@ -2627,12 +2617,7 @@ img { display: block; max-width: 100%; }
 
   .lp-examples { margin-top: 38px; }
   .lp-examples-title { margin-bottom: 12px; }
-  /* 84px of score column next to a question is most of a phone: the score
-     keeps its weight, the column just stops reserving room it does not use. */
-  .lp-example { grid-template-columns: 62px minmax(0, 1fr); gap: 14px; padding: 14px 0; }
-  .lp-example-score b { font-size: var(--font-size-xl); }
-  .lp-example-q { font-size: var(--font-size-sm); }
-  .lp-example-note { font-size: var(--font-size-xs); }
+  .lp-pause-card { padding: 13px 14px; gap: 10px; }
 
   /* --- Lists of three ---------------------------------------------------- */
   .lp-card-grid { margin-top: 26px; gap: 8px; }
@@ -2720,7 +2705,9 @@ img { display: block; max-width: 100%; }
   to { opacity: 1; transform: translateY(0); }
 }
 /* A phone keeps Reasoning in the (+) menu, as /app does, and leaves the
-   count to the chip's words ("3 AIs cross-check"): no marks beside it. */
+   count to the reviewers' words ("3 AIs cross-check"): no marks beside
+   them (/app drops them to 380px, where the chat model's chip needs the
+   room; the mockups have no chip and keep the words whole). */
 @media (max-width: 700px) {
   .lp-composer-tools { display: none; }
 }
@@ -2851,21 +2838,13 @@ main > .lp-scene-02::before { display: none; }
 }
 .lp-mark-note::first-letter { text-transform: uppercase; }
 
-/* L6 — A score and its "/100" share one baseline, as in the app. */
+/* L6 — The title over the pause is a quiet line, not a shouting label. */
 .lp-examples-title {
   font-weight: var(--font-weight-medium);
   letter-spacing: 0;
   text-transform: none;
   color: var(--ink-3);
 }
-.lp-example-score {
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  justify-content: start;
-  column-gap: 3px;
-}
-.lp-example-score i { margin-left: 0; }
-.lp-example-meter { grid-column: 1 / -1; }
 
 /* L7 — The watch story is two objects on the ground, not a card in a card. */
 .lp-watch-story { background: transparent; padding: 0; }
