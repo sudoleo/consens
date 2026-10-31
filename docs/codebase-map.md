@@ -8708,6 +8708,23 @@ keinen Abgleich.
   auf den drei Live-Antworten: 6–39 s, 17 von 19 Einträgen bestanden.
   Nachtrag für bestehende Runs: `scripts/backfill_topic_visuals.py`
   (`--figures` übernimmt schon erzeugte Abbildungen, `--apply` = Prod-Write).
+- **Benchmark-Abbildung** (`app/services/topic_benchmarks.py`, seit
+  2026-10-31): Topics über eine Modellfamilie nennen sie im Feld
+  `benchmark.models` (bis zu 4 Namen, wie Artificial Analysis sie schreibt;
+  Admin-Feld „Benchmark chart“). Nach jedem Check liest der Runner einmal den
+  Artificial Analysis Intelligence Index (freie Daten-API
+  `GET /api/v2/data/llms/models`, Header `x-api-key` aus
+  `ARTIFICIAL_ANALYSIS_API_KEY`, 6 h im Prozess gecacht, 1000 Abrufe/Tag) und
+  speichert am Run `benchmark` = Datum + Balken: die Modelle der Familie
+  (je Modell die beste Einstellung, „(High)“/„(Low)“ zusammengefasst, höchstens
+  drei) neben dem besten Modell jedes anderen Labors (fünf). „Gemini 4“ trifft
+  „Gemini 4 Carbon (High)“, nie „Gemini 4.5 Pro“; Punkt-Releases („GPT-6.1“)
+  werden eigens genannt. Die Zahlen stammen nicht aus der Antwort und stehen
+  deshalb **nach** ihr, vor den Quellen, mit der Pflicht-Attribution
+  (Link auf artificialanalysis.ai, „as of …“). Ohne Einstellung, ohne Key, in
+  Unit-/E2E-/Mock-Läufen oder bei API-Fehlern entsteht keine Abbildung, der
+  Check läuft trotzdem. Anlass: Gemini 4 Carbon (28.10.) fehlte in der
+  Antwort, weil zwei von drei Suchen die Ankündigung nicht fanden.
 - **Hub `/topics`**: eine flache Zeile pro Topic mit Titel, dem ersten ganzen
   Satz von `accepted_lead` (`lead_sentences(limit=150, min_sentence=30)`,
   höchstens drei Zeilen; sonst Leitfrage), einer leisen Meta-Zeile
@@ -8956,6 +8973,7 @@ app/services/
   topics.py                  Kuratierte Topic-Konfiguration, immutable Runs, Public-Discovery und eigene Follower/Dedupe-Daten
   topic_runner.py            Leased Topic-Research/Consensus-Runs, automatische Evidence/Meinungsänderungen + Intervall-Scheduler
   topic_pipeline.py          Topic-spezifische Projektion auf die neutrale Consensus-Pipeline
+  topic_benchmarks.py        Benchmark-Abbildung für Modell-Topics aus der Artificial-Analysis-API (Snapshot am Run, Attribution)
   differences_stats.py       Anonyme Differences-Telemetrie (differences_stats-Collection, §6)
 ```
 
@@ -9619,6 +9637,9 @@ alte Gemini-ADC-JSON ist entfernt.
   nicht erneut. Für bestehende Deployments dient
   `WATCH_UNSUBSCRIBE_SECRET` als Fallback; mindestens einer der beiden Werte muss
   gesetzt sein, sobald eine Chat- oder Turn-Liste eine Folgeseite ausgibt.
+- Artificial Analysis (nur serverseitig, optional): `ARTIFICIAL_ANALYSIS_API_KEY`
+  für die Benchmark-Abbildung der Topics (`topic_benchmarks.py`); ohne Key
+  bleibt sie aus.
 - Search Console (nur serverseitig): `GSC_SITE_URL` (URL-Prefix- oder
   `sc-domain:`-Property) und `GSC_SERVICE_ACCOUNT_JSON` (**ausschließlich ein
   Dateipfad**, trotz Variablennamen; `GSC_SERVICE_ACCOUNT_FILE` gilt als

@@ -19,7 +19,7 @@ import app.core.config as cfg
 from google.cloud.firestore_v1.base_query import FieldFilter
 from app.core import i18n
 from app.core.security import db_firestore
-from app.services import drift_signal, follow_challenges, topic_figures
+from app.services import drift_signal, follow_challenges, topic_benchmarks, topic_figures
 from app.services.public_markdown import lead_sentences
 from app.services.watch_service import WatchError, parse_token_payload, sign_token_payload
 
@@ -521,6 +521,10 @@ def normalize_topic_input(data: dict, *, existing: dict | None = None) -> dict:
         # Optional editorial seed sources remain supported, but generated runs
         # no longer require or inherit them as their evidence set.
         "evidence": evidence,
+        # The model family a benchmark chart is about (topic_benchmarks.py).
+        "benchmark": topic_benchmarks.normalize_config(
+            data.get("benchmark", previous.get("benchmark") or {})
+        ),
         "seo": {
             "title": _clean(
                 (data.get("seo") or {}).get(
@@ -852,6 +856,8 @@ def create_run(
         # Figures drawn from this answer (topic_figures.py); a run keeps its
         # own, so an older version shows the figure of its time.
         "figures": topic_figures.stored_figures(data.get("figures")),
+        # Third-party benchmark snapshot of this check's day, or None.
+        "benchmark": topic_benchmarks.stored(data.get("benchmark")),
         "topic_state": {
             "title": topic.get("title"),
             "slug": topic.get("slug"),
@@ -1199,6 +1205,7 @@ def run_public_view(run: dict) -> dict:
         "models": list(run.get("models") or []),
         "opinion_map": dict(run.get("opinion_map") or {}),
         "figures": topic_figures.stored_figures(run.get("figures")),
+        "benchmark": topic_benchmarks.stored(run.get("benchmark")),
         "topic_state": dict(run.get("topic_state") or {}),
     }
 

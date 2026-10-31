@@ -11,8 +11,8 @@ import app.core.config as cfg
 from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services import (
-    drift_signal, mailer, notification_delivery, notification_outbox, topic_figures,
-    topic_images, topic_pipeline, topics,
+    drift_signal, mailer, notification_delivery, notification_outbox, topic_benchmarks,
+    topic_figures, topic_images, topic_pipeline, topics,
 )
 from app.services.public_markdown import strip_chat_framing
 from app.services.llm.mock_llm import mock_llm_enabled
@@ -204,6 +204,9 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
             strip_chat_framing(result.get("consensus") or ""),
             engine=str(result.get("consensus_model") or "OpenAI"),
         )
+        # The family's standing on Artificial Analysis, independent of what
+        # the searches found; failing only costs the chart (topic_benchmarks.py).
+        benchmark = topic_benchmarks.build(claimed.get("benchmark"), today=now.date())
         source_rules = topics.normalize_source_rules(claimed.get("source_rules") or {})
         evidence, excluded_evidence = split_evidence_from_sources(
             result.get("sources"), source_rules
@@ -234,6 +237,7 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
                 "differences_data": result.get("differences_data") or {},
                 "opinion_map": result.get("opinion_map") or {},
                 "figures": figures,
+                "benchmark": benchmark,
                 "run_mode": "automatic",
             },
             actor_uid=actor_uid,

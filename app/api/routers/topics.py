@@ -33,7 +33,7 @@ from app.core.security import (
 )
 from app.services import (
     check_page, drift_signal, favicons, mailer, og_image, source_links,
-    topic_figures, topic_images, topic_runner, topics,
+    topic_benchmarks, topic_figures, topic_images, topic_runner, topics,
 )
 from app.services.history_view import PAGE_CHART_WIDTH, build_history_view, day_label
 from app.services.public_markdown import (
@@ -482,6 +482,9 @@ async def topic_page(
             f"{answered:%b} {answered.day}, {answered.year}" if isinstance(answered, datetime) else ""
         ),
     )
+    # Third-party measurements close the answer; they are not part of it.
+    if selected["benchmark"]:
+        answer_html += topic_benchmarks.figure_html(selected["benchmark"])
     differences_data = selected_raw.get("differences_data")
     differences_data = differences_data if isinstance(differences_data, dict) else {}
     differences = [

@@ -2542,6 +2542,14 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 .af-row.is-disputed .af-bar i { background: none; border: 1.5px dashed var(--partial); }
 .af-value { color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
+/* Benchmark (app/services/topic_benchmarks.py, seit 2026-10-31): Daten von
+   Artificial Analysis, nicht aus der Antwort. Die Modelle des Topics kräftig,
+   die besten Modelle der anderen Labore getönt daneben. */
+.af-benchmark .af-row.is-own .af-label { color: var(--heading); font-weight: var(--font-weight-semibold); }
+.af-benchmark .af-row.is-other .af-bar i { background: color-mix(in srgb, var(--heading) 22%, transparent); }
+.af-benchmark .af-row.is-other .af-value { color: var(--muted); font-weight: var(--font-weight-regular); }
+.af-cap a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
 @media (max-width: 700px) {
   .af { padding: 14px 16px 12px; }
   .af .af-events.is-ends { grid-template-columns: minmax(0, 1fr); }

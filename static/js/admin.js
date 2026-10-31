@@ -2173,6 +2173,8 @@ function fillAdminTopic(topic, runs) {
         ((topic.source_rules || {}).preferred_domains || []).join('\n');
     document.getElementById('adminTopicSourceNotes').value =
         (topic.source_rules || {}).notes || '';
+    document.getElementById('adminTopicBenchmark').value =
+        ((topic.benchmark || {}).models || []).join('\n');
     document.getElementById('adminTopicSeoTitle').value = (topic.seo || {}).title || '';
     document.getElementById('adminTopicSeoDescription').value = (topic.seo || {}).description || '';
     document.getElementById('adminTopicNoindex').checked = !!(topic.seo || {}).noindex;
@@ -2304,6 +2306,7 @@ function adminTopicPayload() {
             preferred_domains: topicLines(document.getElementById('adminTopicDomains').value),
             notes: document.getElementById('adminTopicSourceNotes').value.trim()
         },
+        benchmark: { models: topicLines(document.getElementById('adminTopicBenchmark').value) },
         seo: {
             title: document.getElementById('adminTopicSeoTitle').value.trim(),
             description: document.getElementById('adminTopicSeoDescription').value.trim(),
