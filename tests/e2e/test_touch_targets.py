@@ -120,9 +120,11 @@ def test_composer_drawer_and_answer_take_a_finger(browser, phase4_server, width)
         # Whole-pixel steps from a fractional centre read a 28.9 px line as 29 or 30.
         assert line - 2 <= area["hit"][1] <= line + 2, (area, line)
         page.evaluate("() => App.quote.set('The race starts in Monaco and climbs La Turbie.')")
+        # Motion that ends: the light of an idle Send breathes on (send-glow.css).
         page.wait_for_function("""() => !document.body.classList.contains('composer-animating')
           && !document.body.classList.contains('composer-gliding')
-          && !document.querySelector('.input-section').getAnimations({subtree: true}).some(a => a.playState === 'running')""")
+          && !document.querySelector('.input-section').getAnimations({subtree: true})
+            .some(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity)""")
         assert_tappable(page, "#composerQuoteRemove", drawn=[24, 24])
         assert_tappable(page, "#sendButton")
 

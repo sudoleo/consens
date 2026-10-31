@@ -526,8 +526,8 @@
              (Layout: static/css/composer.css, sonst nirgends):
              .composer-lead    links:  (+), darin der Modus (App.runMode)
              .composer-tools   daneben, nur auf dem Startbildschirm und ab
-                               701px: Reasoning und Arbeitsplatz ausgeschrieben
-                               (im Chat und auf dem Handy im (+)-Menue)
+                               701px: der Arbeitsplatz ausgeschrieben (im Chat
+                               und auf dem Handy im (+)-Menue)
              .composer-models  rechts: wer antwortet, EIN Chip je Modus (Agent:
                                Chatmodell + Vergleichsmodelle in einem Menue,
                                sonst die antwortenden Modelle). Davor ihre
@@ -535,7 +535,9 @@
                                (#composerModelPicker), im Chat nur die der
                                Pruefer (#composerReviewers). Im Audit-Modus
                                nennt der Chip das Chatmodell, die Marken sagen
-                               "2 KIs pruefen mit" (agent-mode.js)
+                               "2 KIs pruefen mit" (agent-mode.js). Dahinter,
+                               direkt vor Senden, Reasoning (Gehirn + Stufe, wie
+                               die Werkzeuge nur Start und ab 701px)
              .input-actions-container rechts aussen: Demo und Senden -->
         <div class="composer-lead">
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Mode, files and options" aria-label="Mode, files and options">
@@ -549,10 +551,6 @@
           <p id="composerModeDescription" class="composer-mode-description">Works in steps with research, files and tools.</p>
         </div>
         <div id="composerTools" class="composer-tools" role="group" aria-label="Question options">
-          <button type="button" id="composerReasoningToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="false" aria-label="Reasoning" title="Reasoning">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
-            <span class="composer-tool-label">Reasoning</span><span id="composerReasoningState" class="composer-agent-state composer-tool-label">Off</span>
-          </button>
           <!-- The account's workspace live (workspace-view.js): Pro and admins on a server with a VM provider. -->
           <button type="button" id="composerWorkspaceButton" class="composer-agent-toggle composer-tool workspace-only" aria-label="Open the workspace" title="Workspace: watch and steer the agent’s browser">
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
@@ -594,6 +592,12 @@
               </select>
             </div>
           </div>
+          <!-- Reasoning after the models, right before Send (Max, 2026-10-31):
+               start screen only, from 701px (agent-mode.js, composer.css). -->
+          <button type="button" id="composerReasoningToggle" class="composer-agent-toggle composer-tool" role="switch" aria-checked="false" aria-label="Reasoning" title="Reasoning">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5a3 3 0 0 0-5.8.6 3.6 3.6 0 0 0-2.4 5.4 3.6 3.6 0 0 0 .6 6 3.4 3.4 0 0 0 5.4 2.5 2.6 2.6 0 0 0 2.2-1.2"/><path d="M12 5.5a3 3 0 0 1 5.8.6 3.6 3.6 0 0 1 2.4 5.4 3.6 3.6 0 0 1-.6 6 3.4 3.4 0 0 1-5.4 2.5 2.6 2.6 0 0 1-2.2-1.2"/><path d="M12 5.5v13.3"/><path d="M8.6 9.2c.9.2 1.6.9 1.8 1.8M6.4 13.8c1.1-.4 2.3-.1 3 .8"/><path d="m16.3 9.6.55 1.35 1.35.55-1.35.55-.55 1.35-.55-1.35-1.35-.55 1.35-.55Z"/></svg>
+            <span class="composer-tool-label composer-tool-name">Reasoning</span><span id="composerReasoningState" class="composer-agent-state composer-tool-label">Off</span>
+          </button>
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">

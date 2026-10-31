@@ -23,6 +23,12 @@
   inherits: false;
   initial-value: 0%;
 }
+/* Where along the lower edge the light is brightest (send-glow-drift). */
+@property --glow-x {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 35%;
+}
 
 .send-glow {
   position: relative;
@@ -53,7 +59,7 @@
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(130% 100% at 35% calc(112% - var(--glow-lift)),
+  background: radial-gradient(130% 100% at var(--glow-x) calc(112% - var(--glow-lift)),
     color-mix(in srgb, var(--glow) var(--glow-wash), transparent), transparent 66%);
   box-shadow:
     inset 0 -1px 0.5px color-mix(in srgb, var(--glow) var(--glow-rim), transparent),
@@ -62,8 +68,8 @@
      top and the far right. On a circle this is the crescent; on a wide pill
      it keeps the rim from becoming a coloured bottom border. Sized in px so
      a 36px circle and a 160px pill get the same patch of light. */
-  -webkit-mask: radial-gradient(64px 42px at 35% 100%, #000 35%, transparent 100%);
-  mask: radial-gradient(64px 42px at 35% 100%, #000 35%, transparent 100%);
+  -webkit-mask: radial-gradient(64px 42px at var(--glow-x) 100%, #000 35%, transparent 100%);
+  mask: radial-gradient(64px 42px at var(--glow-x) 100%, #000 35%, transparent 100%);
   transition: opacity var(--dur-layer) var(--ease-standard);
 }
 
@@ -85,6 +91,38 @@
    while the models work, see shell.css). Opacity only: nothing travels. */
 @keyframes send-glow-breathe {
   50% { opacity: 0.45; }
+}
+
+/* Send waiting for a question (shell.css, landing.css): the light rises
+   from the lower edge and sinks back, between the host's --glow-rest
+   (opacity at the low point) and --glow-rise (how far it climbs). */
+@keyframes send-glow-wait {
+  0%, 100% { opacity: var(--glow-rest, 0.3); --glow-lift: 0%; }
+  50% { opacity: 1; --glow-lift: var(--glow-rise, 12%); }
+}
+
+/* With it the light sways along the lower edge, as a reflection on a
+   curved surface moves with its source: run alternate at the breath's own
+   length, it crosses once per two breaths, so rise and sway never repeat
+   the same way twice in a row. It stays on the lower edge: nothing runs
+   round the rim (2026-10-02). */
+@keyframes send-glow-drift {
+  from { --glow-x: 26%; }
+  to { --glow-x: 48%; }
+}
+
+/* The arrow rides the light: at its brightest the light lifts it by a
+   pixel (shell.css, landing.css). */
+@keyframes send-arrow-float {
+  50% { transform: translateY(-1px); }
+}
+
+/* The moment a question can go, the light flares up once to the top and
+   settles where the breathing starts (shell.css .is-igniting). */
+@keyframes send-glow-ignite {
+  0% { opacity: var(--glow-rest, 0.3); --glow-lift: 0%; }
+  35% { opacity: 1; --glow-lift: 46%; }
+  100% { opacity: var(--glow-rest, 0.3); --glow-lift: 0%; }
 }
 
 /* High-contrast themes: no light, the control stays a plain button. */

@@ -121,7 +121,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         page.evaluate("document.getElementById('newRunButton').click()")
         expect(bar).to_be_hidden()
         if width > 700:
-            expect(tools).to_be_visible()
+            expect(page.locator('#composerReasoningToggle')).to_be_visible()
             expect(picker).to_be_visible()
         expect(mode).to_have_value('compare')
         assert errors == []

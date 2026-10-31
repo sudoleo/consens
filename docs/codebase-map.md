@@ -588,8 +588,8 @@ prüft. Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip mehr
 (der Modus steckt im (+)), rechts der Modell-Chip „3 AIs cross-check ⌄“ wie in
 /app (seit 2026-10-23 nennt er, was die Vergleichsmodelle tun, keinen
 Modellnamen); seit 2026-10-30 wie der Start der App eine Fläche, eine Reihe:
-(+) · Reasoning Auto · die drei Marken von Daily vor dem Chip
-(`partials/composer_tools_mockup.html`, `partials/composer_marks_mockup.html`).
+(+) · die drei Marken von Daily vor dem Chip · Reasoning Auto vor Senden
+(`partials/composer_marks_mockup.html`, `partials/composer_tools_mockup.html`).
 Das Wärmepumpen-Beispiel (Szene 01
 bis zu den Marken 6/6, 4/6) ist ein Lauf mit sechs Modellen und behält sechs
 Marken und „6 AIs cross-check“ (`{% set full_run = true %}`), ohne eigenes Fenster um
@@ -670,11 +670,14 @@ schicken, ein Licht von unten aus `static/css/send-glow.css` (ebenfalls in
 Hausgrün (`--agree`) als Schimmer und beleuchteter Unterkante, links unten am
 hellsten. Klasse `send-glow` auf `#sendButton`, `.lp-send` und „Try the
 demo“ (Markup in `landing.html` und `static/demo.js`). Zustände stehen beim
-Bedienelement: in `shell.css` aus, solange nichts gesendet werden kann, beim
-Stopp-Knopf atmet es seit 2026-10-02 nur noch in der Deckkraft
-(`send-glow-breathe`, kein umlaufendes Licht mehr; Start-Ring und
-Stopp-Einblendung deutlich kleiner); in `landing.css` geht es an,
-sobald die Mockup-Frage fertig ist. Das Licht ist diesen Elementen vorbehalten.
+Bedienelement: in `shell.css` steigt und sinkt das Licht am Senden-Knopf seit
+2026-10-31 im halben Takt (`send-glow-wait`, Grenzen per `--glow-rest`/
+`--glow-rise`), schwach, solange das Feld leer ist, heller mit Text, Hover am
+hellsten; ohne Bewegung steht es (leer halb so stark). Beim Stopp-Knopf atmet
+es seit 2026-10-02 nur in der Deckkraft (`send-glow-breathe`, kein
+umlaufendes Licht; Start-Ring und Stopp-Einblendung deutlich kleiner); in
+`landing.css` atmet `.lp-send` genauso und wird heller, sobald die
+Mockup-Frage fertig ist. Das Licht ist diesen Elementen vorbehalten.
 `static/demo.js` erkennt den Parameter und startet die Demo automatisch in der
 echten App. Dabei wird zuerst die vollständige Frage in den Composer getippt;
 beim simulierten Absenden wandert sie in den Thread-Kopf, der Composer wird
@@ -2501,10 +2504,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   „agent-mode" sind historisch und meinen den Consensus-Lauf, nicht Agent Beta),
   der Moduswähler `#runModeSelect` samt Settings-Spiegel `#runModeSetting` und
   die Werkzeuge des Startbildschirms. Seit 2026-10-30 ist der Composer dort
-  **eine Fläche, eine Reihe** (Max): `(+)` · `#composerTools` (Reasoning
-  `#composerReasoningToggle`, Arbeitsplatz `#composerWorkspaceButton`) ·
-  `#composerModelPicker` (Anbieter-Marken der nächsten Frage, im Audit mit
-  „N KIs prüfen mit“) vor dem Modell-Chip · Senden. Die frühere Leiste unter
+  **eine Fläche, eine Reihe** (Max): `(+)` · `#composerTools` (Arbeitsplatz
+  `#composerWorkspaceButton`) · `#composerModelPicker` (Anbieter-Marken der
+  nächsten Frage, im Audit mit „N KIs prüfen mit“) vor dem Modell-Chip ·
+  Reasoning `#composerReasoningToggle` (Gehirn + Stufe, seit 2026-10-31 direkt
+  vor Senden; im Agent steuert die Stufe nur das Chatmodell, nie die Prüfer) ·
+  Senden. Die frühere Leiste unter
   dem Feld samt „Attach“-Knopf ist weg; Dateien kommen über das (+).
   Werkzeuge und Marken gehören in jedem Modus zum Startbildschirm (Hero oder
   Compare-Start mit leeren Antwortkarten, `App.composer.isStartScreen()`); in
@@ -7508,14 +7513,15 @@ Vergleichsmodelle stehen auf dem Startbildschirm in der Reihe des Feldes
 (`#composerTools`, `#composerModelPicker`), das (+)-Menü trägt dort den Modus
 und Dateien; auf dem Handy (ohne Werkzeuge in der Reihe) und in einem Chat
 bleibt das Menü vollständig. Reasoning trägt überall
-denselben Vierzack-Funken, Anhänge dieselbe Büroklammer. In der Reihe stehen
+dasselbe Gehirn mit Funken (seit 2026-10-31; in der Reihe des Startbildschirms
+ohne das Wort, nur mit der Stufe), Anhänge dieselbe Büroklammer. In der Reihe stehen
 Zustände („On“, „Auto“) in Labelgröße auf derselben Grundlinie, Anbieterzeichen
 stehen seit 2026-10-22 in ihren eigenen Farben (auch im Landing-Mockup
 `.lp-composer-model`): bei 14 px erkennt man eine Marke an der Farbe, und auf
 dem Handy gibt es keinen Hover. Unter den Antworten und im Modell-Picker ruhen
 sie weiter einfarbig mit Farbe bei Hover. Unter einem leeren
 neuen Chat (Hero) stehen seit 2026-10-15 vier Beispielfragen
-(`#composerStarters`, Pillen ohne Rahmen; auf dem Handy eine seitlich
+(`#composerStarters`, seit 2026-10-31 schlichte Wörter ohne Fläche, Hover-Ton; auf dem Handy eine seitlich
 scrollende Zeile): ein Klick füllt nur das Feld (`composer-invite.js`). Seit
 2026-10-16 sind es drei pro Seitenaufruf zufällig aus einem kuratierten Pool
 (`app/services/starter_questions.py::CURATED_STARTERS`, `pick_curated()` im

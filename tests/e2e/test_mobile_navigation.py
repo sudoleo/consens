@@ -388,7 +388,9 @@ def test_one_line_thread_composer_is_a_pill(browser, phase4_server, width):
         seed_long_answer(page)
         page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
         expect(composer).to_have_css('border-top-left-radius', '25px')
-        page.wait_for_function("() => !document.getAnimations().some(animation => animation.playState === 'running')")
+        # Motion that ends: the light of an idle Send breathes on (send-glow.css).
+        page.wait_for_function("() => !document.getAnimations().some(animation => animation.playState === 'running'"
+                               " && animation.effect?.getComputedTiming().iterations !== Infinity)")
         box = composer.bounding_box()
         attach = page.locator('#attachTrigger').bounding_box()
         # Its ends are concentric with (+): the same 7px all round.

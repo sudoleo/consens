@@ -986,9 +986,21 @@ img { display: block; max-width: 100%; }
 .lp-send.is-ready { opacity: 1; transform: none; }
 .lp-send.is-pressed { transform: scale(0.9); }
 
-/* The light below Send (send-glow.css) comes on once there is a question. */
-.lp-send.send-glow::before { opacity: 0; }
+/* The light below Send (send-glow.css), as in /app (shell.css): it breathes
+   while the field is empty and turns brighter once there is a question. */
+.lp-send.send-glow { --glow-wash: 38%; --glow-rim: 84%; --glow-rest: 0.15; --glow-rise: 14%; }
+.lp-send.send-glow.is-ready { --glow-wash: 54%; --glow-rim: 100%; --glow-rest: 0.5; --glow-rise: 20%; }
+.dark-mode .lp-send.send-glow { --glow-wash: 40%; --glow-rim: 76%; }
+.dark-mode .lp-send.send-glow.is-ready { --glow-wash: 44%; --glow-rim: 90%; }
+.lp-send.send-glow::before { opacity: 0.6; }
 .lp-send.send-glow.is-ready::before { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .lp-send.send-glow::before {
+    animation: send-glow-wait calc(var(--dur-beat) * 2) var(--ease-standard) infinite,
+      send-glow-drift calc(var(--dur-beat) * 2) var(--ease-standard) infinite alternate;
+  }
+  .lp-send.send-glow svg { animation: send-arrow-float calc(var(--dur-beat) * 2) var(--ease-standard) infinite; }
+}
 .lp-send svg { width: 13px; height: 13px; }
 
 .lp-composer-foot {
@@ -2653,15 +2665,15 @@ img { display: block; max-width: 100%; }
 @media (hover: hover) and (pointer: fine) {
   .lp-hero-composer .lp-prompt.lp-hero-prompt:hover { transform: none; }
 }
-/* The row of the /app start screen (composer.css .composer-tools and the
-   marks before the chip, since 2026-10-30): Reasoning beside (+), the
-   comparison models' marks before the chip. Nothing hangs under the field. */
+/* The row of the /app start screen (composer.css, since 2026-10-30): (+)
+   on the left; on the right the comparison models' marks, the chip and,
+   right before Send, Reasoning. Nothing hangs under the field. */
 .lp-composer-tools {
   --lp-mode-active: var(--agree);
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
   color: var(--ink);
   font-size: var(--font-size-xs);
@@ -2675,6 +2687,16 @@ img { display: block; max-width: 100%; }
   transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
 }
 .lp-composer-tool { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; padding: 3px 6px; }
+.lp-composer-tool-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .lp-composer-state { font-size: inherit; font-weight: var(--font-weight-regular); color: var(--ink-3); }
 .lp-composer-state.is-on { color: var(--lp-mode-active); }
 .lp-composer-tool svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

@@ -1085,7 +1085,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 .input-action-btn-primary svg {
   width: 17px;
   height: 17px;
-  transition: transform var(--dur-state) var(--ease-out);
+  transition: transform var(--dur-state) var(--ease-out), translate var(--dur-state) var(--ease-out);
 }
 
 .input-action-btn-primary:disabled {
@@ -1093,9 +1093,11 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   cursor: default;
 }
 
+/* The hover lift is its own translate, so it adds to the pixel the light
+   lifts the arrow by (send-arrow-float) instead of replacing it. */
 @media (hover: hover) and (pointer: fine) {
   .input-action-btn-primary:not(:disabled):not(.is-cancel-action):hover svg {
-    transform: translateY(-2px);
+    translate: 0 -2px;
   }
 }
 
@@ -1124,12 +1126,58 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   height: 15px;
 }
 
-/* The light below Send (send-glow.css) is off while nothing can go and comes
-   on with the question. While the models work it stays on the pale stop
-   button and breathes slowly in place: something is running, without a
+/* The light below Send (send-glow.css) breathes while the field is empty:
+   it rises and sinks at the slow beat, the control waiting for a question
+   (Max, 2026-10-31). With a question it is brighter and breathes on, higher
+   up and never quite out, so typing does not make it stop. Hover lifts it
+   to its brightest. While the models work it stays on the pale stop button
+   and breathes slowly in place (below): something is running, without a
    spinner and without anything travelling round the rim. */
+.input-action-btn-primary.send-glow:not(.is-cancel-action) {
+  --glow-wash: 54%;
+  --glow-rim: 100%;
+  --glow-rest: 0.5;
+  --glow-rise: 20%;
+}
+.dark-mode .input-action-btn-primary.send-glow:not(.is-cancel-action) {
+  --glow-wash: 44%;
+  --glow-rim: 90%;
+}
+.input-action-btn-primary.send-glow:disabled {
+  --glow-wash: 38%;
+  --glow-rim: 84%;
+  --glow-rest: 0.15;
+  --glow-rise: 14%;
+}
+.dark-mode .input-action-btn-primary.send-glow:disabled {
+  --glow-wash: 40%;
+  --glow-rim: 76%;
+}
+/* Without motion the light simply stands, half as strong while nothing can go. */
 .input-action-btn-primary.send-glow:disabled::before {
-  opacity: 0;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .input-action-btn-primary.send-glow:not(.is-cancel-action)::before {
+    animation: send-glow-wait calc(var(--dur-beat) * 2) var(--ease-standard) infinite,
+      send-glow-drift calc(var(--dur-beat) * 2) var(--ease-standard) infinite alternate;
+  }
+  .input-action-btn-primary.send-glow:not(.is-cancel-action):not(.is-returning) svg {
+    animation: send-arrow-float calc(var(--dur-beat) * 2) var(--ease-standard) infinite;
+  }
+  /* The question became sendable (app-init.js): one flare, then the
+     breathing goes on from its start. */
+  .input-action-btn-primary.send-glow.is-igniting:not(:disabled):not(.is-cancel-action)::before {
+    animation: send-glow-ignite var(--dur-light) var(--ease-out),
+      send-glow-drift calc(var(--dur-beat) * 2) var(--ease-standard) infinite alternate;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .input-action-btn-primary.send-glow:not(:disabled):not(.is-cancel-action):hover {
+      --glow-rest: 1;
+      --glow-rise: 24%;
+    }
+  }
 }
 
 .input-action-btn-primary.send-glow.is-cancel-action {
@@ -3842,7 +3890,7 @@ body .theme-toggle:focus-visible {
 /* The state is part of the label's sentence ("Reasoning Auto"): same size,
    same baseline, one step quieter. */
 .composer-agent-state { color: var(--ink-3); font-size: inherit; font-weight: var(--font-weight-regular); }
-.composer-tools { --mode-active: var(--agree); }
+.composer-tools, .composer-models { --mode-active: var(--agree); }
 .composer-mode-models { display: flex; align-items: center; gap: 8px; margin-left: 0; padding: 3px 0; color: var(--ink-3); }
 /* Audit: the reviewers say what they do next to their marks ("2 AIs
    cross-check"), in the words of the tools beside them. On the start screen

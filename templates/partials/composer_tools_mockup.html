@@ -1,12 +1,12 @@
 {# The /app start screen's tools (templates/index.html #composerTools, composer.css),
    non-interactive, for the landing page's composer previews: one field, one row
-   since 2026-10-30, nothing hangs under it. Reasoning stands beside (+); the mode
-   lives in the (+) menu, as in /app. Its words are its name (a plain span may not
+   since 2026-10-30, nothing hangs under it. Reasoning stands after the models,
+   right before Send; the mode lives in the (+) menu, as in /app. Its words are its name (a plain span may not
    carry an aria-label, axe). A block of its own, so the chip's words beside it stay
    one sentence for the translation (app/core/i18n.py). #}
 <div class="lp-composer-tools">
   <span class="lp-composer-tool" title="Reasoning auto · the model decides how long to think">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z"/></svg>
-    <span class="lp-composer-tool-label">Reasoning</span><span class="lp-composer-state lp-composer-tool-label">Auto</span>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5a3 3 0 0 0-5.8.6 3.6 3.6 0 0 0-2.4 5.4 3.6 3.6 0 0 0 .6 6 3.4 3.4 0 0 0 5.4 2.5 2.6 2.6 0 0 0 2.2-1.2"/><path d="M12 5.5a3 3 0 0 1 5.8.6 3.6 3.6 0 0 1 2.4 5.4 3.6 3.6 0 0 1-.6 6 3.4 3.4 0 0 1-5.4 2.5 2.6 2.6 0 0 1-2.2-1.2"/><path d="M12 5.5v13.3"/><path d="M8.6 9.2c.9.2 1.6.9 1.8 1.8M6.4 13.8c1.1-.4 2.3-.1 3 .8"/><path d="m16.3 9.6.55 1.35 1.35.55-1.35.55-.55 1.35-.55-1.35-1.35-.55 1.35-.55Z"/></svg>
+    <span class="lp-composer-tool-label lp-composer-tool-name">Reasoning</span><span class="lp-composer-state lp-composer-tool-label">Auto</span>
   </span>
 </div>

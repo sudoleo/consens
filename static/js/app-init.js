@@ -306,7 +306,19 @@
           const guestCanSend = guest && Boolean(questionInput?.value.trim());
           // While a response runs, the button is query-send.js's (Stop, or Send into it).
           if (sendButton && !sendButton.classList.contains("is-cancel-action") && !window.isRunActive?.()) {
+            const couldSend = !sendButton.disabled;
             sendButton.disabled = !canStartRun && !guestCanSend;
+            // The light flares once when the question becomes sendable
+            // (send-glow.css send-glow-ignite); the class goes with the
+            // flare, so the breathing (shell.css) takes over again.
+            if (!sendButton._igniteBound) {
+              sendButton._igniteBound = true;
+              sendButton.addEventListener("animationend", event => {
+                if (event.animationName === "send-glow-ignite") sendButton.classList.remove("is-igniting");
+              });
+            }
+            if (sendButton.disabled) sendButton.classList.remove("is-igniting");
+            else if (!couldSend) sendButton.classList.add("is-igniting");
             sendButton.title = !canAsk
               ? unverified
                 ? "Confirm your email address to start this run"

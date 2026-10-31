@@ -336,6 +336,10 @@
     // The tools come in when they come back (a new chat, the Compare start),
     // never on the first paint, where they are simply there (Apple-Audit B1).
     if (wasHidden && !tools.hidden) revealBar(tools);
+    // Reasoning stands after the models, right before Send, on the start
+    // screen as the tools; in a chat it is in the (+) menu.
+    const reasoningTool = document.getElementById("composerReasoningToggle");
+    if (reasoningTool) reasoningTool.hidden = !start;
     bar.hidden = !summary;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
     const models = window.App.modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked);

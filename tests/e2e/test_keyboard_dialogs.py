@@ -14,10 +14,12 @@ KEYBOARD = 420
 
 def _reach(page, selector):
     """The action as the user gets to it: scrolled into view inside its layer."""
-    # Motion in time; a scroll-driven fade (the starter row, composer.css)
-    # runs as long as its row is there.
+    # Motion in time that ends; a scroll-driven fade (the starter row,
+    # composer.css) runs as long as its row is there, and the light of an
+    # idle Send breathes on (send-glow.css).
     page.wait_for_function("() => !document.getAnimations()"
-                           ".some(a => a.timeline === document.timeline && a.playState === 'running')")
+                           ".some(a => a.timeline === document.timeline && a.playState === 'running'"
+                           " && a.effect?.getComputedTiming().iterations !== Infinity)")
     action = page.locator(selector).first
     action.evaluate("el => el.scrollIntoView({block: 'nearest'})")
     return action.bounding_box()
