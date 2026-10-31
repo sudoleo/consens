@@ -9879,7 +9879,9 @@ nimmt einzelne Modelle einer sonst anhangfähigen Familie von Anhängen aus.
 (`.get()`). Presets liest es so, wie die App sie ausliefert
 (`_normalize_preset_answers` mit Prod-Listen, Premium und Defaults; das
 gespeicherte gpt-oss in Open Models zählt also nicht als siebtes Modell), nur
-„fehlt in der Liste“ und „Premium in Free“ prüft es am gespeicherten Wert. Es meldet
+„fehlt in der Liste“ und „Premium in Free“ prüft es am gespeicherten Wert, nach
+derselben ID-Migration wie die App (`canonical_model_id(s)`; das alte
+`deepseek-v4-pro` in der Prod-Liste gilt also als die 1017). Es meldet
 neue OpenRouter-Modelle, verschwundene konfigurierte IDs,
 Preset-Befunde (Modell nicht in der Familienliste, Premium in Daily/Open Models,
 neueres Modell derselben Reihe, identische Presets) und je eine Live-Probe (App-Routing) der

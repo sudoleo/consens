@@ -123,6 +123,14 @@ class Config:
         for family, provider in cfg.PROVIDERS.items():
             for model in [*provider.models, *(prod.get(family) or [])]:
                 self.family_by_model.setdefault(model, family)
+        # What a preset may use per family, read like the app reads the lists:
+        # an old ID in the document (deepseek-v4-pro since 2026-10-29) counts
+        # as the model it migrates to.
+        self.allowed = {}
+        for family, provider in cfg.PROVIDERS.items():
+            models = (set(cfg.canonical_model_ids(prod[family], family))
+                      if family in prod else set(provider.models))
+            self.allowed[family] = models - cfg.PROVIDER_DEPRECATED_MODELS.get(family, set()) - cfg.REMOVED_MODEL_IDS
 
     def openrouter_id(self, model: str, family: str | None = None) -> str:
         family = family or self.family_by_model.get(model)
@@ -178,11 +186,6 @@ class Config:
         cfg = self.cfg
         definitions = {preset["id"]: preset for preset in cfg.CONSENSUS_PRESET_DEFINITIONS}
         stored = self.prod.get("preset_models") or {}
-        allowed = {}
-        for family, provider in cfg.PROVIDERS.items():
-            models = (set(cfg.canonical_model_ids(self.prod[family], family))
-                      if family in self.prod else set(provider.models))
-            allowed[family] = models - cfg.PROVIDER_DEPRECATED_MODELS.get(family, set()) - cfg.REMOVED_MODEL_IDS
         result = {}
         for preset_id, definition in definitions.items():
             supplied = stored.get(preset_id) if isinstance(stored.get(preset_id), dict) else {}
@@ -191,7 +194,7 @@ class Config:
                 "pro_only": bool(definition["pro_only"]),
                 "stored": dict(cfg._preset_answer_mapping(supplied)),
                 "answers": cfg._normalize_preset_answers(
-                    preset_id, supplied, allowed_sets=allowed,
+                    preset_id, supplied, allowed_sets=self.allowed,
                     premium_models=self.premium, defaults=self.defaults,
                 ),
                 "consensus": str(supplied.get("consensus") or ""),
@@ -240,9 +243,11 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
         if len(answers) < conf.cfg.MIN_PRESET_FAMILIES:
             findings.append((f"{preset_id}:families:{len(answers)}",
                              f"{label}: nur {len(answers)} Familie(n) belegt, mindestens {conf.cfg.MIN_PRESET_FAMILIES}"))
-        # What the document stores and the app silently replaces.
+        # What the document stores and the app silently replaces. Both checks
+        # take the migrated ID, as _normalize_preset_answers does.
         for family, model in preset["stored"].items():
-            if model not in (conf.prod.get(family) or []):
+            model = conf.cfg.canonical_model_id(model, family)
+            if model not in conf.allowed.get(family, set()):
                 findings.append((f"{preset_id}:{family}:not-allowed:{model}",
                                  f"{label}/{family}: {model} fehlt in der {family}-Modellliste (App ersetzt es still)"))
             if not preset["pro_only"] and model in conf.premium:
