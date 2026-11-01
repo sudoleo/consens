@@ -1,5 +1,5 @@
 {
-  "sources": "3de1c2b21cbb",
+  "sources": "89388fb33956",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -33,6 +33,7 @@
     "static/css/composer.css",
     "static/css/consensus-engine.css",
     "static/css/demo-action.css",
+    "static/css/file-viewer.css",
     "static/css/foundation.css",
     "static/css/landing.css",
     "static/css/layout.css",
@@ -100,6 +101,7 @@
     "static/js/error-reporter.js",
     "static/js/feature-access.js",
     "static/js/feedback-dialog.js",
+    "static/js/file-viewer.js",
     "static/js/letter-clouds.js",
     "static/js/markdown-stream.js",
     "static/js/math-render.js",
@@ -262,7 +264,28 @@
     "static/vendor/novnc/1.7.0/vendor/pako/lib/zlib/inftrees.js",
     "static/vendor/novnc/1.7.0/vendor/pako/lib/zlib/messages.js",
     "static/vendor/novnc/1.7.0/vendor/pako/lib/zlib/trees.js",
-    "static/vendor/novnc/1.7.0/vendor/pako/lib/zlib/zstream.js"
+    "static/vendor/novnc/1.7.0/vendor/pako/lib/zlib/zstream.js",
+    "static/vendor/pdfjs/6.4.299/LICENSE",
+    "static/vendor/pdfjs/6.4.299/build/pdf.min.mjs",
+    "static/vendor/pdfjs/6.4.299/build/pdf.worker.min.mjs",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitDingbats.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitFixed.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitFixedBold.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitFixedBoldItalic.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitFixedItalic.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitSerif.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitSerifBold.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitSerifBoldItalic.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitSerifItalic.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/FoxitSymbol.pfb",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/LICENSE_FOXIT",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/LICENSE_LIBERATION",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/LiberationSans-Bold.ttf",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/LiberationSans-BoldItalic.ttf",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/LiberationSans-Italic.ttf",
+    "static/vendor/pdfjs/6.4.299/standard_fonts/LiberationSans-Regular.ttf",
+    "static/vendor/pdfjs/6.4.299/wasm/jbig2_nowasm_fallback.js",
+    "static/vendor/pdfjs/6.4.299/wasm/openjpeg_nowasm_fallback.js"
   ],
   "scripts": [
     {
@@ -291,20 +314,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.82ee3d5353b4.js",
+      "src": "/static/dist/app.cb94603b3e95.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.e38da51e761a.css",
+    "app": "/static/dist/app.3c185295a429.css",
     "landing": "/static/dist/landing.9fea5f61f42c.css",
     "public": "/static/dist/public.4ade4686cb6c.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "e7f4c3dc9e53",
+      "hash": "ddc5a0bac365",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -327,6 +350,7 @@
         "static/css/composer-attachments.css",
         "static/css/composer.css",
         "static/css/demo-action.css",
+        "static/css/file-viewer.css",
         "static/css/foundation.css",
         "static/css/layout.css",
         "static/css/letter-clouds.css",
@@ -376,10 +400,10 @@
     }
   },
   "previous_assets": [
+    "app.e38da51e761a.css",
     "app.dd3be30d3198.css",
-    "app.a3760c8a5e4d.css",
+    "app.82ee3d5353b4.js",
     "app.8abf162cfa1a.js",
-    "app.8a1ecd07eebf.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.699f525605f0.js",
