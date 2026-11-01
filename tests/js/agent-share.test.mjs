@@ -140,6 +140,19 @@ describe("Share under an Agent answer", () => {
     dom.window.close();
   });
 
+  // Bug hunt 2026-10-25: Share from the chat list while the chat's run was
+  // still going had no turn; "Try again" asked with that same missing turn,
+  // also after the run had ended.
+  it("offers no Try again for an answer that is not finished", async () => {
+    const { window, document, dom } = agentApp();
+    window.App.answerShare.open({ chatId: CHAT, turnId: undefined });
+    const error = document.getElementById("shareDialogError");
+    await vi.waitFor(() => expect(error.hidden).toBe(false));
+    expect(error.textContent).toBe("This answer isn’t finished yet. Share it once it is.");
+    expect(confirmButton(document).hidden).toBe(true);
+    dom.window.close();
+  });
+
   it("says the server's reason in the dialog and offers no button that cannot work", async () => {
     const reason = "Answers in a chat with your Google data can’t be shared publicly.";
     const { window, document, dom } = agentApp({ refuse: reason });

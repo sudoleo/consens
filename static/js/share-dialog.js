@@ -210,6 +210,7 @@
   // server. A 4xx names a reason that stays (an unfinished answer, a chat
   // with Google data), so the dialog offers no button that cannot work.
   function retryable(error) {
+    if (error?.retryable === false) return false;
     const status = Number(error?.status) || 0;
     return !status || status === 408 || status === 429 || status >= 500;
   }
@@ -464,7 +465,9 @@
     const key = () => `${window.auth?.currentUser?.uid || ""}:${chatId}:${turnId}`;
     const prepare = async viewEpoch => {
       if (!TURN_ID.test(chatId || "") || !TURN_ID.test(turnId || "")) {
-        throw new Error("This answer isn’t finished yet. Share it once it is.");
+        // Asking again names the same missing turn (Share from the chat list
+        // while its run goes on): no Try again for it.
+        throw Object.assign(new Error("This answer isn’t finished yet. Share it once it is."), { retryable: false });
       }
       if (preparedAnswers.has(key())) return preparedAnswers.get(key());
       const path = `/agent/chats/${encodeURIComponent(chatId)}/turns/${encodeURIComponent(turnId)}/share-result`;
