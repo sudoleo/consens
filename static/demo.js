@@ -11,16 +11,21 @@ if (!Array.isArray(window.currentEvidenceSources)) {
 
 /* === DEMO: Data & Utilities =======================================
    Das Szenario ist eine Entscheidung, fuer die man sich im echten Leben
-   eine zweite und dritte Meinung holt: eine Waermepumpe im Haus von 1978
-   mit den alten Heizkoerpern. Sie kostet fuenfstellig, und die Fachleute
-   sind sich wirklich uneins. Seit 2026-10-31 spielt die Demo den einen
-   Modus des Agenten: Eine KI arbeitet, die gewaehlten KIs folgen ihrer
-   Arbeit und pruefen ihre Antwort. Der Agent fragt sie einmal (hier lohnen
-   unabhaengige Antworten), schreibt die Antwort selbst, und die Pruefer
-   haben drei Anmerkungen: eine falsche Stelle (der Agent hat die Hausdaten
-   der Frage verwechselt), eine zweifelhafte und eine unvollstaendige. Kein
-   Score. Quellenlisten gibt es bewusst nicht: erfundene Belege waeren die
-   schlechtere Demo.
+   eine zweite und dritte Meinung holt und bei der ein Fehler Geld kostet:
+   Soll ein Paar die Wohnung kaufen, in der es zur Miete wohnt, oder weiter
+   mieten und die Differenz anlegen? Seit 2026-11-01 zeigt die Demo, was
+   der Agent inzwischen kann (vorher: eine Waermepumpen-Frage als reine
+   Textantwort): einen Plan, der sich abhakt, eine Websuche mit echten
+   Quellen, seinen Arbeitsplatz (Skript schreiben, rechnen, Ausgabe), ein
+   Diagramm im Antworttext und eine Excel-Tabelle mit Vorschau neben dem
+   Chat, die einmal gefragten KIs und die Pruefer, die der Arbeit folgen.
+   Diagramm, Tabelle und jede Zahl stammen aus einem Modell
+   (scripts/demo_assets.py, Dateien unter static/demo). Die Pruefer haben
+   drei Anmerkungen: eine falsche Stelle, die das Ergebnis kippt (der Agent
+   rechnet mit Sachsens alter Grunderwerbsteuer von 3,5 %, seit 2023 sind
+   es 5,5 %), eine zweifelhafte und eine unvollstaendige. Kein Score. Die
+   Quellen der Suche sind echte Seiten zum Thema; die Antwort zitiert sie
+   nicht, erfundene Belege waeren die schlechtere Demo.
    ================================================================= */
 // A German page shows the scenario in German: every text of it through the
 // dictionary (docs/i18n.md), markup through i18n.js's own rules. Anchors and
@@ -51,162 +56,166 @@ function demoInPageLanguage(value) {
   return walk(value);
 }
 
-const DEMO_SCENARIO_PROMPT = demoInPageLanguage(
-  "Our house is from 1978 and still has the original radiators. Can a heat pump heat it properly, or do we need new radiators first?\n\n" +
-  "Detached, 140 m², walls insulated in 2015, original double glazing. The gas boiler currently runs at 70 °C.");
+// The question, then the details pasted under it: each a sentence of the
+// dictionary of its own, as demoInPageLanguage looks them up.
+const DEMO_SCENARIO_PROMPT = demoInPageLanguage([
+  "Should we buy the flat we rent, or keep renting and invest the difference?",
+  "Leipzig, 82 m², built 1994. Our landlord offers it to us for €310,000, no agent. Rent is €925 cold. Equity €70,000, the bank offers 3.6% fixed for 15 years with 2% repayment. We plan to stay 12 years."
+].join("\n\n"));
 
-// Die Hausdaten werden nicht getippt, sondern eingefuegt, so wie man sie
-// aus einer Notiz oder dem Energieausweis uebernimmt.
+// Die Eckdaten werden nicht getippt, sondern eingefuegt, so wie man sie aus
+// einer Notiz oder dem Angebot der Bank uebernimmt.
 const DEMO_TYPED_QUESTION = DEMO_SCENARIO_PROMPT.split("\n")[0];
 
-const DEMO_MODELS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"];
+// The two reviewers' viewpoints first: whichever two families Daily has,
+// they take these two, and the notes stay with them (buildDemoDataForModels).
+const DEMO_MODELS = ["Anthropic", "DeepSeek", "OpenAI", "Gemini", "Mistral", "Grok"];
 
 const DEMO_DATA = demoInPageLanguage({
-  delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
+  delays: { Anthropic: 1400, DeepSeek: 2500, OpenAI: 2900, Gemini: 3600, Mistral: 4300, Grok: 5000 },
   responses: {
+    Anthropic:
+`<div class="ai-block">
+  <p>If the 12 years are firm, buying is likely the better deal, but not by much, and not for the reason most people think.</p>
+  <h4>Why it can work</h4>
+  <ul>
+    <li>Every repayment is money you keep. Rent is gone, and it tends to rise.</li>
+    <li>Buying from your landlord saves the agent’s fee and the move, and you already know the flat and the building.</li>
+  </ul>
+  <h4>Why it is closer than it looks</h4>
+  <ul>
+    <li>Tax, notary and land registry are gone the day you sign. The flat needs years just to earn them back.</li>
+    <li>You carry the repairs. Ask for the owners’ association’s last three statements and the size of its repair reserve before you agree a price.</li>
+  </ul>
+  <p>Work out the year in which buying pulls ahead. If it is well before your 12, buy; if it is close, the money does not decide it.</p>
+</div>`,
+
+    DeepSeek:
+`<div class="ai-block">
+  <p>Renting and investing the difference is the more flexible choice, and over 12 years it is often just as good.</p>
+  <h4>What speaks for renting</h4>
+  <ul>
+    <li>Plans change: a job, a child, a separation. Selling within a few years usually costs you the purchase costs and more.</li>
+    <li>€70,000 in one flat is a bet on one building in one city. Invested broadly, the same money carries less risk.</li>
+    <li>A tenant never pays for a new roof or a new heating system.</li>
+  </ul>
+  <h4>What it takes</h4>
+  <ul>
+    <li>Investing the difference every month, for 12 years. A loan makes you save; a savings plan does not.</li>
+    <li>A rent that does not run away from you.</li>
+  </ul>
+  <p>If you are not sure you will really stay 12 years, I would keep renting.</p>
+</div>`,
+
     OpenAI:
 `<div class="ai-block">
-  <p>Short version: very likely yes, and probably without replacing most of the radiators.</p>
-  <h4>Why the house is a better candidate than it sounds</h4>
+  <p>The useful question is not whether to buy or rent, but from which year buying pulls ahead. Compare that year with your 12.</p>
+  <h4>How to work it out</h4>
   <ul>
-    <li>The 2015 wall insulation matters more than the 1978 build date. Heat loss, not age, decides whether a heat pump copes.</li>
-    <li>Radiators from the 1970s were sized for an uninsulated house, so many of them are now larger than the room needs.</li>
+    <li>Let both households spend the same each month: the owners pay the loan and the upkeep, the tenants pay rent and invest the rest.</li>
+    <li>Each year, compare what the owners own, the flat minus the loan, with what the tenants have saved.</li>
+    <li>The owners start behind by the purchase costs; the repayments and the rising rent close the gap.</li>
   </ul>
-  <h4>What I would do</h4>
+  <h4>What moves the result most</h4>
   <ul>
-    <li>Get a room-by-room heat-loss calculation before anyone quotes a size.</li>
-    <li>This winter, turn the boiler down to 50 °C for a cold week. Rooms that stay warm keep their radiators.</li>
-    <li>Replace only the radiators in rooms that fall short, and size the heat pump from the calculation, not from the old boiler.</li>
+    <li>How fast the flat gains in value, and what the savings earn.</li>
+    <li>The rate once the fixed period ends.</li>
   </ul>
-  <h4>Where I would not chase the last degree</h4>
-  <p>Running at 55 °C instead of 45 °C costs a few percent on the annual bill, and replacing every radiator to get there costs more than that difference will save in a decade.</p>
-  <p>I would also take the gas boiler out completely. A backup boiler keeps a gas connection, a standing charge and a second service visit for the few days a well-sized heat pump handles anyway.</p>
+  <p>Run it with cautious numbers too. If buying only wins with optimistic ones, it does not really win.</p>
+</div>`,
+
+    Gemini:
+`<div class="ai-block">
+  <p>Look at the building and the price before you look at the calculation.</p>
+  <ul>
+    <li><b>The price</b>: €310,000 is about 28 years of your rent. Above 25 counts as expensive, and that favours renting.</li>
+    <li><b>The building</b>: from 1994, it is reaching the age of a new roof, new windows or a new heating system. Ask whether the owners’ association has planned any of it.</li>
+    <li><b>The reserve</b>: a small repair reserve today means a special levy later, on top of your monthly payment.</li>
+    <li><b>The minutes</b>: read the last three years of owners’ meetings. Disputes and postponed repairs are in there.</li>
+    <li><b>Your position</b>: as the sitting tenant you are the easiest buyer your landlord will find. That is worth a lower price.</li>
+  </ul>
+  <p>If the building is in good shape and the price comes down, buying is a reasonable bet for 12 years.</p>
 </div>`,
 
     Mistral:
 `<div class="ai-block">
   <p>Work through it in this order.</p>
   <ol>
-    <li>Heat-loss calculation for every room. Without it, every answer you get, including this one, is a guess.</li>
-    <li>Run the boiler at 50 °C for a cold week, so you know which rooms are the weakest before anyone quotes.</li>
-    <li>Replace the radiators in every room you use daily with larger or fan-assisted ones. That is what lets the heat pump run at 45 °C or below.</li>
-    <li>Size the heat pump from the calculation. The old boiler’s 24 kW says nothing about what the house needs.</li>
-    <li>Keep the gas boiler connected for the first winter as a backup. If the heat pump never needs it, remove it the following summer.</li>
+    <li>Get the owners’ association’s statements, minutes and repair reserve. They decide what owning really costs.</li>
+    <li>Negotiate: as the sitting tenant you save your landlord the agent and the search.</li>
+    <li>Calculate year by year what each path leaves you with, including the purchase costs on the first day.</li>
+    <li>Find the year in which buying pulls ahead, and compare it with how long you will really stay.</li>
+    <li>Ask the bank how much will still be owed after the 15 years, and what a higher rate would cost you then.</li>
   </ol>
-  <p>Every degree of flow temperature costs roughly two to three percent of efficiency. The radiators are a one-off cost; the flow temperature is paid every winter.</p>
-</div>`,
-
-    Anthropic:
-`<div class="ai-block">
-  <p>What actually decides this</p>
-  <p>The question is not whether the radiators are old but whether they can deliver each room’s heat loss at a low flow temperature. A radiator does not care how old it is; it cares how warm the water is. At 70 °C your radiators deliver roughly twice what they deliver at 50 °C, which is why a house that is warm today can still be cold with a heat pump.</p>
-  <ul>
-    <li>Start with a room-by-room heat-loss calculation. The 2015 wall insulation probably brought the total down a lot, but the calculation is what tells you where.</li>
-    <li>Run the boiler at 50 °C for a cold week and note which rooms stay warm. Those radiators can stay.</li>
-    <li>Plan for 45 °C rather than 55 °C. The efficiency difference is around a quarter, and you pay it every winter for twenty years.</li>
-    <li>Size the heat pump from the calculation, not from the boiler it replaces.</li>
-    <li>Do not keep the gas boiler as a backup. Two systems mean two service contracts, and a backup tends to become the system that runs whenever it is cold.</li>
-  </ul>
-  <p>The radiators that pass your test are often more than people expect, because 1970s radiators were sized for a house with no insulation at all.</p>
-</div>`,
-
-    Gemini:
-`<div class="ai-block">
-  <p>How it looks from the installer’s side</p>
-  <ul>
-    <li><b>The 1978 build date</b>: matters less than you think. With the walls insulated in 2015, the house loses far less heat than it was designed for.</li>
-    <li><b>The original radiators</b>: often oversized for today’s heat loss, because they were chosen for an uninsulated house. Many will cope at 55 °C.</li>
-    <li><b>The test you can do now</b>: set the boiler to 50 °C on a cold week. Every room that stays warm is a room you do not need to touch.</li>
-    <li><b>The quote</b>: ask for a room-by-room heat-loss calculation, and for the heat pump to be sized from it.</li>
-    <li><b>The flow temperature</b>: 55 °C is a reasonable target here. The step down to 45 °C is worth a few percent, and it usually means replacing radiators that work.</li>
-    <li><b>The gas boiler</b>: keeping it as a backup for the coldest days is a cheap safety net in the first winter, while you learn how the house behaves.</li>
-  </ul>
-  <p>What is missing from the question: the hot water. A cylinder that is reheated to 60 °C for hygiene can cost more efficiency than the radiator question, and nobody asks about it.</p>
-</div>`,
-
-    DeepSeek:
-`<div class="ai-block">
-  <p>Before you commit</p>
-  <h4>Check</h4>
-  <ul>
-    <li>Has anyone calculated the heat loss room by room? If the installer sized it from your boiler, ask again.</li>
-    <li>What is the heat pump’s efficiency at 35 °C and at 55 °C? The datasheet gives both, and the gap is usually around a quarter.</li>
-  </ul>
-  <h4>Fix</h4>
-  <ul>
-    <li>Size the heat pump from the calculation, not from the old boiler’s output.</li>
-    <li>Replace the radiators in the rooms you heat most, so the system can run at 45 °C or below.</li>
-    <li>Insulate the loft if it has not been done. It is the cheapest kilowatt you will ever save.</li>
-  </ul>
-  <h4>Do not</h4>
-  <ul>
-    <li>Do not rely on a boiler test alone. A boiler at 50 °C on a mild day says little about a heat pump at minus ten.</li>
-    <li>Do not keep the gas boiler as a backup. You keep the standing charge and lose the reason you switched.</li>
-  </ul>
+  <p>Only buy if it still works with cautious numbers.</p>
 </div>`,
 
     Grok:
 `<div class="ai-block">
-  <p>Plain take: yes, it will work, and the radiator panic is mostly overblown.</p>
+  <p>Plain take: over 12 years the money is close to a coin toss, so decide on what the money does not show.</p>
   <ul>
-    <li>Your radiators were sized for 1978. Your walls are from 2015. That gap is your margin.</li>
-    <li>Turn the boiler down to 50 °C on the next cold week. If you are comfortable, you have your answer for most rooms.</li>
-    <li>Swap the one or two radiators that cannot keep up, ideally for fan-assisted ones, and leave the rest alone.</li>
-    <li>Run it at 55 °C if that keeps the house warm. Chasing 45 °C with new radiators everywhere saves less than the radiators cost.</li>
-    <li>Keep the gas boiler for one winter. If the heat pump never calls for it, take it out in spring.</li>
+    <li>Buying wins if you stay, the flat holds its value and the rate after 15 years is kind to you.</li>
+    <li>Renting wins if you really invest the difference and might move sooner than you think.</li>
+    <li>A landlord who sells is a signal. Find out why, and what the building needs soon.</li>
+    <li>Do not stretch for it: the monthly payment should still feel easy in a bad year.</li>
   </ul>
-  <p>Two things I would insist on: a room-by-room heat-loss calculation, and a heat pump sized from it rather than from the old boiler. An oversized heat pump cycles on and off, and that wears it out faster than a cold January.</p>
+  <p>If you both would rather own than invest, that is a fine reason to buy. Just know it is a preference, not a sure profit.</p>
 </div>`
   },
-  // The agent's own answer, written after it asked the AIs once. The first
-  // line is its verdict (bold in the chat, demoAgentAnswer). One sentence
-  // mixes up the house's data (the walls were insulated in 2015, the
-  // windows are the original glazing): the reviewers' wrong note is about it.
+  // The agent's own answer, written after it calculated in its workspace and
+  // asked the AIs once. The first line is its verdict (bold in the chat,
+  // demoAgentAnswer); the figure is the chart it shared, placed in the text
+  // ("![…](picture:f1)", demoResponseMarkdown). Its purchase costs use
+  // Saxony's old transfer tax: the reviewers' wrong note is about it.
   answer:
 `<div class="ai-answer">
-  <p>Probably yes, with a few radiators changed, not all of them.</p>
-  <p>The walls and windows were renewed in 2015, and that matters more than the year the house was built. What nobody can tell you from here is which rooms fall short, and that is the whole question.</p>
-  <h4>Do this first</h4>
+  <p>Buying pulls ahead in year 9, so over your 12 years it comes out about €9,200 in front.</p>
+  <p>Until then, renting and investing the difference leads, because the purchase costs are gone on the first day. After that, the repayments and the rising rent tip it towards buying.</p>
+  <figure data-picture="f1">Buying and renting over 30 years</figure>
+  <h4>What the calculation assumes</h4>
   <ul>
-    <li>Get a room-by-room heat-loss calculation before anyone quotes a heat pump size.</li>
-    <li>Test it this winter: turn the boiler down to 50 °C for a cold week and note which rooms stay warm.</li>
-    <li>Rooms that stay warm keep their radiators; only the rooms that fall short need larger or fan-assisted ones.</li>
-    <li>Have the heat pump sized from the calculation, not from the old boiler’s output.</li>
+    <li>Purchase costs: 3.5% property transfer tax and 2% for notary and land registry, €17,050 in total.</li>
+    <li>As owners you pay €1,320 a month: €1,200 for the loan and €120 for management and the repair reserve.</li>
+    <li>As tenants you pay €925 rent, rising 2.5% a year, and invest the other €395 at 5% a year.</li>
+    <li>The flat gains 1.5% in value a year.</li>
+    <li>The rate stays at 3.6% until the loan is repaid.</li>
   </ul>
-  <h4>Decide for yourself</h4>
+  <h4>Decide for yourselves</h4>
   <ul>
-    <li>The answers I asked for split on the boiler test: one trusts a cold week at 50 °C to show which radiators can stay, the other says a boiler test alone tells you little about a heat pump at minus ten.</li>
-    <li>How far below 55 °C to go is your call: both answers plan for 45 °C, and that can mean larger radiators in the rooms you heat most.</li>
+    <li>The two answers I asked for split: one counts on the forced saving of paying off a loan, the other on the freedom to move without selling.</li>
+    <li>At 12 years the two paths are less than 5% apart. If the 12 years are not certain, renting keeps you free to move.</li>
   </ul>
-  <p>Both come down to the same trade: what you spend once on radiators against what you spend every winter on electricity.</p>
+  <p>Every number is in the spreadsheet: change an assumption, and it works out again when buying pulls ahead.</p>
 </div>`,
 
   // What the reviewers note on that answer, in the review's own shape
   // (agent_audit.place_marks): the sentence it concerns (anchor), the
   // quoted words in it (target), its kind and the reviewer's note. Daily's
   // two reviewers (Claude, DeepSeek since 2026-11-01) carry one note of each
-  // kind between them; a reviewer the lineup does not have stays out.
+  // kind between them; a reviewer the lineup does not have stays out. The
+  // numbers are scripts/demo_assets.py's: with 5.5 % buying pulls ahead in
+  // year 13, with 1 % value growth in year 20; after 15 years €157,116 is owed.
   notes: [
     {
       model: "Anthropic",
       kind: "wrong",
-      anchor: "The walls and windows were renewed in 2015, and that matters more than the year the house was built.",
-      target: "walls and windows were renewed in 2015",
-      note: "The question says only the walls were insulated in 2015. The windows are still the original double glazing."
+      anchor: "Purchase costs: 3.5% property transfer tax and 2% for notary and land registry, €17,050 in total.",
+      target: "3.5% property transfer tax",
+      note: "Saxony has charged 5.5% since January 2023. That makes the purchase costs €23,250, and buying only pulls ahead in year 13, after the 12 years you plan to stay."
     },
     {
       model: "DeepSeek",
       kind: "doubtful",
-      anchor: "Test it this winter: turn the boiler down to 50 °C for a cold week and note which rooms stay warm.",
-      target: "for a cold week",
-      note: "A boiler at 50 °C on a mild day says little about a heat pump at minus ten. Run the test in the coldest week you get, and let the calculation decide."
+      anchor: "The flat gains 1.5% in value a year.",
+      target: "1.5% in value a year",
+      note: "That is a guess for 30 years, not a trend, and the result hangs on it: with 1% a year, buying only pulls ahead in year 20."
     },
     {
       model: "Anthropic",
       kind: "incomplete",
-      anchor: "Have the heat pump sized from the calculation, not from the old boiler’s output.",
-      target: "Have the heat pump sized from the calculation",
-      note: "Hot water is missing. A cylinder reheated to 60 °C for hygiene changes what the heat pump has to deliver, so ask how the quote handles it."
+      anchor: "The rate stays at 3.6% until the loan is repaid.",
+      target: "stays at 3.6% until the loan is repaid",
+      note: "It is fixed for 15 years only. About €157,000 is still owed then, at a rate nobody can tell you today."
     }
   ]
 });
@@ -234,12 +243,12 @@ let activeDemoModels = DEMO_MODELS;
 /* === DEMO: Timing & Typing Configuration =============================== */
 const DEMO_PHASES = {
   preType: true,
-  order: ["OpenAI", "Anthropic", "Gemini", "Mistral", "DeepSeek", "Grok"],
-  // Obergrenze fuer die getippte Frage (ohne den eingefuegten Entwurf).
+  order: ["Anthropic", "DeepSeek", "OpenAI", "Gemini", "Mistral", "Grok"],
+  // Obergrenze fuer die getippte Frage (ohne die eingefuegten Eckdaten).
   typeChars: 140,
-  typeSpeed: 40,
+  typeSpeed: 30,
   gapBetweenModels: 540,
-  pauseAfterTypingAll: 650
+  pauseAfterTypingAll: 500
 };
 
 const DEMO_DELAY_BOOST_MS = 1800;
@@ -260,7 +269,7 @@ const MODEL_TO_BOX = {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Staffel-Startzeiten + Tempo für das Token-Streaming der Demo-Antworten.
-const DEMO_STREAM_STARTS = { OpenAI: 500, Anthropic: 1150, Gemini: 1800, Mistral: 2450, DeepSeek: 3100, Grok: 3750 };
+const DEMO_STREAM_STARTS = { Anthropic: 500, DeepSeek: 1150, OpenAI: 1800, Gemini: 2450, Mistral: 3100, Grok: 3750 };
 const DEMO_RESPONSE_STREAM = { wordsPerTick: 2, tickMs: 55 };
 
 // Läuft hoch, sobald ein neuer Demo-Durchlauf startet, damit alte
@@ -296,6 +305,8 @@ function demoResponseMarkdown(html) {
     const text = Array.from(node.childNodes).map(read).join('');
     const tag = node.tagName?.toLowerCase();
     if (/^h[1-6]$/.test(tag || '')) return `\n\n${'#'.repeat(Number(tag[1]))} ${text.trim()}\n\n`;
+    // A picture the agent shared, placed in its text (markdown-stream.js).
+    if (tag === 'figure') return `\n\n![${text.trim()}](picture:${node.getAttribute('data-picture')})\n\n`;
     if (tag === 'li') {
       const marker = node.parentElement?.tagName === 'OL'
         ? `${Array.from(node.parentElement.children).indexOf(node) + 1}.` : '-';
@@ -437,32 +448,98 @@ function renderDemoModelResponse(model, outputEl) {
    Agent is where every question starts, so the demo plays an Agent turn on
    the real Agent surfaces, in the one mode every account has since
    2026-10-31: one AI does the work, the AIs of the Daily lineup follow it
-   and review its answer. The activity line and its notes
-   (agent-activity.js), the reviewers and the AIs it asks beside the clock
-   and in the panel (App.agentDelegation.demo, sessions of kind "audit" and
-   "comparison"), the streamed answer (markdown-stream.js), then the review
-   of exactly that text (agent-review.js, a review of mode "audit"): the
-   reviewers' marks in the answer, Notes and the Answers of the AIs it
-   asked under it. No score. The run is local and scripted from the same
-   fixtures as the Compare demo: no request, no bookmark, no vote.
-   agent-chat.js keeps the answer panel on screen while the demo owns it
-   (App.agentChat.demoView), also for guests.
+   and review its answer. What the agent does is what a real turn shows
+   (agent-activity.js): its plan, checked off step by step (update_plan),
+   a web search with its sources, its workspace (open_workspace, a script it
+   writes and runs, the output of the run, the files it shares), the one
+   time it asks the AIs (compare_models), then the streamed answer
+   (markdown-stream.js) with its chart in the text and its spreadsheet under
+   it (App.agentWorkspace.demo: the same figure, row and preview beside the
+   chat as a real turn's files), and the review of exactly that text
+   (agent-review.js, a review of mode "audit"): the reviewers' marks in the
+   answer, Notes and the Answers of the AIs it asked under it. The
+   reviewers and the AIs it asks stand beside the clock and in the panel
+   (App.agentDelegation.demo, sessions of kind "audit" and "comparison").
+   No score. The run is local and scripted from the same fixtures as the
+   Compare demo: no request, no bookmark, no vote. agent-chat.js keeps the
+   answer panel on screen while the demo owns it (App.agentChat.demoView),
+   also for guests.
    ======================================================================= */
 const DEMO_AGENT_ID = "demo";
-const DEMO_AGENT_HASH = "demo-answer-v1";
+const DEMO_AGENT_HASH = "demo-answer-v2";
+// When each step happens, in ms after the question was sent. Something
+// moves every second or so: the whole turn takes about 17 seconds.
 const DEMO_AGENT_STEPS = {
-  plan: 900,            // first progress note; the reviewers start following
-  round: 2300,          // the reviewers' first round on the work so far
-  compare: 2700,        // compare_models: the agent asks the AIs once
-  modelSpread: 4400,    // the last answer lands this long after compare
-  afterCompare: 900,    // progress note, then the answer starts streaming
-  review: 2600          // the reviewers' final review of the fixed answer
+  plan: 400,            // the plan and the first note; the reviewers start following
+  search: 1000,         // web_search
+  searched: 2400,
+  workspace: 2700,      // open_workspace
+  write: 3300,          // vm_write_file: the script
+  run: 3900,            // vm_exec: its output arrives line by line
+  ran: 5700,
+  chart: 6000,          // vm_share_file: the chart
+  sheet: 6500,          // vm_share_file: the spreadsheet
+  compare: 7200,        // compare_models: the agent asks the AIs once
+  modelSpread: 2800,    // the last answer lands this long after compare
+  afterCompare: 700,    // progress note, then the answer starts streaming
+  review: 2400          // the reviewers' final review of the fixed answer
 };
-const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 42 };
+const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 40 };
 const DEMO_AGENT_NOTES = demoInPageLanguage({
-  plan: "Whether this works depends on the heat loss of each room, not on the year the house was built. Installers genuinely disagree here, so I will ask the other AIs for independent answers before I answer.",
-  compared: "They agree it can work. They split on whether a cold week with the boiler at 50 °C shows which radiators can stay, so the answer has to say so instead of picking a side."
+  plan: "Whether buying pays off depends on how long you stay. I'll calculate both paths year by year in my workspace, then ask the other AIs how they weigh it.",
+  computed: "In my calculation buying pulls ahead in year 9. I'll put it all in a spreadsheet, so you can change any assumption.",
+  compared: "They split on whether paying off a loan beats investing the difference, so the answer shows when the two paths cross instead of picking a side."
 });
+// The agent's plan in its own words (update_plan); the step it is on is
+// "in_progress", the ones before it "completed".
+const DEMO_AGENT_PLAN = demoInPageLanguage([
+  "Look up rents and owner costs in Leipzig",
+  "Calculate 30 years of buying and renting",
+  "Ask the other AIs for their view",
+  "Write the answer"
+]);
+// Real pages on what the search looked up; the answer does not cite them.
+const DEMO_AGENT_SOURCES = [
+  { url: "https://www.leipzig.de/mietspiegel", title: "Mietspiegel der Stadt Leipzig" },
+  { url: "https://www.finanztip.de/eigentumswohnung/hausgeld/", title: "Hausgeld: Laufende Kosten einer Eigentumswohnung" },
+  { url: "https://www.homeday.de/de/immobilienwissen/instandhaltungsruecklage/", title: "Instandhaltungsrücklage: Höhe & Berechnung" }
+];
+// The files of its workspace, named in the page's language; the files it
+// shares are static (scripts/demo_assets.py writes them in both languages).
+const DEMO_AGENT_FILES = demoInPageLanguage({
+  script: "buy_vs_rent.py",
+  chart: "chart.png",
+  sheet: "buy-vs-rent.xlsx",
+  task: "Calculate 30 years of buying and renting"
+});
+const DEMO_SHEET_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+function demoAgentShared(withSheet) {
+  const lang = window.App?.lang === "de" ? "de" : "en";
+  const chart = { id: "dec0de00000000000000000000000001", name: DEMO_AGENT_FILES.chart, mime: "image/png",
+    kind: "vm_file", status: "ready", size: 131072, origin: { ref: "f1" },
+    demo: { file: `/static/demo/buy-vs-rent.${lang}.png` } };
+  const sheet = { id: "dec0de00000000000000000000000002", name: DEMO_AGENT_FILES.sheet, mime: DEMO_SHEET_MIME,
+    kind: "vm_file", status: "ready", size: 8192, preview: true,
+    demo: { file: `/static/demo/buy-vs-rent.${lang}.xlsx`, preview: `/static/demo/buy-vs-rent.${lang}.pdf` } };
+  return withSheet ? [chart, sheet] : [chart];
+}
+// What its script prints: a few of the 30 years (scripts/demo_assets.py),
+// the year buying pulls ahead and the files it saved. Code output, so the
+// numbers keep the program's format; its words are the page's.
+const DEMO_AGENT_YEARS = [[0, 52950, 70000], [5, 104532, 112822], [9, 150924, 150123],
+  [12, 189090, 179930], [20, 307364, 267223], [30, 484555, 379043]];
+function demoRunOutput() {
+  const t = window.App.t;
+  const number = value => Math.round(value).toLocaleString("en-US");
+  const cells = (...items) => items.map((item, index) => String(item).padStart(index ? 11 : 4)).join("");
+  return [
+    cells(t("year", null, "demo output"), t("buying", null, "demo output"), t("renting", null, "demo output"),
+      t("lead", null, "demo output")),
+    ...DEMO_AGENT_YEARS.map(([year, buying, renting]) => cells(year, number(buying), number(renting), number(buying - renting))),
+    t("Buying pulls ahead in year {year}.", { year: 9 }),
+    t("Saved {chart} and {sheet}", { chart: DEMO_AGENT_FILES.chart, sheet: DEMO_AGENT_FILES.sheet })
+  ];
+}
 // A reviewer's round without a note, in the words of agent_audit.review_text.
 // The panel compares it as a value (agent-delegation.js NO_OBJECTION), so it
 // is never translated.
@@ -563,6 +640,7 @@ function showDemoAgentAnswer(body, text, streaming) {
 }
 function clearDemoAgentAnswer() {
   const body = document.getElementById("agentAnswerBody");
+  window.App.agentWorkspace?.demo?.(null);
   if (!body) return;
   window.resetMarkdownStream?.(body);
   delete body.dataset.markdown;
@@ -633,7 +711,7 @@ async function runAgentDemoFlow() {
   const qi = document.getElementById("questionInput");
   if (DEMO_PHASES.preType && qi) {
     await typeIntoInput(qi, DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars), DEMO_PHASES.typeSpeed);
-    await sleep(340);
+    await sleep(300);
     qi.value = DEMO_SCENARIO_PROMPT;
     qi.dispatchEvent(new Event("input", { bubbles: true }));
     await sleep(DEMO_PHASES.pauseAfterTypingAll);
@@ -693,20 +771,76 @@ async function runAgentDemoFlow() {
     return live();
   };
   const round = ms => rounds.push({ kind: "round", text: DEMO_NO_OBJECTIONS, created_at: iso(ms) });
+  // A step that changes is a new event in its old place, as a real turn's
+  // update arrives (agent-activity.js draws an event once per version).
+  const step = (id, changes) => {
+    const index = events.findIndex(item => item.id === id);
+    const item = { ...(index >= 0 ? events[index] : { version: 1, kind: "tool", id }), ...changes };
+    if (index >= 0) events[index] = item; else events.push(item);
+    return item;
+  };
+  // The plan as the agent updates it: `current` is the step it is on.
+  let plans = 0;
+  const plan = current => events.push({ version: 1, kind: "tool", id: `demo-plan-${++plans}`, name: "update_plan",
+    status: "succeeded", items: DEMO_AGENT_PLAN.map((content, index) => ({ content,
+      status: index < current ? "completed" : index === current ? "in_progress" : "pending" })) });
   paint();
 
   if (!await at(DEMO_AGENT_STEPS.plan)) return;
-  events.push({ version: 1, kind: "progress", id: "demo-plan", text: DEMO_AGENT_NOTES.plan });
+  plan(0);
+  events.push({ version: 1, kind: "progress", id: "demo-note-plan", text: DEMO_AGENT_NOTES.plan });
   following = true;
   paint();
-  if (!await at(DEMO_AGENT_STEPS.round)) return;
-  round(DEMO_AGENT_STEPS.round);
+
+  // The search, with the pages it found.
+  if (!await at(DEMO_AGENT_STEPS.search)) return;
+  step("demo-search", { name: "web_search", status: "running" });
   paint();
+  if (!await at(DEMO_AGENT_STEPS.searched)) return;
+  step("demo-search", { status: "succeeded", count: 2, sources: DEMO_AGENT_SOURCES });
+  round(DEMO_AGENT_STEPS.searched);
+  paint();
+
+  // Its workspace: the script, the run and its output, the files it shares.
+  if (!await at(DEMO_AGENT_STEPS.workspace)) return;
+  plan(1);
+  step("demo-workspace", { name: "open_workspace", status: "running", task: DEMO_AGENT_FILES.task });
+  paint();
+  if (!await at(DEMO_AGENT_STEPS.write)) return;
+  step("demo-workspace", { status: "succeeded" });
+  step("demo-write", { name: "vm_write_file", status: "running", path: DEMO_AGENT_FILES.script });
+  paint();
+  if (!await at(DEMO_AGENT_STEPS.run)) return;
+  step("demo-write", { status: "succeeded" });
+  const command = `python ${DEMO_AGENT_FILES.script}`;
+  step("demo-run", { name: "vm_exec", status: "running", command, started_at: iso(DEMO_AGENT_STEPS.run), output: "" });
+  paint();
+  const lines = demoRunOutput();
+  const lineGap = (DEMO_AGENT_STEPS.ran - DEMO_AGENT_STEPS.run) / (lines.length + 1);
+  for (let index = 0; index < lines.length; index++) {
+    if (!await at(DEMO_AGENT_STEPS.run + lineGap * (index + 1))) return;
+    step("demo-run", { output: lines.slice(0, index + 1).join("\n") });
+    paint();
+  }
+  if (!await at(DEMO_AGENT_STEPS.ran)) return;
+  step("demo-run", { status: "succeeded", exit_code: 0, duration_ms: DEMO_AGENT_STEPS.ran - DEMO_AGENT_STEPS.run });
+  events.push({ version: 1, kind: "progress", id: "demo-note-computed", text: DEMO_AGENT_NOTES.computed });
+  round(DEMO_AGENT_STEPS.ran);
+  paint();
+  for (const [id, path, ms] of [["demo-chart", DEMO_AGENT_FILES.chart, DEMO_AGENT_STEPS.chart],
+    ["demo-sheet", DEMO_AGENT_FILES.sheet, DEMO_AGENT_STEPS.sheet]]) {
+    if (!await at(ms)) return;
+    step(id, { name: "vm_share_file", status: "running", path });
+    paint();
+    if (!await at(ms + 350)) return;
+    step(id, { status: "succeeded" });
+    paint();
+  }
 
   // compare_models: the AIs answer independently, each on its own beat.
   if (!await at(DEMO_AGENT_STEPS.compare)) return;
-  const compareTool = { version: 1, kind: "tool", id: "demo-compare", name: "compare_models", status: "running" };
-  events.push(compareTool);
+  plan(2);
+  step("demo-compare", { name: "compare_models", status: "running" });
   asked = iso(DEMO_AGENT_STEPS.compare);
   review = demoAgentReview({ models, comparison: demoAgentComparison(models, answered), status: "required" });
   paint();
@@ -719,14 +853,17 @@ async function runAgentDemoFlow() {
     review = demoAgentReview({ models, comparison: demoAgentComparison(models, answered), status: "required" });
     paint();
   }
-  compareTool.status = "succeeded";
-  events.push({ version: 1, kind: "progress", id: "demo-compared", text: DEMO_AGENT_NOTES.compared });
+  step("demo-compare", { status: "succeeded" });
+  events.push({ version: 1, kind: "progress", id: "demo-note-compared", text: DEMO_AGENT_NOTES.compared });
   round(DEMO_AGENT_STEPS.compare + DEMO_AGENT_STEPS.modelSpread);
   paint();
 
-  // The answer, written in its own step after the comparison.
+  // The answer, written in its own step after the comparison, with the
+  // chart in its place; the spreadsheet joins it once the text stands.
   if (!await at(DEMO_AGENT_STEPS.compare + DEMO_AGENT_STEPS.modelSpread + DEMO_AGENT_STEPS.afterCompare)) return;
+  plan(3);
   events.push({ version: 1, kind: "status", id: "demo-status", status: "responding" });
+  App.agentWorkspace?.demo?.(body, demoAgentShared(false));
   const tokens = answer.match(/\s+|[^\s]+/g) || [];
   let index = 0;
   while (index < tokens.length) {
@@ -742,13 +879,15 @@ async function runAgentDemoFlow() {
     if (!live()) return;
   }
   showDemoAgentAnswer(body, answerText, false);
+  App.agentWorkspace?.demo?.(body, demoAgentShared(true));
 
   // The reviewers review exactly this text: the row under it stands with
   // Notes waiting, a quiet sheen passes over the answer (agent-chat.js
   // setAnswerChecking), the head says "Reviewing".
   const comparison = demoAgentComparison(models, answered);
-  const reviewTool = { version: 1, kind: "tool", id: "demo-review", name: "audit_answer", status: "running" };
-  events.push(reviewTool);
+  events.push({ version: 1, kind: "tool", id: "demo-plan-done", name: "update_plan", status: "succeeded",
+    items: DEMO_AGENT_PLAN.map(content => ({ content, status: "completed" })) });
+  step("demo-review", { name: "audit_answer", status: "running" });
   review = demoAgentReview({ models, comparison, status: "running", answer: answerText });
   body?.classList.add("is-answer-checking");
   App.agentReview?.render(body, review, { key: DEMO_AGENT_ID, question: DEMO_SCENARIO_PROMPT });
@@ -756,7 +895,7 @@ async function runAgentDemoFlow() {
   await sleep(DEMO_AGENT_STEPS.review);
   if (!live()) return;
 
-  reviewTool.status = "succeeded";
+  step("demo-review", { status: "succeeded" });
   reviewed = new Date().toISOString();
   review = demoAgentReview({ models, comparison, status: "succeeded", answer: answerText, notes });
   running = false;

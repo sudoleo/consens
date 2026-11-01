@@ -1349,11 +1349,18 @@ Server.
 
 ## Demo & Sonstiges
 - [ ] „Demo"-Query startet den Demo-Flow (demo.js Integration intakt).
-- [ ] Moduswahl Agent (auch als Gast über `/app?demo=1`): die Demo spielt einen
-      Agent-Turn — „Working for …s“, Planungsnotiz, „Comparing perspectives…“,
-      gestreamte Antwort, „Checking the answer…“ mit Schimmer, danach „Thought
-      for …s“, Markierungen und Evidenzzeile mit 45/100, Contradictions 2,
-      Answers 6 (öffnet alle sechs Antworten). „New chat“ beendet die Ansicht.
+- [ ] Moduswahl Agent (auch als Gast über `/app?demo=1`, seit 2026-11-01 die
+      Frage „Kaufen oder mieten?“): die Demo spielt einen Agent-Turn —
+      „Working for …s“, Plan (hakt sich ab), Planungsnotiz, „Searched the web ·
+      3 sources“, Arbeitsplatz mit `python buy_vs_rent.py` und Ausgabe,
+      „Comparing perspectives…“, gestreamte Antwort mit dem Diagramm im Text
+      (Klick öffnet es groß), „Reviewing the answer…“ mit Schimmer, danach
+      „Thought for …s“, drei Marken (rot an „3.5% property transfer tax“) und
+      die Zeile „buy-vs-rent.xlsx · Excel · 2 sheets“: Klick öffnet die
+      Vorschau neben dem Chat, Download liefert eine rechnende XLSX. Evidenzzeile
+      „Notes 3 · Answers 2“. Auf Deutsch dieselben Zahlen mit
+      „kaufen-oder-mieten.xlsx“. „New chat“ beendet die Ansicht und nimmt
+      Diagramm und Tabelle mit.
 - [ ] Demo zeigt 52/100 „Partial agreement" (amber), drei Differences-Karten
       (kritisch: Schlusszeile, klein: Ursache benennen, Gewichtung: Entschuldigung
       oder Plan) und sechs Claim-Badges — davon 5/6 und 4/6 mit Dissens. Alle

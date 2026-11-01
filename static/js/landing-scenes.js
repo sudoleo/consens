@@ -39,11 +39,10 @@
 
   // Dieselbe Frage, die /app?demo=1 tippt (static/demo.js): Wer aus dem Hero
   // in die Demo springt, sieht dort weiter, was hier anfaengt. Nur die erste
-  // Zeile — der Nachrichtenentwurf wird auch in der App eingefuegt, nicht
-  // getippt.
+  // Zeile — die Eckdaten werden auch in der App eingefuegt, nicht getippt.
   // In the page's language: typed letter by letter, a half question is never
   // looked up (the field is data-i18n-skip below).
-  const ASK_QUESTION = say("Can a heat pump heat our 1978 house with the original radiators?");
+  const ASK_QUESTION = say("Should we buy the flat we rent, or keep renting and invest the difference?");
 
   function buildAskScene(scene) {
     const text = scene.querySelector("[data-ask-text]");
@@ -106,18 +105,23 @@
   // One Agent turn in the one mode (2026-10-31), on the surfaces
   // agent-activity.js, agent-delegation.js and agent-review.js draw in
   // /app: the reviewers join beside the clock with the first step, a note
-  // on the plan, the agent asking the AIs once (their answers land
-  // one by one), the answer written in its own step, the reviewers'
-  // review of that exact text, then their marks and the evidence row. No
-  // score. The comparison owns the longest stretch, as it does in a run.
-  const PLAN_AT = 0.05;
-  const COMPARE_AT = 0.13;
+  // on the plan, its search and its workspace (since 2026-11-01, the demo's
+  // run), the agent asking the AIs once (their answers land one by one),
+  // the answer written in its own step with the files it shared, the
+  // reviewers' review of that exact text, then their marks and the evidence
+  // row. No score. The comparison owns the longest stretch, as it does in a run.
+  const PLAN_AT = 0.04;
+  const SEARCH_AT = 0.07;
+  const SEARCHED_AT = 0.14;
+  const WORKSPACE_AT = 0.16;
+  const WORKSPACE_DONE = 0.24;
+  const COMPARE_AT = 0.26;
   const COMPARE_END = 0.50;
   const COMPARED_AT = 0.53;
   const WRITE_AT = 0.58;
   const REVIEW_AT = 0.79;
   const DONE_AT = 0.91;
-  const RUN_SECONDS = 24;
+  const RUN_SECONDS = 17;
 
   // Where each AI's answer lands inside the comparison, by how many AIs the
   // scene asks (Daily's two since 2026-11-01). A comparison is only as fast
@@ -142,6 +146,10 @@
     const reviewers = Array.from(scene.querySelectorAll("[data-reviewer]"));
     const answer = scene.querySelector("[data-run-answer]");
     const evidence = scene.querySelector("[data-run-evidence]");
+    const files = scene.querySelector("[data-run-files]");
+    // A step's words while it runs and once it is done (landing.html).
+    const steps = [[items.search, SEARCHED_AT], [items.workspace, WORKSPACE_DONE]]
+      .filter(([el]) => el).map(([el, end]) => ({ el, end, label: el.querySelector("[data-run-live]") }));
     // The answer streams in as one text across its blocks, in reading order.
     const streams = Array.from(scene.querySelectorAll("[data-stream]")).map(el => {
       // The words arrive already in the page's language; a half-written
@@ -178,7 +186,7 @@
       if (compareLabel) compareLabel.style.minWidth = "";
       let tallest = 0;
       let label = 0;
-      for (const p of [COMPARE_AT + 0.01, COMPARED_AT, REVIEW_AT + 0.01, 1]) {
+      for (const p of [WORKSPACE_DONE, COMPARE_AT + 0.01, COMPARED_AT, REVIEW_AT + 0.01, 1]) {
         renderRun(p);
         tallest = Math.max(tallest, run.offsetHeight);
         if (compareLabel) label = Math.max(label, compareLabel.getBoundingClientRect().width);
@@ -213,6 +221,14 @@
       // clock line once the run is over, as in /app -- a fold, not a cut.
       if (log) log.classList.toggle("is-folded", done);
       show(items.plan, p >= PLAN_AT);
+      show(items.search, p >= SEARCH_AT);
+      show(items.workspace, p >= WORKSPACE_AT);
+      steps.forEach(({ el, end, label }) => {
+        el.classList.toggle("is-current", p < end);
+        if (!label) return;
+        const text = p < end ? label.dataset.runLive : label.dataset.runDone;
+        if (label.textContent !== say(text)) label.textContent = text;
+      });
       show(items.compare, p >= COMPARE_AT);
       show(items.compared, p >= COMPARED_AT);
 
@@ -256,6 +272,8 @@
         });
         lastChars = chars;
       }
+      // The files the agent shared join the answer after its verdict.
+      show(files, streams.length > 0 && chars >= streams[0].text.length);
       if (answer) {
         answer.classList.toggle("is-streaming", p >= WRITE_AT && chars < total);
         answer.classList.toggle("is-reviewing", reviewing);

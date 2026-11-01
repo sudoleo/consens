@@ -96,7 +96,7 @@ describe("the demo on a German page", () => {
     const fallback = document.querySelector(".consensus-claims-fallback");
     body.innerHTML = data.answer;
     // The answer itself arrived in German.
-    expect(body.textContent).toContain("Als Erstes");
+    expect(body.textContent).toContain("Was die Rechnung annimmt");
     const audit = { claims: data.notes.map(note => ({ anchor: note.anchor, audit: true, kind: note.kind, agree: [],
       dissent: [{ model: note.model, kind: note.kind, note: note.note, target: note.target }] })), unplaced: [], process: [] };
     expect(window.renderStoredAuditMarks(body, audit, fallback, [])).toBe(true);
@@ -111,7 +111,7 @@ describe("the demo on a German page", () => {
     const source = readFileSync(`${ROOT}/static/demo.js`, "utf8");
     const block = source.split("const DEMO_AGENT_NOTES = demoInPageLanguage({", 2)[1].split("});", 1)[0];
     const notes = [...block.matchAll(/^\s+\w+: "(.+)",?$/gm)].map(match => match[1]);
-    expect(notes).toHaveLength(2);
+    expect(notes).toHaveLength(3);
     const dictionary = browserDictionary();
     expect(notes.filter(note => !dictionary[note])).toEqual([]);
   });

@@ -50,6 +50,10 @@
   let chat = '', owner = '', turn = '', data = null, error = '', generation = 0, controller = null;
   let lastStart = -Infinity, timer = null, retryTimer = null, inflight = null, waiting = null, rendered = '';
   let revision = 0, retried = false;
+  // The demo's files (static/demo.js, demo()): fileId -> file with its
+  // static addresses; the answer body that shows them.
+  const demoFiles = new Map();
+  let demoBody = null;
   // Pictures the agent shared from its VM, loaded once per file as a data:
   // URL (the CSP's img-src allows data:, not blob:). fileId -> { url, load }
   const pictures = new Map();
@@ -118,8 +122,8 @@
     return control;
   }
   async function download(chatId, file) {
-    const response = await request(`/agent/chats/${chatId}/files/${file.id}`);
-    const blob = await response.blob();
+    const blob = demoFiles.has(file.id) ? await demoFetch(file.demo.file)
+      : await (await request(`/agent/chats/${chatId}/files/${file.id}`)).blob();
     const url = URL.createObjectURL(blob), link = document.createElement('a');
     link.href = url; link.download = file.name; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
@@ -175,7 +179,7 @@
     return { key: file.id, name: file.name, title: extra.title, mime: file.mime, preview: file.preview, kind: file.kind,
       family: extra.family, load: () => openPreview(file.id),
       downloads: extra.downloads || [{ label: extension(file), run: () => download(chatId, file) }],
-      remove: extra.remove === false ? null : () => removeFile(file.id) };
+      remove: extra.remove === false || demoFiles.has(file.id) ? null : () => removeFile(file.id) };
   }
   // A card's mark becomes its first page; under its name its type and pages.
   function previewMark(mark, meta, item, extra = []) {
@@ -204,6 +208,11 @@
     return hint;
   }
   async function openPreview(fileId) {
+    const shown = demoFiles.get(fileId);
+    if (shown) {
+      const blob = await demoFetch(shown.demo.preview || shown.demo.file);
+      return { blob, mime: blob.type || '' };
+    }
     const chatId = chatOnScreen();
     if (!chatId) throw new Error('Open this chat to preview the file.');
     const response = await request(`/agent/chats/${chatId}/files/${fileId}?preview=1`);
@@ -469,8 +478,10 @@
     for (const warning of file.warnings || []) main.append(node('span', 'agent-file-warning', warning));
     const actions = node('div', 'agent-file-actions');
     actions.append(downloadChip(chatId, file, '', false));
-    actions.append(overflow(key, `More actions for ${file.name}`, [{ label: 'Remove…', danger: true,
-      run: () => askToRemove(key) }]));
+    if (!demoFiles.has(file.id)) {
+      actions.append(overflow(key, `More actions for ${file.name}`, [{ label: 'Remove…', danger: true,
+        run: () => askToRemove(key) }]));
+    }
     if (item) {
       const open = node('button', 'agent-file-open');
       open.type = 'button';
@@ -635,8 +646,9 @@
     let entry = pictures.get(file.id);
     if (!entry) {
       entry = { url: '' };
-      entry.load = request(`/agent/chats/${chatId}/files/${file.id}?preview=1`).then(response => response.blob()).then(readDataUrl)
-        .then(url => { entry.url = url; return url; });
+      const blob = demoFiles.has(file.id) ? demoFetch(file.demo.preview || file.demo.file)
+        : request(`/agent/chats/${chatId}/files/${file.id}?preview=1`).then(response => response.blob());
+      entry.load = blob.then(readDataUrl).then(url => { entry.url = url; return url; });
       // A failed load (chat changed, file removed) may be tried again later.
       entry.load.catch(() => { if (pictures.get(file.id) === entry) pictures.delete(file.id); });
       pictures.set(file.id, entry);
@@ -695,8 +707,9 @@
     }
     // The viewer pages through the pictures of the same line or of the
     // pictures under the answer, as through a gallery (attachments.js).
+    const own = !demoFiles.has(file.id);
     figure._picture = { fileId: file.id, name: file.name, mime: file.mime, size: file.size, title: name,
-      page: web?.page || '', host: web?.host || '' };
+      page: web?.page || '', host: web?.host || '', ...(own ? {} : { removable: false }) };
     open.addEventListener('click', () => {
       const set = figure.closest('.md-picture-line, .agent-answer-pictures');
       const figures = set ? [...set.querySelectorAll('.agent-vm-picture')].filter(item => item._picture) : [figure];
@@ -718,8 +731,8 @@
         caption.append(source);
       }
     } else caption.append(node('span', 'agent-file-name', file.name));
-    caption.append(downloadChip(chatId, file, '', false),
-      overflow(key, `More actions for ${name}`, [{ label: 'Remove…', danger: true, run: () => askToRemove(key) }]));
+    caption.append(downloadChip(chatId, file, '', false));
+    if (own) caption.append(overflow(key, `More actions for ${name}`, [{ label: 'Remove…', danger: true, run: () => askToRemove(key) }]));
     figure.append(open, caption);
     if (confirmKey === key) {
       figure.append(confirmation(key, `Remove ${file.name}? The agent can no longer use it in this chat.`, 'Remove file', [file]));
@@ -750,8 +763,9 @@
   function hideAll() {
     const resources = document.getElementById('agentAnswerResources');
     if (resources) { resources.replaceChildren(); resources.hidden = true; }
-    fillPictures(document.getElementById('agentAnswerBody'), '', [], 'answer');
-    fillDocuments(document.getElementById('agentAnswerBody'), []);
+    // The demo's files stay with its answer until the demo lets them go.
+    const body = document.getElementById('agentAnswerBody');
+    if (body !== demoBody) { fillPictures(body, '', [], 'answer'); fillDocuments(body, []); }
     for (const row of historyRows()) {
       row.replaceChildren(); row.hidden = true; fillPictures(row._answerBody, '', [], 'turn'); fillDocuments(row._answerBody, []);
     }
@@ -965,6 +979,11 @@
     return context?.config?.executionMode === 'agent' ? context.metadata?.chatId || '' : '';
   }
   async function openFile(fileId) {
+    const shown = demoFiles.get(fileId);
+    if (shown) {
+      const blob = await demoFetch(shown.demo.file);
+      return { blob, mime: blob.type || shown.mime || '' };
+    }
     const chatId = chatOnScreen();
     if (!chatId) throw new Error('Open this chat to preview the file.');
     const response = await request(`/agent/chats/${chatId}/files/${fileId}`);
@@ -989,9 +1008,40 @@
     rendered = '';
   }
 
+  // ---- the demo (static/demo.js) ----------------------------------------------------
+  // The demo's turn shares a chart and a spreadsheet as a real turn does: the
+  // picture in its place in the answer, the spreadsheet as a row with its
+  // first page under it, each opening in the same viewer. Its files are the
+  // static ones under static/demo (scripts/demo_assets.py), each
+  // { id, name, mime, kind, preview?, origin?, demo: { file, preview? } }:
+  // loaded without a chat or an account, never removable. demo(body, files)
+  // shows them with that answer (called again as the turn shares more),
+  // demo(null) lets go.
+  async function demoFetch(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('The file couldn’t load.');
+    return response.blob();
+  }
+  function demo(body, files = []) {
+    if (demoBody && demoBody !== body) { fillPictures(demoBody, '', [], 'demo'); fillDocuments(demoBody, []); }
+    if (!body) {
+      for (const id of demoFiles.keys()) pictures.delete(id);
+      demoFiles.clear(); demoBody = null;
+      return;
+    }
+    demoBody = body;
+    for (const file of files) demoFiles.set(file.id, file);
+    const shown = files.filter(file => PICTURE_MIMES.has(file.mime));
+    fillPictures(body, '', shown, 'demo');
+    const rows = files.filter(file => !shown.includes(file));
+    const list = node('div', 'agent-files-list');
+    for (const file of rows) list.append(fileRow('', file, 'demo'));
+    fillDocuments(body, rows.length ? [list] : []);
+  }
+
   window.addEventListener('consensio:auth-state', () => {
     reset(); chat = ''; owner = ''; openState.versions.clear(); hideAll();
   });
-  App.agentWorkspace = { refresh, upload, request, button, download, openFile, openPreview, removeFile, renderTurnResources };
+  App.agentWorkspace = { refresh, upload, request, button, download, openFile, openPreview, removeFile, renderTurnResources, demo };
   App.answerTail = answerTail;
 })();

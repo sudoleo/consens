@@ -55,7 +55,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
         assert hit == 'heroAskField'
         previews = page.locator('.lp-composer-preview:has(.lp-composer-models)')
-        # The hero and the heat-pump scene show Daily's two reviewers (Claude
+        # The hero and the demo's scene show Daily's two reviewers (Claude
         # and DeepSeek since 2026-11-01, the app's default and the demo's lineup).
         for preview, marks in zip(previews.all(), (2, 2), strict=True):
             field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
@@ -100,7 +100,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         # of the typing (a11y audit P2).
         expect(page.locator('[data-scene="ask"] .lp-ask-stage')).to_have_attribute('aria-hidden', 'true')
         expect(page.locator('[data-scene="ask"] .lp-sr')).to_contain_text(
-            'Can a heat pump heat our 1978 house with the original radiators?')
+            'Should we buy the flat we rent, or keep renting and invest the difference?')
         previews.nth(1).screenshot(path=str(output / f'ask-{suffix}.png'))
         if not reduced and width > 640:
             scroll_ask(page, .96)
@@ -144,20 +144,28 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         expect(page.locator('.lp-live-pulse')).to_have_count(0)
         # Scene 02 ends on the reviewers' marks and the row under the answer.
         run = page.locator('[data-run]')
-        expect(run.locator('[data-run-clock]')).to_have_text('Thought for 24s')
+        expect(run.locator('[data-run-clock]')).to_have_text('Thought for 17s')
         expect(run.locator('.cx-claim.is-audit.is-major')).to_have_count(1)
         expect(run.locator('[data-run-evidence]')).to_contain_text('Notes 3')
         expect(run.locator('[data-run-evidence]')).to_contain_text('Answers 2')
         # Daily's two reviewers beside the clock, and the two AIs it asked.
         expect(run.locator('[data-reviewer]')).to_have_count(2)
         expect(run.locator('[data-run-count]')).to_have_text('2 answers')
+        # Since 2026-11-01 the run shows its search, its workspace and the
+        # files it shared, as the demo does.
+        expect(run.locator('[data-run-item="search"]')).to_have_text(
+            'Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de')
+        expect(run.locator('[data-run-item="workspace"]')).to_have_text(
+            'Opened the workspace · Calculate 30 years of buying and renting')
+        expect(run.locator('[data-run-files]')).to_contain_text('buy-vs-rent.xlsx')
+        expect(run.locator('[data-run-files]')).to_contain_text('Excel · 2 sheets')
         # Decide: the marked sentence opens the reviewer's note.
-        mark = page.locator('[data-diff-open="lpNoteWalls"]')
+        mark = page.locator('[data-diff-open="lpNoteTax"]')
         mark.scroll_into_view_if_needed()
         mark.click()
-        expect(page.locator('#lpNoteWalls')).to_have_attribute('open', '')
-        expect(page.locator('#lpNoteWalls')).to_contain_text('The windows are still the original double glazing.')
-        expect(page.locator('#lpNoteWalls')).to_contain_text('Claude · Wrong')
+        expect(page.locator('#lpNoteTax')).to_have_attribute('open', '')
+        expect(page.locator('#lpNoteTax')).to_contain_text('Saxony has charged 5.5% since January 2023.')
+        expect(page.locator('#lpNoteTax')).to_contain_text('Claude · Wrong')
         expect(page.locator('.lp-pause-title')).to_have_text('A reviewer paused before a step')
         output = Path('test-results/landing-one-mode')
         output.mkdir(parents=True, exist_ok=True)

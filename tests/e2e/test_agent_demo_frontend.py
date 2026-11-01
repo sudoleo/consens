@@ -3,10 +3,14 @@
 Since 2026-10-31 the Agent has one mode for every account: one AI does the
 work, the AIs of the Daily lineup follow it and review its answer. The demo
 (static/demo.js) plays that turn on the live surfaces, locally, without a
-request: the reviewers beside the clock, the agent asking them once, the
-review of the written answer ("Reviewing the answer…", Notes waiting), then
-their marks, Notes and Answers. No score, no judge.
+request: the reviewers beside the clock, the agent's plan, its search and its
+workspace (since 2026-11-01), the agent asking the AIs once, the review of the
+written answer ("Reviewing the answer…", Notes waiting), then their marks,
+Notes and Answers, with the chart it shared in the text and its spreadsheet
+under it, opening beside the chat. No score, no judge.
 """
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -22,11 +26,18 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
         page.set_viewport_size({"width": width, "height": 900})
-        expect(page.locator("#threadAskText")).to_contain_text("heat pump", timeout=30000)
+        expect(page.locator("#threadAskText")).to_contain_text("buy the flat", timeout=30000)
         # The reviewers follow from the first step: their marks stand beside
         # the clock while the agent works (Daily's two since 2026-11-01).
         page.wait_for_function("""() => document.querySelectorAll(
             '#agentAnswerActivity .agent-inline-models .agent-inline-model').length === 2""", timeout=15000)
+        # It works where the reader sees it: its plan, its search with the
+        # pages it found, a command in its workspace and that command's output.
+        page.wait_for_function("""() => {
+            const activity = document.getElementById('agentAnswerActivity');
+            return /Plan · \\d of 4 done/.test(activity?.textContent || '')
+              && /python buy_vs_rent\\.py/.test(activity.textContent);
+        }""", timeout=15000)
         # The agent asks them once; then it writes, and they review exactly
         # that text: the row under it waits with Notes, the head says so.
         page.wait_for_function("""() => {
@@ -48,6 +59,20 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         links = page.locator(".agent-review .agent-evidence-link")
         assert links.evaluate_all("links => links.map(link => link.getAttribute('aria-label'))") == ["Notes 3", "Answers 2"]
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Thought for")
+        # What it made: its chart in its place in the text, its spreadsheet
+        # under the answer with its first page, opening beside the chat.
+        expect(page.locator("#agentAnswerBody .md-picture .agent-vm-picture img")).to_have_attribute(
+            "src", re.compile(r"^data:image/png"))
+        sheet = page.locator(".agent-answer-documents .agent-file-open")
+        expect(sheet).to_contain_text("buy-vs-rent.xlsx")
+        # Its first page loads once the row comes near the screen.
+        sheet.scroll_into_view_if_needed()
+        expect(sheet).to_contain_text("2 sheets", timeout=15000)
+        sheet.click()
+        expect(page.locator("#fileViewer")).to_be_visible()
+        expect(page.locator("#fileViewer")).to_contain_text("buy-vs-rent.xlsx")
+        page.keyboard.press("Escape")
+        expect(page.locator("#fileViewer")).to_be_hidden()
         # No score and no judge any more.
         expect(page.locator(".agent-agreement")).to_have_count(0)
         expect(page.locator("#agentAnswer")).not_to_contain_text("/100")
@@ -56,14 +81,14 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         links.first.click()
         expect(page.locator("#modelAnswerReader")).to_be_visible()
         expect(page.locator("#answerReaderInspector")).to_contain_text(
-            "The question says only the walls were insulated in 2015.")
+            "Saxony has charged 5.5% since January 2023.")
         expect(page.locator("#answerReaderInspector")).to_contain_text("1 wrong")
         page.keyboard.press("Escape")
         expect(page.locator("#modelAnswerReader")).not_to_be_visible()
         # Answers open what the two AIs answered when the agent asked.
         links.nth(1).click()
         expect(page.locator("#modelAnswerReader")).to_be_visible()
-        expect(page.locator("#modelAnswerReader")).to_contain_text("heat-loss calculation")
+        expect(page.locator("#modelAnswerReader")).to_contain_text("investing the difference")
         page.keyboard.press("Escape")
         # Local only: the demo asks no model and saves nothing.
         assert not [url for url in requests if "/agent" in url and "/agent/models" not in url], requests

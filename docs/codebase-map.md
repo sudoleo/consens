@@ -729,17 +729,33 @@ eingefügt. Seit 2026-08-18 bleibt der Demo-Lauf bis zum Abschluss aller sechs
 Antworten sichtbar und führt danach über die getrennten Zustände „Writing the
 consensus" und „Checking for contradictions" zum Ergebnis; die lokale synchrone
 Widerspruchsauswertung hält ihren angekündigten Zustand dafür 1,1 Sekunden. Der
-Szenario ist seit 2026-10-02 eine Waermepumpe im Haus von 1978 mit den
-Original-Heizkoerpern (vorher: eine Kundennachricht umformulieren, was Max
-„laecherlich“ fand). Bis zum einen Modus trug der Lauf drei strittige Stellen,
-19 Claims und den daraus gerechneten Score 43/100 (`consensus_scoring.py`);
-seitdem zeigt der Agent-Ablauf die Marken der Prüfer, und die
-Consensus-/Differences-Fixtures der Demo sind entfallen. Zahl und Einheit
-(°C, kW, m²) trennt ein geschuetztes Leerzeichen, auch in Zitaten und Tests.
-Quellen gibt es bewusst keine – erfundene Belege waeren die schlechtere Demo,
-und der Quellen-Tab blendet sich bei leerer Liste ohnehin aus. Der
-Landing-Walkthrough (Szene 01–03) zeigt denselben Lauf, damit Hero, Demo und
-Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
+Szenario ist seit 2026-11-01 die Frage eines Paars, ob es die gemietete
+Wohnung in Leipzig kaufen oder weiter mieten und die Differenz anlegen soll
+(2026-10-02 bis 10-31 eine Waermepumpe im Haus von 1978 als reine
+Textantwort, Max: „aus der Zeit gefallen, consens kann viel mehr“; davor eine
+Kundennachricht, „laecherlich“). Der Lauf zeigt, was der Agent kann: Plan
+(`update_plan`, hakt sich ab), Websuche mit drei echten Seiten
+(leipzig.de, finanztip.de, homeday.de; die Antwort zitiert sie nicht),
+Arbeitsplatz (`open_workspace`, `vm_write_file`, `vm_exec` mit Ausgabe Zeile
+für Zeile, zweimal `vm_share_file`), `compare_models`, dann die Antwort mit
+dem Diagramm im Text (`![…](picture:f1)`) und der Excel-Tabelle darunter.
+Beide Dateien sind echt und liegen statisch unter `static/demo/`
+(`buy-vs-rent.<en|de>.png|pdf|xlsx`), erzeugt von `scripts/demo_assets.py`
+aus EINEM Modell, aus dem auch jede Zahl der Texte stammt (die XLSX rechnet
+per Formeln neu, die PDF ist die Vorschau wie vom Konverter). Gezeigt werden
+sie über `App.agentWorkspace.demo(body, files)` mit denselben Figuren, Zeilen
+und derselben Vorschau neben dem Chat wie Dateien eines echten Turns, ohne
+Chat, Konto oder Entfernen (`demo(null)` gibt frei). Der Fehler, den die
+Prüfer finden, kippt das Ergebnis: Der Agent rechnet mit Sachsens alter
+Grunderwerbsteuer von 3,5 % (seit 2023 5,5 %; dann liegt Kaufen erst ab Jahr 13
+statt 9 vorn, nach den geplanten 12 Jahren). Bis zum einen Modus trug der Lauf
+drei strittige Stellen, 19 Claims und den daraus gerechneten Score 43/100
+(`consensus_scoring.py`); seitdem zeigt der Agent-Ablauf die Marken der
+Prüfer, und die Consensus-/Differences-Fixtures der Demo sind entfallen. Zahl
+und Einheit (°C, kW, m², im Deutschen auch % und €) trennt ein geschuetztes
+Leerzeichen, auch in Zitaten und Tests. Der Landing-Walkthrough (Szene 01–03)
+zeigt denselben Lauf (Szene 02 seit 2026-11-01 mit Suche, Arbeitsplatz und
+den beiden Dateien), damit Hero, Demo und Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
 `App.previewConsensusPreset('fast')`, einschliesslich aller sechs Familien
 und ihrer aktuellen Modelllabels (seit 2026-10-15; vorher Balanced). Eine eigene
 Open-Models-/Custom-Wahl wird dabei nur für die Vorführung durch Daily ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
@@ -756,13 +772,16 @@ im gemeinsamen Thread-Layout sichtbar bleiben. Bei der Moduswahl Agent
 (`runAgentDemoFlow`, Daily-Aufstellung): `App.agentChat.demoView(true)` hält
 `#agentAnswer` sichtbar und setzt `body.single-agent-active.agent-demo-active`
 (auch ohne Agent-Zugang); die Demo rendert Aktivität über
-`App.agentActivity.render`, die Antwort per `renderMarkdownStream`, danach ein
+`App.agentActivity.render` (jede Änderung eines Schritts ist ein neues
+Ereignis an seinem Platz, wie bei einem echten Turn), die Antwort per
+`renderMarkdownStream`, danach ein
 lokales `agent_review` (`mode: "audit"`, `audit.reviewers`/`claims`, dazu
 `comparisons` der einmal befragten KIs) über `App.agentReview.render`: erst
-„Reviewing the answer…“ mit Schimmer, dann drei Marken (wrong: der Agent
-verwechselt die Hausdaten der Frage; doubtful; incomplete) und „Notes 3 ·
-Answers 3“; bis zum einen Modus spielte sie einen Vergleich mit Judges und
-Score 43/100. Die Aufrufe hinter dem Turn (Prüfer-Sitzungen `kind: "audit"` mit
+„Reviewing the answer…“ mit Schimmer, dann drei Marken (wrong: die alte
+Grunderwerbsteuer; doubtful: 1,5 % Wertsteigerung, mit 1 % erst Jahr 20;
+incomplete: der Zins ist nur 15 Jahre fest) und „Notes 3 · Answers 2“; der
+ganze Turn dauert rund 17 Sekunden; bis zum einen Modus spielte sie einen
+Vergleich mit Judges und Score 43/100. Die Aufrufe hinter dem Turn (Prüfer-Sitzungen `kind: "audit"` mit
 `messages`, Antworten `kind: "comparison"` mit `text`, das Werkzeugereignis
 `audit_answer`) reicht sie als ganzen Schnappschuss an
 `App.agentDelegation.demo({turnId, running, agents, usage})`; Fixtures
@@ -11908,6 +11927,15 @@ Dateiliste unter der Antwort mehr:
   und Text im Frame, sonst Hinweis) und darunter „Download“ sowie „Remove from
   chat“ mit Inline-Bestätigung anbietet (`App.agentWorkspace.removeFile(id)`).
   Der Chat ist der sichtbare; der Server prüft Owner und Chat bei jedem Request.
+- Die Demo (`static/demo.js`, seit 2026-11-01) zeigt ihre Dateien über
+  `App.agentWorkspace.demo(body, files)`: Bilder in ihren `.md-picture`-Plätzen,
+  andere Dateien als Zeile mit Vorschau unter der Antwort, mit denselben
+  Bausteinen (`pictureCard`, `fileRow`, `previewItem`) wie ein echter Turn.
+  Eine Demo-Datei trägt `demo: { file, preview? }` (statische Adressen unter
+  `static/demo/`); `openFile`, `openPreview`, `download` und das Laden der
+  Bild-Vorschau holen sie per einfachem `fetch` ohne Chat oder Token, sie hat
+  kein Overflow-Menü und ist im Viewer nicht entfernbar. `hideAll()` lässt die
+  Antwort der Demo stehen, bis `demo(null)` sie freigibt.
 - Entfernen nur über das Overflow-Menü (⋯) mit expliziter Bestätigung; der Fokus
   startet auf „Cancel“. Alle Download-/Menü-Buttons haben sprechende `aria-label`s.
 - `upload()` zeigt Fortschritt ohne die Liste zu leeren. Scheitert eine Datei,

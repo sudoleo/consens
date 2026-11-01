@@ -33,7 +33,7 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     const { document } = await stillFrame();
     const log = document.querySelector("[data-run-log]");
 
-    expect(document.querySelector("[data-run-clock]").textContent).toBe("Thought for 24s");
+    expect(document.querySelector("[data-run-clock]").textContent).toBe("Thought for 17s");
     // A hidden log dropped the answer by its whole height in one frame; the
     // fold is a class the stylesheet animates.
     expect(log.hidden).toBe(false);
@@ -48,7 +48,22 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     const wrapper = document.querySelector("[data-run-log] > .lp-agent-log-items");
     expect(wrapper).not.toBeNull();
     expect(document.querySelectorAll("[data-run-log] > :not(.lp-agent-log-items)")).toHaveLength(0);
-    expect(wrapper.querySelectorAll("[data-run-item]").length).toBe(4);
+    // Plan, search, workspace, comparison, its note and the status row
+    // (search and workspace since 2026-11-01).
+    expect(wrapper.querySelectorAll("[data-run-item]").length).toBe(6);
+  });
+
+  // Since 2026-11-01 the run shows its search and its workspace in /app's
+  // words, and the files it shared under the verdict.
+  it("shows the search, the workspace and the shared files once done", async () => {
+    const { document } = await stillFrame();
+    const said = (item) => document.querySelector(`[data-run-item="${item}"]`).textContent.trim();
+    expect(said("search")).toBe("Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de");
+    expect(said("workspace")).toBe("Opened the workspace · Calculate 30 years of buying and renting");
+    const files = document.querySelector("[data-run-files]");
+    expect(files.hidden).toBe(false);
+    expect(files.textContent).toContain("buy-vs-rent.xlsx");
+    expect(files.textContent).toContain("Excel · 2 sheets");
   });
 
   // The one mode (2026-10-31): the reviewers follow beside the clock, their

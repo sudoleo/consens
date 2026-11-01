@@ -101,12 +101,14 @@
              aria-labelledby="heroAskLabel heroAskText">
           <!-- Every question here is one where a single confident answer is not
                enough: the models plausibly disagree AND being wrong costs the
-               reader something. list[0] is what reduced-motion users see, and
+               reader something, and since 2026-11-01 two of them are tasks
+               (a chart from a file, slides) the agent does in its workspace.
+               list[0] is what reduced-motion users see, and
                it is also the question the demo behind this field actually runs
                (static/demo.js), so the field and the demo tell one story.
                The link's name is what it does, then the question it shows:
                speech input finds it by the words on screen (WCAG 2.5.3). -->
-          <span id="heroAskText" class="lp-prompt-text" data-type-loop="Can a heat pump heat our 1978 house with the original radiators?|Is it safe to take ibuprofen with blood pressure medication?|Do I charge VAT to US clients as a German freelancer?|Is a 3-month notice period in my contract enforceable?|Is it safe to store JWTs in localStorage?"></span>
+          <span id="heroAskText" class="lp-prompt-text" data-type-loop="Should we buy the flat we rent, or keep renting and invest the difference?|Is it safe to take ibuprofen with blood pressure medication?|Turn our sales export into a chart and a one-page summary.|Do I charge VAT to US clients as a German freelancer?|Make six slides on the EU AI Act for Monday’s team meeting."></span>
           <span id="heroAskLabel" hidden>Open the app and ask your own question</span>
           </a>
           <div class="lp-hero-prompt-bar">
@@ -155,13 +157,13 @@
                    and the moving picture is aria-hidden (a11y audit P2). -->
               <div class="lp-sr">
                 <p>Preview of the message box, with this question typed in and ready to send:</p>
-                <p>Can a heat pump heat our 1978 house with the original radiators?</p>
+                <p>Should we buy the flat we rent, or keep renting and invest the difference?</p>
               </div>
               <div class="lp-ask-stage" aria-hidden="true">
                   <div class="lp-composer-preview">
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text data-placeholder="Enter your question"></span>
-                    {# The heat-pump run has the two reviewers of Daily (Claude
+                    {# The demo's run has the two reviewers of Daily (Claude
                        and DeepSeek since 2026-11-01), as the demo behind the
                        hero (static/demo.js). #}
                     <div class="lp-composer-row">
@@ -193,46 +195,51 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">02 · Run</p>
               <h2 class="lp-h2">The agent shows its work.</h2>
-              <p class="lp-lead">It searches the web, reads sources and works with your files, and for a task it can use a browser in its own workspace. The AIs you chose follow every step and review the answer independently, without ever steering it. Before a risky step, one of them can pause the run until you decide.<span class="lp-wide-only"> Scroll to move the run.</span></p>
+              <p class="lp-lead">It makes a plan, searches the web, calculates in its own workspace and hands you real files: a chart in the answer, a spreadsheet you open beside the chat. The AIs you chose follow every step and review the answer independently, without ever steering it. Before a risky step, one of them can pause the run until you decide.<span class="lp-wide-only"> Scroll to move the run.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- An Agent turn in /app, the way agent-activity.js,
                    agent-delegation.js and agent-review.js draw it in the one
                    mode (2026-10-31): the clock ("Working for 12s", "Reviewing
-                   · 21s", later "Thought for 24s") with the reviewers' marks
-                   beside it, the agent's own notes, the one time it asks the
-                   two AIs of Daily (compare_models, their answers landing one
-                   by one), one live status row (Writing answer… / Reviewing the
-                   answer…), then the answer with the reviewers' marks and the
-                   evidence row. No score. Every line and count is the demo
-                   run's own data (static/demo.js). Driver: landing-scenes.js.
+                   · 15s", later "Thought for 17s") with the reviewers' marks
+                   beside it, the agent's own note, its search and its
+                   workspace, the one time it asks the two AIs of Daily
+                   (compare_models, their answers landing one by one), one live
+                   status row (Writing answer… / Reviewing the answer…), then
+                   the answer with the files it shared, the reviewers' marks
+                   and the evidence row. No score. Every line and count is the
+                   demo run's own data (static/demo.js, scripts/demo_assets.py).
+                   Driver: landing-scenes.js.
                    The run is a function of the scroll position, so a
                    screen reader read whatever frame the page stood on: the
                    finished turn below speaks for it (a11y audit P2). -->
               <div class="lp-sr">
                 <p>Preview of a finished Agent turn:</p>
-                <p>Can a heat pump heat our 1978 house with the original radiators?</p>
-                <p>Thought for 24s, reviewed by Claude and DeepSeek</p>
+                <p>Should we buy the flat we rent, or keep renting and invest the difference?</p>
+                <p>Thought for 17s, reviewed by Claude and DeepSeek</p>
                 <ul>
-                  <li>This turns on each room's heat loss, not on the year the house was built. Independent answers first.</li>
+                  <li>Whether buying pays off depends on how long you stay. I'll calculate both paths year by year.</li>
+                  <li>Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de</li>
+                  <li>Opened the workspace · Calculate 30 years of buying and renting</li>
                   <li>Compared perspectives: 2 answers</li>
-                  <li>Both say it can work. They split on whether a test week with the boiler shows which radiators can stay.</li>
+                  <li>They split on whether paying off a loan beats investing the difference.</li>
                 </ul>
-                <p>Probably yes, with a few radiators changed, not all of them.</p>
+                <p>Buying pulls ahead in year 9, so over your 12 years it comes out about €9,200 in front.</p>
+                <p>Shared files: chart.png, buy-vs-rent.xlsx</p>
                 <p>Three sentences from the answer and what the reviewers noted on each</p>
                 <dl>
-                  <dt>The walls and windows were renewed in 2015, and that matters more than the year the house was built.</dt>
-                  <dd>Wrong: only the walls were insulated in 2015.</dd>
-                  <dt>Test it this winter: turn the boiler down to 50 °C for a cold week.</dt>
-                  <dd>Doubtful: a mild week says little about a heat pump at minus ten.</dd>
-                  <dt>Have the heat pump sized from the calculation, not from the old boiler’s output.</dt>
-                  <dd>Incomplete: the hot water is missing.</dd>
+                  <dt>Purchase costs: 3.5% property transfer tax and 2% for notary and land registry.</dt>
+                  <dd>Wrong: Saxony has charged 5.5% since 2023, and buying only pulls ahead in year 13.</dd>
+                  <dt>The flat gains 1.5% in value a year.</dt>
+                  <dd>Doubtful: with 1% a year, buying only pulls ahead in year 20.</dd>
+                  <dt>The rate stays at 3.6% until the loan is repaid.</dt>
+                  <dd>Incomplete: it is fixed for 15 years only.</dd>
                 </dl>
-                <p>Without the reviewers, all three would have read as settled.</p>
+                <p>Without the reviewers, an outdated tax rate would have decided it.</p>
                 <p>Notes 3, Answers 2</p>
               </div>
               <div class="lp-app lp-agent" data-run aria-hidden="true">
-                <p class="lp-agent-ask">Can a heat pump heat our 1978 house with the original radiators?</p>
+                <p class="lp-agent-ask">Should we buy the flat we rent, or keep renting and invest the difference?</p>
                 <div class="lp-agent-body" data-run-body>
                   <div class="lp-agent-activity">
                     <p class="lp-agent-clock"><span data-run-clock>Working for 0s</span><i aria-hidden="true"></i>
@@ -244,7 +251,11 @@
                     </p>
                     <div class="lp-agent-log" data-run-log>
                       <div class="lp-agent-log-items">
-                      <p class="lp-agent-note" data-run-item="plan" hidden>This turns on each room's heat loss, not on the year the house was built. Independent answers first.</p>
+                      <p class="lp-agent-note" data-run-item="plan" hidden>Whether buying pays off depends on how long you stay. I'll calculate both paths year by year.</p>
+                      <!-- A step says what it does while it runs and what it
+                           did once done, in /app's words (agent-activity.js). -->
+                      <p class="lp-agent-step" data-run-item="search" hidden><span data-run-live="Searching the web…" data-run-done="Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de">Searching the web…</span></p>
+                      <p class="lp-agent-step" data-run-item="workspace" hidden><span data-run-live="Opening the workspace…" data-run-done="Opened the workspace · Calculate 30 years of buying and renting">Opening the workspace…</span></p>
                       <div class="lp-agent-step" data-run-item="compare" hidden>
                         <span class="lp-agent-step-label" data-run-compare>Comparing perspectives…</span>
                         <span class="lp-agent-models" aria-hidden="true">
@@ -254,22 +265,28 @@
                         </span>
                         <span class="lp-agent-count" data-run-count></span>
                       </div>
-                      <p class="lp-agent-note" data-run-item="compared" hidden>Both say it can work. They split on whether a test week with the boiler shows which radiators can stay.</p>
+                      <p class="lp-agent-note" data-run-item="compared" hidden>They split on whether paying off a loan beats investing the difference.</p>
                       <p class="lp-agent-step is-current" data-run-item="status" hidden><span data-run-status>Writing answer…</span></p>
                       </div>
                     </div>
                   </div>
                   <div class="lp-agent-answer" data-run-answer>
-                    <!-- The verdict, then three sentences of the answer, each
-                         wearing the note of a reviewer on it: wrong (red),
+                    <!-- The verdict, the two files the agent shared (its chart
+                         stands in the text in /app, the spreadsheet opens
+                         beside the chat), then three sentences of the answer,
+                         each wearing the note of a reviewer on it: wrong (red),
                          doubtful (amber), incomplete (grey, dashed). -->
-                    <p class="lp-agent-verdict"><strong data-stream>Probably yes, with a few radiators changed, not all of them.</strong></p>
+                    <p class="lp-agent-verdict"><strong data-stream>Buying pulls ahead in year 9, so over your 12 years it comes out about €9,200 in front.</strong></p>
+                    <div class="lp-agent-files" data-run-files hidden>
+                      <span class="lp-agent-file"><img class="lp-agent-file-thumb" src="{{ asset_url('/static/demo/buy-vs-rent.en.png') }}" alt="" width="64" height="40" loading="lazy"><span><b>chart.png</b><small>Image</small></span></span>
+                      <span class="lp-agent-file"><span class="lp-agent-file-thumb is-sheet" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 15h16M10 4v16"/></svg></span><span><b>buy-vs-rent.xlsx</b><small>Excel · 2 sheets</small></span></span>
+                    </div>
                     <ul class="lp-run-claims" aria-label="Three sentences from the answer and what the reviewers noted on each">
-                      <li><span class="cx-claim is-audit" data-mark="is-major" data-stream>The walls and windows were renewed in 2015, and that matters more than the year the house was built.</span></li>
-                      <li><span class="cx-claim is-audit" data-mark="is-split" data-stream>Test it this winter: turn the boiler down to 50 °C for a cold week.</span></li>
-                      <li><span class="cx-claim is-audit" data-mark="is-minor" data-stream>Have the heat pump sized from the calculation, not from the old boiler’s output.</span></li>
+                      <li><span class="cx-claim is-audit" data-mark="is-major" data-stream>Purchase costs: 3.5% property transfer tax and 2% for notary and land registry.</span></li>
+                      <li><span class="cx-claim is-audit" data-mark="is-split" data-stream>The flat gains 1.5% in value a year.</span></li>
+                      <li><span class="cx-claim is-audit" data-mark="is-minor" data-stream>The rate stays at 3.6% until the loan is repaid.</span></li>
                     </ul>
-                    <p class="lp-run-result-open" data-stream>Without the reviewers, all three would have read as settled.</p>
+                    <p class="lp-run-result-open" data-stream>Without the reviewers, an outdated tax rate would have decided it.</p>
                   </div>
                   <div class="lp-agent-evidence" data-run-evidence>
                     <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-5 4v-4H4V5ZM8 9h8M8 12.5h5"/></svg>Notes <b>3</b></span>
@@ -345,25 +362,25 @@
             <div class="lp-step-visual">
               <div class="lp-excerpt">
                 <div class="consensus-main-text consensus-answer-body lp-excerpt-lead">
-                  <p><span class="cx-claim is-audit is-major is-interactive" role="button" tabindex="0" data-diff-open="lpNoteWalls" aria-haspopup="dialog" aria-describedby="lpMarkWallsVerdict">The walls and windows were renewed in 2015, and that matters more than the year the house was built.</span></p><p id="lpMarkWallsVerdict" hidden>Wrong: 1 reviewer objects — open details</p>
+                  <p><span class="cx-claim is-audit is-major is-interactive" role="button" tabindex="0" data-diff-open="lpNoteTax" aria-haspopup="dialog" aria-describedby="lpMarkTaxVerdict">Purchase costs: 3.5% property transfer tax and 2% for notary and land registry, €17,050 in total.</span></p><p id="lpMarkTaxVerdict" hidden>Wrong: 1 reviewer objects — open details</p>
                 </div>
                 <!-- The card of a mark in /app (consensus-insights.js auditCard):
                      the words it concerns, then each note with its reviewer
                      and kind. Built on the shared card list, so the hover
                      preview reads it (landing-insights.js). -->
                 <div class="differences-cards">
-                  <details class="diff-card is-contradiction is-major lp-note-card" id="lpNoteWalls" open>
+                  <details class="diff-card is-contradiction is-major lp-note-card" id="lpNoteTax" open>
                     <summary class="diff-card-summary">
                       <span class="diff-card-tags">
                         <span class="sev-dot is-crit" aria-hidden="true"></span>
                         <span class="diff-type-tag">Wrong: 1 reviewer objects</span>
                       </span>
-                      <span class="diff-card-claim">walls and windows were renewed in 2015</span>
+                      <span class="diff-card-claim">3.5% property transfer tax</span>
                     </summary>
                     <div class="diff-card-body">
                       <div class="diff-position">
                         <div class="diff-position-label">Claude · Wrong</div>
-                        <div class="diff-position-stance">The question says only the walls were insulated in 2015. The windows are still the original double glazing.</div>
+                        <div class="diff-position-stance">Saxony has charged 5.5% since January 2023. That makes the purchase costs €23,250, and buying only pulls ahead in year 13, after the 12 years you plan to stay.</div>
                       </div>
                     </div>
                   </details>
@@ -383,19 +400,19 @@
               <div class="lp-excerpt">
                 <ul class="lp-mark-key" aria-label="What the marks in an answer mean">
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-major">The walls and windows were renewed in 2015</span></span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-major">3.5% property transfer tax</span></span>
                     <span class="lp-mark-note">red · wrong</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-split">Turn the boiler down to 50 °C for a cold week</span></span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-split">The flat gains 1.5% in value a year</span></span>
                     <span class="lp-mark-note">amber · doubtful</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-minor">Size the heat pump from the calculation</span></span>
+                    <span class="lp-mark-sample"><span class="cx-claim is-audit is-minor">The rate stays at 3.6% until the loan is repaid</span></span>
                     <span class="lp-mark-note">grey · incomplete</span>
                   </li>
                   <li>
-                    <span class="lp-mark-sample">Rooms that stay warm keep their radiators</span>
+                    <span class="lp-mark-sample">As tenants you pay €925 rent</span>
                     <span class="lp-mark-note">unmarked · no objection</span>
                   </li>
                 </ul>
@@ -412,17 +429,18 @@
             </div>
             <div class="lp-step-visual">
               <!-- Where the two answers in the demo run split (static/demo.js,
-                   the Daily lineup: Claude and DeepSeek since 2026-11-01): the
-                   boiler test the agent's note in scene 02 names. -->
+                   the Daily lineup: Claude and DeepSeek since 2026-11-01):
+                   paying off a loan or staying free to move, the split the
+                   agent's note in scene 02 names. -->
               <div class="lp-excerpt">
                 <ul class="lp-answers" aria-label="The answers of the AIs the agent asked">
                   <li>
                     <span class="lp-answers-who"><span class="lp-composer-model"><img src="{{ asset_url('/static/icons/chat_icons/claude.png') }}" alt="" width="14" height="14"></span>Claude</span>
-                    <span class="lp-answers-text">Run the boiler at 50 °C for a cold week and note which rooms stay warm. Those radiators can stay.</span>
+                    <span class="lp-answers-text">If the 12 years are firm, buying is likely the better deal, but not by much, and not for the reason most people think.</span>
                   </li>
                   <li>
                     <span class="lp-answers-who"><span class="lp-composer-model"><img src="{{ asset_url('/static/icons/chat_icons/deepseek.png') }}" alt="" width="14" height="14"></span>DeepSeek</span>
-                    <span class="lp-answers-text">Do not rely on a boiler test alone. A boiler at 50 °C on a mild day says little about a heat pump at minus ten.</span>
+                    <span class="lp-answers-text">If you are not sure you will really stay 12 years, I would keep renting.</span>
                   </li>
                 </ul>
               </div>

@@ -444,8 +444,9 @@
     // a new chat ends the demo; demo.js stops writing once it is let go.
     if (demoView && (registry.visible() || registry.getSelectedConversationIdentity?.()
       || document.body.classList.contains("is-hero"))) demoView = false;
-    // However the demo ends, its model icons and panel go with it.
-    if (!demoView) App.agentDelegation?.demo?.(null);
+    // However the demo ends, its model icons and panel go with it, and the
+    // chart and spreadsheet it showed (agent-workspace.js demo).
+    if (!demoView) { App.agentDelegation?.demo?.(null); App.agentWorkspace?.demo?.(null); }
     const agent = selectedMode() === "agent";
     // First-paint hint for app-bootstrap.js, written once access is known:
     // whether this browser's account may use Agent at all (the mode of a new

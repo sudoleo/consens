@@ -999,6 +999,35 @@ img { display: block; max-width: 100%; }
   mask-size: 250% 100%;
   animation: lpAgentMask var(--dur-beat) var(--ease-linear) infinite;
 }
+/* The files the agent shared, as their rows read in /app
+   (agent-workspace.js): the chart's own picture or the sheet's mark, the
+   name, its type. No box around them, one quiet line. */
+.lp-agent-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 13px;
+  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
+}
+.lp-agent-files[hidden] { display: none; }
+.lp-agent-file { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.lp-agent-file > span:last-child { display: grid; min-width: 0; line-height: 1.3; }
+.lp-agent-file b { color: var(--ink); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.lp-agent-file small { color: var(--ink-3); font-size: var(--font-size-xs); }
+.lp-agent-file-thumb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 64px;
+  height: 40px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--line-soft);
+  object-fit: cover;
+}
+.lp-agent-file-thumb.is-sheet { background: var(--raise); color: var(--ink-3); }
+.lp-agent-file-thumb svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+
 /* The three sentences under the verdict, each wearing the reviewers' note
    on it once the review is back. */
 .lp-run-claims {
