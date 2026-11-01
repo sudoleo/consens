@@ -2,8 +2,8 @@
    family (picks / runs it was in) instead of a raw pick count. Each bar
    carries three marks on one shared 0..scale axis in real percent: the rate,
    its plausible range as a soft band, and a tick for the family's fair share
-   by chance. Shared atoms (.lp-model-pulse-icon, .pulse-live-dot) also serve
-   the landing strip in landing.css. */
+   by chance. Since 2026-11-01 an archive: the tally closed on 2026-10-31,
+   no live dot. */
 
 .pulse-hero {
   padding-top: clamp(96px, 13vw, 160px);
@@ -23,17 +23,6 @@
 .pulse-hero .lp-display {
   font-size: var(--font-size-display-lg);
   text-wrap: balance;
-}
-
-.pulse-live-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 7px;
-  border-radius: 50%;
-  background: var(--agree);
-  box-shadow: 0 0 0 3px var(--agree-bg);
-  vertical-align: 1px;
 }
 
 /* The one number the page is about, set like a measurement: the figure is

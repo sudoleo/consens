@@ -24,9 +24,9 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         page.set_viewport_size({"width": width, "height": 900})
         expect(page.locator("#threadAskText")).to_contain_text("heat pump", timeout=30000)
         # The reviewers follow from the first step: their marks stand beside
-        # the clock while the agent works.
+        # the clock while the agent works (Daily's two since 2026-11-01).
         page.wait_for_function("""() => document.querySelectorAll(
-            '#agentAnswerActivity .agent-inline-models .agent-inline-model').length === 3""", timeout=15000)
+            '#agentAnswerActivity .agent-inline-models .agent-inline-model').length === 2""", timeout=15000)
         # The agent asks them once; then it writes, and they review exactly
         # that text: the row under it waits with Notes, the head says so.
         page.wait_for_function("""() => {
@@ -46,7 +46,7 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
             ['is-major', 'is-split', 'is-minor'].find(kind => mark.classList.contains(kind)))""")
         assert kinds == ["is-major", "is-split", "is-minor"], kinds
         links = page.locator(".agent-review .agent-evidence-link")
-        assert links.evaluate_all("links => links.map(link => link.getAttribute('aria-label'))") == ["Notes 3", "Answers 3"]
+        assert links.evaluate_all("links => links.map(link => link.getAttribute('aria-label'))") == ["Notes 3", "Answers 2"]
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Thought for")
         # No score and no judge any more.
         expect(page.locator(".agent-agreement")).to_have_count(0)
@@ -60,7 +60,7 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         expect(page.locator("#answerReaderInspector")).to_contain_text("1 wrong")
         page.keyboard.press("Escape")
         expect(page.locator("#modelAnswerReader")).not_to_be_visible()
-        # Answers open what the three AIs answered when the agent asked.
+        # Answers open what the two AIs answered when the agent asked.
         links.nth(1).click()
         expect(page.locator("#modelAnswerReader")).to_be_visible()
         expect(page.locator("#modelAnswerReader")).to_contain_text("heat-loss calculation")

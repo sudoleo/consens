@@ -175,8 +175,8 @@ const DEMO_DATA = demoInPageLanguage({
   </ul>
   <h4>Decide for yourself</h4>
   <ul>
-    <li>The answers I asked for split on the target flow temperature: keep most radiators and run at 55 °C, or replace more of them to run at 45 °C or below.</li>
-    <li>They also disagree on what that costs you: estimates for the efficiency gap between 55 °C and 45 °C range from a few percent to about a quarter.</li>
+    <li>The answers I asked for split on the boiler test: one trusts a cold week at 50 °C to show which radiators can stay, the other says a boiler test alone tells you little about a heat pump at minus ten.</li>
+    <li>How far below 55 °C to go is your call: both answers plan for 45 °C, and that can mean larger radiators in the rooms you heat most.</li>
   </ul>
   <p>Both come down to the same trade: what you spend once on radiators against what you spend every winter on electricity.</p>
 </div>`,
@@ -461,7 +461,7 @@ const DEMO_AGENT_STEPS = {
 const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 42 };
 const DEMO_AGENT_NOTES = demoInPageLanguage({
   plan: "Whether this works depends on the heat loss of each room, not on the year the house was built. Installers genuinely disagree here, so I will ask the other AIs for independent answers before I answer.",
-  compared: "They agree it can work. They split on the flow temperature and on what it costs, so the answer has to say so instead of picking a side."
+  compared: "They agree it can work. They split on whether a cold week with the boiler at 50 °C shows which radiators can stay, so the answer has to say so instead of picking a side."
 });
 // A reviewer's round without a note, in the words of agent_audit.review_text.
 // The panel compares it as a value (agent-delegation.js NO_OBJECTION), so it

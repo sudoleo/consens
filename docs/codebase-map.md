@@ -335,9 +335,11 @@ voll neu, damit Kontolöschungen herausfallen; gehalten werden nur Zeit, Quelle,
 Teilnehmer, Pick — kein Owner). Server rendert die erste Ansicht (GET-Formular
 ohne JS), `model-pulse.js` holt Filterwechsel über `GET /api/model-pulse` und
 schreibt sie in die URL; Lesefehler → 503 + Retry-After statt Nullständen.
-Die Landing zeigt im Benchmark-Abschnitt (seit 03.10.2026 vor `#watch`) einen
-Live-Streifen aus derselben Ansicht (`landing_pulse_preview`: Top 5, versteckt
-unter 3 gerankten Familien); die frühere Pulse-Statuszeile im Hero ist entfallen.
+Seit 2026-11-01 ist `/model-pulse` ein Archiv („collected until 31 October
+2026“, kein Live-Punkt), weil seit dem einen Modus niemand mehr Votes schreibt;
+Routen und Daten sind unverändert, die 7/30/90-Tage-Filter laufen damit bald
+leer. Die Landing zeigt keinen Live-Streifen mehr (`landing_pulse_preview`
+entfernt, `/` liest den Ledger nicht mehr).
 `/api/model-leaderboard` (absolute Picks, `period=all|since-2026-08-31`) bleibt
 als Legacy-API bestehen (Lifetime-Read
 ohne SDK-Retries, mit 5-s-Timeout). Öffentliche Legacy-Citations werden in
@@ -600,8 +602,10 @@ Event-Namen stehen in [`docs/analytics.md`](analytics.md). Die vier Informations
 Chat-/Bookmark-Speicherung, zusätzliche KI-/Suchaufrufe und tatsächliche Retention;
 Betreiberangaben werden als direkt lesbares HTML ausgegeben. Offene rechtliche
 Betriebsfragen und Quellen: `docs/legal-review-2026-09-05.md`. Die primäre
-Navigation beschränkt sich auf Product, Watches, Topics, Questions, Benchmark
-und die App-CTA; Model guide und About liegen im Footer. Seit 2026-10-02
+Navigation beschränkt sich auf Product, Watches, Topics, Questions und die
+App-CTA (Benchmark seit 2026-11-01 nur noch im Footer,
+`tests/test_public_design_system.py` zählt vier Links); Model guide, About,
+Benchmark und „Consensus engine“ (vorher „How consensus works“) liegen im Footer. Seit 2026-10-02
 erzählt die Landingpage Agent als Standard. Seit dem einen Modus des Agenten
 (Zweig one-mode, live mit seinem Deploy) lautet der Hero „One AI does the work.
 Several check it.“ / „Eine KI arbeitet, mehrere prüfen.“; Meta-Titel („The AI
@@ -610,18 +614,23 @@ Agent Other AI Models Check“), Beschreibungen und die Markenkarte
 Vorher (2026-10-02 bis zum einen Modus) „Six models answer …“ bzw. „Several
 models answer.“ mit Score und Judge, was der Agent nicht mehr tut.
 Composer-Mockups wie in /app: (+) ohne Fläche, KEIN Moduschip
-(der Modus steckt im (+)), rechts „3 AIs cross-check“ neben den drei Marken von
-Daily, ohne Pfeil wie in /app; eine Fläche, eine Reihe:
-(+) · die drei Marken vor den Prüfer-Worten · Senden
+(der Modus steckt im (+)), rechts „2 AIs cross-check“ neben den zwei Marken von
+Daily (Claude, DeepSeek seit 2026-11-01), ohne Pfeil wie in /app; eine Fläche,
+eine Reihe: (+) · die Marken vor den Prüfer-Worten · Senden
 (`partials/composer_marks_mockup.html`; seit 2026-10-31 ohne Reasoning: die
 Mockups zeigen keinen Chatmodell-Chip, neben dem in /app die Stufe steht).
-Das Wärmepumpen-Beispiel ist ein Lauf mit drei Prüfern (Szene 01 zeigt keine
-sechs mehr). Szene 02 (`#agent-mode`, `.lp-agent`) baut einen Turn des einen
+Das Wärmepumpen-Beispiel ist seit 2026-11-01 ein Lauf mit Dailys zwei Prüfern
+Claude und DeepSeek (wie die Demo in `static/demo.js`; Claude trägt „wrong“ und
+„incomplete“, DeepSeek „doubtful“; die zwei Antworten sind beim Kesseltest
+uneins). Szene 02 (`#agent-mode`, `.lp-agent`) sagt, was der Agent kann (Web,
+Quellen, Dateien, Browser am eigenen Arbeitsplatz), dass die Prüfer ihn nie
+steuern und vor einem riskanten Schritt pausieren können, und baut einen Turn des einen
 Modus so nach, wie `agent-activity.js`/`agent-review.js` ihn zeichnen: die Marken
-der Prüfer neben der Uhr, der Agent fragt die drei KIs einmal, Uhr „Reviewing ·
+der Prüfer neben der Uhr, der Agent fragt die zwei KIs einmal, Uhr „Reviewing ·
 …s“, Statuszeile „Reviewing the answer…“, gestreamte Antwort, danach drei
-markierte Sätze (wrong / doubtful / incomplete) und „Notes 3 · Answers 3“, kein
+markierte Sätze (wrong / doubtful / incomplete) und „Notes 3 · Answers 2“, kein
 Score. Treiber `landing-scenes.js` (`buildRunScene`, `REVIEW_AT` 0.79,
+`MODEL_FINISH` je Anzahl der `[data-model]`-Marken, 2 und 3, sonst gleichmäßig,
 `data-reviewer`-Marken, `.lp-agent-answer.is-reviewing`, drei `data-mark`-Arten;
 Standbild bei reduced motion = fertiger Turn über `render.still`). Szene 03
 („Decide“) in vier Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
@@ -629,8 +638,10 @@ Standbild bei reduced motion = fertiger Turn über `render.still`). Szene 03
 heißen (`.lp-review`), was die anderen KIs antworteten (`.lp-answers`); statt der
 drei Score-Beispiele die Pause-Karte eines Prüfers vor einem riskanten Schritt
 (`.lp-pause`). `landing-insights.js` baut nur noch die Hover-Vorschau der
-markierten Stelle. Offen (Max' Entscheidung): Benchmark-Abschnitt und Model-Pulse-
-Block beschreiben die Consensus-Engine der Pipeline. Seit 2026-10-20 (Apple-Audit I1) faltet sich der Log
+markierten Stelle. Benchmark-Abschnitt und Model-Pulse-Block sind seit
+2026-11-01 von der Startseite entfernt (`benchmark.css` lädt dort nicht mehr);
+`/consensus-engine` und `/benchmark` beschreiben die Engine hinter Watches,
+Topics und API, nicht die Antworten der App. Seit 2026-10-20 (Apple-Audit I1) faltet sich der Log
 zum Abschluss in die Uhrzeile (`.lp-agent-log.is-folded`, Höhenübergang über
 `.lp-agent-log-items`, statt `hidden`), der Platz für den höchsten Zustand ist am
 Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
@@ -780,11 +791,10 @@ watch“ – nur, wenn es eine laufende, kuratierte öffentliche Watch gibt
 nur per Link öffentliche Seite steht nie auf der Startseite, auch nicht als
 Ersatz; 15-min-Cache, Moderation leert ihn, eine Minute Pause nach einem
 Lesefehler, `stream(retry=None, timeout=3)`, damit die Landing nie auf
-Firestore wartet; `pages.landing_live_watch`). Direkt davor steht seit
-03.10.2026 der Benchmark-Abschnitt mit dem Live-Streifen aus dem Model Pulse
-(„No model wins every time.“), der auf `/model-pulse` verlinkt. Die Seite
-zeigt Best-answer-Raten pro Lauf, in dem eine Familie war (siehe oben), und
-trennt dieses
+Firestore wartet; `pages.landing_live_watch`). Der Benchmark-Abschnitt mit
+dem Live-Streifen aus dem Model Pulse stand dort vom 03.10. bis 2026-11-01.
+`/model-pulse` zeigt (als Archiv) Best-answer-Raten pro Lauf, in dem eine
+Familie war (siehe oben), und trennt dieses
 Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Seit
 2026-10-25 (a11y-Audit P1) sind die Balkendiagramme auf `/benchmark` und das
@@ -8498,7 +8508,11 @@ keinen Abgleich.
   this answer“ nennt die Prüfer, die Zitierzeile „Reviewed by: …“
   (`build_citation`), die Meta-Beschreibung „Reviewed by N AI models · M
   passages noted“. Der Teilen-Dialog sagt seitdem „… the answer, what the
-  checking AIs noted and its sources“. Tests: `tests/test_agent_share.py`,
+  checking AIs noted and its sources“. Seit 2026-11-01 nennt eine Agent-Share
+  ihre Prüfer immer (auch neben verglichenen Modellen) und verlinkt „How
+  consens.io works →“ auf `/#product`; Consensus-Shares behalten
+  `/consensus-engine`. `share_unavailable` heißt „Shared answer“ („This shared
+  answer …“). Tests: `tests/test_agent_share.py`,
   `tests/e2e/test_share_review_notes.py`.
 - `POST /api/share` (`share.py` → `share_snapshots.create_share_from_pending`)
   macht daraus einen unveränderlichen Share-Snapshot (`shares`-Collection) mit
