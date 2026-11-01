@@ -5,10 +5,7 @@
 // saved chats, three questions predicted from them take
 // the curated ones' place: POST /api/my/starter-questions reads the newest
 // chats and suggests what this person may ask next. The prediction is not
-// announced; the reader recognises their own topics. The same answer
-// brings the line above the field (.hero-greeting, since 2026-11-01): a
-// joke about those topics in place of "What do you want to be sure about?",
-// which comes back whenever the prediction goes.
+// announced; the reader recognises their own topics.
 //
 // This browser keeps the last prediction per account, so a reload paints it
 // from the first frame (app-bootstrap.js calls seed()), and asks again only
@@ -24,9 +21,6 @@
   const App = window.App = window.App || {};
 
   const CACHE_KEY = "consensio.starterQuestions.v1";
-  // 2: with the line above the field (2026-11-01). An older record still
-  // paints its questions, and asks once more for the line.
-  const RECORD_VERSION = 2;
   const ENDPOINT = "/api/my/starter-questions";
   // Same as the server (starter_questions.MIN_HISTORY).
   const MIN_CHATS = 3;
@@ -40,7 +34,6 @@
   const REQUEST_TIMEOUT_MS = 20000;
   const MAX_LABEL = 48;
   const MAX_QUESTION = 400;
-  const MAX_GREETING = 120;
 
   function row() { return document.getElementById("composerStarters"); }
 
@@ -51,19 +44,13 @@
       && item.label.length <= MAX_LABEL && item.question.length <= MAX_QUESTION).slice(0, 3);
   }
 
-  function greetingOf(value) {
-    const text = typeof value === "string" ? value.trim() : "";
-    return text.length <= MAX_GREETING ? text : "";
-  }
-
   function read() {
     try {
       const record = JSON.parse(window.localStorage.getItem(CACHE_KEY) || "null");
       if (!record || typeof record.uid !== "string" || typeof record.basis !== "string"
         || !Number.isFinite(record.at)) return null;
       const questions = questionsOf(record.questions);
-      const greeting = greetingOf(record.greeting);
-      return questions.length || greeting ? Object.assign(record, { questions, greeting }) : null;
+      return questions.length ? Object.assign(record, { questions }) : null;
     } catch (_) { return null; }
   }
 
@@ -120,7 +107,7 @@
   // Never swap the buttons under the pointer or the keyboard: the new set
   // waits until the reader leaves the row.
   let waiting = null;
-  function showQuestions(questions) {
+  function show(questions) {
     const target = row();
     if (!target) return;
     const busy = target.matches?.(":hover") || target.contains(document.activeElement);
@@ -134,36 +121,10 @@
       target.removeEventListener("focusout", settle);
       const next = waiting;
       waiting = null;
-      if (next) showQuestions(next.questions);
+      if (next) show(next.questions);
     };
     target.addEventListener("pointerleave", settle);
     target.addEventListener("focusout", settle);
-  }
-
-  // ---- The line above the field ----------------------------------------------
-  // The template's sentence, already in the reader's language, is kept to
-  // come back. A predicted line is the account's own words in their own
-  // language: never through the dictionary (data-i18n-skip, docs/i18n.md).
-  let sentence = null;
-  function paintGreeting(text, { animate = false } = {}) {
-    const line = document.querySelector(".hero-greeting");
-    if (!line) return;
-    if (sentence === null) sentence = line.textContent;
-    const own = greetingOf(text);
-    const next = own || sentence;
-    if (line.textContent === next) return;
-    line.toggleAttribute("data-i18n-skip", Boolean(own));
-    if (own) line.dataset.greeting = "predicted"; else delete line.dataset.greeting;
-    line.textContent = next;
-    // Only a line on screen fades in; a hidden one (a chat is open) just changes.
-    const quiet = !animate || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
-      || window.getComputedStyle(line).visibility !== "visible";
-    if (!quiet && line.animate) line.animate([{ opacity: 0 }, { opacity: 1 }], { duration: window.App?.motion?.ms?.("state") ?? 200, easing: window.App?.motion?.ease?.("out") ?? "ease-out" });
-  }
-
-  function show(prediction) {
-    paintGreeting(prediction?.greeting, { animate: true });
-    showQuestions(prediction?.questions || null);
   }
 
   // First paint (app-bootstrap.js): this account's stored prediction.
@@ -173,10 +134,7 @@
     const authState = window.__consensioAuthState;
     const uid = authState?.known ? authState.uid : tokenUid(token);
     const record = read();
-    if (uid && record?.uid === uid && fresh(record)) {
-      render(target, record.questions);
-      paintGreeting(record.greeting);
-    }
+    if (uid && record?.uid === uid && fresh(record)) render(target, record.questions);
   }
 
   // ---- Asking ----------------------------------------------------------------
@@ -218,8 +176,8 @@
       return;
     }
     const basis = chats.slice(0, BASIS_SIZE).map(item => item.id).join(",");
-    if (own && fresh(own)) show(own);
-    if (own && own.v === RECORD_VERSION && own.basis === basis && fresh(own)) return;
+    if (own && fresh(own)) show(own.questions);
+    if (own && own.basis === basis && fresh(own)) return;
     if (asking && asking.uid === user.uid && asking.basis === basis) return;
     const mine = asking = { uid: user.uid, basis };
     const controller = typeof AbortController === "function" ? new AbortController() : null;
@@ -234,12 +192,11 @@
       });
       const data = await response.json().catch(() => null);
       if (window.auth?.currentUser?.uid !== mine.uid) return;
-      const prediction = response.ok ? { questions: questionsOf(data?.questions), greeting: greetingOf(data?.greeting) }
-        : { questions: [], greeting: "" };
+      const questions = response.ok ? questionsOf(data?.questions) : [];
       // Nothing new (a limit, a failed call): the last prediction stays.
-      if (!prediction.questions.length && !prediction.greeting) return;
-      write({ v: RECORD_VERSION, uid: mine.uid, basis, at: Date.now(), ...prediction });
-      show(prediction);
+      if (!questions.length) return;
+      write({ uid: mine.uid, basis, at: Date.now(), questions });
+      show(questions);
     } catch (_) {
       /* offline or slow: the row keeps what it shows */
     } finally {
