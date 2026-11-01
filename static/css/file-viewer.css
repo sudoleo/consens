@@ -178,6 +178,8 @@ body.file-viewer-resizing .container { transition: none !important; }
 /* ---- Thumbnails and pages ---- */
 .file-viewer-main { position: relative; display: flex; flex: 1; min-height: 0; }
 .file-viewer-rail { display: flex; flex: none; flex-direction: column; width: 184px; min-height: 0; }
+/* A narrow preview keeps a narrow rail (file-viewer.js RAIL_FULL, THUMB_NARROW). */
+.file-viewer.has-narrow-rail .file-viewer-rail { width: 144px; }
 .file-viewer-rail-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 8px 6px 16px; color: var(--ink-3); font-size: var(--font-size-xs); }
 .file-viewer-rail-head .file-viewer-tool { min-width: 32px; height: 32px; padding: 0; }
 .file-viewer-thumbs {

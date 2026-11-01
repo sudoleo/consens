@@ -147,15 +147,18 @@ def _word_text(meta):
 @limiter.limit("60/minute")
 def download_file(request: Request, chat_id: str, file_id: str, preview: bool = False):
     uid, files = service(request)
+    # The metadata once (a picture under every answer asks here): the
+    # preview's branch and the bytes both come from it.
+    known = None
     if preview:
-        meta = invoke(lambda: files.get(uid, chat_id, file_id), uid)
-        if isinstance(meta.get("preview"), dict):
-            _, pdf = invoke(lambda: files.download_preview(uid, chat_id, file_id), uid)
+        known = invoke(lambda: files.get(uid, chat_id, file_id), uid)
+        if isinstance(known.get("preview"), dict):
+            _, pdf = invoke(lambda: files.download_preview(uid, chat_id, file_id, data=known), uid)
             return Response(pdf, media_type="application/pdf", headers=INLINE)
-        text = _word_text(meta)
+        text = _word_text(known)
         if text is not None:
             return Response(text.encode("utf-8"), media_type="text/plain; charset=utf-8", headers=INLINE)
-    meta, raw = invoke(lambda: files.download(uid, chat_id, file_id), uid)
+    meta, raw = invoke(lambda: files.download(uid, chat_id, file_id, data=known), uid)
     smaller = _preview(meta["mime"], raw) if preview else None
     if smaller is not None:
         return Response(smaller, media_type="image/webp", headers=INLINE)

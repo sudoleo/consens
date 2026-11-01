@@ -521,6 +521,8 @@ function keepTextSelection(root, change) {
 }
 
 window.injectMarkdown = injectMarkdown;
+// The same sanitized nodes for a Markdown file in the preview (file-viewer.js).
+window.renderMarkdownFragment = renderMarkdownFragment;
 window.isPlainMarkdown = isPlainMarkdown;
 window.morphMarkdown = morphMarkdown;
 window.keepTextSelection = keepTextSelection;

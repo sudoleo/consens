@@ -328,17 +328,19 @@ class AgentFiles:
             raise FileUnavailable("This file expired. Upload it again to use its contents.")
         return data
 
-    def download(self, uid, chat_id, file_id):
-        data = self.get(uid, chat_id, file_id)
+    def download(self, uid, chat_id, file_id, data=None):
+        """``(metadata, bytes)``; ``data``: the metadata the caller just read
+        with get, so a preview reads them once."""
+        data = data or self.get(uid, chat_id, file_id)
         raw = self.objects.get(data["object_key"])
         if hashlib.sha256(raw).hexdigest() != data["sha256"]:
             raise FileUnavailable("File integrity check failed.")
         self.get(uid, chat_id, file_id)  # Recheck after I/O, including concurrent deletion.
         return data, raw
 
-    def download_preview(self, uid, chat_id, file_id):
+    def download_preview(self, uid, chat_id, file_id, data=None):
         """``(metadata, bytes)`` of the file's preview; FileUnavailable when it has none."""
-        data = self.get(uid, chat_id, file_id)
+        data = data or self.get(uid, chat_id, file_id)
         preview = data.get("preview")
         if not isinstance(preview, dict):
             raise FileUnavailable("This file has no preview.")

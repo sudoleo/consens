@@ -33,10 +33,14 @@
   const App = window.App = window.App || {};
   const PDFJS_DIR = '/static/vendor/pdfjs/6.4.299/';
   const DOCK_QUERY = '(min-width: 1100px)';
-  const RAIL_QUERY = '(min-width: 700px)';
+  // The rail of thumbnails needs a preview this wide, and narrows below RAIL_FULL.
+  const RAIL_MIN = 520;
+  const RAIL_FULL = 720;
   const MIN_WIDTH = 420;
-  // The chat keeps this much beside the preview: room to read and write.
-  const MIN_CHAT = 480;
+  // The chat keeps this much beside the preview: room to read and write, and
+  // the composer on one line (field, reviewers in short, model, Send). Where
+  // the window leaves less beside MIN_WIDTH, the preview covers the chat.
+  const MIN_CHAT = 600;
   const KEY_STEP = 40;
   const WIDTH_KEY = 'consens.fileViewerWidth';
   const RAIL_KEY = 'consens.fileViewerRail';
@@ -50,6 +54,7 @@
   const FIT_PORTRAIT_MAX = 880;
   const MAX_CANVAS_PIXELS = 16 * 1024 * 1024;
   const THUMB_WIDTH = 132;
+  const THUMB_NARROW = 96;
   const PAD = 24;
   const DOCUMENTS_KEPT = 4;
   const SVG = 'http://www.w3.org/2000/svg';
@@ -174,9 +179,11 @@
   function units(family) {
     return UNITS[family === 'presentation' || family === 'spreadsheet' ? family : 'page'];
   }
+  // In the page's language: the number goes in after the words are translated.
   function countText(family, count) {
     const [one, many] = units(family);
-    return count === 1 ? one : many.replace('{n}', String(count));
+    const text = count === 1 ? one : many;
+    return App.t ? App.t(text, { n: count }) : text.replace('{n}', String(count));
   }
   function pageName(family, number) {
     return units(family)[2].replace('{n}', String(number));
@@ -219,7 +226,8 @@
         worker = worker || new lib.PDFWorker({ name: 'file-preview' });
         const data = new Uint8Array(await bytesOf(loaded.blob));
         return lib.getDocument({ data, worker, isEvalSupported: false, enableXfa: false,
-          standardFontDataUrl: `${PDFJS_DIR}standard_fonts/`, wasmUrl: `${PDFJS_DIR}wasm/` }).promise;
+          standardFontDataUrl: `${PDFJS_DIR}standard_fonts/`, wasmUrl: `${PDFJS_DIR}wasm/`,
+          cMapUrl: `${PDFJS_DIR}cmaps/`, cMapPacked: true }).promise;
       });
       entry.catch(() => { if (documents.get(item.key) === entry) documents.delete(item.key); });
       documents.set(item.key, entry);
@@ -241,8 +249,28 @@
       reader.readAsArrayBuffer(blob);
     });
   }
-  function textOf(blob) {
-    return bytesOf(blob).then(buffer => new TextDecoder('utf-8', { fatal: true }).decode(buffer));
+  // Text as its file wrote it: a byte order mark says UTF-8 or UTF-16;
+  // without one UTF-8, and what is no UTF-8 reads as Windows-1252 (a CSV
+  // from a German Excel). A file with NUL characters is no text (notText).
+  async function textOf(blob) {
+    const bytes = new Uint8Array(await bytesOf(blob));
+    let text;
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
+    else if (bytes[0] === 0xfe && bytes[1] === 0xff) text = new TextDecoder('utf-16be').decode(bytes.subarray(2));
+    else {
+      const body = bytes.subarray(bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0);
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(body);
+      } catch (error) {
+        text = new TextDecoder('windows-1252').decode(body);
+      }
+    }
+    if (text.includes('\u0000')) {
+      const error = new Error('Not text');
+      error.notText = true;
+      throw error;
+    }
+    return text;
   }
 
   // ---- Drawing a page -------------------------------------------------------
@@ -268,6 +296,11 @@
 
   // ---- Cards: the first page as a thumbnail ---------------------------------
   const thumbs = new Map();
+  // The mark of a card (agent-workspace.css .agent-file-thumb).
+  const THUMB_BOX = { width: 64, height: 48 };
+  // The marks waiting to come near the screen; one rebuilt with its answer
+  // leaves the watcher (an IntersectionObserver keeps what it observes).
+  const watched = new Set();
   function copyCanvas(source) {
     const canvas = node('canvas', source.className);
     canvas.width = source.width;
@@ -307,8 +340,11 @@
         const page = await doc.getPage(1);
         const base = page.getViewport({ scale: 1 });
         const landscape = base.width >= base.height;
+        // A card not laid out yet (its answer still hidden) has no size: the
+        // thumbnail is cached, so it takes the size of a card's mark.
         const box = host.getBoundingClientRect();
-        const width = Math.max(24, Math.round(Math.min(box.width, box.height * base.width / base.height)));
+        const boxWidth = box.width || THUMB_BOX.width, boxHeight = box.height || THUMB_BOX.height;
+        const width = Math.max(24, Math.round(Math.min(boxWidth, boxHeight * base.width / base.height)));
         const canvas = await drawPage(page, width);
         canvas.style.width = `${width}px`;
         canvas.style.height = `${Math.round(width * base.height / base.width)}px`;
@@ -324,11 +360,20 @@
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           thumbWatcher.unobserve(entry.target);
+          watched.delete(entry.target);
           entry.target._thumbStart?.();
         }
       }, { rootMargin: '400px 0px' });
     }
+    // A card is built before it is placed: only a mark that has been
+    // detached for a while is gone for good.
+    const now = Date.now();
+    for (const old of watched) {
+      if (!old.isConnected && now - old._watchedAt > 2000) { thumbWatcher.unobserve(old); watched.delete(old); }
+    }
     host._thumbStart = start;
+    host._watchedAt = now;
+    watched.add(host);
     thumbWatcher.observe(host);
   }
 
@@ -491,7 +536,7 @@
       const current = view;
       if (!current?.item.remove) return;
       const name = current.item.title || current.item.name;
-      const yes = App.confirm ? await App.confirm({ title: App.t?.(`Remove ${name}?`) || `Remove ${name}?`,
+      const yes = App.confirm ? await App.confirm({ title: App.t ? App.t('Remove {name}?', { name }) : `Remove ${name}?`,
         body: 'The agent can no longer use it in this chat.', confirmLabel: 'Remove', danger: true }) : true;
       if (!yes || view !== current) return;
       try {
@@ -506,13 +551,15 @@
 
   // ---- Lane beside the chat ---------------------------------------------------
   let ui = null;
-  function docked() { return matches(DOCK_QUERY); }
+  function docked() {
+    return matches(DOCK_QUERY) && viewportWidth() - sidebarOffset() - MIN_WIDTH >= MIN_CHAT;
+  }
   function sidebarOffset() {
     return Number.parseFloat(getComputedStyle(document.body).getPropertyValue('--app-sidebar-offset')) || 0;
   }
   function bounds() {
     const room = viewportWidth() - sidebarOffset() - MIN_CHAT;
-    return { min: Math.min(MIN_WIDTH, Math.max(320, room)), max: Math.max(Math.min(MIN_WIDTH, room), room) };
+    return { min: MIN_WIDTH, max: Math.max(MIN_WIDTH, room) };
   }
   // A little more than half of what is left beside the app's sidebar: a page
   // is worth more room than the chat while it is open, and the composer
@@ -530,6 +577,8 @@
     document.body.style.setProperty('--file-viewer-width', `${isDocked ? view.width : 0}px`);
     ui.panel.classList.toggle('is-expanded', Boolean(view.expanded));
     ui.panel.toggleAttribute('aria-modal', !isDocked);
+    setCovering(!isDocked);
+    if (isDocked && document.body.classList.contains('answer-reader-docked')) App.answerReader?.close?.({ focus: false });
     ui.resizer.hidden = !isDocked;
     ui.expand.hidden = !docked();
     ui.resizer.setAttribute('aria-valuemin', String(Math.round(min)));
@@ -537,6 +586,21 @@
     ui.resizer.setAttribute('aria-valuenow', String(view.width));
     syncRail();
     relayout();
+  }
+  // Over everything (aria-modal), what lies beneath is inert: Tab and a
+  // screen reader stay in the preview. Dialogs keep their own layer.
+  let inerted = [];
+  function setCovering(on) {
+    if (!on) {
+      for (const element of inerted) element.inert = false;
+      inerted = [];
+      return;
+    }
+    for (const element of document.body.children) {
+      if (element === ui.panel || element.inert || ['DIALOG', 'SCRIPT', 'TEMPLATE'].includes(element.tagName)) continue;
+      element.inert = true;
+      inerted.push(element);
+    }
   }
   function startDrag(event) {
     if (!view || event.button !== 0) return;
@@ -551,7 +615,7 @@
       resizer.removeEventListener('pointerup', end);
       resizer.removeEventListener('pointercancel', end);
       document.body.classList.remove('file-viewer-resizing');
-      if (view) store(WIDTH_KEY, String(view.width));
+      if (view) { store(WIDTH_KEY, String(view.width)); relayout(); }
     };
     resizer.addEventListener('pointermove', move);
     resizer.addEventListener('pointerup', end);
@@ -576,12 +640,19 @@
     ui.expand.setAttribute('aria-pressed', String(view.expanded));
     layout();
   }
+  function panelWidth() {
+    return document.body.classList.contains('file-viewer-docked') ? view.width : viewportWidth();
+  }
+  function thumbWidthNow() {
+    return view && panelWidth() < RAIL_FULL ? THUMB_NARROW : THUMB_WIDTH;
+  }
   function railWanted() {
     return stored(RAIL_KEY) !== 'hidden';
   }
   function syncRail() {
     if (!view) return;
-    const has = view.kind === 'pdf' && view.count > 1 && matches(RAIL_QUERY);
+    const has = view.kind === 'pdf' && view.count > 1 && panelWidth() >= RAIL_MIN;
+    ui.panel.classList.toggle('has-narrow-rail', panelWidth() < RAIL_FULL);
     const shown = has && railWanted();
     ui.rail.hidden = !shown;
     ui.showRail.hidden = !has || shown;
@@ -604,7 +675,7 @@
     view = { item, described, trigger, kind: '', count: 0, active: 1, zoom: 'fit', entries: [], width: view?.width || 0,
       expanded: wasOpen ? Boolean(ui.panel.classList.contains('is-expanded')) : false, token: Symbol('view') };
     const shown = item.title || item.name;
-    ui.panel.setAttribute('aria-label', App.t?.(`Preview of ${shown}`) || `Preview of ${shown}`);
+    ui.panel.setAttribute('aria-label', App.t ? App.t('Preview of {shown}', { shown }) : `Preview of ${shown}`);
     ui.name.textContent = item.title || item.name;
     ui.name.title = item.name;
     ui.glyph.replaceChildren(icon(glyphFor(described)));
@@ -643,7 +714,13 @@
     stopPresenting();
     view.observer?.disconnect();
     view.thumbObserver?.disconnect();
-    for (const entry of view.entries) { entry.task?.cancel(); entry.thumbTask?.cancel(); }
+    for (const entry of view.entries) {
+      entry.task?.cancel();
+      entry.thumbTask?.cancel();
+      freeCanvases(entry.el);
+      freeCanvases(entry.thumbFrame);
+    }
+    clearTimeout(drawTimer);
     view.token = null;
   }
   function close({ focus = true } = {}) {
@@ -652,6 +729,7 @@
     teardown();
     view = null;
     window.removeEventListener('resize', onWindowResize);
+    setCovering(false);
     ui.panel.hidden = true;
     ui.panel.classList.remove('is-entering', 'is-expanded');
     ui.pages.replaceChildren();
@@ -682,7 +760,8 @@
   // The activity panel or the workspace opened in the preview's lane would
   // open beneath it, unseen: the preview gives them the place.
   if (typeof MutationObserver === 'function') {
-    const lanesNow = () => ['agent-sidebar-open', 'workspace-view-docked'].filter(name => document.body.classList.contains(name));
+    const lanesNow = () => ['agent-sidebar-open', 'workspace-view-docked', 'answer-reader-docked']
+      .filter(name => document.body.classList.contains(name));
     let lanes = lanesNow();
     new MutationObserver(() => {
       if (!document?.body) return;
@@ -691,6 +770,13 @@
       lanes = now;
       if (opened && view && document.body.classList.contains('file-viewer-docked')) close({ focus: false });
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    // The app's sidebar opening or folding changes the room beside the
+    // preview (--app-sidebar-offset), not the window.
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      new MutationObserver(() => { if (view) onWindowResize(); })
+        .observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+    }
   }
 
   function loadingSheet(described) {
@@ -751,7 +837,7 @@
       showText(current, text, described.view);
     } catch (failure) {
       if (current !== view) return;
-      const unreadable = failure?.name === 'TypeError' && /decod|encod/i.test(String(failure.message));
+      const unreadable = failure?.notText === true;
       ui.pages.replaceChildren(unreadable
         ? notice('There is no preview of this file. Download it to open it.')
         : notice(App.userError?.(failure, { fallback: 'The preview could not be loaded.' }) || 'The preview could not be loaded.',
@@ -824,19 +910,28 @@
       entry.css = cssWidth(entry);
       entry.el.style.width = `${entry.css}px`;
       entry.el.style.height = `${Math.round(entry.css * entry.height / entry.width)}px`;
-      const thumbWidth = THUMB_WIDTH;
+      const thumbWidth = thumbWidthNow();
       entry.thumbFrame.style.width = `${thumbWidth}px`;
       entry.thumbFrame.style.height = `${Math.round(thumbWidth * Math.min(1.42, entry.height / entry.width))}px`;
     }
   }
   // Resize, zoom, a rail shown or hidden: the pages take their new size and
   // the ones on the screen are drawn again, sharp; the page in view stays.
+  // Drawing waits until the size rests (a drag, a window being resized): in
+  // between the drawn pages only scale.
+  let drawTimer = 0;
   function relayout() {
     if (!view || view.kind !== 'pdf') return;
     const keep = view.active;
     sizePages();
-    for (const entry of view.entries) if (entry.near) drawEntry(view, entry);
     goTo(keep, { behavior: 'auto', focus: false, quiet: true });
+    clearTimeout(drawTimer);
+    if (document.body.classList.contains('file-viewer-resizing')) return;
+    const current = view;
+    drawTimer = setTimeout(() => {
+      if (current !== view) return;
+      for (const entry of current.entries) if (entry.near) drawEntry(current, entry);
+    }, 120);
   }
   function watchPages(current) {
     current.observer = new IntersectionObserver(items => {
@@ -846,6 +941,7 @@
         if (!entry) continue;
         entry.near = item.isIntersecting;
         if (entry.near) drawEntry(current, entry);
+        else releaseEntry(entry);
       }
     }, { root: ui.stage, rootMargin: '100% 0px' });
     current.thumbObserver = new IntersectionObserver(items => {
@@ -910,12 +1006,29 @@
       if (entry.drawing === width) entry.drawing = 0;
     }
   }
+  // Out of reach of the screen a page gives its pixels back (a 50-page
+  // document at full width kept almost a gigabyte, and an iPhone drew later
+  // pages blank): an empty canvas first, which frees its memory at once.
+  function freeCanvases(element) {
+    for (const canvas of element.querySelectorAll('canvas')) { canvas.width = 0; canvas.height = 0; }
+  }
+  function releaseEntry(entry) {
+    entry.task?.cancel();
+    entry.drawing = 0;
+    if (entry.drawn || entry.el.classList.contains('is-drawn')) {
+      freeCanvases(entry.el);
+      entry.el.replaceChildren();
+      entry.el.classList.remove('is-drawn');
+      entry.drawn = 0;
+    }
+    entry.page?.cleanup?.();
+  }
   async function drawThumb(current, entry) {
     entry.thumbDrawn = true;
     try {
       const page = await pageOf(current, entry);
       if (current !== view) return;
-      const canvas = await drawPage(page, THUMB_WIDTH, task => { entry.thumbTask = task; });
+      const canvas = await drawPage(page, thumbWidthNow(), task => { entry.thumbTask = task; });
       if (current !== view) return;
       entry.thumbFrame.replaceChildren(canvas);
       entry.thumbFrame.classList.add('is-drawn');
@@ -1024,6 +1137,7 @@
     presenting.step = step;
     presenting.draw = draw;
     stage.addEventListener('keydown', event => {
+      if ((event.key === 'Enter' || event.key === ' ') && event.target.closest?.('button')) return;
       const forward = ['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'];
       const back = ['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'];
       if (forward.includes(event.key)) { event.preventDefault(); step(1); }
@@ -1066,16 +1180,12 @@
     ui.stage.classList.add('is-text');
     syncRail();
     let content;
-    if (how === 'markdown' && window.marked && window.DOMPurify) {
+    if (how === 'markdown' && typeof window.renderMarkdownFragment === 'function') {
+      // The answer's own renderer (markdown-stream.js): its sanitizer, and
+      // nothing of the file loads by itself (a remote picture is a note).
       content = node('article', 'file-viewer-sheet file-viewer-markdown');
-      const html = window.marked.parse(text, { gfm: true, breaks: false });
-      // Nothing of the file reaches out: no pictures, forms or frames.
-      content.innerHTML = window.DOMPurify.sanitize(html, { FORBID_TAGS: ['img', 'picture', 'source', 'video', 'audio',
-        'iframe', 'form', 'input', 'button', 'style', 'link', 'object', 'embed'], FORBID_ATTR: ['style'] });
-      for (const link of content.querySelectorAll('a[href]')) {
-        if (!/^https?:/i.test(link.getAttribute('href'))) link.removeAttribute('href');
-        else { link.target = '_blank'; link.rel = 'noopener noreferrer nofollow'; }
-      }
+      content.append(window.renderMarkdownFragment(text));
+      window.addNewTabToLinks?.(content);
     } else if (how === 'table') {
       content = table(text, /\.tsv$/i.test(current.item.name) ? '\t' : null);
     } else if (how === 'document') {
@@ -1092,6 +1202,7 @@
     const notes = [];
     if (how === 'document') notes.push(node('p', 'file-viewer-sheet-note', 'Text only. Download the file for its layout.'));
     if (content._cut) notes.push(node('p', 'file-viewer-sheet-note', `Showing the first ${MAX_LINES} lines. Download the file for the rest.`));
+    if (content._rowsCut) notes.push(node('p', 'file-viewer-sheet-note', `Showing the first ${MAX_ROWS} rows. Download the file for the rest.`));
     ui.pages.replaceChildren(...notes, content);
     const lines = content._lines ?? (text ? text.split('\n').length : 0);
     const counted = how === 'code' || how === 'text';
@@ -1132,14 +1243,18 @@
       else if (char === '\n' || char === '\r') {
         if (char === '\r' && text[i + 1] === '\n') i++;
         row.push(field); out.push(row); row = []; field = '';
-        if (out.length > MAX_ROWS) break;
+        if (out.length > MAX_ROWS) {
+          out.cut = /\S/.test(text.slice(i + 1));
+          break;
+        }
       } else field += char;
     }
     if (field || row.length) { row.push(field); out.push(row); }
     return out;
   }
   function table(text, separator) {
-    const all = rows(text, separator).filter(row => row.some(cell => cell.trim()));
+    const read = rows(text, separator);
+    const all = read.filter(row => row.some(cell => cell.trim()));
     const wrap = node('div', 'file-viewer-table-wrap');
     wrap.tabIndex = 0;
     const grid = node('table', 'file-viewer-table');
@@ -1161,6 +1276,7 @@
     });
     grid.append(tbody);
     wrap.append(grid);
+    wrap._rowsCut = Boolean(read.cut) || rest.length > MAX_ROWS;
     return wrap;
   }
 

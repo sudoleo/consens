@@ -13,7 +13,8 @@ const files = {
   '@novnc/novnc': ['LICENSE.txt', 'core/rfb.js', 'core/util/b.js', 'vendor/pako/a.js'],
   // The file preview: its module, its worker, its fonts and the decoders' script fallbacks.
   'pdfjs-dist': ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs', 'LICENSE', 'wasm/jbig2_nowasm_fallback.js',
-    'wasm/openjpeg_nowasm_fallback.js', 'standard_fonts/FoxitSans.pfb', 'standard_fonts/LiberationSans-Regular.ttf'],
+    'wasm/openjpeg_nowasm_fallback.js', 'standard_fonts/FoxitSans.pfb', 'standard_fonts/LiberationSans-Regular.ttf',
+    'cmaps/UniJIS-UCS2-H.bcmap'],
 };
 // Where a package lands under static/vendor (a scope's @ stays out of URLs).
 const folder = name => ({ '@novnc/novnc': 'novnc', 'pdfjs-dist': 'pdfjs' }[name] || name);
@@ -34,12 +35,12 @@ describe('Vendoring pinned frontend libraries on disk', () => {
     const root = await fixture();
     await put(root, 'static/vendor/marked/0.9.0/keep.js', 'old');
     const inputs = await vendorFrontend(root, false);
-    expect(inputs).toHaveLength(21);
+    expect(inputs).toHaveLength(22);
     expect(inputs.slice(8, 10)).toEqual(['static/vendor/katex/1.0.0/dist/fonts/A.ttf', 'static/vendor/katex/1.0.0/dist/fonts/Z.woff2']);
     expect(inputs.slice(10, 14)).toEqual(['static/vendor/novnc/1.0.0/LICENSE.txt', 'static/vendor/novnc/1.0.0/core/rfb.js',
       'static/vendor/novnc/1.0.0/core/util/b.js', 'static/vendor/novnc/1.0.0/vendor/pako/a.js']);
-    expect(inputs.slice(-2)).toEqual(['static/vendor/pdfjs/1.0.0/standard_fonts/FoxitSans.pfb',
-      'static/vendor/pdfjs/1.0.0/standard_fonts/LiberationSans-Regular.ttf']);
+    expect(inputs.slice(-3)).toEqual(['static/vendor/pdfjs/1.0.0/standard_fonts/FoxitSans.pfb',
+      'static/vendor/pdfjs/1.0.0/standard_fonts/LiberationSans-Regular.ttf', 'static/vendor/pdfjs/1.0.0/cmaps/UniJIS-UCS2-H.bcmap']);
     for (const [name, paths] of Object.entries(files)) for (const file of paths) {
       expect(await fs.readFile(path.join(root, `static/vendor/${folder(name)}/1.0.0/${file}`))).toEqual(await fs.readFile(path.join(root, `node_modules/${name}/${file}`)));
     }

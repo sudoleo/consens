@@ -769,5 +769,6 @@
   "1 line": "1 Zeile",
   "{lines} lines": "{lines} Zeilen",
   "{selectedLabel} writes the answer, without reviewers.": "{selectedLabel} schreibt die Antwort, ohne Prüfer.",
-  "{linked}: {model} writes the answer, without reviewers": "{linked}: {model} schreibt die Antwort, ohne Prüfer"
+  "{linked}: {model} writes the answer, without reviewers": "{linked}: {model} schreibt die Antwort, ohne Prüfer",
+  "Showing the first {MAX_ROWS} rows. Download the file for the rest.": "Die ersten {MAX_ROWS} Zeilen. Den Rest zeigt die heruntergeladene Datei."
 }

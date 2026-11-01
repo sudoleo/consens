@@ -155,6 +155,12 @@
   .composer-reviewers-label[data-short] { font-size: 0; }
   .composer-reviewers-label[data-short]::after { content: attr(data-short); font-size: var(--font-size-xs); }
 }
+/* Beside the docked file preview (file-viewer.js) the column is 600px or a
+   little more: the short form keeps the field, the model and Send on one line. */
+body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short] { font-size: 0; }
+body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::after {
+  content: attr(data-short); font-size: var(--font-size-xs);
+}
 @media (min-width: 1200px) and (max-width: 1365px) {
   body.agent-sidebar-open:not(.is-hero) .composer-reviewers-label[data-short] { font-size: 0; }
   body.agent-sidebar-open:not(.is-hero) .composer-reviewers-label[data-short]::after {

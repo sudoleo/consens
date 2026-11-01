@@ -26,7 +26,8 @@ export async function vendorFrontend(root, checkOnly) {
     "@novnc/novnc": ["LICENSE.txt"],
     // The file preview (file-viewer.js): ES modules, imported when a preview
     // first opens. The standard fonts draw PDFs that only name Helvetica or
-    // Times (our own documents, agent_document_render.py); the decoders'
+    // Times (our own documents, agent_document_render.py), the CMaps those
+    // that only name a Chinese, Japanese or Korean font; the decoders'
     // script fallbacks stand in for WebAssembly, which the CSP does not run.
     "pdfjs-dist": ["build/pdf.min.mjs", "build/pdf.worker.min.mjs", "LICENSE",
       "wasm/jbig2_nowasm_fallback.js", "wasm/openjpeg_nowasm_fallback.js"],
@@ -45,7 +46,7 @@ export async function vendorFrontend(root, checkOnly) {
     if (name === "@novnc/novnc") {
       files.push(...await filesBelow(source, "core"), ...await filesBelow(source, "vendor"));
     }
-    if (name === "pdfjs-dist") files.push(...await filesBelow(source, "standard_fonts"));
+    if (name === "pdfjs-dist") files.push(...await filesBelow(source, "standard_fonts"), ...await filesBelow(source, "cmaps"));
     for (const file of files) {
       const relative = `static/vendor/${folders[name] || name}/${version}/${file}`;
       const target = path.join(root, relative);

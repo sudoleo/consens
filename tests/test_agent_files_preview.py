@@ -105,3 +105,20 @@ def test_a_word_file_without_a_pdf_previews_as_its_text_and_a_pdf_as_itself(clie
     pdf = files.save('owner', chat, raw=b'%PDF-1.4 x', name='a.pdf', mime='application/pdf',
                      extraction={'status': 'ready', 'parts': [], 'warnings': []})
     assert client.get(f'/agent/chats/{chat}/files/{pdf["id"]}?preview=1').content == b'%PDF-1.4 x'
+
+
+def test_a_preview_reads_the_file_record_no_more_often_than_its_download(client, monkeypatch):
+    """A picture under every answer loads as ?preview=1: its branch and its
+    bytes come from one read of the record, plus the read after the bytes
+    that every download makes (2026-11-01, review of the file preview)."""
+    from app.services.agent_files import AgentFiles
+    client, where = client
+    file_id, _ = stored(client, where, 'screen.png', (3200, 1800), 'PNG', 'image/png')
+    path = f'/agent/chats/{where[1]}/files/{file_id}'
+    reads, original = [], AgentFiles.get
+    monkeypatch.setattr(AgentFiles, 'get', lambda self, *args: reads.append(args) or original(self, *args))
+    assert client.get(path + '?preview=1').status_code == 200
+    preview_reads = len(reads)
+    reads.clear()
+    assert client.get(path).status_code == 200
+    assert preview_reads == len(reads) == 2

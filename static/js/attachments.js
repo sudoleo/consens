@@ -496,6 +496,17 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
     }
 
+    // Another file with the same name, size and type is another preview:
+    // the key also takes a fingerprint of the bytes (FNV-1a over the Base64).
+    function contentKey(data) {
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < data.length; i++) {
+        hash ^= data.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+      }
+      return (hash >>> 0).toString(16);
+    }
+
     // Documents, code and text open in the preview beside the chat
     // (file-viewer.js, 2026-11-01); pictures stay in this dialog, which pages
     // through a gallery. A stored file previews as the server's preview of it
@@ -520,7 +531,7 @@
       }
       if (!att.data || att.previewOnly || (type.view === "pdf" && att.mime !== "application/pdf")) return false;
       viewer.open({
-        key: "local:" + imageKey(att), name: att.name, mime: att.mime, trigger: att.trigger,
+        key: "local:" + imageKey(att) + ":" + contentKey(att.data), name: att.name, mime: att.mime, trigger: att.trigger,
         load: function () { return Promise.resolve({ blob: base64ToBlob(att.data, att.mime), mime: att.mime }); },
         downloads: [{ label: label, run: function () { saveBlob(base64ToBlob(att.data, att.mime), att.name); } }],
       });
@@ -878,7 +889,9 @@
       preview.append(...chip.childNodes);
       chip.appendChild(preview);
       preview.addEventListener("click", function () {
-        openAttachmentViewer(att);
+        // The chip gets the focus back when the preview closes, also where
+        // a click does not focus a button (Safari).
+        openAttachmentViewer(Object.assign({}, att, { trigger: preview }));
       });
       return chip;
     }

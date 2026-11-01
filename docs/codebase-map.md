@@ -11534,11 +11534,15 @@ PDFs … für Code natürlich auch“. `static/js/file-viewer.js` (`App.fileView
 - **Ein Format für Dokumente: PDF, gezeichnet im Browser.** pdf.js 6.4.299
   (`pdfjs-dist`, vendort nach `static/vendor/pdfjs/<version>/` von
   `scripts/vendor_frontend.mjs`: `build/pdf.min.mjs`, der Worker, die
-  Standardschriften für PDFs, die Helvetica/Times nur nennen, und die
-  Script-Fallbacks der Bilddecoder, weil die CSP kein WebAssembly erlaubt) wird
+  Standardschriften für PDFs, die Helvetica/Times nur nennen, die CMaps für
+  PDFs, die eine chinesische, japanische oder koreanische Schrift nur nennen,
+  und die Script-Fallbacks der Bilddecoder, weil die CSP kein WebAssembly erlaubt) wird
   erst beim ersten Bedarf per `import()` geladen; ein gemeinsamer `PDFWorker`,
   `isEvalSupported: false`, keine Annotation-/Link-/Skript-Ebene: nur die
   Canvas jeder Seite. `static_delivery.py` liefert `.mjs` als `text/javascript`.
+  Der Router liest die Metadaten bei `?preview=1` einmal und reicht sie an
+  `download`/`download_preview` weiter (`data=`): eine Vorschau kostet so viele
+  Firestore-Lesezugriffe wie ein Download (2026-11-01, kritische Prüfung).
 - **Woher das PDF kommt (Entscheidung 2026-11-01):** `GET …/files/{id}?preview=1`
   antwortet einer Office-Datei mit dem PDF, das beim `vm_share_file` **auf dem
   Konverter aller Konten** entsteht (`agent_vm_tools._office_preview` →
@@ -11564,27 +11568,44 @@ PDFs … für Code natürlich auch“. `static/js/file-viewer.js` (`App.fileView
   die Datei ohne Vorschau geteilt (die Karte bleibt ein Download). Eine
   hochgeladene Word-Datei geht bewusst nicht zum Konverter: ihr Text reicht
   zum Lesen, ein Klick weckt keine VM.
-- **Wo es steht:** ab 1100 px angedockt rechts in einer eigenen Spur
-  (`body.file-viewer-docked`, `--file-viewer-width`, Rand zieht und merkt sich
-  die Breite in `consens.fileViewerWidth`), die Chat-Spalte rückt daneben wie
-  bei der Workspace-Ansicht; Aktivität und Workspace liegen darunter. „Full
-  screen“ nimmt das ganze Fenster, darunter (Handy, Tablet) liegt es immer über
-  allem (`file-viewer-covers`, `aria-modal`). Escape schließt, der Fokus geht
-  zum Auslöser zurück. **Es öffnet nie von selbst** (Max 2026-10-31: Panels nur
+- **Wo es steht:** angedockt rechts in einer eigenen Spur, wenn ab 1100 px
+  neben `MIN_WIDTH` (420 px) und der App-Seitenleiste noch `MIN_CHAT` (600 px)
+  für den Chat bleiben (`body.file-viewer-docked`, `--file-viewer-width`, Rand
+  zieht und merkt sich die Breite in `consens.fileViewerWidth`; beim Ziehen
+  skalieren die Seiten nur, gezeichnet wird erst, wenn die Größe 120 ms ruht).
+  Daneben bleibt der Composer einzeilig: die Prüfer stehen in Kurzform
+  („2 AIs“, `composer.css`). Die Chat-Spalte rückt daneben wie bei der
+  Workspace-Ansicht; Aktivität, Workspace und der angedockte Antwort-Leser
+  liegen darunter, öffnet einer von ihnen, schließt die Vorschau, und eine
+  angedockte Vorschau schließt den Leser. Auf- und Zuklappen der
+  App-Seitenleiste rechnet die Spur neu (Beobachter an `.sidebar`). „Full
+  screen“ nimmt das ganze Fenster; ist zu wenig Platz (Handy, Tablet, 1100 px
+  mit offener Seitenleiste), liegt sie über allem (`file-viewer-covers`,
+  `aria-modal`, alles andere im Body `inert`, Dialoge ausgenommen). Escape
+  schließt, der Fokus geht zum Auslöser zurück (Chips übergeben ihn selbst,
+  Safari fokussiert Knöpfe beim Klick nicht). **Es öffnet nie von selbst** (Max 2026-10-31: Panels nur
   per Klick), auch nicht, wenn der Agent eine Präsentation fertig hat.
 - **Was es zeigt:** Kopf mit Datei-Pille, Seitenzähler „3 / 12“, Zoom-Menü
   („Fit“ = Folie ganz sichtbar bzw. Seite auf die Breite bis 880 px, 50–200 %,
   100 % = Druckgröße; Tasten +, −, 0), „Present“ bei Präsentationen und
   querformatigen PDFs (eine Folie auf Schwarz, Fullscreen-API, Pfeile, Klick,
-  Escape), Download (bei einem Dokument ein Menü DOCX/PDF), ⋯ „Remove from
+  Escape; Enter und Leertaste auf einem Knopf gehören dem Knopf), Download
+  (bei einem Dokument ein Menü DOCX/PDF), ⋯ „Remove from
   chat…“ (nur wo die Karte selbst entfernen darf), Full screen, Schließen.
-  Links ab 700 px die Miniaturen („5 slides“/„3 sheets“/„12 pages“, nummeriert,
-  die aktuelle umrandet, ausblendbar in `consens.fileViewerRail`), rechts die
-  Seiten, gezeichnet nur nahe am Bild (`IntersectionObserver`), bei Zoom und
-  Größenwechsel scharf neu. Code: Zeilennummern als eigene Spalte, höchstens
-  20.000 Zeilen; Markdown über `marked` + DOMPurify ohne Bilder, Formulare,
-  Frames und Nicht-http-Links; CSV/TSV als Tabelle (1.000 Zeilen); Text über
-  2 MB oder nicht UTF-8 bekommt den Hinweis samt Download.
+  Links ab 520 px Breite der Vorschau die Miniaturen (unter 720 px schmaler;
+  „5 slides“/„3 sheets“/„12 pages“, nummeriert, die aktuelle umrandet,
+  ausblendbar in `consens.fileViewerRail`), rechts die Seiten, gezeichnet nur
+  nahe am Bild (`IntersectionObserver`, eine Bildschirmhöhe davor und danach);
+  eine Seite, die diese Zone verlässt, gibt ihre Canvas frei (Breite 0,
+  `page.cleanup()`), sonst hielten 50 Seiten fast ein Gigabyte. Code:
+  Zeilennummern als eigene Spalte, höchstens 20.000 Zeilen; Markdown über den
+  Renderer der Antworten (`window.renderMarkdownFragment` aus
+  markdown-stream.js: derselbe Sanitizer, ein entferntes Bild wird ein
+  Hinweis); CSV/TSV als Tabelle (1.000 Zeilen, danach ein Hinweis). Text: eine
+  BOM sagt UTF-8 oder UTF-16, sonst UTF-8 und ersatzweise Windows-1252 (CSV
+  aus deutschem Excel); NUL-Zeichen, über 2 MB oder ein Fehler bekommen den
+  Hinweis samt Download. Sätze mit Namen und Zahlen gehen als Vorlage durch
+  `App.t` (`'Remove {name}?'`, `countText`).
 - **Auffindbarkeit:** Dokumentzeilen (`documentCard`) und Dateizeilen
   (`fileRow`, `kind` `vm_file`/`mail_attachment`) einer Antwort zeigen statt
   des Symbols die **erste Seite als Miniatur** (`App.fileViewer.thumbnail`,

@@ -185,8 +185,9 @@
     const say = () => {
       const pages = pageCounts.get(item.key);
       const unit = type.family === 'presentation' || type.family === 'spreadsheet' ? type.family : 'page';
-      meta.textContent = [type.label, pages ? viewer.countText(unit, pages) : '', ...extra]
-        .filter(Boolean).map(part => App.t(part)).join(' · ');
+      // Each part in the page's language (countText translates with the number).
+      meta.textContent = [App.t(type.label), pages ? viewer.countText(unit, pages) : '', ...extra.map(part => App.t(part))]
+        .filter(Boolean).join(' · ');
       meta.hidden = false;
     };
     say();
@@ -391,7 +392,7 @@
     main.append(mark, titles);
     if (pdf) {
       main.type = 'button';
-      main.title = App.t(`Preview ${group.title}`);
+      main.title = App.t('Preview {title}', { title: group.title });
       // In the preview: the title, every format to download, no removal (a
       // version goes from this row's ⋯).
       const downloads = current.files.filter(available).map(file => ({ label: extension(file), run: () => download(chatId, file) }));
@@ -473,7 +474,7 @@
     if (item) {
       const open = node('button', 'agent-file-open');
       open.type = 'button';
-      open.title = App.t(`Preview ${file.name}`);
+      open.title = App.t('Preview {name}', { name: file.name });
       open.append(type, main, previewHint());
       open.addEventListener('click', () => App.fileViewer?.open({ ...item, trigger: open }));
       row.classList.add('can-preview');

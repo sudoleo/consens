@@ -135,9 +135,15 @@ def test_a_shared_deck_shows_its_first_slide_and_opens_beside_the_chat(browser, 
         expect(show.locator('.file-viewer-present-count')).to_have_text('3 / 3')
         page.keyboard.press('ArrowLeft')
         expect(show.locator('.file-viewer-present-count')).to_have_text('2 / 3')
-        page.keyboard.press('Escape')
+        # Enter on End is the button's, not a step to the next slide.
+        show.locator('.file-viewer-present-end').focus()
+        page.keyboard.press('Enter')
         expect(show).to_have_count(0)
         expect(viewer).to_be_visible()
+        viewer.get_by_role('button', name='Present').click()
+        expect(page.locator('.file-viewer-present-count')).to_have_text('2 / 3')
+        page.keyboard.press('Escape')
+        expect(page.locator('.file-viewer-present')).to_have_count(0)
         # Full screen takes the window; closing gives the chat its lane back.
         viewer.get_by_role('button', name='Full screen').click()
         assert abs(viewer.bounding_box()['x']) <= 1
@@ -187,12 +193,22 @@ def test_on_a_phone_the_preview_covers_the_screen(browser, phase4_server):
         deck = page.locator('#agentAnswerBody ~ .agent-answer-documents .agent-file-row.can-preview', has_text='Der_Weg_zur_AGI.pptx')
         expect(deck.locator('.agent-file-thumb canvas')).to_have_count(1)
         _shot(page, 'file-viewer-phone-card-dark')
+        # What was inert before (the folded phone sidebar) stays the app's own.
+        inert_before = page.evaluate("[...document.querySelectorAll('body > [inert]')].map(el => el.id || el.className)")
         deck.locator('.agent-file-open').click()
         viewer = page.locator('#fileViewer')
         expect(viewer.locator('.file-viewer-page.is-drawn').first).to_be_visible()
         box = viewer.bounding_box()
         assert box['x'] == 0 and abs(box['width'] - page.evaluate('document.body.clientWidth')) <= 1, box
         assert page.evaluate("document.body.classList.contains('file-viewer-covers')")
+        # Over everything, nothing beneath takes the focus (aria-modal).
+        assert page.evaluate("document.getElementById('appMain').closest('[inert]') !== null")
+        # Tab goes round the preview (and out to the browser's own bar, as from
+        # a native dialog), never to the chat beneath.
+        for _ in range(12):
+            page.keyboard.press('Tab')
+            assert page.evaluate("""() => document.activeElement === document.body
+              || document.getElementById('fileViewer').contains(document.activeElement)""")
         # No room for thumbnails: the pages alone, as wide as the screen allows.
         expect(viewer.locator('nav.file-viewer-rail')).to_be_hidden()
         expect(viewer.locator('.file-viewer-count')).to_be_hidden()
@@ -202,6 +218,78 @@ def test_on_a_phone_the_preview_covers_the_screen(browser, phase4_server):
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         viewer.get_by_role('button', name='Close preview').click()
         expect(viewer).to_be_hidden()
+        assert page.evaluate("[...document.querySelectorAll('body > [inert]')].map(el => el.id || el.className)") == inert_before
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def _settle(page):
+    for moving in (page.locator('#fileViewer'), page.locator('.container').first):
+        moving.evaluate("el => Promise.all(el.getAnimations().map(a => a.finished.catch(() => {})))")
+
+
+def _composer_on_one_line(page):
+    field, send = page.locator('#questionInput').bounding_box(), page.locator('#sendButton').bounding_box()
+    assert abs((field['y'] + field['height'] / 2) - (send['y'] + send['height'] / 2)) <= 4, (field, send)
+    # Room for its hint, not "A…".
+    assert field['width'] >= 150, field
+
+
+@pytest.mark.parametrize('width', [1100, 1280, 1440])
+def test_the_composer_stays_on_one_line_beside_the_preview(browser, phase4_server, width):
+    context, page, errors, requests = _open_answer(browser, phase4_server, width)
+    try:
+        deck = page.locator('#agentAnswerBody ~ .agent-answer-documents .agent-file-row.can-preview', has_text='Der_Weg_zur_AGI.pptx')
+        deck.locator('.agent-file-open').click()
+        viewer = page.locator('#fileViewer')
+        expect(viewer.locator('.file-viewer-page.is-drawn').first).to_be_visible()
+        _settle(page)
+        docked = page.evaluate("document.body.classList.contains('file-viewer-docked')")
+        if width == 1100:
+            # Beside the open sidebar the chat would keep too little: the
+            # preview covers it, as on a tablet.
+            assert not docked
+            _shot(page, 'file-viewer-composer-1100-sidebar')
+            # The sidebar folded gives the room back: the preview docks.
+            viewer.get_by_role('button', name='Close preview').click()
+            page.locator('#sidebarToggleInner').click()
+            page.wait_for_function("() => document.querySelector('.sidebar').classList.contains('collapsed')")
+            deck.locator('.agent-file-open').click()
+            expect(viewer.locator('.file-viewer-page.is-drawn').first).to_be_visible()
+            _settle(page)
+            assert page.evaluate("document.body.classList.contains('file-viewer-docked')")
+            _composer_on_one_line(page)
+            _shot(page, 'file-viewer-composer-1100')
+            # Unfolded again while the preview is open: it covers the chat
+            # instead of leaving it a sliver.
+            page.locator('#toggleSidebarButton, #sidebarToggleInner').first.click()
+            page.wait_for_function("() => document.body.classList.contains('file-viewer-covers')")
+        else:
+            assert docked
+            _composer_on_one_line(page)
+            _shot(page, f'file-viewer-composer-{width}')
+        assert not errors, errors
+    finally:
+        context.close()
+
+
+def test_pages_far_from_the_screen_give_their_pixels_back(browser, phase4_server):
+    context, page, errors, requests = _open_answer(browser, phase4_server, 1440)
+    try:
+        page.route('**/e2e-long.pdf', lambda route: route.fulfill(body=_pdf(30, A4), content_type='application/pdf'))
+        page.evaluate("""() => App.fileViewer.open({ key: 'long', name: 'Bericht.pdf', mime: 'application/pdf',
+          load: () => fetch('/e2e-long.pdf').then(async r => ({ blob: await r.blob(), mime: 'application/pdf' })) })""")
+        viewer = page.locator('#fileViewer')
+        expect(viewer.locator('.file-viewer-rail-count')).to_have_text('30 pages')
+        expect(viewer.locator('.file-viewer-page[data-page="1"].is-drawn')).to_be_visible()
+        drawn = lambda: page.evaluate("document.querySelectorAll('.file-viewer-page canvas').length")
+        assert drawn() <= 6
+        viewer.locator('.file-viewer-stage').evaluate('el => { el.scrollTop = el.scrollHeight; }')
+        expect(viewer.locator('.file-viewer-page[data-page="30"].is-drawn')).to_have_count(1)
+        # The first pages gave their canvas back; only those near the screen hold one.
+        expect(viewer.locator('.file-viewer-page[data-page="1"] canvas')).to_have_count(0)
+        assert drawn() <= 6
         assert not errors, errors
     finally:
         context.close()
