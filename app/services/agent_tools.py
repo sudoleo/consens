@@ -71,6 +71,28 @@ def argument_schema(arguments):
     return resolve(schema, frozenset())
 
 
+def argument_shape(node):
+    """A flat schema in one line, optional fields with "?":
+    {title: string, sections: [{heading: string, paragraphs?: [string]}]}.
+
+    For a tool description: with the flat schema, DeepSeek V4.1 Flash still
+    guessed the document's fields on its first call (2026-11-01), and a
+    description reaches the model with every provider."""
+    options = [option for option in node.get("anyOf", [node]) if option.get("type") != "null"]
+    if len(options) != 1:
+        return " | ".join(argument_shape(option) for option in options)
+    node = options[0]
+    if "properties" in node:
+        required = set(node.get("required", ()))
+        return "{" + ", ".join(f"{key}{'' if key in required else '?'}: {argument_shape(value)}"
+                               for key, value in node["properties"].items()) + "}"
+    if node.get("type") == "array":
+        return f"[{argument_shape(node.get('items', {}))}]"
+    if "const" in node or "enum" in node:
+        return " | ".join(json.dumps(value) for value in node.get("enum", [node.get("const")]))
+    return node.get("type", "any")
+
+
 def _option(node, key):
     """The anyOf option of an optional field that carries ``key``."""
     return next((option for option in node.get("anyOf", ()) if key in option), node)
@@ -189,19 +211,29 @@ class ToolRegistry:
             # Field and message only: pydantic's default text repeats the
             # input and a docs URL per error, and the 500-character cut
             # dropped every error after the second. An unknown field also
-            # names the fields its object takes, once per object: "Extra
-            # inputs are not permitted" alone left DeepSeek guessing
-            # (2026-11-01).
-            schema, named, problems = argument_schema(tool.arguments), set(), []
+            # names the fields its object takes: "Extra inputs are not
+            # permitted" alone left DeepSeek guessing (2026-11-01). The same
+            # mistake in every list item is one problem ("and 9 more like
+            # it"): ten slides with "bullets" filled the cut before the
+            # document's own fields came up.
+            schema, problems, alike, named = argument_schema(tool.arguments), [], {}, set()
             for error in exc.errors(include_url=False, include_input=False):
+                place = tuple(None if isinstance(part, int) else part for part in error["loc"])
+                key = (place, error["type"], error["msg"])
+                if key in alike:
+                    alike[key][1] += 1
+                    continue
+                alike[key] = [len(problems), 0]
                 problem = f"{'.'.join(str(part) for part in error['loc']) or 'arguments'}: {error['msg']}"
-                parent = error["loc"][:-1]
-                if error["type"] == "extra_forbidden" and parent not in named:
-                    named.add(parent)
-                    allowed = _allowed_fields(schema, parent)
+                if error["type"] == "extra_forbidden" and place[:-1] not in named:
+                    named.add(place[:-1])
+                    allowed = _allowed_fields(schema, error["loc"][:-1])
                     if allowed:
                         problem += f" (allowed here: {', '.join(allowed)})"
                 problems.append(problem)
+            for index, more in alike.values():
+                if more:
+                    problems[index] += f" (and {more} more like it)"
             raise ValueError(f"Invalid {tool.name} arguments - {'; '.join(problems)}") from exc
         return tool, arguments
 

@@ -3972,13 +3972,20 @@ Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 verfügbaren Tools (und `_unknown_notes`: welches Werkzeug Seiten öffnet, dass
 es keines gibt, oder dass die Werkzeuge des geschlossenen Arbeitsplatzes erst
 nach `open_workspace` kommen), Feld und Meldung je Schemafehler ohne
-Eingabewerte; ein unbekanntes Feld nennt dazu einmal je Objekt die Felder,
-die es nimmt („allowed here: heading, paragraphs, table“). Die Schemas gehen
-flach an den Provider (`argument_schema`: jedes `$ref` ausgeschrieben, kein
-`$defs`, rekursive Modelle werden beim Registrieren abgelehnt). Anlass
-2026-11-01: DeepSeek V4.1 Flash sah die Abschnittsfelder von
-`create_document` unter `$defs` nicht, riet dreimal („blocks“, „content“,
-„text“) und lief in die Grenze ungültiger Runden. Rein anzeigende Felder hat seit 2026-10-31 kein Werkzeug mehr
+Eingabewerte; ein unbekanntes Feld nennt dazu einmal je Objektart die
+Felder, die es nimmt („allowed here: heading, paragraphs, table“), und
+derselbe Fehler in jedem Listeneintrag ist ein Problem („and 9 more like
+it“). Ein Werkzeugfehler geht bis 2000 Zeichen an das Modell (bis
+2026-11-01: 500). Die Schemas gehen flach an den Provider
+(`argument_schema`: jedes `$ref` ausgeschrieben, kein `$defs`, rekursive
+Modelle werden beim Registrieren abgelehnt), und `create_document` /
+`revise_document` schreiben ihre Argumentform in die Beschreibung
+(`argument_shape`, eine Zeile, Optionales mit „?“). Anlass 2026-11-01:
+DeepSeek V4.1 Flash sah die Abschnittsfelder unter `$defs` nicht, riet
+dreimal („blocks“, „content“, „text“) und lief in die Grenze ungültiger
+Runden; mit flachem Schema riet es beim ersten Aufruf weiter („bullets“ auf
+zehn Folien), und der 500-Zeichen-Schnitt nahm die Hinweise zu `subtitle`
+und `sources`. Rein anzeigende Felder hat seit 2026-10-31 kein Werkzeug mehr
 (bis dahin wurden `status_update` und `reason` gekürzt statt abgelehnt);
 `context` darf fehlen. Abgelehnte Aufrufe loggen Tool, Feldpfade und Argumentlänge
 (`Agent tool call rejected`), nie Inhalte.

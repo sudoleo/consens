@@ -4564,8 +4564,10 @@ kommt (Sonnet schickte `"memory": "[]"` und scheiterte dreimal an der
 Validierung), als den deklarierten Container (`_decode_stringified`); alles
 andere lehnt die Validierung ab. Werkzeugschemas gehen flach an den Provider
 (`argument_schema`, kein `$defs`/`$ref`; DeepSeek sah verschachtelte Modelle
-sonst nicht), und ein unbekanntes Feld nennt in der Ablehnung die erlaubten
-Felder seines Objekts. Seit 2026-10-07 steuert allein der Code-Prompt
+sonst nicht), die Dokument-Werkzeuge nennen ihre Argumentform zusätzlich in
+der Beschreibung (`argument_shape`), und ein unbekanntes Feld nennt in der
+Ablehnung die erlaubten Felder seines Objekts; gleiche Fehler in
+Listeneinträgen werden zusammengefasst. Seit 2026-10-07 steuert allein der Code-Prompt
 (gespeicherte Admin-Prompts wirken nicht), seit 2026-10-31
 `DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT` (Aufbau unter
 „Prompt-Aufteilung im Agenten“ unten). Ob der Agent sucht, liest, die Modelle

@@ -279,10 +279,30 @@ def test_document_schema_is_flat_and_refusals_name_the_section_fields():
         registry.validate(call({"title": "T", "sections": [{"heading": "A", "blocks": []}, {"heading": "B", "text": "x"}]}))
     text = str(refused.value)
     assert "sections.0.blocks: Extra inputs are not permitted (allowed here: heading, paragraphs, table)" in text
-    assert text.count("allowed here") == 2
+    assert "sections.1.text: Extra inputs are not permitted" in text and text.count("allowed here") == 1
+    # Ten slides with "bullets" are one problem: the cut of a tool error
+    # (500 characters until then) dropped "subtitle" and the sources
+    # behind them (a deck about cats, same day).
+    slides = [{"heading": f"Slide {i}", "bullets": ["a"]} for i in range(10)]
+    with pytest.raises(ValueError) as refused:
+        registry.validate(call({"title": "Cats", "subtitle": "x", "sections": slides,
+                                "sources": [{"title": "Wiki", "url": "https://de.wikipedia.org"}]}))
+    text = str(refused.value)
+    assert "sections.0.bullets: Extra inputs are not permitted (allowed here: heading, paragraphs, table) (and 9 more like it)" in text
+    assert "allowed here: label, file_id, locator, url" in text and "allowed here: title, summary, sections" in text
+    assert len(text) < 600
     # The whole document sent as JSON text is an object like any other.
     sent = json.dumps({"title": "T", "sections": [{"heading": "A", "paragraphs": ["p"]}]})
     assert registry.validate(call(sent))[1].document.sections[0].paragraphs == ["p"]
+
+
+def test_document_tool_descriptions_spell_out_the_arguments():
+    # With the flat schema DeepSeek still guessed the fields on its first call.
+    tools = {tool.name: tool for tool in DocumentTools.tools(SimpleNamespace(create=None, read=None, revise=None))}
+    assert ("sections: [{heading: string, paragraphs?: [string], table?: {headers: [string], rows?: [[string]]}}]"
+            in tools["create_document"].description)
+    assert "sources?: [{label: string, file_id?: string, locator?: string, url?: string}]" in tools["create_document"].description
+    assert "replacement: {heading: string, paragraphs?: [string]" in tools["revise_document"].description
 
 
 def test_failed_revision_keeps_the_manifest_title(setup, monkeypatch):

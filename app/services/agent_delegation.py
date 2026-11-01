@@ -1287,7 +1287,9 @@ class DelegationLoop(AgentLoop):
             raise
         except (ValueError, TypeError) as exc:
             # A schema/selection error is safe feedback, not a provider retry.
-            result = {"error": str(exc)[:500]}
+            # 500 characters cut a document's refusal before the fields it
+            # named (2026-11-01); the model has three rounds to get it right.
+            result = {"error": str(exc)[:2000]}
             if tool is None:
                 self._log_rejected_call(call, exc)
             if tool is not None and tool.name == "update_memory":
