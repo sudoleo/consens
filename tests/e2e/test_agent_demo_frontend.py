@@ -88,7 +88,7 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         # Answers open what the two AIs answered when the agent asked.
         links.nth(1).click()
         expect(page.locator("#modelAnswerReader")).to_be_visible()
-        expect(page.locator("#modelAnswerReader")).to_contain_text("investing the difference")
+        expect(page.locator("#modelAnswerReader")).to_contain_text("Every repayment is money you keep.")
         page.keyboard.press("Escape")
         # Local only: the demo asks no model and saves nothing.
         assert not [url for url in requests if "/agent" in url and "/agent/models" not in url], requests
