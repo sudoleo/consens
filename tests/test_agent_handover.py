@@ -8,7 +8,7 @@ reads the fixed answer, and the reviewers' marks still land on the turn they
 review.
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.services.agent_runs import AgentRunStore
 from app.services.llm.agent_client import AgentModel
@@ -74,6 +74,66 @@ def test_without_a_hand_over_the_chat_stays_reserved_until_the_end(store, monkey
     events = list(loop.run())
     assert loop.handed_over is False and not any(e.get("type") == "handover" for e in events)
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_the_next_message_s_sweep_leaves_a_long_turn_under_review_alone(store, monkeypatch):  # noqa: F811
+    """A two-hour workspace turn is older than the abandoned-turn cutoff
+    when its answer stands; the next message's sweep came right after the
+    hand-over and failed it while its reviewers worked (review 2026-11-01)."""
+    script = Audit()
+    loop = audit_loop(store, script)
+    handed_over = AgentRunStore.hand_over
+    seen = {}
+
+    def and_send_the_next(self, uid, chat_id, turn_id, **kwargs):
+        handed = handed_over(self, uid, chat_id, turn_id, **kwargs)
+        self._turn_ref(uid, chat_id, turn_id).update({"created_at": datetime.now(timezone.utc) - timedelta(minutes=40)})
+        # What the route does for the next message: sweep, then create.
+        self.sweep_abandoned_turns(uid, chat_id)
+        seen["after_sweep"] = self._turn_ref(uid, chat_id, turn_id).get().to_dict()
+        seen["next"] = next_turn(self, chat_id)
+        return handed
+    monkeypatch.setattr(AgentRunStore, "hand_over", and_send_the_next)
+    list(loop.run())
+    assert seen["after_sweep"]["status"] == "pending"
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["agent_review"]["status"] == "succeeded"
+    # Half an hour after the answer stood, a turn nobody finished is retired.
+    later = datetime.now(timezone.utc) + timedelta(minutes=31)
+    chat_id, stuck = loop.chat_id, seen["next"]["id"]
+    store._turn_ref(UID, chat_id, stuck).update({"agent_answer_fixed_at": datetime.now(timezone.utc),
+                                                 "created_at": datetime.now(timezone.utc) - timedelta(hours=2)})
+    assert store.purge_abandoned_turns(UID, chat_id) == []
+    assert store.purge_abandoned_turns(UID, chat_id, now=later) == [stuck]
+
+
+def test_the_reaper_keeps_an_answer_that_already_stood(store, monkeypatch):  # noqa: F811
+    """The process dies during the review (hard kill): the reaper ends the
+    run as cancelled, the user already took the answer and may have gone on.
+    The turn stays answered, with its sources; only its review is cut off."""
+    from app.services.llm.agent_client import AgentCompletion
+    script = Audit()
+    loop = audit_loop(store, script)
+    handed_over = AgentRunStore.hand_over
+    seen = {}
+
+    def and_die(self, uid, chat_id, turn_id, **kwargs):
+        handed = handed_over(self, uid, chat_id, turn_id, **kwargs)
+        self._turn_ref(uid, chat_id, turn_id).update({"sources": [{"url": "https://example.com/a", "title": "A"}]})
+        seen["fixed"] = self._turn_ref(uid, chat_id, turn_id).get().to_dict()
+        root = self.receipt_ref(uid, chat_id, turn_id).get().to_dict()
+        reaped = AgentCompletion()
+        reaped.failure = {"code": "run_interrupted", "error": "The server connection ended."}
+        self.finish_run(uid, chat_id, turn_id, completion=reaped, status="cancelled", run_token=root["run_token"])
+        return handed
+    monkeypatch.setattr(AgentRunStore, "hand_over", and_die)
+    list(loop.run())
+    turn = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    assert turn["status"] == "completed" and "agent_failure" not in turn and "error_code" not in turn
+    assert turn["assistant_response"] == seen["fixed"]["assistant_response"] == ANSWER
+    assert [source["url"] for source in turn["sources"]] == ["https://example.com/a"]
+    assert turn["agent_review"]["status"] not in {"required", "running"}
+    assert turn.get("agent_activity") == seen["fixed"].get("agent_activity")
 
 
 def test_a_turn_under_review_carries_its_answer_for_the_next_message(store):  # noqa: F811

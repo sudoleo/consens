@@ -112,17 +112,20 @@ def _take(lock, cancellation, seconds):
             return True
 
 
-def prepare(backend, cancellation):
+def prepare(backend, cancellation, seconds=None):
     """The converter at this VERSION: created where missing, its rules set,
     the tools written and set up when its marker names another version.
     Once per process. The setup runs to its end whatever the message does:
     a Stop halfway through apt would leave dpkg broken for every account
     (setup.sh repairs that too). After a failure the converter counts as
-    down for SETUP_RETRY_SECONDS."""
+    down for SETUP_RETRY_SECONDS. ``seconds``: what the caller has (render):
+    a setup needs SETUP_SECONDS and its conversion RUN_SECONDS more, so with
+    less it is left to a later call (OfficeUnavailable)."""
     global _ready, _failed_at
     if _ready == VERSION:
         return
-    if not _take(_setup_lock, cancellation, SETUP_SECONDS + 30):
+    wait = SETUP_SECONDS + 30 if seconds is None else max(1, min(SETUP_SECONDS + 30, seconds))
+    if not _take(_setup_lock, cancellation, wait):
         raise OfficeUnavailable("setup busy")
     try:
         if _ready == VERSION:
@@ -135,6 +138,8 @@ def prepare(backend, cancellation):
         except agent_vm.VMFileMissing:
             raw = b""
         if raw.decode("utf-8", "replace").strip() != VERSION:
+            if seconds is not None and seconds < SETUP_SECONDS + RUN_SECONDS:
+                raise OfficeUnavailable("no time to set up")
             for name, data in tool_files().items():
                 backend.write_file(NAME, f"{DIR}/{name}", data, agent=False)
             said = []
@@ -166,18 +171,26 @@ def _unpack(raw):
         raise OfficeUnavailable("unreadable answer") from None
 
 
-def render(data, extension, *, cancellation, backend=None):
+def render(data, extension, *, cancellation, backend=None, seconds=None):
     """``data`` of an Office file with ``extension`` as a Rendered: its PDF,
     the overview of its first OVERVIEW_PAGES pages (PNG) and its page count.
     OfficeRefused when LibreOffice makes nothing of it, OfficeUnavailable
-    when the converter fails; ProviderCancelled on Stop."""
+    when the converter fails; ProviderCancelled on Stop. ``seconds``: all
+    it may take (the answer's time left, agent_vm_tools): the wait for a
+    slot and the run are cut to it, LibreOffice's own limit with them, and
+    a converter not yet set up at this VERSION is not set up in less time
+    than that takes (OfficeUnavailable)."""
     extension = str(extension or "").lower()
     if extension not in EXTENSIONS:
         raise OfficeRefused(f"Not an Office file the converter takes: .{extension}")
     if len(data) > MAX_BYTES:
         raise OfficeRefused(f"The file is larger than {MAX_BYTES // (1024 * 1024)} MB.")
+    end = None if seconds is None else time.monotonic() + seconds
+
+    def left(most):
+        return most if end is None else max(1, min(most, int(end - time.monotonic())))
     # A free slot, or the converter counts as busy (never a wait without end).
-    if not _take(_slots, cancellation, CONVERT_SECONDS):
+    if not _take(_slots, cancellation, left(CONVERT_SECONDS)):
         raise OfficeUnavailable("busy")
     own = backend is None
     out, err = bytearray(), bytearray()
@@ -190,10 +203,12 @@ def render(data, extension, *, cancellation, backend=None):
         backend = backend or agent_vm.backend()
         if backend is None:
             raise OfficeUnavailable("no provider")
-        prepare(backend, cancellation)
-        outcome = backend.run(NAME, ["sudo", "-n", "/bin/bash", CONVERT, extension, str(CONVERT_SECONDS),
+        prepare(backend, cancellation, seconds=None if end is None else end - time.monotonic())
+        timeout = left(RUN_SECONDS)
+        outcome = backend.run(NAME, ["sudo", "-n", "/bin/bash", CONVERT, extension,
+                                     str(max(1, min(CONVERT_SECONDS, timeout - (RUN_SECONDS - CONVERT_SECONDS)))),
                                      str(OVERVIEW_PAGES)],
-                              cwd="/", timeout=RUN_SECONDS, on_output=keep, cancellation=cancellation,
+                              cwd="/", timeout=timeout, on_output=keep, cancellation=cancellation,
                               input=bytes(data))
     except agent_vm.VMUnavailable as exc:
         _forget()

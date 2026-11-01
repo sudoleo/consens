@@ -1009,7 +1009,7 @@ def test_a_shared_office_file_brings_the_pdf_the_app_previews_it_by(store, fake_
     monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
     converted = []
 
-    def render(data, extension, *, cancellation, backend=None):
+    def render(data, extension, *, cancellation, backend=None, seconds=None):
         converted.append((data, extension))
         if data == b"broken":
             raise agent_office.OfficeRefused("LibreOffice could not turn the file into a PDF.")

@@ -1468,6 +1468,10 @@ class VMTools:
             raise ValueError(f"No file at {path}.") from None
         if not complete or len(raw) > agent_office.MAX_BYTES:
             raise ValueError(f"{path} is larger than {agent_office.MAX_BYTES // (1024 * 1024)} MB.")
+        # Within the answer's time, like a command (_timeout).
+        left = self.loop.answer_time_left()
+        if left is not None and left < MIN_COMMAND_SECONDS:
+            raise ValueError(VM_NO_TIME)
         # Counted once the converter is asked, not for a typo in the path.
         try:
             api_uid_limiter.check(self.loop.uid, "office:render", agent_office.RENDERS_PER_HOUR, window_seconds=3600)
@@ -1476,13 +1480,16 @@ class VMTools:
                              "the next one can wait or go without.") from None
         report({"bytes": len(raw)})
         try:
-            rendered = agent_office.render(raw, extension, cancellation=cancellation)
+            rendered = agent_office.render(raw, extension, cancellation=cancellation, seconds=left)
         except agent_office.OfficeRefused as exc:
             raise ValueError(str(exc)) from None
         except agent_office.OfficeUnavailable:
             # The converter's failure, not the workbench's: the VM stays on.
             raise ValueError("The converter is not available right now. Nothing changed in your workspace.") from None
-        self._rendered[hashlib.sha256(raw).hexdigest()] = rendered.pdf
+        # For a share of the same file in this message (_office_preview):
+        # only a PDF a preview can use is kept (60 MB each otherwise).
+        if rendered.pdf.startswith(b"%PDF-") and len(rendered.pdf) <= PREVIEW_BYTES:
+            self._rendered[hashlib.sha256(raw).hexdigest()] = rendered.pdf
         # deck.pptx -> deck.pptx.pdf: never over a PDF of the same name that
         # is not this file's (the user's own report.pdf beside report.docx,
         # or deck.docx's beside deck.pptx).
@@ -1579,7 +1586,11 @@ class VMTools:
             try:
                 api_uid_limiter.check(self.loop.uid, "office:render", agent_office.RENDERS_PER_HOUR,
                                       window_seconds=3600)
-                pdf = agent_office.render(raw, extension, cancellation=cancellation).pdf
+                # Within the answer's time, its last MIN_COMMAND_SECONDS kept
+                # for the share itself: a slow or cold converter costs the
+                # preview, never the file (review 2026-11-01).
+                pdf = agent_office.render(raw, extension, cancellation=cancellation,
+                                          seconds=None if left is None else left - MIN_COMMAND_SECONDS).pdf
             except ProviderCancelled:
                 raise
             except (ApiUidRateLimitExceeded, agent_office.OfficeRefused, agent_office.OfficeUnavailable) as exc:

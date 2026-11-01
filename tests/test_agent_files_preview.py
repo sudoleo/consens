@@ -85,6 +85,19 @@ def test_an_office_file_previews_as_its_pdf_and_downloads_as_itself(client):
     assert not (root / stored['object_key']).exists() and not (root / (stored['object_key'] + '.preview')).exists()
 
 
+def test_a_file_that_fits_without_its_preview_is_saved_without_it(client):
+    """The preview only shows the file: an account near its storage limit
+    gets the file, not "File storage limit reached" (review 2026-11-01)."""
+    _, (files, chat) = client
+    meta = files.save('owner', chat, raw=b'PK deck', name='deck.pptx', mime='application/octet-stream',
+                      extraction={'status': 'ready', 'parts': [], 'warnings': []}, extra={'kind': 'vm_file'},
+                      preview=b'%PDF-1.7 deck', limits=(10, len(b'PK deck') + 5))
+    stored = files.ref('owner', chat, meta['id']).get().to_dict()
+    assert 'preview' not in stored and 'preview' not in meta
+    assert not (files.objects.root / (stored['object_key'] + '.preview')).exists()
+    assert files.quota_ref('owner').get().to_dict() == {'count': 1, 'bytes': len(b'PK deck')}
+
+
 def test_a_changed_preview_is_refused(client):
     client, (files, chat) = client
     meta = files.save('owner', chat, raw=b'PK', name='a.docx', mime='application/octet-stream',

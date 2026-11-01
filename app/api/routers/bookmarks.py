@@ -731,10 +731,16 @@ def _running_agent_turn(turns: list[dict]) -> dict | None:
     another device), with what a browser needs to follow it: its request
     identity for GET /agent/chats/{chat}/live and the settings its
     recover_only request must repeat (agent-chat.js followRunning, A-B2).
-    The newest only; a stale one is settled by recover_only itself."""
-    for turn in reversed(turns):
+    The newest only; a stale one is settled by recover_only itself. A turn
+    whose answer stands while its reviewers work (hand_over) is followed only
+    as the chat's newest; under a later message it stands in the transcript
+    (_transcript_turn)."""
+    for index in range(len(turns) - 1, -1, -1):
+        turn = turns[index]
         request_id = turn.get("client_request_id")
         if turn.get("status") != "pending" or not isinstance(request_id, str) or not request_id:
+            continue
+        if turn.get("agent_answer_fixed") is True and index != len(turns) - 1:
             continue
         settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
         return {
@@ -746,6 +752,21 @@ def _running_agent_turn(turns: list[dict]) -> dict | None:
             "agent_settings": {key: settings[key] for key in _RUNNING_SETTINGS if key in settings},
         }
     return None
+
+
+def _transcript_turn(turn: dict, agent_history: bool, running: dict | None) -> bool:
+    """Whether the conversation page shows ``turn``: finished, or (Agent)
+    failed, or answered with its review still going (hand_over) unless it is
+    the turn the browser follows as running. Until 2026-11-01 a reload in
+    that review left such a turn out, or drew it below the next message."""
+    if turn.get("status") == "completed":
+        return True
+    if not agent_history:
+        return False
+    if turn.get("status") == "failed":
+        return True
+    return (turn.get("status") == "pending" and turn.get("agent_answer_fixed") is True
+            and (running is None or running.get("id") != turn.get("id")))
 
 
 @router.get("/bookmarks/{bookmark_id}/conversation")
@@ -812,14 +833,14 @@ def load_bookmark_conversation(
                 "next_cursor": metadata_page.get("next_cursor"),
                 "has_more": metadata_page.get("has_more") is True,
             }
+        running = _running_agent_turn(page["turns"]) if agent_history else None
         return {
             "status": "success",
             "chat_id": chat_id,
-            "turns": [t for t in page["turns"] if t.get("status") == "completed"
-                      or (agent_history and t.get("status") == "failed")],
+            "turns": [t for t in page["turns"] if _transcript_turn(t, agent_history, running)],
             "next_cursor": page.get("next_cursor"),
             "has_more": page.get("has_more") is True,
-            "running": _running_agent_turn(page["turns"]) if agent_history else None,
+            "running": running,
         }
     except HTTPException:
         raise

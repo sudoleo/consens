@@ -762,6 +762,8 @@
   "The file could not be removed.": "Die Datei konnte nicht entfernt werden.",
   "There is no preview of this file. Download it to open it.": "Für diese Datei gibt es keine Vorschau. Lade sie herunter, um sie zu öffnen.",
   "This file is too large to preview. Download it to open it.": "Diese Datei ist für die Vorschau zu groß. Lade sie herunter, um sie zu öffnen.",
+  "Open this chat to preview the file.": "Öffne diesen Chat, um die Vorschau der Datei zu sehen.",
+  "The chat changed. Open the file again.": "Der Chat hat gewechselt. Öffne die Datei noch einmal.",
   "The preview could not be loaded.": "Die Vorschau konnte nicht geladen werden.",
   "End presentation": "Präsentation beenden",
   "Text only. Download the file for its layout.": "Nur der Text. Das Layout zeigt die heruntergeladene Datei.",

@@ -53,8 +53,11 @@
     // in the (+) menu goes with it (Apple-Audit H3): the sign-in may bring an
     // account's settings that say otherwise. Unchosen, the account's own
     // mode applies (Agent by default, as the guest saw it).
-    const mode = App.userSettings?.get?.("run_mode");
-    writePending({ at: Date.now(), source, text, ...(mode ? { mode } : {}) });
+    // A temporary chat (temporary-chat.js) is an Agent chat; its switch
+    // lives in this tab, and an email link signs in in another.
+    const temporary = App.temporaryChat?.armed?.() === true;
+    const mode = temporary ? "agent" : App.userSettings?.get?.("run_mode");
+    writePending({ at: Date.now(), source, text, ...(mode ? { mode } : {}), ...(temporary ? { temporary } : {}) });
     track("app_guest_send", { source });
     App.openAuthModal?.("register", document.getElementById("sendButton"), "composer", { lead: GUEST_SEND_LEAD });
     return true;
@@ -97,6 +100,11 @@
     setTimeout(() => {
       autoSendScheduled = false;
       if (App.reloadingAfterSignIn || !holdsSentText(pending) || !window.userCanAskQuestions?.()) return;
+      // Chosen temporary, it goes out temporary or stays in the field.
+      if (pending.temporary) {
+        App.temporaryChat?.arm?.(true);
+        if (App.temporaryChat?.armed?.() !== true) return;
+      }
       source = pending.source || "typed";
       afterLogin = true;
       // A send that stopped before its "ask" (a limit, a refusal) must not

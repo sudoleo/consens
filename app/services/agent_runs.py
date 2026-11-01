@@ -610,11 +610,20 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             tx.set(active_ref, {"leases": leases})
             chat_data, turn_data = chat.to_dict() or {}, turn.to_dict() or {}
             if chat.exists and turn.exists and chat_data.get("status") == "active" and turn_data.get("status") == "pending":
-                patch = {"status": "completed" if status == "succeeded" else "failed", "updated_at": firestore.SERVER_TIMESTAMP,
+                # An answer that already stands (hand_over) stays the answer
+                # when its reviewers' run ends otherwise (the reaper after a
+                # hard kill): the user took it and may have gone on. Only its
+                # review ends unfinished. The reaper's completion is empty, so
+                # the handed-over text and sources stay.
+                fixed = status != "succeeded" and review_tail(turn_data)
+                sources = agent_sources(completion, review)
+                if fixed:
+                    sources = normalize_turn_sources([*(turn_data.get("sources") or []), *sources])
+                patch = {"status": "completed" if status == "succeeded" or fixed else "failed", "updated_at": firestore.SERVER_TIMESTAMP,
                          "agent_usage": completion.usage,
                          "agent_finish_reason": completion.finish_reason,
                          "agent_reasoning_truncated": completion.reasoning_truncated,
-                         "sources": agent_sources(completion, review)}
+                         "sources": sources}
                 if getattr(completion, "vm", None):
                     # The Agent VM's summary (agent_vm_tools.VMSession.summary):
                     # the message's checkpoint and the commands' run time.
@@ -630,22 +639,24 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # Which limit ended its work (DelegationLoop._wrap_up):
                     # reason code, steps and seconds, no text (audit I1).
                     patch["agent_wrap_up"] = completion.wrap_up
-                if status == "succeeded":
-                    patch.update(assistant_response=completion.text, completed_at=firestore.SERVER_TIMESTAMP,
+                if status == "succeeded" or fixed:
+                    patch.update(assistant_response=completion.text or (turn_data.get("assistant_response") or "" if fixed else ""),
+                                 completed_at=firestore.SERVER_TIMESTAMP,
                                  differences="", differences_data=None, included_models=[])
-                    if review and review.get("mode") == "audit" and review.get("status") in {"required", "running"}:
+                    if status == "succeeded" and review and review.get("mode") == "audit" and review.get("status") in {"required", "running"}:
                         # A review (agent_audit.py) whose last saves failed: a
                         # finished answer never keeps "reviewing".
                         patch["agent_review"] = {**review, "status": "failed"}
-                else:
-                    patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
-                    patch["agent_failure"] = getattr(completion, "failure", None) or {
-                        "code": "cancelled" if status == "cancelled" else "agent_failed",
-                        "error": "Response stopped. Available results have been saved." if status == "cancelled" else "The response could not be completed. Available results have been saved."}
-                    # The streamed text is all there is: comparisons only
-                    # advise, the answer is the agent's own.
-                    if completion.text:
-                        patch["assistant_response"] = completion.text
+                if status != "succeeded":
+                    if not fixed:
+                        patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
+                        patch["agent_failure"] = getattr(completion, "failure", None) or {
+                            "code": "cancelled" if status == "cancelled" else "agent_failed",
+                            "error": "Response stopped. Available results have been saved." if status == "cancelled" else "The response could not be completed. Available results have been saved."}
+                        # The streamed text is all there is: comparisons only
+                        # advise, the answer is the agent's own.
+                        if completion.text:
+                            patch["assistant_response"] = completion.text
                     if review:
                         # A crash/stop cannot leave a saved review looking live.
                         # A review that had already finished keeps its result:
@@ -682,7 +693,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                             review.pop("read_sources")
                         patch["agent_review"] = review
                 # Last: the activity takes the room the rest of the turn leaves.
-                patch["agent_activity"] = bounded_activity(completion.activity, activity_budget(turn_data, patch))
+                if completion.activity or not fixed:
+                    patch["agent_activity"] = bounded_activity(completion.activity, activity_budget(turn_data, patch))
                 tx.update(turn_ref, patch)
                 # A chat that already runs its next message (hand_over) keeps
                 # that message's state.

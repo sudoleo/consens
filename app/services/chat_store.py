@@ -558,6 +558,10 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal", "agent_vm", "agent_pull_request"):
             if field in source:
                 result[field] = source[field]
+        # Its answer stands while its reviewers still work (agent_runs.hand_over):
+        # the transcript shows it in its place (routers/bookmarks.py).
+        if source.get("status") == "pending" and source.get("agent_answer_fixed_at") is not None:
+            result["agent_answer_fixed"] = True
         # The turn has a work log (agent_work_log, every chat run since
         # 2026-10-31): its view loads it through its own endpoint.
         if source.get("work_log_expires_at"):
@@ -1609,9 +1613,18 @@ class ChatStore:
         ).limit(ABANDONED_TURN_SWEEP_LIMIT)
         retired: list[str] = []
         for snapshot in query.stream():
-            created_at = (snapshot.to_dict() or {}).get("created_at")
+            data = snapshot.to_dict() or {}
+            created_at = data.get("created_at")
             if not isinstance(created_at, datetime) or created_at.tzinfo is None:
                 continue
+            # A turn whose answer stands while its reviewers still work
+            # (agent_runs.hand_over) ages from that moment: the chat's next
+            # message comes right after it, and a two-hour workspace turn
+            # is older than the cutoff by then. Its run's reaper ends it if
+            # the reviewers die (agent_sessions.reap_delegation).
+            fixed_at = data.get("agent_answer_fixed_at")
+            if isinstance(fixed_at, datetime) and fixed_at.tzinfo is not None:
+                created_at = max(created_at, fixed_at)
             if created_at > cutoff:
                 continue
             try:
@@ -1738,6 +1751,11 @@ def _expire_temporary_chat(store, snapshot, *, now) -> bool:
     data = (chat.to_dict() or {}) if chat.exists else {}
     if data.get("temporary") is not True or data.get("status") != CHAT_STATUS_ACTIVE:
         snapshot.reference.delete()
+        return False
+    # A message sent while the sweep worked through earlier deadlines moved
+    # this one on: read as it is now, not as the query found it.
+    current = (snapshot.reference.get().to_dict() or {}).get("expires_at")
+    if isinstance(current, datetime) and current > now:
         return False
     try:
         store.request_chat_deletion(uid, chat_id)

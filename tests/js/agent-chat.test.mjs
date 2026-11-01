@@ -3733,6 +3733,39 @@ describe("agent turns that outlive their connection", () => {
   }
   const liveCalls = w => w.fetch.mock.calls.map(call => String(call[0])).filter(url => url.includes("/live?"));
 
+  it("lands the review when the poll brings the hand-over and the run's end at once", async () => {
+    // A stream that broke before the hand-over (a phone that slept): the
+    // poll after the run's end holds hand-over, review and end together,
+    // and the end settled before the page took the answer (review 2026-11-01).
+    const handedReview = status => ({ mode: "audit", status, answer_version: 1, answer_hash: "h", comparisons: [],
+      versions: [{ id: 1, text: "Answer.", hash: "h" }],
+      audit: { reviewers: [{ provider: "anthropic", provider_label: "Anthropic", status: status === "running" ? "running" : "completed" }] } });
+    const turn = { id: TURN, question: "Question", consensus: "Answer.", mode: "Agent", execution_mode: "agent", status: "pending" };
+    const handed = { response: "Answer.", chat_id: CHAT, turn_id: TURN, bookmark_meta: { id: "saved" },
+      turn: { ...turn, agent_review: handedReview("running") } };
+    const final = { response: "Answer.", chat_id: CHAT, turn_id: TURN, bookmark_meta: { id: "saved" },
+      turn: { ...turn, status: "completed", agent_review: handedReview("succeeded") } };
+    const { window: w, document: d, dom } = bootFollow({ pages: [
+      { known: true, done: true, last_seq: 6, events: [
+        { seq: 3, type: "delta", data: { text: "Answer." } },
+        { seq: 4, type: "handover", data: handed },
+        { seq: 5, type: "review", data: { review: handedReview("succeeded") } },
+        { seq: 6, type: "final", data: final }] }] });
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_url, _body, _signal, handlers, options) => {
+      options.onProgress();
+      handlers.accepted.receive({ chat_id: CHAT, turn_id: TURN }, "1");
+      throw Object.assign(new Error("network error"), { streamFailureKind: "stream_read_failed" });
+    });
+    d.querySelector("#questionInput").value = "Question";
+    await w.App.agentChat.send();
+    const run = w.App.runRegistry.visible();
+    await vi.waitFor(() => expect(run.consensus.completedTurn?.agent_review?.status).toBe("succeeded"));
+    expect(run.consensus.completedTurn.status).toBe("completed");
+    expect(run.metadata.lateReview).toBeNull();
+    dom.window.close();
+  });
+
   it("follows the turn by polling when the stream breaks and ends with its answer", async () => {
     const { window: w, document: d, dom } = bootFollow({ pages: [
       { known: true, done: true, last_seq: 4, events: [

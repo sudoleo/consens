@@ -42,6 +42,18 @@ def test_a_temporary_chat_carries_its_deadline_from_its_creation_and_each_messag
         store.create_chat(UID, execution_mode="consensus", temporary=True)
 
 
+def test_a_message_during_the_sweep_moves_its_deadline_on(store):
+    """The query found the deadline due, a message renewed it before the
+    sweep came to it: the chat stays (review 2026-11-01)."""
+    from app.services.chat_store import ChatStore, _expire_temporary_chat
+    chat = store.create_chat(UID, execution_mode="agent", temporary=True)
+    due = deadline(store, chat["id"])["expires_at"]
+    found = store._temporary_ref(UID, chat["id"]).get()
+    store._temporary_ref(UID, chat["id"]).update({"expires_at": due + TEMPORARY_CHAT_TTL})
+    assert _expire_temporary_chat(ChatStore(store.db), found, now=due + timedelta(seconds=1)) is False
+    assert store.get_chat(UID, chat["id"])["temporary"] is True
+
+
 def test_the_retention_loop_deletes_a_temporary_chat_once_its_deadline_passed(store):
     chat = store.create_chat(UID, execution_mode="agent", temporary=True)
     pending(store, chat_id=chat["id"])

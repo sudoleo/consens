@@ -77,6 +77,17 @@ describe("a guest's Send", () => {
     expect(JSON.parse(chose.window.localStorage.getItem(PENDING)).mode).toBe("consensus");
   });
 
+  // A temporary chat's switch lives in this tab; the sign-in by email
+  // link happens in another (review 2026-11-01).
+  it("takes a temporary chat along, as an Agent chat", () => {
+    const { App, input, window } = boot();
+    App.userSettings = { get: name => (name === "run_mode" ? "compare" : undefined) };
+    App.temporaryChat = { armed: () => true };
+    input.value = "Question";
+    App.composerInvite.sendAsGuest();
+    expect(JSON.parse(window.localStorage.getItem(PENDING))).toMatchObject({ mode: "agent", temporary: true });
+  });
+
   it("only points to the field while it is empty", () => {
     const { App, input, document, calls } = boot();
     expect(App.composerInvite.sendAsGuest()).toBe(true);
@@ -103,6 +114,28 @@ describe("the send after sign-in", () => {
     expect(calls.sentText).toBe("Do I charge VAT?");
     expect(calls.ask).toEqual({ source: "example", after_login: true });
     expect(App.composerInvite.takeAskContext()).toEqual({ source: "typed" });
+  });
+
+  it("sends a temporary question only into a temporary chat", async () => {
+    const pending = { at: Date.now(), source: "typed", text: "Question", mode: "agent", temporary: true };
+    const armable = boot({ guest: false, pending });
+    let armed = false;
+    armable.App.runMode = { preference: () => "agent", set: vi.fn() };
+    armable.App.temporaryChat = { armed: () => armed, arm: vi.fn(on => { armed = on; }) };
+    armable.input.value = "Question";
+    armable.App.composerInvite.afterAccessUpdate(true);
+    await tick(armable.window);
+    expect(armable.App.temporaryChat.arm).toHaveBeenCalledWith(true);
+    expect(armable.calls.sends).toBe(1);
+    // The switch cannot be set (no Agent): the question stays in the field.
+    const refused = boot({ guest: false, pending });
+    refused.App.runMode = { preference: () => "agent", set: vi.fn() };
+    refused.App.temporaryChat = { armed: () => false, arm: vi.fn() };
+    refused.input.value = "Question";
+    refused.App.composerInvite.afterAccessUpdate(true);
+    await tick(refused.window);
+    expect(refused.calls.sends).toBe(0);
+    expect(refused.input.value).toBe("Question");
   });
 
   // A guest sees Agent; one who chose Consensus or Compare sends in that

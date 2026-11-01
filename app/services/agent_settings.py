@@ -466,7 +466,12 @@ class SettingsTools:
         if cancellation is not None:
             cancellation.raise_if_cancelled()
         pro = self._pro()
-        _, models, current, default = self._models()
+        try:
+            _, models, current, default = self._models()
+        except ValueError as exc:
+            # The facts of consens.io do not need the model list: a question
+            # about the price still has its answer (review 2026-11-01).
+            return {"settings": str(exc), "consens_io": self._about()}
         effort = self.loop.model.reasoning_effort or "default"
         open_models = [model["label"] for model in models if model.get("available") is not False and not model.get("premium")]
         pro_models = [model["label"] for model in models if model.get("available") is not False and model.get("premium")]
@@ -547,18 +552,20 @@ class SettingsTools:
             "reviewers": "Settings > Runs > Reviewers: Always (the default), Only in the workspace (from the agent's "
                          "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "
                          "the user's own decisions on cards and the Stop button remain.",
-            "sharing": "Publishing is a separate action: Share makes an answer readable at its link without an "
-                       "account. The user can revoke a link in the share dialog; a revoked share is deleted for good "
-                       f"after {REVOKED_RETENTION_DAYS} days.",
+            "sharing": "Publishing is a separate action: Share makes an answer public, readable at its link without "
+                       "an account, and the operator may let selected shared pages appear in search engines. The "
+                       "user can revoke a link in the share dialog; a revoked share is deleted for good after "
+                       f"{REVOKED_RETENTION_DAYS} days.",
             "memory": "Memory (Settings > Memory) holds what the user writes there about themselves and goes with "
                       "their questions while it is on; they can edit, pause or delete it. The agent saves details "
                       "from the user's own messages only once they turn on \"Let Agent update memory\" (off by "
                       "default).",
             "watches": "A Watch reruns a question on a schedule and tracks how the answer changes; readers can follow "
                        "public Watches and Topics by email.",
-            "data": "Chats can be deleted one by one, and Settings > Account > Delete account deletes the account with "
-                    "everything stored. What is stored, how long and which providers see what is in the privacy "
-                    "policy, the binding text: link it instead of summing it up.",
+            "data": "Chats can be deleted one by one, and Settings > Account > Delete account deletes the account and "
+                    "its chats, files and settings. What is stored, what stays for a while after a deletion, how long "
+                    "and which providers see what is in the privacy policy, the binding text: link it instead of "
+                    "summing it up.",
             "pages": {"about": f"{SITE}/about", "privacy": f"{SITE}/privacy", "terms": f"{SITE}/terms",
                       "imprint": f"{SITE}/imprint", "german": f"the same under {SITE}/de/, e.g. {SITE}/de/privacy"},
             "contact": "contact@consens.io",
@@ -581,9 +588,11 @@ class SettingsTools:
                               "running hold part of it until they finish"})
         if getattr(self.loop, "vm_tools", None) is not None:
             # Admins run it without a cap (agent_vm_time.daily_limit).
-            about["workspace"] = (f"The workspace (the agent's own computer with a browser and files) runs up to "
-                                  f"{BASE_DAILY_SECONDS // 60} minutes a day, {PRO_DAILY_SECONDS // 3600} hours on Pro"
-                                  + ("; this account has no daily limit." if tier == "admin" else "."))
+            about["workspace"] = (f"The workspace (the agent's own computer with a browser and files) runs commands, "
+                                  f"installations and new processes for up to {BASE_DAILY_SECONDS // 60} minutes a "
+                                  f"day, {PRO_DAILY_SECONDS // 3600} hours on Pro"
+                                  + ("; this account has no daily limit." if tier == "admin" else
+                                     "; after that its files, its browser and what runs keep working until the next day."))
         return about
 
     # ---- Preparing a change -------------------------------------------------

@@ -567,7 +567,10 @@ def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(stor
             break
     source.close()
     saved = saved_turn(store, loop)
-    assert saved["status"] == "failed" and saved["assistant_response"] == "The first option costs 100."
+    # The answer stood before the review (agent_runs.hand_over): it stays the
+    # answer, only its review is cut off (since 2026-11-01).
+    assert saved["status"] == "completed" and saved["assistant_response"] == "The first option costs 100."
+    assert "agent_failure" not in saved
     # A review still running when the run closes is marked stopped; one that
     # had already finished keeps its result.
     review = saved["agent_review"]
@@ -590,7 +593,9 @@ def test_later_run_failure_keeps_finished_review_result(store):
     with pytest.raises(RuntimeError):
         list(loop.run())
     saved = saved_turn(store, loop)
-    assert saved["status"] == "failed"
+    # Its answer stood before the review (hand_over): a failure after it
+    # leaves the turn answered (since 2026-11-01).
+    assert saved["status"] == "completed"
     assert saved["agent_review"]["status"] == "succeeded"
     assert [row["status"] for row in saved["agent_review"]["audit"]["reviewers"]] == ["completed", "completed"]
 

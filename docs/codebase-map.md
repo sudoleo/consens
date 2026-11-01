@@ -5179,7 +5179,20 @@ Antwort fixiert ist:
   Lease des Laufs, nie die Chat-Sperre; `finish_run` schreibt Chat-Felder
   (`agent_workspace_used`, Sperre) nur, wenn der Chat noch diesem Turn gehört.
 - Die nächste Nachricht liest einen Turn im Nachlauf wie einen fertigen
-  (`agent_runs.in_history`, auch in `history_current`).
+  (`agent_runs.in_history`, auch in `history_current`). Ihr
+  `purge_abandoned_turns` misst sein Alter ab `agent_answer_fixed_at`, nicht
+  ab `created_at`: ein zweistündiger Arbeitsplatz-Turn ist bei der Übergabe
+  älter als die 30 Minuten und wurde sonst als `abandoned` beendet, während
+  seine Prüfer arbeiteten (Gegenprüfung 2026-11-01).
+- Stirbt der Prozess im Nachlauf (harter Abbruch), beendet der Reaper den
+  Lauf als `cancelled`; `finish_run` lässt einen Turn mit fixierter Antwort
+  dann `completed` mit Antwort, Quellen und Aktivität der Übergabe, nur die
+  Prüfung endet unfertig (`agent_review` wie bei einem Abbruch).
+- `GET /bookmarks/{id}/conversation` zeigt einen Turn im Nachlauf an seiner
+  Stelle im Verlauf (`turn_detail` → `agent_answer_fixed`,
+  `routers/bookmarks._transcript_turn`); als `running` (dem der Browser
+  folgt) gilt er nur, wenn er der neueste Turn ist. Vorher fehlte er nach
+  einem Neuladen, solange die nächste Nachricht lief, oder stand unter ihr.
 - Die Route sendet daraufhin den Frame `handover` (`_handover_frame`: der Turn
   wie im `final`-Frame, Review noch `running`, Bookmark gespeichert); `final`
   folgt am Laufende wie bisher.
@@ -5190,7 +5203,10 @@ Antwort fixiert ist:
   `review`-Frame und das Laufende landen per `reviewArrived` an der Antwort,
   im Live-Bereich oder, nachdem die nächste Nachricht ihn übernahm, am
   Verlaufs-Turn (`.thread-history-turn[data-turn-id]`), und in den Kopien des
-  Turns (Basis, `historyTurns` späterer Läufe).
+  Turns (Basis, `historyTurns` späterer Läufe). Kommen Übergabe und
+  Laufende im selben Poll, endet `followReview` vor `adopt`: `reviewArrived`
+  legt das Ergebnis dann in `metadata.lateReview`, und `acceptAnswer` setzt es
+  gleich nach der Übernahme.
 - Anzeige: Über der fixierten Antwort läuft kein Lichtstreifen mehr. In der
   Zeile darunter stehen vor „Reviewing the answer…“ die Marken der Prüfer
   (`agent-review.js` `reviewerMarks`, `.agent-review-reviewers`), jede atmet,
@@ -8516,6 +8532,8 @@ aus, ein abgebrochener Lauf gibt seine gespeicherte Antwort ohne Bookmark mit
 liegt eine Stunde davor (`TEMPORARY_CHAT_TTL`), weil der Loop stündlich läuft.
 Ein scheiternder Termin hält den Lauf nicht auf (`_expire_temporary_chat`,
 `TEMPORARY_CHAT_RETRY`); einer, dessen Chat schon gelöscht wird, geht allein.
+Vor dem Löschen liest `_expire_temporary_chat` den Termin neu: eine Nachricht,
+die ihn verschob, während der Loop frühere abarbeitete, hält den Chat.
 Ein laufender Turn endet über den Wächter des Laufs (Chat nicht mehr
 `active`). Seit 2026-11-01 nimmt jede Chat-Löschung eines Agent-Chats auch die
 Texte der Laufbelege mit (`ChatStore._scrub_run_receipts`, je 100 Belege ein
@@ -8539,7 +8557,11 @@ gespeicherter Chat; keine Sidebar-Zeile (`run-view.js` `ensureRunRow`), kein
 Nachricht in den laufenden Turn (`readsMessages`, der Lauf hat keine VM),
 keine Arbeitsplatz-Knöpfe (`body.temporary-chat`). Der Schalter überlebt ein
 Neuladen des Tabs (`sessionStorage` `consens.temporaryChat.armed.v1`), damit
-die Frage eines Gasts nach der Anmeldung temporär rausgeht.
+die Frage eines Gasts nach der Anmeldung temporär rausgeht. Meldet er sich
+über den Link in der E-Mail an (ein neues Tab ohne diesen Speicher), trägt der
+wartende Datensatz `temporary: true` und `mode: "agent"`
+(`composer-invite.js`); gesendet wird dann nur, wenn der Schalter wieder an
+ist (`arm(true)`), sonst bleibt die Frage im Feld.
 Verlassen = jede Registry-Änderung (`created`, `visible`, `saved-view`,
 `visible-cleared`, `cleared`), nach der kein Lauf mit seinem Token sichtbar ist
 (Neuer Chat, anderer Chat, Abmelden; `performLogout` löscht ihn erst nach dem
@@ -11588,7 +11610,14 @@ PDFs … für Code natürlich auch“. `static/js/file-viewer.js` (`App.fileView
   Datei in der Nachricht schon mit `vm_render_office` gewandelt, nimmt das
   Teilen dieses PDF (`_rendered`, nach sha256). Es zählt zu den
   `RENDERS_PER_HOUR` des Kontos, kostet keine VM-Zeit und wird nie in den
-  letzten `PREVIEW_MIN_SECONDS` der Antwort versucht; höchstens
+  letzten `PREVIEW_MIN_SECONDS` der Antwort versucht; die Umwandlung bekommt
+  höchstens die Restzeit der Antwort ohne `MIN_COMMAND_SECONDS`
+  (`agent_office.render(seconds=…)`: Warten auf einen Platz, Lauf und
+  LibreOffices eigene Grenze; ein noch nicht eingerichteter Konverter wird
+  mit weniger als Einrichtung plus Lauf nicht eingerichtet). Ein langsamer
+  oder kalter Konverter kostet so die Vorschau, nie die Datei; passt die
+  Datei nur ohne PDF ins Speicherlimit, speichert `AgentFiles.save` sie ohne.
+  `vm_render_office` hält für dieses Teilen nur PDFs bis `PREVIEW_BYTES`; höchstens
   `PREVIEW_BYTES` (10 MB). Es liegt als zweites privates Objekt neben der
   Datei (`AgentFiles.save(preview=…)`, Feld `preview {mime, size, sha256}`,
   Schlüssel `object_key + ".preview"`), zählt zum Speicher des Kontos, geht

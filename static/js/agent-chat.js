@@ -983,6 +983,11 @@
       // The next message stays in the temporary chat (temporary-chat.js).
       temporary: context.config.temporary === true || data.temporary === true,
     });
+    const late = context.metadata.lateReview;
+    if (late) {
+      context.metadata.lateReview = null;
+      reviewArrived(context, late.review, late.turn);
+    }
   }
   // Besides its Watch pill, a finished answer may offer to keep itself
   // current (watch.js owns the card, the counter and "dismissed"). Only a
@@ -2756,7 +2761,10 @@
   // the page already took as done.
   function reviewArrived(context, review, turn = null) {
     const saved = context.consensus.completedTurn;
-    if (!saved || !review || !registry.isAuthCurrent(context)) return;
+    if (!review || !registry.isAuthCurrent(context)) return;
+    // The run's end came in the same poll as the hand-over and settles
+    // before adopt took the answer: acceptAnswer lands it right after.
+    if (!saved) { context.metadata.lateReview = { review, turn: turn || context.metadata.lateReview?.turn || null }; return; }
     context.metadata.agentReview = review;
     if (turn) {
       const activity = turn.agent_activity?.length ? turn.agent_activity : saved.agent_activity;

@@ -389,7 +389,8 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     monkeypatch.setattr(agent_quota, "remaining_allowance",
                         lambda db, uid, tier=None: (_ for _ in ()).throw(RuntimeError("firestore down")))
     about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
-    assert about["workspace"].endswith("20 minutes a day, 2 hours on Pro.")
+    # Only what counts stops at the cap (agent_vm_time: commands, installs, new processes).
+    assert "up to 20 minutes a day, 2 hours on Pro; after that its files, its browser" in about["workspace"]
     assert set(about["allowance"]) == {"how"} and about["contact"] == "contact@consens.io"
     # An admin's workspace has no daily cap (agent_vm_time.daily_limit).
     monkeypatch.setattr(agent_quota, "_admin_role", lambda uid: True)
@@ -666,8 +667,9 @@ def test_auto_counts_with_the_level_it_runs_at(store, effort, wanted, expected, 
 def test_a_model_list_outage_is_a_readable_refusal(store):
     loop = settings_loop(store)
     loop.settings_tools.catalog = lambda: (_ for _ in ()).throw(RuntimeError("metadata down"))
-    with pytest.raises(ValueError, match="model list is unavailable"):
-        loop.settings_tools.read(agent_settings.ReadSettings())
+    # The facts of consens.io do not need the model list (review 2026-11-01).
+    read = loop.settings_tools.read(agent_settings.ReadSettings())
+    assert "model list is unavailable" in read["settings"] and read["consens_io"]["contact"] == "contact@consens.io"
     with pytest.raises(ValueError, match="model list is unavailable"):
         prepare(loop, reasoning="low")
     # Settings without the model still work.

@@ -175,6 +175,29 @@ def test_a_stop_ends_the_wait_for_a_place(monkeypatch):
     assert time.monotonic() - started < 5
 
 
+def test_a_conversion_takes_no_longer_than_the_answer_has_left():
+    """A file shared late in a long run: the conversion ate the answer's
+    reserve and the hard stop took the share down with it (review
+    2026-11-01). ``seconds`` cuts the run and LibreOffice's own limit; a
+    converter still to set up is left to a later call, one set up is used."""
+    class Timed(Converter):
+        def run(self, name, argv, *, timeout, **kwargs):
+            self.timeout = timeout
+            return super().run(name, argv, timeout=timeout, **kwargs)
+    cold = Timed()
+    with pytest.raises(agent_office.OfficeUnavailable, match="no time"):
+        agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=cold, seconds=60)
+    assert cold.setups == [] and cold.runs == [] and agent_office._failed_at is None
+    warm = Timed(marker=agent_office.VERSION.encode() + b"\n")
+    agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=warm, seconds=100)
+    [(_, argv, _)] = warm.runs
+    assert warm.setups == [] and warm.timeout <= 100
+    assert int(argv[5]) == warm.timeout - (agent_office.RUN_SECONDS - agent_office.CONVERT_SECONDS)
+    # Without a limit, as before.
+    agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=warm)
+    assert warm.timeout == agent_office.RUN_SECONDS and warm.runs[1][1][5] == str(agent_office.CONVERT_SECONDS)
+
+
 def test_without_a_provider_the_converter_is_unavailable_and_its_own_backend_closes(monkeypatch):
     monkeypatch.setattr(agent_vm, "backend", lambda: None)
     with pytest.raises(agent_office.OfficeUnavailable):

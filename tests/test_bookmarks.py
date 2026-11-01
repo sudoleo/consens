@@ -390,6 +390,45 @@ def test_agent_bookmark_returns_failed_turn_without_synthesis():
     assert response.status_code == 200 and response.json()['turns'] == [turn]
 
 
+def test_agent_bookmark_shows_a_turn_under_review_in_its_place():
+    # A reload while the reviewers of the previous answer still work and the
+    # next message already runs (agent_runs.hand_over, 2026-11-01): the
+    # answered turn stands in the transcript, the next one is followed.
+    bookmark_id, chat_id = "review_tail", "c" * 32
+    fake_db = FakeBookmarkDatabase({"uid-1": {bookmark_id: {
+        "query": "Question", "chat_id": chat_id, "execution_mode": "agent"}}})
+    reviewing = {"id": "1" * 32, "status": "pending", "execution_mode": "agent", "question": "First",
+                 "consensus": "Answer", "position": 1, "client_request_id": "req-1", "agent_answer_fixed": True}
+    following = {"id": "2" * 32, "status": "pending", "execution_mode": "agent", "question": "Second",
+                 "position": 2, "client_request_id": "req-2"}
+    finished = {**following, "status": "completed", "consensus": "Second answer"}
+    pages = {"turns": [reviewing, following], "has_more": False}
+
+    class Store:
+        def list_turn_details(self, uid, requested_chat_id, **kwargs):
+            return pages
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+    with (patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+          patch.object(bookmarks_router, "db_firestore", fake_db),
+          patch.object(bookmarks_router, "_chat_store", return_value=Store())):
+        client = TestClient(app)
+        body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
+        assert body["turns"] == [reviewing] and body["running"]["id"] == "2" * 32
+        # The next message is done already: the turn under review stays above
+        # it instead of being followed below it.
+        pages["turns"] = [reviewing, finished]
+        body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
+        assert body["turns"] == [reviewing, finished] and body["running"] is None
+        # Alone at the end it is followed as before, and not drawn twice.
+        pages["turns"] = [reviewing]
+        body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
+        assert body["turns"] == [] and body["running"]["id"] == "1" * 32
+
+
 def test_agent_bookmark_names_its_running_turn_for_another_tab_to_follow():
     # A-B2 (docs/agent-audit-readiness-2026-10-29.md): a chat opened in a
     # second tab or on another device follows its running turn by the

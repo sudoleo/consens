@@ -97,7 +97,7 @@ def test_an_office_file_becomes_a_pdf_beside_it_and_its_pages_follow_as_a_pictur
     api_uid_limiter.reset()
     sent = []
 
-    def render(data, extension, *, cancellation, backend=None):
+    def render(data, extension, *, cancellation, backend=None, seconds=None):
         sent.append((data, extension))
         return agent_office.Rendered(pdf=b"%PDF-1.7 deck", overview=PNG, pages=8)
     monkeypatch.setattr(agent_office, "render", render)
@@ -139,7 +139,7 @@ def test_office_rendering_refuses_other_files_and_keeps_the_workspace_on_when_th
     from app.services import agent_office
     api_uid_limiter.reset()
 
-    def render(data, extension, *, cancellation, backend=None):
+    def render(data, extension, *, cancellation, backend=None, seconds=None):
         if data == b"broken":
             raise agent_office.OfficeRefused("LibreOffice could not turn the file into a PDF.")
         raise agent_office.OfficeUnavailable("conversion failed")

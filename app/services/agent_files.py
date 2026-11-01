@@ -264,8 +264,13 @@ class AgentFiles:
         stored = len(raw) + (len(preview) if preview else 0)
         max_files, max_bytes = limits or (MAX_FILES, MAX_STORAGE_BYTES)
         def reserve(tx):
+            nonlocal preview, stored
             self.guard(uid, chat_id, tx)
             usage = quota.get(transaction=tx).to_dict() or {}
+            if preview and usage.get("bytes", 0) + stored > max_bytes:
+                # The preview only shows the file: one that still fits goes without.
+                preview, stored = None, len(raw)
+                data.pop("preview", None)
             if usage.get("count", 0) >= max_files or usage.get("bytes", 0) + stored > max_bytes:
                 raise FileUnavailable(f"File storage limit reached ({max_files} files or "
                                       f"{max_bytes // (1024 * 1024)} MB). Delete old files before uploading more.")
