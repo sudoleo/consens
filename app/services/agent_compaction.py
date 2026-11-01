@@ -84,6 +84,8 @@ SCREENSHOT_GONE = ("The screenshot is no longer shown, to save context. A new sc
                    "page as it is now.")
 WEB_PICTURE_GONE = ("The picture is no longer shown, to save context. find_pictures with its address shows it "
                     "again, under the same id.")
+OVERVIEW_GONE = ("The overview is no longer shown, to save context. vm_render_office shows it again; the PDF next to "
+                 "the file has every page.")
 
 
 @dataclass
@@ -124,11 +126,14 @@ def picture_gone(intro):
     (the app's own text above the image, never the model's): the way back
     to it where it came from."""
     from app.services.agent_browser import SCREENSHOT_INTRO
+    from app.services.agent_vm_tools import OVERVIEW_INTRO
     from app.services.agent_web_images import INTRO
     if intro.startswith(INTRO.split("{")[0]):
         return WEB_PICTURE_GONE
     if intro.startswith(SCREENSHOT_INTRO.split("{")[0]):
         return SCREENSHOT_GONE
+    if intro.startswith(OVERVIEW_INTRO.split("{")[0]):
+        return OVERVIEW_GONE
     return PICTURE_GONE
 
 

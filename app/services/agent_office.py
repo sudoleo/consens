@@ -25,11 +25,13 @@ import io
 import logging
 import tarfile
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.observability import safe_exception
 from app.services import agent_vm
+from app.services.llm.provider_runtime import ProviderCancellation
 
 NAME = "consens-office"
 DIR = agent_vm.SERVER_HOME + "/.consens/office"
@@ -48,7 +50,15 @@ MAX_OUTPUT = 60 * 1024 * 1024
 # The overview shows this many pages; the PDF has them all.
 OVERVIEW_PAGES = 12
 SETUP_SECONDS = 300
+# After a failed setup the converter counts as down this long: every call
+# would otherwise run the whole setup again and wait minutes for it.
+SETUP_RETRY_SECONDS = 600
+# LibreOffice's own limit; convert.sh's other steps take at most 50 s more,
+# and the server waits RUN_SECONDS, so the script ends a slow file itself.
 CONVERT_SECONDS = 90
+RUN_SECONDS = CONVERT_SECONDS + 75
+# A wait for a slot or for the setup looks at Stop this often.
+WAIT_STEP_SECONDS = 1
 # Conversions at once on the one VM (8 cores; LibreOffice takes one or two each).
 PARALLEL = 3
 # Per account, the operator's cost (agent_vm_tools.render).
@@ -84,24 +94,41 @@ def _version():
 
 VERSION = _version()
 _ready = None
+_failed_at = None
 _setup_lock = threading.Lock()
 _slots = threading.BoundedSemaphore(PARALLEL)
 
 
-def _quiet(stream, chunk):
-    pass
+def _take(lock, cancellation, seconds):
+    """``lock`` within ``seconds``, looking at Stop meanwhile; False when it
+    stayed taken."""
+    deadline = time.monotonic() + seconds
+    while True:
+        cancellation.raise_if_cancelled()
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return False
+        if lock.acquire(timeout=min(WAIT_STEP_SECONDS, left)):
+            return True
 
 
 def prepare(backend, cancellation):
     """The converter at this VERSION: created where missing, its rules set,
     the tools written and set up when its marker names another version.
-    Once per process; a failed setup is tried again by the next call."""
-    global _ready
+    Once per process. The setup runs to its end whatever the message does:
+    a Stop halfway through apt would leave dpkg broken for every account
+    (setup.sh repairs that too). After a failure the converter counts as
+    down for SETUP_RETRY_SECONDS."""
+    global _ready, _failed_at
     if _ready == VERSION:
         return
-    with _setup_lock:
+    if not _take(_setup_lock, cancellation, SETUP_SECONDS + 30):
+        raise OfficeUnavailable("setup busy")
+    try:
         if _ready == VERSION:
             return
+        if _failed_at is not None and time.monotonic() - _failed_at < SETUP_RETRY_SECONDS:
+            raise OfficeUnavailable("setup failed recently")
         backend.ensure(NAME, RULES)
         try:
             raw, _ = backend.read_file(NAME, MARKER, limit=64, agent=False)
@@ -111,13 +138,20 @@ def prepare(backend, cancellation):
             for name, data in tool_files().items():
                 backend.write_file(NAME, f"{DIR}/{name}", data, agent=False)
             said = []
-            outcome = backend.exec(NAME, f"sudo -n bash {DIR}/setup.sh {VERSION}", cwd=agent_vm.SERVER_HOME,
-                                   timeout=SETUP_SECONDS, on_output=lambda stream, chunk: said.append(chunk),
-                                   cancellation=cancellation, agent=False)
+            try:
+                outcome = backend.exec(NAME, f"sudo -n bash {DIR}/setup.sh {VERSION}", cwd=agent_vm.SERVER_HOME,
+                                       timeout=SETUP_SECONDS, on_output=lambda stream, chunk: said.append(chunk),
+                                       cancellation=ProviderCancellation(), agent=False)
+            except agent_vm.VMUnavailable:
+                _failed_at = time.monotonic()
+                raise
             if outcome.exit_code != 0:
+                _failed_at = time.monotonic()
                 logging.warning("Office converter setup failed exit=%s", outcome.exit_code)
                 raise OfficeUnavailable("setup failed")
-        _ready = VERSION
+        _ready, _failed_at = VERSION, None
+    finally:
+        _setup_lock.release()
 
 
 def _unpack(raw):
@@ -143,7 +177,7 @@ def render(data, extension, *, cancellation, backend=None):
     if len(data) > MAX_BYTES:
         raise OfficeRefused(f"The file is larger than {MAX_BYTES // (1024 * 1024)} MB.")
     # A free slot, or the converter counts as busy (never a wait without end).
-    if not _slots.acquire(timeout=CONVERT_SECONDS):
+    if not _take(_slots, cancellation, CONVERT_SECONDS):
         raise OfficeUnavailable("busy")
     own = backend is None
     out, err = bytearray(), bytearray()
@@ -159,17 +193,29 @@ def render(data, extension, *, cancellation, backend=None):
         prepare(backend, cancellation)
         outcome = backend.run(NAME, ["sudo", "-n", "/bin/bash", CONVERT, extension, str(CONVERT_SECONDS),
                                      str(OVERVIEW_PAGES)],
-                              cwd="/", timeout=CONVERT_SECONDS + 60, on_output=keep, cancellation=cancellation,
+                              cwd="/", timeout=RUN_SECONDS, on_output=keep, cancellation=cancellation,
                               input=bytes(data))
     except agent_vm.VMUnavailable as exc:
+        _forget()
         raise OfficeUnavailable(str(exc)) from None
     finally:
         if own and backend is not None:
             backend.close()
         _slots.release()
-    if outcome.exit_code in (2, 3):
+    if outcome.exit_code in (2, 3, 5):
+        # The file's, not the converter's; still worth a line, for a pattern.
+        logging.info("Office conversion refused exit=%s", outcome.exit_code)
         raise OfficeRefused(err.decode("utf-8", "replace").strip()[:300] or "LibreOffice could not convert the file.")
     if outcome.exit_code != 0 or outcome.timed_out or len(out) > MAX_OUTPUT:
         logging.warning("Office conversion failed exit=%s timed_out=%s", outcome.exit_code, outcome.timed_out)
+        if outcome.exit_code == 127:
+            _forget()
         raise OfficeUnavailable("conversion failed")
     return _unpack(bytes(out))
+
+
+def _forget():
+    """A converter that failed this way may be gone or reset (its Sprite
+    recreated, convert.sh missing): the next call checks it again."""
+    global _ready
+    _ready = None

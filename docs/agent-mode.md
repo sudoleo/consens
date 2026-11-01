@@ -1359,26 +1359,65 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   Marke `/usr/local/lib/consens/office/VERSION`, zuletzt geschrieben; einmal
   pro Prozess geprüft, `prepare`), das Setup läuft als root (LibreOffice
   Impress/Writer/Calc ohne Recommends, Carlito/Caladea/Liberation/DejaVu,
-  poppler-utils, python3-pil, Nutzer `office` ohne sudo, Home und Shell).
+  poppler-utils, python3-pil, Nutzer `office0`–`office2` ohne sudo, Home
+  und Shell, einer je Platz).
   Netz nur Ubuntus Spiegel (`RULES`). Eine Umwandlung schickt die Bytes per
   stdin an `convert.sh` und liest ein tar von stdout (`in.pdf`, `pages.png`,
-  `pages.txt`); LibreOffice läuft als `office` in einem Ordner nur dieser
-  Umwandlung mit eigenem Profil (`-env:UserInstallation`), danach gehen alle
-  Prozesse und Dateien dieses Nutzers (`trap cleanup`): Eine Datei trifft nie
-  die eines anderen Kontos, und auf der VM bleibt nichts. Höchstens
-  `PARALLEL` = 3 zugleich (Semaphore, sonst nach 90 s „busy“). Die Sprite
-  schläft dazwischen; Rechenzeit kostet nur die Umwandlung (Sekunden), der
-  Speicher einmal statt pro Konto.
+  `pages.txt`). `convert.sh` nimmt sich einen von drei Plätzen
+  (`flock -n` auf `/run/consens-office/slotN.lock`, sonst Exit 4 „busy“)
+  und lässt LibreOffice als dessen Nutzer `officeN` in einem Ordner nur
+  dieser Umwandlung mit eigenem Profil laufen (`-env:UserInstallation`);
+  danach gehen alle Prozesse und Dateien dieses Nutzers (`trap cleanup`):
+  Eine Datei trifft nie die eines anderen Kontos, und auf der VM bleibt
+  nichts. Bis zur Live-Probe teilten sich alle Umwandlungen einen Nutzer,
+  und die erste fertige beendete die anderen (2 von 3 scheiterten); die
+  Sperre gilt auch über zwei Serverprozesse hinweg (Deploy-Überlappung).
+  Der Server lässt höchstens `PARALLEL` = 3 zugleich los (Semaphore, sonst
+  nach 90 s „busy“; die Wartezeit schaut jede Sekunde nach Stop).
+  `convert.sh` geht zuerst nach `/` (aus einem Ordner, den die Platz-Nutzer
+  nicht betreten dürfen, brach LibreOffice sofort ab), räumt den Platz vor
+  der Umwandlung schon einmal auf (Reste einer mit SIGKILL beendeten, deren
+  Trap nie lief; `kill -s KILL -- -1` als Platz-Nutzer erreicht auch einen,
+  der immer neu forkt) und schreibt die Seitenzahl als Platz-Nutzer, nie als
+  root in dessen Ordner. Jeder Schritt hat sein Limit (LibreOffice
+  `CONVERT_SECONDS` = 90 +5, `pdfinfo` 10, `pdftoppm` 20, `sheet.py` 20),
+  zusammen unter `RUN_SECONDS` = 165 des Servers; ein Zeitlimit von
+  LibreOffice ist Exit 5 („took longer than …“), nicht „kaputt“. Das Setup
+  beendet zuerst ein abgebrochenes dpkg (`dpkg --configure -a`), leert danach
+  den Paket-Cache (~200 MB weniger Speicher) und läuft mit eigener
+  Cancellation zu Ende, auch wenn der Nutzer stoppt; scheitert es, gilt der
+  Konverter `SETUP_RETRY_SECONDS` = 600 lang als aus (sonst wartete jeder
+  Aufruf Minuten auf ein neues Setup). Ein Provider-Ausfall oder Exit 127
+  (Sprite neu, `convert.sh` fehlt) lässt den nächsten Aufruf neu prüfen
+  (`_forget`). Diese Punkte kamen aus einer unabhängigen Durchsicht am selben
+  Tag. **Live geprüft 2026-11-01** an fünf Test-Sprites (Max' OK, alle
+  gelöscht): Einrichtung samt erster Umwandlung 38–41 s, danach Folien
+  2,3 s, Word 2,1 s, Excel 1,4–1,7 s; 3, 4 und 6 zugleich alle erfolgreich;
+  ein liegengelassener Prozess und eine Datei von `office0` waren vor der
+  nächsten Umwandlung weg; 0,05 s für LibreOffice ergab Exit 5; Start aus dem
+  Home des Anbieters klappt; Übersicht höchstens 1568 px, apt-Cache 20 KB;
+  LibreOffice 26.2 auf Ubuntu 26.04, 325 MB einmal; nichts bleibt in `/tmp`,
+  die Platz-Nutzer haben kein sudo, und die VM erreicht nur Ubuntus Spiegel
+  (example.com: DNS gesperrt). LibreOffice liest fast alles: Text oder
+  Zufallsbytes unter `.docx`/`.pptx` werden ein PDF ihres Inhalts, Exit 3 ist
+  selten. Die Sprite schläft dazwischen; Rechenzeit kostet nur die
+  Umwandlung (Sekunden), der Speicher einmal statt pro Konto.
   `vm_render_office(path)` liest die Datei aus der Werkbank (pptx/ppt/odp,
-  docx/doc/odt/rtf, xlsx/xls/ods, bis 20 MB), legt das PDF daneben
-  (`<name>.pdf`) und zeigt dem Agenten wie `vm_view_image` eine Übersicht der
-  ersten `OVERVIEW_PAGES` = 12 Seiten (Folien in zwei Spalten, Hochformat in
-  drei, `sheet.py`), mit eigenem Begleitsatz; ohne Bildfähigkeit des Modells
-  nur das PDF. Nicht lesbare Datei (Exit 3) = Fehler des Agenten, Ausfall des
-  Konverters = Fehler des Aufrufs, die Werkbank bleibt an. Keine VM-Zeit des
-  Kontos, dafür `RENDERS_PER_HOUR` = 30 je Konto. python-pptx & Co. holt der
-  Agent bei Bedarf selbst (pip, ~4 s). Noch nicht an einer echten Sprite
-  geprüft (Smoke-Liste „Office-Dateien“).
+  docx/doc/odt/rtf, xlsx/xls/ods, bis 20 MB), legt das PDF unter ihrem ganzen
+  Namen daneben (`deck.pptx` → `deck.pptx.pdf`: nie über ein fremdes
+  `deck.pdf` oder das PDF von `deck.docx`) und zeigt dem Agenten wie
+  `vm_view_image` eine Übersicht der ersten `OVERVIEW_PAGES` = 12 Seiten
+  (Folien in zwei Spalten, Hochformat in drei, höchstens 1568 px, `sheet.py`).
+  Ihr Begleitsatz `OVERVIEW_INTRO` beginnt wie jedes Bild mit
+  `agent_compaction.PICTURE_OPEN`: Sie verlässt den Blick mit den älteren
+  Bildern (`OVERVIEW_GONE` sagt, wie sie zurückkommt), und das
+  Arbeitsprotokoll zählt sie zur VM. Ohne Bildfähigkeit des Modells oder
+  über `PICTURE_BYTES` nur das PDF. Nicht lesbare Datei (Exit 2/3/5) = Fehler
+  des Agenten, Ausfall des Konverters = Fehler des Aufrufs, die Werkbank
+  bleibt an. Keine VM-Zeit des Kontos, dafür `RENDERS_PER_HOUR` = 30 je Konto,
+  gezählt erst, wenn die Datei gelesen ist. python-pptx & Co. holt der Agent
+  bei Bedarf selbst (pip, ~4 s). Offen: ein echter Agent-Lauf in Prod
+  (Smoke-Liste „Office-Dateien“).
 - **Netz für das Setup.** `dl.google.com` ist in `WORKBENCH_RULES` zu.
   `prepare` liest deshalb vor `setup.sh` die Regeln (`get_policy`), setzt sie
   plus `{"domain": "dl.google.com", "action": "allow"}` (`CHROME_RULE`) und

@@ -329,12 +329,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `consens-office`): Konto mit Arbeitsplatz, „Mach mir eine kurze
       PowerPoint über X“. Der Agent installiert kein LibreOffice, ruft
       `vm_render_office` (Aktivität „Made a PDF of …“), sieht die Übersicht der
-      Folien und liefert die .pptx; das PDF liegt daneben im Chat-Ordner. Der
+      Folien und liefert die .pptx; das PDF liegt daneben (`… .pptx.pdf`). Der
       erste Aufruf nach einem Deploy, der `workspace_vm/office` ändert, richtet
-      den Konverter ein (bis ~2 min), jeder weitere braucht Sekunden. Eine
-      kaputte Datei (`echo x > kaputt.docx`) bringt „LibreOffice could not turn
-      the file into a PDF …“, die Werkbank bleibt an. Im Sprites-Dashboard gibt
-      es genau eine Sprite `consens-office`, die nach der Umwandlung schläft.
+      den Konverter ein (live gemessen 38 s inkl. erster Umwandlung), jeder
+      weitere braucht 1,5–2,5 s. Eine Datei mit falscher Endung (`echo x >
+      kaputt.docx`) wird ein PDF ihres Textes, kein Fehler: LibreOffice liest
+      fast alles. Im Sprites-Dashboard gibt es genau eine Sprite
+      `consens-office`, die nach der Umwandlung schläft.
 - [ ] VM-Zeit am Tageslimit (2026-10-31, Konto ohne Pro mit Arbeitsplatz,
       echte Sprite): „Bau mir eine kleine Web-App und zeig sie mir im
       Browser“: Der Dev-Server bekommt höchstens die Hälfte der Restzeit
