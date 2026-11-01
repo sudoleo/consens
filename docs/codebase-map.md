@@ -4562,7 +4562,10 @@ auch `check_contradictions`): der Server führt es über
 `ToolRegistry.validate` nimmt ein Array-/Objekt-Argument, das als JSON-Text
 kommt (Sonnet schickte `"memory": "[]"` und scheiterte dreimal an der
 Validierung), als den deklarierten Container (`_decode_stringified`); alles
-andere lehnt die Validierung ab. Seit 2026-10-07 steuert allein der Code-Prompt
+andere lehnt die Validierung ab. Werkzeugschemas gehen flach an den Provider
+(`argument_schema`, kein `$defs`/`$ref`; DeepSeek sah verschachtelte Modelle
+sonst nicht), und ein unbekanntes Feld nennt in der Ablehnung die erlaubten
+Felder seines Objekts. Seit 2026-10-07 steuert allein der Code-Prompt
 (gespeicherte Admin-Prompts wirken nicht), seit 2026-10-31
 `DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT` (Aufbau unter
 „Prompt-Aufteilung im Agenten“ unten). Ob der Agent sucht, liest, die Modelle

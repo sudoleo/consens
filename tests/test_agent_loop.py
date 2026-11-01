@@ -832,3 +832,13 @@ def test_refused_tool_calls_say_what_to_change(caplog):
         DelegationLoop._log_rejected_call(call("compare_models", json.dumps({"question": secret})), invalid.value)
     assert "tool=compare_models" in caplog.text and "question:missing" in caplog.text
     assert secret not in caplog.text
+
+
+def test_a_recursive_argument_model_is_refused_at_registration():
+    # Flat schemas (argument_schema) cannot write out a model that holds itself.
+    from pydantic import BaseModel, ConfigDict
+    class Node(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        children: list["Node"] = []
+    with pytest.raises(ValueError, match="recursive"):
+        ToolRegistry([ReadOnlyTool("tree", "Tree", Node, lambda a, **kw: {})])

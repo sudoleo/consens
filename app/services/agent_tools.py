@@ -44,6 +44,49 @@ def search_tools(model, searches):
                             max_characters=SEARCH_RESULT_CHARACTERS)] if searches else []
 
 
+def argument_schema(arguments):
+    """The argument model's JSON schema with every $ref written out in place.
+
+    Pydantic puts nested models under $defs. DeepSeek V4.1 Flash never saw
+    them: it called create_document three times with guessed section fields
+    ("blocks", "content", "text") until the turn ended (2026-11-01), and
+    needed three attempts at prepare_settings_change before. A flat schema
+    shows every provider the whole structure."""
+    schema = arguments.model_json_schema()
+    definitions = schema.pop("$defs", {})
+
+    def resolve(node, seen):
+        if isinstance(node, list):
+            return [resolve(item, seen) for item in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" not in node:
+            return {key: resolve(value, seen) for key, value in node.items()}
+        name = node["$ref"].rsplit("/", 1)[-1]
+        if name in seen:
+            raise ValueError("Tool argument schemas must not be recursive")
+        siblings = {key: resolve(value, seen) for key, value in node.items() if key != "$ref"}
+        return {**resolve(definitions[name], seen | {name}), **siblings}
+
+    return resolve(schema, frozenset())
+
+
+def _option(node, key):
+    """The anyOf option of an optional field that carries ``key``."""
+    return next((option for option in node.get("anyOf", ()) if key in option), node)
+
+
+def _allowed_fields(schema, path):
+    """The fields the object at ``path`` takes, for an unknown-field refusal."""
+    node = schema
+    for part in path:
+        node = (_option(node, "items").get("items") if isinstance(part, int)
+                else _option(node, "properties").get("properties", {}).get(part))
+        if not isinstance(node, dict):
+            return []
+    return list(_option(node, "properties").get("properties", {}))
+
+
 @dataclass(frozen=True)
 class ReadOnlyTool:
     name: str
@@ -65,7 +108,7 @@ class ReadOnlyTool:
                 or not self.arguments.model_config.get("strict")):
             raise ValueError("Tools require strict server-owned argument schemas")
         return {"type": "function", "function": {"name": self.name, "description": self.description,
-                "parameters": self.arguments.model_json_schema()}}
+                "parameters": argument_schema(self.arguments)}}
 
 
 def _decode_stringified(arguments, value, unique):
@@ -74,7 +117,7 @@ def _decode_stringified(arguments, value, unique):
     repeated it until the turn ended (2026-10-07). A string that decodes to
     the declared container type is taken as that container; anything else is
     left for validation to reject."""
-    properties = arguments.model_json_schema().get("properties", {})
+    properties = argument_schema(arguments).get("properties", {})
     decoded = dict(value)
     for key, item in value.items():
         if not isinstance(item, str) or key not in properties:
@@ -145,11 +188,21 @@ class ToolRegistry:
         except ValidationError as exc:
             # Field and message only: pydantic's default text repeats the
             # input and a docs URL per error, and the 500-character cut
-            # dropped every error after the second.
-            problems = "; ".join(
-                f"{'.'.join(str(part) for part in error['loc']) or 'arguments'}: {error['msg']}"
-                for error in exc.errors(include_url=False, include_input=False))
-            raise ValueError(f"Invalid {tool.name} arguments - {problems}") from exc
+            # dropped every error after the second. An unknown field also
+            # names the fields its object takes, once per object: "Extra
+            # inputs are not permitted" alone left DeepSeek guessing
+            # (2026-11-01).
+            schema, named, problems = argument_schema(tool.arguments), set(), []
+            for error in exc.errors(include_url=False, include_input=False):
+                problem = f"{'.'.join(str(part) for part in error['loc']) or 'arguments'}: {error['msg']}"
+                parent = error["loc"][:-1]
+                if error["type"] == "extra_forbidden" and parent not in named:
+                    named.add(parent)
+                    allowed = _allowed_fields(schema, parent)
+                    if allowed:
+                        problem += f" (allowed here: {', '.join(allowed)})"
+                problems.append(problem)
+            raise ValueError(f"Invalid {tool.name} arguments - {'; '.join(problems)}") from exc
         return tool, arguments
 
     def _unknown_notes(self):

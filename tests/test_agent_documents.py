@@ -1,4 +1,5 @@
 import io
+import json
 from types import SimpleNamespace
 import pytest
 from docx import Document
@@ -260,6 +261,28 @@ def test_document_tools_get_a_larger_argument_limit_than_other_tools():
     assert registry.validate({"function": {"name": "large", "arguments": payload}})[0].name == "large"
     with pytest.raises(ValueError, match="not authorized"):
         registry.validate({"function": {"name": "small", "arguments": payload}})
+
+
+def test_document_schema_is_flat_and_refusals_name_the_section_fields():
+    # DeepSeek V4.1 Flash never saw the section fields under $defs and sent
+    # "blocks", "content", "text" until the turn ended (2026-11-01).
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+    registry = ToolRegistry([ReadOnlyTool("create_document", "", CreateDocument, None, argument_limit=50_000),
+                             ReadOnlyTool("revise_document", "", ReviseDocument, None, argument_limit=50_000)])
+    schemas = json.dumps(registry.schemas)
+    assert "$ref" not in schemas and "$defs" not in schemas
+    section = registry.schemas[0]["function"]["parameters"]["properties"]["document"]["properties"]["sections"]["items"]
+    assert list(section["properties"]) == ["heading", "paragraphs", "table"]
+    def call(document):
+        return {"function": {"name": "create_document", "arguments": json.dumps({"document": document})}}
+    with pytest.raises(ValueError) as refused:
+        registry.validate(call({"title": "T", "sections": [{"heading": "A", "blocks": []}, {"heading": "B", "text": "x"}]}))
+    text = str(refused.value)
+    assert "sections.0.blocks: Extra inputs are not permitted (allowed here: heading, paragraphs, table)" in text
+    assert text.count("allowed here") == 2
+    # The whole document sent as JSON text is an object like any other.
+    sent = json.dumps({"title": "T", "sections": [{"heading": "A", "paragraphs": ["p"]}]})
+    assert registry.validate(call(sent))[1].document.sections[0].paragraphs == ["p"]
 
 
 def test_failed_revision_keeps_the_manifest_title(setup, monkeypatch):
