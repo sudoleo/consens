@@ -15,8 +15,10 @@ the comparison answers and the app's page fetches are not part of it
 
 The log only grows: an entry is never changed, a retraction is a new entry.
 One writer thread saves the entries in order, up to BATCH_LIMIT per
-Firestore transaction of their own (AgentSessionStore.save_work_log), under
-``users/{uid}/chats/{chat}/turns/{turn}/work_log/{seq:06d}``. Content above
+Firestore transaction of their own (AgentSessionStore.save_work_log), as
+chunk documents ``users/{uid}/chats/{chat}/turns/{turn}/work_log/{seq:06d}``
+named after their first entry (``seq``, ``last_seq``, ``entries``; until
+2026-11-01 one document per entry, which readers still take). Content above
 INLINE_CHARS goes to the private object store (agent_files.PrivateObjects);
 without one it is kept shortened. Recording never raises and never holds the
 agent up: an entry that cannot be saved is lost, and the turn then carries
@@ -45,8 +47,18 @@ RETENTION_DAYS = 30
 # to the object store and the entry keeps PREVIEW_CHARS of it.
 INLINE_CHARS = 16_000
 PREVIEW_CHARS = 2_000
-# Entries per Firestore transaction (each one write).
+# Entries per Firestore transaction. They go out together as a few chunk
+# documents (AgentSessionStore.save_work_log, CHUNK_BYTES each), never one
+# document per entry (until 2026-11-01: 687 writes on a day of 15 messages,
+# and as many deletes 30 days later).
 BATCH_LIMIT = 50
+# The writer gathers what comes within this long after the first entry it
+# has not saved yet (the run's end saves at once): a step brings several
+# entries one after another. On the 687 entries of 2026-11-01 that is 202
+# writes instead of 627 (2 s: 285, 10 s: 136). Only the saved log's view
+# (admins, agent-work-log.js, polling every 3 s) sees entries this much
+# later; the reviewers read the log in memory.
+FLUSH_SECONDS = 5.0
 WRITE_ATTEMPTS = 3
 # Seconds the run's end waits for the writer; what it has not saved by then
 # is lost (the log then has no ``end`` entry, which readers take as a gap).
@@ -199,8 +211,11 @@ class WorkLog:
     at the run's end, at most CLOSE_SECONDS)."""
 
     def __init__(self, store, uid, chat_id, turn_id, *, ready=lambda: True, objects=None, clock=_now,
-                 sleep=time.sleep):
+                 sleep=time.sleep, flush_seconds=FLUSH_SECONDS):
         self.store, self.uid, self.chat_id, self.turn_id = store, uid, chat_id, turn_id
+        self._flush_seconds = flush_seconds
+        # When the oldest unsaved entry came (time.monotonic), or None.
+        self._pending_since = None
         # Entries are saved once the run has started its first model step;
         # a run that never did keeps no log.
         self._ready = ready
@@ -240,6 +255,8 @@ class WorkLog:
                 for key, value in (fields or {}).items():
                     if key in ENTRY_FIELDS and _measure(value):
                         entry[key] = value
+                if not self._pending:
+                    self._pending_since = time.monotonic()
                 self._pending.append((entry, text))
                 self._entries.append((entry, text))
                 self._start()
@@ -386,17 +403,30 @@ class WorkLog:
             self._thread = threading.Thread(target=self._run, name="agent-work-log", daemon=True)
             self._thread.start()
 
+    def _due(self):
+        """Pending entries go now: the batch is full or the oldest waited
+        FLUSH_SECONDS. Seconds left until then otherwise (None: nothing)."""
+        if not self._pending:
+            return None
+        if len(self._pending) >= BATCH_LIMIT or self._pending_since is None:
+            return 0
+        return max(0.0, self._pending_since + self._flush_seconds - time.monotonic())
+
     def _run(self):
         while True:
             with self._condition:
-                while not self._closing and not (self._pending and self._is_ready()):
-                    self._condition.wait(.5)
+                while not self._closing:
+                    left = self._due()
+                    if left is not None and left <= 0 and self._is_ready():
+                        break
+                    self._condition.wait(.5 if left is None or left <= 0 else min(.5, left))
                 ready = self._is_ready()
                 if self._closing and not ready:
                     # The run never started a model step: no log.
                     self._pending.clear()
                     return
                 batch = [self._pending.popleft() for _ in range(min(BATCH_LIMIT, len(self._pending)))]
+                self._pending_since = time.monotonic() if self._pending else None
             if batch:
                 self._write(batch)
                 continue
@@ -490,8 +520,10 @@ def delete_turn_log(turn_ref, objects=None):
     """Delete one turn's log: the stored content its entries name, then the
     entries. A turn without a log costs one empty query, never a call to the
     object store. Returns the number of entries deleted."""
-    snapshots = list(turn_ref.collection("work_log").select(["ref"]).stream())
-    keys = [data["ref"] for data in (snapshot.to_dict() or {} for snapshot in snapshots) if data.get("ref")]
+    from app.services.agent_sessions import work_log_entries
+    snapshots = list(turn_ref.collection("work_log").select(["ref", "entries"]).stream())
+    keys = [entry["ref"] for snapshot in snapshots for entry in work_log_entries(snapshot.to_dict())
+            if entry.get("ref")]
     if keys:
         objects = objects if objects is not None else _objects()
         for key in keys if objects is not None else ():

@@ -71,8 +71,10 @@ def test_a_step_that_broke_off_runs_once_more_and_the_turn_completes(store):
     # The broken attempt is paid for what it used, and the work log says it failed.
     receipt = store.receipt_ref(UID, loop.chat_id, loop.turn_id, "completion:0").get().to_dict()
     assert receipt["status"] == "succeeded" and receipt["usage"]["input_tokens"] == 50
-    log = [e.to_dict() for e in store.db.collection("users").document(UID).collection("chats")
-           .document(loop.chat_id).collection("turns").document(loop.turn_id).collection("work_log").stream()]
+    from app.services.agent_sessions import work_log_entries
+    log = [entry for e in store.db.collection("users").document(UID).collection("chats")
+           .document(loop.chat_id).collection("turns").document(loop.turn_id).collection("work_log").stream()
+           for entry in work_log_entries(e.to_dict())]
     steps = [json.loads(e["content"])["status"] for e in sorted(log, key=lambda e: e["seq"]) if e["kind"] == "step"]
     assert steps == ["failed", "succeeded"]
 

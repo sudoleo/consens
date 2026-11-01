@@ -135,6 +135,37 @@ def compact_root(patch, data):
 def _serialized_size(value):
     import json
     return len(json.dumps(value, default=str, ensure_ascii=False).encode("utf-8"))
+# A work log chunk stays well within Firestore's 1 MiB per document: an
+# entry keeps at most agent_work_log.INLINE_CHARS of content inline.
+WORK_LOG_CHUNK_BYTES = 600_000
+
+
+def work_log_chunks(entries):
+    """``entries`` (in order) as chunk documents: ``seq`` and ``last_seq``
+    of the entries they hold, ``entries`` themselves, each at most
+    WORK_LOG_CHUNK_BYTES. The same entries make the same documents, so a
+    retried save writes them again, never twice."""
+    import json
+    chunks, current, size = [], [], 0
+    for entry in entries:
+        bytes_ = len(json.dumps(entry, default=str, ensure_ascii=False).encode("utf-8"))
+        if current and size + bytes_ > WORK_LOG_CHUNK_BYTES:
+            chunks.append(current)
+            current, size = [], 0
+        current.append(entry)
+        size += bytes_
+    if current:
+        chunks.append(current)
+    return [{"seq": chunk[0]["seq"], "last_seq": chunk[-1]["seq"], "entries": chunk} for chunk in chunks]
+
+
+def work_log_entries(document):
+    """The entries a work log document holds: a chunk's, or itself (one
+    entry per document until 2026-11-01)."""
+    document = document or {}
+    return list(document["entries"]) if isinstance(document.get("entries"), list) else [document]
+
+
 class AgentSessionStore:
     @staticmethod
     def _read_all(tx, refs):
@@ -337,8 +368,8 @@ class AgentSessionStore:
             turn, chat = (snapshot.to_dict() for snapshot in snapshots)
             if not turn or turn.get("status") != "pending" or (chat or {}).get("status") != "active":
                 raise TurnStatusConflict("Agent work log is closed")
-            for entry in entries:
-                tx.set(turn_ref.collection("work_log").document(f"{entry['seq']:06d}"), entry)
+            for chunk in work_log_chunks(entries):
+                tx.set(turn_ref.collection("work_log").document(f"{chunk['seq']:06d}"), chunk)
             patch = {}
             if turn.get("work_log_expires_at") is None:
                 patch["work_log_expires_at"] = expires_at
@@ -357,22 +388,39 @@ class AgentSessionStore:
         return turn.to_dict() or {}
 
     def read_work_log(self, uid, chat_id, turn_id, *, after=0, limit=100):
-        """The turn's work log entries after ``after``, in order."""
+        """The turn's work log entries after ``after``, in order: from chunk
+        documents (work_log_chunks, since 2026-11-01) and from the single
+        entry documents written before. The chunk that holds entry
+        ``after + 1`` may begin at or before ``after``."""
         turn = self._work_log_turn(uid, chat_id, turn_id)
-        query = (self._turn_ref(uid, chat_id, turn_id).collection("work_log").order_by("seq")
-                 .start_after({"seq": after}).limit(limit + 1))
-        entries = [snapshot.to_dict() for snapshot in query.stream()]
+        log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
+        holding = self._work_log_holding(log, after) if after else []
+        # Every document holds at least one entry: limit + 1 documents are
+        # enough to know whether more follow.
+        later = list(log.order_by("seq").start_after({"seq": after}).limit(limit + 1).stream())
+        entries = [entry for snapshot in [*holding, *later] for entry in work_log_entries(snapshot.to_dict())
+                   if entry.get("seq", 0) > after]
         return {"entries": entries[:limit], "has_more": len(entries) > limit,
                 "incomplete": bool(turn.get("work_log_incomplete")), "status": turn.get("status")}
+
+    @staticmethod
+    def _work_log_holding(log, seq):
+        """The document that holds entry ``seq`` or the last one before it."""
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        return list(log.where(filter=FieldFilter("seq", "<=", seq))
+                    .order_by("seq", direction=firestore.Query.DESCENDING).limit(1).stream())
 
     def work_log_entry(self, uid, chat_id, turn_id, seq):
         """One entry with its whole content (agent_work_log.entry_content)."""
         from app.services.agent_work_log import entry_content
         self._work_log_turn(uid, chat_id, turn_id)
-        snapshot = self._turn_ref(uid, chat_id, turn_id).collection("work_log").document(f"{seq:06d}").get()
-        if not snapshot.exists:
+        log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
+        snapshot = log.document(f"{seq:06d}").get()
+        snapshots = [snapshot] if snapshot.exists else self._work_log_holding(log, seq)
+        entry = next((entry for snapshot in snapshots for entry in work_log_entries(snapshot.to_dict())
+                      if entry.get("seq") == seq), None)
+        if entry is None:
             raise ChatNotFound("Work log entry not found")
-        entry = snapshot.to_dict()
         from app.services.agent_files import FileUnavailable
         try:
             return {**entry, "content": entry_content(entry)}

@@ -422,3 +422,84 @@ def test_retention_removes_logs_past_their_expiry_and_keeps_the_others(monkeypat
     assert "work_log_expires_at" not in old and "work_log_incomplete" not in old and old["status"] == "pending"
     assert "work_log_expires_at" in store._turn_ref(UID, new_chat, new_turn["id"]).get().to_dict()
     assert list(objects.items) == [f"work-log/{UID}/{new_chat}/{new_turn['id']}/000001"]
+
+
+# --- Chunks (since 2026-11-01) ------------------------------------------------
+
+def test_entries_within_the_flush_window_are_saved_together():
+    """A step brings several entries one after another: they go out as one
+    write, not one each (687 writes on a day of 15 messages before)."""
+    store = LogStore()
+    log = work_log(store, flush_seconds=0.3)
+    for index in range(4):
+        log.app(f"note-{index}", "x")
+    time.sleep(0.6)
+    assert [len(batch) for batch in store.batches] == [4]
+    # The run's end does not wait for the window.
+    log.app("last", "y")
+    started = time.monotonic()
+    log.close()
+    assert time.monotonic() - started < 0.25 and [len(batch) for batch in store.batches] == [4, 1]
+
+
+def test_a_chunk_stays_within_a_documents_size():
+    from app.services.agent_sessions import WORK_LOG_CHUNK_BYTES, work_log_chunks
+    entries = [{"seq": seq, "content": "x" * INLINE_CHARS} for seq in range(1, 51)]
+    chunks = work_log_chunks(entries)
+    assert len(chunks) > 1 and [e["seq"] for c in chunks for e in c["entries"]] == list(range(1, 51))
+    assert all(len(json.dumps(c).encode()) <= WORK_LOG_CHUNK_BYTES + 1000 for c in chunks)
+    assert [(c["seq"], c["last_seq"]) for c in chunks][0][0] == 1 and chunks[-1]["last_seq"] == 50
+    assert work_log_chunks(entries) == chunks
+
+
+def test_the_reader_takes_chunks_and_single_entries_alike(api, store):
+    """Pages after any entry, also one in the middle of a chunk; a log
+    written before 2026-11-01 (one document per entry) reads the same."""
+    client, store, _ = api
+    chat_id, turn = pending(store)
+    log = store._turn_ref(UID, chat_id, turn["id"]).collection("work_log")
+    log.document("000001").set({"seq": 1, "kind": "app", "content": "old"})
+    log.document("000002").set({"seq": 2, "last_seq": 4, "entries": [
+        {"seq": seq, "kind": "app", "content": f"c{seq}"} for seq in (2, 3, 4)]})
+    log.document("000005").set({"seq": 5, "last_seq": 6, "entries": [
+        {"seq": seq, "kind": "app", "content": f"c{seq}"} for seq in (5, 6)]})
+    read = lambda after, limit: store.read_work_log(UID, chat_id, turn["id"], after=after, limit=limit)
+    assert [e["seq"] for e in read(0, 100)["entries"]] == [1, 2, 3, 4, 5, 6]
+    page = read(2, 2)
+    assert [e["seq"] for e in page["entries"]] == [3, 4] and page["has_more"] is True
+    assert [e["seq"] for e in read(4, 2)["entries"]] == [5, 6] and read(4, 2)["has_more"] is False
+    assert read(6, 10)["entries"] == []
+    for seq in (1, 3, 5, 6):
+        response = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log/{seq}", headers=AUTH)
+        assert response.status_code == 200 and response.json()["seq"] == seq
+    assert client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log/7", headers=AUTH).status_code == 404
+
+
+def test_a_chunks_stored_content_goes_with_the_chat(store, monkeypatch):
+    objects = Objects()
+    monkeypatch.setattr(agent_work_log, "_objects", lambda: objects)
+    chat_id, turn = pending(store)
+    key = f"work-log/{UID}/{chat_id}/{turn['id']}/000003"
+    objects.put(key, b"long", "text/plain")
+    log = store._turn_ref(UID, chat_id, turn["id"]).collection("work_log")
+    log.document("000002").set({"seq": 2, "last_seq": 3, "entries": [
+        {"seq": 2, "content": "short"}, {"seq": 3, "content": "x", "ref": key}]})
+    store._purge_chat(UID, chat_id)
+    assert not log.document("000002").get().exists and objects.items == {}
+
+
+def test_a_run_saves_its_log_in_chunks(store):
+    store_entries = []
+    original = store.save_work_log
+    def counted(uid, chat_id, turn_id, entries, **kwargs):
+        store_entries.append(len(entries))
+        return original(uid, chat_id, turn_id, entries, **kwargs)
+    store.save_work_log = counted
+    chat_id, turn = pending(store)
+    log = WorkLog(store, UID, chat_id, turn["id"], sleep=lambda seconds: None, flush_seconds=5)
+    for index in range(6):
+        log.app(f"note-{index}", "x")
+    log.close()
+    docs = list(store._turn_ref(UID, chat_id, turn["id"]).collection("work_log").stream())
+    assert store_entries == [6] and len(docs) == 1
+    assert [e["seq"] for e in docs[0].to_dict()["entries"]] == list(range(1, 7))

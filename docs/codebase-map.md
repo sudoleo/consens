@@ -5097,9 +5097,10 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   `usage_totals`), nicht mehr am User-Dokument; `chat_state/agent_runs` nur bei
   Änderung; ein delegiertes Settlement liest Chat, Turn und diese Liste nicht
   mehr; die Lease wird erst unter 45 s Rest verlängert (`PRODUCER_RENEW_BEFORE_SECONDS`,
-  etwa alle 75 statt 30 s). Eine kurze Nachricht mit zwei Prüfern: 54 statt 70
-  Schreib- und 129 statt 160 Lesevorgänge; Rundgänge bis zur ersten Anfrage
-  unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (neue Sitzung
+  etwa alle 75 statt 30 s), das Arbeitsprotokoll schreibt Sammeldokumente
+  (Abschnitt „Arbeitsprotokoll“). Eine kurze Nachricht mit zwei Prüfern: 49
+  statt 70 Schreib- und 131 statt 160 Lesevorgänge; Rundgänge bis zur ersten
+  Anfrage unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (neue Sitzung
   vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) kommen
   bei vollem Stapel zuerst, mit allem, was ihre Sitzung vorher übergab. Noch
   ungeschriebene Updates einer Sitzung werden ein Update (`completed` +
@@ -6382,7 +6383,10 @@ Position samt Verlauf, dazu was nur die Anfrage trägt; `step` im finally nach
 der Abrechnung), `_execute` (`tool`, nicht für `app_registry`), `_retract`,
 `_lock_memory`, `_finish_merged` (`answer_fixed`). `_log_actor` zählt nur den
 Agenten (`completion:N`) und seine Worker ohne `kind`; Prüfer, Vergleichsantworten
-und Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`
+und Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`,
+seit 2026-11-01 als Sammeldokumente (`work_log_chunks`: `seq`, `last_seq`,
+`entries`, höchstens 600.000 Bytes; der Schreib-Thread sammelt
+`FLUSH_SECONDS` = 5), alte Einzeldokumente liest `work_log_entries` weiter
 (`AgentSessionStore.save_work_log`, eigene Transaktion, liest nur Löschmarke,
 Turn (`pending`) und Chat (aktiv), nie den Root-Beleg), lange Inhalte als
 `work-log/{uid}/{chat}/{turn}/{seq}` in `PrivateObjects`; der Turn trägt
