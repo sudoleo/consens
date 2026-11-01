@@ -1,7 +1,8 @@
 """Example questions under an empty new chat (app/services/starter_questions.py).
 
 Three curated questions per page load; with a few saved chats, three
-predicted from the newest ones (POST /api/my/starter-questions).
+predicted from the newest ones and the line above the field
+(POST /api/my/starter-questions).
 """
 import json
 import os
@@ -24,11 +25,12 @@ HISTORY = [
     {"title": "EU AI Act for support bots", "question": "EU AI Act for support bots"},
     {"title": "Creatine and sleep", "question": "Does creatine affect sleep quality?"},
 ]
+GREETING = "Heat pump lore, episode 7: the radiators strike back"
 PREDICTED = {"questions": [
     {"label": "Heat pump running costs?", "question": "What will a heat pump cost to run in a 1978 house per year?"},
     {"label": "AI Act deadlines?", "question": "Which EU AI Act deadlines apply to a support chatbot in 2027?"},
     {"label": "Creatine timing?", "question": "Does the time of day I take creatine change how I sleep?"},
-]}
+], "greeting": GREETING}
 
 
 def test_the_curated_pool_fits_one_row_and_asks_real_questions():
@@ -54,16 +56,18 @@ def test_prediction_sends_the_chats_as_data_and_returns_clean_questions():
         calls.append((model, kwargs))
         return json.dumps(PREDICTED)
 
-    questions = starter_questions.predict_questions(
+    prediction = starter_questions.predict_questions(
         HISTORY, query_fn=fake_query, api_keys={"OpenRouter": "key"}, today="2026-10-16"
     )
 
-    assert questions == PREDICTED["questions"][:starter_questions.PREDICTED_COUNT]
+    assert prediction == {"questions": PREDICTED["questions"][:starter_questions.PREDICTED_COUNT], "greeting": GREETING}
     (model, kwargs), = calls
     assert model == starter_questions.title_model()
-    assert kwargs["json_schema"]["required"] == ["questions"]
+    # One call for both: the questions and the line above the field.
+    assert kwargs["json_schema"]["required"] == ["questions", "greeting"]
     prompt = kwargs["prompt"]
     assert "Today is 2026-10-16." in prompt
+    assert '"greeting"' in prompt and "What do you want to be sure about?" in prompt
     conversations = prompt.split("<RECENT_CONVERSATIONS>\n", 1)[1].split("\n</RECENT_CONVERSATIONS>", 1)[0]
     assert conversations.splitlines() == [
         "1. Heat pump for a 1978 house (latest question: Do we need bigger radiators?)",
@@ -89,23 +93,37 @@ def test_prediction_drops_repeats_junk_and_too_little():
         {"label": "AI Act deadlines again?", "question": "Which EU AI Act deadlines apply to a support chatbot?"},
         "not an object",
     ]}
-    assert starter_questions.predict_questions(HISTORY, query_fn=answer(mixed), api_keys=keys) == [
+    assert starter_questions.predict_questions(HISTORY, query_fn=answer(mixed), api_keys=keys)["questions"] == [
         {"label": "Heat pump costs?", "question": "What will a heat pump cost to run per year?"},
         {"label": "AI Act deadlines?", "question": "Which EU AI Act deadlines apply to a support chatbot?"},
     ]
-    # One usable question is no row of suggestions.
-    one = {"questions": PREDICTED["questions"][:1]}
-    assert starter_questions.predict_questions(HISTORY, query_fn=answer(one), api_keys=keys) == []
+    # One usable question is no row of suggestions; the line still counts.
+    one = {"questions": PREDICTED["questions"][:1], "greeting": GREETING}
+    assert starter_questions.predict_questions(HISTORY, query_fn=answer(one), api_keys=keys) == {
+        "questions": [], "greeting": GREETING}
 
     def broken(*_args, **_kwargs):
         raise RuntimeError("provider down")
 
-    assert starter_questions.predict_questions(HISTORY, query_fn=broken, api_keys=keys) == []
-    assert starter_questions.predict_questions(HISTORY, query_fn=lambda *a, **k: "not json", api_keys=keys) == []
+    nothing = {"questions": [], "greeting": ""}
+    assert starter_questions.predict_questions(HISTORY, query_fn=broken, api_keys=keys) == nothing
+    assert starter_questions.predict_questions(HISTORY, query_fn=lambda *a, **k: "not json", api_keys=keys) == nothing
     # Fewer than three chats: nothing to read a pattern from, no call.
-    assert starter_questions.predict_questions(HISTORY[:2], query_fn=broken, api_keys=keys) == []
+    assert starter_questions.predict_questions(HISTORY[:2], query_fn=broken, api_keys=keys) == nothing
     with patch.object(starter_questions, "mock_llm_enabled", return_value=False):
-        assert starter_questions.predict_questions(HISTORY, query_fn=broken, api_keys={}) == []
+        assert starter_questions.predict_questions(HISTORY, query_fn=broken, api_keys={}) == nothing
+
+
+def test_the_greeting_is_one_plain_line_that_fits_above_the_field():
+    clean = starter_questions.clean_greeting
+    assert clean({"greeting": '  "**Heat pump lore,\n episode 7**"  '}) == "Heat pump lore, episode 7"
+    assert clean({"greeting": "Bro asked five AIs about creatine. Again?"}) == "Bro asked five AIs about creatine. Again?"
+    # Too short, too long for two lines, missing or not text: the sentence stays.
+    assert clean({"greeting": "lol"}) == ""
+    assert clean({"greeting": "x" * (starter_questions.GREETING_MAX_LENGTH + 1)}) == ""
+    assert clean({"questions": []}) == ""
+    assert clean({"greeting": ["not", "text"]}) == ""
+    assert clean("not an object") == ""
 
 
 def test_mock_engine_predicts_deterministically():
@@ -116,6 +134,9 @@ def test_mock_engine_predicts_deterministically():
         conversations=starter_questions._conversation_lines(HISTORY),
     )
     raw = json.loads(_mock_engine_output(prompt, True))
+    # No line from the mock: the start screen keeps its sentence in the
+    # browser tests, which read it.
+    assert starter_questions.clean_greeting(raw) == ""
     assert starter_questions.clean_predictions(raw, HISTORY) == [
         {"label": "More on Heat pump?", "question": "What should I know next about Heat pump for a 1978 house?"},
         {"label": "More on EU AI?", "question": "What should I know next about EU AI Act for support bots?"},
@@ -189,12 +210,12 @@ def test_the_route_predicts_from_the_newest_chat_names_only():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", database),
-        patch.object(starter_questions, "predict_questions", return_value=PREDICTED["questions"]) as predict,
+        patch.object(starter_questions, "predict_questions", return_value=PREDICTED) as predict,
     ):
         response = _client().post("/api/my/starter-questions", headers={"Authorization": "Bearer token"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "success", "questions": PREDICTED["questions"]}
+    assert response.json() == {"status": "success", "questions": PREDICTED["questions"], "greeting": GREETING}
     # Never the answers: a bookmark document carries every model's text.
     assert database.calls[0] == ("select", ["title", "query"])
     assert ("limit", starter_questions.HISTORY_SIZE) in database.calls
@@ -214,11 +235,20 @@ def test_the_route_skips_quietly():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", FakeDatabase(_bookmarks(5))),
-        patch.object(starter_questions, "predict_questions", return_value=[]),
+        patch.object(starter_questions, "predict_questions", return_value={"questions": [], "greeting": ""}),
     ):
         failed = _client().post("/api/my/starter-questions", headers=headers)
     assert failed.status_code == 200
     assert failed.json() == {"status": "skipped", "questions": []}
+
+    # The line alone is worth sending: the curated questions stay.
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", FakeDatabase(_bookmarks(5))),
+        patch.object(starter_questions, "predict_questions", return_value={"questions": [], "greeting": GREETING}),
+    ):
+        alone = _client().post("/api/my/starter-questions", headers=headers)
+    assert alone.json() == {"status": "success", "questions": [], "greeting": GREETING}
 
     assert _client().post("/api/my/starter-questions").status_code == 401
 
@@ -229,7 +259,7 @@ def test_predictions_are_capped_per_account_before_any_read():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", database),
-        patch.object(starter_questions, "predict_questions", return_value=PREDICTED["questions"]) as predict,
+        patch.object(starter_questions, "predict_questions", return_value=PREDICTED) as predict,
     ):
         client = _client()
         responses = [

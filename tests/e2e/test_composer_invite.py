@@ -113,6 +113,7 @@ PREDICTED = [
     {"label": "AI Act deadlines?", "question": "Which EU AI Act deadlines apply to our support chatbot?"},
     {"label": "Creatine timing?", "question": "Does the time of day I take creatine change how I sleep?"},
 ]
+GREETING = "Heat pump lore, episode 7: the radiators strike back"
 
 
 def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(browser, phase4_server):
@@ -126,13 +127,17 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
         page.route("**/agent/models", lambda route: _json(route, AGENT_CATALOG))
         page.route("**/bookmarks?*", lambda route: _json(route, {"bookmarks": chats, "next_cursor": None}))
         page.route("**/api/my/starter-questions", lambda route: (
-            asked.append(route.request.method), _json(route, {"status": "success", "questions": PREDICTED})))
+            asked.append(route.request.method),
+            _json(route, {"status": "success", "questions": PREDICTED, "greeting": GREETING})))
         page.reload(wait_until="domcontentloaded")
 
         visible = page.locator("#composerStarters .composer-starter:visible")
-        # Two predicted and the check: three in one row (2026-10-31).
         # Three predicted, in one row, without "Check an AI answer" (2026-10-31).
         expect(visible).to_have_text([item["label"] for item in PREDICTED])
+        # The same answer brings the line above the field (2026-11-01).
+        greeting = page.locator(".hero-greeting")
+        expect(greeting).to_have_text(GREETING)
+        expect(greeting).to_be_visible()
         assert asked == ["POST"]
         page.locator('[data-starter="predicted"]').first.click()
         expect(page.locator("#questionInput")).to_have_value(PREDICTED[0]["question"])
@@ -145,6 +150,7 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
           'header.' + btoa(JSON.stringify({ user_id: 'account-a' })) + '.signature')""")
         page.reload(wait_until="domcontentloaded")
         assert page.evaluate("document.querySelectorAll('[data-starter=\"predicted\"]').length") == 3
+        assert page.evaluate("document.querySelector('.hero-greeting').textContent") == GREETING
         page.wait_for_function("() => window.bookmarksData?.length === 4")
         page.wait_for_timeout(2500)
         assert asked == ["POST"]

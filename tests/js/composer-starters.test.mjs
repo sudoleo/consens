@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // static/js/composer-starters.js: example questions predicted from the
-// newest chats, kept per account and painted from the first frame.
-const ROW = '<div id="composerStarters">'
+// newest chats, and the line above the field, kept per account and painted
+// from the first frame.
+const SENTENCE = "What do you want to be sure about?";
+const GREETING = "Heat pump lore, part 7. The radiators demand answers.";
+const ROW = `<p class="hero-greeting">${SENTENCE}</p>`
+  + '<div id="composerStarters">'
   + '<button type="button" class="composer-starter" data-starter="glp1" data-question="GLP-1?">GLP-1?</button>'
   + '</div><footer class="app-footer"></footer>';
 const KEY = "consensio.starterQuestions.v1";
@@ -46,7 +50,8 @@ function boot({ storage = {}, uid = "uid-1", bookmarks = chats(3), answer = { st
   const { window, document } = ctx;
   const labels = () => [...document.querySelectorAll(".composer-starter:not([hidden])")].map(button => button.textContent);
   const stored = () => JSON.parse(window.localStorage.getItem(KEY) || "null");
-  return { ...ctx, App: window.App, calls, labels, stored, row: document.getElementById("composerStarters") };
+  const line = document.querySelector(".hero-greeting");
+  return { ...ctx, App: window.App, calls, labels, stored, line, row: document.getElementById("composerStarters") };
 }
 
 // Past the refresh delay, then through the request's awaits.
@@ -61,10 +66,10 @@ afterEach(() => {
 });
 
 describe("the first frame", () => {
-  const record = (uid, at = Date.now()) => JSON.stringify({ uid, basis: "chat_0", at, questions: PREDICTED });
+  const record = (uid, at = Date.now()) => JSON.stringify({ uid, basis: "chat_0", at, questions: PREDICTED, greeting: GREETING });
 
   it("paints the account's stored prediction before the session is restored", () => {
-    const { document, labels } = boot({
+    const { document, labels, line } = boot({
       storage: { id_token: token("uid-1"), [KEY]: record("uid-1") },
       files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"],
     });
@@ -73,6 +78,10 @@ describe("the first frame", () => {
     expect(predicted.dataset.question).toBe(PREDICTED[0].question);
     // The curated question waits, hidden, for a sign-out.
     expect(document.querySelector('[data-starter="glp1"]').hidden).toBe(true);
+    // The line above the field is the account's own, in its own language.
+    expect(line.textContent).toBe(GREETING);
+    expect(line.dataset.greeting).toBe("predicted");
+    expect(line.hasAttribute("data-i18n-skip")).toBe(true);
   });
 
   it.each([
@@ -80,8 +89,10 @@ describe("the first frame", () => {
     ["a guest's browser", { [KEY]: record("uid-1") }],
     ["a week-old", { id_token: token("uid-1"), [KEY]: record("uid-1", Date.now() - 8 * 24 * 3600 * 1000) }],
   ])("keeps the curated questions for %s prediction", (_label, storage) => {
-    const { labels } = boot({ storage, files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"] });
+    const { labels, line } = boot({ storage, files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"] });
     expect(labels()).toEqual(["GLP-1?"]);
+    expect(line.textContent).toBe(SENTENCE);
+    expect(line.hasAttribute("data-i18n-skip")).toBe(false);
   });
 });
 
@@ -148,6 +159,45 @@ describe("asking for a prediction", () => {
     expect(ctx.labels()).toEqual(["GLP-1?"]);
   });
 
+  it("brings the line above the field with the questions, or alone", async () => {
+    vi.useFakeTimers();
+    const ctx = boot({ answer: { status: "success", questions: PREDICTED, greeting: GREETING } });
+    ctx.App.composerStarters.refresh();
+    await settle(ctx);
+    expect(ctx.line.textContent).toBe(GREETING);
+    expect(ctx.stored()).toMatchObject({ questions: PREDICTED, greeting: GREETING });
+
+    // A line without usable questions still counts; the curated ones stay.
+    const alone = boot({ answer: { status: "success", questions: [], greeting: GREETING } });
+    alone.App.composerStarters.refresh();
+    await settle(alone);
+    expect(alone.line.textContent).toBe(GREETING);
+    expect(alone.labels()).toEqual(["GLP-1?"]);
+    expect(alone.stored()).toMatchObject({ questions: [], greeting: GREETING });
+
+    // One that would not fit keeps the sentence.
+    const long = boot({ answer: { status: "success", questions: PREDICTED, greeting: "lol ".repeat(40) } });
+    long.App.composerStarters.refresh();
+    await settle(long);
+    expect(long.line.textContent).toBe(SENTENCE);
+    expect(long.labels()).toEqual(["Heat pump costs?", "AI Act deadlines?"]);
+  });
+
+  it("asks once more for the line when the stored prediction is older than it", async () => {
+    vi.useFakeTimers();
+    const older = JSON.stringify({ uid: "uid-1", basis: "chat_0,chat_1,chat_2", at: Date.now(), questions: PREDICTED });
+    const ctx = boot({ storage: { [KEY]: older }, answer: { status: "success", questions: PREDICTED, greeting: GREETING } });
+    ctx.App.composerStarters.refresh();
+    await settle(ctx);
+    expect(ctx.calls.fetches).toHaveLength(1);
+    expect(ctx.line.textContent).toBe(GREETING);
+    expect(ctx.stored()).toMatchObject({ v: 2, greeting: GREETING });
+    // Then it is up to date: the same chats ask nothing.
+    ctx.App.composerStarters.refresh();
+    await settle(ctx);
+    expect(ctx.calls.fetches).toHaveLength(1);
+  });
+
   it("keeps what the row shows when the server skips", async () => {
     vi.useFakeTimers();
     const ctx = boot({ answer: { status: "skipped", questions: [] } });
@@ -173,16 +223,21 @@ describe("asking for a prediction", () => {
 });
 
 describe("leaving the account", () => {
-  const record = JSON.stringify({ uid: "uid-1", basis: "chat_0", at: Date.now(), questions: PREDICTED });
+  const record = JSON.stringify({ uid: "uid-1", basis: "chat_0", at: Date.now(), questions: PREDICTED, greeting: GREETING });
 
   it("takes the prediction off the row and out of the browser on sign-out", () => {
     const ctx = boot({ storage: { id_token: token("uid-1"), [KEY]: record },
       files: ["static/js/composer-starters.js", "static/js/app-bootstrap.js"] });
     expect(ctx.labels()).toHaveLength(2);
+    expect(ctx.line.textContent).toBe(GREETING);
     ctx.App.composerStarters.clear();
     expect(ctx.labels()).toEqual(["GLP-1?"]);
     expect(ctx.document.querySelector('[data-starter="predicted"]')).toBeNull();
     expect(ctx.stored()).toBeNull();
+    // The template's sentence comes back, translatable again.
+    expect(ctx.line.textContent).toBe(SENTENCE);
+    expect(ctx.line.hasAttribute("data-i18n-skip")).toBe(false);
+    expect(ctx.line.dataset.greeting).toBeUndefined();
   });
 
   it("forgets another account's prediction once the session is known", () => {

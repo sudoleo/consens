@@ -99,12 +99,12 @@ describe('private Agent workspace', () => {
   it('removes only after an explicit confirmation from the overflow menu', async () => {
     const { window, document, dom } = boot({ files: [MAIL] });
     await window.App.agentWorkspace.refresh(CHAT);
-    const more = document.querySelector('#agentAnswerResources .agent-files-more');
+    const more = document.querySelector('.agent-answer-documents .agent-files-more');
     expect(more.getAttribute('aria-label')).toBe('More actions for invoice.pdf');
-    expect(document.querySelector('#agentAnswerResources .agent-files-icon-btn').getAttribute('aria-label')).toBe('Download invoice.pdf');
+    expect(document.querySelector('.agent-answer-documents .agent-files-icon-btn').getAttribute('aria-label')).toBe('Download invoice.pdf');
     more.click();
     expect(more.getAttribute('aria-expanded')).toBe('true');
-    document.querySelector('#agentAnswerResources [role=menuitem]').click();
+    document.querySelector('.agent-answer-documents [role=menuitem]').click();
     expect(window.fetch).toHaveBeenCalledTimes(1);
     const confirm = document.querySelector('.agent-files-confirm');
     expect(confirm.textContent).toContain('Remove invoice.pdf? The agent can no longer use it in this chat.');
@@ -112,8 +112,8 @@ describe('private Agent workspace', () => {
     confirm.querySelector('.agent-files-ghost').click();
     expect(document.querySelector('.agent-files-confirm')).toBeNull();
     expect(window.fetch).toHaveBeenCalledTimes(1);
-    document.querySelector('#agentAnswerResources .agent-files-more').click();
-    document.querySelector('#agentAnswerResources [role=menuitem]').click();
+    document.querySelector('.agent-answer-documents .agent-files-more').click();
+    document.querySelector('.agent-answer-documents [role=menuitem]').click();
     document.querySelector('.agent-files-danger').click();
     await vi.waitFor(() => expect(window.fetch.mock.calls.some(([, o]) => o?.method === 'DELETE')).toBe(true));
     const call = window.fetch.mock.calls.find(([, o]) => o?.method === 'DELETE');
@@ -135,7 +135,8 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // vm_share_file (2026-10-26): a picture under the answer, any other file a row.
+  // vm_share_file (2026-10-26): a picture under the answer, any other file a
+  // row; both above the evidence row (2026-11-01: the files belong to the answer).
   it('shows the pictures the agent shared from its VM under the answer, other files as rows', async () => {
     const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
       turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', origin: { source: 'vm', path: '/tmp/chart.png' } };
@@ -152,11 +153,14 @@ describe('private Agent workspace', () => {
     body.after(evidence);
     await window.App.agentWorkspace.refresh(CHAT);
     const resources = document.getElementById('agentAnswerResources');
-    // The pictures stand right under the answer text, above that row.
+    // The pictures stand right under the answer text, the other files under
+    // them, both above that row.
     const slot = body.nextElementSibling;
     expect(slot.className).toBe('agent-answer-pictures');
-    expect(slot.nextElementSibling).toBe(evidence);
-    expect(window.App.answerTail(body)).toBe(slot);
+    const rows = slot.nextElementSibling;
+    expect(rows.classList.contains('agent-answer-documents')).toBe(true);
+    expect(rows.nextElementSibling).toBe(evidence);
+    expect(window.App.answerTail(body)).toBe(rows);
     expect(resources.querySelector('.agent-vm-picture')).toBeNull();
     const figures = slot.querySelectorAll('.agent-vm-picture');
     expect(figures).toHaveLength(1);
@@ -168,8 +172,9 @@ describe('private Agent workspace', () => {
     const opened = { fileId: PICTURE.id, name: 'chart.png', mime: 'image/png', size: 17000, title: 'chart.png', page: '', host: '' };
     expect(window.App.attachments.openStored).toHaveBeenCalledWith({ ...opened, gallery: [opened], index: 0 });
     // Any other file is a row with its download; an earlier turn's file is not here.
-    expect([...resources.querySelectorAll('.agent-file-row .agent-file-name')].map(el => el.textContent)).toEqual(['table.csv']);
-    expect(resources.textContent).not.toContain('earlier.png');
+    expect([...rows.querySelectorAll('.agent-file-row .agent-file-name')].map(el => el.textContent)).toEqual(['table.csv']);
+    expect(resources.querySelector('.agent-file-row')).toBeNull();
+    expect(document.body.textContent).not.toContain('earlier.png');
     // A picture loads once and is not drawn again while the list refreshes.
     await window.App.agentWorkspace.refresh(CHAT, true);
     expect(slot.querySelector('.agent-vm-picture')).toBe(figures[0]);
@@ -179,6 +184,7 @@ describe('private Agent workspace', () => {
     window.App.runRegistry.getSelectedConversationBasis = () => ({ chatId: CHAT, turnId: plain, currentTurn: { id: plain } });
     window.App.agentWorkspace.refresh(CHAT);
     expect(slot.hidden).toBe(true);
+    expect(rows.hidden).toBe(true);
     expect(window.App.answerTail(body)).toBe(body);
     dom.window.close();
   });
@@ -188,7 +194,8 @@ describe('private Agent workspace', () => {
       origin: { message_id: 'ff', part_id: '1' } }, { ...MAIL, id: '9'.repeat(32), name: 'older.pdf', turn_id: TURN_ONE }] });
     window.App.agentGoogle.evidenceFor = id => id === 'ff' ? { subject: 'Contract', from: 'Legal <legal@example.org>' } : null;
     await window.App.agentWorkspace.refresh(CHAT);
-    const text = document.getElementById('agentAnswerResources').textContent;
+    expect(document.getElementById('agentAnswerResources').textContent).toBe('');
+    const text = document.querySelector('.agent-answer-documents').textContent;
     expect(text).not.toContain('older.pdf');
     expect(text).toContain('From email: Offer 2026 (Jens)');
     expect(text).toContain('From email: Contract (Legal)');

@@ -1,8 +1,9 @@
 /* Agent files, attachments and document versions (agent-workspace.js).
-   Document cards and mail attachments of a turn sit after its answer: in
-   #agentAnswerResources for the live answer, in .agent-turn-resources for
-   archived turns. Uploads are chips on their message. Tokens only
-   (variables.css). */
+   Document cards, shared files and mail attachments of a turn are part of
+   its answer (.agent-answer-documents, above its evidence row); notes about
+   its uploads follow in #agentAnswerResources for the live answer, in
+   .agent-turn-resources for archived turns. Uploads are chips on their
+   message. Tokens only (variables.css). */
 
 /* Shared panel shell. agent-google.js also uses .agent-workspace for its
    action and evidence panels. */

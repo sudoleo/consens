@@ -1252,6 +1252,12 @@ Server.
       (Leiste und Menü) öffnen je den Login mit eigenem Satz, kein Menü öffnet
       sich. Senden → Login → die Frage läuft einmal im Agent; vorher Consensus
       gewählt → sie läuft in Consensus, und das Konto behält Consensus.
+- [ ] Zeile über dem Feld (seit 2026-11-01): Konto mit ≥ 3 Chats, einen neuen
+      Chat speichern, zurück zum leeren Chat — statt „What do you want to be
+      sure about?“ steht eine schräge, lustige Zeile zu den eigenen Themen in
+      deren Sprache (keine Witze über die Person oder Sensibles), höchstens
+      zwei Zeilen. Neuladen zeigt sie ab dem ersten Bild; Abmelden bringt den
+      Satz zurück (auf Deutsch „Wobei willst du sichergehen?“).
 - [ ] Beispielfragen beim Tippen (seit 2026-10-16): Der erste Buchstabe blendet
       sie weich nacheinander aus, danach gleitet „Please avoid personal…“ direkt
       unter die Leiste mit Reasoning/Attach statt allein unter einer Lücke zu

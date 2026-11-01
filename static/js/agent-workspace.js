@@ -6,16 +6,16 @@
 // - Uploads sit as chips on the user message they were sent with
 //   (attachments.js). A chip opens the stored file through openFile(), with
 //   download and removal in the preview.
-// - The documents created or revised in a turn (one row per document_id)
-//   belong to its answer: right under its text and pictures, above the
-//   evidence row (.agent-answer-documents, documentsSlot; Max 2026-10-31:
-//   "die Antwort endet mit diesen Punkten"). A click opens the PDF in the
-//   file viewer.
+// - The documents created or revised in a turn (one row per document_id),
+//   the other files the agent shared from its VM and the mail attachments
+//   it fetched belong to its answer: right under its text and pictures,
+//   above the evidence row (.agent-answer-documents, documentsSlot; Max
+//   2026-10-31: "die Antwort endet mit diesen Punkten", 2026-11-01 also the
+//   files). A document's click opens its PDF in the file viewer.
 // - #agentAnswerResources (after the live answer) and one resources row per
-//   archived Agent turn (renderTurnResources) show the files the agent
-//   shared from its VM, mail attachments the agent fetched in it, per-file
-//   upload progress, and a note when a file of the turn was only partly
-//   readable (and the documents of a turn without an answer body).
+//   archived Agent turn (renderTurnResources) show a note when a file of the
+//   turn was only partly readable or could not load (and the files of a turn
+//   without an answer body).
 // - The pictures the agent showed (vm_share_file, show_image) stand in the
 //   answer text where it placed them (.md-picture, fillPictures), the others
 //   right under the text, above its evidence row (Notes, Watch, Share):
@@ -690,19 +690,18 @@
   }
   // What one turn produced: its documents (versions up to this turn), the
   // files the agent shared from its VM, the pictures it showed from the web
-  // and the mail attachments it fetched.
-  // Uploads are on the message.
+  // and the mail attachments it fetched. All of it belongs to the answer:
+  // under its text, above its evidence row (Max, 2026-11-01: files under
+  // Notes and Sources "gehören doch zur Antwort"). Uploads are on the message.
   function turnResources(box, chatId, files, turnId, scope, live, body) {
     if (!turnId) { fillPictures(body, chatId, [], scope); fillDocuments(body, []); return; }
-    const cards = [];
+    const own = [];
     for (const group of groupDocuments(files)) {
       const mine = group.list.filter(version => version.turn === turnId);
       if (!mine.length) continue;
       const card = documentCard(chatId, group, { upTo: mine[0].number, scope });
-      if (card) cards.push(card);
+      if (card) own.push(card);
     }
-    // Part of the answer: under its text, above its evidence row.
-    if (body) fillDocuments(body, cards); else box.append(...cards);
     const shared = files.filter(file => ['vm_file', 'web_image'].includes(file.kind) && file.turn_id === turnId);
     const shown = shared.filter(file => PICTURE_MIMES.has(file.mime) && ['ready', 'partial'].includes(file.status));
     // In and under the answer text when there is one, else with the other files.
@@ -710,15 +709,16 @@
     else if (shown.length) {
       const gallery = node('div', 'agent-answer-pictures');
       for (const file of shown) gallery.append(pictureCard(chatId, file, scope));
-      box.append(gallery);
+      own.push(gallery);
     }
     const rows = [...shared.filter(file => !shown.includes(file)),
       ...files.filter(file => file.kind === 'mail_attachment' && file.turn_id === turnId)];
     if (rows.length) {
       const list = node('div', 'agent-files-list');
       for (const file of rows) list.append(fileRow(chatId, file, scope));
-      box.append(list);
+      own.push(list);
     }
+    if (body) fillDocuments(body, own); else box.append(...own);
   }
   function fillHistoryRow(row) {
     row.replaceChildren();

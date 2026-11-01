@@ -183,9 +183,11 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         expect(card.locator('.agent-doc-earlier')).not_to_have_attribute('open', '')
         _shot(page, f'workspace-saved-{width}-{"dark" if dark else "light"}')
         expect(page.locator('#agentWorkspace')).to_have_count(0)
-        panel = page.locator('#agentAnswerResources')
-        # The mail attachment fetched in this turn follows its answer.
+        panel = page.locator('#agentAnswerBody ~ .agent-answer-documents')
+        # The mail attachment fetched in this turn is part of its answer, with
+        # its documents above the evidence row (2026-11-01).
         expect(panel).to_contain_text('From email: Offer 2026 (Jens)')
+        expect(page.locator('#agentAnswerResources')).not_to_contain_text('invoice-attachment.pdf')
         expect(panel).not_to_contain_text('18c2f0a1b2c3d4e5')
         # Remove sits behind the overflow menu and needs an explicit confirmation.
         more = panel.get_by_role('button', name='More actions for invoice-attachment.pdf')

@@ -676,10 +676,11 @@ def pin_bookmark(request: Request, bookmark_id: str, payload: BookmarkPinRequest
 # POST like the title route: each call may cost a model call. Sync: the
 # Firestore read and the LLM call block, FastAPI runs it in the threadpool.
 def predict_starter_questions(request: Request):
-    """Three questions this account may ask next, read from its newest chats.
+    """Three questions this account may ask next, read from its newest chats,
+    and the line above the empty field ("greeting").
 
-    For the example questions under an empty new chat. Never an error for
-    a missing prediction: "skipped" keeps the curated questions in place.
+    For the start screen of an empty new chat. Never an error for a missing
+    prediction: "skipped" keeps the curated questions and the sentence.
     """
     uid = _bookmark_uid(request)
     skipped = {"status": "skipped", "questions": []}
@@ -707,8 +708,10 @@ def predict_starter_questions(request: Request):
     ]
     if len(history) < starter_questions.MIN_HISTORY:
         return skipped
-    questions = starter_questions.predict_questions(history)
-    return {"status": "success", "questions": questions} if questions else skipped
+    prediction = starter_questions.predict_questions(history)
+    if not (prediction["questions"] or prediction["greeting"]):
+        return skipped
+    return {"status": "success", **prediction}
 
 
 # Not agent_preferences: since the Agent's one mode (2026-10-31) the route
