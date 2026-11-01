@@ -8566,18 +8566,40 @@ Chat des Kontos (`AgentPreferences(vm=…)` nach `vm_allowed`, Prüfer-Einstellu
 Google-Regeln); dazu `AGENT_TEMPORARY_CHAT_PROMPT` nach dem Prüfer-Fakt: was
 mit ihm geht und was bleibt. Eine Watch nennt keinen Chat (`agent_watch.py`,
 `POST /api/watch`): sie überdauert ihn unberührt. Am Arbeitsplatz gehört ihm
-sein Ordner (`~/chats/<ordner>` samt `downloads/` und `input/`) und seine
-Hintergrundprozesse (`agent_vm_processes`, Datei `chat` im Prozessordner):
-beides geht mit jeder Chat-Löschung (`agent_vm.delete_chat_vm` →
-`delete_for_chat`: stoppen wie `vm_stop_process`, Ordner mit `output.log` weg),
-dazu `restore_floor`, also kein Prüfpunkt holt den Ordner zurück. Kontoweit
-und bleibend: Browser-Profil (selbst gemachte Anmeldungen, Cookies, Verlauf,
-offene Tabs), `~/repos` (`github_import`), installierte Pakete, `~/.secrets`,
-andere Chat-Ordner, `~/NOTES.md`. Die Notizen liest er (erstes VM-Ergebnis,
-`notes_for_agent(temporary=True)` mit `NOTES_TEMPORARY` statt der Einladung,
-welche anzulegen), `vm_write_file`/`vm_edit_file` lehnen sie ab
-(`VMTools._notes_kept`, `NOTES_KEPT`). Eine Shell in `vm_exec` könnte sie
-trotzdem ändern; das hält allein der Fakt im Prompt. Ein schreibgeschütztes
+sein Ordner und seine Hintergrundprozesse. Der Ordner heißt
+`~/chats/temporary-<id6>` statt nach der Frage, sein `.consens-chat` nennt
+keinen Titel und sagt, dass andere Chats ihn in Ruhe lassen
+(`agent_workspace.wanted_folder`, `TEMPORARY_MARKER`); samt `downloads/` und
+`input/`. Seine Prozesse tragen die Dateien `chat` und `temporary` im
+Prozessordner; `vm_process_output` ohne ID anderer Chats listet sie nicht
+(`list_command(chat=…)`). Beides geht mit jeder Chat-Löschung
+(`agent_vm.delete_chat_vm` → `delete_for_chat`: ein laufender wird gestoppt wie
+mit `vm_stop_process`; nicht verbrauchte VM-Zeit von heute kommt zurück; dann
+geht der Ordner mit `output.log`; eine nicht vollständig gelesene Liste lässt
+den Lösch-Job wiederholen). Seine Nachrichten legen keinen Prüfpunkt an
+(`VMSession.ready`), denn die Sprites-API löscht keine und ein Prüfpunkt hielte
+den Ordner über den Chat hinaus. Damit hat er auch kein „Restore“. Prüfpunkte,
+die andere Chats in seiner Lebenszeit nehmen, enthalten seinen Ordner. Sein
+Löschen sperrt deshalb genau diese (`agent_workspace.close_restore_gap`,
+`restore_gaps` am Konto-Dokument ab `agent_vm.created_at` bis zum Löschen plus
+`GAP_GRACE`, höchstens `RESTORE_GAPS`, sonst `restore_floor`). Ältere Prüfpunkte
+bleiben wiederherstellbar; bis 2026-11-01 nachts hob jedes Löschen
+`restore_floor` und beendete Restore für alle früheren Nachrichten. Die Kopien
+beim Anbieter bleiben wie bei jedem Prüfpunkt. Ein gestoppter Lauf, dessen
+Chat schon weg ist, räumt nach dem Freigeben des Arbeitsplatzes nach
+(`VMSession._sweep_deleted`, nur wenn die Werkbank lief): Prozesse, Ordner
+und den Ordner unter dem Namen, den der Titel will (Stopp während `open_chat`).
+Das gilt für Läufe in diesem Prozess; einen anderswo stoppt sein Wächter.
+Kontoweit und bleibend: Browser-Profil (selbst gemachte Anmeldungen, Cookies,
+Verlauf, offene Tabs), `~/repos` (`github_import`), installierte Pakete,
+`~/.secrets` (ein Schlüssel, den der Nutzer auf einer Karte gibt, „Saved in
+your workspace“), andere Chat-Ordner, `~/NOTES.md`, Dateien außerhalb seines
+Ordners. Ein mit `&` in `vm_exec` gestarteter Prozess hat keine `chat`-Datei;
+er endet, wenn die Werkbank schläft. Die Notizen liest er (erstes VM-Ergebnis,
+`notes_for_agent(temporary=True)`: `NOTES_TEMPORARY`, ohne Notizen
+`NOTES_NONE_TEMPORARY`), `vm_write_file`/`vm_edit_file` lehnen sie ab
+(`VMTools._notes_kept`, `NOTES_KEPT`, auch mit `//` davor). Eine Shell in
+`vm_exec` könnte sie trotzdem ändern; das hält allein der Fakt im Prompt. Ein schreibgeschütztes
 Bind-Mount in `agent-run` wäre die harte Variante, braucht aber eine neue
 Werkbank-Version und einen Test an einer echten Sprite. `search_chats` anderer
 Chats findet und öffnet ihn nicht (`agent_chat_search`), auch nicht aus einem

@@ -95,9 +95,9 @@ _ENTRIES = (
      "block says the same for memory changes (agent_memory.py:AUDIT_MEMORY_LOCK_FACTS).",
      "prompt_defaults.py:AGENT_REVIEW_FACTS", _review_facts),
     ("agent_temporary_chat", "Agent: temporary chat",
-     "Appended after \"Agent: who reviews\" in a temporary chat (since 2026-11-01), which has every tool of "
-     "the account's chats but sharing and writes nothing to memory or the workspace's notes; its memory block "
-     "ends with agent_memory.py:AUDIT_MEMORY_TEMPORARY_PROMPT.",
+     "Appended after \"Agent: who reviews\" in a temporary chat (since 2026-11-01), which has the tools of "
+     "the account's chats, cannot be shared and writes nothing to memory or the workspace's notes; with "
+     "readable memory its memory block ends with agent_memory.py:AUDIT_MEMORY_TEMPORARY_PROMPT.",
      "prompt_defaults.py:AGENT_TEMPORARY_CHAT_PROMPT", _temporary_chat),
     ("comparison", "Agent: comparison models",
      "System prompt of each model compare_models asks, each in a fresh conversation of its own, shown for depth "

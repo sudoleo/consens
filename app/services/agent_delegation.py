@@ -363,7 +363,8 @@ class DelegationLoop(AgentLoop):
         # chats (since 2026-11-01 evening), and the agent knows what goes
         # with it and what lasts (AGENT_TEMPORARY_CHAT_PROMPT); memory is
         # read-only (MemorySnapshot.temporary), the workspace's notes too
-        # (agent_vm_tools.VMTools.notes_refused).
+        # (agent_vm_tools.VMTools._notes_kept), and its messages take no
+        # checkpoint of the workspace (VMSession.ready).
         self.temporary = temporary
         # Who checks this message's work (account setting ``reviewers``,
         # since 2026-11-01): "always" from the run's start, "workspace" from

@@ -184,7 +184,10 @@ def test_its_memory_is_read_and_never_written():
     # Paused or unreadable memory says so, temporary or not.
     assert agent_memory.orchestrator_prompt(dataclasses.replace(temporary, enabled=False)) == (
         agent_memory.AUDIT_MEMORY_PAUSED_PROMPT)
+    # Unreadable: nothing could be saved later either.
     assert agent_memory.orchestrator_prompt(agent_memory.MemorySnapshot(temporary=True)) == (
+        agent_memory.AUDIT_MEMORY_TEMPORARY_PROMPT)
+    assert agent_memory.orchestrator_prompt(agent_memory.MemorySnapshot()) == (
         agent_memory.AUDIT_MEMORY_UNAVAILABLE_PROMPT)
 
 
@@ -214,17 +217,25 @@ def test_it_reads_the_workspaces_notes_and_its_file_tools_leave_them_as_they_are
     fake_vm.vms[NAME] = {"files": {agent_workspace.NOTES_PATH: notes}, "checkpoints": []}
     script = Agent([[("vm_write_file", {"path": "draft.md", "content": "a"})],
                     [("vm_write_file", {"path": "~/NOTES.md", "content": "private"})],
-                    [("vm_edit_file", {"path": "../../NOTES.md", "old_string": "blog", "new_string": "private"})]])
+                    [("vm_edit_file", {"path": "../../NOTES.md", "old_string": "blog", "new_string": "private"})],
+                    [("vm_write_file", {"path": "//home/agent/NOTES.md", "content": "private"})]])
     loop = vm_loop(store, script)
     loop.temporary = True
     list(loop.run())
-    draft, written, edited = results(loop)
+    draft, written, edited, doubled = results(loop)
     assert draft["workspace_notes"] == {"path": agent_workspace.NOTES_PATH, "text": notes.decode(),
                                         "note": agent_workspace.NOTES_TEMPORARY}
-    assert written == edited == {"error": NOTES_KEPT}
+    assert written == edited == doubled == {"error": NOTES_KEPT}
     assert fake_vm.vms[NAME]["files"][agent_workspace.NOTES_PATH] == notes
+    # Its folder and marker name no title, and its messages take no checkpoint.
+    session = loop.vm_tools.session
+    assert session.dir.rsplit("/", 1)[1] == f"temporary-{loop.chat_id[:6]}"
+    marker = fake_vm.vms[NAME]["files"][f"{session.dir}/{agent_workspace.CHAT_MARKER}"].decode()
+    assert "Question one" not in marker and agent_workspace.TEMPORARY_MARKER in marker
+    assert not [call for call in fake_vm.calls if call[0] == "checkpoint"]
+    assert not (store.get_turn(UID, loop.chat_id, loop.turn_id).get("agent_vm") or {}).get("checkpoint")
     # None yet: no invitation to start them.
-    assert agent_workspace.notes_for_agent(None, temporary=True)["note"] == agent_workspace.NOTES_TEMPORARY
+    assert agent_workspace.notes_for_agent(None, temporary=True)["note"] == agent_workspace.NOTES_NONE_TEMPORARY
     assert "keep them shorter" not in agent_workspace.notes_for_agent(b"x" * 30_000, temporary=True)["more"]
 
 
@@ -278,13 +289,62 @@ def test_deleting_it_takes_its_folder_and_processes_from_the_workspace(store, mo
                                 f"{process}/output.log": b"private output", f"{process}/chat": chat_id.encode(),
                                 "/home/agent/NOTES.md": b"# Notes\n", "/home/agent/chats/other-123456/a.txt": b"a"},
                       "checkpoints": []}
-    fake.commands[agent_vm_processes.chat_command(chat_id)] = ([("stdout", b"abcd1234\n")], 0, .1)
+    fake.commands[agent_vm_processes.chat_command(chat_id)] = ([("stdout", b"abcd1234 running\n")], 0, .1)
+    # Stopped after 100 of the 1800 seconds it was charged today: the rest comes back.
+    from app.services import agent_vm_time
+    stopped = f"consens-process stopped 0 100 1800 {agent_vm_time.day_key()} 0\n"
+    fake.commands[agent_vm_processes.stop_command(process, agent_vm_processes.task_name("abcd1234"))] = (
+        [("stdout", stopped.encode())], 0, .1)
+    refunds = []
+    monkeypatch.setattr(agent_vm_time, "refund", lambda store_, uid, seconds, day: refunds.append((uid, seconds, day)))
     store.delete_chat(UID, chat_id)
+    assert refunds == [(UID, 1700, agent_vm_time.day_key())]
     files = fake.vms[name]["files"]
     assert not [path for path in files if path.startswith(agent_vm.chat_dir(chat_id, folder))]
     assert not [path for path in files if path.startswith(process)]
     assert agent_vm_processes.stop_command(process, agent_vm_processes.task_name("abcd1234")) in fake.server
     assert files["/home/agent/NOTES.md"] == b"# Notes\n" and "/home/agent/chats/other-123456/a.txt" in files
+
+
+def test_a_process_list_that_does_not_come_back_whole_keeps_the_deletion_job(monkeypatch):
+    from app.services import agent_vm, agent_vm_processes
+    from test_agent_vm import FakeVM
+    fake = FakeVM()
+    name = agent_vm.workspace_name(UID)
+    fake.vms[name] = {"files": {}, "checkpoints": []}
+    fake.commands[agent_vm_processes.chat_command("c1")] = ([("stdout", b"abcd1234 run")], None, 30.0)
+    with pytest.raises(agent_vm.VMUnavailable):
+        agent_vm_processes.delete_for_chat(fake.backend(), name, "c1")
+
+
+def test_leaving_it_closes_only_its_own_lifetime_to_restore(store, monkeypatch):
+    """Its messages take no checkpoint; other chats' checkpoints from its
+    lifetime hold its folder and may not come back. Older ones still may: a
+    floor at every deletion would end restore for the account's whole past."""
+    from datetime import datetime, timezone
+    from app.services import agent_vm, agent_workspace
+    from test_agent_vm import FakeVM
+    monkeypatch.setattr(agent_vm, "backend", FakeVM().backend)
+    name = agent_vm.workspace_name(UID)
+    agent_workspace.ref(store.db, UID).set({"name": name})
+    before = datetime.now(timezone.utc) - timedelta(hours=2)
+    chat_id = store.create_chat(UID, execution_mode="agent", temporary=True)["id"]
+    lived = datetime.now(timezone.utc) - timedelta(hours=1)
+    store._chat_ref(UID, chat_id).update({"agent_vm": {"name": name, "workspace": True,
+                                                        "created_at": (lived - timedelta(minutes=5)).isoformat()}})
+    store.delete_chat(UID, chat_id)
+    record = agent_workspace.record(store.db, UID)
+    assert "restore_floor" not in record and len(record["restore_gaps"]) == 1
+
+    def turn_vm(at):
+        return {"name": name, "checkpoint": "cp", "checkpoint_at": at.isoformat()}
+    assert agent_workspace.restorable(record, turn_vm(before))
+    assert not agent_workspace.restorable(record, turn_vm(lived))
+    # A normal chat's deletion still raises the floor.
+    normal = store.create_chat(UID, execution_mode="agent")["id"]
+    store._chat_ref(UID, normal).update({"agent_vm": {"name": name, "workspace": True}})
+    store.delete_chat(UID, normal)
+    assert not agent_workspace.restorable(agent_workspace.record(store.db, UID), turn_vm(before))
 
 
 def test_a_run_that_outlives_its_deleted_chat_leaves_no_texts_on_its_receipt(store):

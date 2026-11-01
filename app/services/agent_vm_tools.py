@@ -780,7 +780,11 @@ class VMSession:
                 agent_workspace.record_folder(self.loop.store, self.loop.uid, self.loop.chat_id, opened.folder)
             self._still_active()
             since = self._took("chat", since)
-            self._checkpoint_start()
+            # A temporary chat's messages take none: a checkpoint holds the
+            # chat's folder, and the provider keeps it beyond the chat (its
+            # API deletes none, docs/agent-mode.md "Wiederherstellen").
+            if getattr(self.loop, "temporary", False) is not True:
+                self._checkpoint_start()
             context = self.loop.file_context
             if context is not None and context.file_ids:
                 # The attachments come after the checkpoint: a restore never brings them back.
@@ -1036,11 +1040,13 @@ class VMSession:
             leased = self.leased
             self.leased = False
             callbacks = list(self._on_close)
-        if self.started and self.loop.cancellation.cancelled:
-            self._sweep_deleted()
         if leased:
             policy = self._leave_policy()
             agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=policy)
+        # After the release: it touches this chat's paths alone, and another
+        # chat's message need not wait for it.
+        if self._bench_ran and self.loop.cancellation.cancelled:
+            self._sweep_deleted()
         for callback in callbacks:
             try:
                 callback()
@@ -1057,14 +1063,26 @@ class VMSession:
         temporary chat left mid-answer, since 2026-11-01): what its last
         calls wrote after the deletion's sweep (agent_vm.delete_chat_vm)
         goes too, its folder and its background processes. Only after a
-        stop: a message that ended on its own found its chat active."""
-        from app.services import agent_vm_processes
+        stop, which a deletion in this process makes first
+        (ChatStore.request_chat_deletion); a run elsewhere ends at its
+        watcher's next look. The
+        folder also by the name its title wants: a stop during open_chat
+        may leave it moved there before the chat recorded it."""
+        from app.services import agent_vm_processes, agent_vm_time
         try:
             snapshot = self.loop.store._chat_ref(self.loop.uid, self.loop.chat_id).get()
             if snapshot.exists and (snapshot.to_dict() or {}).get("status") == "active":
                 return
-            agent_vm_processes.delete_for_chat(self.backend, self.name, self.loop.chat_id)
-            self.backend.delete_path(self.name, self.dir)
+            store, uid = self.loop.store, self.loop.uid
+            agent_vm_processes.delete_for_chat(self.backend, self.name, self.loop.chat_id,
+                                               refund=lambda seconds, day: agent_vm_time.refund(store, uid, seconds, day))
+            folders = {self.dir}
+            if self.claim is not None:
+                from app.services import agent_workspace
+                folders.add(agent_vm.chat_dir(self.loop.chat_id, agent_workspace.wanted_folder(
+                    self.loop.chat_id, self.claim.title, temporary=getattr(self.loop, "temporary", False) is True)))
+            for folder in sorted(folders):
+                self.backend.delete_path(self.name, folder)
         except Exception as exc:
             logging.warning("Agent VM folder of a deleted chat not swept category=%s", safe_exception(exc))
 
@@ -1487,7 +1505,9 @@ class VMTools:
         they are (AGENT_TEMPORARY_CHAT_PROMPT): they outlast it. Its own
         file tools refuse them; a command in vm_exec is the agent's."""
         from app.services import agent_workspace
-        if getattr(self.loop, "temporary", False) is True and path == agent_workspace.NOTES_PATH:
+        # vm_path keeps a leading "//" (POSIX normpath): one slash here.
+        if (getattr(self.loop, "temporary", False) is True
+                and posixpath.normpath("/" + path.lstrip("/")) == agent_workspace.NOTES_PATH):
             raise ValueError(NOTES_KEPT)
 
     def write(self, args, *, cancellation, report=None):

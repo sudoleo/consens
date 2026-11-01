@@ -525,10 +525,22 @@ CHAT_MARKER = ".consens-chat"
 TITLE_CHARS = 200
 
 
-def chat_marker(chat_id, title="", started=""):
-    title = " ".join(str(title or "").split())[:TITLE_CHARS] or "(untitled)"
-    return (f"chat: {title}\nstarted: {started or 'unknown'}\nid: {chat_id}\n"
-            "This folder holds the files of that chat; it is deleted with the chat.\n").encode("utf-8")
+# A temporary chat's folder and marker name no title (since 2026-11-01):
+# the workspace is every chat's, and its title is the user's question.
+TEMPORARY_FOLDER_TITLE = "temporary"
+TEMPORARY_MARKER = ("This folder holds the files of a temporary chat; it is deleted when the user leaves that "
+                    "chat, and other chats leave it alone.")
+
+
+def chat_marker(chat_id, title="", started="", *, temporary=False):
+    title = "(temporary chat)" if temporary else " ".join(str(title or "").split())[:TITLE_CHARS] or "(untitled)"
+    note = TEMPORARY_MARKER if temporary else "This folder holds the files of that chat; it is deleted with the chat."
+    return f"chat: {title}\nstarted: {started or 'unknown'}\nid: {chat_id}\n{note}\n".encode("utf-8")
+
+
+def wanted_folder(chat_id, title="", *, temporary=False):
+    """The folder's name that the chat's title asks for (agent_vm.chat_folder)."""
+    return agent_vm.chat_folder(TEMPORARY_FOLDER_TITLE if temporary else title, chat_id)
 
 
 def record_folder(store, uid, chat_id, folder):
@@ -602,6 +614,7 @@ def parse_chat(raw):
 # A temporary chat reads the notes and leaves them as they are (since
 # 2026-11-01 evening): they outlast it (agent_vm_tools.VMTools._notes_kept).
 NOTES_TEMPORARY = "This temporary chat leaves the notes as they are: they outlast it."
+NOTES_NONE_TEMPORARY = "No notes yet, and this temporary chat starts none: they would outlast it."
 
 
 def notes_for_agent(raw, *, temporary=False):
@@ -611,7 +624,7 @@ def notes_for_agent(raw, *, temporary=False):
     temporary chat, which only reads them."""
     if raw is None:
         return {"path": NOTES_PATH, "text": "",
-                "note": NOTES_TEMPORARY if temporary else "No notes yet: start them when something lasting comes up."}
+                "note": NOTES_NONE_TEMPORARY if temporary else "No notes yet: start them when something lasting comes up."}
     text = raw.decode("utf-8", "replace")
     notes = {"path": NOTES_PATH, "text": text[:NOTES_CHARS]}
     if len(raw) >= NOTES_CHARS * 4 or len(text) > NOTES_CHARS:
@@ -632,7 +645,7 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
     new name is taken or the move failed."""
     from app.services import agent_secrets
     from app.services.llm.provider_runtime import ProviderCancellation
-    wanted = agent_vm.chat_folder(title, chat_id)
+    wanted = wanted_folder(chat_id, title, temporary=temporary)
     old = agent_vm.chat_dir(chat_id, folder or None)
     names = [key for key in dict.fromkeys(keys) if agent_secrets.NAME.fullmatch(str(key))][:agent_secrets.KEEP_NAMES]
     out = bytearray()
@@ -646,7 +659,7 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
                                                 agent_vm.chat_dir(chat_id, wanted), NOTES_PATH, str(limit), *names],
                                                CHAT_SECONDS, HOME),
                      cwd="/", timeout=CHAT_SECONDS, on_output=keep, cancellation=cancellation or ProviderCancellation(),
-                     input=chat_marker(chat_id, title, started))
+                     input=chat_marker(chat_id, title, started, temporary=temporary))
     if outcome.exit_code != 0:
         raise agent_vm.VMUnavailable(f"chat: exit {outcome.exit_code}")
     state, found, notes = parse_chat(bytes(out))
@@ -788,7 +801,51 @@ def restorable(record, turn_vm, now=None):
     if taken.tzinfo is None or taken < now - timedelta(days=RESTORE_DAYS):
         return False
     floor = record.get("restore_floor")
-    return not (isinstance(floor, datetime) and taken <= floor)
+    if isinstance(floor, datetime) and taken <= floor:
+        return False
+    return not any(isinstance(gap, dict) and isinstance(gap.get("from"), datetime)
+                   and isinstance(gap.get("to"), datetime) and gap["from"] <= taken <= gap["to"]
+                   for gap in record.get("restore_gaps") or ())
+
+
+# A temporary chat's messages take no checkpoint (VMSession.ready), but
+# other chats' messages may while it lives, its folder in them: only those
+# may not bring it back (restore_gaps, since 2026-11-01). A floor at each
+# deletion would end restore for the account's whole past, and temporary
+# chats are deleted whenever the user leaves one. A gap ends this much
+# after the deletion, for a checkpoint still being taken then.
+RESTORE_GAPS = 100
+GAP_GRACE = timedelta(seconds=agent_vm.CHECKPOINT_SECONDS + 10)
+
+
+def close_restore_gap(store, uid, since):
+    """A temporary chat's folder left the workspace: no checkpoint taken
+    from ``since`` (when the chat first claimed the workspace, its record's
+    ``created_at``) to now may bring it back (restorable). Gaps past
+    RESTORE_DAYS go; beyond RESTORE_GAPS, or without a readable ``since``,
+    the floor rises instead (raise_restore_floor)."""
+    try:
+        start = datetime.fromisoformat(str(since or ""))
+    except ValueError:
+        start = None
+    if start is None or start.tzinfo is None:
+        raise_restore_floor(store, uid)
+        return
+    workspace = ref(store.db, uid)
+
+    def operation(tx):
+        snapshot = workspace.get(transaction=tx)
+        if not snapshot.exists:
+            return
+        now = _now()
+        kept = [gap for gap in (snapshot.to_dict() or {}).get("restore_gaps") or ()
+                if isinstance(gap, dict) and isinstance(gap.get("to"), datetime)
+                and gap["to"] > now - timedelta(days=RESTORE_DAYS)]
+        if len(kept) >= RESTORE_GAPS:
+            tx.update(workspace, {"restore_floor": now, "restore_gaps": []})
+        else:
+            tx.update(workspace, {"restore_gaps": [*kept, {"from": start, "to": now + GAP_GRACE}]})
+    store._transaction(operation)
 
 
 def raise_restore_floor(store, uid):

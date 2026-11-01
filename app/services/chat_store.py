@@ -1513,10 +1513,14 @@ class ChatStore:
         snapshot = self._chat_ref(uid, chat_id).get()
         if snapshot.exists:
             record = (snapshot.to_dict() or {}).get("agent_vm")
-            delete_chat_vm(uid, chat_id, record)
+            delete_chat_vm(uid, chat_id, record, store=self)
             if isinstance(record, dict) and record.get("workspace"):
                 from app.services import agent_workspace
-                agent_workspace.raise_restore_floor(self, uid)
+                if (snapshot.to_dict() or {}).get("temporary") is True:
+                    # Only the checkpoints of its lifetime (its own take none).
+                    agent_workspace.close_restore_gap(self, uid, record.get("created_at"))
+                else:
+                    agent_workspace.raise_restore_floor(self, uid)
         # Before the turns go: they name the receipts whose texts go too.
         # Only Agent runs have such receipts (a chat document already gone,
         # in a resumed cascade, may have been one).

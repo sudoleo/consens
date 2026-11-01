@@ -1448,8 +1448,10 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Temporären Chat verlassen (Neuer Chat, anderer Chat, Abmelden, Neuladen):
   er ist danach weg (Firestore: Chat, Turns und `temporary_chats`-Eintrag
   gelöscht; am Arbeitsplatz sein Ordner unter `~/chats` und seine
-  Hintergrundprozesse, im eigenen Terminal `ls ~/chats`; Browser-Anmeldungen
-  und andere Chats bleiben); ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der
+  Hintergrundprozesse, im eigenen Terminal `ls ~/chats`, dort hieß er
+  `temporary-…`; Browser-Anmeldungen und andere Chats bleiben). „Restore“ an
+  einer Antwort eines normalen Chats von vor dem temporären Chat geht danach
+  weiter, der temporäre Chat selbst bietet keins an; ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der
   stündliche Retention-Loop löscht ihn spätestens 24 h nach der letzten
   Nachricht.
 

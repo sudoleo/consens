@@ -183,8 +183,12 @@ def stop_command(directory, task):
             f"http://sprite/v1/tasks/{shlex.quote(task)} >/dev/null 2>&1; fi; " + status_command(directory))
 
 
-def list_command(root=PROCESSES_DIR):
-    return (f"for d in {shlex.quote(root)}/*/; do [ -d \"$d\" ] || continue; id=$(basename \"$d\"); "
+def list_command(root=PROCESSES_DIR, chat=""):
+    """The processes, one per line: id, state, the command's start. A
+    temporary chat's (its file ``temporary``) only for ``chat`` itself."""
+    return (f"chat={shlex.quote(chat)}; for d in {shlex.quote(root)}/*/; do [ -d \"$d\" ] || continue; "
+            "if [ -f \"$d/temporary\" ] && [ \"$(head -c 100 \"$d/chat\" 2>/dev/null)\" != \"$chat\" ]; then "
+            "continue; fi; id=$(basename \"$d\"); "
             "code=$(cat \"$d/exit_code\" 2>/dev/null); if [ -z \"$code\" ]; then pid=$(cat \"$d/pid\" 2>/dev/null); "
             "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; else code=lost; fi; fi; "
             "[ -f \"$d/stopped\" ] && [ \"$code\" != running ] && code=stopped; "
@@ -197,34 +201,56 @@ def task_name(process_id):
 
 
 def chat_command(chat_id, root=PROCESSES_DIR):
-    """The ids of the processes ``chat_id`` started (their ``chat`` file),
-    one per line."""
+    """The processes ``chat_id`` started (their ``chat`` file), one per
+    line: the id, then ``running`` or ``ended`` (also one the VM lost)."""
     return (f"chat={shlex.quote(chat_id)}; for d in {shlex.quote(root)}/*/; do [ -f \"$d/chat\" ] || continue; "
-            "[ \"$(head -c 100 \"$d/chat\")\" = \"$chat\" ] && basename \"$d\"; done; true")
+            "[ \"$(head -c 100 \"$d/chat\")\" = \"$chat\" ] || continue; state=ended; "
+            "pid=$(cat \"$d/pid\" 2>/dev/null); if [ ! -f \"$d/exit_code\" ] && [ -n \"$pid\" ] "
+            "&& kill -0 \"$pid\" 2>/dev/null; then state=running; fi; "
+            "printf '%s %s\\n' \"$(basename \"$d\")\" \"$state\"; done; true")
 
 
-def delete_for_chat(vm, name, chat_id):
+def delete_for_chat(vm, name, chat_id, *, refund=None):
     """With its chat (agent_vm.delete_chat_vm, since 2026-11-01): the
-    background processes it started on the workbench ``name``, stopped as
-    vm_stop_process stops them, and their folders with the command and its
-    output. One started before it had a ``chat`` file ends by its limit.
-    Raises VMUnavailable when the provider fails: the chat's deletion then
-    retries."""
+    background processes it started on the workbench ``name``, a running
+    one stopped as vm_stop_process stops it, and their folders with the
+    command and its output. ``refund(seconds, day)`` gives back today's VM
+    time a process did not use, as a look at it would (ProcessTools._refund).
+    One started before it had a ``chat`` file ends by its limit. Raises
+    VMUnavailable when the provider fails or the list did not come back
+    whole: the chat's deletion then retries."""
+    from app.services import agent_vm_time
     from app.services.llm.provider_runtime import ProviderCancellation
-    out = bytearray()
 
-    def keep(stream, chunk):
-        if stream == "stdout" and len(out) < 4096:
-            out.extend(chunk)
-    vm.exec(name, chat_command(chat_id), cwd=agent_vm.SERVER_HOME, timeout=30, on_output=keep,
-            cancellation=ProviderCancellation(), agent=False)
-    for process_id in dict.fromkeys(out.decode("ascii", "replace").split()):
+    def run(command, timeout):
+        out = bytearray()
+
+        def keep(stream, chunk):
+            if stream == "stdout" and len(out) < OUTPUT_CHARS * 2:
+                out.extend(chunk)
+        outcome = vm.exec(name, command, cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=keep,
+                          cancellation=ProviderCancellation(), agent=False)
+        return outcome.exit_code, out.decode("utf-8", "replace")
+    code, listed = run(chat_command(chat_id), 30)
+    if code != 0:
+        raise agent_vm.VMUnavailable(f"processes: exit {code}")
+    for line in dict.fromkeys(listed.splitlines()):
+        process_id, _, state = line.partition(" ")
         if not re.match(ID, process_id):
             continue
         directory = process_dir(process_id)
-        vm.exec(name, stop_command(directory, task_name(process_id)), cwd=agent_vm.SERVER_HOME,
-                timeout=STOP_GRACE_SECONDS + 30, on_output=lambda stream, chunk: None,
-                cancellation=ProviderCancellation(), agent=False)
+        if state == "running":
+            _, text = run(stop_command(directory, task_name(process_id)), STOP_GRACE_SECONDS + 30)
+        else:
+            _, text = run(status_command(directory, chars=0), 30)
+        found = spent(text)
+        if refund is not None and found is not None:
+            ran, reserved, day, refunded = found
+            if not refunded and reserved > ran and day == agent_vm_time.day_key():
+                # Marked first, as _refund does: the deletion and a stopped
+                # message's sweep never both give it back.
+                vm.write_file(name, posixpath.join(directory, "refunded"), b"1", agent=False)
+                refund(reserved - ran, day)
         vm.delete_path(name, directory, agent=False)
 
 
@@ -341,9 +367,13 @@ class ProcessTools:
         from app.services import agent_vm_time
         process_id = new_id()
         directory = process_dir(process_id)
-        for name, content in (("run.sh", RUNNER), ("launch.sh", launch_script(args.command, cwd, seconds)),
-                              ("command", args.command), ("reserve", f"{seconds} {agent_vm_time.day_key()}"),
-                              ("chat", self.vm.loop.chat_id)):
+        # A temporary chat's command stays out of other chats' lists (list_command).
+        temporary = (("temporary", "1"),) if getattr(self.vm.loop, "temporary", False) is True else ()
+        # Its chat first: a folder left by a later write that failed still
+        # goes with the chat (delete_for_chat).
+        for name, content in (("chat", self.vm.loop.chat_id), *temporary, ("run.sh", RUNNER),
+                              ("launch.sh", launch_script(args.command, cwd, seconds)),
+                              ("command", args.command), ("reserve", f"{seconds} {agent_vm_time.day_key()}")):
             self.vm._provider("write", lambda name=name, content=content: session.backend.write_file(
                 session.name, posixpath.join(directory, name), content.encode("utf-8"), agent=False))
         code, text = self._run(start_command(directory, task_name(process_id)), cancellation, 30)
@@ -375,7 +405,7 @@ class ProcessTools:
         # time below: also once that is used up (VMTools._start).
         self.vm._start(cancellation, change=False, spends=False)
         if not args.id:
-            code, text = self._run(list_command(), cancellation, 30, idempotent=True)
+            code, text = self._run(list_command(chat=self.vm.loop.chat_id), cancellation, 30, idempotent=True)
             processes = []
             for line in text.splitlines():
                 parts = line.split("\t", 2)

@@ -535,9 +535,11 @@
         question: basis.currentTurn?.question || basis.question,
         eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch,
         followUp: Boolean(document.querySelector('#threadHistory > .thread-history-turn')) });
+      // Not in a temporary chat: a share keeps a copy for 30 days.
       App.answerShare?.button?.(document.getElementById('agentAnswerBody'), {
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId,
-        eligible: basis.currentTurn?.status === 'completed' && Boolean(String(basis.consensus || '').trim()) });
+        eligible: basis.temporary !== true && basis.currentTurn?.status === 'completed'
+          && Boolean(String(basis.consensus || '').trim()) });
       App.agentGithub?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_pull_request : null,
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId });

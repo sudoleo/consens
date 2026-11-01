@@ -1471,8 +1471,11 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   ihn an `timeout` weitergibt; nach 10 s KILL an die ganze Sitzung des
   Aufsehers als root (`pkill -s`). Seit 2026-11-01 nennt die Datei `chat`
   im Prozessordner den startenden Chat: Mit dem Chat gehen seine Prozesse
-  (`delete_for_chat` in `agent_vm.delete_chat_vm`, derselbe Stopp, dann der
-  Ordner samt `output.log`); ältere ohne die Datei enden an ihrem Limit.
+  (`delete_for_chat` in `agent_vm.delete_chat_vm`: ein laufender mit
+  demselben Stopp, die nicht verbrauchte VM-Zeit von heute zurück, dann der
+  Ordner samt `output.log`); ältere ohne die Datei enden an ihrem Limit. Die
+  eines temporären Chats tragen zusätzlich `temporary` und fehlen in der Liste
+  anderer Chats.
 
 #### Netz der Werkbank (Fund 4)
 
@@ -2642,8 +2645,10 @@ VM:
   Konto-Dokument. Die Untergrenze setzen „Log out everywhere“ (vor dem
   Löschen des Profils) und das Löschen eines Chats mit Ordner im Arbeitsplatz
   (`raise_restore_floor`): ein älterer Checkpoint brächte Anmeldungen oder den
-  Ordner zurück. Löschen kann die REST-API der Sprites Checkpoints nicht; nur
-  ihre Nutzung endet hier. Der Chat merkt sich `agent_vm.restored`; die nächste
+  Ordner zurück. Ein temporärer Chat nimmt keine Checkpoints; sein Löschen
+  sperrt statt einer Untergrenze nur die Checkpoints seiner Lebenszeit
+  (`restore_gaps`, `close_restore_gap`, seit 2026-11-01). Löschen kann die
+  REST-API der Sprites Checkpoints nicht; nur ihre Nutzung endet hier. Der Chat merkt sich `agent_vm.restored`; die nächste
   Nachricht mit VM bekommt einmal `VM_RESTORED_NOTE` in ihren App-Kontext
   (danach `told`), damit der Agent seinem Arbeitsstand nicht blind glaubt.
 

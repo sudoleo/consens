@@ -893,7 +893,7 @@ def restore_workspace(uid, checkpoint, *, factory=None):
         vm.close()
 
 
-def delete_chat_vm(uid, chat_id, record, *, factory=None):
+def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
     """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
     folder in the account's workbench with the background processes it
     started there (since 2026-11-01, agent_vm_processes.delete_for_chat),
@@ -919,8 +919,13 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
         if name == workspace_name(uid) and vm.exists(name):
             from app.services import agent_vm_processes, agent_workspace
             agent_workspace.prepare(vm, name)
-            # Its processes first: they run in its folder.
-            agent_vm_processes.delete_for_chat(vm, name, chat_id)
+            # Its processes first: they run in its folder. ``store``: the VM
+            # time they did not use comes back (agent_vm_time.refund).
+            refund = None
+            if store is not None:
+                from app.services import agent_vm_time
+                refund = lambda seconds, day: agent_vm_time.refund(store, uid, seconds, day)  # noqa: E731
+            agent_vm_processes.delete_for_chat(vm, name, chat_id, refund=refund)
             # The folder by the name the chat recorded (since 2026-10-28), and
             # by its id, as before and while a rename has not happened yet.
             folder = record.get("folder")

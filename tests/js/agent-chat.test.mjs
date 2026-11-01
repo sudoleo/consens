@@ -1766,6 +1766,39 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("offers a temporary chat's answer the Watch pill but no share", async () => {
+    // A Watch names no chat and stays; a share keeps a copy for 30 days.
+    const { window, document, dom } = boot({ setup(w) {
+      w.App.temporaryChat = { armed: () => true, start: () => "token-1", adopt: () => true, token: () => "token-1",
+        unanswered: () => false, leave: vi.fn(), arm: vi.fn(), sync: vi.fn(), shown: () => true };
+      w.App.watch = { answerButton: vi.fn(), showFeatureNudge: vi.fn() };
+      w.App.answerShare = { button: vi.fn() };
+    } });
+    await selectAgent(window);
+    window.streamSSERequest = vi.fn(async () => ({ ok: true, data: { response: "Answer", chat_id: "a".repeat(32),
+      turn_id: "b".repeat(32), temporary: true, bookmark_meta: null,
+      turn: { id: "b".repeat(32), question: "Question", consensus: "Answer", status: "completed", mode: "Agent",
+        execution_mode: "agent", sources: [{ url: "https://example.com" }] } } }));
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.App.runRegistry.visible()?.status).toBe("succeeded"));
+    const run = window.App.runRegistry.visible();
+    window.App.agentChat.project(run);
+    expect(window.App.watch.answerButton).toHaveBeenLastCalledWith(expect.anything(),
+      expect.objectContaining({ eligible: true }));
+    expect(window.App.answerShare.button).toHaveBeenLastCalledWith(expect.anything(),
+      expect.objectContaining({ eligible: false }));
+    // The finished chat's view (its basis, no run on screen): no share either.
+    window.App.runRegistry.clearVisible({ keepConversationBasis: true });
+    window.App.agentChat.renderShell(true);
+    const fromBasis = window.App.answerShare.button.mock.calls.map(([, options]) => options).filter(o => "chatId" in o);
+    expect(fromBasis.length).toBeGreaterThan(1);
+    expect(fromBasis.filter(options => options.eligible === true)).toEqual([]);
+    // Not offered on its own, though the answer has sources.
+    for (const [options] of window.App.watch.showFeatureNudge.mock.calls) expect(options.eligible).toBe(false);
+    dom.window.close();
+  });
+
   // The run read the message before the POST's answer with its id arrived:
   // it stayed queued and went out again after the response, paid twice.
   it("never sends a message again that the run read before its id came back", async () => {

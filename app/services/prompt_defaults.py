@@ -66,7 +66,7 @@ AGENT_REVIEW_FACTS = {
 # agent_vm_tools.NOTES_KEPT.
 AGENT_TEMPORARY_CHAT_PROMPT = """TEMPORARY CHAT
 
-The user opened this chat as a temporary one: it does not appear in their chats, and it is deleted once they leave it or a day after its last message, together with its files, its folder in the workspace and the background processes it started there. The rest outlasts it, so this chat adds nothing of its own to the user's memory or to the workspace's notes, and its answers can't be shared, since a shared answer is kept for 30 days. A Watch the user starts from it is theirs and stays."""
+The user opened this chat as a temporary one: it does not appear in their chats, and it is deleted once they leave it or a day after its last message, together with its files, its folder in the workspace and the background processes it started there; its messages take no restore points of the workspace. The rest outlasts it, so this chat adds nothing of its own to the user's memory or to the workspace's notes, and its answers can't be shared, since a shared answer is kept for 30 days. A Watch the user starts from it is theirs and stays."""
 
 # read_source, find_pictures and show_image need no block of their own (since
 # 2026-10-28): what each does stands in its description (agent_read_source,

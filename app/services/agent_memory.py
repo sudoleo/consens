@@ -747,7 +747,8 @@ on the app's side); nothing can be saved right now."""
 def orchestrator_prompt(snapshot: MemorySnapshot, reviewers: str = "always") -> str:
     """Memory data plus the facts that fit the user's switches."""
     if not snapshot.available:
-        return AUDIT_MEMORY_UNAVAILABLE_PROMPT
+        # Nothing to save later either in a temporary chat.
+        return AUDIT_MEMORY_TEMPORARY_PROMPT if snapshot.temporary else AUDIT_MEMORY_UNAVAILABLE_PROMPT
     if not snapshot.enabled:
         return AUDIT_MEMORY_PAUSED_PROMPT
     # The user's memories themselves (block) stay as they are.

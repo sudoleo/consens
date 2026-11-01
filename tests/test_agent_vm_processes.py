@@ -179,9 +179,10 @@ def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed
 
 
 def test_without_an_id_the_processes_are_listed(store, fake_vm):
-    fake_vm.commands[list_command()] = ([("stdout", b"abcd1234\trunning\tnpm run dev\n"
-                                                    b"0000ffff\t1\tpytest -q\nnot a line\n")], 0, .1)
-    loop = vm_loop(store, Agent([[("vm_process_output", {})]]))
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    fake_vm.commands[list_command(chat=chat_id)] = ([("stdout", b"abcd1234\trunning\tnpm run dev\n"
+                                                                b"0000ffff\t1\tpytest -q\nnot a line\n")], 0, .1)
+    loop = vm_loop(store, Agent([[("vm_process_output", {})]]), chat_id=chat_id)
     list(loop.run())
     assert results(loop)[0] == {"processes": [
         {"id": "abcd1234", "status": "running", "command": "npm run dev"},
@@ -287,8 +288,22 @@ def test_a_chats_processes_are_found_by_its_chat_file(shell, tmp_path):
     Path(mine, "chat").write_text("chat-a", newline="\n")
     Path(root, "44444442", "chat").write_text("chat-a2", newline="\n")
     code, text = run(agent_vm_processes.chat_command("chat-a", root=root))
-    assert code == 0 and text.split() == ["44444441"]
+    assert code == 0 and text.splitlines() == ["44444441 ended"]
     assert run(agent_vm_processes.chat_command("nobody", root=root)) == (0, "")
+    # A live one is "running" (delete_for_chat stops only those): the pid of the shell itself.
+    code, text = run(f'echo $$ > {shlex.quote(mine)}/pid; ' + agent_vm_processes.chat_command("chat-a", root=root))
+    assert code == 0 and text.splitlines() == ["44444441 running"]
+
+
+def test_a_temporary_chats_processes_are_left_out_of_other_chats_lists(shell, tmp_path):
+    run, root = shell
+    temporary = prepare(root, "55555551", "true", tmp_path.as_posix())
+    prepare(root, "55555552", "true", tmp_path.as_posix())
+    Path(temporary, "chat").write_text("temp-chat", newline="\n")
+    Path(temporary, "temporary").write_text("1", newline="\n")
+    listed = lambda chat: sorted(line.split("\t")[0] for line in run(list_command(root=root, chat=chat))[1].splitlines())
+    assert listed("temp-chat") == ["55555551", "55555552"]
+    assert listed("other") == ["55555552"]
 
 
 def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):
