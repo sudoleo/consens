@@ -639,6 +639,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       chat“ samt Bestätigung. Entfernen an Karten nur über ⋯ mit Bestätigung;
       Screenreader hört „Download <Datei>, version n“. Teils lesbare Dateien zeigen
       „Partly read“ an Chip und Antwort.
+- [ ] Bild-Zoom im Anhang-Viewer (Anhang-Bild und Agent-Bild/Galerie), 1440 px
+      und Handy: Pinch (Finger, Trackpad, Strg+Mausrad) zoomt um den Punkt
+      darunter, der Seiten-Zoom des Browsers bleibt stehen; Doppeltipp bzw.
+      Doppelklick schaltet eingepasst ↔ vergrößert; vergrößert verschiebt
+      Ziehen das Bild bis an den Rand, nie darüber hinaus; `+`/`-`/`0`; Quelle
+      und Download treten beim Zoomen zurück. Vergrößert blättert Wischen
+      nicht, eingepasst schon; Schließen/Escape und Blättern beginnen wieder
+      eingepasst. Reduced Motion: Sprünge ohne Animation. Safari (Mac/iOS).
 - [ ] Skeletons: Bei gedrosseltem Laden bleiben Chat-Platzhalter bis zur
       Metadatenantwort stehen; leere Liste, Fehler und Logout entfernen sie.
       Wartende Modellantworten zeigen Textzeilen bis zum ersten Token oder

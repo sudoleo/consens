@@ -68,6 +68,52 @@ dialog.modal.attachment-viewer-dialog[open] {
   max-height: min(72dvh, 680px);
   border-radius: var(--radius-xs);
   object-fit: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Zooming into the picture (image-zoom.js): the body is its frame and clips
+   it, the source and the actions under it step aside while it is enlarged.
+   A pinch is the picture's, never the page's: the picture takes its touches
+   itself, the body around it only scrolls up and down. */
+.attachment-viewer-body:has(> .attachment-viewer-image) {
+  touch-action: pan-y;
+}
+
+.attachment-viewer-body.is-zoomed {
+  overflow: hidden;
+}
+
+.attachment-viewer-body.is-zoomed .attachment-viewer-image {
+  cursor: grab;
+}
+
+.attachment-viewer-body.is-zoomed .attachment-viewer-image.is-panning {
+  cursor: grabbing;
+}
+
+.attachment-viewer-image.is-settling {
+  transition: transform var(--dur-state) var(--ease-out);
+}
+
+.attachment-viewer-body > .attachment-viewer-source,
+.attachment-viewer-body > .attachment-viewer-actions {
+  transition: opacity var(--dur-state) var(--ease-standard), visibility 0s var(--ease-linear) 0s;
+}
+
+.attachment-viewer-body.is-zoomed > .attachment-viewer-source,
+.attachment-viewer-body.is-zoomed > .attachment-viewer-actions {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-state) var(--ease-standard), visibility 0s var(--ease-linear) var(--dur-state);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attachment-viewer-image.is-settling,
+  .attachment-viewer-body > .attachment-viewer-source,
+  .attachment-viewer-body > .attachment-viewer-actions {
+    transition: none;
+  }
 }
 
 /* A PDF or a large text file: a light page in every theme. The page inside
@@ -232,7 +278,7 @@ dialog.modal.attachment-viewer-dialog[open] {
 
 /* A gallery of pictures (attachments.js showGalleryPlace): "2 / 5" beside the
    title, round arrows over the picture's edges; a swipe pages too, so the
-   body leaves sideways moves to the script. */
+   body leaves sideways moves to the script, and a pinch zooms the picture. */
 .modal-content.attachment-viewer {
   position: relative;
 }
@@ -248,7 +294,7 @@ dialog.modal.attachment-viewer-dialog[open] {
    where they are while it pages. */
 .attachment-viewer-body.is-gallery {
   min-height: min(60dvh, 560px);
-  touch-action: pan-y pinch-zoom;
+  touch-action: pan-y;
 }
 
 .attachment-viewer-nav {

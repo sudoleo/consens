@@ -254,11 +254,23 @@
     // Stored Agent files load asynchronously; a newer open or a close makes
     // an older response stale so it can never paint into the wrong preview.
     let viewerToken = 0;
+    // The picture shown zooms (image-zoom.js): pinch, double tap or click,
+    // + / - / 0, inside the body. Each picture starts fitted.
+    let viewerZoom = null;
+    function zoomable(img) {
+      if (viewerZoom) viewerZoom.detach();
+      viewerZoom = window.App?.imageZoom?.attach(img, { frame: viewerBody,
+        active: function () { return Boolean(viewerOverlay?.hasAttribute("open")); } }) || null;
+    }
 
     // The preview is a native <dialog> (App.modalDialog): focus goes in and
     // back, Tab stays inside, Escape and the backdrop close it. Its content
     // is emptied once it has faded out, not while it still shows.
     function releaseViewerContent() {
+      if (viewerZoom) {
+        viewerZoom.detach();
+        viewerZoom = null;
+      }
       if (viewerBody) viewerBody.innerHTML = "";
       if (viewerObjectUrl) {
         URL.revokeObjectURL(viewerObjectUrl);
@@ -450,6 +462,7 @@
           img.alt = att.name;
           img.src = image;
           viewerBody.appendChild(img);
+          zoomable(img);
           // A picture from the web names the page it came from (agent_web_images.py).
           if (att.page && att.host) {
             const source = document.createElement("a");
@@ -582,6 +595,7 @@
         img.alt = att.name;
         img.src = "data:" + att.mime + ";base64," + att.data;
         viewerBody.appendChild(img);
+        zoomable(img);
       } else if (att.mime.indexOf("text/") === 0 && att.data.length * 3 / 4 <= TEXT_PREVIEW_BYTES) {
         try {
           viewerBody.appendChild(textPreview(base64Text(att.data), att.name));
@@ -653,8 +667,10 @@
     }
     if (viewerBody) {
       let swipe = null;
+      // A second finger pinches and an enlarged picture pans: neither pages.
       viewerBody.addEventListener("pointerdown", function (event) {
-        swipe = viewerGallery && event.pointerType !== "mouse" ? { x: event.clientX, y: event.clientY } : null;
+        swipe = viewerGallery && event.pointerType !== "mouse" && event.isPrimary !== false && !viewerZoom?.zoomed()
+          ? { x: event.clientX, y: event.clientY } : null;
       });
       viewerBody.addEventListener("pointercancel", function () { swipe = null; });
       viewerBody.addEventListener("pointerup", function (event) {

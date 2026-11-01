@@ -152,6 +152,10 @@
           "file": "static/js/file-viewer.js",
           "note": "App.fileViewer: the preview of a document, code or text file beside the chat (pdf.js from static/vendor/pdfjs, imported when a preview first needs it). attachments.js and agent-workspace.js open it at runtime."
         },
+        {
+          "file": "static/js/image-zoom.js",
+          "note": "App.imageZoom: pinch, double tap and keys zoom a picture in its preview. attachments.js attaches it to the picture of its viewer at runtime."
+        },
         "static/js/attachments.js",
         "static/js/model-answer-reader.js",
         "static/js/agent-mode.js",

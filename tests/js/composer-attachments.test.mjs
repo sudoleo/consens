@@ -21,7 +21,7 @@ const BODY = `<div class="input-section">
     <button id="attachmentViewerPrev" hidden></button><button id="attachmentViewerNext" hidden></button></div></dialog>`;
 
 function boot() {
-  const ctx = loadScripts(["static/js/motion.js", "static/js/modal-dialog.js", "static/js/user-settings.js", "static/js/run-mode.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
+  const ctx = loadScripts(["static/js/motion.js", "static/js/modal-dialog.js", "static/js/user-settings.js", "static/js/run-mode.js", "static/js/image-zoom.js", "static/js/attachments.js", "static/js/agent-mode.js"], {
     body: BODY,
     before(window) {
       window.document.body.classList.add("is-hero");
@@ -290,5 +290,47 @@ describe("composer attachment tray", () => {
     window.App.attachments.openStored({ ...gallery[0], gallery: [gallery[0]], index: 0 });
     expect([count.hidden, prev.hidden, next.hidden, title.textContent]).toEqual([true, true, true, "Picture a"]);
     await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
+  });
+
+  // 2026-11-02: a picture in the viewer zooms (image-zoom.js).
+  it("zooms into a picture, starts each picture fitted and pages by swipe only when it is fitted", async () => {
+    const { window, document } = boot();
+    const picture = id => ({ fileId: id.repeat(32), name: `picture-${id}.webp`, mime: "image/webp", size: 9, title: `Picture ${id}` });
+    const gallery = [picture("a"), picture("b")];
+    window.App.agentWorkspace = { openFile: vi.fn(async () => ({ blob: new window.Blob(["RIFF"], { type: "image/webp" }), mime: "image/webp" })) };
+    const body = document.getElementById("attachmentViewerBody");
+    const count = document.getElementById("attachmentViewerCount");
+    const image = () => body.querySelector(".attachment-viewer-image");
+    const swipe = (fromX, toX, second) => {
+      const touch = (type, x, id = 1, primary = true) => {
+        const event = new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: 100 });
+        Object.defineProperties(event, { pointerId: { value: id }, pointerType: { value: "touch" }, isPrimary: { value: primary } });
+        return event;
+      };
+      body.dispatchEvent(touch("pointerdown", fromX));
+      if (second) body.dispatchEvent(touch("pointerdown", fromX + 40, 2, false));
+      body.dispatchEvent(touch("pointerup", toX));
+    };
+    window.App.attachments.openStored({ ...gallery[0], gallery, index: 0 });
+    await vi.waitFor(() => expect(image()).not.toBeNull());
+    expect(image().style.touchAction).toBe("none");
+    image().dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    expect(body.classList.contains("is-zoomed")).toBe(true);
+    // Enlarged, a swipe moves the picture, not to the next one; a pinch never pages.
+    swipe(300, 100);
+    expect(count.textContent).toBe("1 / 2");
+    document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "0", bubbles: true }));
+    expect(image().style.transform).toBe("");
+    swipe(300, 100, true);
+    expect(count.textContent).toBe("1 / 2");
+    // Fitted, it pages; the next picture starts fitted.
+    image().dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    document.getElementById("attachmentViewerNext").click();
+    expect(count.textContent).toBe("2 / 2");
+    expect(body.classList.contains("is-zoomed")).toBe(false);
+    await vi.waitFor(() => expect(image()?.alt).toBe("picture-b.webp"));
+    expect(image().style.transform).toBe("");
+    swipe(300, 100);
+    expect(count.textContent).toBe("1 / 2");
   });
 });

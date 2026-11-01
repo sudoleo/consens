@@ -2502,6 +2502,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Datei neben dem Chat: Präsentationen, Word, Tabellen und PDFs Seite für Seite
   mit Miniaturen, Code und Text mit Zeilennummern, Markdown gelesen, CSV als
   Tabelle. Details unter „Agent-Dateien“, Abschnitt „Vorschau neben dem Chat“.
+- **`image-zoom.js`** (`App.imageZoom`, seit 2026-11-02) — Zoomen in ein Bild
+  der Vorschau, ohne Knopfleiste: zwei Finger bzw. Trackpad (Strg+Rad, Safaris
+  `gesture*`-Events) um den Punkt darunter, Doppeltipp/-klick schaltet
+  eingepasst ↔ 2,5×, vergrößert Ziehen oder Zwei-Finger-Scroll, Tasten
+  `+`/`-`/`0`; 1× bis 4× (bzw. bis zu den eigenen Pixeln, höchstens 8×),
+  kleiner als der Rahmen mittig, größer ohne Lücke am Rand. Der Seiten-Zoom
+  springt nicht mit (`touch-action: none` am Bild, Strg+Rad und `gesture*`
+  abgefangen). `attach(img, {frame, active})` → `{zoomed, reset, detach}`;
+  Klassen `is-zoomed` am Rahmen, `is-panning`/`is-settling` am Bild, das
+  Aussehen steht beim Aufrufer. Einziger Aufrufer: der Anhang-Viewer
+  (`attachments.js` `zoomable`, Rahmen `#attachmentViewerBody`). Die
+  Dokument-Vorschau (`file-viewer.js`) zeigt keine Bilder und hat ihr eigenes
+  Zoom-Menü. Tests: `tests/js/image-zoom.test.mjs`,
+  `tests/js/composer-attachments.test.mjs`,
+  `tests/e2e/test_agent_inline_pictures_frontend.py` (Strg+Rad, CDP-Pinch,
+  Doppeltipp, Wischen).
 - **`attachments.js`** — Attachment-UI/Payload (ab Plus), inklusive Bild-Paste im
   Fragefeld und Drag-and-drop aller unterstützten Dateitypen auf den
   Input-Container. Die Vorschau zeigt Textdateien bis 2 MB seit 2026-10-27 als
@@ -6646,7 +6662,7 @@ Prüfer-Satzzerlegung eine Zeile nur aus Bildern (`_PICTURE_LINE_RE`),
 Figur trägt `data-i18n-ui`: `i18n.js` übersetzt die App-Knöpfe darin, obwohl
 die Antwort `data-i18n-skip` ist. Ein Markdown-Bild mit
 Dateinamen/VM-Pfad (`is-local-ref`, markdown-stream.js) blendet eine Antwort mit
-geteilten Bildern aus, statt „[Image not loaded]“ zu zeigen. **Collage (seit 2026-10-31, Max: ChatGPTs Bild-Collage zum Durchklicken):** `agent-workspace.js` `markGalleries` markiert die Figuren einer `.md-picture-line` mit mehr als einem gefüllten Platz (`data-gallery-size` 2 oder 3, `data-gallery-lead` für das große erste ab drei, `data-gallery-more` „+N“ auf dem dritten, `data-gallery-hidden` dahinter); die Marken sitzen an den eigenen Figuren, weil ein Morph des gestreamten Texts die Attribute der Zeile zurücksetzt. `agent-workspace.css` legt die Zeile per `:has()` als Raster an (zwei nebeneinander, ab drei eins groß und zwei daneben, Kacheln mit `object-fit: cover`, Unterschrift nur in der Ansicht). Ein Klick öffnet `App.attachments.openStored` mit `gallery` (die Figuren derselben Zeile oder unter der Antwort) und `index`; `attachments.js` `showGalleryPlace`/`pageGallery` blättert mit Pfeilen (`#attachmentViewerPrev/Next`), ←/→ (am Dokument, auch wenn der Fokus mit dem Inhalt verschwand) und Wischen, „2 / 5“ in `#attachmentViewerCount` (`aria-live`), im Kreis, in fester Höhe; `storedFile` lädt jedes Bild der Galerie einmal und die Nachbarn vorab, Blättern zählt nicht als neuer Aufruf (`paged`); ein Webbild nennt dort seine Seite als Link (`.attachment-viewer-source`). Beim Streamen hält `markdown-stream.js` `holdOpenImage` (`OPEN_PICTURE_LINES`) Bildzeilen am Ende zurück, bis etwas anderes folgt; `markGalleries` nimmt Figuren, die ihre Zeile verlassen, die Marken wieder ab. Details: `docs/agent-mode.md`, „Agent VM“.
+geteilten Bildern aus, statt „[Image not loaded]“ zu zeigen. **Collage (seit 2026-10-31, Max: ChatGPTs Bild-Collage zum Durchklicken):** `agent-workspace.js` `markGalleries` markiert die Figuren einer `.md-picture-line` mit mehr als einem gefüllten Platz (`data-gallery-size` 2 oder 3, `data-gallery-lead` für das große erste ab drei, `data-gallery-more` „+N“ auf dem dritten, `data-gallery-hidden` dahinter); die Marken sitzen an den eigenen Figuren, weil ein Morph des gestreamten Texts die Attribute der Zeile zurücksetzt. `agent-workspace.css` legt die Zeile per `:has()` als Raster an (zwei nebeneinander, ab drei eins groß und zwei daneben, Kacheln mit `object-fit: cover`, Unterschrift nur in der Ansicht). Ein Klick öffnet `App.attachments.openStored` mit `gallery` (die Figuren derselben Zeile oder unter der Antwort) und `index`; `attachments.js` `showGalleryPlace`/`pageGallery` blättert mit Pfeilen (`#attachmentViewerPrev/Next`), ←/→ (am Dokument, auch wenn der Fokus mit dem Inhalt verschwand) und Wischen, „2 / 5“ in `#attachmentViewerCount` (`aria-live`), im Kreis, in fester Höhe; `storedFile` lädt jedes Bild der Galerie einmal und die Nachbarn vorab, Blättern zählt nicht als neuer Aufruf (`paged`); ein Webbild nennt dort seine Seite als Link (`.attachment-viewer-source`). Seit 2026-11-02 zoomt das Bild der Ansicht (`image-zoom.js`, Pinch, Doppeltipp/-klick, `+`/`-`/`0`); vergrößert verschiebt Wischen das Bild statt zu blättern, ein zweiter Finger blättert nie, und jedes Bild beginnt eingepasst. Beim Streamen hält `markdown-stream.js` `holdOpenImage` (`OPEN_PICTURE_LINES`) Bildzeilen am Ende zurück, bis etwas anderes folgt; `markGalleries` nimmt Figuren, die ihre Zeile verlassen, die Marken wieder ab. Details: `docs/agent-mode.md`, „Agent VM“.
 
 **Sicherheitsregeln des Arbeitsplatzes** (seit 2026-10-30, Max: „nicht durch
 den Agenten, durch unseren Server“): drei Schichten, keine liest Wörter.
