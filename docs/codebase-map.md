@@ -3852,9 +3852,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `clear()` (`clearAuthenticatedUiState`, ein anderes Konto oder Gast im
   `consensio:auth-state`-Event) nimmt Knöpfe und Speicher weg. Die
   Vorhersage wird nicht angekündigt: man erkennt die eigenen Themen. Eine
-  vom selben Call geschriebene Zeile über dem Feld statt „What do you want
-  to be sure about?“ (2026-11-01, schräg-lustig) nahm Max am selben Tag
-  wieder heraus („ultra cringe“): der Satz bleibt fest.
+  vom selben Call geschriebene Zeile über dem Feld (2026-11-01, schräg-lustig)
+  nahm Max am selben Tag wieder heraus („ultra cringe“): der Satz bleibt
+  fest, seitdem „Get a second opinion. And a third.“
 - **`composer-keyboard.js`** (seit 2026-10-04, nach `composer-collapse.js`) —
   hält den fixierten Thread-Composer auf dem Handy (≤1099 px) an der
   Tastaturkante. Safari auf iOS ignoriert `interactive-widget=resizes-content`
@@ -8019,7 +8019,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   und zeigt die Begrüßung auch auf dem Handy. **Seit 2026-10-21 (Max,
   Apple-Audit H3)** sieht ein Gast mit Standardwahl ab dem ersten Bild Agents
   Composer eines neuen Chats wie ein Konto: Chip mit `data-agent-default-label`
-  und `+N`, „What do you want to be sure about?“ (ein Satz für jeden Modus), Reasoning „Auto“; im (+)-Menü Agent
+  und `+N`, „Get a second opinion. And a third.“ (ein Satz für jeden Modus, seit 2026-11-01 statt „What do you want to be sure about?“), Reasoning „Auto“; im (+)-Menü Agent
   gewählt, Consensus und Compare daneben. Geladen wird nichts, was ein Konto
   braucht (keine `/agent/models`), und es steht kein Hinweis unter dem Feld.
   Jede Wahl darin ist eine Tür zum Login mit Satz (`App.askToLogIn`): Chip,

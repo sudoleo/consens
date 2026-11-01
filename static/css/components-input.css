@@ -213,6 +213,10 @@ body.is-hero .input-section:has(> .agent-composer-notice:not([hidden])) > .compo
      cutting it off in the first frame. It comes back at the slower pace. */
   transition: opacity var(--dur-press) var(--ease-in), transform var(--dur-press) var(--ease-in), visibility var(--dur-press) var(--ease-linear);
 }
+/* Two sentences, as the landing's claim (.lp-hero-claim): a narrow screen
+   breaks between them, never inside one, and the second steps back a tone. */
+.hero-greeting > span { display: inline-block; }
+.hero-greeting > span + span { color: var(--ink-3); }
 body.is-hero .hero-greeting {
   transition: opacity var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard), visibility var(--dur-layer) var(--ease-linear);
 }

@@ -361,7 +361,7 @@ def test_hero_greeting_requires_agent_mode_and_available_space():
     template = read("templates/index.html")
     input_css = read("static/css/components-input.css")
 
-    assert "What do you want to be sure about?" in template
+    assert "<span>Get a second opinion.</span> <span>And a third.</span>" in template
     # Der sichtbare Direktvergleich ist ausgenommen: dort steht der Composer
     # oben, die Begruessung schwebte darueber hinaus in die Kopfzeile.
     assert (

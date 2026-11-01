@@ -1247,7 +1247,7 @@ Server.
       zurück (innerhalb einer Stunde läuft sie von selbst).
 - [ ] Gast sieht den Agent (seit 2026-10-21, Apple-Audit H3): privates Fenster,
       `/app` hart neu laden — ab dem ersten Bild Agent-Chip mit dem
-      Chatmodell und davor „6 AIs cross-check“, „What do you want to be sure about?“, Beispielfragen und
+      Chatmodell und davor „6 AIs cross-check“, „Get a second opinion. And a third.“, Beispielfragen und
       „Try the demo“; nichts springt, wenn der Login-Status kommt. (+) zeigt
       Agent gewählt, Consensus und Compare daneben. Chip, Reasoning, Attach
       (Leiste und Menü) öffnen je den Login mit eigenem Satz, kein Menü öffnet

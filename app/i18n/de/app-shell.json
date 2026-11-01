@@ -43,7 +43,7 @@
   "Consensus": "Konsens",
   "Answer check": "Antwortprüfung",
   "Dismiss this notice": "Hinweis schließen",
-  "What do you want to be sure about?": "Wobei willst du sichergehen?",
+  "<0>Get a second opinion.</0> <1>And a third.</1>": "<0>Hol dir eine zweite Meinung.</0> <1>Und eine dritte.</1>",
   "Review": "Prüfen",
   "Files for your next question": "Dateien für deine nächste Frage",
   "Quoted": "Zitat",
