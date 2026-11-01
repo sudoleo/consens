@@ -365,8 +365,12 @@ def test_message_during_active_generation_is_delivered_at_next_boundary(store):
             assert not worker.thread.is_alive()
 
 
-def test_remote_stop_cancels_a_worker_with_an_active_stream(store):
+def test_remote_stop_cancels_a_worker_with_an_active_stream(store, monkeypatch):
+    """A stop saved by another process reaches the run at its watcher's next
+    look (WATCH_SECONDS, 10 s since 2026-11-01; shortened here)."""
+    from app.services import agent_delegation
     from app.services.llm.provider_runtime import current_provider_cancellation
+    monkeypatch.setattr(agent_delegation, "WATCH_SECONDS", .2)
     entered = threading.Event()
     class Completion(AgentCompletion):
         def stream(self, *, model, **kwargs):

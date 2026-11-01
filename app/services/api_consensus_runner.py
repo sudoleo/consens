@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -61,12 +62,23 @@ api_account_cleanup = FirestoreApiAccountCleanup(db_firestore)
 API_RUN_WORKERS = 2
 MAX_SCHEDULED_RUNS = 32
 API_MAINTENANCE_INTERVAL_SECONDS = 60
+# With no API run open (reserved, accepted, running) the scan doubles its
+# pause up to this; a run this process schedules brings it back to the
+# minute (schedule_run). Until 2026-11-01 it made four queries a minute,
+# about 5,800 reads a day on an idle API, every empty query billed as one.
+API_MAINTENANCE_IDLE_MAX_SECONDS = 600
+# The 30-day retention of finished runs needs no minute.
+API_RETENTION_INTERVAL_SECONDS = 3600
 _background_executor = ThreadPoolExecutor(
     max_workers=API_RUN_WORKERS, thread_name_prefix="consensus-api"
 )
 _schedule_lock = threading.Lock()
 _scheduled_run_ids: set[str] = set()
 _retention_backfilled = False
+# Whether the last scan (or this process) saw an open API run; unknown at
+# start, so the first scan runs at once.
+_runs_open = True
+_last_retention = None
 
 
 def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
@@ -215,6 +227,8 @@ def schedule_run(run_id: str) -> bool:
         if len(_scheduled_run_ids) >= MAX_SCHEDULED_RUNS:
             return False
         _scheduled_run_ids.add(run_id)
+    global _runs_open
+    _runs_open = True
     try:
         _background_executor.submit(_execute_scheduled_run, run_id)
     except Exception:
@@ -289,8 +303,10 @@ def cleanup_expired_runs() -> int:
 
 
 def recover_persisted_runs() -> int:
-    """Requeue only pre-provider runs; running work is never replayed."""
-    global _retention_backfilled
+    """Requeue only pre-provider runs; running work is never replayed. One
+    query for every open run (it costs a read even when empty); retention
+    at most every API_RETENTION_INTERVAL_SECONDS."""
+    global _retention_backfilled, _runs_open, _last_retention
     # A MOCK_LLM instance would answer recovered production runs with fixtures,
     # so it never picks up durable work left behind by the live deployment.
     if mock_llm_enabled():
@@ -302,11 +318,16 @@ def recover_persisted_runs() -> int:
             if backfill is not None:
                 backfill()
             _retention_backfilled = True
-        cleanup_expired_runs()
-        for run in api_run_repository.list_by_status(("reserved",)):
+        now = time.monotonic()
+        if _last_retention is None or now - _last_retention >= API_RETENTION_INTERVAL_SECONDS:
+            cleanup_expired_runs()
+            _last_retention = now
+        runs = api_run_repository.list_by_status(("reserved", "accepted", "running"))
+        _runs_open = bool(runs)
+        for run in [run for run in runs if run.get("status") == "reserved"]:
             if schedule_run(run["run_id"]):
                 recovered += 1
-        for run in api_run_repository.list_by_status(("accepted",)):
+        for run in [run for run in runs if run.get("status") == "accepted"]:
             try:
                 reserved, _usage = reserve_or_terminalize(run)
             except AcceptedRunUnrecoverable:
@@ -323,7 +344,7 @@ def recover_persisted_runs() -> int:
             if reserved.get("status") == "reserved":
                 if schedule_run(reserved["run_id"]):
                     recovered += 1
-        for run in api_run_repository.list_by_status(("running",)):
+        for run in [run for run in runs if run.get("status") == "running"]:
             fail_expired_run(run["run_id"])
     except Exception as exc:
         logging.error(
@@ -334,11 +355,21 @@ def recover_persisted_runs() -> int:
 
 
 async def api_run_maintenance_loop() -> None:
-    """Periodically retry durable work and close expired worker leases."""
+    """Periodically retry durable work and close expired worker leases;
+    without open runs less and less often (API_MAINTENANCE_IDLE_MAX_SECONDS),
+    looking every minute whether this process scheduled one meanwhile."""
+    pause = API_MAINTENANCE_INTERVAL_SECONDS
     while True:
         recovered = await asyncio.to_thread(recover_persisted_runs)
         task_succeeded("consensus-api-maintenance", recovered_runs=recovered)
-        await asyncio.sleep(API_MAINTENANCE_INTERVAL_SECONDS)
+        pause = (API_MAINTENANCE_INTERVAL_SECONDS if _runs_open
+                 else min(pause * 2, API_MAINTENANCE_IDLE_MAX_SECONDS))
+        waited = 0
+        while waited < pause:
+            await asyncio.sleep(API_MAINTENANCE_INTERVAL_SECONDS)
+            waited += API_MAINTENANCE_INTERVAL_SECONDS
+            if _runs_open:
+                break
 
 
 def execute_persisted_run(run_id: str) -> None:

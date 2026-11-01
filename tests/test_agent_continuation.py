@@ -222,9 +222,10 @@ def test_brief_database_outage_does_not_cancel_a_healthy_producer(store, monkeyp
         checks.append(args)
         if len(checks) == 1:
             raise ServiceUnavailable("temporary")
+    from app.services import agent_delegation
     class CloseAfterTwoChecks:
         def wait(self, seconds):
-            assert seconds == 3
+            assert seconds == agent_delegation.WATCH_SECONDS
             return len(checks) == 2
     monkeypatch.setattr(store, "check_delegation", check)
     loop.closed = CloseAfterTwoChecks()

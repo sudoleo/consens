@@ -915,7 +915,7 @@ def stop_agent_run(request: Request, chat_id: str, turn_id: str):
     require_agent_access(uid)
     try:
         # This process runs it: cancel at once. Otherwise (or as well) the
-        # saved flag stops it wherever it runs, within the watcher's 3 s.
+        # saved flag stops it wherever it runs, at the watcher's next look.
         agent_background.stop(uid, chat_id, turn_id=turn_id)
         AgentRunStore(db_firestore).stop_delegation(uid, chat_id, turn_id)
         return JSONResponse({"status": "stopping"}, headers={"Cache-Control": "private, no-store"})

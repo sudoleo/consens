@@ -2021,9 +2021,13 @@ def _restore_runtime_config(state: dict) -> None:
 
 # Revision of the Firestore model document this process last activated. Admin
 # saves increment ``revision`` with a compare-and-swap (R25); every process
-# compares it periodically and reloads a newer published revision.
+# compares it periodically and reloads a newer published revision. The
+# process that saves applies it at once (routers/admin.py); the look serves
+# the others (a deploy's overlap, a local server against the same database),
+# every 5 minutes: each look is a read, also on every local server, about
+# 1,440 a day per process at 60 s (until 2026-11-01).
 ACTIVE_MODEL_CONFIG_REVISION: int | None = None
-MODEL_CONFIG_SYNC_SECONDS = 60
+MODEL_CONFIG_SYNC_SECONDS = 300
 
 
 def model_config_revision_of(document) -> int:

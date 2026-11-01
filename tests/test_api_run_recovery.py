@@ -61,6 +61,8 @@ def recovery(http_adapter, monkeypatch):
     )
     monkeypatch.setattr(runner, "_retention_backfilled", False)
     monkeypatch.setattr(runner, "_scheduled_run_ids", set())
+    monkeypatch.setattr(runner, "_last_retention", None)
+    monkeypatch.setattr(runner, "_runs_open", True)
     h.tasks = []
     monkeypatch.setattr(
         runner,
@@ -237,3 +239,53 @@ def test_recovery_backfill_failure_is_retryable_and_queue_submission_unwinds(
     with pytest.raises(RuntimeError):
         runner.schedule_run("run")
     assert "run" not in runner._scheduled_run_ids
+
+
+def test_an_idle_api_is_scanned_less_and_less_often_until_a_run_comes(monkeypatch):
+    """2026-11-01: four queries a minute (about 5,800 reads a day) on an API
+    nobody called. Without an open run the pause doubles up to
+    API_MAINTENANCE_IDLE_MAX_SECONDS; a run scheduled in between ends it
+    within a minute."""
+    import asyncio
+    scans, sleeps = [], []
+    states = [False, False, False, False, False, True]
+
+    class Done(Exception):
+        pass
+
+    def scan():
+        runner._runs_open = states[len(scans)]
+        scans.append(len(sleeps))
+        return 0
+
+    async def sleep(seconds):
+        assert seconds == runner.API_MAINTENANCE_INTERVAL_SECONDS
+        sleeps.append(seconds)
+        if len(scans) == 5 and len(sleeps) == scans[-1] + 2:
+            runner._runs_open = True  # schedule_run in the middle of a long pause
+        if len(scans) == 6:
+            raise Done
+    monkeypatch.setattr(runner, "recover_persisted_runs", scan)
+    monkeypatch.setattr(runner.asyncio, "sleep", sleep)
+    monkeypatch.setattr(runner, "_runs_open", False)
+    with pytest.raises(Done):
+        asyncio.run(runner.api_run_maintenance_loop())
+    minutes = [later - earlier for earlier, later in zip(scans, scans[1:])]
+    cap = runner.API_MAINTENANCE_IDLE_MAX_SECONDS // 60
+    assert minutes == [2, 4, 8, min(16, cap), 2]
+
+
+def test_one_query_finds_every_open_run_and_retention_runs_hourly(recovery, monkeypatch):
+    h = recovery
+    queries, cleanups = [], []
+    original = runner.api_run_repository.list_by_status
+    monkeypatch.setattr(runner.api_run_repository, "list_by_status",
+                        lambda statuses: queries.append(statuses) or original(statuses))
+    monkeypatch.setattr(runner, "cleanup_expired_runs", lambda: cleanups.append(1) or 0)
+    runner.recover_persisted_runs()
+    runner.recover_persisted_runs()
+    assert queries == [("reserved", "accepted", "running")] * 2 and cleanups == [1]
+    assert runner._runs_open is False
+    runner._last_retention -= runner.API_RETENTION_INTERVAL_SECONDS
+    runner.recover_persisted_runs()
+    assert cleanups == [1, 1]

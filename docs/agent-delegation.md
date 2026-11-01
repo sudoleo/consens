@@ -89,7 +89,8 @@ Modellfenster und strikte Provider-Schemas gelten weiter. Details zu Vergleichen
 und Prüfungen: [Agent-Modus](agent-mode.md).
 
 Abbruch schließt sämtliche Provider-Sockets und wartet auf alle Worker. Ein Watchdog
-prüft alle drei Sekunden Run-Abbruch und Chatlöschung; Account-Sperren gelten für
+prüft alle zehn Sekunden (bis 2026-11-01 drei) Run-Abbruch und Chatlöschung aus anderen
+Prozessen; Stop und Löschen in diesem Prozess wirken sofort (`agent_background`); Account-Sperren gelten für
 jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird, sobald weniger als
 `PRODUCER_RENEW_BEFORE_SECONDS` = 45 übrig sind (etwa alle 75 Sekunden; bis
 2026-11-01 alle 30), atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre

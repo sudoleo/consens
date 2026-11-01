@@ -22,11 +22,12 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCa
 
 
 PRODUCER_LEASE_SECONDS = 120
-# The run's watcher looks every 3 s (10 s in a pause); a renewal writes the
-# root, the chat's lock and the account's running responses. With 45 s left
-# it renews about every 75 s and still has a dozen tries before the lease
-# ends; at 90 s (until 2026-11-01) it renewed every 30 s.
-PRODUCER_RENEW_BEFORE_SECONDS = 45
+# The run's watcher looks every 10 s (agent_delegation.WATCH_SECONDS); a
+# renewal writes the root, the chat's lock and the account's running
+# responses. With 60 s left it renews about every 60 s and has six tries
+# before the lease ends (a database blip of up to a minute is tolerated);
+# at 90 s (until 2026-11-01) it renewed every 30 s.
+PRODUCER_RENEW_BEFORE_SECONDS = 60
 # Size contract of the per-turn root receipt (R29). Running steps always stay
 # in the root maps; only settled steps beyond this window are folded into
 # `compacted_usage`/`compacted_steps`. Each step keeps its own immutable

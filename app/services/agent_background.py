@@ -179,6 +179,18 @@ class AgentBackgroundRuns:
         run.cancel()
         return True
 
+    def stop_chat(self, uid, chat_id) -> int:
+        """Cancel every turn of this account's chat that this process runs
+        (the chat was deleted, a temporary chat left): at once, not at the
+        run's next look (agent_delegation.WATCH_SECONDS)."""
+        with self._lock:
+            runs = [run for run in self._runs.values() if (run.uid, run.chat_id) == (str(uid), str(chat_id))]
+            for run in runs:
+                run.stopped = True
+        for run in runs:
+            run.cancel()
+        return len(runs)
+
     def begin_shutdown(self, grace: float | None = None) -> None:
         """Refuse new turns; interrupt the remaining ones after ``grace`` seconds."""
         grace = shutdown_grace_seconds() if grace is None else max(float(grace), 0.0)

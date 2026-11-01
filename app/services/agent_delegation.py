@@ -136,9 +136,12 @@ HOLD_TIMEOUT_STOPPED = "Stopped after 30 minutes without your decision."
 HOLDS_KEPT = 20
 # First pause between two attempts to save an open hold (_save_hold), doubled.
 HOLD_SAVE_BACKOFF_SECONDS = .5
-# How often the run's watcher reads its root (stop, notes, decisions, lease),
-# and during a pause (_watch).
-WATCH_SECONDS = 3
+# How often the run's watcher reads its chat and root (stop, deletion, notes,
+# decisions, lease), and during a pause (_watch). What this process does to
+# the run reaches it at once (agent_background.stop and stop_chat, receive);
+# the look serves another process (a deploy's overlap) and the lease. Every
+# 3 s until 2026-11-01: two reads each, about 40 a minute of run time.
+WATCH_SECONDS = 10
 WATCH_PAUSED_SECONDS = 10
 # Calls of a batch after the user paused the work and wrote to the agent: not
 # run, so the agent reads the message first. All the agent learns: a pause of

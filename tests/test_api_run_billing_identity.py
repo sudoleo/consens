@@ -310,6 +310,7 @@ def test_crash_between_reserve_and_mark_reserved_is_terminalized_once(env, monke
     usage_path = expire_usage_receipt(env, run)
     monkeypatch.setattr(runner, "mock_llm_enabled", lambda: False)
     monkeypatch.setattr(runner, "_retention_backfilled", True)
+    monkeypatch.setattr(runner, "_last_retention", None)
     monkeypatch.setattr(runner, "schedule_run", lambda run_id: pytest.fail("must not schedule"))
 
     assert runner.recover_persisted_runs() == 0

@@ -405,6 +405,18 @@ async def _run_probes(worker_lost: asyncio.Event) -> int:
     return pulled
 
 
+def _work_due(now) -> bool:
+    """A watch to run or a probe to make (a failed look counts as work: the
+    tick then decides under its lease, as before)."""
+    try:
+        if watch_service.list_due_watch_ids(now=now, max_items=1):
+            return True
+        return cfg.get_watch_probe_max_per_day() > 0 and bool(watch_probe.list_due_probe_ids(now=now, max_items=1))
+    except Exception as exc:
+        logging.warning("Watch due-look failed category=%s", safe_exception(exc))
+        return True
+
+
 async def run_watch_tick() -> int:
     # MOCK_LLM instances share the production Firestore: a mock tick would take
     # the worker lease from the live deployment and persist fixture answers as
@@ -412,6 +424,12 @@ async def run_watch_tick() -> int:
     if mock_llm_enabled():
         return 0
     now = watch_service.utcnow()
+    # Nothing due, no lease: taking and giving back the global lease wrote
+    # two documents on every tick, also on an idle server (about 100-150 a
+    # day, 2026-11-01). The look costs the queries the tick makes anyway;
+    # with work due, the tick looks again under the lease.
+    if not await asyncio.to_thread(_work_due, now):
+        return 0
     lease_owner = await asyncio.to_thread(watch_service.acquire_worker_lease, now=now)
     if not lease_owner:
         return 0

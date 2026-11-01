@@ -159,6 +159,28 @@ def test_stop_by_request_cancels_the_run_and_tells_every_follower(api, runs, liv
     assert again.status_code == 200 and again.json() == {"status": "not_running"}
 
 
+def test_deleting_the_chat_ends_its_running_response_at_once(api, runs, live, monkeypatch):
+    """A temporary chat left mid-answer, a chat deleted: the run in this
+    process ends now, not at its watcher's next look, which comes every
+    WATCH_SECONDS = 10 since 2026-11-01 (every 3 s, two reads each, before)."""
+    from app.api.routers import chat_history
+    monkeypatch.setattr(chat_history, "_chat_uid", lambda request, *args: UID)
+    monkeypatch.setattr(chat_history, "_store", lambda: store)
+    client, store, _ = api
+    gate = Gate(monkeypatch)
+    chat_id, _response = _start(client, "delete-me")
+    assert gate.entered.wait(5)
+    # Another chat's deletion leaves it alone.
+    assert runs.stop_chat(UID, "f" * 32) == 0 and runs.running(UID, chat_id, "delete-me")
+    started = time.monotonic()
+    assert client.delete(f"/chats/{chat_id}", headers=AUTH).status_code == 200
+    deadline = time.monotonic() + 3
+    while runs.running(UID, chat_id, "delete-me"):
+        assert time.monotonic() < deadline, "the deleted chat's run did not end"
+        time.sleep(0.01)
+    assert time.monotonic() - started < 3
+
+
 def test_a_stop_that_overtakes_its_request_keeps_it_from_starting(api, runs, live):
     client, store, calls = api
     chat_id = _chat(client)

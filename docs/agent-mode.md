@@ -702,7 +702,7 @@ ist der Stop-Knopf. Läuft der Lauf im selben Prozess, hat er die Entscheidung
 (`DelegationLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
 Blick des Wächters, bis 3 s); der gespeicherte Root bleibt die Wahrheit für
 andere Prozesse. Während einer Pause liest der Wächter den Root deshalb nur
-alle `WATCH_PAUSED_SECONDS` (10 s statt `WATCH_SECONDS` = 3 s; eine Pause von
+alle `WATCH_PAUSED_SECONDS` (10 s, so oft wie seit 2026-11-01 auch `WATCH_SECONDS`; eine Pause von
 30 min kostete ~600 Blicke mit je zwei Lesevorgängen), eine Browser-Karte
 `control_state` alle 3 s statt jede Sekunde. Eine Pause bleibt entscheidbar, wenn ihr Speichern scheitert
 (seit 2026-10-29): `set_hold` wird dreimal versucht (`_save_hold`, Pause ab

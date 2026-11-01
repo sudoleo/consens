@@ -5266,8 +5266,12 @@ terminalen Agent-Aufrufs kann den fehlenden Beleg rekonstruieren; Aggregate
 mehrerer Aufrufe werden nicht auf einzelne Schritte verteilt. Gelöschte Chats
 werden dabei nicht wiederhergestellt. Aktive Chat-Producer erneuern ihre
 120-Sekunden-Lease etwa alle 30 Sekunden atomar mit Account-Lease und Chat-Lock.
-Der Watchdog prüft alle drei Sekunden statt zweimal pro Sekunde und toleriert
-kurze temporäre DB-Ausfälle bis 60 Sekunden. Abgelaufene oder ersetzte Producer
+Der Watchdog prüft seit 2026-11-01 alle `WATCH_SECONDS` = 10 Sekunden (vorher
+drei, davor zweimal pro Sekunde; je Blick zwei Lesevorgänge) und toleriert
+kurze temporäre DB-Ausfälle bis 60 Sekunden. Was dieser Prozess dem Lauf tut,
+erreicht ihn sofort: Stop (`agent_background.stop`), Löschen des Chats
+(`DELETE /chats/{id}` → `agent_background.stop_chat`), Pausen-Entscheidungen
+und Nachrichten (`receive`); der Blick dient anderen Prozessen und der Lease. Abgelaufene oder ersetzte Producer
 dürfen keine Lease erneuern. Eine Chat-Löschung löscht keine
 entstandenen Kosten; Account-Tombstones sperren verspätete Writes.
 
@@ -9648,7 +9652,9 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Der Rollback nach fehlgeschlagener Aktivierung ersetzt nur die eigene, noch
   gespeicherte Revision (unter neuer Revisionsnummer) und nie eine inzwischen
   von einem anderen Prozess geschriebene. Jeder Prozess merkt sich die aktive
-  Revision und prüft sie im Lifespan-Task `model-configuration-sync` alle 60 s
+  Revision und prüft sie im Lifespan-Task `model-configuration-sync` alle
+  `MODEL_CONFIG_SYNC_SECONDS` = 300 s (bis 2026-11-01 60 s; der Prozess, der
+  speichert, lädt sofort, der Blick dient anderen, auch lokalen Servern)
   mit einem Read; bei neuer Revision lädt er vollständig neu. Ein einzelner
   Reload muss dabei vollständig sein: `apply_model_order`/`apply_default_models`
   laufen vor Preset-/Judge-/Watch-Normalisierung, die auf sie zurückfällt, und
@@ -10552,8 +10558,16 @@ Snapshots und abgelaufene Memory-Edit-Leases) direkt nach Task-Start
 und danach standardmäßig stündlich aus; der tägliche Render-Restart ist keine
 Voraussetzung mehr. Revoked-Shares werden bereits per `revoked_at < cutoff`
 gefiltert, deterministisch sortiert und vollständig in begrenzten Seiten
-abgearbeitet. Consensus-API-Retention/Lease-/Queue-Recovery laufen alle 60
-Sekunden; fehlgeschlagene API- und Vollkonto-Löschkaskaden alle fünf Minuten.
+abgearbeitet. Consensus-API-Lease-/Queue-Recovery läuft mit offenen Läufen alle
+60 Sekunden, ohne verdoppelt sie die Pause bis `API_MAINTENANCE_IDLE_MAX_SECONDS`
+= 600 (ein `schedule_run` dieses Prozesses holt sie zurück); eine Abfrage für
+alle offenen Status statt drei, die 30-Tage-Retention stündlich (bis 2026-11-01
+vier Abfragen je Minute, rund 5.800 Lesevorgänge am Tag ohne einen API-Lauf).
+Fehlgeschlagene API- und Vollkonto-Löschkaskaden werden alle 15 Minuten
+wiederholt (bis 2026-11-01 fünf), der Topic-Scheduler sieht alle 5 Minuten nach
+(`TOPIC_SCHEDULER_INTERVAL_SECONDS`, bis dahin jede Minute), und der
+Watch-Scheduler nimmt seine globale Lease nur noch, wenn eine Watch oder Probe
+fällig ist (`watch_scheduler._work_due`; vorher zwei Schreibvorgänge je Runde).
 Alle Loops werden beaufsichtigt und melden nach jedem erfolgreichen Tick Health.
 Die Retention-Schritte laufen unabhängig weiter, wenn einer scheitert; ein Tick
 mit gescheitertem Schritt setzt den Task über `task_partially_failed` auf

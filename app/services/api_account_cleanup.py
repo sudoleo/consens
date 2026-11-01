@@ -18,7 +18,9 @@ API_ACCOUNT_BLOCKS_COLLECTION = "api_consensus_account_blocks"
 API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
 API_KEYS_COLLECTION = "api_consensus_keys"
 API_RUNS_COLLECTION = "api_consensus_runs"
-API_ACCOUNT_CLEANUP_INTERVAL_SECONDS = 5 * 60
+# Retries of a cleanup that failed inline; each look is a query, a read
+# even when nothing waits (every 5 minutes until 2026-11-01).
+API_ACCOUNT_CLEANUP_INTERVAL_SECONDS = 15 * 60
 
 
 class ApiAccountCleanupError(Exception):
