@@ -622,7 +622,10 @@ async function runAgentDemoFlow() {
   const App = window.App;
   window.hideConsensusOutput?.();
   const runId = ++demoRunId;
-  const live = () => runId === demoRunId;
+  // Once agent-chat.js has let go of the demo (a run, a saved chat or a new
+  // chat took the panel), nothing more is written into it.
+  let shown = false;
+  const live = () => runId === demoRunId && (!shown || document.body.classList.contains("agent-demo-active"));
   const sendBtn = document.getElementById("sendButton");
   if (sendBtn) sendBtn.disabled = true;
   App.state.set("currentEvidenceSources", [], "evidence");
@@ -651,6 +654,7 @@ async function runAgentDemoFlow() {
   }
   clearDemoAgentAnswer();
   const host = App.agentChat?.demoView?.(true);
+  shown = Boolean(host);
   const body = document.getElementById("agentAnswerBody");
   const models = demoAgentModels();
   const notes = demoAgentNotes(models);

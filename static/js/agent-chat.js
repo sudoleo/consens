@@ -440,7 +440,10 @@
     else if ((!agent || !canUse()) && budgetTimer) { clearInterval(budgetTimer); budgetTimer = null; }
   }
   function renderShellNow() {
-    if (demoView && (registry.visible() || document.body.classList.contains("is-hero"))) demoView = false;
+    // A run, a saved chat (a guest who signed in on the page opened one) or
+    // a new chat ends the demo; demo.js stops writing once it is let go.
+    if (demoView && (registry.visible() || registry.getSelectedConversationIdentity?.()
+      || document.body.classList.contains("is-hero"))) demoView = false;
     // However the demo ends, its model icons and panel go with it.
     if (!demoView) App.agentDelegation?.demo?.(null);
     const agent = selectedMode() === "agent";

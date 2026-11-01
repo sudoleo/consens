@@ -2521,6 +2521,24 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A guest watched the demo, signed in on the page and opened a saved chat:
+  // the panel kept the demo's answer and the chat's never came (bug hunt
+  // 2026-10-30).
+  it("lets go of the demo when a saved chat opens", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    expect(window.App.agentChat.demoView(true)).not.toBe(null);
+    document.getElementById("agentAnswerBody").textContent = "Demo answer";
+    expect(document.body.classList.contains("agent-demo-active")).toBe(true);
+    window.App.runRegistry.showSavedView({ type: "bookmark" }, { chatId: "a".repeat(32), turnId: "b".repeat(32),
+      bookmarkId: "saved", question: "Q", consensus: "Saved answer", executionMode: "agent",
+      currentTurn: { id: "b".repeat(32), question: "Q", consensus: "Saved answer", status: "completed" } });
+    window.App.agentChat.render();
+    expect(document.body.classList.contains("agent-demo-active")).toBe(false);
+    expect(document.getElementById("agentAnswerBody").textContent).toContain("Saved answer");
+    dom.window.close();
+  });
+
   it("restores reasoning and settings from a saved turn without treating reasoning as HTML", async () => {
     const { window, document, dom } = boot();
     const turn = { mode: "Agent", execution_mode: "agent", agent_settings: { model_id: "gpt-5.6-sol", label: "GPT-5.6 Sol", reasoning_effort: "medium" },
