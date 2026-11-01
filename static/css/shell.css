@@ -2267,6 +2267,14 @@ body:not(.is-hero) .input-section::before {
     display: none;
   }
 
+  /* Without a keyboard, Safari can leave the visible part below the layout
+     viewport this box hangs on (after another app's keyboard over the page,
+     2026-11-01): composer-keyboard.js writes the gap as --viewport-drop, and
+     the composer follows the visible bottom down. */
+  body.viewport-panned:not(.keyboard-open):not(.is-hero) .input-section {
+    transform: translate(-50%, var(--viewport-drop, 0px));
+  }
+
   /* Die Auf-/Zuklapp-Bewegung animiert die Hoehe; der Wechsel an die
      Tastaturkante darf nicht als Gleiten mitlaufen. */
   body.keyboard-open.composer-animating:not(.is-hero) .input-section {

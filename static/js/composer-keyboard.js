@@ -31,6 +31,14 @@
 // iOS-Kurve, body.keyboard-moving) und beim Verlassen des Feldes mit ihr
 // herunter; die gemeldete Groesse korrigiert danach nur noch. Android meldet
 // nie eine verdeckende Tastatur (resizes-content) und bleibt unberuehrt.
+//
+// Ohne Tastatur kann Safari den sichtbaren Bereich unter dem Layout-Viewport
+// stehen lassen, an dem fixierte Kaesten haengen: nach der Tastatur einer
+// anderen App ueber der Seite (Screenshot an WhatsApp teilen, Max
+// 2026-11-01: der Composer stand rund 170px zu hoch und wanderte beim
+// Scrollen mit dem Text). Bis Safari das selbst richtet, folgt der Composer
+// der sichtbaren Unterkante (body.viewport-panned, --viewport-drop), und
+// einmal je Seite geht der Zustand als app_viewport_panned in die Analyse.
 // Exporte: window.App.composerKeyboard.sync
 // =====================================================================
 
@@ -57,6 +65,12 @@
   // Until then a rise made ahead of the keyboard stands, even though the
   // viewport has not reported it yet; without a keyboard it ends then.
   const PREDICTION_MS = 1000;
+  // The visible bottom below the layout viewport's without a keyboard, by
+  // more than this: Safari left the page panned (see above). Less is
+  // rounding between the two viewports.
+  const PANNED_MIN_PX = 4;
+  const PANNED_CLASS = "viewport-panned";
+  let pannedTracked = false;
   let frame = 0;
   let moveTimer = 0;
   let predictedUntil = 0;
@@ -113,6 +127,21 @@
     }
   }
 
+  // The composer down to the visible bottom, while Safari leaves it panned.
+  function pan(drop) {
+    const on = drop > 0;
+    document.body.classList.toggle(PANNED_CLASS, on);
+    const section = composer();
+    if (!on) { section?.style.removeProperty("--viewport-drop"); return; }
+    section?.style.setProperty("--viewport-drop", `${Math.round(drop)}px`);
+    if (pannedTracked) return;
+    pannedTracked = true;
+    window.App.trackAppEvent?.("app_viewport_panned", {
+      drop: Math.round(drop), top: Math.round(viewport.offsetTop),
+      visible: Math.round(viewport.height), layout: Math.round(window.innerHeight),
+    });
+  }
+
   // The keyboard's own move, ahead of its report: Safari reports the size
   // once the keyboard stands. Only for a size this device reported before.
   function glide() {
@@ -134,6 +163,10 @@
     const edge = viewport.offsetTop + viewport.height;
     if (open) rememberLift(layoutHeight - viewport.height);
     write(open, Math.max(0, layoutHeight - edge), edge, viewport.offsetTop);
+    // innerHeight, not the root's height: Safari's toolbars sliding away
+    // grow the visible part and innerHeight alike, the root's height not.
+    const drop = edge - window.innerHeight;
+    pan(media.matches && unzoomed && !open && !typing() && drop > PANNED_MIN_PX ? drop : 0);
   }
 
   function schedule() {
@@ -174,6 +207,11 @@
   document.addEventListener("focusin", onFocusIn);
   document.addEventListener("focusout", onFocusOut);
   media.addEventListener?.("change", schedule);
+  // Back from another app (a share sheet with its keyboard): Safari may
+  // report nothing new for the visible part; its panning later does
+  // (the viewport's scroll above).
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) schedule(); });
+  window.addEventListener("pageshow", schedule);
   sync();
 
   window.App.composerKeyboard = { sync: sync };

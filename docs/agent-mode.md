@@ -3780,9 +3780,11 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
 - **Fakten über consens.io (seit 2026-11-01):** Fragt der Nutzer nach
   consens.io selbst, liest der Agent `consens_io` im Ergebnis von
   `read_settings` (`SettingsTools._about`): Preis (Early Access, noch kein
-  Abo), Tagesbudget in Euro je Stufe aus der Admin-Konfiguration, Stufe und
-  Rest des Kontos wie der Ring in der Seitenleiste
-  (`agent_quota.remaining_allowance`), eigener OpenRouter-Schlüssel (nur
+  Abo), Tagesbudget je Stufe als Vielfaches von Free aus der
+  Admin-Konfiguration, Stufe und Rest des Kontos in Prozent wie der Ring in
+  der Seitenleiste (`agent_quota.remaining_allowance`, nie Geldbeträge: Max
+  2026-11-01 nach „5,00 € Tagesbudget, noch 4,27 € übrig“ in einer Antwort),
+  eigener OpenRouter-Schlüssel (nur
   Compare, zählt nicht aufs Budget), Speichergrenzen
   (`MAX_CHATS_PER_OWNER`, `MAX_TURNS_PER_CHAT`), Teilen und Widerruf
   (`REVOKED_RETENTION_DAYS`), Memory, Watches, Löschen, Seiten-Links und

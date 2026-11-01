@@ -528,8 +528,12 @@ class SettingsTools:
         from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT, TEMPORARY_CHAT_DELETED_WITHIN
         from app.services.share_snapshots import REVOKED_RETENTION_DAYS
 
-        def euros(amount):
-            return f"{amount / agent_budget_config.MICRO_EUR:.2f} EUR"
+        def percent(left, limit):
+            # As the sidebar ring says it (token-budget.js percentLabel):
+            # users see shares of their allowance, never amounts of money
+            # (Max 2026-11-01: "Wir sollen kein € erwähnen").
+            share = max(0, min(100, int(left / limit * 100))) if limit else 0
+            return "<1%" if share == 0 and left > 0 else f"{share}%"
 
         # The wording follows the app's own (the early-access note, the
         # limit messages of app-text.js, the Memory settings).
@@ -537,7 +541,7 @@ class SettingsTools:
             "price": "Free during early access: usage limits apply, some features are open to selected accounts only, "
                      "paid plans are coming and there is no subscription to buy yet. What Pro adds for this account "
                      "shows under on_pro here; for a feature they would like, the user can write to the contact.",
-            "allowance": {"how": "One daily allowance in euros pays for every model call, web search and reviewer, "
+            "allowance": {"how": "One daily allowance pays for every model call, web search and reviewer, "
                                  "in the Agent and in Compare, at what each costs. It resets at 00:00 UTC; once it is "
                                  "used up, new messages are refused until then. The ring in the sidebar shows what "
                                  "is left. In Compare the user can use their own OpenRouter API key instead "
@@ -581,11 +585,15 @@ class SettingsTools:
         except Exception as exc:
             logging.warning("agent settings allowance failed category=%s", type(exc).__name__)
         else:
+            base = config["tier_limits"]["free"]
             about["allowance"].update({
-                "per_day": {TIER_LABELS[key]: euros(config["tier_limits"][key]) for key in ("free", "plus", "pro")},
+                "per_day": {TIER_LABELS[key]: "the base allowance" if key == "free" else
+                            f"{config['tier_limits'][key] / base:g} times Free's" for key in ("free", "plus", "pro")}
+                if base else {},
                 "this_account": TIER_LABELS[tier],
-                "left_today": f"{euros(left)} of {euros(agent_budget_config.limit_for(config, tier))}; calls still "
-                              "running hold part of it until they finish"})
+                "left_today": f"{percent(left, agent_budget_config.limit_for(config, tier))} of today's allowance, "
+                              "as the ring in the sidebar shows; calls still running hold part of it until they "
+                              "finish"})
         if getattr(self.loop, "vm_tools", None) is not None:
             # Admins run it without a cap (agent_vm_time.daily_limit).
             about["workspace"] = (f"The workspace (the agent's own computer with a browser and files) runs commands, "

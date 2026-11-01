@@ -549,6 +549,45 @@ def test_mobile_composer_hangs_from_the_keyboard_edge(browser, phase4_server):
         context.close()
 
 
+def test_mobile_composer_follows_a_visible_part_safari_left_panned(browser, phase4_server):
+    """2026-11-01 (Max, a screenshot shared to WhatsApp): without a keyboard
+    Safari left the visible part 171px below the layout viewport, and the
+    fixed composer stood that much too high, drifting with the text. It
+    follows the visible bottom until Safari rights it; once per page the
+    state goes to the analysis. Toolbars sliding away (visible part and
+    innerHeight grow alike) and pinch zoom are no such state."""
+    context, page = _real_firebase_page(browser, phase4_server, has_touch=True, init_script=FAKE_VISUAL_VIEWPORT)
+    try:
+        page.set_viewport_size({'width': 390, 'height': 820})
+        seed_long_answer(page)
+        settle = "() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')"
+        page.wait_for_function(settle)
+        page.evaluate("() => { window.__events = []; window.App.trackAppEvent = (name, data) => window.__events.push([name, data]); }")
+        bottom = "() => Math.round(document.querySelector('.input-section').getBoundingClientRect().bottom)"
+        page.wait_for_function(f"() => Math.abs(({bottom})() - 820) <= 1")
+
+        page.evaluate("() => window.__keyboard(820, 171, 'scroll')")
+        expect(page.locator('body')).to_have_class(re.compile(r'\bviewport-panned\b'))
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bkeyboard-open\b'))
+        page.wait_for_function(f"() => Math.abs(({bottom})() - 991) <= 1")
+        # Safari pans on: the composer follows; the analysis heard it once.
+        page.evaluate("() => window.__keyboard(820, 60, 'scroll')")
+        page.wait_for_function(f"() => Math.abs(({bottom})() - 880) <= 1")
+        assert page.evaluate("window.__events.filter(([name]) => name === 'app_viewport_panned')") == [
+            ['app_viewport_panned', {'drop': 171, 'top': 171, 'visible': 820, 'layout': 820}]]
+
+        # Righted: back on the layout bottom, nothing left on the box.
+        page.evaluate("() => window.__keyboard(820, 0, 'scroll')")
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bviewport-panned\b'))
+        page.wait_for_function(f"() => Math.abs(({bottom})() - 820) <= 1")
+        assert page.evaluate("document.querySelector('.input-section').style.getPropertyValue('--viewport-drop')") == ''
+        # Zoomed in, the visible part moves for its own reason.
+        page.evaluate("() => { visualViewport.scale = 2; window.__keyboard(410, 300, 'scroll'); }")
+        expect(page.locator('body')).not_to_have_class(re.compile(r'\bviewport-panned\b'))
+    finally:
+        context.close()
+
+
 def test_mobile_composer_rises_with_a_known_keyboard_before_safari_reports_it(browser, phase4_server):
     """F9: Safari reports the keyboard once it stands. A height this device
     reported before moves the composer up with the keyboard at the tap and

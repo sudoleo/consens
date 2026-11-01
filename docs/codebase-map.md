@@ -2237,8 +2237,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Modelle „Daily“ fragt); damit beantwortet der Agent „was ist eingestellt?“
   und fragt bei unklaren Wünschen („schneller“, „GPT“) mit echten Optionen
   zurück, statt zu raten. Seit 2026-11-01 enthält es unter `consens_io`
-  auch die Fakten über consens.io selbst (Preis, Tagesbudget und Rest des
-  Kontos, Speichergrenzen, Teilen, Memory, Löschen, Links; Zahlen aus dem
+  auch die Fakten über consens.io selbst (Preis, Tagesbudget je Stufe als
+  Vielfaches und Rest des Kontos in Prozent wie der Ring, nie in Euro,
+  Speichergrenzen, Teilen, Memory, Löschen, Links; Zahlen aus dem
   Code, [agent-mode.md](agent-mode.md) „Fakten über consens.io“).
   `prepare_settings_change`
   nimmt eine Liste `changes: [{setting, value}]` (nur das Genannte, jede
@@ -3914,7 +3915,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   280 ms iOS-Kurve, Vorhersage hält höchstens 1 s ohne Meldung), beim Verlassen
   mit ihr herunter; Safaris späte Meldung korrigiert nur. Android
   (Layout-Viewport schrumpft mit, keine Meldung einer verdeckenden Tastatur)
-  und Desktop bleiben unberührt.
+  und Desktop bleiben unberührt. Seit 2026-11-01 auch ohne Tastatur: Liegt
+  die sichtbare Unterkante (`offsetTop + height`) mehr als 4 px unter
+  `window.innerHeight` (ungezoomt, kein Feld fokussiert), hat Safari den
+  sichtbaren Bereich verschoben stehen lassen (Max: nach dem Teilen eines
+  Screenshots an WhatsApp stand der Composer rund 170 px zu hoch und wanderte
+  mit dem Text). Dann `body.viewport-panned` und `--viewport-drop` am
+  Composer, `shell.css` schiebt ihn per `transform` hinunter; einmal je Seite
+  das Analyse-Ereignis `app_viewport_panned` (docs/analytics.md). Auch
+  `visibilitychange`/`pageshow` messen neu. Nicht am Gerät belegt, nur mit
+  nachgestelltem `visualViewport` (`test_mobile_navigation.py`).
   Export `window.App.composerKeyboard.sync`.
 - **`composer-quote.js`** (seit 2026-08-17) — **„Ask about this"**: der in einer
   Antwort markierte Abschnitt wandert als sichtbares Zitat über das Eingabefeld

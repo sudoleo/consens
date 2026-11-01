@@ -368,12 +368,15 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     loop = settings_loop(store)
     about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
     limits = agent_budget_config.get_config(store.db)["tier_limits"]
-    euros = lambda amount: f"{amount / agent_budget_config.MICRO_EUR:.2f} EUR"
     allowance = about["allowance"]
-    assert allowance["per_day"] == {"Free": euros(limits["free"]), "Plus": euros(limits["plus"]),
-                                    "Pro": euros(limits["pro"])}
+    # Shares as the sidebar ring shows them, never amounts of money (Max
+    # 2026-11-01: the agent said "5,00 € Tagesbudget, noch 4,27 € übrig").
+    assert allowance["per_day"] == {"Free": "the base allowance",
+                                    "Plus": f"{limits['plus'] / limits['free']:g} times Free's",
+                                    "Pro": f"{limits['pro'] / limits['free']:g} times Free's"}
     assert allowance["this_account"] == "Free"
-    assert allowance["left_today"].startswith(f"0.62 EUR of {euros(limits['free'])}")
+    assert allowance["left_today"].startswith(f"{int(620_000 / limits['free'] * 100)}% of today's allowance")
+    assert not any(word in json.dumps(about) for word in ("EUR", "euro", "€"))
     assert "00:00 UTC" in allowance["how"] and "own OpenRouter API key" in allowance["how"]
     assert f"at most {MAX_CHATS_PER_OWNER} per account" in about["storage"]
     assert f"at most {MAX_TURNS_PER_CHAT} messages; then a new chat" in about["storage"]
