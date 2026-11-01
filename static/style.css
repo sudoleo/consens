@@ -30,6 +30,7 @@
 @import url('./css/agent-google.css');
 @import url('./css/agent-workspace.css');
 @import url('./css/workspace-view.css');
+@import url('./css/file-viewer.css');
 /* The composer row's layout, for every mode (see its header). */
 @import url('./css/composer.css');
 @import url('./css/chat-scroll.css');

@@ -296,16 +296,18 @@ def test_a_reviewers_pause_asks_the_user_above_the_field(browser, phase4_server,
             page.wait_for_timeout(300)
             _snapshot(page, f"audit-vm-open-{width}")
         if dark:
-            # A text file reads in the dark theme's colours, not light text on a white page.
+            # A table file reads as a table in the preview beside the chat
+            # (file-viewer.js, 2026-11-01), in the dark theme's colours.
             page.evaluate("""() => {
-                App.agentWorkspace = { ...App.agentWorkspace, openFile: async () => ({
+                const file = async () => ({
                     blob: new Blob(['Datum;Posten;Betrag\\n2026-10-01;Miete;950\\n2026-10-03;Strom;84\\n'], {type: 'text/plain'}),
-                    mime: 'text/plain' }) };
+                    mime: 'text/plain' });
+                App.agentWorkspace = { ...App.agentWorkspace, openFile: file, openPreview: file };
                 App.attachments.openStored({ fileId: 'f'.repeat(32), name: 'tabelle.csv', mime: 'text/plain', size: 64 });
             }""")
-            text = page.locator("#attachmentViewerBody .attachment-viewer-text")
-            expect(text).to_contain_text("Miete;950")
-            colors = text.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el.closest('.modal-content') || el.parentElement).backgroundColor]")
+            text = page.locator("#fileViewer .file-viewer-table")
+            expect(text.locator("td", has_text="Miete")).to_have_count(1)
+            colors = text.evaluate("el => [getComputedStyle(el).color, getComputedStyle(el.closest('.file-viewer-table-wrap')).backgroundColor]")
             assert colors[0] != "rgb(0, 0, 0)", colors
             page.wait_for_timeout(400)
             _snapshot(page, f"audit-textfile-{width}-dark")

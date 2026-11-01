@@ -148,6 +148,10 @@
           "file": "static/js/stream-reveal.js",
           "note": "App.streamReveal: pace and letter-by-letter light of a streamed Agent answer (CSS Custom Highlight API). agent-chat.js calls it at runtime with renderMarkdownStream / morphMarkdown as its painters."
         },
+        {
+          "file": "static/js/file-viewer.js",
+          "note": "App.fileViewer: the preview of a document, code or text file beside the chat (pdf.js from static/vendor/pdfjs, imported when a preview first needs it). attachments.js and agent-workspace.js open it at runtime."
+        },
         "static/js/attachments.js",
         "static/js/model-answer-reader.js",
         "static/js/agent-mode.js",

@@ -487,8 +487,52 @@
       });
     }
 
+    function saveBlob(blob, name) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    }
+
+    // Documents, code and text open in the preview beside the chat
+    // (file-viewer.js, 2026-11-01); pictures stay in this dialog, which pages
+    // through a gallery. A stored file previews as the server's preview of it
+    // (an Office file's PDF, a Word file's text), a file only in this page
+    // (Compare) from its bytes; a Word file there keeps the note below.
+    function openInFileViewer(att) {
+      const viewer = window.App?.fileViewer;
+      if (!viewer || !att || String(att.mime || "").indexOf("image/") === 0 || !viewer.previews(att)) return false;
+      const type = viewer.describe(att);
+      const label = (String(att.name || "").match(/\.([a-z0-9]{1,5})$/i)?.[1] || type.label).toUpperCase();
+      if (att.fileId && window.App?.agentWorkspace?.openPreview) {
+        viewer.open({
+          key: att.fileId, name: att.name, title: att.title, mime: att.mime, preview: att.preview, kind: att.kind,
+          family: att.family, trigger: att.trigger,
+          load: function () { return window.App.agentWorkspace.openPreview(att.fileId); },
+          downloads: att.downloads || [{ label: label, run: function () {
+            return window.App.agentWorkspace.openFile(att.fileId).then(function (file) { saveBlob(file.blob, att.name); });
+          } }],
+          remove: att.removable === false ? null : function () { return window.App.agentWorkspace.removeFile(att.fileId); },
+        });
+        return true;
+      }
+      if (!att.data || att.previewOnly || (type.view === "pdf" && att.mime !== "application/pdf")) return false;
+      viewer.open({
+        key: "local:" + imageKey(att), name: att.name, mime: att.mime, trigger: att.trigger,
+        load: function () { return Promise.resolve({ blob: base64ToBlob(att.data, att.mime), mime: att.mime }); },
+        downloads: [{ label: label, run: function () { saveBlob(base64ToBlob(att.data, att.mime), att.name); } }],
+      });
+      return true;
+    }
+
     function openAttachmentViewer(att) {
       if (!viewerOverlay || !viewerBody) return;
+      if (!att?.gallery && openInFileViewer(att)) {
+        if (viewerOverlay.hasAttribute("open")) closeAttachmentViewer();
+        return;
+      }
       // A newer preview makes an older stored file's answer stale; an open
       // dialog stays open and only changes what it shows.
       viewerToken++;

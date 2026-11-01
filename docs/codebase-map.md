@@ -2478,6 +2478,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Modellantwort-Bookmarks verschiebt `rewriteSourceTags` ausserdem einen
   eindeutigen, reinen `[S…]`-Block vor dem ersten Wort hinter die erste
   vollstaendige Aussage; der Consensus-Renderpfad ruft diese Reparatur nicht auf.
+- **`file-viewer.js`** (`App.fileViewer`, seit 2026-11-01) — die Vorschau einer
+  Datei neben dem Chat: Präsentationen, Word, Tabellen und PDFs Seite für Seite
+  mit Miniaturen, Code und Text mit Zeilennummern, Markdown gelesen, CSV als
+  Tabelle. Details unter „Agent-Dateien“, Abschnitt „Vorschau neben dem Chat“.
 - **`attachments.js`** — Attachment-UI/Payload (ab Plus), inklusive Bild-Paste im
   Fragefeld und Drag-and-drop aller unterstützten Dateitypen auf den
   Input-Container. Die Vorschau zeigt Textdateien bis 2 MB seit 2026-10-27 als
@@ -2509,7 +2513,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Anhänge (`showBookmarkAttachments`) landen aus demselben Grund an der
   wiederhergestellten Frage statt im Eingabefeld. Im Agent-Modus bleibt die
   Datei im Chat gespeichert: Chips mit Datei-`id` sind klickbar und öffnen die
-  Vorschau mit Download/Entfernen (siehe Abschnitt Agent-Dateien).
+  Vorschau mit Download/Entfernen (siehe Abschnitt Agent-Dateien). Seit
+  2026-11-01 öffnen PDFs, Word-Dateien, Code und Text nicht mehr in diesem
+  Dialog, sondern in der Vorschau neben dem Chat (`openInFileViewer` →
+  `App.fileViewer.open`); hier bleiben Bilder samt Galerie und Word-Dateien
+  eines Compare-Chats (nur Name und Bytes im Browser, kein Text vom Server).
   Jeder Import gehört zu einer Entwurfs-Generation: `clearPendingAttachments`,
   `detachForMessage` und `consensio:auth-state` beginnen eine neue, verwerfen
   verspätete FileReader-/Verkleinerungsergebnisse und setzen den
@@ -6383,6 +6391,9 @@ VM-Datei bis 5 MB in die private Dateiablage des Chats (`AgentFiles.save`,
 `file_mime`, Bild nur nach Bytes) und meldet sie per `resources`;
 `agent-workspace.js` (seit 2026-10-30 erst, wenn ihr Platz in Sicht kommt,
 `IntersectionObserver`, als Vorschau `GET …/files/{id}?preview=1` bis 1600 px,
+seit 2026-11-01 bei einer Präsentation, einem Word- oder Excel-Dokument ihr
+PDF vom gemeinsamen Konverter, `agent_office.py`; siehe „Vorschau neben dem
+Chat“ unter Agent-Dateien;
 Original für Download und Ansicht) zeigt PNG/JPEG/WebP/GIF der Turn (`vm_file`, seit
 2026-10-28 auch `web_image` von `show_image`, seit 2026-10-29 nur ein
 Bild, das der Agent vorher mit `find_pictures` angesehen hat, mit Bildunterschrift und der
@@ -11351,6 +11362,84 @@ zu entfernen. Sources und Differences bleiben flache Reader-Listen;
 Resolve bleibt eine unabhängige sekundäre Aktion mit erhaltenem `[hidden]`.
 
 ## Agent-Dateien (2026-09-27)
+
+### Vorschau neben dem Chat (2026-11-01)
+
+Max: „einen Viewer für Office-Dokumente, der von ChatGPT sieht sehr gut aus …
+vor allem müssen User verstehen, dass das möglich ist“, dann „natürlich auch für
+PDFs … für Code natürlich auch“. `static/js/file-viewer.js` (`App.fileViewer`,
+`static/css/file-viewer.css`) zeigt eine Datei des Chats neben dem Gespräch:
+
+- **Ein Format für Dokumente: PDF, gezeichnet im Browser.** pdf.js 6.4.299
+  (`pdfjs-dist`, vendort nach `static/vendor/pdfjs/<version>/` von
+  `scripts/vendor_frontend.mjs`: `build/pdf.min.mjs`, der Worker, die
+  Standardschriften für PDFs, die Helvetica/Times nur nennen, und die
+  Script-Fallbacks der Bilddecoder, weil die CSP kein WebAssembly erlaubt) wird
+  erst beim ersten Bedarf per `import()` geladen; ein gemeinsamer `PDFWorker`,
+  `isEvalSupported: false`, keine Annotation-/Link-/Skript-Ebene: nur die
+  Canvas jeder Seite. `static_delivery.py` liefert `.mjs` als `text/javascript`.
+- **Woher das PDF kommt (Entscheidung 2026-11-01):** `GET …/files/{id}?preview=1`
+  antwortet einer Office-Datei mit dem PDF, das beim `vm_share_file` **auf dem
+  Konverter aller Konten** entsteht (`agent_vm_tools._office_preview` →
+  `agent_office.render`, die Sprite `consens-office`: LibreOffice als Nutzer
+  ohne Rechte in einem Ordner nur dieser Umwandlung). Hat der Agent dieselbe
+  Datei in der Nachricht schon mit `vm_render_office` gewandelt, nimmt das
+  Teilen dieses PDF (`_rendered`, nach sha256). Es zählt zu den
+  `RENDERS_PER_HOUR` des Kontos, kostet keine VM-Zeit und wird nie in den
+  letzten `PREVIEW_MIN_SECONDS` der Antwort versucht; höchstens
+  `PREVIEW_BYTES` (10 MB). Es liegt als zweites privates Objekt neben der
+  Datei (`AgentFiles.save(preview=…)`, Feld `preview {mime, size, sha256}`,
+  Schlüssel `object_key + ".preview"`), zählt zum Speicher des Kontos, geht
+  mit der Datei und wird beim Lesen gegen den Hash geprüft
+  (`download_preview`); `public_file` nennt dem Browser nur `preview {mime,
+  size}`, dem Modell nichts. **Nicht auf Render:** die native Python-Umgebung
+  hat kein LibreOffice (rund 500 MB, langsamer Kaltstart), und fremde
+  Office-Dateien sind eine klassische Angriffsfläche, die auf die
+  abgeschottete Konverter-VM gehört, nicht auf den Webserver. Ein erzeugtes Dokument
+  (`create_document`) hat sein PDF schon; eine Word-Datei, die der Nutzer
+  hochlädt oder die aus einer Mail kommt, antwortet mit ihrem beim Upload
+  gelesenen Text (`text/plain`, Absätze aus `parts`); ein PDF mit sich selbst.
+  Lehnt der Konverter ab, fällt er aus oder ist die Stunde verbraucht, wird
+  die Datei ohne Vorschau geteilt (die Karte bleibt ein Download). Eine
+  hochgeladene Word-Datei geht bewusst nicht zum Konverter: ihr Text reicht
+  zum Lesen, ein Klick weckt keine VM.
+- **Wo es steht:** ab 1100 px angedockt rechts in einer eigenen Spur
+  (`body.file-viewer-docked`, `--file-viewer-width`, Rand zieht und merkt sich
+  die Breite in `consens.fileViewerWidth`), die Chat-Spalte rückt daneben wie
+  bei der Workspace-Ansicht; Aktivität und Workspace liegen darunter. „Full
+  screen“ nimmt das ganze Fenster, darunter (Handy, Tablet) liegt es immer über
+  allem (`file-viewer-covers`, `aria-modal`). Escape schließt, der Fokus geht
+  zum Auslöser zurück. **Es öffnet nie von selbst** (Max 2026-10-31: Panels nur
+  per Klick), auch nicht, wenn der Agent eine Präsentation fertig hat.
+- **Was es zeigt:** Kopf mit Datei-Pille, Seitenzähler „3 / 12“, Zoom-Menü
+  („Fit“ = Folie ganz sichtbar bzw. Seite auf die Breite bis 880 px, 50–200 %,
+  100 % = Druckgröße; Tasten +, −, 0), „Present“ bei Präsentationen und
+  querformatigen PDFs (eine Folie auf Schwarz, Fullscreen-API, Pfeile, Klick,
+  Escape), Download (bei einem Dokument ein Menü DOCX/PDF), ⋯ „Remove from
+  chat…“ (nur wo die Karte selbst entfernen darf), Full screen, Schließen.
+  Links ab 700 px die Miniaturen („5 slides“/„3 sheets“/„12 pages“, nummeriert,
+  die aktuelle umrandet, ausblendbar in `consens.fileViewerRail`), rechts die
+  Seiten, gezeichnet nur nahe am Bild (`IntersectionObserver`), bei Zoom und
+  Größenwechsel scharf neu. Code: Zeilennummern als eigene Spalte, höchstens
+  20.000 Zeilen; Markdown über `marked` + DOMPurify ohne Bilder, Formulare,
+  Frames und Nicht-http-Links; CSV/TSV als Tabelle (1.000 Zeilen); Text über
+  2 MB oder nicht UTF-8 bekommt den Hinweis samt Download.
+- **Auffindbarkeit:** Dokumentzeilen (`documentCard`) und Dateizeilen
+  (`fileRow`, `kind` `vm_file`/`mail_attachment`) einer Antwort zeigen statt
+  des Symbols die **erste Seite als Miniatur** (`App.fileViewer.thumbnail`,
+  erst wenn die Zeile in Sicht kommt, höchstens zwei gleichzeitig, gezeichnete
+  Miniaturen im Speicher, damit eine neu projizierte Antwort nicht flackert),
+  darunter Typ und Seiten („PowerPoint · 5 slides“, „Document · 3 pages“,
+  „Python“) und rechts das leise Wort „Preview“; Symbol, Name und Wort sind
+  ein Knopf (`agent-file-open` bzw. `agent-doc-main`) ohne Kasten. Uploads an
+  der Nachricht öffnen ihren Chip in derselben Vorschau
+  (`App.attachments.openStored` → `openInFileViewer`).
+- Tests: `tests/test_agent_files_preview.py` (PDF neben der Datei, Quota,
+  Löschen, Hash, Word-Text), `tests/test_agent_vm.py` (Wandlung beim Teilen,
+  ein Rendering wiederverwendet, Ablehnung/Ausfall, ohne Zeit, Stundenlimit),
+  `tests/js/file-viewer.test.mjs`,
+  `tests/e2e/test_file_viewer_frontend.py` (echte PDFs: Karte, Andocken, Rail,
+  Zoom, Present, Full screen, Code, Handy).
 
 `agent_files.py` (Router/Service) ergänzt owner- und chat-gebundene private Dateien:
 `POST/GET /agent/chats/{chat}/files`, `GET/DELETE .../{file}`. Der bestehende

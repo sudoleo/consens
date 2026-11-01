@@ -76,7 +76,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .agent-files-badge .agent-files-icon { width: 12px; height: 12px; }
 
 /* Earlier versions stay one click away and never grow the row by default. */
-.agent-doc-earlier { margin: 2px 0 0 44px; font-size: var(--font-size-xs); }
+.agent-doc-earlier { margin: 2px 0 0 76px; font-size: var(--font-size-xs); }
 .agent-doc-earlier > summary {
   display: inline-flex; align-items: center; min-height: 32px; padding: 0 2px; color: var(--ink-3);
   cursor: pointer; list-style: none; border-radius: var(--radius-2xs);
@@ -124,7 +124,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   margin: 12px 0 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--dispute) 45%, var(--line));
   border-radius: var(--radius-sm); background: var(--dispute-bg); color: var(--ink); font-size: var(--font-size-ui);
 }
-.agent-doc-card > .agent-files-confirm { margin-left: 44px; }
+.agent-doc-card > .agent-files-confirm { margin-left: 76px; }
 .agent-files-confirm p { margin: 0 0 10px; line-height: 1.5; }
 .agent-files-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .agent-files-danger, .agent-files-ghost {
@@ -158,6 +158,45 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .agent-file-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
 .agent-file-meta .agent-files-icon { width: 14px; height: 14px; }
 .agent-file-origin { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
+
+/* A file the preview shows (file-viewer.js, 2026-11-01): its first page
+   stands where the glyph stood, white with a hairline like a page on the
+   desk, and its type and pages under the name ("PowerPoint · 5 slides").
+   Mark, name and the quiet word Preview are one button with the hover tone
+   of a document's row: no box around it (Max 2026-10-31), the page itself
+   says it opens. */
+.agent-file-thumb { width: 64px; height: 48px; border-radius: 6px; }
+.agent-file-thumb.has-thumb { background: transparent; }
+.agent-file-thumb.has-thumb::before { content: none; }
+.agent-file-thumb canvas {
+  display: block; max-width: 100%; max-height: 100%; border-radius: 3px; background: #fff;
+  box-shadow: 0 0 0 1px var(--line-soft), 0 1px 3px rgba(0, 0, 0, .08);
+}
+.agent-file-kind { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
+.agent-file-kind[hidden] { display: none; }
+.agent-file-open {
+  display: flex; flex: 1; align-items: center; gap: 12px; min-width: 0; margin: -4px 0 -4px -6px; padding: 4px 6px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; font: inherit; text-align: left;
+  cursor: pointer; transition: background-color var(--dur-press) var(--ease-standard);
+}
+.agent-file-open:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.agent-file-preview-hint {
+  flex: none; margin-left: auto; padding: 0 4px; color: var(--ink-3); font-size: var(--font-size-xs);
+  transition: color var(--dur-press) var(--ease-standard);
+}
+@media (hover: hover) and (pointer: fine) {
+  .agent-file-open:hover { background: var(--hover); }
+  :is(.agent-file-open, button.agent-doc-main):hover .agent-file-preview-hint { color: var(--ink); }
+  :is(.agent-file-open, button.agent-doc-main):hover .agent-file-thumb.has-thumb canvas { box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(0, 0, 0, .1); }
+}
+/* A narrow column (a phone, the chat beside the preview) keeps the room for
+   the name: the page and the hover say it opens. */
+@container (max-width: 560px) {
+  .agent-file-preview-hint { display: none; }
+}
+@media (max-width: 520px) {
+  .agent-file-preview-hint { display: none; }
+}
 .agent-file-warning { color: color-mix(in srgb, var(--partial) 70%, var(--ink)); font-size: var(--font-size-xs); line-height: 1.5; }
 
 /* A file of the turn read only in part: a line of the answer with its
@@ -320,13 +359,13 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 @media (max-width: 420px) {
   .agent-doc-head { flex-wrap: wrap; row-gap: 0; }
   .agent-doc-head .agent-files-menu-wrap { order: 3; }
-  .agent-doc-downloads { order: 4; flex-basis: calc(100% - 37px); margin: 2px 0 0 37px; }
+  .agent-doc-downloads { order: 4; flex-basis: calc(100% - 76px); margin: 2px 0 0 76px; }
   .agent-doc-title > span { display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .agent-doc-card > .agent-files-confirm { margin-left: 0; }
 }
 @media (pointer: coarse) {
   .agent-files-chip, .agent-files-more, .agent-files-icon-btn, .agent-files-danger, .agent-files-ghost,
-  .agent-files-menu-item, .agent-doc-earlier > summary, button.agent-doc-main { min-height: 44px; }
+  .agent-files-menu-item, .agent-doc-earlier > summary, button.agent-doc-main, .agent-file-open { min-height: 44px; }
   .agent-files-more, .agent-files-icon-btn { width: 44px; }
   .agent-doc-version .agent-files-chip { min-height: 44px; }
 }

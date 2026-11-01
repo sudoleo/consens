@@ -4,6 +4,12 @@ A picture under an answer loads as a preview (``?preview=1``, since
 2026-10-30, runtime audit P2): at most agent_web_images.MAX_SIDE pixels on a
 side, as WebP, when the stored file is larger; a GIF keeps its frames. The
 original stays the download and what the file viewer opens.
+
+The same ``?preview=1`` is what the app's document preview shows (since
+2026-11-01, static/js/file-viewer.js): an Office file the agent shared from
+its workspace answers with its PDF from the converter all accounts share
+(agent_office.py, agent_vm_tools._office_preview), a Word file the user sent
+with the text read from it (its paragraphs, plain text), a PDF with itself.
 """
 import io
 from typing import Optional
@@ -123,15 +129,36 @@ def _preview(mime, raw):
     return shrunk[0] if shrunk and len(shrunk[0]) < len(raw) else None
 
 
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+INLINE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"}
+
+
+def _word_text(meta):
+    """A Word file's text as read on upload (agent_file_extract), paragraph
+    by paragraph, or None when nothing was read."""
+    if meta.get("mime") != DOCX_MIME:
+        return None
+    texts = [str(part.get("text") or "").strip() for part in meta.get("parts") or [] if isinstance(part, dict)]
+    text = "\n\n".join(text for text in texts if text)
+    return text or None
+
+
 @router.get("/agent/chats/{chat_id}/files/{file_id}")
 @limiter.limit("60/minute")
 def download_file(request: Request, chat_id: str, file_id: str, preview: bool = False):
     uid, files = service(request)
+    if preview:
+        meta = invoke(lambda: files.get(uid, chat_id, file_id), uid)
+        if isinstance(meta.get("preview"), dict):
+            _, pdf = invoke(lambda: files.download_preview(uid, chat_id, file_id), uid)
+            return Response(pdf, media_type="application/pdf", headers=INLINE)
+        text = _word_text(meta)
+        if text is not None:
+            return Response(text.encode("utf-8"), media_type="text/plain; charset=utf-8", headers=INLINE)
     meta, raw = invoke(lambda: files.download(uid, chat_id, file_id), uid)
     smaller = _preview(meta["mime"], raw) if preview else None
     if smaller is not None:
-        return Response(smaller, media_type="image/webp", headers={"Cache-Control": "private, no-store",
-            "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"})
+        return Response(smaller, media_type="image/webp", headers=INLINE)
     return Response(raw, media_type=meta["mime"], headers={"Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff", "Content-Disposition": "attachment; filename*=UTF-8''" + quote(meta["name"], safe="")})
 

@@ -100,6 +100,11 @@ READ_CHARS = 16_000
 # A shared file goes into the chat's file store, which takes up to 5 MB a file
 # (AgentFiles.save).
 SHARE_BYTES = 5 * 1024 * 1024
+# The preview of a shared Office file (_office_preview): a PDF larger than
+# this is no preview worth loading in a browser, and a conversion never
+# takes the answer's last seconds.
+PREVIEW_BYTES = 10 * 1024 * 1024
+PREVIEW_MIN_SECONDS = 30
 # Pictures the chat shows as pictures, known by their bytes only: a name
 # never makes a file an image (agent-workspace.js shows these inline).
 _IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
@@ -1005,6 +1010,9 @@ class VMTools:
         self._running = None
         # Pictures vm_view_image read, for the loop to show after the batch.
         self._pictures, self._pictures_lock = [], threading.Lock()
+        # The PDFs vm_render_office made in this message, by the file's
+        # sha256: sharing that file previews it without converting it again.
+        self._rendered = {}
 
     def tools(self):
         from app.services import agent_github
@@ -1468,6 +1476,7 @@ class VMTools:
         except agent_office.OfficeUnavailable:
             # The converter's failure, not the workbench's: the VM stays on.
             raise ValueError("The converter is not available right now. Nothing changed in your workspace.") from None
+        self._rendered[hashlib.sha256(raw).hexdigest()] = rendered.pdf
         target = posixpath.join(posixpath.dirname(path), stem + ".pdf")
         size = self._provider("render", lambda: self.session.backend.write_file(self.session.name, target,
                                                                                   rendered.pdf))
@@ -1512,11 +1521,16 @@ class VMTools:
             # (agent_web_images.picture_markdown); f1, f2 … per message.
             if mime.startswith("image/"):
                 origin["ref"] = f"f{sum(1 for item in self.shared.values() if 'ref' in item) + 1}"
+            # A presentation, document or spreadsheet opens in the app's
+            # preview as its PDF (agent_office.py, file-viewer.js).
+            preview = None
+            if not mime.startswith("image/") and mime != "application/pdf":
+                preview = self._office_preview(raw, posixpath.splitext(path)[1][1:].lower(), cancellation)
             # The agent made it: nothing for the store to read out. The bytes
             # are served as a download only (routers/agent_files.py).
             meta = self.files.save(self.loop.uid, self.loop.chat_id, raw=raw, name=name, mime=mime,
                                    extraction={"status": "ready", "parts": [], "warnings": []},
-                                   cancellation=cancellation,
+                                   cancellation=cancellation, preview=preview,
                                    extra={"kind": "vm_file", "turn_id": self.loop.turn_id, "origin": origin})
             self.shared[key] = {field: meta[field] for field in ("id", "name", "mime", "size")}
             if "ref" in origin:
@@ -1534,6 +1548,34 @@ class VMTools:
         return self.session.announce({"path": path, "file": file, "shown_as": "download",
                                       "note": "The app shows it with your answer by itself. Do not embed it as an "
                                               "image, link it or say where it appears."})
+
+    def _office_preview(self, raw, extension, cancellation):
+        """The PDF the app previews a shared Office file by (file-viewer.js),
+        made on the converter VM all accounts share (agent_office.py), or
+        None: a type it does not take, the account's renders of the hour
+        used up, too little of the answer's time left, a refusal or a
+        failure. A file the agent rendered in this message (vm_render_office)
+        takes that PDF. A failure is never the share's."""
+        from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter
+        from app.services import agent_office
+        if extension not in agent_office.EXTENSIONS or len(raw) > agent_office.MAX_BYTES:
+            return None
+        digest = hashlib.sha256(raw).hexdigest()
+        pdf = self._rendered.get(digest)
+        if pdf is None:
+            left = self.loop.answer_time_left()
+            if left is not None and left < PREVIEW_MIN_SECONDS:
+                return None
+            try:
+                api_uid_limiter.check(self.loop.uid, "office:render", agent_office.RENDERS_PER_HOUR,
+                                      window_seconds=3600)
+                pdf = agent_office.render(raw, extension, cancellation=cancellation).pdf
+            except ProviderCancelled:
+                raise
+            except (ApiUidRateLimitExceeded, agent_office.OfficeRefused, agent_office.OfficeUnavailable) as exc:
+                logging.info("Agent VM share without preview category=%s %s", type(exc).__name__, log_tag(self.loop))
+                return None
+        return pdf if pdf.startswith(b"%PDF-") and len(pdf) <= PREVIEW_BYTES else None
 
     # --- Activity fields (DelegationLoop._execute) -----------------------------
 

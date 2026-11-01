@@ -39,6 +39,9 @@ from starlette.datastructures import Headers, MutableHeaders
 # slim Linux images) know no .woff2: the fonts went out as
 # application/octet-stream next to a preload that announces font/woff2.
 mimetypes.add_type("font/woff2", ".woff2")
+# pdf.js (static/vendor/pdfjs) is ES modules: a browser runs a module only
+# with a script type, and nosniff forbids guessing one.
+mimetypes.add_type("text/javascript", ".mjs")
 
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 REVALIDATE_CACHE_CONTROL = "no-cache"

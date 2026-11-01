@@ -1226,6 +1226,20 @@ Server.
       `/ask_glm`, sobald GLM 5.3 das effektive Modell ist.
 - [ ] Bookmark-Attachments werden angezeigt.
 
+## Vorschau neben dem Chat (seit 2026-11-01)
+- [ ] Agent baut in der VM eine PPTX (python-pptx) und teilt sie mit
+      `vm_share_file` → unter der Antwort steht die erste Folie als Miniatur,
+      „PowerPoint · n slides“ und „Preview“ (das PDF kommt vom Konverter
+      `consens-office`; fällt er aus, bleibt die Zeile ein Download).
+- [ ] Klick öffnet die Vorschau rechts neben dem Chat (ab 1100 px), Miniaturen
+      links, Folie ganz sichtbar; „Present“ zeigt eine Folie im Vollbild,
+      Pfeile blättern, Escape beendet; Zoom 100 %, „Full screen“, Schließen.
+- [ ] Dasselbe mit DOCX und XLSX aus der VM (ein Tabellenblatt je Seite), mit
+      einem erzeugten Dokument (Download-Menü DOCX/PDF), einem hochgeladenen
+      PDF und einer DOCX (Textansicht), einer `.py`-Datei (Zeilennummern).
+- [ ] Am Handy liegt die Vorschau über allem, ohne Miniaturen; Schließen führt
+      zur Karte zurück. Hell und dunkel ansehen.
+
 ## Auth / Usage / Tier
 
 - Mit Free mehrere gesperrte Funktionen anklicken (High Quality,

@@ -177,11 +177,23 @@ def _warning(data, warning, *, for_model):
     return text
 
 
+# A file's preview (an Office file's PDF, agent_vm_tools._office_preview) is a second
+# object beside it, named after it.
+PREVIEW_SUFFIX = ".preview"
+
+
+def preview_key(data):
+    return data["object_key"] + PREVIEW_SUFFIX
+
+
 def public_file(data, *, for_model=False):
     """File metadata for the browser, or with ``for_model`` for a model's tool result."""
     file = {key: data[key] for key in ("id", "name", "title", "mime", "size", "sha256", "status", "warnings",
         "created_at", "expires_at", "kind", "document_id", "version", "parent_version", "turn_id", "source_file_ids",
         "origin", "origin_subject", "origin_from") if key in data}
+    # That it can be previewed, as what: never where it lies.
+    if isinstance(data.get("preview"), dict) and not for_model:
+        file["preview"] = {"mime": data["preview"].get("mime", ""), "size": data["preview"].get("size", 0)}
     if file.get("warnings"):
         warnings = [_warning(data, w, for_model=for_model) for w in file["warnings"]]
         file["warnings"] = [w for w in warnings if w]
@@ -225,7 +237,11 @@ class AgentFiles:
         return self.save(uid, chat_id, raw=parsed["raw"], name=parsed["name"], mime=parsed["mime"],
                          extraction=extraction, cancellation=cancellation, extra=extra, limits=limits)
 
-    def save(self, uid, chat_id, *, raw, name, mime, extraction, extra=None, cancellation=None, limits=None):
+    def save(self, uid, chat_id, *, raw, name, mime, extraction, extra=None, cancellation=None, limits=None,
+             preview=None):
+        """Store a file. ``preview``: the PDF the app shows it by (an Office
+        file shared from the workspace), kept beside it and counted in the
+        account's storage with it."""
         if not raw or len(raw) > 5 * 1024 * 1024:
             raise FileUnavailable("Files must be between 1 byte and 5 MB.")
         if cancellation:
@@ -242,18 +258,24 @@ class AgentFiles:
             "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "object_key": key,
             "status": "processing", "processing_until": (now + timedelta(minutes=20)).isoformat(), "created_at": now.isoformat(), "expires_at": (now + timedelta(days=RETENTION_DAYS)).isoformat(),
             "warnings": extraction["warnings"], "parts": extraction["parts"], "kind": "upload", **(extra or {})}
+        if preview:
+            data["preview"] = {"mime": "application/pdf", "size": len(preview),
+                               "sha256": hashlib.sha256(preview).hexdigest()}
+        stored = len(raw) + (len(preview) if preview else 0)
         max_files, max_bytes = limits or (MAX_FILES, MAX_STORAGE_BYTES)
         def reserve(tx):
             self.guard(uid, chat_id, tx)
             usage = quota.get(transaction=tx).to_dict() or {}
-            if usage.get("count", 0) >= max_files or usage.get("bytes", 0) + len(raw) > max_bytes:
+            if usage.get("count", 0) >= max_files or usage.get("bytes", 0) + stored > max_bytes:
                 raise FileUnavailable(f"File storage limit reached ({max_files} files or "
                                       f"{max_bytes // (1024 * 1024)} MB). Delete old files before uploading more.")
             tx.set(ref, data)
-            tx.set(quota, {"count": usage.get("count", 0) + 1, "bytes": usage.get("bytes", 0) + len(raw)})
+            tx.set(quota, {"count": usage.get("count", 0) + 1, "bytes": usage.get("bytes", 0) + stored})
         self.chats._transaction(reserve)
         try:
             self.objects.put(key, raw, mime)
+            if preview:
+                self.objects.put(preview_key(data), preview, "application/pdf")
             if cancellation:
                 cancellation.raise_if_cancelled()
             def finish(tx):
@@ -268,7 +290,7 @@ class AgentFiles:
             # Best effort only: the original error must surface, and a record
             # left in "deleting" is retried by cleanup_expired_files.
             try:
-                self.delete(uid, chat_id, file_id, cleanup=True, object_key=key)
+                self.delete(uid, chat_id, file_id, cleanup=True, object_key=key, preview=bool(preview))
             except Exception as cleanup_error:
                 logger.warning("agent_file_upload_cleanup_failed category=%s", safe_exception(cleanup_error))
             raise
@@ -314,6 +336,18 @@ class AgentFiles:
         self.get(uid, chat_id, file_id)  # Recheck after I/O, including concurrent deletion.
         return data, raw
 
+    def download_preview(self, uid, chat_id, file_id):
+        """``(metadata, bytes)`` of the file's preview; FileUnavailable when it has none."""
+        data = self.get(uid, chat_id, file_id)
+        preview = data.get("preview")
+        if not isinstance(preview, dict):
+            raise FileUnavailable("This file has no preview.")
+        raw = self.objects.get(preview_key(data))
+        if hashlib.sha256(raw).hexdigest() != preview.get("sha256"):
+            raise FileUnavailable("File integrity check failed.")
+        self.get(uid, chat_id, file_id)
+        return data, raw
+
     def _delete_object(self, key):
         try:
             objects = self.objects
@@ -321,7 +355,7 @@ class AgentFiles:
             return  # Nothing can have been stored without an object store.
         objects.delete(key)
 
-    def delete(self, uid, chat_id, file_id, *, cleanup=False, object_key=None):
+    def delete(self, uid, chat_id, file_id, *, cleanup=False, object_key=None, preview=False):
         ref, quota = self.ref(uid, chat_id, file_id), self.quota_ref(uid)
         def mark(tx):
             if not cleanup:
@@ -334,8 +368,12 @@ class AgentFiles:
         if not data:
             if object_key:
                 self._delete_object(object_key)
+                if preview:
+                    self._delete_object(object_key + PREVIEW_SUFFIX)
             return
         self._delete_object(data["object_key"])
+        if isinstance(data.get("preview"), dict):
+            self._delete_object(preview_key(data))
         def finish(tx):
             current = ref.get(transaction=tx).to_dict()
             usage = quota.get(transaction=tx).to_dict() or {}
@@ -343,7 +381,9 @@ class AgentFiles:
                 tx.delete(ref)
                 # During account deletion do not recreate an already removed quota.
                 if usage:
-                    tx.set(quota, {"count": max(0, usage.get("count", 0) - 1), "bytes": max(0, usage.get("bytes", 0) - current.get("size", 0))})
+                    stored = current.get("size", 0) + ((current.get("preview") or {}).get("size", 0)
+                                                       if isinstance(current.get("preview"), dict) else 0)
+                    tx.set(quota, {"count": max(0, usage.get("count", 0) - 1), "bytes": max(0, usage.get("bytes", 0) - stored)})
         self.chats._transaction(finish)
 
     def cleanup_chat(self, uid, chat_id):

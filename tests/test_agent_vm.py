@@ -998,6 +998,79 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
         "/tmp/chart.png", f"{D}/notes.txt", "/tmp/chart.png", "/tmp/fake.png"]
 
 
+def test_a_shared_office_file_brings_the_pdf_the_app_previews_it_by(store, fake_vm, tmp_path, monkeypatch):
+    """file-viewer.js (2026-11-01): a presentation, document or spreadsheet
+    the agent shares goes to the converter all accounts share
+    (agent_office.py), and its PDF is stored beside it; one the agent
+    rendered in this message is not converted again. A refusal, a failure
+    or no PDF leave the file without one, and the share goes on."""
+    from app.services import agent_office
+    from app.services.agent_files import AgentFiles, FileContext
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    converted = []
+
+    def render(data, extension, *, cancellation, backend=None):
+        converted.append((data, extension))
+        if data == b"broken":
+            raise agent_office.OfficeRefused("LibreOffice could not turn the file into a PDF.")
+        if data == b"down":
+            raise agent_office.OfficeUnavailable("busy")
+        return agent_office.Rendered(pdf=b"%PDF-1.7 " + data, overview=b"", pages=3)
+    monkeypatch.setattr(agent_office, "render", render)
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    script = Agent([[("vm_render_office", {"path": "deck.pptx"}),
+                     ("vm_share_file", {"path": "deck.pptx", "name": "Der Weg zur AGI.pptx"}),
+                     ("vm_share_file", {"path": "plan.xlsx"}), ("vm_share_file", {"path": "bad.docx"})],
+                    [("vm_share_file", {"path": "late.docx"}), ("vm_share_file", {"path": "notes.txt"})]])
+    loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    D = chat_path(chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"].update({f"{D}/deck.pptx": b"slides", f"{D}/plan.xlsx": b"sheets",
+                                       f"{D}/bad.docx": b"broken", f"{D}/late.docx": b"down",
+                                       f"{D}/notes.txt": b"mean 42\n"})
+    list(loop.run())
+    _rendered, deck, plan, bad, late, notes = results(loop)
+    assert all(result["shown_as"] == "download" for result in (deck, plan, bad, late, notes))
+    saved = {file["name"]: file for file in files.list(UID, chat_id)}
+    assert saved["Der Weg zur AGI.pptx"]["preview"] == {"mime": "application/pdf", "size": len(b"%PDF-1.7 slides")}
+    assert files.download_preview(UID, chat_id, deck["file"]["id"])[1] == b"%PDF-1.7 slides"
+    assert files.download(UID, chat_id, deck["file"]["id"])[1] == b"slides"
+    assert "preview" in saved["plan.xlsx"]
+    assert not any("preview" in saved[name] for name in ("bad.docx", "late.docx", "notes.txt"))
+    # The deck was rendered once (vm_render_office), its share took that PDF.
+    assert converted == [(b"slides", "pptx"), (b"sheets", "xlsx"), (b"broken", "docx"), (b"down", "docx")]
+    # The model hears of no preview: it is the app's.
+    assert "preview" not in deck["file"]
+
+
+def test_a_share_without_the_answers_time_or_renders_goes_on_without_a_preview(store, fake_vm, tmp_path, monkeypatch):
+    from app.core.rate_limit import api_uid_limiter
+    from app.services import agent_office
+    from app.services.agent_files import AgentFiles, FileContext
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    converted = []
+    monkeypatch.setattr(agent_office, "render", lambda data, extension, **kwargs: converted.append(data)
+                        or agent_office.Rendered(pdf=b"%PDF-1.7 x", overview=b"", pages=1))
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    loop = vm_loop(store, Agent([[]]), chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    tools = loop.vm_tools
+    monkeypatch.setattr(type(loop), "answer_time_left", lambda self: agent_vm_tools.PREVIEW_MIN_SECONDS - 1)
+    assert tools._office_preview(b"slides", "pptx", ProviderCancellation()) is None
+    monkeypatch.setattr(type(loop), "answer_time_left", lambda self: None)
+    assert tools._office_preview(b"slides", "zip", ProviderCancellation()) is None
+    # The account's renders of the hour, shared with vm_render_office.
+    api_uid_limiter.reset()
+    try:
+        for _ in range(agent_office.RENDERS_PER_HOUR):
+            api_uid_limiter.check(UID, "office:render", agent_office.RENDERS_PER_HOUR, window_seconds=3600)
+        assert tools._office_preview(b"slides", "pptx", ProviderCancellation()) is None
+        assert converted == []
+    finally:
+        api_uid_limiter.reset()
+
+
 def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(store, fake_vm, monkeypatch):
     """agent_vm_time.py (2026-10-26, with Audit for Pro): a command never runs
     past what is left today, a background process counts with its whole time

@@ -62,12 +62,16 @@ describe('private Agent workspace', () => {
     expect(card.querySelector('.agent-doc-earlier').open).toBe(false);
     const labels = [...card.querySelectorAll('.agent-doc-downloads > .agent-files-chip')].map(b => b.getAttribute('aria-label'));
     expect(labels.slice(0, 2)).toEqual(['Download Decision brief-v2.docx, version 2', 'Download Decision brief-v2.pdf, version 2']);
-    // Mark and title open the version's PDF in the file viewer; its removal
-    // stays with the version, not in the preview.
-    window.App.attachments = { openStored: vi.fn() };
-    card.querySelector('button.agent-doc-main').click();
-    expect(window.App.attachments.openStored).toHaveBeenCalledWith({ fileId: '6'.repeat(32), name: 'Decision brief-v2.pdf',
-      mime: 'application/pdf', size: 41000, removable: false });
+    // Mark and title open the version's PDF in the preview beside the chat
+    // (file-viewer.js) with both formats to download; its removal stays with
+    // the version, not in the preview.
+    window.App.fileViewer = { open: vi.fn() };
+    const main = card.querySelector('button.agent-doc-main');
+    main.click();
+    const item = window.App.fileViewer.open.mock.calls[0][0];
+    expect(item).toMatchObject({ key: '6'.repeat(32), name: 'Decision brief-v2.pdf', title: 'Decision brief',
+      family: 'document', remove: null, trigger: main });
+    expect(item.downloads.map(entry => entry.label)).toEqual(['DOCX', 'PDF']);
     // Remove never sits next to Download: it lives behind the overflow menu.
     expect([...card.querySelectorAll('button')].some(b => /^Remove/.test(b.textContent) && !b.closest('[role=menu]'))).toBe(false);
     // No chat-wide list under the answer: uploads live on their message.
@@ -83,7 +87,7 @@ describe('private Agent workspace', () => {
     const card = document.querySelector('.agent-answer-documents .agent-doc-card');
     // A first version says nothing under its title; its name says it.
     expect(card.getAttribute('aria-label')).toBe('Decision brief, version 1');
-    expect(card.querySelector('.agent-doc-meta')).toBeNull();
+    expect(card.querySelector('.agent-doc-meta:not([hidden])')).toBeNull();
     expect(card.textContent).not.toContain('Version 2');
     expect(card.querySelector('.agent-doc-earlier')).toBeNull();
     const other = boot({ files: DOCS, turn: 'f'.repeat(32) });

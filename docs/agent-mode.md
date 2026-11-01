@@ -938,7 +938,11 @@ wie jede Datei), meldet sie per `resources`, und die App zeigt sie unter der
 Antwort: PNG, JPEG, WebP und GIF als Bild im Antworttext, wo der Agent es mit
 dem `markdown` des Ergebnisses (`![name](picture:f1)`, seit 2026-10-31) setzt,
 sonst direkt unter dem Text über Notes · Watch · Share (nur nach den Bytes
-erkannt, nie nach dem Namen), alles andere als Dateizeile mit Download. Eine
+erkannt, nie nach dem Namen), alles andere als Dateizeile mit Download; eine
+Präsentation, ein Word- oder Excel-Dokument wandelt der Server seit 2026-11-01
+dabei auf dem gemeinsamen Konverter (`agent_office.py`, oder nimmt das PDF
+eines `vm_render_office` derselben Nachricht) in ein PDF, das die App als
+Vorschau zeigt (`docs/codebase-map.md` „Vorschau neben dem Chat“). Eine
 Datei verlinkt er nicht; ein Markdown-Bild mit Dateinamen oder VM-Pfad blendet
 die Antwort als nicht ladbaren Verweis aus. Ausgeliefert wird
 nur über die angemeldete Download-Route (`Content-Disposition: attachment`,

@@ -43,7 +43,7 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
                 _json(route, {'file':files[0]})
             else: _json(route, {'files':files})
         page.route(f'**/agent/chats/{CHAT}/files', resource)
-        page.route(f'**/agent/chats/{CHAT}/files/{file_id}', lambda r: r.fulfill(body='Price 42 EUR',headers={'Content-Disposition':'attachment; filename="offer.txt"'},content_type='text/plain'))
+        page.route(f'**/agent/chats/{CHAT}/files/{file_id}*', lambda r: r.fulfill(body='Price 42 EUR',headers={'Content-Disposition':'attachment; filename="offer.txt"'},content_type='text/plain'))
         def answer(route):
             payload=route.request.post_data_json; calls.append(payload)
             turn={'id':'b'*32,'question':payload['question'],'consensus':'Offer costs 42 EUR (offer.txt, lines 1-1).','execution_mode':'agent','status':'completed','attachments':files,'agent_settings':{'file_ids':[file_id]}}
@@ -63,15 +63,11 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
         chip = page.locator('#threadAskAttachments .attachment-chip-preview')
         expect(chip).to_contain_text('offer.txt')
         chip.click()
-        viewer = page.locator('#attachmentViewerModal')
-        # A text file reads in the app's colours, not in a frame (2026-10-27).
-        expect(viewer.locator('.attachment-viewer-text')).to_have_text('Price 42 EUR')
+        # A text file reads in the preview beside the chat, in the app's
+        # colours (file-viewer.js, 2026-11-01; before, the picture dialog).
+        viewer = page.locator('#fileViewer')
+        expect(viewer.locator('.file-viewer-plain')).to_have_text('Price 42 EUR')
         expect(viewer.locator('iframe')).to_have_count(0)
-        # In the middle of the window, not in its top left corner (2026-10-22).
-        # Measured against the dialog: the scroll lock keeps the page's
-        # scrollbar gutter, so the dialog is that much narrower than the page.
-        box, layer = viewer.locator('.modal-content').bounding_box(), viewer.bounding_box()
-        assert abs((box['x'] + box['width'] / 2) - (layer['x'] + layer['width'] / 2)) <= 2
         with page.expect_download() as pending:
             viewer.get_by_role('button',name='Download',exact=True).click()
         assert pending.value.suggested_filename == 'offer.txt'
@@ -171,7 +167,8 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         expect(card).to_have_count(1)
         expect(card).to_contain_text('Decision brief')
         # One quiet row in the answer (Max, 2026-10-31): no badge, no hint.
-        expect(card.locator('.agent-doc-meta')).to_have_text('Version 2')
+        # Its kind and version under the title; the pages follow once its PDF is read.
+        expect(card.locator('.agent-doc-meta')).to_have_text('Document · Version 2')
         expect(card.locator('.agent-files-badge')).to_have_count(0)
         assert card.evaluate("el => getComputedStyle(el).borderTopWidth === '0px' && getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)'")
         expect(card).not_to_contain_text(DOC)

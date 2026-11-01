@@ -11,7 +11,10 @@
 //   it fetched belong to its answer: right under its text and pictures,
 //   above the evidence row (.agent-answer-documents, documentsSlot; Max
 //   2026-10-31: "die Antwort endet mit diesen Punkten", 2026-11-01 also the
-//   files). A document's click opens its PDF in the file viewer.
+//   files). A document's click opens its PDF in the preview beside the chat
+//   (file-viewer.js), as a shared presentation, PDF, code or text file does
+//   (2026-11-01): each shows its first page as a thumbnail, its type and its
+//   number of pages, and the word Preview, so it is plain that it opens.
 // - #agentAnswerResources (after the live answer) and one resources row per
 //   archived Agent turn (renderTurnResources) show a note when a file of the
 //   turn was only partly readable or could not load (and the files of a turn
@@ -162,6 +165,51 @@
     return file.title || String(file.name || 'Document').replace(/-v\d+\.[a-z0-9]+$/i, '').replace(/\.[a-z0-9]+$/i, '');
   }
   function partial(file) { return Array.isArray(file.warnings) && file.warnings.length > 0; }
+  function available(file) { return ['ready', 'partial'].includes(file.status) && expiry(file) !== 'Expired'; }
+
+  // ---- previews (file-viewer.js) ----------------------------------------------
+  // The number of pages a card learned from its thumbnail, so a card drawn
+  // again says it at once.
+  const pageCounts = new Map();
+  function previewItem(chatId, file, extra = {}) {
+    return { key: file.id, name: file.name, title: extra.title, mime: file.mime, preview: file.preview, kind: file.kind,
+      family: extra.family, load: () => openPreview(file.id),
+      downloads: extra.downloads || [{ label: extension(file), run: () => download(chatId, file) }],
+      remove: extra.remove === false ? null : () => removeFile(file.id) };
+  }
+  // A card's mark becomes its first page; under its name its type and pages.
+  function previewMark(mark, meta, item, extra = []) {
+    const viewer = App.fileViewer;
+    if (!viewer) return;
+    const type = viewer.describe(item);
+    const say = () => {
+      const pages = pageCounts.get(item.key);
+      const unit = type.family === 'presentation' || type.family === 'spreadsheet' ? type.family : 'page';
+      meta.textContent = [type.label, pages ? viewer.countText(unit, pages) : '', ...extra]
+        .filter(Boolean).map(part => App.t(part)).join(' · ');
+      meta.hidden = false;
+    };
+    say();
+    viewer.thumbnail(mark, item, info => {
+      // A landscape PDF is a deck: its pages are slides.
+      if (type.family === 'pdf' && info.landscape) type.family = 'presentation';
+      pageCounts.set(item.key, info.pages);
+      say();
+    });
+  }
+  function previewHint() {
+    const hint = node('span', 'agent-file-preview-hint', 'Preview');
+    hint.setAttribute('aria-hidden', 'true');
+    return hint;
+  }
+  async function openPreview(fileId) {
+    const chatId = chatOnScreen();
+    if (!chatId) throw new Error('Open this chat to preview the file.');
+    const response = await request(`/agent/chats/${chatId}/files/${fileId}?preview=1`);
+    const blob = await response.blob();
+    if (chatOnScreen() !== chatId) throw new Error('The chat changed. Open the file again.');
+    return { blob, mime: response.headers.get('Content-Type') || blob.type || '' };
+  }
 
   // ---- data shaping -----------------------------------------------------------
   function groupDocuments(files) {
@@ -327,9 +375,9 @@
     // (Max, 2026-10-31: "warum kann ich erzeugte Dokumente nicht in der
     // Vorschau angucken?"); without one ready, the row only downloads.
     const pdf = current.files.find(file => (file.mime === 'application/pdf' || /\.pdf$/i.test(file.name || ''))
-      && ['ready', 'partial'].includes(file.status) && expiry(file) !== 'Expired');
+      && available(file));
     const main = node(pdf ? 'button' : 'div', 'agent-doc-main');
-    const mark = node('span', 'agent-doc-mark'); mark.append(icon('document'));
+    const mark = node('span', 'agent-doc-mark agent-file-thumb'); mark.append(icon('document'));
     const titles = node('span', 'agent-doc-titles');
     const title = node('span', 'agent-doc-title');
     title.append(node('span', '', group.title));
@@ -337,13 +385,20 @@
     titles.append(title);
     const expired = expiry(current.files[0] || {}) === 'Expired';
     const note = [current.number > 1 ? `Version ${current.number}` : '', expired ? 'Expired' : ''].filter(Boolean);
-    if (note.length) titles.append(node('span', 'agent-doc-meta', note.map(part => App.t(part)).join(' · ')));
+    const meta = node('span', 'agent-doc-meta', note.map(part => App.t(part)).join(' · '));
+    meta.hidden = !note.length;
+    titles.append(meta);
     main.append(mark, titles);
     if (pdf) {
       main.type = 'button';
-      main.title = App.t(`Open ${group.title}`);
-      main.addEventListener('click', () => App.attachments?.openStored?.({ fileId: pdf.id, name: pdf.name, mime: 'application/pdf',
-        size: pdf.size, removable: false }));
+      main.title = App.t(`Preview ${group.title}`);
+      // In the preview: the title, every format to download, no removal (a
+      // version goes from this row's ⋯).
+      const downloads = current.files.filter(available).map(file => ({ label: extension(file), run: () => download(chatId, file) }));
+      const item = previewItem(chatId, pdf, { title: group.title, family: 'document', downloads, remove: false });
+      previewMark(mark, meta, item, note);
+      main.append(previewHint());
+      main.addEventListener('click', () => App.fileViewer?.open({ ...item, trigger: main }));
     }
     const chips = node('div', 'agent-doc-downloads');
     for (const file of current.files) chips.append(downloadChip(chatId, file, `, version ${current.number}`, true));
@@ -392,6 +447,11 @@
     const main = node('div', 'agent-file-main');
     const name = node('span', 'agent-file-name', file.name);
     main.append(name);
+    // A file the preview can show (file-viewer.js): mark, name and the
+    // word Preview are one button, as a document's row.
+    const item = available(file) && App.fileViewer?.previews(file) ? previewItem(chatId, file) : null;
+    const typeMeta = item ? node('span', 'agent-file-kind') : null;
+    if (typeMeta) { main.append(typeMeta); type.classList.add('agent-file-thumb'); previewMark(type, typeMeta, item); }
     const origin = mailOrigin(file);
     // As the document row: the name says the type; size and expiry are the
     // download's tooltip. Under the name only a state worth reading.
@@ -410,7 +470,15 @@
     actions.append(downloadChip(chatId, file, '', false));
     actions.append(overflow(key, `More actions for ${file.name}`, [{ label: 'Remove…', danger: true,
       run: () => askToRemove(key) }]));
-    row.append(type, main, actions);
+    if (item) {
+      const open = node('button', 'agent-file-open');
+      open.type = 'button';
+      open.title = App.t(`Preview ${file.name}`);
+      open.append(type, main, previewHint());
+      open.addEventListener('click', () => App.fileViewer?.open({ ...item, trigger: open }));
+      row.classList.add('can-preview');
+      row.append(open, actions);
+    } else row.append(type, main, actions);
     const wrap = node('div', 'agent-file-item'); wrap.append(row);
     if (confirmKey === key) {
       wrap.append(confirmation(key, `Remove ${file.name}? The agent can no longer use it in this chat.`, 'Remove file', [file]));
@@ -800,6 +868,8 @@
     waiting?.resolve(); waiting = null;
     lastStart = -Infinity; data = null; error = ''; revision++; confirmKey = ''; retried = false;
     pictures.clear();
+    // A file of the chat left behind stays in it.
+    if (App.fileViewer?.isOpen?.()) App.fileViewer.close({ focus: false });
     watcher?.disconnect(); watcher = null;
   }
   function knownEmpty(chatId) {
@@ -921,6 +991,6 @@
   window.addEventListener('consensio:auth-state', () => {
     reset(); chat = ''; owner = ''; openState.versions.clear(); hideAll();
   });
-  App.agentWorkspace = { refresh, upload, request, button, download, openFile, removeFile, renderTurnResources };
+  App.agentWorkspace = { refresh, upload, request, button, download, openFile, openPreview, removeFile, renderTurnResources };
   App.answerTail = answerTail;
 })();
