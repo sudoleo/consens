@@ -102,13 +102,16 @@ class Journey:
         return self.api.fetch(self.base + path, method=method,
             headers={'Authorization': 'Bearer token-' + (uid or self.uid), 'Connection': 'close'}, data=data)
 
-    def settled(self):
+    def settled(self, bookmark=False):
+        # bookmark: also wait for the sidebar entry, which an interrupted turn
+        # gets only after it is marked failed (agent.py _save_interrupted).
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             state = self.control('state')
             turns = [turn['data'] for chat in state['collections'].get('chats', {}).values()
                      for turn in chat['children'].get('turns', {}).values()]
-            if turns and all(turn['status'] != 'pending' for turn in turns):
+            if (turns and all(turn['status'] != 'pending' for turn in turns)
+                    and (not bookmark or state['collections'].get('bookmarks'))):
                 return state
             time.sleep(.05)
         pytest.fail('Native turn did not reach terminal state: ' + json.dumps(state))
@@ -199,17 +202,17 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     j.page.locator('#sendButton').click()
     j.page.wait_for_function('() => App.runRegistry.visible()?.status === "canceled"')
     j.control('release', {})
-    state = j.settled()
+    state = j.settled(bookmark=True)
     Path(f'test-results/{j.uid}-state.json').write_text(json.dumps(state, indent=2), encoding='utf-8')
-    # Comparison call + the three providers of Daily (since 2026-10-28) +
+    # Comparison call + the two providers of Daily (since 2026-11-01) +
     # the agent's partial answer.
-    assert len(state['calls']) == 5
+    assert len(state['calls']) == 4
     chat_id, chat = next(iter(state['collections']['chats'].items()))
     turn_id, turn = next(iter(chat['children']['turns'].items()))
     assert turn['data']['status'] == 'failed'
     assert turn['data']['agent_failure']['code'] == 'cancelled'
     budget = j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']
-    assert budget['used'] == 5 * 150 and budget['reserved'] == 0
+    assert budget['used'] == 4 * 150 and budget['reserved'] == 0
     j.page.reload()
     j.page.wait_for_function('() => window.__consensioAuthState?.known && window.openBookmark')
     bookmark_id = next(iter(state['collections']['bookmarks']))
@@ -222,7 +225,7 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
     assert 'Saved partial answer' in recover.text()
     after = j.control('state')
     assert after['calls'] == state['calls']
-    assert j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']['used'] == 5 * 150
+    assert j.request('POST', '/usage', {'id_token': 'token-' + j.uid}).json()['token_budget']['used'] == 4 * 150
 
 
 def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey):

@@ -61,7 +61,12 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         page.locator('#questionInput').fill('Revise the plan for Monday and update the email attachment.')
         # The chat holds the consent now: no second checkbox.
         expect(consent).to_be_hidden()
-        page.locator('#sendButton').click()
+        # Send once the first run has ended and nothing holds the message back:
+        # the revision is a new message, never steering or a refusal. Nightly
+        # runs kept showing only v1 here (2026-10-30, 2026-11-01).
+        page.wait_for_function('() => !window.isRunActive() && !App.agentChat.sendBlocker()')
+        with page.expect_request(lambda r: r.url.endswith('/agent') and r.method == 'POST'):
+            page.locator('#sendButton').click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Decision-v2.pdf')
         expect(page.locator('#agentAnswerBody ~ .agent-answer-documents')).to_contain_text('Version 2')
         expect(page.locator('#agentGoogleActions .agent-action-history > summary')).to_have_text('Earlier versions (1)')
@@ -85,8 +90,11 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         send.click()
         expect(page.locator('.agent-action-card[data-status="succeeded"]')).to_contain_text('Google confirmed this action.')
         assert confirmed==[{'expected_hash':'5'*64}]
-    except Exception:
+    except Exception as error:
         _snapshot(page,f'gmail-failure-{width}')
-        print(page.evaluate("() => ({classes:document.body.className,question:document.getElementById('questionInput').value,chips:document.getElementById('agentGoogleChips')?.textContent})"),flush=True)
+        state=page.evaluate("() => ({classes:document.body.className,question:document.getElementById('questionInput').value,chips:document.getElementById('agentGoogleChips')?.textContent,runs:App.runRegistry.list().map(r => r.status),blocker:App.agentChat.sendBlocker()?.message || '',queue:document.getElementById('agentQueue')?.textContent || ''})")
+        print(state,flush=True)
+        # The annotation carries the message, not the log (ci_annotate_failures.py).
+        error.add_note(f'agent requests: {len(requests)}, actions: {[a["status"] for a in actions]}, page: {state}')
         raise
     finally:context.close()

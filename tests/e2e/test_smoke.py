@@ -183,11 +183,12 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     picker = app_page.locator("#consensusModelDropdown").locator("xpath=..")
     expect(picker.locator(".model-picker-menu")).to_have_class(re.compile(r"\bis-open\b"))
     assert sidebar.evaluate("element => element.scrollTop") == 0
-    # Daily compares three models since 2026-10-28.
-    expect(app_page.locator("#sidebarModelCount")).to_have_text("3 providers selected")
+    # Daily compares two models since 2026-11-01; Compare needs two, so one
+    # left out asks for another.
+    expect(app_page.locator("#sidebarModelCount")).to_have_text("2 providers selected")
     picker.locator(".model-picker-custom-option").click()
     picker.locator('.model-picker-row-toggle[aria-checked="true"]').last.click()
-    expect(app_page.locator("#sidebarModelCount")).to_have_text("2 providers selected")
+    expect(app_page.locator("#sidebarModelCount")).to_have_text("1 provider · choose at least 2")
 
 
 def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
@@ -1696,13 +1697,13 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
     assert result["whileAttached"]["disabled"] is True
     assert result["whileAttached"]["notice"] == "DeepSeek paused · No attachment support"
     assert result["whileAttached"]["responseExcluded"] is True
-    # Daily's three models (since 2026-10-28) without DeepSeek.
-    assert result["whileAttached"]["pickerText"].startswith("2 models")
+    # Daily's two models (since 2026-11-01) without DeepSeek.
+    assert result["whileAttached"]["pickerText"].startswith("1 model")
     assert result["afterTierRefresh"] == {
         "checked": False,
         "disabled": True,
         "responseExcluded": True,
-        "includedProgressModels": 2,
+        "includedProgressModels": 1,
     }
     assert result["withBookmarkPreview"] == {
         "checked": True,

@@ -40,8 +40,9 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')
         expect(intro).to_be_visible()
-        # Daily, the default preset, compares three models since 2026-10-28.
-        expect(cards).to_have_count(3)
+        # Daily, the default preset, compares two models since 2026-11-01
+        # (Claude Haiku and DeepSeek).
+        expect(cards).to_have_count(2)
         expect(page.locator('#composerComparisonStatus')).to_be_hidden()
         expect(page.locator('.is-preview [aria-busy="true"], .is-preview .skeleton')).to_have_count(0)
         assert page.evaluate('App.runRegistry.visible()') is None
@@ -106,15 +107,16 @@ def test_persisted_off_new_comparison_and_model_selection(browser, phase4_server
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')
         expect(intro).to_be_visible()
-        expect(cards).to_have_count(3)
+        # Daily's two models (since 2026-11-01); one left out shows one card.
+        expect(cards).to_have_count(2)
         page.evaluate("""() => {
           const pref = App.modelPrefs.find(p => document.getElementById(p.checkId).checked);
           document.getElementById(pref.checkId).click();
         }""")
-        expect(cards).to_have_count(2)
+        expect(cards).to_have_count(1)
         page.evaluate("document.getElementById('newRunButton').click()")
         expect(intro).to_be_visible()
-        expect(cards).to_have_count(2)
+        expect(cards).to_have_count(1)
         page.evaluate("""() => {
           for (let i = 0; i < 8; i++) App.runMode.set(i % 2 === 0 ? 'agent' : 'compare');
         }""")

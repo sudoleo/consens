@@ -28,14 +28,14 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         # hangs under the field on the start screen.
         expect(bar).to_be_hidden()
         expect(mode).to_have_value('compare')
-        # Daily compares three since 2026-10-28. A phone leaves the count to
+        # Daily compares two since 2026-11-01. A phone leaves the count to
         # the chip's words; the marks are drawn all the same.
         picker = page.locator('.composer-models #composerModelPicker')
         if width > 700:
             expect(picker).to_be_visible()
         else:
             expect(picker).to_be_hidden()
-        expect(page.locator('#composerModelIcons img')).to_have_count(3)
+        expect(page.locator('#composerModelIcons img')).to_have_count(2)
         expect(page.locator('#composerModelCount')).to_have_count(0)
         expect(page.locator('#composerAttachButton')).to_have_count(0)
         # Reasoning has no button in the row (since 2026-10-31): Compare's
