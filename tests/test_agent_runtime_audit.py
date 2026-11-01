@@ -430,18 +430,31 @@ def test_a_refused_domain_ends_the_steps_later_calls(store, fake_vm):
 
 # --- L3: a line of facts after each batch ---------------------------------------------
 
-def test_each_batch_ends_with_the_steps_and_minutes_of_the_message(store, fake_vm):
+def test_each_batch_ends_with_the_step_and_how_long_the_user_has_waited(store, fake_vm):
     script = Steps([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
     loop = vm_loop(store, script)
     list(loop.run())
     first, second, third = script.requests
-    line = re.compile(r"\[consens\.io, written by the app: step (\d) of at most (\d+), \d+\.\d of (\d+) minutes "
-                      r"in this message\.\]")
+    line = re.compile(r"\[consens\.io, written by the app: step (\d); the user has been waiting \d+ seconds? for "
+                      r"your answer\.\]")
     assert [line.fullmatch(request[-1]["content"]).group(1) for request in (second, third)] == ["1", "2"]
-    steps, minutes = line.fullmatch(third[-1]["content"]).group(2, 3)
-    assert (int(steps), int(minutes)) == (loop._turn_steps(), loop._turn_seconds() // 60)
     # New content at the end only: each request continues the one before.
     assert second[:len(first)] == first and third[:len(second)] == second
+    # The limits only once they come near (2026-11-01, Max: "2.2 of 120
+    # minutes" read as time to spare, and the run went on for thirteen).
+    loop.workspace_opened = True
+    assert (loop._turn_steps(), loop._turn_seconds()) == (200, 7200)
+    loop._turn_elapsed, loop.routing_steps = (lambda: 95 * 60), 159
+    loop._note_progress()
+    assert loop.messages[-1]["content"] == ("[consens.io, written by the app: step 159; the user has been waiting "
+                                            "95 minutes for your answer.]")
+    loop._turn_elapsed, loop.routing_steps = (lambda: 97 * 60), 160
+    loop._note_progress()
+    assert loop.messages[-1]["content"] == ("[consens.io, written by the app: step 160 of at most 200; the user has "
+                                            "been waiting 97 minutes for your answer, of at most 120 minutes for "
+                                            "this message.]")
+    assert [agent_delegation._waited(s) for s in (0.2, 45, 61, 150)] == [
+        "1 second", "45 seconds", "1 minute", "2 minutes"]
     # A message without the workspace has no such line.
     script = Steps([[("no_such_tool", {})]])
     list(vm_loop(store, script, request_id="two", vm="off").run())

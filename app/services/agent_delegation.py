@@ -159,6 +159,12 @@ CALL_AFTER_DENIAL = "Not run: the user did not allow {domain} earlier in this st
 CALL_AT_LIMIT = "Not run: this message reached its limit."
 # The line of facts after each batch of a message with the workspace (_note_progress).
 PROGRESS_OPEN = "[consens.io, written by the app:"
+# The message's limits stand in that line only from this share of them on
+# (2026-11-01, Max: the 120 minutes mislead). Until then it named them in
+# every batch, "step 9 of at most 200, 2.2 of 120 minutes": a ceiling that
+# read as time to spare, and a run that had its pictures after two minutes
+# went on for thirteen ("füg mal mehr bilder ein").
+LIMITS_SHOWN_FROM = 0.8
 NOTES_UNREAD = ("Your message arrived after the answer was written. Send it again as a new message.")
 # The run's end waits this long in all for its journal and its work log to
 # save what they hold (A-R3, since 2026-10-29); what they have not saved by
@@ -241,6 +247,16 @@ def _passing_failure(error):
     if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
         return False
     return agent_failure(error).get("code") in PASSING_FAILURE_CODES
+
+
+def _waited(seconds):
+    """How long the user has waited, as the line of facts says it
+    (_note_progress): seconds under a minute, else whole minutes."""
+    if seconds < 60:
+        count = max(1, int(seconds))
+        return "1 second" if count == 1 else f"{count} seconds"
+    minutes = int(seconds // 60)
+    return "1 minute" if minutes == 1 else f"{minutes} minutes"
 
 
 def joined_halt(hold, details):
@@ -776,8 +792,10 @@ class DelegationLoop(AgentLoop):
     def _request_workspace(self, args, *, cancellation):
         """open_workspace: the workspace opens once this step's calls are done
         (_open_workspace, on the run's own thread). Its result says what the
-        message may take from then on. Its start begins now, beside the
-        model's next step (VMTools.prewarm, runtime audit 2026-10-30 T1):
+        message took so far; its limits stand in the line of facts once
+        they come near (_note_progress, since 2026-11-01). Its start begins
+        now, beside the model's next step (VMTools.prewarm, runtime audit
+        2026-10-30 T1):
         the first call waits only for what is left of it. Not while the
         server's safety rules have closed the workspace (workspace_guard.py):
         the agent learns that it is closed, and answers without it."""
@@ -792,13 +810,8 @@ class DelegationLoop(AgentLoop):
             steps = self.routing_steps
         if first:
             self.vm_tools.prewarm(bench=True)
-        result = {"workspace": "open", "note": WORKSPACE_OPENED, "steps_so_far": steps,
-                  "minutes_so_far": round(self._turn_elapsed() / 60, 1)}
-        if self.policy.vm_turn_steps:
-            result["step_limit"] = self.policy.vm_turn_steps
-        if self.policy.vm_turn_seconds:
-            result["time_limit_minutes"] = self.policy.vm_turn_seconds // 60
-        return result
+        return {"workspace": "open", "note": WORKSPACE_OPENED, "steps_so_far": steps,
+                "minutes_so_far": round(self._turn_elapsed() / 60, 1)}
 
     def _open_workspace(self):
         """The workspace's prompt takes the place of AGENT_WORKSPACE_CLOSED_PROMPT
@@ -947,19 +960,23 @@ class DelegationLoop(AgentLoop):
 
     def _note_progress(self):
         """In a message with the workspace, a line of facts at the end of
-        each batch of results: the step and the minutes of this message, with
-        their limits (audit L3). The limits stood only in open_workspace's
-        result; a message that began with the workspace open never learned
-        them, and a run whose answer stood after 30 s went on looking for
-        pictures for five minutes. New content at the end only: the cached
-        prefix stays. A fact, never a rule (docs/agent-mode.md)."""
+        each batch of results: the step and how long the user has been
+        waiting for the answer (audit L3: a run whose answer stood after
+        30 s went on looking for pictures for five minutes). The message's
+        limits only once LIMITS_SHOWN_FROM of one is used. New content at
+        the end only: the cached prefix stays. A fact, never a rule
+        (docs/agent-mode.md)."""
         if self.vm_tools is None or not self.policy.account_budget_only:
             return
         steps, seconds = self._turn_steps(), self._turn_seconds()
-        minutes = max(0.0, self._turn_elapsed()) / 60
-        step = f"step {self.routing_steps}" + (f" of at most {steps}" if steps else "")
-        time_used = f"{minutes:.1f}" + (f" of {seconds // 60}" if seconds else "") + " minutes"
-        self.messages.append({"role": "user", "content": f"{PROGRESS_OPEN} {step}, {time_used} in this message.]"})
+        elapsed = max(0.0, self._turn_elapsed())
+        step = f"step {self.routing_steps}"
+        if steps and self.routing_steps >= steps * LIMITS_SHOWN_FROM:
+            step += f" of at most {steps}"
+        line = f"{PROGRESS_OPEN} {step}; the user has been waiting {_waited(elapsed)} for your answer"
+        if seconds and elapsed >= seconds * LIMITS_SHOWN_FROM:
+            line += f", of at most {seconds // 60} minutes for this message"
+        self.messages.append({"role": "user", "content": line + ".]"})
 
     def _compact(self):
         """Older VM output of a long run leaves the conversation once it is

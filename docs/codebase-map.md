@@ -4579,7 +4579,9 @@ offenem Arbeitsplatz fragt jeder Schritt des Agenten mit `parallel_tool_calls`
 (`_parallel_calls`, schaltet nur mit `open_workspace` um); die Aufrufe laufen
 nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit genau einem
 Ergebnis (`CALL_OVER_LIMIT`, `CALL_AFTER_*`), und nach jedem Batch einer
-Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`). Details und
+Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`: Schritt und
+wie lange der Nutzer wartet, die Grenzen erst ab `LIMITS_SHOWN_FROM` = 80 %,
+seit 2026-11-01; `open_workspace` nennt keine Grenzen mehr). Details und
 Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt,
 „Arbeitsplatz: Schritte, Zeit und Bilder“).
 Worker-Delegation bleibt separat durch delegation_config.enabled und die

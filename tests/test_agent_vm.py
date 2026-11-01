@@ -1249,10 +1249,11 @@ def test_a_message_opens_its_workspace_on_demand_and_goes_on_as_if_it_had_it_fro
     from_start = vm_loop(store, Agent(), request_id="from-start")
     assert script.systems[1] == from_start.messages[0]["content"]
     assert list(loop.registry.tools) == list(from_start.registry.tools)
-    # What the agent reads: open, with the long run's limits and what it took so far.
+    # What the agent reads: open, and what it took so far. The long run's
+    # limits come only once they are near (since 2026-11-01, _note_progress).
     opened, ran = results(loop)
     assert opened["workspace"] == "open" and opened["note"] == agent_vm_tools.WORKSPACE_OPENED
-    assert (opened["step_limit"], opened["time_limit_minutes"], opened["steps_so_far"]) == (200, 120, 1)
+    assert opened["steps_so_far"] == 1 and not {"step_limit", "time_limit_minutes"} & set(opened)
     assert ran["exit_code"] == 0
     # The long run's limits hold from the opening on, not from the VM's start.
     assert loop._long_run() and loop._turn_steps() == 200
