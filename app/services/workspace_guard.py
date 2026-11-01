@@ -734,8 +734,9 @@ def _count(uid, pending):
     def operation(tx):
         persistence_guard.ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         guard_doc, trail_doc = guard_ref(db, uid), trail_ref(db, uid, day)
-        guard = (tx.get(guard_doc) if tx is not None else guard_doc.get()).to_dict() or {}
-        trail = (tx.get(trail_doc) if tx is not None else trail_doc.get()).to_dict() or {}
+        # ref.get(transaction=): Transaction.get(ref) yields snapshots (persistence_guard._get).
+        guard = guard_doc.get(transaction=tx).to_dict() or {}
+        trail = trail_doc.get(transaction=tx).to_dict() or {}
         trail = merge_visits({**trail, "uid": uid, "day": day}, pending.visits, categories)
         last, rx, sent = merge_net(guard.get("net"), pending.net)
         counts = trail["counts"]
@@ -901,8 +902,8 @@ def unlock(uid, *, db=None, now=None):
 
     def operation(tx):
         guard_doc, trail_doc = guard_ref(db, uid), trail_ref(db, uid, day)
-        guard = (tx.get(guard_doc) if tx is not None else guard_doc.get()).to_dict() or {}
-        trail = (tx.get(trail_doc) if tx is not None else trail_doc.get()).to_dict() or {}
+        guard = guard_doc.get(transaction=tx).to_dict() or {}
+        trail = trail_doc.get(transaction=tx).to_dict() or {}
         seen["before"] = current(guard, now)
         fields = {"uid": uid, "state": "open", "until": None, "rule": "", "closed_days": [], "updated_at": now,
                   "expires_at": now + timedelta(days=GUARD_RETENTION_DAYS),

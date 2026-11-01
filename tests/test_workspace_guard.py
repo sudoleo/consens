@@ -18,6 +18,7 @@ from app.services.workspace_guard import GIB, Rule
 from test_agent_runs import AUTH, UID, pending, store  # noqa: F401  (fixtures)
 from test_agent_vm import ANSWER, Agent, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401
 from test_agent_workspace_view import open_view, terminal_api, view_api  # noqa: F401
+from test_chat_history import FakeDocumentRef, FakeTransaction
 
 DAY = datetime(2026, 10, 30, 14, 0, tzinfo=timezone.utc)
 AT = DAY.timestamp()
@@ -328,6 +329,41 @@ def test_a_second_close_in_the_week_locks_until_an_admin_unlocks(guard):
     record = guard_doc(store)
     assert record["closed_days"] == [] and record["history"][-1]["rule"] == "unlocked"
     assert record["expires_at"] > clock["now"]
+
+
+class SdkTransaction(FakeTransaction):
+    """Reads as google-cloud-firestore's Transaction does: get() of a
+    document yields its snapshot (a generator, no to_dict); only
+    ref.get(transaction=tx) answers with the snapshot itself."""
+
+    def get(self, ref):
+        yield FakeTransaction.get(self, ref)
+
+
+def test_counts_and_unlocks_read_documents_as_firestores_transactions_answer(guard, monkeypatch):
+    """Render log 2026-11-01: every count failed with an AttributeError
+    (tx.get(document) is a generator in Firestore), so nothing was counted
+    and no rule could close the workspace; the admin's unlock failed alike."""
+    store, alerts, _, _ = guard
+
+    def run_transaction(operation):
+        transaction = SdkTransaction(store.db)
+        result = operation(transaction)
+        transaction.commit()
+        return result
+
+    read = FakeDocumentRef.get
+    monkeypatch.setattr(store.db, "run_transaction", run_transaction)
+    monkeypatch.setattr(FakeDocumentRef, "get", lambda ref, transaction=None, **options: (
+        FakeTransaction.get(transaction, ref) if transaction is not None else read(ref, **options)))
+    for n in range(1, 5):
+        visit(f"adult-{n}.example", by="user")
+    visit("bad.example", by="user")
+    workspace_guard.flush(UID)
+    assert trail(store)["counts"]["flagged_user"] == 5
+    assert workspace_guard.status(UID).state == "closed" and "closed for today" in alerts[-1]
+    assert workspace_guard.unlock(UID, db=store.db).state == "closed"
+    assert guard_doc(store)["history"][-1]["rule"] == "unlocked"
 
 
 def test_a_page_that_talks_the_agent_into_flagged_sites_closes_a_day_never_locks(guard):
