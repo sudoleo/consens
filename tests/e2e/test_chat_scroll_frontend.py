@@ -286,6 +286,91 @@ def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, pha
         context.close()
 
 
+# A long run has taller moments that pass: a command's output open while it
+# runs, the activity opened once to look back. Each held its height to the
+# end of the run, and under the turn lay a screen of white to scroll into
+# (Max, 2026-11-01: a run with a plan and 39 steps; measured 36px after a
+# command's output, 778px after the activity was opened and closed again).
+def test_a_taller_moment_of_a_working_run_leaves_no_white_to_scroll_into(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True, "limit": 500}))
+        page.route("**/usage", lambda r: _json(r, {"tier": "pro", "is_pro": True, "remaining": 500, "total_limit": 500}))
+        page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.evaluate("""() => {
+          const original = window.fetch;
+          let calls = 0;
+          window.fetch = async (url, options) => {
+            if (url !== '/agent') return original(url, options);
+            const body = JSON.parse(options.body || '{}');
+            if (!calls++) {
+              const text = Array.from({length:30}, (_, i) => `Paragraph ${i}. An earlier answer with enough material to read.`).join('\\n\\n');
+              const final = {response:text, chat_id:'a'.repeat(32), turn_id:'b'.repeat(32),
+                turn:{id:'b'.repeat(32), question:body.question, consensus:text, status:'completed', execution_mode:'agent',
+                  sources:[], model_answers:{}, agent_settings:{model_id:body.model_id, label:'DeepSeek V4.1 Flash'}}};
+              return new Response('event: final\\ndata: ' + JSON.stringify(final) + '\\n\\n', {headers:{'Content-Type':'text/event-stream'}});
+            }
+            const encoder = new TextEncoder();
+            return new Response(new ReadableStream({ start(controller) {
+              window.__emitAgent = event => controller.enqueue(encoder.encode('event: activity\\ndata: ' + JSON.stringify(event) + '\\n\\n'));
+              options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
+            }}), {headers:{'Content-Type':'text/event-stream'}});
+          };
+        }""")
+        page.locator("#questionInput").fill("First message")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_timeout(500)
+        page.locator("#questionInput").fill("Good so far, can you add pictures?")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => !!window.__emitAgent")
+        page.wait_for_function("() => !document.body.classList.contains('chat-scroll-following')")
+        page.wait_for_timeout(400)
+        top = page.evaluate("scrollY")
+        # What lies below the window: the turn fits it, so nothing.
+        below = "() => document.documentElement.scrollHeight - innerHeight - scrollY"
+        assert page.evaluate(below) < 2
+        output = "\n".join(f"saved slide {n}" for n in range(14))
+        note = "I render the charts, check each slide in the PDF and compare the layout with the plan. " * 3
+        for i in range(1, 13):
+            # The agent's words before each command: whole in the history.
+            page.evaluate("event => window.__emitAgent(event)", {
+                "version": 1, "step_id": f"completion:{i}", "id": f"completion:{i}/note", "kind": "progress", "text": note})
+            command = f"cd /home/agent/chats/slides && python3 make_charts.py # {i}"
+            for status in ["running", "succeeded"]:
+                page.evaluate("event => window.__emitAgent(event)", {
+                    "version": 1, "step_id": f"tool:{i}", "id": f"tool:{i}/tool", "kind": "tool", "name": "vm_exec",
+                    "status": status, "command": command, "output": output,
+                    **({"exit_code": 0, "duration_ms": 6000} if status == "succeeded" else {})})
+                page.wait_for_timeout(450)
+            expect(page.locator("#agentAnswerActivity .agent-vm[data-tool='vm_exec']").last).not_to_have_attribute("open", "")
+            assert page.evaluate(below) < 2, i
+        summary = page.locator("#agentAnswerActivity summary").first
+        summary.click()
+        page.wait_for_timeout(500)
+        # The whole history is taller than the window.
+        assert page.evaluate(below) > 100
+        summary.click()
+        page.wait_for_timeout(500)
+        # The reader never moved, and the page ends with the window again.
+        assert page.evaluate("scrollY") == top
+        assert page.evaluate(below) < 2
+        page.evaluate("""() => window.__emitAgent({version:1, step_id:'completion:5', id:'completion:5/r', kind:'reasoning',
+          format:'summary', text:'Checking the slides.', append:true})""")
+        page.wait_for_timeout(450)
+        assert page.evaluate(below) < 2
+        assert not errors
+    finally:
+        context.close()
+
+
 # Full-HD windows with a bookmarks bar: the question lands at a fractional
 # position (292.625px), where the reserve and the page height used to swap
 # 1px every frame and the scrollbar flickered for the whole run.

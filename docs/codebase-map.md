@@ -2895,9 +2895,21 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   laufenden Runs = Spalte ohne Reserve, sonst hielte die Untergrenze sich
   selbst fest; zurückgesetzt bei neuem Run/Chat und neuer Fensterbreite):
   die Prüfer werden fertig, während der Leser schon die nächste Frage tippt,
-  und ihre kürzere Zeile zog den Chat sonst unter den Augen herunter. Wächst
-  über einem Leser am Seitenende etwas, das `preserveAbove` ausgleicht (offene
-  Aktivität), wächst `peak` ab der aktuellen Inhaltshöhe um den fehlenden Rest mit, sonst schluckte die
+  und ihre kürzere Zeile zog den Chat sonst unter den Augen herunter.
+  **Seit 2026-11-01 hält `peak` nur bis zur Unterkante des Fensters:** jede
+  Nachmessung kürzt es auf `max(Inhaltshöhe, Fensterunterkante)` (das
+  Fenster in seiner größten Höhe bei dieser Breite, `tallest`, damit
+  einklappende Handy-Leisten das Seitenende nicht über sich finden); auch
+  nach dem Lauf, wachsen tut es nur, solange er arbeitet. Vorher hielt jeder
+  höhere Moment eines langen Laufs bis zu seinem Ende (für ein Werkzeug
+  zurückgezogener Antworttext, offene Befehlsausgabe, Schritte vor dem
+  Einfalten, einmal aufgeklappte Aktivität), und unter dem Turn lag ein
+  Bildschirm Weiß zum Hineinscrollen (Max, Agent-Lauf mit Plan und 39
+  Schritten). Unterhalb des Fensters sieht niemand die Seite kürzer werden.
+  Wächst über einem Leser am Seitenende etwas, das `preserveAbove` ausgleicht
+  (offene Aktivität), wächst `peak` ab der aktuellen Inhaltshöhe um den
+  fehlenden Rest mit (`updateReserve(true)`: ohne Kürzen, das Fenster folgt
+  erst mit dem Scrollen), sonst schluckte die
   Reserve das Wachstum und der Text im Bild rutschte nach unten. Der
   ResizeObserver beobachtet Spalte und Reserve (deren Höhe ändert sich, wenn
   sich der Verlauf über der Frage ändert, die Spalte aber nicht).

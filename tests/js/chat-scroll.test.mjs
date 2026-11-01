@@ -152,6 +152,7 @@ describe("conversation scroll", () => {
     const app = boot({ askAt: 100, executing: true });
     app.grow(0);
     expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3200px)');
+    app.scroll(2400);
     app.grow(-300);
     expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3200px)');
     app.show({ runId: 'two', config: { executionMode: 'agent', agentMode: true } });
@@ -165,9 +166,8 @@ describe("conversation scroll", () => {
   // into the reserve below, and the text in view moved down (2026-10-30).
   it('lets the floor grow with what grows above a reader at the end', () => {
     const app = boot({ askAt: 100, executing: true });
-    app.grow(60); app.grow(-60);
+    app.grow(60); app.scroll(2460); app.grow(-60);
     expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3260px)');
-    app.scroll(2460);
     const activity = app.document.createElement('div');
     app.document.querySelector('.container').prepend(activity);
     let bottom = 900;
@@ -176,6 +176,36 @@ describe("conversation scroll", () => {
     bottom += 24.8; app.grow(24.8);
     restore();
     expect(app.window.scrollY).toBeCloseTo(2484.8, 3);
+    // The window is there now: the next layout keeps the grown floor, down
+    // to the layout's unit (1/64px).
+    app.grow(0);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3284.796875px)');
+    expect(app.window.scrollY).toBeCloseTo(2484.8, 3);
+    app.dom.window.close();
+  });
+
+  // Every taller moment of a long run (an answer taken back for a tool
+  // call, a command's open output, the steps before they fold) held its
+  // height to the end of the run: under the turn a screen of white to
+  // scroll into (Max, 2026-11-01). The floor holds the reader's window only.
+  it('lets the floor of a working run go below the reader\'s window', () => {
+    const app = boot({ askAt: 100, executing: true });
+    app.grow(0);
+    app.scroll(2400);
+    app.grow(-1500);
+    // What the reader sees stays: the page still ends at the window's bottom.
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3200px)');
+    // Further up, the next change of the run lets go of what lies below.
+    app.scroll(1000);
+    app.grow(0);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 1800px)');
+    expect(app.window.scrollY).toBe(1000);
+    app.scroll(0);
+    app.grow(0);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 1700px)');
+    // Growth still raises it.
+    app.grow(400);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 2100px)');
     app.dom.window.close();
   });
 

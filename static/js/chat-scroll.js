@@ -78,8 +78,13 @@
   // works: the reviewers finish while the reader types the next question,
   // and their row (or the live lines leaving) took a line from the end of the
   // page, which pulled the chat down under the reader's eyes. The tallest
-  // column of the run holds until the next run, chat or window size.
-  let floor = "", peak = 0;
+  // column of the run holds until the next run, chat or window size, but
+  // only as far down as the reader's window: below it, nobody sees the page
+  // get shorter. Held whole, every taller moment of a long run (an answer
+  // taken back for a tool call, a command's open output, the steps before
+  // they fold, the activity opened once) left a screen of white under the
+  // turn to scroll into (Max, 2026-11-01).
+  let floor = "", peak = 0, tallest = 0;
   // The turn's own height: the column without the room the reserve fills.
   // The column alone holds its floor, and a floor measured into the next
   // floor would never let go.
@@ -87,7 +92,9 @@
     const room = reserve?.isConnected ? reserve.getBoundingClientRect() : null;
     return bounds.bottom - bounds.top - (room ? room.bottom - room.top : 0);
   }
-  function updateReserve() {
+  // hold: the floor just grew for a reader who scrolls down next
+  // (preserveAbove); the window is not there yet.
+  function updateReserve(hold = false) {
     const column = container();
     if (!column) return;
     if (!reserve) {
@@ -113,7 +120,16 @@
       // turn's height and fraction (20.8px lines), down to the layout's own
       // unit (1/64px): a floor a fraction too tall would scroll by that fraction.
       const height = Math.floor((Math.round(head) + window.innerHeight - after - (bounds.top + window.scrollY)) * 64) / 64;
-      if (context?.runId && App.runRegistry?.isExecuting?.(context.runId)) peak = Math.max(peak, contentHeight(bounds));
+      // The window at its tallest at this width: a phone's toolbars that
+      // fold away while scrolling must not find the page end above them.
+      tallest = Math.max(tallest, window.innerHeight);
+      const working = context?.runId && App.runRegistry?.isExecuting?.(context.runId);
+      if (peak || working) {
+        const content = contentHeight(bounds);
+        // Down to the layout's unit, like the end above.
+        if (!hold) peak = Math.min(peak, Math.max(content, Math.floor((tallest - after - bounds.top) * 64) / 64));
+        if (working) peak = Math.max(peak, content);
+      }
       // The column's own floor (shell.css) still holds on a short page.
       next = `max(calc(100dvh - 10px), ${Math.max(0, height, peak)}px)`;
     }
@@ -181,7 +197,7 @@
       const missing = y + shift - maxTop();
       if (peak && missing > 0) {
         peak = Math.max(peak, contentHeight(container().getBoundingClientRect())) + missing;
-        updateReserve();
+        updateReserve(true);
       }
       const target = Math.max(0, Math.min(maxTop(), y + shift));
       if (Math.abs(target - window.scrollY) > .5) write(target);
@@ -334,7 +350,7 @@
   let width = window.innerWidth;
   window.addEventListener("resize", () => {
     // Another width sets the turn anew; the phone's keyboard does not.
-    if (window.innerWidth !== width) { width = window.innerWidth; peak = 0; }
+    if (window.innerWidth !== width) { width = window.innerWidth; peak = 0; tallest = 0; }
     changed();
   }, { passive: true });
   window.visualViewport?.addEventListener("resize", changed, { passive: true });
