@@ -289,13 +289,14 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     # The VM tools too: a command's result depends on the VM's state, which
     # every command may change (the tests again after an edit; test_agent_vm),
     # and sharing a file again after it changed is a new file for the user.
-    # Reading a background process's output again is waiting for it.
+    # Reading a background process's output again is waiting for it, and
+    # rendering the same deck again after an edit is checking the edit.
     # The same plan between work steps says where the agent stands; refusing
     # it ended a long VM run at its fourth unchanged plan.
     assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
                                                  "vm_process_output", "vm_stop_process", "vm_view_image",
-                                                 "update_plan", "browser"}
+                                                 "vm_render_office", "update_plan", "browser"}
     plan = {"id": "p", "type": "function", "function": {"name": "update_plan", "arguments": json.dumps(
         {"items": [{"content": "Run the tests", "status": "in_progress"}]})}}
     assert all(loop._identical_call(plan) is None for _ in range(5))
