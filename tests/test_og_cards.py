@@ -71,7 +71,8 @@ def test_info_pages_and_the_app_share_the_brand_card(pages_client, path):
 
 def test_the_app_names_the_product_it_is(pages_client):
     head = pages_client.get("/app").text.split("</head>", 1)[0]
-    assert "<title>consens.io</title>" in head
+    # data-i18n-skip: scripts make the tab title the question (docs/i18n.md).
+    assert "<title data-i18n-skip>consens.io</title>" in head
     assert "Compare AI Answers" not in head
     assert meta(head, "og:url") == "https://www.consens.io/app"
     # The script resets the tab to the same title when a chat is closed.
