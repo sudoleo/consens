@@ -270,6 +270,26 @@ def test_sharing_the_same_answer_again_keeps_its_one_link(share_app):
     assert len(shares) == 1
 
 
+def test_an_answer_shared_again_after_a_day_keeps_its_one_link(share_app):
+    # A prepared answer lives PENDING_TTL_HOURS. After that the first Share
+    # answered 404 (and the server dropped the expired result), and preparing
+    # the answer again made a second public link (bug hunt 2026-10-25).
+    client, database, store = share_app
+    chat_id, turn_id = _saved_turn(database, store)
+    result_id, first = _share(client, chat_id, turn_id)
+    pending = (share_snapshots.PENDING_COLLECTION, result_id)
+    database.documents[pending]["expires_at"] = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    stale = client.post("/api/share", json={"id_token": "token", "result_id": result_id})
+    assert stale.status_code == 404
+    again_result, again = _share(client, chat_id, turn_id)
+
+    assert again_result == result_id
+    assert again["share_id"] == first["share_id"] and again["created"] is False
+    shares = [path for path in database.documents if path[0] == share_snapshots.SHARES_COLLECTION]
+    assert len(shares) == 1
+
+
 @pytest.mark.parametrize("fields, chat_google, status, words", [
     ({"status": "failed"}, False, 409, "didn’t finish"),
     ({"agent_settings": {"label": "Claude Sonnet 5.5", "google_data": True}}, False, 409, "Google data"),

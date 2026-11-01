@@ -933,10 +933,36 @@ def save_pending_result(payload, db=None, result_id=None):
             if (existing and existing.get("owner_uid") == owner_uid
                     and _pending_expiry_is_valid(existing.get("expires_at"))):
                 return
+            # Expired or gone, the answer still has its links.
+            doc.update(_active_share_backlinks(db, owner_uid, result_id))
         transaction.set(result_ref, doc)
 
     _run_transaction(db, persist)
     return result_id
+
+
+def _active_share_backlinks(db, uid, result_id) -> dict:
+    """The links a stable result backed before it expired, by their source.
+
+    A pending result lives PENDING_TTL_HOURS and an expired one is dropped on
+    the next Share; without its backlinks, sharing the same answer again made
+    a second public link. Read only when the result is prepared anew.
+    """
+    backlinks = {}
+    try:
+        query = _where(db.collection(SHARES_COLLECTION), "source_result_id", "==", result_id)
+        for snapshot in query.stream():
+            share = snapshot.to_dict() or {}
+            if share.get("owner_uid") != uid or share.get("status") != "active":
+                continue
+            visibility = str(share.get("visibility") or "public")
+            backlinks.setdefault(f"{visibility}_share_id", snapshot.id)
+            if visibility == "public":
+                backlinks.setdefault("share_id", snapshot.id)
+    except Exception as exc:
+        # Without them the next Share makes a new link, as before.
+        logging.warning("share backlink lookup failed category=%s", safe_exception(exc))
+    return backlinks
 
 
 def pending_result_is_available(uid, result_id, db=None):

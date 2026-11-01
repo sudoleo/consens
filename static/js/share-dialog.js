@@ -288,6 +288,24 @@
       // 2026-10-25; a saved answer prepares itself above).
       confirmBtn.textContent = "Nothing to share yet";
     }
+    // A prepared answer lives a day on the server (PENDING_TTL_HOURS): an
+    // older one in a tab left open answers 404 and is prepared again once,
+    // keeping its link (share_snapshots.py). Before, every click failed
+    // until a reload.
+    function renewable() {
+      if (prepare) return Boolean(prepare.forget?.());
+      return Boolean(window.forgetPreparedShareResult?.());
+    }
+    async function publish(renew) {
+      try {
+        return await shareApiRequest("POST", "/api/share", { result_id: pendingId }, viewEpoch);
+      } catch (error) {
+        if (!renew || Number(error?.status) !== 404 || !renewable()) throw error;
+        pendingId = "";
+        await resolveResultId();
+        return publish(false);
+      }
+    }
     confirmBtn.addEventListener("click", async function () {
       if (!pendingId) {
         prepareLink();
@@ -297,7 +315,7 @@
       this.textContent = "Creating link…";
       errorLine.hidden = true;
       try {
-        const data = await shareApiRequest("POST", "/api/share", { result_id: pendingId }, viewEpoch);
+        const data = await publish(true);
         if (!shareViewIsCurrent(viewEpoch)) return;
         window.App.trackAppEvent("app_share_created", { reused: data.created === false });
         renderShareSuccessView(data.url);
@@ -443,18 +461,21 @@
   const preparedAnswers = new Map();
 
   function prepareAgentAnswer(chatId, turnId) {
-    return async viewEpoch => {
+    const key = () => `${window.auth?.currentUser?.uid || ""}:${chatId}:${turnId}`;
+    const prepare = async viewEpoch => {
       if (!TURN_ID.test(chatId || "") || !TURN_ID.test(turnId || "")) {
         throw new Error("This answer isn’t finished yet. Share it once it is.");
       }
-      const key = `${window.auth?.currentUser?.uid || ""}:${chatId}:${turnId}`;
-      if (preparedAnswers.has(key)) return preparedAnswers.get(key);
+      if (preparedAnswers.has(key())) return preparedAnswers.get(key());
       const path = `/agent/chats/${encodeURIComponent(chatId)}/turns/${encodeURIComponent(turnId)}/share-result`;
       const data = await shareApiRequest("POST", path, undefined, viewEpoch);
       if (!data?.result_id) throw new Error("This answer couldn’t be prepared for sharing. Try again.");
-      preparedAnswers.set(key, data.result_id);
+      preparedAnswers.set(key(), data.result_id);
       return data.result_id;
     };
+    // Its prepared ID expired on the server: the next call asks again.
+    prepare.forget = () => preparedAnswers.delete(key());
+    return prepare;
   }
 
   function shareAgentAnswer({ chatId, turnId, trigger } = {}) {

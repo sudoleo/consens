@@ -2338,6 +2338,18 @@ window.clearPreparedBookmarkShareResult = function () {
   window.App.state.set("lastShareResultId", null, "share");
 };
 
+// The prepared ID of the chat on screen expired on the server (Share
+// answered 404): the next resolve prepares it again. False when nothing on
+// screen could be prepared again (share-dialog.js).
+window.forgetPreparedShareResult = function () {
+  if (!window.currentBookmarkShareResultContext) return false;
+  bookmarkShareResultVersion += 1;
+  window.currentBookmarkShareResultPromise = null;
+  window.currentBookmarkShareResultError = "";
+  window.App.state.set("lastShareResultId", null, "share");
+  return true;
+};
+
 function prepareBookmarkShareResult(bookmark) {
   window.clearPreparedBookmarkShareResult();
   const bookmarkId = bookmark?.id;

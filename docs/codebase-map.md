@@ -8463,7 +8463,14 @@ keinen Abgleich.
   `basis_hash`) und nicht „off“ war. Die Pending-ID ist je Turn stabil
   (`agent_pending_result_id`, `save_pending_result(result_id=…)` lässt einen
   gültigen Snapshot stehen): erneutes Teilen derselben Antwort liefert denselben
-  Link, auch nach Reload oder aus dem Chat-Menü; `vote_subject_id` ist
+  Link, auch nach Reload oder aus dem Chat-Menü. Ist der Snapshot nach 24 h
+  abgelaufen oder schon gelöscht, sucht `save_pending_result` die aktiven
+  Shares mit dieser `source_result_id` und übernimmt ihre Rückverweise
+  (`_active_share_backlinks`, eine Query nur beim Neuvorbereiten; seit
+  2026-11-01, vorher entstand ein zweiter Link). Antwortet `POST /api/share`
+  im offenen Tab mit 404 (abgelaufen), verwirft der Share-Dialog die gemerkte
+  ID (`prepare.forget` bzw. `window.forgetPreparedShareResult`) und bereitet
+  einmal neu vor; vorher scheiterte jeder Klick bis zum Reload. `vote_subject_id` ist
   `agent:{turn}` wie beim Agent-Pick. Nicht teilbar (409 mit Satz für den
   Dialog): nicht fertige Turns und Chats mit Google-Daten (Turn-
   `agent_settings.google_data`/`google_selection` oder Chat-`google_data`, das

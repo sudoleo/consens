@@ -108,6 +108,38 @@ describe("Share under an Agent answer", () => {
     dom.window.close();
   });
 
+  // A tab left open for more than a day: the first click got 404 and every
+  // later one too, until a reload (bug hunt 2026-10-25).
+  it("prepares an answer again whose prepared ID expired, and publishes it", async () => {
+    const { window, document, dom } = agentApp();
+    window.App.runMode.set("agent");
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
+    await ask(window, document, "Is the James Webb telescope still working?");
+    const pill = document.querySelector("#agentAnswer .agent-share-pill");
+    pill.click();
+    await vi.waitFor(() => expect(confirmButton(document).disabled).toBe(false));
+    confirmButton(document).click();
+    await vi.waitFor(() => expect(document.getElementById("shareModalTitle").textContent).toBe("Public link created"));
+    window.App.sharedModal.close();
+    // A day later, in the same tab.
+    window.fetch.mockClear();
+    const answer = window.fetch.getMockImplementation();
+    let expired = 1;
+    window.fetch.mockImplementation(async (url, init) => {
+      if (String(url) === "/api/share" && expired-- > 0) return respond({ detail: "Result not found or expired." }, 404);
+      return answer(url, init);
+    });
+    pill.click();
+    await vi.waitFor(() => expect(confirmButton(document).disabled).toBe(false));
+    const shareCalls = () => window.fetch.mock.calls.map(([url]) => String(url))
+      .filter(path => path === "/api/share" || path.endsWith("/share-result"));
+    expect(shareCalls()).toEqual([]);
+    confirmButton(document).click();
+    await vi.waitFor(() => expect(document.getElementById("shareModalTitle").textContent).toBe("Public link created"));
+    expect(shareCalls()).toEqual(["/api/share", `/agent/chats/${CHAT}/turns/${"1".repeat(32)}/share-result`, "/api/share"]);
+    dom.window.close();
+  });
+
   it("says the server's reason in the dialog and offers no button that cannot work", async () => {
     const reason = "Answers in a chat with your Google data can’t be shared publicly.";
     const { window, document, dom } = agentApp({ refuse: reason });
