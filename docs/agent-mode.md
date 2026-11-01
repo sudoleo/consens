@@ -1311,6 +1311,26 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   `sprite`, nie den headless Chrome des Agenten. Eine gescheiterte
   Installation bricht das Setup nicht ab (Meldung auf stderr): Der Werkbank
   fehlt dann das Werkzeug bis zur nächsten `VERSION`, nie ihr Nutzer.
+- **Office-Dateien (seit 2026-11-01).** Das erste PowerPoint in Prod brauchte
+  160 s, davon 73 s, weil der Agent LibreOffice selbst installierte, um die
+  Folien als Bild zu prüfen (vorher hielt er sich für unfähig, eins zu bauen).
+  `setup.sh` startet deshalb am Ende losgelöst sich selbst als
+  `setup.sh --office` (`setsid nohup`, Log `/var/log/consens-office.log`):
+  LibreOffice ohne Oberfläche (`libreoffice-impress`, `-writer`, `-calc`,
+  `--no-install-recommends`, nur wenn `soffice` fehlt) mit den Schriften, die
+  Office-Dateien nennen (Carlito für Calibri, Caladea für Cambria,
+  Liberation), und als Nutzer `agent` mit seinem `python3` `pip install
+  --user` python-pptx, python-docx und openpyxl. Im Hintergrund, weil sonst
+  jedes Konto beim ersten Werkbank-Aufruf nach dem Update eine Minute auf ein
+  Werkzeug wartete, das die meisten nie brauchen. Eine pausierte VM friert
+  ihre Prozesse ein, auch `dpkg` mittendrin: Der Job hält die VM deshalb über
+  die Sprites-Tasks-API wach (`PUT /v1/tasks/consens-office`, `expire` 5m, jede
+  Minute erneuert, danach `DELETE`), wie der Aufseher der Hintergrundprozesse.
+  Weil er die Option als Erstes prüft, läuft nichts vom Aufbau ein zweites Mal.
+  `vm_install_packages` wartet seitdem bis 120 s auf eine laufende apt-Instanz
+  (`DPkg::Lock::Timeout`), statt sofort zu scheitern. `AGENT_VM_PROMPT` nennt
+  die Werkzeuge als Fakt neben Chrome. Noch nicht an einer echten Sprite
+  geprüft (Smoke-Liste „Office-Dateien“).
 - **Netz für das Setup.** `dl.google.com` ist in `WORKBENCH_RULES` zu.
   `prepare` liest deshalb vor `setup.sh` die Regeln (`get_policy`), setzt sie
   plus `{"domain": "dl.google.com", "action": "allow"}` (`CHROME_RULE`) und

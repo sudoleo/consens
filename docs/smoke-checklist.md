@@ -325,6 +325,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `consens-browser-awake` mit Ablauf ~2 min nach dem Lauf). Ein Lauf mit
       localhost-Seite: Nach dem Lauf und geschlossener Ansicht endet der Tunnel
       nach ~2 min („Agent tunnel ended“).
+- [ ] Office-Dateien (2026-11-01, `docs/agent-mode.md`): Konto mit Arbeitsplatz,
+      erste Nachricht nach dem Deploy mit einem Werkbank-Befehl — die Antwort
+      wartet nicht länger als sonst. Ein bis zwei Minuten später im Terminal des
+      Arbeitsplatzes: `soffice --version` antwortet, `python3 -c "import pptx,
+      docx, openpyxl"` läuft ohne Fehler, `/var/log/consens-office.log` nennt keinen.
+      Dann „Mach mir eine kurze PowerPoint über X“: Der Agent installiert nichts,
+      prüft die Folien per `soffice --headless --convert-to pdf` und liefert die
+      .pptx; deutlich schneller als die 160 s des ersten Laufs.
 - [ ] VM-Zeit am Tageslimit (2026-10-31, Konto ohne Pro mit Arbeitsplatz,
       echte Sprite): „Bau mir eine kleine Web-App und zeig sie mir im
       Browser“: Der Dev-Server bekommt höchstens die Hälfte der Restzeit

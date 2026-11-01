@@ -165,6 +165,39 @@ def test_every_workbench_gets_ripgrep_and_headless_chrome_and_loses_the_old_scre
     assert "find /tmp -maxdepth 1 -user sprite \\( -name 'playwright*'" in setup
 
 
+def test_every_workbench_gets_the_tools_for_office_files_in_the_background():
+    """setup.sh (2026-11-01): the first deck in production spent 73 of its 160
+    seconds installing LibreOffice, after the agent took itself to be unable
+    to make one. LibreOffice without a screen, the fonts Office files name and
+    the Python libraries now come with the workbench, in a job of their own
+    that holds the VM awake (a paused VM freezes dpkg halfway), so no
+    account's setup waits for them. Checked as text; not yet on a Sprite."""
+    from app.services import agent_vm_tools, prompt_defaults
+    setup = agent_workspace.tool_files("workbench")["setup.sh"].decode()
+    office = setup[setup.index("office() {"):setup.index('if [ "${1:-}" = "--office" ]')]
+    assert "if ! command -v soffice " in office and "--no-install-recommends libreoffice-impress" in office
+    assert all(name in office for name in ("libreoffice-writer", "libreoffice-calc", "fonts-crosextra-carlito",
+                                           "fonts-crosextra-caladea", "fonts-liberation"))
+    # As the agent's user with its own python3, never into root's site-packages.
+    assert "as_user PATH=" in office
+    assert "python3 -m pip install --user --quiet --disable-pip-version-check python-pptx python-docx openpyxl" in office
+    # Awake while it runs, as agent_vm_processes.RUNNER; released after.
+    assert "--unix-socket /.sprite/api.sock" in setup and "http://sprite/v1/tasks/consens-office" in setup
+    assert "office_task PUT -d '{\"expire\": \"5m\"}'" in office
+    assert office.index('kill "$keeper"') < office.index("office_task DELETE") < office.index('return "$status"')
+    # The job runs nothing of the layout again: it leaves before the first step.
+    assert setup.index("apt_get() {") < setup.index("office() {") < setup.index('if [ "${1:-}" = "--office" ]') \
+        < setup.index("useradd")
+    # Started detached once the layout is done, never in the setup's own time.
+    start = 'setsid nohup bash "$0" --office >/var/log/consens-office.log 2>&1 </dev/null &'
+    assert start in setup and setup.index("\ntools ||") < setup.index(start) < setup.rindex("exit 0")
+    # The agent's own apt waits for the job instead of failing at once.
+    assert agent_vm_tools.INSTALL_COMMAND.count("-o DPkg::Lock::Timeout=120") == 2
+    # And the agent knows what it has (a fact of the workspace, beside Chrome).
+    assert "python-pptx, python-docx and openpyxl, and LibreOffice without a screen" in prompt_defaults.AGENT_VM_PROMPT
+    assert "python-pptx" in prompt_defaults.AGENT_VM_NO_DOMAINS_PROMPT
+
+
 def _recording_setup(fake_vm, name, *, stop=False):
     """A backend whose exec notes the policy each command ran under, and is
     stopped at the setup when ``stop``."""

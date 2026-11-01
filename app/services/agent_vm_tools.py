@@ -160,9 +160,12 @@ VM_USER_HAS_BROWSER = ("The user has taken over the workspace's browser and stil
 PACKAGE = r"^[a-z0-9][a-z0-9+.-]{0,99}$"
 MAX_PACKAGES = 30
 INSTALL_TIMEOUT = 300
-# The package lists are fetched again when older than a day.
+# The package lists are fetched again when older than a day. apt waits for
+# another apt instead of failing at once: the setup installs the tools for
+# Office files in the background for a minute or two (setup.sh --office).
 INSTALL_COMMAND = ("find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -mmin -1440 2>/dev/null | grep -q . || "
-                   "sudo -n apt-get update -qq; sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q -- {}")
+                   "sudo -n apt-get -o DPkg::Lock::Timeout=120 update -qq; "
+                   "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=120 install -y -q -- {}")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
