@@ -16,8 +16,10 @@ import os
 import random
 import re
 import secrets
+import threading
 import time
 import unicodedata
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Callable, TypeVar
 
@@ -158,6 +160,24 @@ _CURSOR_TIMESTAMP_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.(?:\d{6}|\d{9})Z"
 )
 _T = TypeVar("_T")
+
+# Owners whose chat counter this process has seen in place (create_chat):
+# checking costs a round trip before every new chat, and a counter, once set
+# up, stays.
+_COUNTED_OWNERS = OrderedDict()
+_COUNTED_OWNERS_LOCK = threading.Lock()
+_COUNTED_OWNERS_MAX = 4096
+
+
+def _counted(db, uid: str, seen: bool = False) -> bool:
+    key = (id(db), uid)
+    with _COUNTED_OWNERS_LOCK:
+        if seen:
+            _COUNTED_OWNERS[key] = True
+            _COUNTED_OWNERS.move_to_end(key)
+            while len(_COUNTED_OWNERS) > _COUNTED_OWNERS_MAX:
+                _COUNTED_OWNERS.popitem(last=False)
+        return key in _COUNTED_OWNERS
 
 
 class _CursorTimestamp(DatetimeWithNanoseconds):
@@ -591,7 +611,8 @@ class ChatStore:
         if execution_mode not in {"consensus", "agent"}:
             raise ValueError("Invalid execution mode")
         title = normalize_title(title)
-        self._ensure_chat_counter(uid, fence_writes=True)
+        if not _counted(self.db, uid):
+            self._ensure_chat_counter(uid, fence_writes=True)
         chat_id = secrets.token_hex(16)
         ref = self._chats_ref(uid).document(chat_id)
         counter_ref = self._chat_counter_ref(uid)
@@ -607,13 +628,14 @@ class ChatStore:
         }
 
         def operation(transaction):
+            tombstone, counter_snapshot, existing_snapshot = read_together(
+                [persistence_guard.deletion_ref(self.db, uid), counter_ref, ref], transaction)
             persistence_guard.ensure_account_write_allowed(
                 uid=uid,
                 db=self.db,
                 transaction=transaction,
+                snapshot=tombstone,
             )
-            counter_snapshot = counter_ref.get(transaction=transaction)
-            existing_snapshot = ref.get(transaction=transaction)
             if existing_snapshot.exists:
                 raise ChatStoreError("Chat ID collision")
             counter = counter_snapshot.to_dict() if counter_snapshot.exists else {}
@@ -643,8 +665,13 @@ class ChatStore:
             if not freed:
                 raise limit_reached
             self._transaction(operation)
-        snapshot = ref.get()
-        return chat_metadata(snapshot.id, snapshot.to_dict() or {})
+        _counted(self.db, uid, True)
+        # The chat as written, not read back (a round trip before the first
+        # message of a new chat could start): the commit's moment stands in
+        # for the server's timestamps, a moment off.
+        now = datetime.now(timezone.utc)
+        return chat_metadata(chat_id, {key: now if value is firestore.SERVER_TIMESTAMP else value
+                                       for key, value in document.items()})
 
     def reclaim_unreachable_chats(
         self, uid: str, *, now: datetime | None = None
@@ -704,6 +731,19 @@ class ChatStore:
             data,
             {} if data.get("execution_mode") == "agent" else self._model_answers(turn_ref),
         )
+
+    def chat_and_turn(self, uid: str, chat_id: str, turn_id: str) -> tuple[dict, dict | None]:
+        """The chat's stored fields ({} without a chat) and get_turn's turn
+        (None where get_turn raises ChatNotFound), in one round trip."""
+        chat_ref = self._chat_ref(uid, chat_id)
+        turn_ref = self._turn_ref(uid, chat_id, turn_id)
+        chat, turn = read_together([chat_ref, turn_ref], db=self.db)
+        chat_data = (chat.to_dict() or {}) if chat.exists else {}
+        if not _is_live_chat(chat) or not turn.exists:
+            return chat_data, None
+        data = turn.to_dict() or {}
+        return chat_data, turn_detail(
+            turn.id, data, {} if data.get("execution_mode") == "agent" else self._model_answers(turn_ref))
 
     def _model_answers(self, turn_ref) -> dict[str, dict]:
         """Read a turn's model answers with ONE query instead of six gets.
@@ -826,11 +866,17 @@ class ChatStore:
         execution_mode: str = "consensus",
         agent_settings: dict | None = None,
         app_context: str | None = None,
+        sweep: bool = True,
+        read_back: bool = True,
     ) -> dict:
         """``app_context``: the app's context block an Agent question is sent
         with (agent_runs.with_app_context). Stored on the turn, never in its
         projection: the chat's next message repeats the question with exactly
-        these bytes (AgentRunStore.messages)."""
+        these bytes (AgentRunStore.messages). ``sweep=False``: the caller ran
+        sweep_abandoned_turns itself (the Agent route, beside its other reads).
+        ``read_back=False``: the turn as written instead of read back, one
+        round trip less before an Agent message's first request; the commit's
+        moment stands in for the server's timestamps, a moment off."""
         question = normalize_question(question)
         if app_context is not None and (not isinstance(app_context, str) or len(app_context) > MAX_APP_CONTEXT_CHARS):
             raise ValueError("app_context must be a short string")
@@ -844,13 +890,8 @@ class ChatStore:
         )
         client_request_id = normalize_client_request_id(client_request_id)
         chat_ref = self._chat_ref(uid, chat_id)
-        # Opportunistic, best effort: a new turn is the natural moment to
-        # notice that an earlier one was abandoned. This must never block the
-        # run, so every failure here is swallowed after logging.
-        try:
-            self.purge_abandoned_turns(uid, chat_id)
-        except Exception:
-            logging.warning("abandoned-turn sweep failed for chat %s", chat_id)
+        if sweep:
+            self.sweep_abandoned_turns(uid, chat_id)
         if client_request_id:
             turn_id = _idempotent_turn_id(chat_id, client_request_id)
         else:
@@ -858,12 +899,14 @@ class ChatStore:
         turn_ref = chat_ref.collection("turns").document(turn_id)
 
         def operation(transaction):
+            tombstone, chat_snapshot, existing = read_together(
+                [persistence_guard.deletion_ref(self.db, uid), chat_ref, turn_ref], transaction)
             persistence_guard.ensure_account_write_allowed(
                 uid=uid,
                 db=self.db,
                 transaction=transaction,
+                snapshot=tombstone,
             )
-            chat_snapshot = chat_ref.get(transaction=transaction)
             if not chat_snapshot.exists:
                 raise ChatNotFound("Chat not found")
             if (chat_snapshot.to_dict() or {}).get("status") != CHAT_STATUS_ACTIVE:
@@ -872,7 +915,6 @@ class ChatStore:
                 raise TurnStatusConflict("Conversation mode cannot be changed")
 
             if client_request_id:
-                existing = turn_ref.get(transaction=transaction)
                 if existing.exists:
                     if not _same_turn_request(
                         existing.to_dict() or {},
@@ -886,7 +928,7 @@ class ChatStore:
                         raise ChatIdempotencyConflict(
                             "client_request_id conflicts with an existing turn"
                         )
-                    return
+                    return existing.to_dict() or {}
 
             chat_data = chat_snapshot.to_dict() or {}
             if execution_mode == "agent":
@@ -939,8 +981,13 @@ class ChatStore:
 
             transaction.set(turn_ref, turn_document)
             transaction.update(chat_ref, chat_updates)
+            return turn_document
 
-        self._transaction(operation)
+        stored = self._transaction(operation)
+        if not read_back:
+            now = datetime.now(timezone.utc)
+            return turn_metadata(turn_id, {key: now if value is firestore.SERVER_TIMESTAMP else value
+                                           for key, value in stored.items()})
         snapshot = turn_ref.get()
         if not snapshot.exists:
             raise ChatStoreError("Turn was not persisted")
@@ -1082,9 +1129,14 @@ class ChatStore:
         *,
         limit: int,
         cursor: str,
+        fields: tuple[str, ...] | None = None,
+        checked: bool = False,
     ) -> dict:
+        """``fields``: only these (and ``position``, the cursor's), not whole
+        turns: an Agent turn keeps its activity next to its answer, up to
+        about a megabyte. ``checked``: the caller saw the chat live itself."""
         chat_ref = self._chat_ref(uid, chat_id)
-        if not _is_live_chat(chat_ref.get()):
+        if not checked and not _is_live_chat(chat_ref.get()):
             raise ChatNotFound("Chat not found")
         turns_ref = chat_ref.collection("turns")
         query = turns_ref.order_by(
@@ -1100,6 +1152,8 @@ class ChatStore:
                 "position": cursor_position,
                 FieldPath.document_id(): cursor_id,
             })
+        if fields:
+            query = query.select(sorted({"position", *fields}))
         snapshots = list(query.limit(limit + 1).stream())
         has_more = len(snapshots) > limit
         page = snapshots[:limit]
@@ -1447,6 +1501,16 @@ class ChatStore:
             evidence_ref.delete()
         chat_ref.delete()
 
+    def sweep_abandoned_turns(self, uid: str, chat_id: str) -> None:
+        """purge_abandoned_turns before a new turn. Opportunistic, best
+        effort: a new turn is the natural moment to notice that an earlier one
+        was abandoned. This must never block the run, so every failure here
+        is swallowed after logging."""
+        try:
+            self.purge_abandoned_turns(uid, chat_id)
+        except Exception:
+            logging.warning("abandoned-turn sweep failed for chat %s", chat_id)
+
     def purge_abandoned_turns(self, uid: str, chat_id: str, *, now=None) -> list[str]:
         """Retire pending turns that no run can ever finish.
 
@@ -1483,6 +1547,21 @@ def _is_live_chat(snapshot) -> bool:
     if not snapshot.exists:
         return False
     return (snapshot.to_dict() or {}).get("status") != CHAT_STATUS_DELETING
+
+
+def read_together(refs, transaction=None, *, db=None):
+    """``refs`` read in one round trip (Firestore's get_all), in their order;
+    a missing document is a snapshot that does not exist. With
+    ``transaction`` inside it, else through ``db``. Each read on its own
+    costs a round trip of its own, and they add up on the way from Send to
+    the first model request (2026-10-21: claims; 2026-11-01: the turn)."""
+    get_all = getattr(transaction, "get_all", None) if transaction is not None else getattr(db, "get_all", None)
+    if get_all is None:
+        return [ref.get(transaction=transaction) if transaction is not None else ref.get() for ref in refs]
+    # Asked once each, however often a caller names one.
+    unique = list({ref.path: ref for ref in refs}.values())
+    found = {snapshot.reference.path: snapshot for snapshot in get_all(unique)}
+    return [found[ref.path] for ref in refs]
 
 
 def _new_deletion_job(uid: str, chat_id: str, now: datetime) -> dict:

@@ -4440,6 +4440,12 @@ Metadaten fünf Minuten und versucht nach Fehlern frühestens nach 30 Sekunden n
 Abrufe sind auf fünf Sekunden und 8 MiB begrenzt; zuletzt gültige Werte und der
 eingecheckte `agent_model_catalog.json` bleiben als Rückfall erhalten. Das Modul
 prüft Preise/Limits und versieht die Metadaten mit einer Version für Kostenbelege.
+`snapshot()` liefert seit 2026-11-01 einen `CatalogSnapshot`, der einen Eintrag
+erst beim Lesen kopiert (vorher eine Kopie aller rund 550 Modelle je Aufruf;
+siehe „Von Senden bis zur ersten Modellanfrage“). Nur der erste Abruf eines
+Prozesses wartet; danach holt ein Thread (`ModelMetadataCache.refreshing`) neu,
+während Snapshots den bisherigen Stand ausgeben (vorher wartete die erste
+Nachricht nach je fünf Minuten auf den Download des ganzen Katalogs).
 Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reason`
 sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
@@ -5081,6 +5087,50 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
 Belegt mit `tests/test_agent_tempo.py` (sechs Modelle, Datenbank mit Latenz je
 Rundgang, ein Konto-Lock) und `tests/test_agent_journal.py`. Prod-Befund und
 Zahlen: [agent-mode.md](agent-mode.md) „Wartezeit im Server“.
+
+**Von Senden bis zur ersten Modellanfrage (seit 2026-11-01).** Auf diesem Weg
+liegen nur noch vier Rundgänge hintereinander: die Anlage des Turns (ein
+gebündelter Read, Commit) und der Claim des ersten Schritts (ein gebündelter
+Read, Commit). Vorher waren es rund 25 und dazu etwa 45 Kopien des ganzen
+OpenRouter-Katalogs, 2–3 s je Nachricht:
+- `run_agent` startet für eine neue Nachricht alle Lesezugriffe sofort und
+  nebeneinander (`_turn_reads`, Pool `_TURN_READS`): Turn und Chat in einem
+  Rundgang (`ChatStore.chat_and_turn`, statt `get_turn` plus eigenem Chat-Read),
+  `recover_allowance`, Bookmark, Dateien, Memory, Browser-Stand,
+  `sweep_abandoned_turns`, die erste Seite des Verlaufs
+  (`AgentRunStore.history_page`, nur `HISTORY_FIELDS`, nicht Aktivität und
+  Review der früheren Turns) und die Dateiliste (`AgentFiles.list(checked=True)`,
+  `FileContext.preload`). Jedes Ergebnis wird dort abgeholt, wo der Read früher
+  stand; ein Fehler bricht die Anfrage also an derselben Stelle ab. Ein
+  `recover_only` liest nur seinen Turn.
+- `create_turn(sweep=False, read_back=False)`: Tombstone, Chat und Turn in
+  einem Read (`chat_store.read_together`, das auch `AgentSessionStore._read_all`
+  nutzt), der Turn wird nicht zurückgelesen. `messages(first_page=…)` nimmt die
+  vorab gelesene Seite nur, wenn `history_current` sie noch gelten lässt (kein
+  früherer Turn darin `pending`, keiner fehlt), sonst liest es selbst.
+- Der erste Schritt des Agenten liest den Chat nicht noch einmal auf
+  Google-Daten (`DelegationLoop.google_data` aus der Route); spätere Schritte
+  schon (ein Gmail-Import kann sie bringen).
+- Den Anteil der Prüfer am Kontingent (`ComparisonTools._output_shares`, liest
+  das Konto) holt der erste startende Prüfer auf seinem Thread
+  (`AnswerAudit.output_share`), nicht `follow` vor dem ersten Schritt.
+- Die `quota`-Frames nach `started` und nach jedem `usage` liest ein eigener
+  Pool (`_ALLOWANCE_READS`); `quota_frames` hängt sie an den nächsten Frame,
+  am Ende wartet der Stream auf den Rest. Vorher wartete jeder Schritt drei
+  Rundgänge auf diese Anzeige.
+- `agent_model_metadata.snapshot()` gibt einen `CatalogSnapshot`: Ein Eintrag
+  wird beim ersten Lesen kopiert, nicht der ganze Katalog (etwa 550 Modelle,
+  rund 20 ms je Kopie); der gemischte Katalog wird nur nach einem Abruf neu
+  gebaut. `DelegationLoop.__init__` baut seinen Worker-Katalog mit einem
+  `agent_models()` (`resolve_agent_model(models=…)`) statt zweimal je Modell,
+  `agent_tools.argument_schema` baut jedes Schema einmal je Prozess. Den
+  Katalog holt nach fünf Minuten ein Thread neu, keine Nachricht wartet darauf.
+- `ChatStore.create_chat` liest Tombstone, Zähler und Kollision in einem
+  Rundgang, prüft den Chat-Zähler je Konto nur einmal je Prozess (`_counted`)
+  und liest den neuen Chat nicht zurück (die erste Nachricht eines neuen
+  Chats wartet auf `POST /chats`).
+Belegt mit `tests/test_agent_first_request.py` (zählt die Rundgänge der
+Route und des Laufs bis zur ersten Anfrage und die Katalog-Aufbauten).
 DelegationLoop wiederholt bei temporären Datenbankfehlern ausschließlich die
 idempotente Abrechnung mit den ursprünglichen Messwerten, auch bei unklarem
 Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut

@@ -53,6 +53,10 @@ ACTIVITY_SHORT_CHARS = 200
 PLAN_ITEM_SHORT_CHARS = 60
 # A model call's own times on its receipt (settle, since 2026-10-30).
 REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
+# What the conversation needs of an earlier turn (messages): not its
+# activity, review or work log, which take up to about a megabyte.
+HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_context",
+                  "agent_work_record", "sources")
 
 
 class ConversationTooLong(ValueError):
@@ -230,13 +234,32 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0{step}".encode()).hexdigest()
         return self.db.collection("users").document(uid).collection("llm_calls").document(key)
 
-    def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None):
+    def history_page(self, uid, chat_id, cursor="", *, checked=False):
+        """One page of a chat's turns as messages reads them (HISTORY_FIELDS).
+        The Agent route reads the first while it creates the turn."""
+        return self._list_turn_snapshots(uid, chat_id, cursor=cursor, limit=TURN_PAGE_SIZE_MAX,
+                                         fields=HISTORY_FIELDS, checked=checked)
+
+    @staticmethod
+    def history_current(page, target):
+        """Whether ``page``, read before ``target`` was created, still holds
+        every earlier turn as it is: none of them pending (one that finished
+        or was swept in between is read again), all of them there (a single
+        page). Else messages reads its own."""
+        earlier = [(s.to_dict() or {}) for s in page["snapshots"]]
+        earlier = [turn for turn in earlier if turn.get("position", 0) < target["position"]]
+        return (all(turn.get("status") in {"completed", "failed"} for turn in earlier)
+                and (page.get("has_more") or len(earlier) == target["position"] - 1))
+
+    def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None):
         """The conversation for the target turn. ``sources``, a list, receives
         the saved sources of the earlier turns it includes (read_source may
         open them; agent_read_source, "Sources from the chat itself").
         ``context``: the app context the target turn was created with
         (create_turn ``app_context``); an earlier turn's question comes back
         with its own, so the prompt continues the one that turn first sent.
+        ``first_page``: history_page read beside the turn's creation, used
+        where history_current says it still holds.
 
         A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
         (history_start) and tells the model so in this message's app context;
@@ -254,7 +277,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         while True:
             # Agent answers live on the turn itself. Do not issue an empty
             # model_answers subcollection query for every message in history.
-            page = self._list_turn_snapshots(uid, chat_id, cursor=cursor, limit=TURN_PAGE_SIZE_MAX)
+            if not cursor and first_page is not None and self.history_current(first_page, target):
+                page = first_page
+            else:
+                page = self.history_page(uid, chat_id, cursor)
             for snapshot in page["snapshots"]:
                 turn = snapshot.to_dict() or {}
                 if turn["position"] >= target["position"] or turn["status"] not in {"completed", "failed"}:

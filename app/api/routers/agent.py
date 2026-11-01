@@ -1,6 +1,7 @@
 """Bounded Agent turns in the existing chat storage (every signed-in account)."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import logging
 import re
@@ -313,6 +314,66 @@ def available_agent_budget(request: Request):
                         headers={"Cache-Control": "private, no-store"})
 
 
+# Reads a new message needs before its turn exists, side by side
+# (_turn_reads). Until 2026-11-01 they ran one after another: with the turn's
+# creation, its history and the first step's admission about 25 Firestore
+# round trips lay between Send and the first model request, 2-3 s in prod
+# before a model saw the question.
+_TURN_READS = ThreadPoolExecutor(max_workers=24, thread_name_prefix="agent-turn-read")
+
+
+def _turn_reads(uid, payload, store):
+    """Futures of what run_agent reads for a new message, all started at
+    once. Each is taken where its read used to stand, so a failing read
+    still fails the request at the same point; the sweep of abandoned turns
+    is done before the turn is created."""
+    from app.services.agent_files import AgentFiles, public_file
+    files = AgentFiles(db_firestore)
+    chat_id = payload.chat_id
+    bookmark = db_firestore.collection("users").document(uid).collection("bookmarks").document(payload.bookmark_id)
+    jobs = {
+        "turn": lambda: store.chat_and_turn(uid, chat_id, _idempotent_turn_id(chat_id, payload.client_request_id)),
+        "recover": lambda: store.recover_allowance(uid),
+        "bookmark": bookmark.get,
+        "files": lambda: [public_file(files.get(uid, chat_id, fid)) for fid in payload.file_ids],
+        "memory": lambda: _memory_snapshot(uid),
+        "browser": lambda: browser_turn(uid) if vm_allowed(uid) else None,
+        "sweep": lambda: store.sweep_abandoned_turns(uid, chat_id),
+        # Before the turn exists: messages checks that it still holds
+        # (AgentRunStore.history_current). Both are used only after the
+        # turn's creation found the chat live.
+        "history": lambda: store.history_page(uid, chat_id, checked=True),
+        "catalog": lambda: files.list(uid, chat_id, checked=True),
+    }
+    return {name: _TURN_READS.submit(job) for name, job in jobs.items()}
+
+
+def _first_history_page(read):
+    """The history page read beside the turn's creation, None when that read
+    failed: messages then reads it itself."""
+    try:
+        return read.result()
+    except Exception as exc:
+        logging.warning("Agent history read ahead unavailable category=%s", safe_exception(exc))
+        return None
+
+
+# Reads of the account's allowance for the browser's quota frames. Until
+# 2026-11-01 the stream read it in between: the first step's request waited
+# three round trips for it after "started", every later step after its usage.
+_ALLOWANCE_READS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-allowance")
+
+
+def quota_frames(allowances, *, wait=False):
+    """The quota frames of the reads in ``allowances`` that are done (all of
+    them with ``wait``), oldest first; an unreadable allowance is left out."""
+    while allowances and (wait or allowances[0].done()):
+        try:
+            yield {"token_budget": allowances.pop(0).result()}
+        except Exception as exc:
+            logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
+
+
 @router.post("/agent")
 @limiter.limit("30/minute")
 def run_agent(request: Request, payload: AgentRequest):
@@ -322,12 +383,13 @@ def run_agent(request: Request, payload: AgentRequest):
     turn = None
     lease = None
     try:
+        # A new message starts all its reads at once; a request that only
+        # recovers a saved answer reads its turn alone.
+        reads = None if payload.recover_only else _turn_reads(uid, payload, store)
         # Read before applying today's configuration: old requests remain
         # replayable after a model/price/key change without another paid call.
-        try:
-            existing = store.get_turn(uid, payload.chat_id, _idempotent_turn_id(payload.chat_id, payload.client_request_id))
-        except ChatNotFound:
-            existing = None
+        chat_data, existing = (reads["turn"].result() if reads else store.chat_and_turn(
+            uid, payload.chat_id, _idempotent_turn_id(payload.chat_id, payload.client_request_id)))
         if existing:
             if existing["question"] != payload.question or existing.get("execution_mode") != "agent":
                 raise TurnStatusConflict("Request identity conflicts with another turn")
@@ -400,14 +462,15 @@ def run_agent(request: Request, payload: AgentRequest):
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
         provider_cooldowns.check(model, key or "")
-        store.recover_allowance(uid)
-        bookmark = db_firestore.collection("users").document(uid).collection("bookmarks").document(payload.bookmark_id).get()
+        reads["recover"].result()
+        bookmark = reads["bookmark"].result()
         if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
             raise TurnStatusConflict("Bookmark belongs to another conversation")
-        from app.services.agent_files import AgentFiles, FileContext, public_file
+        from app.services.agent_files import AgentFiles, FileContext
         files = AgentFiles(db_firestore)
-        file_meta = [public_file(files.get(uid, payload.chat_id, fid)) for fid in payload.file_ids]
+        file_meta = reads["files"].result()
         file_context = FileContext(files, uid, payload.chat_id, payload.file_ids)
+        file_context.preload(reads["catalog"])
         if payload.google_selection:
             from app.services.google_connections import user_allowed
             if not user_allowed(uid):
@@ -415,7 +478,6 @@ def run_agent(request: Request, payload: AgentRequest):
         # Google data enters a chat through a Gmail/Calendar selection or a file
         # picked from Google Drive; once there, the chat keeps the Google rules.
         drive_files = any(meta.get("kind") == "drive_file" for meta in file_meta)
-        chat_data = store._chat_ref(uid, payload.chat_id).get().to_dict() or {}
         google_data = bool(payload.google_selection or drive_files or chat_data.get("google_data"))
         if google_data:
             from app.services.google_connections import restricted_model
@@ -443,7 +505,7 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
-        memory = _memory_snapshot(uid)
+        memory = reads["memory"].result()
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
         app_context = get_agent_turn_context(model, config, payload.timezone)
@@ -453,9 +515,10 @@ def run_agent(request: Request, payload: AgentRequest):
         if isinstance(restored, dict) and not restored.get("told"):
             app_context += "\n" + agent_vm.VM_RESTORED_NOTE
         # The user works in the workspace's browser or just did (browser_turn).
-        browser = browser_turn(uid) if preferences.vm == "on" else None
+        browser = reads["browser"].result() if preferences.vm == "on" else None
         if browser:
             app_context += "\n" + agent_vm.HANDED_BACK_NOTE.format(minutes=max(1, round(browser / 60)))
+        reads["sweep"].result()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -472,7 +535,7 @@ def run_agent(request: Request, payload: AgentRequest):
                             "memory": memory.settings(),
                             "answer_mode": "merged",
                             "selection": {"model_id": payload.model_id, "reasoning_effort": payload.reasoning_effort}},
-            app_context=app_context,
+            app_context=app_context, sweep=False, read_back=False,
         )
         if turn["status"] == "completed":
             lease.release()
@@ -481,7 +544,7 @@ def run_agent(request: Request, payload: AgentRequest):
             _vm_restore_told(store, uid, payload.chat_id)
         chat_sources = []
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
-                                  context=app_context)
+                                  context=app_context, first_page=_first_history_page(reads["history"]))
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
@@ -528,6 +591,9 @@ def run_agent(request: Request, payload: AgentRequest):
         status = "failed"
         error = "The agent response could not be completed. Please try a new message."
         failure = {}
+        # The allowance after a step started or settled, read beside the run
+        # and sent with the next frame once read (quota_frames).
+        allowances = []
         try:
             # Give the browser a durable identity while admission is still
             # waiting, so Stop/status do not depend on a paid call starting.
@@ -539,10 +605,11 @@ def run_agent(request: Request, payload: AgentRequest):
                     if event:
                         yield pack(event["type"], event)
                         if event["type"] == "started" or (event["type"] == "activity" and event.get("kind") == "usage"):
-                            try:
-                                yield pack("quota", {"token_budget": agent_quota.snapshot(store.db, uid)})
-                            except Exception as exc:
-                                logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
+                            allowances.append(_ALLOWANCE_READS.submit(agent_quota.snapshot, store.db, uid))
+                    for frame in quota_frames(allowances):
+                        yield pack("quota", frame)
+                for frame in quota_frames(allowances, wait=True):
+                    yield pack("quota", frame)
             except GeneratorExit:
                 closing = True
                 raise

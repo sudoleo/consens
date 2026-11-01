@@ -1,4 +1,5 @@
 """Cached public provider metadata, never the allowlist of selectable models."""
+from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -57,27 +58,90 @@ def fetch_models():
     return models
 
 
+class CatalogSnapshot(Mapping):
+    """The catalog as one snapshot() saw it, read like a dict. A model's
+    entry is copied when it is first read, not the whole catalog: OpenRouter
+    lists about 550 models, a copy of all of them took about 20 ms, and until
+    2026-11-01 every message made some 45 of them before its first request
+    (one per model of the picker, mostly to read a single entry)."""
+
+    def __init__(self, entries):
+        # Shared between snapshots and never changed: every read copies.
+        self._entries = entries
+        self._copies = {}
+
+    def __getitem__(self, key):
+        if key not in self._copies:
+            self._copies[key] = deepcopy(self._entries[key])
+        return self._copies[key]
+
+    def __contains__(self, key):
+        return key in self._entries
+
+    def __iter__(self):
+        return iter(self._entries)
+
+    def __len__(self):
+        return len(self._entries)
+
+
 class ModelMetadataCache:
+    """OpenRouter's metadata, fetched again after five minutes (30 s after a
+    failure). Only the process's first snapshot waits for the fetch; later
+    ones hand out what is there while a thread fetches (``refreshing``):
+    until 2026-11-01 the first message after each five minutes waited for the
+    whole catalog's download before its request, with a few users nearly
+    every message."""
+
     def __init__(self):
         self._lock = threading.Lock()
         self._live = {}
         self._refresh_at = 0
+        # Baseline and live entries merged, until the next refresh.
+        self._merged = None
+        self.refreshing = None
+
+    def _fetch(self):
+        try:
+            models = fetch_models()
+        except Exception as exc:
+            logging.warning('Agent model metadata refresh failed category=%s', type(exc).__name__)
+            return None
+        version = datetime.now(timezone.utc).strftime('openrouter-%Y-%m-%dT%H:%M:%SZ')
+        return {key: {**value, '_version': version} for key, value in models.items()}
+
+    def _take(self, models):
+        """Under the lock: a fetch's result (None: it failed)."""
+        if models is None:
+            self._refresh_at = time.monotonic() + 30
+            return
+        self._live.update(models)
+        self._merged = None
+        self._refresh_at = time.monotonic() + 300
+
+    def _refresh(self):
+        models = self._fetch()
+        with self._lock:
+            self._take(models)
+            self.refreshing = None
 
     def snapshot(self):
         with self._lock:
-            if time.monotonic() >= self._refresh_at:
-                try:
-                    models = fetch_models()
-                    version = datetime.now(timezone.utc).strftime('openrouter-%Y-%m-%dT%H:%M:%SZ')
-                    self._live.update({key: {**value, '_version': version} for key, value in models.items()})
-                    self._refresh_at = time.monotonic() + 300
-                except Exception as exc:
-                    logging.warning('Agent model metadata refresh failed category=%s', type(exc).__name__)
-                    self._refresh_at = time.monotonic() + 30
-            result = {key: {**value, '_version': BASELINE['version']} for key, value in BASELINE['models'].items()}
-            for key, value in self._live.items():
-                result[key] = {**result.get(key, {}), **value}
-            return deepcopy(result)
+            if time.monotonic() >= self._refresh_at and self.refreshing is None:
+                if not self._live:
+                    # Nothing fetched yet: the first snapshot waits for it,
+                    # and callers at the same time wait with it.
+                    self._take(self._fetch())
+                else:
+                    self.refreshing = threading.Thread(target=self._refresh, name='agent-model-metadata',
+                                                       daemon=True)
+                    self.refreshing.start()
+            if self._merged is None:
+                merged = {key: {**value, '_version': BASELINE['version']} for key, value in BASELINE['models'].items()}
+                for key, value in self._live.items():
+                    merged[key] = {**merged.get(key, {}), **value}
+                self._merged = merged
+            return CatalogSnapshot(self._merged)
 
 
 _cache = ModelMetadataCache()

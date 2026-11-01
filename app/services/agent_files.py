@@ -274,9 +274,12 @@ class AgentFiles:
             raise
         return public_file({**data, "status": extraction["status"]})
 
-    def list(self, uid, chat_id):
-        """Files of one chat, oldest first, with document titles for grouping."""
-        self.chats.get_chat(uid, chat_id)
+    def list(self, uid, chat_id, *, checked=False):
+        """Files of one chat, oldest first, with document titles for grouping.
+        ``checked``: the caller sees the chat live itself (the Agent route,
+        whose turn's creation checks it)."""
+        if not checked:
+            self.chats.get_chat(uid, chat_id)
         chat = self.chats._chat_ref(uid, chat_id)
         records = [s.to_dict() for s in chat.collection("files").limit(MAX_FILES + 1).stream()]
         # Versions saved before titles were stored on file records fall back to
@@ -377,6 +380,13 @@ class FileContext:
         # image/PDF, so it is downloaded once per turn, not once per call.
         self._objects = {}
         self._objects_lock = threading.Lock()
+        # The catalog's read, started by the route beside its other reads
+        # (preload); catalog() takes it once.
+        self._preloaded = None
+
+    def preload(self, read):
+        """``read``: a future of files.list for this chat (the Agent route)."""
+        self._preloaded = read
 
     def read(self, args, *, cancellation):
         cancellation.raise_if_cancelled()
@@ -399,7 +409,8 @@ class FileContext:
         return [ReadOnlyTool("read_file", "Read bounded excerpts of a file in this chat. Cite its name and locator; use pagination for more.", ReadFileArgs, self.read)]
 
     def catalog(self):
-        return self.files.list(self.uid, self.chat_id)
+        read, self._preloaded = self._preloaded, None
+        return read.result() if read is not None else self.files.list(self.uid, self.chat_id)
 
     def selection(self):
         """User selection first, then visual files the model opened, at most five."""

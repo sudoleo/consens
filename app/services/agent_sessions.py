@@ -17,7 +17,7 @@ from app.services import agent_quota, agent_budget_config
 from app.services.agent_costs import USAGE_FIELDS, aggregate_usage, remaining_reservation
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_provider_limits import AgentRunInterrupted
-from app.services.chat_store import ChatNotFound, TurnStatusConflict
+from app.services.chat_store import ChatNotFound, TurnStatusConflict, read_together
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancelled
 
 
@@ -120,18 +120,11 @@ def _serialized_size(value):
 class AgentSessionStore:
     @staticmethod
     def _read_all(tx, refs):
-        """``refs`` read in one round trip of transaction ``tx`` (Firestore's
-        get_all), in their order; a missing document is a snapshot that does
-        not exist. Until 2026-10-21 each read was its own round trip: a claim
-        read nine documents one after another while every other call of the
-        account waited for the account lock (agent_journal)."""
-        get_all = getattr(tx, "get_all", None)
-        if get_all is None:
-            return [ref.get(transaction=tx) for ref in refs]
-        # The root receipt of a first step is that step's receipt: asked once.
-        unique = list({ref.path: ref for ref in refs}.values())
-        found = {snapshot.reference.path: snapshot for snapshot in get_all(unique)}
-        return [found[ref.path] for ref in refs]
+        """``refs`` read in one round trip of transaction ``tx``
+        (chat_store.read_together). Until 2026-10-21 each read was its own
+        round trip: a claim read nine documents one after another while every
+        other call of the account waited for the account lock (agent_journal)."""
+        return read_together(refs, tx)
 
     def _agent_transaction(self, uid, operation):
         # Shared with the pipeline's usage transactions: both write the same

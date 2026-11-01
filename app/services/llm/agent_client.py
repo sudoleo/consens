@@ -401,8 +401,9 @@ def metered_model(model_id, *, max_tokens=2048):
         request_config=dict(entry.request_config or {}))
 
 
-def resolve_agent_model(model_id=None, reasoning_effort="default"):
-    models = agent_models()
+def resolve_agent_model(model_id=None, reasoning_effort="default", *, models=None):
+    """``models``: agent_models() as the caller already holds it."""
+    models = agent_models() if models is None else models
     # A saved chat model may carry a migrated ID (grok-4.3-no-reasoning).
     wanted = cfg.canonical_model_id(model_id) if model_id else models[0][0].selection_id
     for model, metadata in models:

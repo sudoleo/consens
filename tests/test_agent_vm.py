@@ -273,7 +273,10 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_cont
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(vm=vm), file_context=file_context,
-        google_data=google_data, workspace_closed=workspace_closed, domains=domains)
+        # A chat with Google data always carries the user's consent (the
+        # route refuses it without).
+        google_data=google_data, google_data_consent=google_data, workspace_closed=workspace_closed,
+        domains=domains)
     return without_reviewers(loop)
 
 

@@ -332,7 +332,7 @@ class Worker:
 class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
-                 agent_preferences=None, memory=None, google_data=False, chat_sources=None, workspace_closed=False,
+                 agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
                  domains=True, **kwargs):
         super().__init__(**kwargs)
         # Domains beyond the package registries for the workbench
@@ -377,6 +377,9 @@ class DelegationLoop(AgentLoop):
         self.settings_proposal = None
         self.google_evidence = []
         self.google_data_consent = google_data_consent
+        # Whether the chat holds Google data, as the route read it (and
+        # marked it) a moment ago; None where nobody said.
+        self.google_data = google_data
         self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
         self.workers = {}
@@ -446,9 +449,13 @@ class DelegationLoop(AgentLoop):
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
         self.identical_calls = {}
-        self.models = {model.selection_id: resolve_agent_model(model.selection_id)
-                       for model, _ in agent_models() if supports_delegation(resolve_agent_model(model.selection_id))
-                       and (worker_model_ids is None or model.selection_id in worker_model_ids)}
+        # One catalog for all of them: built once per model of the picker,
+        # about 45 times, it was most of a message's work before its first
+        # request (until 2026-11-01).
+        available = agent_models()
+        resolved = {model.selection_id: resolve_agent_model(model.selection_id, models=available) for model, _ in available}
+        self.models = {selection: model for selection, model in resolved.items() if supports_delegation(model)
+                       and (worker_model_ids is None or selection in worker_model_ids)}
         catalog = [{"id": m.selection_id, "label": m.label, "input_usd_per_million": m.input_usd_per_million,
                     "output_usd_per_million": m.output_usd_per_million, "context_length": m.context_length}
                    for m in self.models.values()]
@@ -1473,7 +1480,11 @@ class DelegationLoop(AgentLoop):
         if answer_output and not self.policy.account_budget_only:
             # Bounded runs keep their hard limits whole: no overdraft.
             model, answer_output = replace(model, max_output_tokens=max(model.max_output_tokens, answer_output)), 0
-        if (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"):
+        # Google data can join the chat during the turn (a Gmail import), so
+        # every step reads the chat again; the agent's first step starts with
+        # what the route read a moment ago, before any step could add some.
+        if (self.google_data if step == "completion:0" and worker is None and self.google_data is not None
+                else (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data")):
             from app.services.google_connections import restricted_model, GoogleError
             if not self.google_data_consent:
                 raise GoogleError("Enable Google model-sharing consent for this chat before continuing.", 403)

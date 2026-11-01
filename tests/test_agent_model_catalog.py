@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json
+import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -32,12 +33,51 @@ def test_public_metadata_cache_coalesces_reads_and_preserves_last_good_values(mo
     assert cache.snapshot()[TERRA['id']]['pricing']['prompt'] == '0.000002'
     clock[0] += 301
     fetch.side_effect = TimeoutError('offline')
+    # A due refresh runs beside the snapshot, which hands out what is there.
     assert cache.snapshot()[TERRA['id']]['context_length'] == 1050000
+    cache.refreshing.join(5)
     assert metadata.BASELINE['models'].keys() <= cache.snapshot().keys()
     assert fetch.call_count == 2
     clock[0] += 31
     cache.snapshot()
+    cache.refreshing.join(5)
     assert fetch.call_count == 3
+
+
+def test_a_due_refresh_never_holds_up_a_snapshot(monkeypatch):
+    clock = [10]
+    monkeypatch.setattr(metadata.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(metadata, 'fetch_models', Mock(return_value={TERRA['id']: metadata._normalize(TERRA)}))
+    cache = metadata.ModelMetadataCache()
+    assert cache.snapshot()[TERRA['id']]['pricing']['prompt'] == '0.000002'
+    release = threading.Event()
+    cheaper = {**TERRA, 'pricing': {'prompt': '0.000001', 'completion': '0.000012'}}
+
+    def slow():
+        release.wait(5)
+        return {TERRA['id']: metadata._normalize(cheaper)}
+    monkeypatch.setattr(metadata, 'fetch_models', slow)
+    clock[0] += 301
+    assert cache.snapshot()[TERRA['id']]['pricing']['prompt'] == '0.000002'
+    release.set()
+    cache.refreshing.join(5)
+    assert cache.snapshot()[TERRA['id']]['pricing']['prompt'] == '0.000001'
+
+
+def test_a_snapshot_copies_only_the_entries_it_reads(monkeypatch):
+    """Until 2026-11-01 every snapshot copied OpenRouter's whole catalog
+    (about 550 models, ~20 ms), some 45 times before a message's first
+    request, mostly to read one entry."""
+    many = {f'vendor/model-{i}': metadata._normalize({**TERRA, 'id': f'vendor/model-{i}'}) for i in range(500)}
+    monkeypatch.setattr(metadata, 'fetch_models', Mock(return_value=many))
+    copies = []
+    real = metadata.deepcopy
+    monkeypatch.setattr(metadata, 'deepcopy', lambda value: copies.append(value) or real(value))
+    snapshot = metadata.ModelMetadataCache().snapshot()
+    assert snapshot['vendor/model-7']['context_length'] == 1050000
+    assert snapshot.get('vendor/model-7') is snapshot['vendor/model-7']
+    assert 'vendor/model-8' in snapshot and 'vendor/missing' not in snapshot and len(snapshot) >= 500
+    assert len(copies) == 1
 
 
 def test_public_fetch_uses_one_fixed_unauthenticated_bounded_endpoint(monkeypatch):

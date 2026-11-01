@@ -5,6 +5,7 @@ The direct loop's registry is empty by default. Delegation supplies its own
 server-owned registry; tools require a strict argument model and bounded executor.
 """
 from dataclasses import dataclass
+import functools
 import json
 import re
 from typing import Callable, Optional
@@ -51,7 +52,15 @@ def argument_schema(arguments):
     them: it called create_document three times with guessed section fields
     ("blocks", "content", "text") until the turn ended (2026-11-01), and
     needed three attempts at prepare_settings_change before. A flat schema
-    shows every provider the whole structure."""
+    shows every provider the whole structure.
+
+    Built once per model and handed out as a copy: every message builds its
+    tools (about 50 schemas) before its first request."""
+    return json.loads(_flat_schema(arguments))
+
+
+@functools.lru_cache(maxsize=None)
+def _flat_schema(arguments):
     schema = arguments.model_json_schema()
     definitions = schema.pop("$defs", {})
 
@@ -68,7 +77,7 @@ def argument_schema(arguments):
         siblings = {key: resolve(value, seen) for key, value in node.items() if key != "$ref"}
         return {**resolve(definitions[name], seen | {name}), **siblings}
 
-    return resolve(schema, frozenset())
+    return json.dumps(resolve(schema, frozenset()))
 
 
 def argument_shape(node):

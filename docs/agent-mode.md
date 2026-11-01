@@ -3085,6 +3085,20 @@ Rundgangszeit; mit dem gebündelten Journal (2026-10-22) bei 10 ms je Rundgang
 Review-Speicherungen 12 → 9. Zeiten immer gegen OpenRouters eigene Zeiten
 legen, bevor ein Modell oder Anbieter als langsam gilt.
 
+Befund 2026-11-01 (Max: „wir müssen schneller sein bei einfachen Dingen“):
+Kurze Fragen hatten ihre Antwort nach 4–9 s, davon lagen 2–3 s vor der ersten
+Modellanfrage, gemessen an den Belegen (`created_at` des Turns bis
+`request_started_at` des ersten Schritts, dazu die Zeit vor der Anlage des
+Turns). Ein Nachbau mit Latenz je Rundgang zeigte rund 25 Firestore-Rundgänge
+hintereinander (der Chat viermal gelesen, der Verlauf mit allen früheren
+Aktivitäten, die Kontingent-Anzeige vor dem ersten Schritt) und etwa 45 Kopien
+des ganzen OpenRouter-Katalogs im Aufbau des Laufs. Seitdem liest die Route
+alles nebeneinander, vor der Anfrage stehen nur Anlage und Claim, und der
+Katalog wird je Eintrag kopiert (Details codebase-map „Von Senden bis zur
+ersten Modellanfrage“). Im Nachbau (70 ms je Rundgang): erste Anfrage nach
+0,6 statt 2,1–3,8 s. `tests/test_agent_first_request.py` hält die vier
+Rundgänge.
+
 ## Antwortversion und Prüfung
 
 Der Agent schreibt die Antwort selbst, als Klartext in einem Schritt ohne

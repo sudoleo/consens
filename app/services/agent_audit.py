@@ -1564,6 +1564,9 @@ class ReviewerSession:
     def run(self):
         audit, log = self.audit, self.audit.work_log
         try:
+            self.model = replace(self.model, max_output_tokens=min(self.model.max_output_tokens,
+                                                                    audit.output_share(self.provider)))
+            self.budget = session_budget(self.model)
             while not audit.stopping:
                 if audit.final_answer is not None:
                     self._final(audit.final_answer)
@@ -2009,6 +2012,10 @@ class AnswerAudit:
         # The reviewers' brief of the agent's instructions (instructions_brief),
         # bound to their log entry once the log holds it (brief).
         self._brief_parts = self._brief = None
+        # Each reviewer's output allowance (output_share), read once by the
+        # first reviewer that starts.
+        self._shares = None
+        self._shares_lock = threading.Lock()
 
     def brief(self):
         """{seq, content}: the agent's instructions as the reviewers read them,
@@ -2202,7 +2209,6 @@ class AnswerAudit:
             # The reviewers then read the instructions themselves.
             logging.warning("Agent reviewer brief unavailable category=%s", safe_exception(exc))
         self.slots = threading.BoundedSemaphore(max(1, len(models)))
-        shares = tools._output_shares(models)
         with tools.lock:
             self.reviewers = {provider: {"provider": provider, "provider_label": cfg.provider_label(provider),
                                          "model": model.settings(), "status": "waiting", "rounds": 0,
@@ -2210,13 +2216,22 @@ class AnswerAudit:
                               for provider, model in models.items()}
         loop.cancellation.register(self._limit)
         for provider, model in models.items():
-            session = ReviewerSession(self, provider, replace(model, max_output_tokens=min(model.max_output_tokens,
-                                                                                            shares[provider])))
+            session = ReviewerSession(self, provider, model)
             self._limit.register(session.cancellation)
             session.thread = threading.Thread(target=copy_context().run, args=(session.run,),
                                               name=f"agent-review-{provider}", daemon=True)
             self.sessions[provider] = session
             session.thread.start()
+
+    def output_share(self, provider):
+        """A reviewer's output allowance (ComparisonTools._output_shares),
+        computed once for all of them by the first reviewer that starts, on
+        its own thread: it reads the account, and until 2026-11-01 that read
+        stood in follow(), between Send and the agent's first request."""
+        with self._shares_lock:
+            if self._shares is None:
+                self._shares = self.tools._output_shares(dict(self.tools.models))
+            return self._shares[provider]
 
     def _settle(self, status, issues=()):
         tools = self.tools
