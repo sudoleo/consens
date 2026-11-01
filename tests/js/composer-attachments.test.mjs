@@ -117,6 +117,29 @@ describe("composer attachment tray", () => {
     expect(row.querySelector(".attachment-chip").classList.contains("is-uploading")).toBe(false);
   });
 
+  // Excel, Word and LibreOffice put a picture of what was copied next to its
+  // text; Chromium hands it over as image.png. Before, the paste took the
+  // picture and dropped the text (bug hunt 2026-10-24).
+  it("pastes cells from an office program as text, a screenshot as a picture", () => {
+    const { window, document } = boot();
+    const field = document.getElementById("questionInput");
+    const picture = new window.File(["png"], "image.png", { type: "image/png" });
+    const paste = data => {
+      const event = new window.Event("paste", { bubbles: true, cancelable: true });
+      event.clipboardData = { types: Object.keys(data).concat(["Files"]), files: [picture], items: [],
+        getData: type => data[type] || "" };
+      field.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(paste({ "text/plain": "Gold\t2400\n", "text/html": '<html xmlns:o="urn:schemas-microsoft-com:office:office"><table></table></html>' })).toBe(false);
+    expect(paste({ "text/plain": "A paragraph from Word", "text/rtf": "{\\rtf1 A paragraph}" })).toBe(false);
+    expect(paste({ "text/plain": "Gold\t2400", "text/html": '<meta name="generator" content="LibreOffice"><table></table>' })).toBe(false);
+    expect(window.pendingAttachments.map(file => file.name)).toEqual([FILE.name]);
+    // A screenshot, or a picture copied in the browser, stays a picture.
+    expect(paste({})).toBe(true);
+    expect(paste({ "text/html": '<img src="https://example.com/a.png">' })).toBe(true);
+  });
+
   it("ends the (+) menu above the bottom edge of a short phone, where it scrolls", () => {
     const { window, document } = boot();
     const menu = document.getElementById("attachMenu");

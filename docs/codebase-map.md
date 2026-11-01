@@ -7726,7 +7726,9 @@ Parserfehler gelten als „kein Text“ und führen zum bestehenden Hinweis bzw.
 nativen Versand. **Im klassischen Consensus landen in Firestore nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
-angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
+angehängt werden; Text aus Excel, Word oder LibreOffice (nicht leeres
+`text/plain` plus `text/rtf` oder Office-HTML) bleibt Text, obwohl diese
+Programme ein Bild daneben legen (`isOfficeText`). Drag-and-drop auf `.chat-input-container` akzeptiert wie der
 Dateiauswahldialog die vollständige PDF/DOCX/TXT/MD/CSV/PNG/JPEG/WebP-Whitelist;
 alle Wege nutzen dasselbe Gate sowie dieselben Anzahl-/Größenlimits. Seit
 2026-10-02 ist `entitlements.attachments` für jede Stufe wahr (Dateien kosten

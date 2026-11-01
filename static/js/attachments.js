@@ -1318,8 +1318,19 @@
       addFiles(files, { source: "picker", imagesOnly: false });
     });
 
+    // Excel, Word and LibreOffice put a picture of the cells or the page next
+    // to the text, and Chromium hands it over as image.png: what the reader
+    // copied there is the text.
+    function isOfficeText(clipboard) {
+      if (!clipboard || typeof clipboard.getData !== "function") return false;
+      if (!String(clipboard.getData("text/plain") || "").trim()) return false;
+      if (Array.from(clipboard.types || []).indexOf("text/rtf") !== -1) return true;
+      return /urn:schemas-microsoft-com:office|ProgId|LibreOffice/i.test(String(clipboard.getData("text/html") || ""));
+    }
+
     if (questionInput) {
       questionInput.addEventListener("paste", function (event) {
+        if (isOfficeText(event.clipboardData)) return;
         const files = transferFiles(event.clipboardData).filter(isImageLike);
         if (!files.length) return;
         event.preventDefault();

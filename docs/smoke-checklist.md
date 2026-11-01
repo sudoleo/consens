@@ -1206,7 +1206,8 @@ Server.
 ## Attachments (Pro)
 - [ ] Datei anhängen → Chip erscheint, Vorschau öffnet, Entfernen funktioniert.
 - [ ] PNG/JPG/WebP mit Strg+V im Fragefeld einfügen → Bild-Chip erscheint;
-      normaler Text-Paste bleibt unverändert möglich.
+      normaler Text-Paste bleibt unverändert möglich, auch Zellen aus Excel
+      oder ein Absatz aus Word (landen als Text, nicht als Bild).
 - [ ] PDF/DOCX/TXT/MD/CSV/PNG/JPG/WebP auf den Input ziehen → Drop-Hinweis
       erscheint und nach dem Ablegen wird der passende Datei-Chip angelegt.
 - [ ] Mit einem echten Anhang zeigt der Modell-Picker ein Modell weniger und
