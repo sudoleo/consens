@@ -424,12 +424,18 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         def operation(tx):
             # One round trip for all of them (_read_all), the expected ledger
-            # day included; the receipt names the day it books into.
-            tombstone, receipt, user, chat, turn, active, root, *guessed = self._read_all(tx, (
-                persistence_guard.deletion_ref(self.db, uid), receipt_ref, user_ref, chat_ref, turn_ref, active_ref,
-                root_ref, *([expected_daily] if expected_daily is not None else [])))
+            # day included; the receipt names the day it books into. Chat,
+            # turn and the account's running responses only for a final
+            # settlement: a delegated step's (final=False, every step of a
+            # run since the delegation) touches none of them (2026-11-01).
+            tombstone, receipt, root, *rest = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), receipt_ref, root_ref,
+                *((chat_ref, turn_ref, active_ref) if final else ()),
+                *([expected_daily] if expected_daily is not None else [])))
+            chat, turn, active = rest[:3] if final else (None, None, None)
+            guessed = rest[3:] if final else rest
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
-            if not receipt.exists or not user.exists:
+            if not receipt.exists:
                 raise ChatNotFound("Agent receipt not found")
             if (receipt.to_dict() or {}).get("status") != "running":
                 return False
@@ -445,26 +451,20 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 # A call claimed before midnight or a reset: its own day.
                 daily = daily_ref.get(transaction=tx).to_dict()
             usage = completion.usage
-            totals = dict((user.to_dict() or {}).get("agent_usage") or {})
-            totals["unsettled_calls"] = max(0, totals.get("unsettled_calls", 0) - 1)
-            key = "measured_calls" if usage is not None and usage.get("input_tokens") is not None else "unmetered_calls"
-            totals[key] = totals.get(key, 0) + 1
-            if usage is not None and not usage.get("complete", True):
-                totals["incomplete_calls"] = totals.get("incomplete_calls", 0) + 1
-            if usage is not None and usage.get("estimated_cost_nano_usd") is not None:
-                cost_key = "provider_cost_nano_usd" if usage.get("cost_source") == "provider" else "catalog_cost_nano_usd"
-                totals[cost_key] = totals.get(cost_key, 0) + usage["estimated_cost_nano_usd"]
-            for field in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens", "reasoning_tokens", "estimated_cost_nano_usd"):
-                if usage is not None and usage.get(field) is not None:
-                    totals[field] = totals.get(field, 0) + usage[field]
-            totals["updated_at"] = firestore.SERVER_TIMESTAMP
-            tx.update(user_ref, {"agent_usage": totals})
+            # A receipt without a ledger day (a claim without a reservation,
+            # the plain AgentLoop) still counts on the user document; every
+            # other call in its day's ledger (agent_quota.count_claim).
+            user = user_ref.get(transaction=tx) if daily_ref is None else None
             estimate = None
             if daily_ref:
-                tx.set(daily_ref, agent_quota.settle(daily, receipt_data["quota_reserved"], usage))
+                tx.set(daily_ref, agent_quota.count_settlement(
+                    agent_quota.settle(daily, receipt_data["quota_reserved"], usage), usage))
                 estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage)
-            leases = dict((active.to_dict() or {}).get("leases") or {})
+            elif user.exists:
+                ledger = agent_quota.count_settlement({"agent_usage": (user.to_dict() or {}).get("agent_usage")}, usage)
+                tx.update(user_ref, {"agent_usage": {**ledger["agent_usage"], "updated_at": firestore.SERVER_TIMESTAMP}})
             if final:
+                leases = dict((active.to_dict() or {}).get("leases") or {})
                 leases.pop(self.receipt_ref(uid, chat_id, turn_id).id, None)
                 tx.set(active_ref, {"leases": leases})
             receipt_patch = {
@@ -504,7 +504,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             delegated = self._delegated_settlement(root_data, step, status, usage)
             if delegated:
                 tx.update(root_ref, delegated)
-            chat_data = chat.to_dict() or {}
+            chat_data = (chat.to_dict() or {}) if final else {}
             if final and chat.exists and turn.exists and chat_data.get("status") == "active":
                 if (turn.to_dict() or {}).get("status") == "pending":
                     patch = {"status": "completed" if status == "succeeded" else "failed",

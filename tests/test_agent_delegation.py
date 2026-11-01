@@ -424,3 +424,36 @@ def test_worker_429_can_use_checked_fallback_without_retrying_worker(store):
     assert any(e.get("agent", {}).get("failure", {}).get("code") == "provider_rate_limited"
                for e in events if e.get("agent", {}).get("failure"))
     assert loop.completion.usage["cost_complete"] is True
+
+
+def test_a_retried_session_update_is_saved_once_without_an_event_document(store):
+    """A journal batch whose commit was ambiguous is sent again with the same
+    event ids (_journal_write): the second time returns what the first saved,
+    moves no sequence and adds no message. Since 2026-11-01 the session keeps
+    the ids itself; the event documents (agent_events), read by nothing else,
+    cost a write and a read per update."""
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
+    agent_id, event_id = "a" * 32, "e" * 32
+    first = store.publish_agent(*args, run_token=loop.run_token, agent_id=agent_id, event_id=event_id,
+                                patch={"assignment": assignment("Verify"), "status": "working"},
+                                message={"kind": "note", "text": "Started."})
+    again = store.publish_agent(*args, run_token=loop.run_token, agent_id=agent_id, event_id=event_id,
+                                patch={"assignment": assignment("Verify"), "status": "working"},
+                                message={"kind": "note", "text": "Started."})
+    assert again["seq"] == first["seq"] and again["id"] == event_id and again["agent"]["status"] == "working"
+    assert store.receipt_ref(*args).get().to_dict()["event_seq"] == first["seq"]
+    session = store.agent_ref(*args, agent_id).get().to_dict()
+    assert session["event_ids"] == [event_id] and "event_ids" not in first["agent"]
+    turn_ref = store._turn_ref(*args)
+    assert len(list(turn_ref.collection("agents").document(agent_id).collection("messages").stream())) == 1
+    assert not list(turn_ref.collection("agent_events").stream())
+    # The browser's view of the sessions carries neither the ids nor the assignment.
+    [view] = store.delegation_view(*args)["agents"]
+    assert "event_ids" not in view and "assignment" not in view
+    # Only the newest ids stay with the session.
+    for index in range(10):
+        store.publish_agent(*args, run_token=loop.run_token, agent_id=agent_id, event_id=f"{index:032x}",
+                            patch={"status": "working"})
+    assert store.agent_ref(*args, agent_id).get().to_dict()["event_ids"] == [f"{index:032x}" for index in range(2, 10)]

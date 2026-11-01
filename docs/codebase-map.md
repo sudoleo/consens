@@ -5082,7 +5082,24 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   Update das Event oder die Ablehnung nur dieses Updates (Limit, fehlende
   Assignment, gestoppter Lauf bei nicht beendendem Status), die übrigen werden
   trotzdem gespeichert; Konto, Chat und `run_token` lehnen alle ab.
-  `publish_agent` ist der Einzelfall davon. Wartende Aufrufer (neue Sitzung
+  `publish_agent` ist der Einzelfall davon. Seit 2026-11-01 ohne eigenes
+  Ereignis-Dokument (`agent_events`, las nur diese Prüfung): Die Sitzung trägt
+  die IDs ihrer letzten 8 Updates (`event_ids`, `SESSION_PRIVATE` mit
+  `assignment`, nie an den Browser), ein wiederholter Commit findet sich dort
+  und bekommt den Stand der Sitzung zurück.
+
+  **Schreibvorgänge je Nachricht (Messung 2026-11-01).** Prod an dem Tag: rund
+  15 Agent-Nachrichten, 348 Modellaufrufe, 436 Journal-Updates, 687
+  Protokolleinträge, zusammen geschätzt 5.000–5.500 Schreibvorgänge; knapp 60 %
+  davon Claim und Settlement je Modellaufruf. Seitdem schreibt ein Aufruf 6
+  statt 9–10 Dokumente: Die Account-Zähler stehen im Tageskonto
+  (`agent_quota.count_claim`/`count_settlement`, Admin-Suche
+  `usage_totals`), nicht mehr am User-Dokument; `chat_state/agent_runs` nur bei
+  Änderung; ein delegiertes Settlement liest Chat, Turn und diese Liste nicht
+  mehr; die Lease wird erst unter 45 s Rest verlängert (`PRODUCER_RENEW_BEFORE_SECONDS`,
+  etwa alle 75 statt 30 s). Eine kurze Nachricht mit zwei Prüfern: 54 statt 70
+  Schreib- und 129 statt 160 Lesevorgänge; Rundgänge bis zur ersten Anfrage
+  unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (neue Sitzung
   vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) kommen
   bei vollem Stapel zuerst, mit allem, was ihre Sitzung vorher übergab. Noch
   ungeschriebene Updates einer Sitzung werden ein Update (`completed` +

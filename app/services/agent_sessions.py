@@ -22,7 +22,11 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCa
 
 
 PRODUCER_LEASE_SECONDS = 120
-PRODUCER_RENEW_BEFORE_SECONDS = 90
+# The run's watcher looks every 3 s (10 s in a pause); a renewal writes the
+# root, the chat's lock and the account's running responses. With 45 s left
+# it renews about every 75 s and still has a dozen tries before the lease
+# ends; at 90 s (until 2026-11-01) it renewed every 30 s.
+PRODUCER_RENEW_BEFORE_SECONDS = 45
 # Size contract of the per-turn root receipt (R29). Running steps always stay
 # in the root maps; only settled steps beyond this window are folded into
 # `compacted_usage`/`compacted_steps`. Each step keeps its own immutable
@@ -35,6 +39,11 @@ TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent t
 # Messages the user sends into a running response (add_user_note), on its root
 # receipt, which the run's watcher reads every few seconds anyway.
 USER_NOTES_MAX = 10
+# What a session keeps for itself: its assignment (the browser loads it on
+# demand) and the ids of its last journal updates, by which a retried
+# ambiguous commit finds that it was saved (publish_agents).
+SESSION_PRIVATE = frozenset({"assignment", "event_ids"})
+SESSION_EVENT_IDS = 8
 
 
 def review_tail(turn):
@@ -187,7 +196,7 @@ class AgentSessionStore:
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id, step)
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
-        user_ref, active_ref = self.db.collection("users").document(uid), self.active_ref(uid)
+        active_ref = self.active_ref(uid)
         agent_id = step.split(":")[1] if step.startswith("agent:") else "orchestrator"
         index = int(step.split(":")[-1])
         budget_config = agent_budget_config.get_config(self.db)
@@ -198,8 +207,8 @@ class AgentSessionStore:
         agent_refs = [self.agent_ref(uid, chat_id, turn_id, agent_id)] if agent_id != "orchestrator" else []
 
         def operation(tx):
-            tombstone, receipt, root, chat, turn, user, active, daily_snapshot, *agent = self._read_all(tx, (
-                persistence_guard.deletion_ref(self.db, uid), receipt_ref, root_ref, chat_ref, turn_ref, user_ref,
+            tombstone, receipt, root, chat, turn, active, daily_snapshot, *agent = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), receipt_ref, root_ref, chat_ref, turn_ref,
                 active_ref, daily_ref, *agent_refs))
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
             agent = agent[0] if agent else None
@@ -215,7 +224,8 @@ class AgentSessionStore:
                     or turn_data.get("execution_mode") != "agent"
                     or (chat_data.get("agent_turn_id") != turn_id and not tail)):
                 raise TurnStatusConflict("Agent turn is no longer runnable")
-            leases = {key: value for key, value in ((active.to_dict() or {}).get("leases") or {}).items()
+            stored_leases = (active.to_dict() or {}).get("leases") or {}
+            leases = {key: value for key, value in stored_leases.items()
                       if isinstance(value, datetime) and value > now}
             if not root.exists:
                 if chat_data.get("agent_lock_until", now) <= now:
@@ -283,15 +293,14 @@ class AgentSessionStore:
             else:
                 tx.set(root_ref, {**record, **patch})
                 tx.update(chat_ref, {"agent_lock_until": data["lease_until"]})
-            totals = dict((user.to_dict() or {}).get("agent_usage") or {})
-            totals.update(calls=totals.get("calls", 0) + 1, unsettled_calls=totals.get("unsettled_calls", 0) + 1,
-                          currency="USD", billing_mode="simulation")
-            tx.set(active_ref, {"leases": leases})
-            tx.set(daily_ref, daily)
-            if user.exists:
-                tx.update(user_ref, {"agent_usage": totals})
-            else:
-                tx.set(user_ref, {"agent_usage": totals})
+            # The account's running responses change only with a new run or
+            # an expired lease: a later step of the same run writes nothing
+            # here (2026-11-01; every claim rewrote the map).
+            if leases != stored_leases:
+                tx.set(active_ref, {"leases": leases})
+            # The call is counted in the day's ledger it reserves from, not
+            # on the user document (agent_quota.count_claim).
+            tx.set(daily_ref, agent_quota.count_claim(daily))
             return True
         return self._agent_transaction(uid, operation)
 
@@ -403,14 +412,25 @@ class AgentSessionStore:
         its first commit. A deleted account, chat or closed run refuses the
         whole call. Until 2026-10-22 every update was its own transaction:
         six comparison answers starting together queued six writes behind
-        the account lock, each before its model call could be claimed."""
+        the account lock, each before its model call could be claimed.
+
+        The session remembers the ids of its last updates (``event_ids``,
+        SESSION_EVENT_IDS): a retried id returns the session as that first
+        commit left it. Until 2026-11-01 each event was a document of its own
+        (``agent_events``) that nothing else read: a write and a read more
+        per update, a fifth of a message's writes."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         agent_refs = [self.agent_ref(uid, chat_id, turn_id, agent_id) for agent_id, *_ in updates]
-        event_refs = [turn_ref.collection("agent_events").document(event_id) for *_, event_id in updates]
+
+        def event(session, event_id):
+            public = {key: value for key, value in session.items() if key not in SESSION_PRIVATE}
+            return {"type": "delegation", "version": 1, "id": event_id, "seq": session["seq"],
+                    "run_id": root_ref.id, "chat_id": chat_id, "turn_id": turn_id, "agent": public}
+
         def operation(tx):
             tombstone, root, chat, turn, *snapshots = self._read_all(tx, (
-                persistence_guard.deletion_ref(self.db, uid), root_ref, chat_ref, turn_ref, *agent_refs, *event_refs))
+                persistence_guard.deletion_ref(self.db, uid), root_ref, chat_ref, turn_ref, *agent_refs))
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
             data = root.to_dict() or {}
             if not chat.exists or not turn.exists or (chat.to_dict() or {}).get("status") != "active":
@@ -421,12 +441,11 @@ class AgentSessionStore:
             # Sessions as this call leaves them: one updated twice reads its own first update.
             sessions = {}
             results = []
-            for (agent_id, patch, message, event_id), agent_ref, event_ref, agent, event in zip(
-                    updates, agent_refs, event_refs, snapshots[:len(updates)], snapshots[len(updates):]):
-                if event.exists:
-                    results.append(event.to_dict())
-                    continue
+            for (agent_id, patch, message, event_id), agent_ref, agent in zip(updates, agent_refs, snapshots):
                 current = sessions[agent_id] if agent_id in sessions else agent.to_dict() if agent.exists else None
+                if event_id in (current or {}).get("event_ids", ()):
+                    results.append(event(current, event_id))
+                    continue
                 try:
                     if data.get("run_status") != "running":
                         raise TurnStatusConflict("Agent session is closed")
@@ -457,11 +476,9 @@ class AgentSessionStore:
                     tx.set(agent_ref.collection("messages").document(event_id),
                            {**message, "id": event_id, "seq": seq, "created_at": session["updated_at"]})
                     session["message_seq"] = seq
-                public = {key: value for key, value in session.items() if key != "assignment"}
-                result = {"type": "delegation", "version": 1, "id": event_id, "seq": seq,
-                          "run_id": root_ref.id, "chat_id": chat_id, "turn_id": turn_id, "agent": public}
+                session["event_ids"] = [*(current or {}).get("event_ids", ())[1 - SESSION_EVENT_IDS:], event_id]
+                result = event(session, event_id)
                 tx.set(agent_ref, session)
-                tx.set(event_ref, result)
                 sessions[agent_id] = session
                 results.append(result)
             if seq != data.get("event_seq", 0):
@@ -629,7 +646,7 @@ class AgentSessionStore:
             for agent in agents:
                 if agent.get("status") in {"waiting", "working", "question", "rework"}:
                     agent["duration_ms"] = max(agent.get("duration_ms", 0), self._observed_duration(agent, now))
-        return {"agents": [{k: v for k, v in a.items() if k != "assignment"} for a in agents],
+        return {"agents": [{k: v for k, v in a.items() if k not in SESSION_PRIVATE} for a in agents],
                 "seq": root.get("event_seq", 0), "status": root.get("run_status", turn["status"]),
                 "usage": root_usage(root) or turn.get("agent_usage")}
 

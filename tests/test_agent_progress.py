@@ -325,8 +325,9 @@ def test_live_usage_replaces_step_snapshots_without_extra_receipts_or_transcript
         assert updates[-1]["usage"]["input_tokens"] == agent["usage"]["input_tokens"] == 50
         assert updates[-1]["usage"]["output_tokens"] == agent["usage"]["output_tokens"] == 20
         assert "stream_chars" not in agent
-    stored = [snap.to_dict() for snap in store._turn_ref(loop.uid, loop.chat_id, loop.turn_id).collection("agent_events").stream()]
-    assert all(e["type"] == "delegation" for e in stored)
+    # Nothing of the live frames is saved: since 2026-11-01 not even the
+    # session events (publish_agents keeps their ids on the session).
+    assert not list(store._turn_ref(loop.uid, loop.chat_id, loop.turn_id).collection("agent_events").stream())
     assert loop.completion.usage["input_tokens"] + loop.completion.usage["output_tokens"] == 70 * len(script.calls)
 
 

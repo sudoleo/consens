@@ -25,7 +25,7 @@ from app.services.agent_provider_limits import ModelEmptyAnswer
 from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, AnalysisBudgetExceeded
 from agent_reviewers import without_reviewers
-from test_agent_runs import UID, AUTH, api, pending, receipt, store, priced
+from test_agent_runs import UID, AUTH, api, pending, receipt, store, priced, totals
 
 # How a reviewer's system prompt begins (agent_audit.REVIEW_PROMPT_HEAD).
 REVIEWER = "You are an independent reviewer"
@@ -624,7 +624,7 @@ def test_transient_settlement_failure_never_repeats_model_or_leaves_run_pending(
     assert len(saved["agent_review"]["comparisons"][0]["answers"]) == (2 if failures == 1 else 1)
     root = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     assert root["run_status"] == "succeeded" and "running" not in root["step_states"].values()
-    assert store.db.collection("users").document(UID).get().to_dict()["agent_usage"]["unsettled_calls"] == 0
+    assert totals(store)["unsettled_calls"] == 0
     assert saved["agent_usage"]["input_tokens"] + saved["agent_usage"]["output_tokens"] == len(script.calls) * 70
 
 

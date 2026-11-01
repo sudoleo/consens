@@ -111,14 +111,19 @@ def test_lease_renewal_keeps_all_fences_in_sync_but_never_revives_a_stopped_run(
     store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(1, priced(1)))
     root, chat, active = store.receipt_ref(*args), store._chat_ref(UID, loop.chat_id), store.active_ref(UID)
     original = root.get().to_dict()["lease_until"]
-    timer.stamp += timedelta(seconds=35)
+    from app.services.agent_sessions import PRODUCER_LEASE_SECONDS, PRODUCER_RENEW_BEFORE_SECONDS
+    # Not yet: more than PRODUCER_RENEW_BEFORE_SECONDS left writes nothing.
+    timer.stamp += timedelta(seconds=PRODUCER_LEASE_SECONDS - PRODUCER_RENEW_BEFORE_SECONDS - 5)
+    store.check_delegation(*args, loop.run_token)
+    assert root.get().to_dict()["lease_until"] == original
+    timer.stamp += timedelta(seconds=10)
     store.check_delegation(*args, loop.run_token)
     renewed = root.get().to_dict()["lease_until"]
     assert renewed > original
     assert chat.get().to_dict()["agent_lock_until"] == active.get().to_dict()["leases"][root.id] == renewed
     store.check_delegation(*args, loop.run_token)
     assert root.get().to_dict()["lease_until"] == renewed
-    timer.stamp += timedelta(seconds=35)
+    timer.stamp += timedelta(seconds=PRODUCER_LEASE_SECONDS - PRODUCER_RENEW_BEFORE_SECONDS + 5)
     if failure == "stop":
         store.stop_delegation(*args)
     elif failure == "expired":

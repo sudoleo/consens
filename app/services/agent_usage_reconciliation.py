@@ -18,7 +18,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
-from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.observability import safe_exception
@@ -134,8 +133,6 @@ def reconcile_pending(db, uid: str, *, fetch_usage, now: datetime | None = None)
 
 
 def _apply(db, uid, receipt_ref, *, actual, now, retry=False) -> bool:
-    user_ref = db.collection("users").document(uid)
-
     def operation(tx):
         persistence_guard.ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         receipt = receipt_ref.get(transaction=tx).to_dict() or {}
@@ -146,7 +143,6 @@ def _apply(db, uid, receipt_ref, *, actual, now, retry=False) -> bool:
         day = receipt.get("quota_day")
         daily_ref = agent_quota.quota_ref(db, uid, day) if day and actual is not None else None
         daily = (daily_ref.get(transaction=tx).to_dict() or {}) if daily_ref else None
-        user = user_ref.get(transaction=tx) if actual is not None else None
         if retry:
             attempts = int(receipt.get("quota_reconcile_attempts") or 0) + 1
             tx.update(receipt_ref, {"quota_reconcile_attempts": attempts,
@@ -157,13 +153,12 @@ def _apply(db, uid, receipt_ref, *, actual, now, retry=False) -> bool:
             return True
         charged = actual
         if daily_ref:
-            tx.set(daily_ref, agent_quota.reconcile(daily, estimate, charged))
-        if user is not None and user.exists:
-            totals = dict((user.to_dict() or {}).get("agent_usage") or {})
+            reconciled = agent_quota.reconcile(daily, estimate, charged)
+            # The admin's sums, in the ledger as every call's (agent_quota.count_claim).
+            totals = dict(reconciled.get("agent_usage") or {})
             totals["reconciled_calls"] = totals.get("reconciled_calls", 0) + 1
             totals["reconciled_micro_eur"] = totals.get("reconciled_micro_eur", 0) + charged
-            totals["updated_at"] = firestore.SERVER_TIMESTAMP
-            tx.update(user_ref, {"agent_usage": totals})
+            tx.set(daily_ref, {**reconciled, "agent_usage": totals})
         tx.update(receipt_ref, {"quota_reconcile": MEASURED, "quota_measured": charged,
                                 "quota_reconciled_at": now})
         return True

@@ -54,12 +54,24 @@ Modellschritt haben stabile Identitäten. Modellschritte heißen `completion:N`
 oder `agent:<uuid>:N`. Alle Pfade liegen unter dem authentifizierten Nutzer.
 `agent_sessions.py` verwaltet kompakte Dokumente unter
 `chats/{chat}/turns/{turn}/agents/{agent}` und getrennte `messages`-Subcollections.
-`agent_events` enthält geordnete, deduplizierbare Zustandsereignisse mit globaler
-Sequenznummer. Die kurzen Reasoning-Zusammenfassungen bleiben davon getrennt.
+Jedes Zustandsereignis trägt eine globale Sequenznummer; seit 2026-11-01 merkt sich
+die Sitzung die IDs ihrer letzten `SESSION_EVENT_IDS` = 8 Updates (`event_ids`,
+nie an den Browser), an denen ein wiederholter mehrdeutiger Commit erkennt, dass er
+schon gespeichert ist. Bis dahin war jedes Ereignis ein eigenes Dokument
+(`agent_events`), das außer dieser Prüfung nichts las: ein Schreib- und ein
+Lesevorgang mehr je Update. Die kurzen Reasoning-Zusammenfassungen bleiben davon getrennt.
 
 Jeder tatsächliche Provideraufruf erhält genau einen `llm_calls`-Beleg.
 Claim, gemeinsame Token-/Kostenreserve und Account-Zähler werden atomar geschrieben;
-Settlement, Freigabe bekannter Reserven und Account-Kosten ebenfalls.
+Settlement, Freigabe bekannter Reserven und Account-Kosten ebenfalls. Die
+Account-Zähler (Aufrufe, Tokens, Kosten fürs Admin) stehen seit 2026-11-01 im
+Tageskonto (`agent_quota.count_claim`/`count_settlement`), das beide ohnehin
+schreiben, nicht mehr am User-Dokument: zwei Schreib- und Lesevorgänge weniger je
+Modellaufruf. Die Admin-Kontosuche summiert die Tageskonten
+(`agent_quota.usage_totals`) zu dem, was das User-Dokument bis dahin zählte. Die
+Liste der laufenden Antworten (`chat_state/agent_runs`) schreibt ein Claim nur noch,
+wenn sie sich ändert (neuer Lauf, abgelaufene Lease); ein delegierter Schritt
+(`final=False`) liest beim Settlement weder Chat noch Turn noch diese Liste.
 Das Budget umfasst Orchestrierung, Worker, Suche und Nacharbeit. Provider-Gesamtkosten
 haben Vorrang; Katalogschätzungen und unvollständige Messungen bleiben markiert.
 `cost_complete` ist unabhängig von vollständigen Tokenzahlen. Unbekannte Anteile
@@ -78,8 +90,9 @@ und Prüfungen: [Agent-Modus](agent-mode.md).
 
 Abbruch schließt sämtliche Provider-Sockets und wartet auf alle Worker. Ein Watchdog
 prüft alle drei Sekunden Run-Abbruch und Chatlöschung; Account-Sperren gelten für
-jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird etwa alle
-30 Sekunden atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
+jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird, sobald weniger als
+`PRODUCER_RENEW_BEFORE_SECONDS` = 45 übrig sind (etwa alle 75 Sekunden; bis
+2026-11-01 alle 30), atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
 DB-Ausfälle verursachen keinen sofortigen Stopp. Nach Prozessverlust werden offene Belege beim Lesen nach Lease-Ablauf
 als abgebrochen/unbekannt abgeschlossen; bereits bezahlte Schritte werden nie
 neu gestartet. Sitzungsstände (Status, Live-Zeile, Ergebnis) schreibt seit

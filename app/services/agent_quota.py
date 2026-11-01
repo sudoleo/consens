@@ -367,6 +367,58 @@ def settle(data, reserved, usage):
     return data
 
 
+# What the account's model calls took in all (the admin's account lookup),
+# counted in the day's ledger that a claim and a settlement write anyway.
+# Until 2026-11-01 the user document carried these counters: two more writes
+# and reads of the account's busiest document per model call, about a fifth
+# of all Firestore writes of an Agent message.
+USAGE_SUMS = ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens", "reasoning_tokens",
+              "estimated_cost_nano_usd")
+
+
+def count_claim(data):
+    """A call claimed against ``data`` (a day's ledger): counted, unsettled."""
+    totals = dict(data.get("agent_usage") or {})
+    totals["calls"] = totals.get("calls", 0) + 1
+    totals["unsettled_calls"] = totals.get("unsettled_calls", 0) + 1
+    data["agent_usage"] = totals
+    return data
+
+
+def count_settlement(data, usage):
+    """The settled call's measurement in the ledger's sums (count_claim)."""
+    totals = dict(data.get("agent_usage") or {})
+    totals["unsettled_calls"] = max(0, totals.get("unsettled_calls", 0) - 1)
+    key = "measured_calls" if usage is not None and usage.get("input_tokens") is not None else "unmetered_calls"
+    totals[key] = totals.get(key, 0) + 1
+    if usage is not None and not usage.get("complete", True):
+        totals["incomplete_calls"] = totals.get("incomplete_calls", 0) + 1
+    if usage is not None and usage.get("estimated_cost_nano_usd") is not None:
+        cost_key = "provider_cost_nano_usd" if usage.get("cost_source") == "provider" else "catalog_cost_nano_usd"
+        totals[cost_key] = totals.get(cost_key, 0) + usage["estimated_cost_nano_usd"]
+    for field in USAGE_SUMS:
+        if usage is not None and usage.get(field) is not None:
+            totals[field] = totals.get(field, 0) + usage[field]
+    data["agent_usage"] = totals
+    return data
+
+
+def usage_totals(db, uid, legacy=None):
+    """The account's sums over all its day ledgers (count_claim and
+    count_settlement), added to ``legacy``: what the user document counted
+    until 2026-11-01. Reads every ledger of the account: for the admin's
+    lookup only, never on a message's path."""
+    totals = {key: value for key, value in (legacy or {}).items() if type(value) in (int, float)}
+    ledgers = db.collection("users").document(uid).collection("chat_state").stream()
+    for snapshot in ledgers:
+        if not (snapshot.id.startswith("agent_tokens_") and snapshot.id.endswith(LEDGER_UNIT)):
+            continue
+        for key, value in ((snapshot.to_dict() or {}).get("agent_usage") or {}).items():
+            if type(value) in (int, float):
+                totals[key] = totals.get(key, 0) + value
+    return totals
+
+
 def reconcile(data, estimate, actual):
     """Replace one charged estimate with the measured charge. Callers fence once."""
     data = normalize(data)

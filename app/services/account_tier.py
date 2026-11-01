@@ -109,7 +109,16 @@ def get_account(identifier: str, db=None) -> dict:
         email = auth.get_user(uid).email or ""
     except Exception as exc:  # Auth-Ausfall darf die Anzeige nicht brechen.
         logging.warning("account tier email lookup failed category=%s", safe_exception(exc))
-    return _serialize(uid, _profile(uid, db), email=email)
+    profile = _profile(uid, db)
+    account = _serialize(uid, profile, email=email)
+    # The Agent's sums live in the day ledgers since 2026-11-01; the user
+    # document keeps what it counted before (agent_quota.usage_totals).
+    try:
+        from app.services import agent_quota
+        account["agent_usage"] = agent_quota.usage_totals(db, uid, legacy=profile.get("agent_usage"))
+    except Exception as exc:
+        logging.warning("account agent usage lookup failed category=%s", safe_exception(exc))
+    return account
 
 
 def set_tier(identifier: str, tier, *, admin_uid: str, note: str = "", db=None) -> dict:

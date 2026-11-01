@@ -60,7 +60,8 @@ def test_reload_reaps_lost_lease_map_and_recovers_exact_saved_single_call_usage(
                     step=f'agent:{aid}:0', reservation=(3701, priced(3701)))
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid, patch={'status':'failed', 'usage':usage})
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
-    ref.set({'used':85329, 'unknown':154521, 'reserved':161923})
+    # The calls counted so far stay in the ledger (agent_quota.count_claim).
+    ref.set({'used':85329, 'unknown':154521, 'reserved':161923, 'agent_usage':ref.get().to_dict()['agent_usage']})
     root = store.receipt_ref(*args)
     store._transaction(lambda tx: tx.update(root, {'lease_until':datetime.now(timezone.utc)-timedelta(seconds=60)}))
     store.active_ref(UID).set({'leases':{}})

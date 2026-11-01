@@ -69,7 +69,11 @@ def receipt(*, measured=True):
 
 
 def totals(store):
-    return store.db.collection("users").document(UID).get().to_dict()["agent_usage"]
+    """The account's Agent sums as the admin sees them: the day ledgers'
+    (since 2026-11-01) plus what the user document counted before."""
+    from app.services import agent_quota
+    user = store.db.collection("users").document(UID).get().to_dict() or {}
+    return agent_quota.usage_totals(store.db, UID, legacy=user.get("agent_usage"))
 
 
 def priced(amount):

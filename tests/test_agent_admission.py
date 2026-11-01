@@ -26,7 +26,9 @@ class Completion(AgentCompletion):
 
 def quota(store, remaining):
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
-    ref.set({"used": 250000 - remaining})
+    # The calls counted so far stay (agent_quota.count_claim, since 2026-11-01).
+    counted = (ref.get().to_dict() or {}).get("agent_usage")
+    ref.set({"used": 250000 - remaining, **({"agent_usage": counted} if counted else {})})
     return ref
 
 
