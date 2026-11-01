@@ -337,6 +337,13 @@ body:has(.sidebar.active) .brand-float {
   z-index: var(--z-header);
 }
 
+/* The glyph alone mirrors the folded sidebar's mark at the top left (12px
+   from the edge); a guest's pills keep their 16px. Without specificity, so
+   the panels' offsets below still move the group. */
+.app-top-actions:where(:not(:has(> .auth-top-actions:not([hidden])))) {
+  right: 12px;
+}
+
 .auth-top-actions {
   display: flex;
   align-items: center;
@@ -369,10 +376,13 @@ body:has(.sidebar.active) .brand-float {
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 
+.temporary-chat-button[hidden] {
+  display: none;
+}
+
 /* Not on Watches; and a guest's top right is Log in and Sign up alone (a
    phone has no room for a third control there): the switch comes with the
-   account. */
-.temporary-chat-button[hidden],
+   account (temporary-chat.js also disarms it for a guest). */
 body:has(.watch-page:not([hidden])) .temporary-chat-button,
 .app-top-actions:has(> .auth-top-actions:not([hidden])) > .temporary-chat-button {
   display: none;

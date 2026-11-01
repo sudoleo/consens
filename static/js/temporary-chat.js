@@ -110,8 +110,16 @@
     return Boolean(runs && !runs.visible() && !runs.getSelectedConversationIdentity());
   }
 
+  // Known to be signed out: a guest has no switch (it comes with the
+  // account), so a tab that loses its account (a logout in another tab, an
+  // expired session) does not stay armed without a way to turn it off.
+  function guest() {
+    const state = window.__consensioAuthState;
+    return Boolean(state?.known && !state.uid);
+  }
+
   function arm(on) {
-    const next = Boolean(on) && !session;
+    const next = Boolean(on) && !session && !guest();
     if (next === armed) return;
     armed = next;
     keepArmed();
@@ -229,45 +237,56 @@
   }
 
   // The field's dashed rim (shell.css, .composer-dashed-edge): one SVG line
-  // just inside the field's edge, in its radius. The dashes are fitted to
-  // the line's length so the pattern closes on itself, with the seam in the
-  // middle of a gap: no stub where it starts, wherever the field's size.
-  // Refitted while it changes size (a second line, a phone's collapse) or
-  // radius (one line is a pill).
+  // just inside the field's edge, in its radius, over a solid one in the
+  // page's ground. The dashes are fitted to the line's length so the
+  // pattern closes on itself, with the seam in the middle of a gap: no stub
+  // where it starts, wherever the field's size. Refitted while it changes
+  // size (a second line, a phone's collapse) or radius (one line is a pill).
   const DASH = 4.5;
   const GAP = 3.5;
   const edge = document.querySelector(".composer-dashed-edge");
-  const edgeLine = edge?.querySelector("rect");
+  const edgeLines = [...(edge?.querySelectorAll("rect") || [])];
+  const edgeLine = edgeLines[edgeLines.length - 1];
   const field = edge?.parentElement;
   let edgeWatch = null;
+  let edgeBox = null;
   let radiusFrame = 0;
   function fitEdge() {
     if (!edgeLine || typeof edgeLine.getTotalLength !== "function") return;
-    const width = field.clientWidth - 1;
-    const height = field.clientHeight - 1;
-    if (width <= 0 || height <= 0) return;
     const style = window.getComputedStyle(field);
-    const inner = (parseFloat(style.borderTopLeftRadius) || 0) - (parseFloat(style.borderTopWidth) || 0);
-    edgeLine.setAttribute("x", "0.5");
-    edgeLine.setAttribute("y", "0.5");
-    edgeLine.setAttribute("width", String(width));
-    edgeLine.setAttribute("height", String(height));
-    edgeLine.setAttribute("rx", String(Math.max(0, Math.min(inner - 0.5, width / 2, height / 2))));
+    const border = parseFloat(style.borderTopWidth) || 0;
+    // The observer's border box keeps its fractions (clientWidth rounds
+    // them, leaving the right or bottom line half outside or short of it).
+    const width = (edgeBox ? edgeBox.width - 2 * border : field.clientWidth) - 1;
+    const height = (edgeBox ? edgeBox.height - 2 * border : field.clientHeight) - 1;
+    if (width <= 0 || height <= 0) return;
+    const inner = (parseFloat(style.borderTopLeftRadius) || 0) - border;
+    const rx = String(Math.max(0, Math.min(inner - 0.5, width / 2, height / 2)));
+    for (const line of edgeLines) {
+      line.setAttribute("x", "0.5");
+      line.setAttribute("y", "0.5");
+      line.setAttribute("width", String(width));
+      line.setAttribute("height", String(height));
+      line.setAttribute("rx", rx);
+    }
     const length = edgeLine.getTotalLength();
     const scale = length / Math.max(1, Math.round(length / (DASH + GAP))) / (DASH + GAP);
     edgeLine.style.strokeDasharray = `${DASH * scale} ${GAP * scale}`;
     edgeLine.style.strokeDashoffset = String((DASH + GAP / 2) * scale);
   }
+  // Once shown, it keeps following the field: leaving a temporary chat
+  // (New chat) grows the pill into the start screen's box while the rim
+  // fades out, and the rim goes with it. The observer only works when the
+  // field changes size.
   function watchEdge(on) {
-    if (!field || on === Boolean(edgeWatch)) return;
-    if (!on) {
-      edgeWatch.disconnect();
-      edgeWatch = null;
-      return;
-    }
+    if (!field || !on || edgeWatch) return;
     if (typeof window.ResizeObserver !== "function") { fitEdge(); return; }
     // Padding moves with the phone's collapse: the border box is the size.
-    edgeWatch = new window.ResizeObserver(fitEdge);
+    edgeWatch = new window.ResizeObserver(entries => {
+      const box = entries[entries.length - 1]?.borderBoxSize?.[0];
+      if (box) edgeBox = { width: box.inlineSize, height: box.blockSize };
+      fitEdge();
+    });
     edgeWatch.observe(field, { box: "border-box" });
   }
   function followRadius() {
@@ -295,16 +314,24 @@
     // Before agent-chat.js is there, nothing is known yet: the switch stays.
     if (!App.agentChat) return;
     const agent = App.agentChat.isSelected?.() === true;
-    if (armed && (!agent || !newChatShown())) { armed = false; keepArmed(); }
-    const fresh = agent && newChatShown();
+    if (armed && (!agent || !newChatShown() || guest())) { armed = false; keepArmed(); }
+    const fresh = agent && newChatShown() && !guest();
     const button = document.getElementById("temporaryChatButton");
     if (button) {
       button.hidden = !(session || fresh);
       button.setAttribute("aria-pressed", String(Boolean(session) || armed));
-      if (session) button.setAttribute("aria-disabled", "true");
-      else button.removeAttribute("aria-disabled");
-      const title = session ? "Temporary chat. Ends when you leave it." : "Temporary chat";
+      // The tooltip says it whole; a screen reader hears the name, then only
+      // what it adds.
+      const title = session ? "Temporary chat. Gone when you leave it." : "Temporary chat";
       if (button.title !== (App.t?.(title) ?? title)) button.title = title;
+      if (session) {
+        button.setAttribute("aria-disabled", "true");
+        const more = "Gone when you leave it.";
+        if (button.getAttribute("aria-description") !== (App.t?.(more) ?? more)) button.setAttribute("aria-description", more);
+      } else {
+        button.removeAttribute("aria-disabled");
+        button.removeAttribute("aria-description");
+      }
     }
     document.body.classList.toggle("temporary-chat", shown());
     watchEdge(shown());
@@ -312,11 +339,20 @@
     if (note) note.hidden = !session;
   }
 
-  document.getElementById("temporaryChatButton")?.addEventListener("click", () => {
-    if (!session) arm(!armed);
+  document.getElementById("temporaryChatButton")?.addEventListener("click", function (event) {
+    // In the chat a tap turns nothing off; it says why (a finger gets no
+    // hover tooltip, tooltip.js).
+    if (session) { App.tooltip?.show?.(this); return; }
+    arm(!armed);
+    // Chosen with the mouse, the next keystroke is the question; the
+    // keyboard stays on the switch, a phone keeps its keyboard closed.
+    if (event.detail > 0 && window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches) {
+      document.getElementById("questionInput")?.focus?.();
+    }
   });
   window.addEventListener("consensio:run-mode-change", sync);
   window.addEventListener("consensio:run-registry-change", sync);
+  window.addEventListener("consensio:auth-state", sync);
 
   App.temporaryChat = {
     armed: () => armed && !session, arm, start, token, adopt, leave, sync, shown, unanswered,

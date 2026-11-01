@@ -1425,8 +1425,13 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   leave it.“, Platzhalter „Ask in a temporary chat“, die Feldkante wird weich
   gestrichelt (gleichmäßige Striche rundum, auch an der Naht oben links, im
   hellen und dunklen Theme; als Pille im Chat ebenso). Zweiter Klick nimmt es
-  zurück. Gäste und die Watches-Seite zeigen den Knopf nicht. Senden: keine
-  Zeile in der Seitenleiste, Knopf bleibt gedrückt und schaltet nichts ab,
+  zurück; nach dem Mausklick geht Tippen direkt ins Feld. Gäste und die
+  Watches-Seite zeigen den Knopf nicht; in einem anderen Tab abmelden →
+  hier verschwinden Knopf, Begrüßung und gestrichelte Kante. Windows-
+  Kontrastmodus: Knopf gedrückt umrandet, Feldkante gestrichelt. Senden: keine
+  Zeile in der Seitenleiste, Knopf bleibt gedrückt und schaltet nichts ab
+  (Tippen am Handy zeigt „Temporary chat. Gone when you leave it.“), Neuer
+  Chat: der Rand blendet mit der wachsenden Box aus, ohne alte Pillenform,
   unter dem Feld „Temporary chat: not in your chats, saves nothing to memory.
   …“, kein Share-Knopf, aber die Watch-Pille unter der Antwort. Mit einem
   Konto mit Arbeitsplatz: Arbeitsplatz-Knopf im Feld und im (+)-Menü da, der

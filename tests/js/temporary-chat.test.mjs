@@ -9,7 +9,7 @@ const MARKUP = `
   <button type="button" id="temporaryChatButton" aria-pressed="false" hidden></button>
   <p id="temporaryChatNote" hidden></p>
   <div class="chat-input-container" style="border-top-left-radius: 25px; border-top-width: 1px">
-    <svg class="composer-dashed-edge"><rect></rect></svg>
+    <svg class="composer-dashed-edge"><rect class="composer-dashed-edge-ground"></rect><rect></rect></svg>
     <textarea id="questionInput"></textarea>
   </div>`;
 
@@ -36,17 +36,18 @@ function geometry(window, { width, height }) {
   const field = window.document.querySelector(".chat-input-container");
   Object.defineProperty(field, "clientWidth", { configurable: true, get: () => width });
   Object.defineProperty(field, "clientHeight", { configurable: true, get: () => height });
-  const rect = field.querySelector("rect");
-  rect.getTotalLength = () => {
-    const [w, h, r] = ["width", "height", "rx"].map(name => Number(rect.getAttribute(name)));
-    return 2 * (w + h) - (8 - 2 * Math.PI) * r;
-  };
+  for (const rect of field.querySelectorAll("rect")) {
+    rect.getTotalLength = () => {
+      const [w, h, r] = ["width", "height", "rx"].map(name => Number(rect.getAttribute(name)));
+      return 2 * (w + h) - (8 - 2 * Math.PI) * r;
+    };
+  }
   window.ResizeObserver = class {
     constructor(callback) { this.callback = callback; window.__observers = (window.__observers || 0) + 1; }
     observe() { this.callback([]); }
     disconnect() { window.__observers -= 1; }
   };
-  return { field, rect };
+  return { field };
 }
 
 function boot({ stored = null, channel = null, armed = false, box = null } = {}) {
@@ -58,7 +59,9 @@ function boot({ stored = null, channel = null, armed = false, box = null } = {})
       window.App = {
         authState: { uid: user.uid, generation: 1, snapshot: () => ({ uid: user.uid, generation: 1 }) },
         agentChat: { isSelected: () => true, syncComposer: vi.fn() },
+        tooltip: { show: vi.fn() },
       };
+      window.matchMedia = query => ({ matches: query === "(hover: hover) and (pointer: fine)" });
       window.auth = { currentUser: user };
       window.fetch = fetch;
       if (channel) window.BroadcastChannel = channel;
@@ -119,7 +122,11 @@ describe("App.temporaryChat", () => {
     expect(button.hidden).toBe(false);
     expect(pressed(document)).toBe("true");
     expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(button.title).toBe("Temporary chat. Gone when you leave it.");
+    expect(button.getAttribute("aria-description")).toBe("Gone when you leave it.");
+    // A tap says why instead (a finger gets no hover tooltip).
     button.click();
+    expect(window.App.tooltip.show).toHaveBeenCalledWith(button);
     expect(temporary.current()).toEqual({ token, chatId: "chat-1" });
     expect(pressed(document)).toBe("true");
     expect(document.getElementById("temporaryChatNote").hidden).toBe(false);
@@ -135,6 +142,38 @@ describe("App.temporaryChat", () => {
     expect(deletes(fetch)).toEqual([["/chats/chat-1", true]]);
     expect(window.sessionStorage.getItem("consens.temporaryChat.v1")).toBeNull();
     expect(document.body.classList.contains("temporary-chat")).toBe(false);
+    expect(button.title).toBe("Temporary chat");
+    expect(button.hasAttribute("aria-description")).toBe(false);
+    expect(button.hasAttribute("aria-disabled")).toBe(false);
+  });
+
+  it("hands the next keystroke to the field after a mouse click, not after the keyboard", () => {
+    const { temporary, document, window } = boot();
+    temporary.sync();
+    const button = document.getElementById("temporaryChatButton");
+    const input = document.getElementById("questionInput");
+    button.focus();
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 0 }));
+    expect(temporary.armed()).toBe(true);
+    expect(document.activeElement).toBe(button);
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+    expect(temporary.armed()).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("is no guest's: a tab that loses its account is disarmed and shows no switch", () => {
+    const { temporary, document, window } = boot();
+    temporary.sync();
+    temporary.arm(true);
+    expect(document.body.classList.contains("temporary-chat")).toBe(true);
+    window.__consensioAuthState = { known: true, uid: null, generation: 2 };
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: window.__consensioAuthState }));
+    expect(temporary.armed()).toBe(false);
+    expect(document.getElementById("temporaryChatButton").hidden).toBe(true);
+    expect(document.body.classList.contains("temporary-chat")).toBe(false);
+    expect(window.sessionStorage.getItem("consens.temporaryChat.armed.v1")).toBeNull();
+    temporary.arm(true);
+    expect(temporary.armed()).toBe(false);
   });
 
   it("deletes a chat the server created after the user had left it", async () => {
@@ -175,7 +214,7 @@ describe("App.temporaryChat's dashed field", () => {
     expect(window.__observers || 0).toBe(0);
     temporary.arm(true);
     expect(window.__observers).toBe(1);
-    const rect = document.querySelector(".composer-dashed-edge rect");
+    const [ground, rect] = document.querySelectorAll(".composer-dashed-edge rect");
     // On the rim, just inside the field's edge, in its inner radius.
     expect(rect.getAttribute("x")).toBe("0.5");
     expect(Number(rect.getAttribute("width"))).toBe(box.width - 1);
@@ -190,9 +229,12 @@ describe("App.temporaryChat's dashed field", () => {
     expect(dash / (dash + gap)).toBeCloseTo(4.5 / 8, 9);
     expect(Math.abs(dash + gap - 8)).toBeLessThan(0.5);
     expect(Number(rect.style.strokeDashoffset)).toBeCloseTo(dash + gap / 2, 9);
-    // Switched off, it stops following the field.
+    // The ground's solid line lies exactly under it.
+    for (const name of ["x", "y", "width", "height", "rx"]) expect(ground.getAttribute(name)).toBe(rect.getAttribute(name));
+    expect(ground.style.strokeDasharray).toBe("");
+    // Switched off, it keeps following the field while it fades out.
     temporary.arm(false);
-    expect(window.__observers).toBe(0);
+    expect(window.__observers).toBe(1);
   });
 });
 

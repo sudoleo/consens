@@ -1017,10 +1017,13 @@ body.is-hero .chat-input-container:focus-within {
    end. Not the browser's dashes (short, busy): one SVG line on the rim, the
    same hairline weight, round ends, its dashes fitted to the rim's length
    so the pattern closes on itself (temporary-chat.js fitEdge). The solid
-   edge fades out as the dashes fade in; the field's surface stops inside
-   the rim, so the dashes are its edge in the dark theme too. A dashed line
-   reads lighter than a solid one, so it is a step darker, and focus darkens
-   it one step more, as it does the solid edge. */
+   edge fades out as the dashes fade in. Under the dashes a solid line in
+   the page's ground covers the field's outermost pixel, so between the
+   dashes the page shows, not the field: in the dark theme too the dashes
+   are the field's edge. A dashed line reads lighter than a solid one, so it
+   is a step darker, and focus darkens it one step more, as it does the
+   solid edge. Windows' contrast themes draw a plain dashed border instead
+   (foundation.css). */
 .chat-input-container > .composer-dashed-edge {
   position: absolute;
   inset: 0;
@@ -1040,10 +1043,17 @@ body.temporary-chat .chat-input-container {
   border-color: transparent;
   background-clip: padding-box;
 }
+.composer-dashed-edge > .composer-dashed-edge-ground { stroke: var(--ground); }
 body.temporary-chat .chat-input-container > .composer-dashed-edge { opacity: 1; }
 body.temporary-chat .chat-input-container:focus-within > .composer-dashed-edge {
   stroke: color-mix(in srgb, var(--ink) 32%, transparent);
 }
+/* A file dragged over the field: its own accent edge and inner dashed
+   frame, not a second dashed ring around them. */
+body.temporary-chat .chat-input-container.is-image-dragover {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--glass-border));
+}
+body.temporary-chat .chat-input-container.is-image-dragover > .composer-dashed-edge { opacity: 0; }
 
 .input-field {
   background: transparent;
@@ -4191,6 +4201,11 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     border-radius: 50%;
   }
   .app-mobile-header .temporary-chat-button svg { width: 22px; height: 22px; }
+  /* New chat beside it sits in a group without a gap: the bar's 8px gap
+     goes, so the two glyphs stand as close as the group's own. */
+  .app-mobile-header .app-top-actions:has(> .temporary-chat-button:not([hidden])):not(:has(> .auth-top-actions:not([hidden]))) {
+    margin-inline-end: -8px;
+  }
 
   /* A 32px button surface inside a 44px touch target keeps the header light. */
   .app-mobile-header #authTopActions button {

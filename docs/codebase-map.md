@@ -8609,13 +8609,20 @@ entfernt sie, wenn der Chat schon weg ist (ein Lauf, der ihn um Sekunden
 (`#temporaryChatButton`, `aria-pressed`; die Sprechblase der App gestrichelt) in
 der fixierten Gruppe `.app-top-actions` (mit `#authTopActions`, weicht wie diese
 den Seitenpanels aus), nur auf einem neuen Agent-Chat und nur mit Konto (Gäste
-sehen dort allein Log in/Sign up), nicht auf Watches; im Chat bleibt er gedrückt
-mit `aria-disabled` („Temporary chat. Ends when you leave it.“), ein Klick
-beendet nichts. Begrüßung `.hero-greeting-temporary`, Platzhalter „Ask in a
-temporary chat“ und eine gestrichelte Feldkante (`body.temporary-chat`:
+sehen dort allein Log in/Sign up; bekannt abgemeldet, `__consensioAuthState`,
+entschärft `sync()` ihn und `arm` verweigert), nicht auf Watches; ein Mausklick
+gibt den Fokus ins Feld. Im Chat bleibt er gedrückt mit `aria-disabled`
+(Tooltip „Temporary chat. Gone when you leave it.“, `aria-description` nur der
+zweite Satz), ein Klick beendet nichts und zeigt den Tooltip
+(`App.tooltip.show`). Begrüßung `.hero-greeting-temporary`, Platzhalter „Ask in
+a temporary chat“ und eine gestrichelte Feldkante (`body.temporary-chat`:
 `.composer-dashed-edge`, ein SVG-Rand, dessen Striche `fitEdge` per
-`ResizeObserver` auf die Randlänge einpasst, Naht mitten in einer Lücke; die
-volle Haarlinie blendet aus), im Chat `#temporaryChatNote` unter dem Feld. `agent-chat.js` `send`: erste Nachricht `start()` → Token an
+`ResizeObserver` auf die Randlänge einpasst, Naht mitten in einer Lücke; darunter
+eine volle Linie in `--ground`, damit zwischen den Strichen die Seite statt des
+Felds steht; die volle Haarlinie blendet aus; der Beobachter bleibt, damit der
+ausblendende Rand der wachsenden Box folgt; Kontrastmodus: gestrichelter
+`border` in `CanvasText`, `foundation.css`), im Chat `#temporaryChatNote` unter
+dem Feld. `agent-chat.js` `send`: erste Nachricht `start()` → Token an
 `metadata.temporaryToken`, `config.temporary`, `POST /chats` mit `temporary`,
 `adopt(token, chatId)` (verlassen inzwischen → sofort löschen; ersetzt ein
 zweiter Anlauf einen schon angelegten Chat, geht der erste); Folge- und
@@ -8627,12 +8634,10 @@ gespeicherter Chat; keine Sidebar-Zeile (`run-view.js` `ensureRunRow`), kein
 Watch-Einladung von selbst (`offerWatch`); die Watch-Pille, die Watch-Karte
 des Agenten, Nachrichten in den laufenden Turn (`readsMessages`) und die
 Arbeitsplatz-Knöpfe gibt es wie sonst (bis 2026-11-01 abends ausgeblendet). Der Schalter überlebt ein
-Neuladen des Tabs (`sessionStorage` `consens.temporaryChat.armed.v1`), damit
-die Frage eines Gasts nach der Anmeldung temporär rausgeht. Meldet er sich
-über den Link in der E-Mail an (ein neues Tab ohne diesen Speicher), trägt der
-wartende Datensatz `temporary: true` und `mode: "agent"`
-(`composer-invite.js`); gesendet wird dann nur, wenn der Schalter wieder an
-ist (`arm(true)`), sonst bleibt die Frage im Feld.
+Neuladen des Tabs (`sessionStorage` `consens.temporaryChat.armed.v1`). Gäste
+wählen keinen temporären Chat mehr (seit 2026-11-01 abends), die wartende Frage
+eines Gasts (`composer-invite.js`) geht nach der Anmeldung als normaler Chat
+raus.
 Verlassen = jede Registry-Änderung (`created`, `visible`, `saved-view`,
 `visible-cleared`, `cleared`), nach der kein Lauf mit seinem Token sichtbar ist
 (Neuer Chat, anderer Chat, Abmelden; `performLogout` löscht ihn erst nach dem

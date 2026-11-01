@@ -236,7 +236,7 @@
         },
         {
           "file": "static/js/temporary-chat.js",
-          "note": "App.temporaryChat: the temporary Agent chat of this tab (the (+) switch, its note above the field, leaving it deletes it). Listens to App.runRegistry; agent-chat.js, run-view.js and app-update.js ask it at runtime."
+          "note": "App.temporaryChat: the temporary Agent chat of this tab (the switch at the top right, the dashed field and the note under it, leaving it deletes it). Listens to App.runRegistry; agent-chat.js, run-view.js and app-update.js ask it at runtime."
         },
         "static/js/agent-chat.js",
         {

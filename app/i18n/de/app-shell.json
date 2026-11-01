@@ -531,5 +531,6 @@
   "Answers without the workspace are not reviewed. The reviewers start with the Agent’s first step in its workspace and follow the rest of that message. Uses less of your allowance.": "Antworten ohne Arbeitsplatz werden nicht geprüft. Die Prüfer beginnen mit dem ersten Schritt des Agenten an seinem Arbeitsplatz und lesen den Rest dieser Nachricht mit. Verbraucht weniger von deinem Kontingent.",
   "Nobody checks the Agent’s work: mistakes in its answers stay unmarked, and nothing pauses it when a step goes against your goal or a page tries to steer it. What remains are the model’s own safeguards, consens.io’s fixed limits and your Stop button. Uses less of your allowance.": "Niemand prüft die Arbeit des Agenten: Fehler in seinen Antworten bleiben unmarkiert, und nichts pausiert ihn, wenn ein Schritt gegen dein Ziel geht oder eine Seite ihn zu lenken versucht. Es bleiben die eigenen Schutzmechanismen des Modells, die festen Grenzen von consens.io und dein Stopp-Knopf. Verbraucht weniger von deinem Kontingent.",
   "Temporary chat": "Temporärer Chat",
-  "Temporary chat. Ends when you leave it.": "Temporärer Chat. Endet, sobald du ihn verlässt."
+  "Temporary chat. Gone when you leave it.": "Temporärer Chat. Weg, sobald du ihn verlässt.",
+  "Gone when you leave it.": "Weg, sobald du ihn verlässt."
 }

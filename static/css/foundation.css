@@ -424,8 +424,17 @@ html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-she
   .settings-nav-item.is-active,
   .view-switch-btn.is-active,
   [role="tab"][aria-selected="true"],
-  .attach-menu-mode[aria-pressed="true"] {
+  .attach-menu-mode[aria-pressed="true"],
+  .temporary-chat-button[aria-pressed="true"] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
+
+  /* A temporary chat's field: its tinted SVG dashes would be lost here; the
+     border itself turns dashed in the system's colour. */
+  body.temporary-chat .chat-input-container {
+    border-color: CanvasText !important;
+    border-style: dashed !important;
+  }
+  .composer-dashed-edge { display: none !important; }
 }
