@@ -32,8 +32,10 @@ two hours, runtime audit K5).
 
 Everything lives in PROCESSES_DIR/<id>: the command, its combined output
 (``output.log``), the supervisor's pid file, its start and, once it ended,
-its end and exit code, and the VM time it was charged (``reserve``: seconds
-and UTC day). The VM holds no secret, so neither does any of it.
+its end and exit code, the VM time it was charged (``reserve``: seconds
+and UTC day) and, since 2026-11-01, the chat that started it (``chat``):
+the process and its folder go with that chat (delete_for_chat). The VM
+holds no secret, so neither does any of it.
 """
 from __future__ import annotations
 
@@ -194,6 +196,38 @@ def task_name(process_id):
     return f"consens-{process_id}"
 
 
+def chat_command(chat_id, root=PROCESSES_DIR):
+    """The ids of the processes ``chat_id`` started (their ``chat`` file),
+    one per line."""
+    return (f"chat={shlex.quote(chat_id)}; for d in {shlex.quote(root)}/*/; do [ -f \"$d/chat\" ] || continue; "
+            "[ \"$(head -c 100 \"$d/chat\")\" = \"$chat\" ] && basename \"$d\"; done; true")
+
+
+def delete_for_chat(vm, name, chat_id):
+    """With its chat (agent_vm.delete_chat_vm, since 2026-11-01): the
+    background processes it started on the workbench ``name``, stopped as
+    vm_stop_process stops them, and their folders with the command and its
+    output. One started before it had a ``chat`` file ends by its limit.
+    Raises VMUnavailable when the provider fails: the chat's deletion then
+    retries."""
+    from app.services.llm.provider_runtime import ProviderCancellation
+    out = bytearray()
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) < 4096:
+            out.extend(chunk)
+    vm.exec(name, chat_command(chat_id), cwd=agent_vm.SERVER_HOME, timeout=30, on_output=keep,
+            cancellation=ProviderCancellation(), agent=False)
+    for process_id in dict.fromkeys(out.decode("ascii", "replace").split()):
+        if not re.match(ID, process_id):
+            continue
+        directory = process_dir(process_id)
+        vm.exec(name, stop_command(directory, task_name(process_id)), cwd=agent_vm.SERVER_HOME,
+                timeout=STOP_GRACE_SECONDS + 30, on_output=lambda stream, chunk: None,
+                cancellation=ProviderCancellation(), agent=False)
+        vm.delete_path(name, directory, agent=False)
+
+
 def parse_status(text):
     """``(state, bytes, output)`` of a status command's output: state is
     "running", "lost" (the VM stopped it, e.g. while paused without a hold),
@@ -308,7 +342,8 @@ class ProcessTools:
         process_id = new_id()
         directory = process_dir(process_id)
         for name, content in (("run.sh", RUNNER), ("launch.sh", launch_script(args.command, cwd, seconds)),
-                              ("command", args.command), ("reserve", f"{seconds} {agent_vm_time.day_key()}")):
+                              ("command", args.command), ("reserve", f"{seconds} {agent_vm_time.day_key()}"),
+                              ("chat", self.vm.loop.chat_id)):
             self.vm._provider("write", lambda name=name, content=content: session.backend.write_file(
                 session.name, posixpath.join(directory, name), content.encode("utf-8"), agent=False))
         code, text = self._run(start_command(directory, task_name(process_id)), cancellation, 30)

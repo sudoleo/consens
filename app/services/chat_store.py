@@ -150,8 +150,8 @@ CHAT_DELETION_RETRY_BASE_SECONDS = 60
 CHAT_DELETION_RETRY_MAX_SECONDS = 6 * 60 * 60
 CHAT_DELETION_SWEEP_LIMIT = 100
 # Temporary chats (since 2026-11-01, docs/codebase-map.md "Temporäre Chats"):
-# an Agent chat with ``temporary: true`` has no bookmark, no memory, no
-# workspace and no share. The browser deletes it when the user leaves it;
+# an Agent chat with ``temporary: true`` has no bookmark and no share and
+# writes nothing to memory. The browser deletes it when the user leaves it;
 # this registry is the guarantee for a closed tab: one document per chat
 # (hashed id, like a deletion job), written in the transaction that creates
 # the chat and renewed with each of its turns, whose ``expires_at`` the hourly

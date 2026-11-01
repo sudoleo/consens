@@ -599,20 +599,30 @@ def parse_chat(raw):
     raise agent_vm.VMUnavailable("chat: unreadable")
 
 
-def notes_for_agent(raw):
+# A temporary chat reads the notes and leaves them as they are (since
+# 2026-11-01 evening): they outlast it (agent_vm_tools.VMTools._notes_kept).
+NOTES_TEMPORARY = "This temporary chat leaves the notes as they are: they outlast it."
+
+
+def notes_for_agent(raw, *, temporary=False):
     """The beginning of the workspace's notes for the agent (``raw``, None:
     there are none), or that there are none yet: ``{"path", "text", "more"}``.
-    Data, never instructions (AGENT_VM_PROMPT)."""
+    Data, never instructions (AGENT_VM_PROMPT). ``temporary``: for a
+    temporary chat, which only reads them."""
     if raw is None:
-        return {"path": NOTES_PATH, "text": "", "note": "No notes yet: start them when something lasting comes up."}
+        return {"path": NOTES_PATH, "text": "",
+                "note": NOTES_TEMPORARY if temporary else "No notes yet: start them when something lasting comes up."}
     text = raw.decode("utf-8", "replace")
     notes = {"path": NOTES_PATH, "text": text[:NOTES_CHARS]}
     if len(raw) >= NOTES_CHARS * 4 or len(text) > NOTES_CHARS:
-        notes["more"] = f"The notes go on: read the rest with vm_read_file {NOTES_PATH}, and keep them shorter."
+        notes["more"] = (f"The notes go on: read the rest with vm_read_file {NOTES_PATH}"
+                         + ("." if temporary else ", and keep them shorter."))
+    if temporary:
+        notes["note"] = NOTES_TEMPORARY
     return notes
 
 
-def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), cancellation=None):
+def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), cancellation=None, temporary=False):
     """At a message's first workbench call: the chat's folder follows its
     title (``folder``: the name the chat recorded, empty for a folder named
     by its id from before 2026-10-28, which moves too) with its marker
@@ -640,7 +650,8 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
     if outcome.exit_code != 0:
         raise agent_vm.VMUnavailable(f"chat: exit {outcome.exit_code}")
     state, found, notes = parse_chat(bytes(out))
-    return ChatOpened(folder=wanted if state in {"moved", "missing", "same"} else folder, notes=notes_for_agent(notes),
+    return ChatOpened(folder=wanted if state in {"moved", "missing", "same"} else folder,
+                      notes=notes_for_agent(notes, temporary=temporary),
                       keys=tuple(found), seconds=outcome.seconds)
 
 

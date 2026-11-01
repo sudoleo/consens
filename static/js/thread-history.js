@@ -253,14 +253,15 @@
         // Every finished Agent answer has its Watch pill, with the question
         // of its own turn (Max, Apple-Audit J20). The history shows no
         // prepared-Watch card, so a turn with one gets the pill as well.
-        // Not in a temporary chat: a Watch and a share outlive it (temporary-chat.js).
-        const shareable = turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim())
-          && turnData.agent_settings?.temporary !== true;
+        // A temporary chat has its Watch pill too (a Watch names no chat),
+        // but no share: that keeps a copy for 30 days (temporary-chat.js).
+        const finished = turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim());
         window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true,
-          eligible: shareable, followUp: options.followUp === true });
+          eligible: finished, followUp: options.followUp === true });
         // Its Share pill shares this turn's answer; the chat is the one on
         // screen when it is pressed (share-dialog.js).
-        window.App.answerShare?.button?.(answerBody, { turnId: turnId || "", eligible: shareable });
+        window.App.answerShare?.button?.(answerBody, { turnId: turnId || "",
+          eligible: finished && turnData.agent_settings?.temporary !== true });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.
         if (turnId) {

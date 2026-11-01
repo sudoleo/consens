@@ -49,9 +49,10 @@ class ChatCreateRequest(BaseModel):
 
     title: str | None = None
     execution_mode: Literal["consensus", "agent"] = "consensus"
-    # A temporary Agent chat (since 2026-11-01): no bookmark, no memory, no
-    # workspace, no share; deleted when the user leaves it, at the latest
-    # chat_store.TEMPORARY_CHAT_TTL after its last message.
+    # A temporary Agent chat (since 2026-11-01): no bookmark, nothing written
+    # to memory, no share; deleted with its workspace folder when the user
+    # leaves it, at the latest chat_store.TEMPORARY_CHAT_TTL after its last
+    # message.
     temporary: bool = False
 
     @field_validator("title")

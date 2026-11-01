@@ -918,15 +918,16 @@
     // answer (watch.js; Apple-Audit J20). It is not the Agent offering one:
     // a prepared Watch has its card instead, and a follow-up opens at its
     // question so the watched question stands on its own.
-    // A temporary chat keeps nothing beyond itself: no Watch, no share
-    // (both outlive their chat; the server refuses them too).
-    const keeps = context.config.temporary !== true;
+    // A temporary chat has its Watch pill too: a Watch is the user's own
+    // and names no chat. No share: it keeps a copy for 30 days (the server
+    // refuses it too).
     App.watch?.answerButton?.(answerBody, { question: context.question,
-      eligible: keeps && !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
+      eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
       followUp: context.historyTurns.length > 0 });
     // Share beside it, for every finished answer (share-dialog.js).
     App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
-      eligible: keeps && !running && state.completedTurn?.status === 'completed' && Boolean(String(state.text || '').trim()) });
+      eligible: context.config.temporary !== true && !running && state.completedTurn?.status === 'completed'
+        && Boolean(String(state.text || '').trim()) });
     // A settings change the Agent prepared: its card, applied with one click.
     // Keyed like the saved chat's view (chat:turn), so applying or dismissing
     // holds when the chat is opened again.
@@ -999,6 +1000,7 @@
     const turn = context.consensus.completedTurn;
     App.watch?.showFeatureNudge?.({
       eligible: turn?.status !== "failed" && context.historyTurns.length === 0 && !turn?.agent_watch
+        // Not in a temporary chat: its Watch only on the user's own wish (the pill, the Agent's card).
         && Array.isArray(turn?.sources) && turn.sources.length > 0 && context.config.temporary !== true,
       question: context.question,
       anchor: document.getElementById("agentWatchAnchor"),
@@ -1422,10 +1424,10 @@
   // under review) the run takes no more steps: a message then waits for its
   // end like any other (2026-10-27; before, it went to the run as "Read
   // before the next step" and came back only when the review was done).
-  // A temporary chat runs without the workspace, so its run takes no
-  // message into the running response (routers/agent.py: VM off).
+  // A temporary chat too, since 2026-11-01 evening: it has the account's
+  // workspace like any chat.
   function readsMessages(context) {
-    return document.body.classList.contains("viewer-has-workspace") && context?.config?.temporary !== true
+    return document.body.classList.contains("viewer-has-workspace")
       && !context?.metadata?.agentReview?.versions?.length;
   }
   // What Send does now: null when it stops the response (an empty field).

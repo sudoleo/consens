@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import dataclasses
 from datetime import datetime, timezone
 import logging
 import re
@@ -506,14 +507,16 @@ def run_agent(request: Request, payload: AgentRequest):
         chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
         require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
         require_reasoning_access(uid, payload.reasoning_effort)
-        # A temporary chat (since 2026-11-01, chat_store.create_chat) keeps
-        # nothing beyond itself: no sidebar entry (_final), no memory, no
-        # workspace (its computer, browser and notes outlive every chat),
-        # and the agent offers no Watch and no search of other chats.
+        # A temporary chat (since 2026-11-01, chat_store.create_chat) does
+        # what any chat of the account does and keeps nothing beyond
+        # itself (since 2026-11-01 evening, Max): no sidebar entry
+        # (_final), memory read but never written (MemorySnapshot), no
+        # share; its folder and processes in the workspace go with it
+        # (agent_vm.delete_chat_vm).
         temporary = chat_data.get("temporary") is True
         # What the message runs with: the one mode, with the account's
         # workspace where it has one.
-        preferences = AgentPreferences(vm="on" if not temporary and vm_allowed(uid) else "off")
+        preferences = AgentPreferences(vm="on" if vm_allowed(uid) else "off")
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
@@ -563,8 +566,10 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
-        # Read beside the others; a temporary chat leaves it unused.
-        memory = MemorySnapshot(temporary=True) if temporary else reads["memory"].result()
+        # Read beside the others; a temporary chat reads it and writes nothing.
+        memory = reads["memory"].result()
+        if temporary:
+            memory = dataclasses.replace(memory, temporary=True)
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
         app_context = get_agent_turn_context(model, config, payload.timezone)

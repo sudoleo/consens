@@ -1469,7 +1469,10 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   Sprite über `api.sock` wach; nur der Befehl selbst läuft über `launch.sh`
   (`exec sudo -n /bin/bash agent-run …`) als Agent. Stopp: TERM an `sudo`, das
   ihn an `timeout` weitergibt; nach 10 s KILL an die ganze Sitzung des
-  Aufsehers als root (`pkill -s`).
+  Aufsehers als root (`pkill -s`). Seit 2026-11-01 nennt die Datei `chat`
+  im Prozessordner den startenden Chat: Mit dem Chat gehen seine Prozesse
+  (`delete_for_chat` in `agent_vm.delete_chat_vm`, derselbe Stopp, dann der
+  Ordner samt `output.log`); ältere ohne die Datei enden an ihrem Limit.
 
 #### Netz der Werkbank (Fund 4)
 

@@ -895,8 +895,9 @@ def restore_workspace(uid, checkpoint, *, factory=None):
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None):
     """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
-    folder in the account's workbench, and the chat's own VM from before
-    2026-10-27. That one's name comes from the chat (vm_name), never from
+    folder in the account's workbench with the background processes it
+    started there (since 2026-11-01, agent_vm_processes.delete_for_chat),
+    and the chat's own VM from before 2026-10-27. That one's name comes from the chat (vm_name), never from
     the record: a chat that moved to the workspace lost it there, and its VM
     stayed (security audit 2026-10-27). The folder goes as the agent's user
     (its tools brought up to date first, agent_workspace.prepare) and from
@@ -916,8 +917,10 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None):
         raise VMUnavailable("delete: no provider configured")
     try:
         if name == workspace_name(uid) and vm.exists(name):
-            from app.services import agent_workspace
+            from app.services import agent_vm_processes, agent_workspace
             agent_workspace.prepare(vm, name)
+            # Its processes first: they run in its folder.
+            agent_vm_processes.delete_for_chat(vm, name, chat_id)
             # The folder by the name the chat recorded (since 2026-10-28), and
             # by its id, as before and while a rename has not happened yet.
             folder = record.get("folder")

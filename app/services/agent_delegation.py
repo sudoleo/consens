@@ -359,9 +359,11 @@ class DelegationLoop(AgentLoop):
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
                  domains=True, reviewers="always", temporary=False, **kwargs):
         super().__init__(**kwargs)
-        # A temporary chat (routers/agent.py): no Watch, no search of other
-        # chats, and the agent knows why (AGENT_TEMPORARY_CHAT_PROMPT); the
-        # route leaves out the workspace and the memory.
+        # A temporary chat (routers/agent.py): every tool of the account's
+        # chats (since 2026-11-01 evening), and the agent knows what goes
+        # with it and what lasts (AGENT_TEMPORARY_CHAT_PROMPT); memory is
+        # read-only (MemorySnapshot.temporary), the workspace's notes too
+        # (agent_vm_tools.VMTools.notes_refused).
         self.temporary = temporary
         # Who checks this message's work (account setting ``reviewers``,
         # since 2026-11-01): "always" from the run's start, "workspace" from
@@ -602,9 +604,10 @@ class DelegationLoop(AgentLoop):
                  "consens.io sends and changes nothing in Google."))
         # A Watch the user asks for is prepared, never started (agent_watch.py):
         # only on their own account-mode turns, never with Google data. The
-        # condition holds for a whole chat, so the prompt stays cacheable.
+        # condition holds for a whole chat, so the prompt stays cacheable. In
+        # a temporary chat too: a Watch is the user's own and names no chat.
         if (self.comparison is not None and self.policy.account_budget_only
-                and not google_selection and not google_data and not temporary):
+                and not google_selection and not google_data):
             from app.services.agent_watch import AUDIT_PROMPT, WatchTools
             self.watch_tools = WatchTools(self)
             self.messages[0]["content"] += "\n\n" + AUDIT_PROMPT
@@ -620,9 +623,9 @@ class DelegationLoop(AgentLoop):
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # The user's earlier chats, found and read on demand (agent_chat_search.py):
-        # on their own account-mode turns; chats with Google data stay out,
-        # and a temporary chat starts from nothing.
-        if self.comparison is not None and self.policy.account_budget_only and not temporary:
+        # on their own account-mode turns; chats with Google data stay out, and
+        # so do temporary chats, also from a temporary chat.
+        if self.comparison is not None and self.policy.account_budget_only:
             from app.services.agent_chat_search import ChatSearch
             self.registry = ToolRegistry([*self.registry.tools.values(), *ChatSearch(self).tools()],
                                          argument_limit=self.registry.argument_limit)

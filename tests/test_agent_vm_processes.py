@@ -62,8 +62,11 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert shlex.split(launch)[1:7] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "1800",
                                         chat_path(loop.chat_id) + "/app"]
     assert files[f"{directory}/command"] == b"npm run dev"
+    # Its chat: the process goes with it (delete_for_chat, since 2026-11-01).
+    assert files[f"{directory}/chat"] == loop.chat_id.encode()
     assert {path for _, path in fake_vm.server_files if path.startswith(directory)} == {
-        f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command", f"{directory}/reserve"}
+        f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command", f"{directory}/reserve",
+        f"{directory}/chat"}
     # Started, read and stopped by the server, which holds the VM awake.
     assert fake_vm.server[-3:] == [start_command(directory, task_name(PID)), status_command(directory, wait=5),
                                    stop_command(directory, task_name(PID))]
@@ -271,6 +274,21 @@ def test_the_supervisor_stops_a_process_and_counts_the_running_ones(shell, tmp_p
     assert parse_status(text)[0] == "stopped"
     listed = run(list_command(root=root))[1].splitlines()
     assert sorted(line.split("\t")[1] for line in listed) == ["lost", "stopped", "stopped", "stopped"]
+
+
+def test_a_chats_processes_are_found_by_its_chat_file(shell, tmp_path):
+    """delete_for_chat stops and removes what chat_command lists: the
+    processes whose ``chat`` file names the chat, never another chat's or
+    one from before the file."""
+    run, root = shell
+    mine = prepare(root, "44444441", "true", tmp_path.as_posix())
+    prepare(root, "44444442", "true", tmp_path.as_posix())
+    prepare(root, "44444443", "true", tmp_path.as_posix())
+    Path(mine, "chat").write_text("chat-a", newline="\n")
+    Path(root, "44444442", "chat").write_text("chat-a2", newline="\n")
+    code, text = run(agent_vm_processes.chat_command("chat-a", root=root))
+    assert code == 0 and text.split() == ["44444441"]
+    assert run(agent_vm_processes.chat_command("nobody", root=root)) == (0, "")
 
 
 def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):

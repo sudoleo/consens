@@ -1,10 +1,14 @@
 """Temporary chats (since 2026-11-01): an Agent chat that keeps nothing
-beyond itself. No bookmark (the sidebar's handle), no memory read or
-written, no workspace, no Watch, no search of other chats and none of them
-of it, no share. The browser deletes it when the user leaves it; a deadline
-registry (chat_store.TEMPORARY_CHATS_COLLECTION) deletes it from the hourly
-retention loop when a tab closed without that. A chat's deletion also takes
-the texts its runs' receipts held. No model calls beyond the scripted ones.
+beyond itself. Since 2026-11-01 evening it does what the account's other
+chats do (Max): the workspace, Watches, the search of other chats and the
+memory, read. What would outlast it stays out: no bookmark (the sidebar's
+handle), nothing written to memory or the workspace's notes, no share, and
+no other chat's search finds it. Its folder and background processes in the
+workspace go with it. The browser deletes it when the user leaves it; a
+deadline registry (chat_store.TEMPORARY_CHATS_COLLECTION) deletes it from
+the hourly retention loop when a tab closed without that. A chat's deletion
+also takes the texts its runs' receipts held. No model calls beyond the
+scripted ones.
 """
 import json
 from datetime import timedelta
@@ -18,6 +22,7 @@ from test_agent_chat_search import earlier, search
 from test_agent_comparison import Script
 from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtures)
 from test_agent_share import UID as SHARE_UID, _saved_turn, share_app  # noqa: F401  (fixture)
+from test_agent_vm import NAME, Agent, fake_vm, results, vm_loop  # noqa: F401  (fixture)
 from test_agent_watch import watch_loop
 
 
@@ -115,10 +120,12 @@ def test_its_answers_cannot_be_shared(share_app):
     assert response.status_code == 409 and "temporary chat" in response.json()["detail"]
 
 
-def test_a_temporary_chat_keeps_nothing_beyond_itself(api, monkeypatch):
+def test_a_temporary_chat_does_what_any_chat_does_and_keeps_nothing_beyond_itself(api, monkeypatch):
     client, store, calls = api
     # An account with the workspace and a memory it may change.
+    from app.services import agent_vm
     monkeypatch.setattr(agent, "vm_allowed", lambda uid: True)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
     monkeypatch.setattr(agent, "_memory_snapshot", lambda uid: agent_memory.MemorySnapshot(
         available=True, enabled=True, auto=True, items=({"id": "m1", "text": "Prefers SECRET-MEMORY."},)))
     assert client.post("/chats", json={"execution_mode": "consensus", "temporary": True},
@@ -137,22 +144,147 @@ def test_a_temporary_chat_keeps_nothing_beyond_itself(api, monkeypatch):
     assert final["bookmark_meta"] is None and final["temporary"] is True
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Something private")
     settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
-    assert settings["temporary"] is True and settings["agent_preferences"] == {"vm": "off"}
-    assert settings["memory"] == {"used": False, "auto": False, "hint": False}
+    # The account's workspace, as in its other chats; memory read, not written.
+    assert settings["temporary"] is True and settings["agent_preferences"] == {"vm": "on"}
+    assert settings["memory"] == {"used": True, "auto": False, "hint": False}
     # What the agent is offered and told.
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
-    assert not names & {"update_memory", "search_chats", "prepare_watch", "open_workspace"}
-    assert "compare_models" in names
+    assert {"compare_models", "search_chats", "prepare_watch", "open_workspace"} <= names
+    assert "update_memory" not in names
     system = calls[0]["messages"][0]["content"]
     assert prompt_defaults.AGENT_TEMPORARY_CHAT_PROMPT in system
-    # The memory, read beside the other reads, goes nowhere.
-    assert agent_memory.AUDIT_MEMORY_TEMPORARY_PROMPT in system and "SECRET-MEMORY" not in system
+    assert "SECRET-MEMORY" in system and agent_memory.AUDIT_MEMORY_TEMPORARY_PROMPT in system
     # A normal chat of the same account keeps its bookmark and its memory.
     normal = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
     assert client.post("/agent", json={**payload, "chat_id": normal, "client_request_id": "normal-1",
                                        "bookmark_id": "b_agent_normal"}, headers=AUTH).status_code == 200
     assert store.db.collection("users").document(UID).collection("bookmarks").document("b_agent_normal").get().exists
-    assert "SECRET-MEMORY" in calls[-1]["messages"][0]["content"]
+    normal_system = calls[-1]["messages"][0]["content"]
+    assert "SECRET-MEMORY" in normal_system and agent_memory.AUDIT_MEMORY_TEMPORARY_PROMPT not in normal_system
+    assert prompt_defaults.AGENT_TEMPORARY_CHAT_PROMPT not in normal_system
+    normal_names = {tool["function"]["name"] for tool in calls[-1].get("tools") or [] if tool.get("type") == "function"}
+    assert "update_memory" in normal_names
+
+
+def test_its_memory_is_read_and_never_written():
+    """The block and the facts as in any chat, the write rules replaced by
+    the temporary chat's fact; no "Let Agent update memory" hint, since that
+    would not save anything here either."""
+    import dataclasses
+    snapshot = agent_memory.MemorySnapshot(available=True, enabled=True, auto=True,
+                                           items=({"id": "m1", "text": "Prefers tea."},))
+    temporary = dataclasses.replace(snapshot, temporary=True)
+    assert snapshot.writable and not temporary.writable
+    prompt = agent_memory.orchestrator_prompt(temporary)
+    assert "Prefers tea." in prompt and prompt.endswith(agent_memory.AUDIT_MEMORY_TEMPORARY_PROMPT)
+    assert "update_memory" not in prompt
+    off = dataclasses.replace(temporary, auto=False)
+    assert off.settings() == {"used": True, "auto": False, "hint": False}
+    assert dataclasses.replace(snapshot, auto=False).settings()["hint"] is True
+    # Paused or unreadable memory says so, temporary or not.
+    assert agent_memory.orchestrator_prompt(dataclasses.replace(temporary, enabled=False)) == (
+        agent_memory.AUDIT_MEMORY_PAUSED_PROMPT)
+    assert agent_memory.orchestrator_prompt(agent_memory.MemorySnapshot(temporary=True)) == (
+        agent_memory.AUDIT_MEMORY_UNAVAILABLE_PROMPT)
+
+
+def test_a_temporary_chat_prepares_a_watch_and_searches_the_other_chats(store):
+    """A Watch is the user's own and names no chat: it outlasts the chat it
+    came from untouched. The search finds saved chats, never a temporary one."""
+    loop = watch_loop(store, Script())
+    store._chat_ref(UID, loop.chat_id).update({"temporary": True})
+    loop.temporary = True
+    bike = earlier(store, "Fahrrad", "Welches Rad?")
+    assert [chat["chat_id"] for chat in search(loop, query="fahrrad")["chats"]] == [bike]
+    from app.services.agent_watch import PrepareWatch
+    prepared = loop.watch_tools.prepare(PrepareWatch(question="Tell me when GPT-6 comes out.",
+                                                     goals=["It is officially announced"]))
+    assert prepared["status"] == "prepared"
+    proposal = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]
+    assert set(proposal) == {"question", "goals", "interval"}
+
+
+def test_it_reads_the_workspaces_notes_and_its_file_tools_leave_them_as_they_are(store, fake_vm):
+    """The notes outlast the chat (NOTES.md, agent_workspace.py): its first
+    result brings them as in any chat, saying they stay as they are; writing
+    or editing them is refused, the rest of the workspace is the agent's."""
+    from app.services import agent_workspace
+    from app.services.agent_vm_tools import NOTES_KEPT
+    notes = b"# Notes\nThe blog lives in ~/blog.\n"
+    fake_vm.vms[NAME] = {"files": {agent_workspace.NOTES_PATH: notes}, "checkpoints": []}
+    script = Agent([[("vm_write_file", {"path": "draft.md", "content": "a"})],
+                    [("vm_write_file", {"path": "~/NOTES.md", "content": "private"})],
+                    [("vm_edit_file", {"path": "../../NOTES.md", "old_string": "blog", "new_string": "private"})]])
+    loop = vm_loop(store, script)
+    loop.temporary = True
+    list(loop.run())
+    draft, written, edited = results(loop)
+    assert draft["workspace_notes"] == {"path": agent_workspace.NOTES_PATH, "text": notes.decode(),
+                                        "note": agent_workspace.NOTES_TEMPORARY}
+    assert written == edited == {"error": NOTES_KEPT}
+    assert fake_vm.vms[NAME]["files"][agent_workspace.NOTES_PATH] == notes
+    # None yet: no invitation to start them.
+    assert agent_workspace.notes_for_agent(None, temporary=True)["note"] == agent_workspace.NOTES_TEMPORARY
+    assert "keep them shorter" not in agent_workspace.notes_for_agent(b"x" * 30_000, temporary=True)["more"]
+
+
+def test_a_message_stopped_by_its_chats_deletion_sweeps_what_it_wrote_after(store, fake_vm):
+    """Left mid-answer: DELETE /chats stops the run before the cascade, and
+    the stopped message's end removes what a call still in flight wrote."""
+    from app.services import agent_vm_processes
+    loop = vm_loop(store, Agent([[("vm_write_file", {"path": "late.txt", "content": "late"})]]))
+    list(loop.run())
+    session = loop.vm_tools.session
+    late = f"{session.dir}/late.txt"
+    assert late in fake_vm.vms[NAME]["files"]
+    # Still active (a plain Stop): nothing goes.
+    session._sweep_deleted()
+    assert late in fake_vm.vms[NAME]["files"]
+    store._chat_ref(UID, loop.chat_id).update({"status": "deleting"})
+    session.backend = fake_vm.backend()
+    session._sweep_deleted()
+    assert not [path for path in fake_vm.vms[NAME]["files"] if path.startswith(session.dir + "/")]
+    assert agent_vm_processes.chat_command(loop.chat_id) in fake_vm.server
+
+
+def test_leaving_it_mid_answer_stops_the_run_before_the_cascade(api, monkeypatch):
+    from app.services.agent_background import agent_background
+    from app.services.chat_store import ChatStore
+    client, store, calls = api
+    chat_id = client.post("/chats", json={"execution_mode": "agent", "temporary": True}, headers=AUTH).json()["chat"]["id"]
+    order = []
+    monkeypatch.setattr(agent_background, "stop_chat", lambda uid, chat: order.append(("stop", chat)) or 0)
+    real = ChatStore.run_chat_deletion
+    monkeypatch.setattr(ChatStore, "run_chat_deletion",
+                        lambda self, uid, chat: order.append(("cascade", chat)) or real(self, uid, chat))
+    assert client.delete(f"/chats/{chat_id}", headers=AUTH).status_code == 200
+    assert order == [("stop", chat_id), ("cascade", chat_id)]
+    assert client.delete(f"/chats/{chat_id}", headers=AUTH).status_code == 404
+
+
+def test_deleting_it_takes_its_folder_and_processes_from_the_workspace(store, monkeypatch):
+    """The account's workspace stays (browser sign-ins, notes, other chats'
+    folders); what the chat made there goes with it."""
+    from app.services import agent_vm, agent_vm_processes
+    from test_agent_vm import FakeVM
+    fake = FakeVM()
+    monkeypatch.setattr(agent_vm, "backend", fake.backend)
+    name = agent_vm.workspace_name(UID)
+    chat_id = store.create_chat(UID, execution_mode="agent", temporary=True)["id"]
+    folder = agent_vm.chat_folder("Geheim", chat_id)
+    store._chat_ref(UID, chat_id).update({"agent_vm": {"name": name, "workspace": True, "folder": folder}})
+    process = agent_vm_processes.process_dir("abcd1234")
+    fake.vms[name] = {"files": {f"{agent_vm.chat_dir(chat_id, folder)}/notes.txt": b"private",
+                                f"{process}/output.log": b"private output", f"{process}/chat": chat_id.encode(),
+                                "/home/agent/NOTES.md": b"# Notes\n", "/home/agent/chats/other-123456/a.txt": b"a"},
+                      "checkpoints": []}
+    fake.commands[agent_vm_processes.chat_command(chat_id)] = ([("stdout", b"abcd1234\n")], 0, .1)
+    store.delete_chat(UID, chat_id)
+    files = fake.vms[name]["files"]
+    assert not [path for path in files if path.startswith(agent_vm.chat_dir(chat_id, folder))]
+    assert not [path for path in files if path.startswith(process)]
+    assert agent_vm_processes.stop_command(process, agent_vm_processes.task_name("abcd1234")) in fake.server
+    assert files["/home/agent/NOTES.md"] == b"# Notes\n" and "/home/agent/chats/other-123456/a.txt" in files
 
 
 def test_a_run_that_outlives_its_deleted_chat_leaves_no_texts_on_its_receipt(store):

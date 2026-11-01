@@ -549,9 +549,10 @@ class SettingsTools:
                                  "requests, and they do not count here. The Agent always runs on the allowance."},
             "storage": f"Signed-in chats save automatically, at most {MAX_CHATS_PER_OWNER} per account; then a new "
                        f"chat needs an old one deleted. A chat holds at most {MAX_TURNS_PER_CHAT} messages; then a "
-                       "new chat continues. A temporary chat (the switch \"Temporary chat\" in the (+) menu of a new "
-                       "Agent chat) is not saved: it is not in the chats, uses and changes no memory, has no "
-                       "workspace, cannot be shared and is deleted once the user leaves it, at the latest "
+                       "new chat continues. A temporary chat (the button \"Temporary chat\" at the top right of a "
+                       "new Agent chat) does what the account's chats do but is not saved: it is not in the chats, "
+                       "saves nothing to memory, cannot be shared and is deleted with its files and its folder in "
+                       "the workspace once the user leaves it, at the latest "
                        f"{int(TEMPORARY_CHAT_DELETED_WITHIN.total_seconds() // 3600)} hours after its last message.",
             "reviewers": "Settings > Runs > Reviewers: Always (the default), Only in the workspace (from the agent's "
                          "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "

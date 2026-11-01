@@ -1427,8 +1427,14 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   hellen und dunklen Theme; als Pille im Chat ebenso). Zweiter Klick nimmt es
   zurück. Gäste und die Watches-Seite zeigen den Knopf nicht. Senden: keine
   Zeile in der Seitenleiste, Knopf bleibt gedrückt und schaltet nichts ab,
-  unter dem Feld „Temporary chat: …“, kein Share- und kein Watch-Knopf unter
-  der Antwort, kein Arbeitsplatz-Werkzeug, keine Memory-Änderung. Folgefrage
+  unter dem Feld „Temporary chat: not in your chats, saves nothing to memory.
+  …“, kein Share-Knopf, aber die Watch-Pille unter der Antwort. Mit einem
+  Konto mit Arbeitsplatz: Arbeitsplatz-Knopf im Feld und im (+)-Menü da, der
+  Agent arbeitet dort wie sonst (Datei anlegen, Dev-Server mit
+  `vm_start_process`), eine Nachricht während des Laufs geht in den Lauf. Der
+  Agent liest Memory und andere Chats („Was habe ich neulich zu X gefragt?“),
+  ändert aber kein Memory und nicht `~/NOTES.md`. „Beobachte X“ → Watch-Karte,
+  gestartete Watch bleibt nach dem Verlassen in „Watches“. Folgefrage
   bleibt im Chat. Aktivitätsleiste oder Arbeitsplatz offen: der Knopf rückt
   daneben.
 - [ ] Temporärer Chat, erste Nachricht scheitert oder wird gestoppt: die
@@ -1436,7 +1442,9 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Ein dupliziertes Tab löscht den Chat im Original nicht.
 - [ ] Temporären Chat verlassen (Neuer Chat, anderer Chat, Abmelden, Neuladen):
   er ist danach weg (Firestore: Chat, Turns und `temporary_chats`-Eintrag
-  gelöscht); ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der
+  gelöscht; am Arbeitsplatz sein Ordner unter `~/chats` und seine
+  Hintergrundprozesse, im eigenen Terminal `ls ~/chats`; Browser-Anmeldungen
+  und andere Chats bleiben); ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der
   stündliche Retention-Loop löscht ihn spätestens 24 h nach der letzten
   Nachricht.
 

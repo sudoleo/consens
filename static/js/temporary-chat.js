@@ -1,10 +1,11 @@
 // =====================================================================
 // temporary-chat.js
 // Temporary chats (since 2026-11-01): an Agent chat that is not in the
-// user's chats, uses and changes no memory, has no workspace and cannot be
-// shared. The server knows it by its chat (POST /chats with temporary:
-// true, chat_store.create_chat) and leaves out bookmark, memory, workspace,
-// Watch and chat search for it (routers/agent.py). This module is the
+// user's chats and is not kept. It does what the account's other chats do
+// (since 2026-11-01 evening: workspace, Watch, chat search, memory read),
+// but saves nothing to memory and cannot be shared. The server knows it by
+// its chat (POST /chats with temporary: true, chat_store.create_chat) and
+// writes no bookmark and no memory for it (routers/agent.py). This module is the
 // browser's half: the switch at the top right of a new Agent chat, the
 // words and the dashed field that say a chat is temporary, and its end.
 //

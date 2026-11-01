@@ -177,6 +177,10 @@ VM_DAY_LIMIT = ("The VM time of this account for today is used up: commands, ins
 # there (VMTools.exec, install): until 2026-10-31 it read like its own limit.
 VM_DAY_CUT = ("The {what} was stopped after {seconds} seconds, when the VM time of this account for today ran "
               "out: commands run again tomorrow (the day starts at midnight UTC).")
+# vm_write_file or vm_edit_file on the workspace's notes in a temporary chat
+# (VMTools._notes_kept, since 2026-11-01 evening).
+NOTES_KEPT = ("This is a temporary chat: the workspace's notes outlast it, so it leaves them as they are. Nothing "
+              "was written.")
 # Below this much of today's VM time, the first result of a message says how
 # much is left (VMSession.announce): the agent plans its commands with it.
 DAY_NOTE_SECONDS = 30 * 60
@@ -765,7 +769,8 @@ class VMSession:
             self._go_on(cancellation)
             opened = agent_workspace.open_chat(backend, self.name, self.loop.chat_id, title=claim.title,
                                                started=claim.started, folder=claim.folder, keys=claim.secrets,
-                                               cancellation=cancellation)
+                                               cancellation=cancellation,
+                                               temporary=getattr(self.loop, "temporary", False) is True)
             # The keys the user gave, so this message masks them (agent_secrets.scrub).
             for key_name, value in opened.keys:
                 agent_secrets.remember(self.loop.uid, value, key_name)
@@ -1031,6 +1036,8 @@ class VMSession:
             leased = self.leased
             self.leased = False
             callbacks = list(self._on_close)
+        if self.started and self.loop.cancellation.cancelled:
+            self._sweep_deleted()
         if leased:
             policy = self._leave_policy()
             agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=policy)
@@ -1044,6 +1051,22 @@ class VMSession:
                 self.backend.close()
             except Exception as exc:
                 logging.info("Agent VM backend close failed category=%s", safe_exception(exc))
+
+    def _sweep_deleted(self):
+        """A stopped message whose chat is being deleted or gone (a
+        temporary chat left mid-answer, since 2026-11-01): what its last
+        calls wrote after the deletion's sweep (agent_vm.delete_chat_vm)
+        goes too, its folder and its background processes. Only after a
+        stop: a message that ended on its own found its chat active."""
+        from app.services import agent_vm_processes
+        try:
+            snapshot = self.loop.store._chat_ref(self.loop.uid, self.loop.chat_id).get()
+            if snapshot.exists and (snapshot.to_dict() or {}).get("status") == "active":
+                return
+            agent_vm_processes.delete_for_chat(self.backend, self.name, self.loop.chat_id)
+            self.backend.delete_path(self.name, self.dir)
+        except Exception as exc:
+            logging.warning("Agent VM folder of a deleted chat not swept category=%s", safe_exception(exc))
 
     def _leave_policy(self):
         """The workbench's rules as the message leaves them: the chat's
@@ -1459,10 +1482,19 @@ class VMTools:
                               "with vm_exec (sed -n, tail).")
         return self.session.announce(result)
 
+    def _notes_kept(self, path):
+        """A temporary chat reads the workspace's notes and leaves them as
+        they are (AGENT_TEMPORARY_CHAT_PROMPT): they outlast it. Its own
+        file tools refuse them; a command in vm_exec is the agent's."""
+        from app.services import agent_workspace
+        if getattr(self.loop, "temporary", False) is True and path == agent_workspace.NOTES_PATH:
+            raise ValueError(NOTES_KEPT)
+
     def write(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
         self._start(cancellation, spends=False)
         path = vm_path(args.path, self.session.dir)
+        self._notes_kept(path)
         size = self._provider("write", lambda: self.session.backend.write_file(
             self.session.name, path, args.content.encode("utf-8")))
         report({"bytes": size})
@@ -1476,6 +1508,7 @@ class VMTools:
             raise ValueError("old_string and new_string are the same: there is nothing to change.")
         self._start(cancellation, spends=False)
         path = vm_path(args.path, self.session.dir)
+        self._notes_kept(path)
         try:
             raw, complete = self._provider("edit", lambda: self.session.backend.read_file(
                 self.session.name, path, limit=READ_BYTES), idempotent=True)

@@ -324,7 +324,8 @@ class MemorySnapshot:
     items: tuple = ()
     revision: int = 0
     # A temporary chat (routers/agent.py, since 2026-11-01): the user's
-    # memory is neither read nor changed, and the prompt says so.
+    # memory is read as in any chat (since 2026-11-01 evening; before, not
+    # at all) and never changed, and the prompt says so.
     temporary: bool = False
 
     @property
@@ -342,7 +343,8 @@ class MemorySnapshot:
         """
         return {"used": bool(self.available and self.enabled and (self.items or not user_memory.profile_is_empty(self.profile))),
                 "auto": self.writable,
-                "hint": bool(self.available and self.enabled and not self.auto)}
+                # A temporary chat saves nothing to memory, with the opt-in or without.
+                "hint": bool(self.available and self.enabled and not self.auto and not self.temporary)}
 
 
 class FirestoreAgentMemoryRepository:
@@ -736,8 +738,7 @@ Memory, "Let Agent update memory")."""
 
 AUDIT_MEMORY_PAUSED_PROMPT = """The user's memory is paused for this message (Settings > Memory)."""
 
-AUDIT_MEMORY_TEMPORARY_PROMPT = """This is a temporary chat: the user's memory is not used in it, and nothing
-of it can be saved to memory."""
+AUDIT_MEMORY_TEMPORARY_PROMPT = """This is a temporary chat: nothing of it can be saved to the user's memory."""
 
 AUDIT_MEMORY_UNAVAILABLE_PROMPT = """The user's memory could not be loaded for this message (a temporary problem
 on the app's side); nothing can be saved right now."""
@@ -745,15 +746,14 @@ on the app's side); nothing can be saved right now."""
 
 def orchestrator_prompt(snapshot: MemorySnapshot, reviewers: str = "always") -> str:
     """Memory data plus the facts that fit the user's switches."""
-    if snapshot.temporary:
-        return AUDIT_MEMORY_TEMPORARY_PROMPT
     if not snapshot.available:
         return AUDIT_MEMORY_UNAVAILABLE_PROMPT
     if not snapshot.enabled:
         return AUDIT_MEMORY_PAUSED_PROMPT
     # The user's memories themselves (block) stay as they are.
     block = render_memory_block(snapshot)
-    rules = (_AUDIT_MEMORY_WRITE_RULES + AUDIT_MEMORY_LOCK_FACTS[reviewers] if snapshot.writable
+    rules = (AUDIT_MEMORY_TEMPORARY_PROMPT if snapshot.temporary
+             else _AUDIT_MEMORY_WRITE_RULES + AUDIT_MEMORY_LOCK_FACTS[reviewers] if snapshot.writable
              else AUDIT_MEMORY_READ_ONLY_PROMPT)
     return "\n\n".join(part for part in (block, AUDIT_MEMORY_USE_PROMPT if block else "", rules) if part)
 

@@ -1744,6 +1744,28 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("sends a message into a temporary chat's running response like into any other", async () => {
+    // Since 2026-11-01 evening a temporary chat has the account's workspace.
+    const { window, document, dom } = boot({ setup(w) {
+      w.document.body.classList.add("viewer-has-workspace");
+      // The switch is on (temporary-chat.js): the first message starts the chat.
+      w.App.temporaryChat = { armed: () => true, start: () => "token-1", adopt: () => true, token: () => "token-1",
+        unanswered: () => false, leave: vi.fn(), arm: vi.fn(), sync: vi.fn(), shown: () => true };
+    } });
+    await selectAgent(window);
+    window.streamSSERequest = vi.fn(() => new Promise(() => {}));
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
+    const run = window.App.runRegistry.visible();
+    expect(run.config.temporary).toBe(true);
+    input.value = "Use the newer data";
+    expect(window.App.agentChat.steering()).toEqual({ title: "Send into the running response" });
+    window.App.runRegistry.cancel(run.runId, "user");
+    dom.window.close();
+  });
+
   // The run read the message before the POST's answer with its id arrived:
   // it stayed queued and went out again after the response, paid twice.
   it("never sends a message again that the run read before its id came back", async () => {
