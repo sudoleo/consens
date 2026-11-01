@@ -77,8 +77,13 @@ describe("VM calls in the activity", () => {
       path: "/home/sprite/calc.py" });
     activity.receive(events, { version: 1, kind: "tool", id: "s:4/tool", name: "github_import", status: "succeeded",
       path: "/home/sprite/repos/app", repo: "owner/app" });
+    activity.receive(events, { version: 1, kind: "tool", id: "s:5/tool", name: "vm_save_picture", status: "succeeded",
+      path: "/home/sprite/images/cafe.jpg" });
     activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
-    const [write, failed, edit, imported] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    const [write, failed, edit, imported, picture] = host.querySelectorAll(".agent-activity-content .agent-vm");
+    // A picture of the web the server put into the VM (vm_save_picture, 2026-11-01).
+    expect(picture.querySelector(".agent-vm-verb").textContent).toBe("Saved the picture as");
+    expect(picture.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/images/cafe.jpg");
     // A repository the backend brought into the VM (agent_github.py).
     expect(imported.querySelector(".agent-vm-verb").textContent).toBe("Imported the repository into");
     expect(imported.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/repos/app");

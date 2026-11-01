@@ -1,9 +1,12 @@
 """The agent looks at pictures in its VM (vm_view_image): a chart it plotted
 or a screenshot follows the batch's results as a user message with the image,
-the format attached images use, only for a chat model that takes images.
-The VM is FakeVM (test_agent_vm.py); no provider is called.
+the format attached images use, only for a chat model that takes images,
+and no larger than it needs to be (since 2026-11-01). vm_save_picture puts a
+picture of the web into the VM by its id. The VM is FakeVM
+(test_agent_vm.py); no provider is called.
 """
 import base64
+import io
 import json
 
 import pytest
@@ -187,3 +190,121 @@ def test_without_pictures_the_tool_still_makes_the_pdf(store, fake_vm, monkeypat
     tool = loop.registry.tools["vm_render_office"]
     assert tool.description.endswith("the PDF lands next to it.")
     assert "note" not in results(loop)[0] and loop.vm_tools.take_pictures() == []
+
+
+# --- What the model gets (model_picture, since 2026-11-01) ---
+# Two photos of 4000 px (3.4 and 3.6 MB) and three overviews of 1.2 MB went
+# along with every request while they were in view: each step about nine
+# seconds slower, the provider working a tenth of a second ("füg mal mehr
+# bilder ein", 13 minutes).
+
+def photo(size, kind="JPEG"):
+    from PIL import Image
+    image = Image.merge("RGB", [Image.effect_noise(size, 40), Image.linear_gradient("L").resize(size),
+                                Image.new("L", size, 120)])
+    buffer = io.BytesIO()
+    image.save(buffer, kind, **({"quality": 95} if kind == "JPEG" else {}))
+    return buffer.getvalue()
+
+
+def test_a_large_picture_goes_to_the_model_smaller_as_webp():
+    from PIL import Image
+    big = photo((4000, 3000))
+    assert len(big) > agent_vm_tools.PICTURE_SENT_BYTES
+    mime, sent = agent_vm_tools.model_picture("image/jpeg", big)
+    assert mime == "image/webp" and len(sent) < len(big) / 4
+    with Image.open(io.BytesIO(sent)) as image:
+        assert image.format == "WEBP" and image.size == (agent_vm_tools.PICTURE_SIDE, 1176)
+    # The message the loop shows carries the smaller one.
+    shown = picture_message("/home/agent/big.jpg", "image/jpeg", big)["content"][1]["image_url"]["url"]
+    assert shown == "data:image/webp;base64," + base64.b64encode(sent).decode()
+    # Transparency stays.
+    clear = io.BytesIO()
+    Image.new("RGBA", (2000, 1000), (0, 0, 0, 0)).save(clear, "PNG")
+    with Image.open(io.BytesIO(agent_vm_tools.model_picture("image/png", clear.getvalue())[1])) as image:
+        assert image.mode == "RGBA" and image.size == (agent_vm_tools.PICTURE_SIDE, 784)
+
+
+def test_a_picture_within_bounds_goes_as_it_is_and_a_screenshot_keeps_its_pixels():
+    from PIL import Image
+    small = photo((300, 200), "PNG")
+    assert agent_vm_tools.model_picture("image/png", small) == ("image/png", small)
+    # A heavy screenshot only changes its format: its x,y are what click takes.
+    shot = photo((1280, 800), "PNG")
+    assert len(shot) > agent_vm_tools.PICTURE_SENT_BYTES
+    mime, sent = agent_vm_tools.model_picture("image/png", shot)
+    assert mime == "image/webp" and len(sent) < len(shot)
+    with Image.open(io.BytesIO(sent)) as image:
+        assert image.size == (1280, 800)
+    # What cannot be decoded within bounds goes as it is (the provider's call, as before).
+    assert agent_vm_tools.model_picture("image/png", PNG) == ("image/png", PNG)
+    wide = io.BytesIO()
+    Image.new("RGB", (4000, 2500), (40, 90, 160)).save(wide, "PNG")
+    assert agent_vm_tools.model_picture("image/png", wide.getvalue()) == ("image/png", wide.getvalue())
+
+
+# --- A picture of the web into the workspace (vm_save_picture, since 2026-11-01) ---
+# Wikimedia refused twelve downloads in the workspace's browser with 429 and
+# 400 and the agent waited 25 and 30 s for it, while find_pictures fetched
+# the same pictures on the server without trouble.
+
+def test_a_picture_from_the_web_comes_into_the_workspace_by_its_id(store, fake_vm, monkeypatch):
+    from PIL import Image
+    from app.services import agent_web_images, picture_search
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    monkeypatch.setenv(picture_search.KEY_ENV, "test-key")
+    page, address = "https://commons.wikimedia.org/wiki/File:Cafe.jpg", "https://upload.wikimedia.org/cafe.jpg"
+    found_page, found = "https://www.24grad.de/", "https://www.24grad.de/roesterei.jpg"
+    # Half of it transparent: white in a JPEG.
+    sign = Image.new("RGBA", (2000, 1000), (200, 30, 30, 255))
+    sign.paste((0, 0, 0, 0), (1000, 0, 2000, 1000))
+    buffer = io.BytesIO()
+    sign.save(buffer, "PNG")
+
+    async def fetch(url, get=None):
+        return buffer.getvalue(), address, page, {"page_title": "File:Cafe.jpg"}
+
+    async def fetch_found(picture, copy, page, get=None):
+        return agent_web_images.encode(photo((900, 600)))
+    monkeypatch.setattr(agent_web_images, "fetch_picture", fetch)
+    monkeypatch.setattr(agent_web_images, "fetch_found", fetch_found)
+    monkeypatch.setattr(picture_search, "search", lambda query, count: [
+        {"picture": found, "thumbnail": "", "page": found_page, "title": "24grad", "width": 900, "height": 600}])
+    script = LongAgent([[("find_pictures", {"urls": [page]})], [("search_pictures", {"query": "24grad Hannover"})],
+                        [("vm_save_picture", {"picture": "p1", "path": "images/cafe.jpg"})],
+                        [("vm_save_picture", {"picture": "p2", "path": "images/roesterei.PNG"})],
+                        [("vm_save_picture", {"picture": "p1", "path": "images/cafe.gif"})],
+                        [("vm_save_picture", {"picture": "p9", "path": "x.png"})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    assert "vm_save_picture" in script.offered[0]
+    assert "find_pictures or search_pictures" in loop.registry.tools["vm_save_picture"].description
+    _looked, _searched, cafe, roast, gif, unknown = results(loop)
+    folder, files = chat_path(loop.chat_id), fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
+    assert {key: cafe[key] for key in ("path", "bytes", "width", "height", "picture", "page")} == {
+        "path": f"{folder}/images/cafe.jpg", "bytes": len(files[f"{folder}/images/cafe.jpg"]), "width": 1600,
+        "height": 800, "picture": address, "page": page}
+    with Image.open(io.BytesIO(files[f"{folder}/images/cafe.jpg"])) as image:
+        assert image.format == "JPEG" and image.size == (1600, 800)
+        assert min(image.getpixel((1400, 400))) > 245 and image.getpixel((200, 400))[0] > 180
+    # A found picture comes now, fetched by the server; the extension sets the format.
+    assert (roast["path"], roast["picture"], roast["page"]) == (f"{folder}/images/roesterei.PNG", found, found_page)
+    with Image.open(io.BytesIO(files[f"{folder}/images/roesterei.PNG"])) as image:
+        assert image.format == "PNG" and image.size == (900, 600)
+    assert gif == {"error": "Name the file .jpg, .png or .webp: the picture is written in that format."}
+    assert "No picture p9 in this message" in unknown["error"]
+    # The next message's record names it; the reviewers read it as the web's.
+    calls = [m for m in loop.messages if m.get("role") == "assistant" and m.get("tool_calls")]
+    saving = calls[2]["tool_calls"][0]["function"]
+    assert agent_compaction.describe(saving["name"], saving["arguments"], json.dumps(cafe)) == (
+        f"vm_save_picture p1 -> {folder}/images/cafe.jpg (1600x800, from {page})")
+    logged = [entry for entry, _ in loop.work_log.entries_after(0)]
+    assert {e["data"] for e in logged if e["kind"] == "tool" and e.get("name") == "vm_save_picture"} == {"web"}
+
+
+def test_without_the_picture_tools_there_is_nothing_to_save(store, fake_vm, monkeypatch):
+    monkeypatch.setenv("AGENT_READ_SOURCES", "0")
+    script = LongAgent()
+    loop = vm_loop(store, script)
+    list(loop.run())
+    assert loop.image_tools is None and "vm_save_picture" not in script.offered[0]

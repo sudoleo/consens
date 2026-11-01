@@ -46,6 +46,13 @@ agent to look at: it chooses by those words. The server fetches the first
 PREFETCH of them at once in the background, so show_image finds most ready;
 a picture its site does not give comes as Brave's copy of it.
 
+Into the workspace (2026-11-01, "füg mal mehr bilder ein": Wikimedia refused
+twelve downloads in the workspace's browser with 429 and 400, and the agent
+waited 25 and 30 s for it, while find_pictures fetched the same pictures
+without trouble). vm_save_picture (agent_vm_tools.py) writes a picture of
+this message into the workspace by its id, as the server fetched it
+(picture_file), in the format of the file's extension (saved_as).
+
 The fetch reaches out like a browser's open, which the reviewers follow live
 (from 2026-10-28 to 2026-10-29 an address the message did not hold waited
 for them first, agent_gate.py). Never in chats with Google data (like
@@ -105,6 +112,8 @@ MAX_SIDE = 1600
 MAX_PIXELS = 40_000_000
 STORED_BYTES = 1_500_000
 FORMATS = ("JPEG", "PNG", "WEBP", "GIF")
+# What vm_save_picture writes into the workspace, by the file's extension.
+SAVE_FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".webp": "WEBP"}
 PAGE_KINDS = frozenset({"text/html", "application/xhtml+xml"})
 # What hosts call their pictures; the bytes decide (encode), never the type.
 IMAGE_KINDS = frozenset({"image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/webp", "image/gif",
@@ -217,6 +226,24 @@ def encode(raw):
         # Broken files of any kind are simply no picture.
         return None
     return None
+
+
+def saved_as(data, extension):
+    """The stored WebP ``data`` in the format of ``extension``
+    (SAVE_FORMATS): JPEG, on white where it is transparent, or PNG, which
+    slides and documents take everywhere; ``data`` itself for .webp."""
+    kind = SAVE_FORMATS[extension]
+    if kind == "WEBP":
+        return data
+    with Image.open(io.BytesIO(data)) as source:
+        image = source.convert("RGBA")
+    if kind == "JPEG":
+        ground = Image.new("RGB", image.size, "white")
+        ground.paste(image, mask=image.getchannel("A"))
+        image = ground
+    buffer = io.BytesIO()
+    image.save(buffer, kind, **({"quality": 90} if kind == "JPEG" else {"optimize": True}))
+    return buffer.getvalue()
 
 
 async def _get(client, url, kinds, limit, referer=""):
@@ -545,6 +572,19 @@ class WebImageTools:
             candidate.update(data=data, mime=mime, width=width, height=height,
                              digest=hashlib.sha256(data).hexdigest())
             self.by_hash.setdefault(candidate["digest"], candidate["id"])
+
+    def picture_file(self, key, cancellation):
+        """The candidate ``key`` with its data, fetched now if the image
+        search only found it (vm_save_picture, agent_vm_tools.py);
+        ValueError with the reason otherwise."""
+        with self.lock:
+            candidate = self.candidates.get(key)
+        if candidate is None:
+            where = "search_pictures or find_pictures" if self.search_enabled else "find_pictures"
+            raise ValueError(f"No picture {key} in this message: find pictures with {where} first.")
+        if "data" not in candidate:
+            self._arrived(candidate, cancellation)
+        return candidate
 
     @staticmethod
     def _public(candidate):

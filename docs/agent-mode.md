@@ -2638,6 +2638,21 @@ im Arbeitsprotokoll Herkunft `vm`, dort als „[image]“; die Prüfer sehen das
 Bild nicht). Live gegen einen Anbieter noch nicht geprüft; das Format ist das
 der Anhänge.
 
+**Bilder in Modellgröße (seit 2026-11-01, `model_picture`).** Jedes Bild, das
+`picture_message` ans Modell gibt (`vm_view_image`, Browser-Screenshot,
+Übersicht von `vm_render_office`, `find_pictures`), geht höchstens
+`PICTURE_SIDE` = 1568 px lang (wie die Übersicht, `sheet.py`: so weit
+verkleinern die Anbieter ohnehin) und etwa `PICTURE_SENT_BYTES` = 400 KB groß;
+was darüber liegt, geht neu als WebP (q85, sonst q70), aufgerichtet und ohne
+Metadaten. Ein Screenshot (1280×800) wird nie verkleinert, höchstens anders
+kodiert: Seine x,y sind die von `click`. Was Pillow nicht in den Grenzen
+dekodiert (JPEG bis 40 MP, andere bis `MAX_PIXELS_DECODED`), geht wie bisher
+roh. Anlass: Im Lauf „füg mal mehr bilder ein“ (13:13 min) hingen zwei Fotos
+mit 4000 px (3,4 und 3,6 MB) und drei Übersichten (je 1,2 MB) im Kontext und
+fuhren bei jeder Anfrage mit. Pro Schritt kamen 11,9 s statt 3,5 s Aufschlag
+zur Rechenzeit des Anbieters (laut OpenRouter `generation_time` teils 45 ms),
+bis die Bilder aus der Sicht fielen; danach 2,9 s.
+
 **Hintergrundprozesse (seit 2026-10-26).** Ein mit `&` in `vm_exec`
 gestarteter Prozess endet, sobald die Sprite pausiert (nach wenigen Sekunden
 Leerlauf, also zwischen zwei Schritten des Agenten). Für Dev-Server und lange
@@ -4796,8 +4811,23 @@ der Agent riet Seite für Seite und sah jede an (Bildtokens, Schritte).
   einmal lädt und die Nachbarn vorlädt, in fester Höhe, und die Seite jedes
   Bildes als Link nennt (`docs/codebase-map.md`, „Collage“).
 - Ohne Schlüssel in Render bleibt die Suche aus.
+- **In den Arbeitsplatz (seit 2026-11-01):** `vm_save_picture(picture, path)`
+  schreibt ein Bild dieser Nachricht per ID in die Werkbank, so wie der Server
+  es geholt hat (`WebImageTools.picture_file`; ein Suchtreffer kommt erst
+  jetzt), höchstens 1600 px, als JPEG (Transparentes auf Weiß), PNG oder WebP
+  nach der Dateiendung (`saved_as`); andere Endungen weist es ab. Ergebnis:
+  Pfad, Bytes, Größe, `picture` und `page` (die Quelle). Das Werkzeug gibt es
+  nur, wo es die Bildwerkzeuge gibt; es kostet keine VM-Zeit, und das Bild
+  kommt vor dem Start der Werkbank, sodass eine falsche ID nichts aufweckt. Ein
+  abgelehnter Download im Browser (`The download failed: HTTP …`) nennt dann
+  diesen Weg (`DOWNLOAD_REFUSED_PICTURE`). Anlass: Wikimedia lehnte im Lauf
+  „füg mal mehr bilder ein“ zwölf Downloads im Browser des Arbeitsplatzes mit
+  429/400 ab (Vorschaugrößen unter `thumb/` und `Special:FilePath?width=`,
+  die Originale gingen), der Agent wartete 25 und 30 s mit `sleep`, während
+  `find_pictures` dieselben Bilder auf dem Server ohne Mühe holte.
 
 Tests: `tests/test_agent_web_images.py` (Suche, Abruf, Ablauf),
+`tests/test_agent_vm_pictures.py` (`vm_save_picture`, `model_picture`),
 `tests/js/agent-workspace.test.mjs` (Collage),
 `tests/js/composer-attachments.test.mjs` (Blättern).
 

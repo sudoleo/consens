@@ -320,6 +320,10 @@ def describe(name, arguments, result):
             line += f", now: {_short(data['in_progress'], RECORD_TAIL_CHARS)}"
     elif name == "vm_view_image":
         line = f"vm_view_image {path}"
+    elif name == "vm_save_picture":
+        line = f"vm_save_picture {_short(args.get('picture'), 16)} -> {path}"
+        if data.get("page"):
+            line += f" ({data.get('width', '?')}x{data.get('height', '?')}, from {_short(data['page'], 200)})"
     elif name == "vm_render_office":
         line = f"vm_render_office {path} -> {data.get('pdf') or 'a PDF'}, {data.get('pages', '?')} pages"
     elif name == "vm_share_file":

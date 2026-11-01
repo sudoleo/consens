@@ -264,6 +264,12 @@ LOCAL_DOWN = "The way from the browser to your workspace did not open. Try again
 LOCAL_OPENED = ("localhost:{port} here is port {port} of your workspace. The browser also reaches the other ports "
                 "your servers listen on now; a server you start later, once you open its address.")
 LOCAL_DOWNLOAD = "download takes a file on the web: what your workspace serves is in your workspace already."
+# After a download a site refused, where vm_save_picture is (agent_vm_tools.py):
+# on 2026-11-01 Wikimedia refused twelve picture downloads with 429 and 400,
+# and the agent waited 25 and 30 s for it, while the server's own fetch of
+# the same pictures went through.
+DOWNLOAD_REFUSED_PICTURE = ("A picture also comes into your workspace without the browser: vm_save_picture writes "
+                            "one from find_pictures or search_pictures, which the server fetches.")
 
 
 def required(args):
@@ -674,6 +680,9 @@ class BrowserTools:
                                           page_url=seen.group(1) if seen else "", answer=answer)
         report({"page": text[:VIEW_CHARS]})
         if status in {"refused", "setup", "failed"}:
+            if (args.action == "download" and text.startswith("The download failed: HTTP")
+                    and getattr(self.vm.loop, "image_tools", None) is not None):
+                text += " " + DOWNLOAD_REFUSED_PICTURE
             raise ValueError(text or "The browser could not do that.")
         if status == "user":
             from app.services.agent_vm_tools import VM_USER_HAS_BROWSER

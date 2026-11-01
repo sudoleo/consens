@@ -73,7 +73,7 @@ TOOL_DATA = {
     # the page back with it once the user handed the browser back (agent_ask.py).
     "browser": "web", "ask_user": "web",
     # Pictures of the web the server fetched (agent_web_images.py).
-    "find_pictures": "web", "search_pictures": "web", "show_image": "web",
+    "find_pictures": "web", "search_pictures": "web", "show_image": "web", "vm_save_picture": "web",
     # The answers of the user's chosen models with their pages (since
     # 2026-10-31): model output.
     "compare_models": "agent",

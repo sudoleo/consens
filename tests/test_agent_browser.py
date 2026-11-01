@@ -628,3 +628,19 @@ def test_localhost_opens_through_the_tunnel_to_the_workbench(store, fake_vm, mon
     loop.vm_tools.session.claim = agent_workspace.Claim(restored=False, tunnel_ports=(5173,))
     call(browser, action="read")
     assert fake_vm.requests[-1]["local_ports"] == [5173]
+
+
+def test_a_refused_download_names_the_way_a_picture_comes_without_the_browser(store, fake_vm, monkeypatch):
+    """On 2026-11-01 Wikimedia refused twelve picture downloads with 429 and
+    400, while the server's own fetch of the same pictures went through."""
+    monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
+    loop, browser = tools(store)
+    fake_vm.browser = lambda request: {"status": "refused", "text": "The download failed: HTTP 429."}
+    with pytest.raises(ValueError) as refused:
+        call(browser, action="download", url="https://upload.wikimedia.org/thumb/cafe.jpg/1280px-cafe.jpg")
+    assert str(refused.value) == "The download failed: HTTP 429. " + agent_browser.DOWNLOAD_REFUSED_PICTURE
+    # Without the picture tools there is no such way: the refusal alone.
+    loop.image_tools = None
+    with pytest.raises(ValueError) as plain:
+        call(browser, action="download", url="https://upload.wikimedia.org/thumb/cafe.jpg/1280px-cafe.jpg")
+    assert str(plain.value) == "The download failed: HTTP 429."
