@@ -1420,15 +1420,20 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Ein `request_domain` dort zeigt die Domain-Karte mit dem Urteil der Prüfer.
 - [ ] Reviewers *Off* + Domain-Anfrage am Arbeitsplatz: die Karte sagt „Your
   reviewers are off, so only you decide.“
-- [ ] Temporärer Chat: im (+)-Menü eines neuen Agent-Chats „Temporary chat“
-  einschalten → Begrüßung „Temporary chat. Gone when you leave it.“, Platzhalter
-  „Ask in a temporary chat“. Senden: keine Zeile in der Seitenleiste, unter dem
-  Feld „Temporary chat: …“, kein Share- und kein Watch-Knopf unter der Antwort,
-  kein Arbeitsplatz-Werkzeug, keine Memory-Änderung. Folgefrage bleibt im Chat.
+- [ ] Temporärer Chat: auf einem neuen Agent-Chat oben rechts die gestrichelte
+  Sprechblase klicken → gedrückt, Begrüßung „Temporary chat. Gone when you
+  leave it.“, Platzhalter „Ask in a temporary chat“, die Feldkante wird weich
+  gestrichelt (gleichmäßige Striche rundum, auch an der Naht oben links, im
+  hellen und dunklen Theme; als Pille im Chat ebenso). Zweiter Klick nimmt es
+  zurück. Gäste und die Watches-Seite zeigen den Knopf nicht. Senden: keine
+  Zeile in der Seitenleiste, Knopf bleibt gedrückt und schaltet nichts ab,
+  unter dem Feld „Temporary chat: …“, kein Share- und kein Watch-Knopf unter
+  der Antwort, kein Arbeitsplatz-Werkzeug, keine Memory-Änderung. Folgefrage
+  bleibt im Chat. Aktivitätsleiste oder Arbeitsplatz offen: der Knopf rückt
+  daneben.
 - [ ] Temporärer Chat, erste Nachricht scheitert oder wird gestoppt: die
   nächste Nachricht bleibt temporär (keine Zeile in der Seitenleiste).
-  Als Gast „Temporary chat“ einschalten, Frage senden, anmelden: sie geht
-  temporär raus. Ein dupliziertes Tab löscht den Chat im Original nicht.
+  Ein dupliziertes Tab löscht den Chat im Original nicht.
 - [ ] Temporären Chat verlassen (Neuer Chat, anderer Chat, Abmelden, Neuladen):
   er ist danach weg (Firestore: Chat, Turns und `temporary_chats`-Eintrag
   gelöscht); ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der

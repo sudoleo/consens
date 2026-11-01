@@ -43,7 +43,7 @@
     left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--workspace-width) / 2);
   }
 
-  body.workspace-view-docked .auth-top-actions {
+  body.workspace-view-docked .app-top-actions {
     right: calc(var(--workspace-width) + 16px);
   }
 
@@ -61,7 +61,7 @@
       calc(100vw - var(--app-sidebar-offset) - var(--workspace-width) - 346px - 48px));
   }
 
-  body.agent-sidebar-open.workspace-view-docked .auth-top-actions {
+  body.agent-sidebar-open.workspace-view-docked .app-top-actions {
     right: calc(346px + var(--workspace-width) + 16px);
   }
 
@@ -81,7 +81,7 @@
     margin-left: calc((var(--app-sidebar-offset) + 100% - var(--agent-chat-width)) / 2);
   }
 
-  body.agent-sidebar-open.workspace-view-covers .auth-top-actions {
+  body.agent-sidebar-open.workspace-view-covers .app-top-actions {
     right: calc(var(--workspace-width) + 16px);
   }
 

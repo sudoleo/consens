@@ -116,11 +116,22 @@
       <span class="brand-float-title">consens.io</span>
     </a>
   </div>
-  <!-- Auth oben rechts (nur ausgeloggt; firebase.js blendet um): Login +
-       Registrieren öffnen das Auth-Modal im jeweiligen Modus. -->
-  <div id="authTopActions" class="auth-top-actions" hidden>
-    <button type="button" id="authTopLoginBtn" class="auth-top-login">Log in</button>
-    <button type="button" id="authTopSignupBtn" class="auth-top-signup">Sign up</button>
+  <!-- Oben rechts: der Schalter fuer einen temporaeren Chat und, nur
+       ausgeloggt, Login + Registrieren. Die Gruppe ist fixiert und weicht den
+       Seitenpanels aus; ihre Teile blenden sich einzeln ein. -->
+  <div class="app-top-actions">
+    <!-- Temporary chat (temporary-chat.js): chosen on a new chat, shown on
+         in one. The app's chat bubble, dashed: a chat that is not kept. -->
+    <button type="button" id="temporaryChatButton" class="temporary-chat-button" aria-pressed="false"
+      aria-label="Temporary chat" title="Temporary chat" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12Z" pathLength="54" stroke-dasharray="2.6 3.4" stroke-dashoffset="4.5"></path></svg>
+    </button>
+    <!-- Auth (nur ausgeloggt; firebase.js blendet um): Login + Registrieren
+         oeffnen das Auth-Modal im jeweiligen Modus. -->
+    <div id="authTopActions" class="auth-top-actions" hidden>
+      <button type="button" id="authTopLoginBtn" class="auth-top-login">Log in</button>
+      <button type="button" id="authTopSignupBtn" class="auth-top-signup">Sign up</button>
+    </div>
   </div>
   <!-- Ansichts-Umschalter oben mittig (Chat | Watches), auf Start-/Watch-Ansicht —
        ausgeloggt bittet der Watches-Klick per Popup um Login (watch.js
@@ -438,6 +449,8 @@
            the run, or sent once it is done. -->
       <div id="agentQueue" class="agent-queue" role="status" aria-live="polite" hidden></div>
       <div class="chat-input-container u-position-relative" data-drop-label="Drop file to attach">
+        <!-- A temporary chat's dashed rim (shell.css; temporary-chat.js fits its dashes). -->
+        <svg class="composer-dashed-edge" aria-hidden="true" focusable="false"><rect></rect></svg>
         <!-- Noch nicht gesendete Anhaenge, auf dem Startbildschirm wie im
              Chat ueber der Frage im Feld. Beim Senden wandern sie an die
              Nachricht (#threadAskAttachments) — ein Anhang gehoert zu der
@@ -500,19 +513,6 @@
               <span class="attach-menu-hint">Watch and steer the agent’s browser</span>
             </span>
           </button>
-          <!-- A temporary chat (temporary-chat.js): chosen on a new Agent
-               chat, said in one; nowhere else. -->
-          <label class="attach-menu-toggle" id="temporaryChatOption" for="temporaryChatToggle" hidden>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 1 0 17a8.5 8.5 0 1 1 0-17" stroke-dasharray="2.4 2.6"/><path d="M12 8v4.2l2.6 1.6"/></svg>
-            <span class="attach-menu-toggle-text">
-              <span class="menu-switch-label">Temporary chat</span>
-              <span id="temporaryChatHint" class="attach-menu-toggle-sub">Not saved, no memory</span>
-            </span>
-            <span class="switch attach-menu-switch">
-              <input type="checkbox" id="temporaryChatToggle">
-              <span class="slider"></span>
-            </span>
-          </label>
           <div class="attach-menu-divider"></div>
           <!-- Reasoning lebt im (+)-Kontextmenü: im Agent-Modus der
                Effort-Picker, sonst der Schalter darunter (für alle Stufen).

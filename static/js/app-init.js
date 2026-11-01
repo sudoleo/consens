@@ -628,7 +628,7 @@
         // goes into it and comes back to the menu button when it closes, and
         // Escape closes it. What lives on <body> for the drawer (a chat's row
         // menu, the notice line, dialogs) stays usable.
-        const DRAWER_BACKDROP = [".container", ".app-mobile-header", ".app-nav-float", "#authTopActions",
+        const DRAWER_BACKDROP = [".container", ".app-mobile-header", ".app-nav-float", ".app-top-actions",
           "#viewSwitch", "#mobileConversationActions", ".app-bottom-edge"];
         let drawerOpen = false;
         function syncDrawerFocus(sidebar, open) {

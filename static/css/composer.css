@@ -521,16 +521,6 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
   stroke-linejoin: round;
 }
 .chat-input-container .attach-menu .attach-menu-toggle-icon { background: var(--ink-2); }
-/* A switch row drawn with its own glyph (Temporary chat, temporary-chat.js). */
-.chat-input-container .attach-menu .attach-menu-toggle > svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-/* In a temporary chat its switch says so and cannot be turned off. */
-.chat-input-container .attach-menu .attach-menu-toggle:has(input:disabled) { cursor: default; }
 .chat-input-container .attach-menu :is(.attach-menu-label, .attach-menu-text, .attach-menu-toggle-text) { grid-column: 2; min-width: 0; }
 .chat-input-container .attach-menu :is(.attach-menu-text, .attach-menu-toggle-text) { display: flex; flex-direction: column; gap: 1px; }
 .chat-input-container .attach-menu :is(.attach-menu-label, .attach-menu-toggle-text .menu-switch-label) {

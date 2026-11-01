@@ -8578,11 +8578,17 @@ Texte der Laufbelege mit (`ChatStore._scrub_run_receipts`, je 100 Belege ein
 `RUN_RECEIPT_TEXT_FIELDS`; der Beleg mit den Kosten bleibt), und `finish_run`
 entfernt sie, wenn der Chat schon weg ist (ein Lauf, der ihn um Sekunden
 überlebt). **Browser** (`static/js/temporary-chat.js`,
-`App.temporaryChat`): Schalter „Temporary chat“ im (+)-Menü nur auf einem neuen
-Agent-Chat (`#temporaryChatOption`, im Chat gesperrt mit „Ends when you leave
-this chat“), Begrüßung `.hero-greeting-temporary` und Platzhalter „Ask in a
-temporary chat“ (`body.temporary-chat`), im Chat `#temporaryChatNote` unter dem
-Feld. `agent-chat.js` `send`: erste Nachricht `start()` → Token an
+`App.temporaryChat`): seit 2026-11-01 abends ein Glyph oben rechts
+(`#temporaryChatButton`, `aria-pressed`; die Sprechblase der App gestrichelt) in
+der fixierten Gruppe `.app-top-actions` (mit `#authTopActions`, weicht wie diese
+den Seitenpanels aus), nur auf einem neuen Agent-Chat und nur mit Konto (Gäste
+sehen dort allein Log in/Sign up), nicht auf Watches; im Chat bleibt er gedrückt
+mit `aria-disabled` („Temporary chat. Ends when you leave it.“), ein Klick
+beendet nichts. Begrüßung `.hero-greeting-temporary`, Platzhalter „Ask in a
+temporary chat“ und eine gestrichelte Feldkante (`body.temporary-chat`:
+`.composer-dashed-edge`, ein SVG-Rand, dessen Striche `fitEdge` per
+`ResizeObserver` auf die Randlänge einpasst, Naht mitten in einer Lücke; die
+volle Haarlinie blendet aus), im Chat `#temporaryChatNote` unter dem Feld. `agent-chat.js` `send`: erste Nachricht `start()` → Token an
 `metadata.temporaryToken`, `config.temporary`, `POST /chats` mit `temporary`,
 `adopt(token, chatId)` (verlassen inzwischen → sofort löschen; ersetzt ein
 zweiter Anlauf einen schon angelegten Chat, geht der erste); Folge- und
@@ -12136,8 +12142,8 @@ Dateizeilen der Turn stehen seit 2026-10-31/11-01 davor in
 App-Sidebar rechts (volle Höhe, `--ground`, eine Haarlinie `--line-soft` zur
 Spalte, keine Karte, kein Schatten; Zeilen ohne Trennlinien mit Ton beim
 Hover, Segmente nur in Tinte, laufender Aufruf als wandernder Abschnitt ohne
-Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.auth-top-actions` rückt
-für Gäste neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet,
+Schiene, Faltzeichen nur bei Hover/Fokus/offen); `.app-top-actions`
+(temporärer Chat, für Gäste Log in/Sign up) rückt neben die Leiste. Unter 1200 px bleibt sie ein schwebendes Sheet,
 seit 2026-10-29 von 700 px an als Panel am rechten Rand in der Breite der
 Desktop-Leiste (UX-Audit E6, vorher 1066 px breit bei 1100), darunter von
 unten; Scrim und Sheet liegen über der Kopfleiste des Handys

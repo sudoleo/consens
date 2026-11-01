@@ -323,10 +323,11 @@ body:has(.sidebar.active) .brand-float {
 }
 
 /* --------------------------------------------------------------------------
-   Auth-Buttons oben rechts (nur ausgeloggt, firebase.js): Log in als ruhige
-   Pill, Sign up als Primär-Button. Fixed, auf Höhe der Float-Nav.
+   Oben rechts, auf Höhe der Float-Nav: eine fixierte Gruppe aus dem Schalter
+   für einen temporären Chat und den Auth-Buttons (nur ausgeloggt,
+   firebase.js): Log in als ruhige Pill, Sign up als Primär-Button.
    -------------------------------------------------------------------------- */
-.auth-top-actions {
+.app-top-actions {
   position: fixed;
   top: 16px;
   right: 16px;
@@ -336,8 +337,75 @@ body:has(.sidebar.active) .brand-float {
   z-index: var(--z-header);
 }
 
+.auth-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .auth-top-actions[hidden] {
   display: none;
+}
+
+/* Temporary chat (temporary-chat.js): one bare glyph, the counterpart of the
+   sidebar mark at the top left (same box, ink and hover tone). Chosen, it is
+   pressed the way the app marks a chosen control: a quiet tint, no colour.
+   In an open temporary chat it stays pressed and says so, but turns nothing
+   off: leaving the chat is what ends it. */
+.temporary-chat-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard);
+}
+
+/* Not on Watches; and a guest's top right is Log in and Sign up alone (a
+   phone has no room for a third control there): the switch comes with the
+   account. */
+.temporary-chat-button[hidden],
+body:has(.watch-page:not([hidden])) .temporary-chat-button,
+.app-top-actions:has(> .auth-top-actions:not([hidden])) > .temporary-chat-button {
+  display: none;
+}
+
+.temporary-chat-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.temporary-chat-button[aria-pressed="true"] {
+  background-color: var(--selected);
+}
+
+.temporary-chat-button[aria-disabled="true"] {
+  cursor: default;
+}
+
+.temporary-chat-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .temporary-chat-button:not([aria-pressed="true"]):hover {
+    background-color: var(--hover);
+  }
 }
 
 .auth-top-login,
@@ -377,7 +445,7 @@ body:has(.sidebar.active) .brand-float {
 /* .auth-top-signup wears the .btn material (components-input.css). */
 
 @media (max-width: 640px) {
-  .auth-top-actions {
+  .app-top-actions {
     right: 10px;
   }
 
@@ -1534,7 +1602,7 @@ body:has(.sidebar.active) .brand-float {
      View-/Auth-Aktionen zur verdeckten Seite und dürfen den Sidebar-Kopf
      nicht überlagern. Der Burger bleibt als Close-Aktion sichtbar. */
   body:has(.sidebar.active) .view-switch,
-  body:has(.sidebar.active) .auth-top-actions {
+  body:has(.sidebar.active) .app-top-actions {
     visibility: hidden;
     opacity: 0;
     pointer-events: none;

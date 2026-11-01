@@ -49,7 +49,7 @@
   body.file-viewer-docked.file-viewer-docked.file-viewer-docked .view-switch {
     left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--file-viewer-width) / 2);
   }
-  body.file-viewer-docked.file-viewer-docked.file-viewer-docked .auth-top-actions {
+  body.file-viewer-docked.file-viewer-docked.file-viewer-docked .app-top-actions {
     right: calc(var(--file-viewer-width) + 16px);
   }
 }

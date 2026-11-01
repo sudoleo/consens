@@ -5,8 +5,8 @@
 // shared. The server knows it by its chat (POST /chats with temporary:
 // true, chat_store.create_chat) and leaves out bookmark, memory, workspace,
 // Watch and chat search for it (routers/agent.py). This module is the
-// browser's half: the switch in the (+) menu of a new Agent chat, the
-// words that say a chat is temporary, and its end.
+// browser's half: the switch at the top right of a new Agent chat, the
+// words and the dashed field that say a chat is temporary, and its end.
 //
 // A temporary chat lives in its tab. It ends when the user leaves it (New
 // chat, another chat, logout: whatever takes it off the screen in the run
@@ -227,35 +227,92 @@
     return Boolean(session) || (armed && newChatShown());
   }
 
-  // The switch in the (+) menu: on a new Agent chat it chooses, in a
-  // temporary chat it says so; elsewhere it is not there. The words: a
-  // greeting on the start screen, a line under the field in the chat.
+  // The field's dashed rim (shell.css, .composer-dashed-edge): one SVG line
+  // just inside the field's edge, in its radius. The dashes are fitted to
+  // the line's length so the pattern closes on itself, with the seam in the
+  // middle of a gap: no stub where it starts, wherever the field's size.
+  // Refitted while it changes size (a second line, a phone's collapse) or
+  // radius (one line is a pill).
+  const DASH = 4.5;
+  const GAP = 3.5;
+  const edge = document.querySelector(".composer-dashed-edge");
+  const edgeLine = edge?.querySelector("rect");
+  const field = edge?.parentElement;
+  let edgeWatch = null;
+  let radiusFrame = 0;
+  function fitEdge() {
+    if (!edgeLine || typeof edgeLine.getTotalLength !== "function") return;
+    const width = field.clientWidth - 1;
+    const height = field.clientHeight - 1;
+    if (width <= 0 || height <= 0) return;
+    const style = window.getComputedStyle(field);
+    const inner = (parseFloat(style.borderTopLeftRadius) || 0) - (parseFloat(style.borderTopWidth) || 0);
+    edgeLine.setAttribute("x", "0.5");
+    edgeLine.setAttribute("y", "0.5");
+    edgeLine.setAttribute("width", String(width));
+    edgeLine.setAttribute("height", String(height));
+    edgeLine.setAttribute("rx", String(Math.max(0, Math.min(inner - 0.5, width / 2, height / 2))));
+    const length = edgeLine.getTotalLength();
+    const scale = length / Math.max(1, Math.round(length / (DASH + GAP))) / (DASH + GAP);
+    edgeLine.style.strokeDasharray = `${DASH * scale} ${GAP * scale}`;
+    edgeLine.style.strokeDashoffset = String((DASH + GAP / 2) * scale);
+  }
+  function watchEdge(on) {
+    if (!field || on === Boolean(edgeWatch)) return;
+    if (!on) {
+      edgeWatch.disconnect();
+      edgeWatch = null;
+      return;
+    }
+    if (typeof window.ResizeObserver !== "function") { fitEdge(); return; }
+    // Padding moves with the phone's collapse: the border box is the size.
+    edgeWatch = new window.ResizeObserver(fitEdge);
+    edgeWatch.observe(field, { box: "border-box" });
+  }
+  function followRadius() {
+    fitEdge();
+    radiusFrame = window.requestAnimationFrame(followRadius);
+  }
+  field?.addEventListener("transitionrun", event => {
+    if (event.target === field && event.propertyName.includes("radius") && edgeWatch && !radiusFrame) followRadius();
+  });
+  for (const type of ["transitionend", "transitioncancel"]) {
+    field?.addEventListener(type, event => {
+      if (event.target !== field || !event.propertyName.includes("radius") || !radiusFrame) return;
+      window.cancelAnimationFrame(radiusFrame);
+      radiusFrame = 0;
+      fitEdge();
+    });
+  }
+
+  // The switch at the top right: on a new Agent chat it chooses, in a
+  // temporary chat it stays pressed and says so (turning it off there would
+  // read as "keep this chat", which leaving it never does); elsewhere it is
+  // not there. The words: a greeting on the start screen, a line under the
+  // field in the chat. The field's dashed edge in both (body.temporary-chat).
   function sync() {
     // Before agent-chat.js is there, nothing is known yet: the switch stays.
     if (!App.agentChat) return;
     const agent = App.agentChat.isSelected?.() === true;
     if (armed && (!agent || !newChatShown())) { armed = false; keepArmed(); }
     const fresh = agent && newChatShown();
-    const row = document.getElementById("temporaryChatOption");
-    const toggle = document.getElementById("temporaryChatToggle");
-    const hint = document.getElementById("temporaryChatHint");
-    if (row) row.hidden = !(session || fresh);
-    if (toggle) {
-      toggle.checked = Boolean(session) || armed;
-      toggle.disabled = Boolean(session);
-    }
-    if (hint) {
-      const text = session ? "Ends when you leave this chat" : "Not saved, no memory";
-      if (hint.textContent !== (App.t?.(text) ?? text)) hint.textContent = text;
+    const button = document.getElementById("temporaryChatButton");
+    if (button) {
+      button.hidden = !(session || fresh);
+      button.setAttribute("aria-pressed", String(Boolean(session) || armed));
+      if (session) button.setAttribute("aria-disabled", "true");
+      else button.removeAttribute("aria-disabled");
+      const title = session ? "Temporary chat. Ends when you leave it." : "Temporary chat";
+      if (button.title !== (App.t?.(title) ?? title)) button.title = title;
     }
     document.body.classList.toggle("temporary-chat", shown());
+    watchEdge(shown());
     const note = document.getElementById("temporaryChatNote");
     if (note) note.hidden = !session;
   }
 
-  document.getElementById("temporaryChatToggle")?.addEventListener("change", function () {
-    arm(this.checked);
-    document.getElementById("questionInput")?.focus?.();
+  document.getElementById("temporaryChatButton")?.addEventListener("click", () => {
+    if (!session) arm(!armed);
   });
   window.addEventListener("consensio:run-mode-change", sync);
   window.addEventListener("consensio:run-registry-change", sync);
