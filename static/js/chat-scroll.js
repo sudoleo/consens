@@ -129,6 +129,8 @@
         // Down to the layout's unit, like the end above.
         if (!hold) peak = Math.min(peak, Math.max(content, Math.floor((tallest - after - bounds.top) * 64) / 64));
         if (working) peak = Math.max(peak, content);
+        // Nothing taller left to hold: scrolling stops measuring (below).
+        else if (peak <= content) peak = 0;
       }
       // The column's own floor (shell.css) still holds on a short page.
       next = `max(calc(100dvh - 10px), ${Math.max(0, height, peak)}px)`;
@@ -346,7 +348,10 @@
   ["wheel", "touchstart", "pointerdown", "keydown"].forEach(name => {
     window.addEventListener(name, interrupt, { passive: true, capture: true });
   });
-  window.addEventListener("scroll", syncButton, { passive: true });
+  // A reader who scrolls up leaves the room the floor held below the window:
+  // it goes now, not with the turn's next change. After the run none comes,
+  // and scrolling back down found the white under the turn again.
+  window.addEventListener("scroll", () => { if (peak) updateReserve(); syncButton(); }, { passive: true });
   let width = window.innerWidth;
   window.addEventListener("resize", () => {
     // Another width sets the turn anew; the phone's keyboard does not.

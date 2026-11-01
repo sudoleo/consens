@@ -7,6 +7,9 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // question's document position, `height` the document height.
 function boot({ reduced = false, mode = "agent", askAt = 2000, executing = false } = {}) {
   let y = 0, height = 3200, now = 0, serial = 0, resize, ask = askAt;
+  // The run itself; `executing` also keeps the floor in the geometry below,
+  // which outlasts the run as in the layout.
+  let working = executing;
   const frames = new Map();
   let visible = { runId: "one", config: { executionMode: mode, agentMode: true } };
   let basis = null;
@@ -15,7 +18,7 @@ function boot({ reduced = false, mode = "agent", askAt = 2000, executing = false
     before(window) {
       window.matchMedia = () => ({ matches: reduced });
       window.App = { runRegistry: { visible: () => visible, isAuthCurrent: () => true, getSelectedConversationIdentity: () => basis,
-        isExecuting: runId => executing && runId === visible?.runId } };
+        isExecuting: runId => working && runId === visible?.runId } };
       Object.defineProperty(window, "scrollY", { get: () => y });
       // With a working run, the column's floor (its min-height) holds the
       // page as the layout would: the page is at least that tall.
@@ -51,6 +54,7 @@ function boot({ reduced = false, mode = "agent", askAt = 2000, executing = false
     moveAsk(to) { ask = to; },
     wheel(delta = -100) { result.window.dispatchEvent(new result.window.WheelEvent("wheel", { deltaY: delta })); },
     scroll(top) { y = top; result.window.dispatchEvent(new result.window.Event("scroll")); },
+    stop() { working = false; },
     show(next) { visible = next; result.window.App.chatScroll.project(next); },
     saved(id = 'saved') { visible = null; basis = { bookmarkId: id, executionMode: mode }; result.window.App.chatScroll.project(null); },
   };
@@ -206,6 +210,26 @@ describe("conversation scroll", () => {
     // Growth still raises it.
     app.grow(400);
     expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 2100px)');
+    app.dom.window.close();
+  });
+
+  // After the run the turn changes no more: what the floor held below a
+  // reader at the end stayed, and scrolling up and back found a screen of
+  // white under the turn again (2026-11-01). Scrolling itself lets it go.
+  it('lets go of the room below the window when the reader scrolls up after the run', () => {
+    const app = boot({ askAt: 100, executing: true });
+    app.grow(0);
+    app.scroll(2400);
+    app.stop();
+    app.grow(-1500);
+    // The reader at the end sees nothing move.
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 3200px)');
+    expect(app.window.scrollY).toBe(2400);
+    app.scroll(1000);
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 1800px)');
+    app.scroll(0);
+    // Nothing held any more: the question's own floor, the turn beyond it.
+    expect(floorOf(app)).toBe('max(calc(100dvh - 10px), 900px)');
     app.dom.window.close();
   });
 

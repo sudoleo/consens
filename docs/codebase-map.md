@@ -2908,7 +2908,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Nachmessung kürzt es auf `max(Inhaltshöhe, Fensterunterkante)` (das
   Fenster in seiner größten Höhe bei dieser Breite, `tallest`, damit
   einklappende Handy-Leisten das Seitenende nicht über sich finden); auch
-  nach dem Lauf, wachsen tut es nur, solange er arbeitet. Vorher hielt jeder
+  nach dem Lauf, wachsen tut es nur, solange er arbeitet. Auch jedes
+  Scrollen misst nach, solange `peak` gesetzt ist: Nach dem Lauf kommt
+  keine Änderung mehr, und wer hoch- und wieder runterscrollte, fand das
+  Weiß unter dem Turn sonst wieder. Ist nach dem Lauf nichts Höheres mehr zu
+  halten (`peak` ≤ Inhaltshöhe), fällt `peak` auf 0, und das Scrollen misst
+  nicht mehr. Vorher hielt jeder
   höhere Moment eines langen Laufs bis zu seinem Ende (für ein Werkzeug
   zurückgezogener Antworttext, offene Befehlsausgabe, Schritte vor dem
   Einfalten, einmal aufgeklappte Aktivität), und unter dem Turn lag ein
