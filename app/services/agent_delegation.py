@@ -338,6 +338,10 @@ class Worker:
     partial_text: str = ""
     progress_seq: int = 0
     session_seq: int = 0
+    # Its latest reasoning line as handed to the journal (progress_text,
+    # progress_kind): its end record carries it, so a line the journal
+    # leaves out because the call has ended (_journal_write) is not lost.
+    progress: dict | None = None
     result: dict | None = None
     reviewed_evidence: dict | None = None
     # The OpenRouter session its requests use (worker_completion): its own
@@ -1136,6 +1140,8 @@ class DelegationLoop(AgentLoop):
             worker.state = status
             if status in {"completed", "failed", "stopped"}:
                 patch.setdefault("ended_at", datetime.now(timezone.utc).isoformat())
+                for key, value in (worker.progress or {}).items():
+                    patch.setdefault(key, value)
             self._publish(worker, patch={"status": status, "duration_ms": int((time.monotonic() - worker.started) * 1000),
                                         "usage": aggregate_usage(worker.usages), **patch}, wait=False)
             self.condition.notify_all()
@@ -1693,7 +1699,8 @@ class DelegationLoop(AgentLoop):
                             if compact:
                                 # Handed to the journal: the stream is read on
                                 # at once (agent_journal).
-                                self._publish(worker, patch={"progress_text": compact["text"], "progress_kind": compact["summary_source"]},
+                                worker.progress = {"progress_text": compact["text"], "progress_kind": compact["summary_source"]}
+                                self._publish(worker, patch=dict(worker.progress),
                                               wait=False, progress=True)
                         if worker:
                             stream_progress.update(event)

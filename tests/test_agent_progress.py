@@ -232,6 +232,28 @@ def test_live_and_saved_activity_never_contain_full_reasoning(store):
     assert all(s["progress_kind"] == "excerpt" for s in sessions)
 
 
+def test_a_reasoning_line_the_journal_leaves_out_stays_with_the_end_record(store):
+    """The journal leaves out a line of a call that has ended by the time it
+    writes (_journal_write). CI 2026-11-01 caught a comparison answer that
+    ended between the journal taking its line and writing it, and kept no
+    line at all: its end record now carries the latest one."""
+    from app.services.agent_delegation import Worker
+    loop = make_loop(store, Script())
+    submitted = []
+    loop.journal.submit = lambda worker, patch, message=None, **kwargs: submitted.append(patch)
+    worker = Worker("a" * 32, loop.model, [])
+    worker.progress = {"progress_text": "Long internal detail.", "progress_kind": "excerpt"}
+    loop._state(worker, "working")
+    loop._state(worker, "completed", finish_reason="stop")
+    working, completed = submitted
+    assert "progress_text" not in working
+    assert completed["progress_text"] == "Long internal detail." and completed["progress_kind"] == "excerpt"
+    assert completed["status"] == "completed" and completed["finish_reason"] == "stop"
+    # A line given with the end itself wins.
+    loop._state(worker, "failed", progress_text="Newer.")
+    assert submitted[-1]["progress_text"] == "Newer."
+
+
 def test_the_agents_words_beside_its_calls_are_its_progress(store):
     """Since 2026-10-28 the agent's own text beside a call stands as its note
     in the activity; until 2026-10-31 compare_models also carried a
