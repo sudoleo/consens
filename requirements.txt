@@ -33,10 +33,6 @@ charset-normalizer==3.4.1
     #   requests
 click==8.1.8
     # via uvicorn
-colorama==0.4.6
-    # via
-    #   click
-    #   tqdm
 cryptography==50.0.2
     # via
     #   -r requirements.in
@@ -46,7 +42,7 @@ deprecated==1.2.18
     # via limits
 distro==1.9.0
     # via openai
-fastapi==0.143.2
+fastapi==0.162.0
     # via -r requirements.in
 firebase-admin==6.9.0
     # via -r requirements.in
@@ -79,7 +75,7 @@ google-cloud-firestore==2.27.0
     # via
     #   -r requirements.in
     #   firebase-admin
-google-cloud-storage==3.17.0
+google-cloud-storage==3.17.1
     # via
     #   -r requirements.in
     #   firebase-admin
@@ -214,7 +210,7 @@ sniffio==1.3.1
     # via openai
 soupsieve==3.0.3
     # via beautifulsoup4
-starlette==1.8.0
+starlette==1.10.0
     # via
     #   -r requirements.in
     #   fastapi
@@ -249,7 +245,7 @@ urllib3==2.8.0
     #   requests
 uvicorn==0.54.0
     # via -r requirements.in
-websockets==17.2
+websockets==17.3
     # via -r requirements.in
 wrapt==1.17.2
     # via deprecated

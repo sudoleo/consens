@@ -2,4 +2,4 @@
 
 # Pinned so every CI OS installs the same binary wheel.
 greenlet==3.5.6
-playwright==1.64.0
+playwright==1.64.1
