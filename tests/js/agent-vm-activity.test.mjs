@@ -5,8 +5,12 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 // updated while it runs. The chat shows it compactly like a terminal: the
 // command and how it ended on one line, its output below, open while it runs
 // and folded once it is done.
+// The live lines in full (the Display switch "Detailed progress"): these
+// cases look at the blocks of commands, files and pages themselves. The calm
+// view says the same steps in words (agent-calm-progress.test.mjs).
 function setup() {
   const app = loadScripts(["static/js/agent-activity.js"], { body: '<div id="host"></div>' });
+  app.window.App.userSettings = { get: name => (name === "detailed_progress" ? true : undefined) };
   return { app, host: app.document.getElementById("host"), activity: app.window.App.agentActivity };
 }
 

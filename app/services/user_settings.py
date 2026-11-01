@@ -95,6 +95,9 @@ class UserSettings(_Strict):
     # The letters of a streamed answer and behind the empty start screen
     # (stream-reveal.js, letter-clouds.js); None is on.
     letter_animations: Optional[bool] = None
+    # The Agent's live lines in full, every thought, command and output as
+    # it comes (agent-activity.js, since 2026-11-01); None is the calm line.
+    detailed_progress: Optional[bool] = None
     # Who checks the Agent's work (agent_audit.py, since 2026-11-01): its
     # reviewers in every message, only from its first step in the workspace
     # on, or nobody. None is "always". The browser sends the value with each

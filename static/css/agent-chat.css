@@ -945,6 +945,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-progress .agent-progress-note {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
 }
+/* The calm view's thought (agent-activity.js calmThought, since 2026-11-01)
+   stands under the line of what the agent does as a subtitle under its
+   title: on the edge of its words after the mark, --space-1 below it (the
+   negative margin collapses with the line's --trace-gap). */
+.agent-progress .agent-progress-thought { padding-left: calc(.86em * 1.395 + .55em); }
+.agent-progress .agent-current-status + .agent-progress-thought { margin-top: calc(var(--space-1) - var(--trace-gap)); }
 .agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); overflow-wrap: anywhere; white-space: pre-line; }
 /* A step's thinking, opened (agent-activity.js updateThought): a heading in
    the trace's ink over its paragraphs in the quiet one, no weight, no rule. */

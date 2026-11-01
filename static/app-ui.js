@@ -241,24 +241,30 @@ function bindLanguageSelect() {
   select.addEventListener("blur", () => { if (choosing) apply(); });
 }
 
-// Letter animations (account setting "letter_animations", on unless false):
-// stream-reveal.js and letter-clouds.js read it themselves.
-function bindLetterAnimationsSwitch() {
-  const toggle = document.getElementById("letterAnimationsSwitch");
+// The switch of a boolean account setting; `on` says whether a setting never
+// chosen counts as on. The modules that use the setting read it themselves:
+// letter animations (on unless false) stream-reveal.js and letter-clouds.js,
+// detailed progress (off unless true) agent-activity.js.
+function bindSettingSwitch(id, name, on) {
+  const toggle = document.getElementById(id);
   const settings = window.App.userSettings;
   if (!toggle || !settings || toggle.dataset.bound) return;
   toggle.dataset.bound = "1";
-  const show = () => { toggle.checked = settings.get("letter_animations") !== false; };
+  const show = () => {
+    const value = settings.get(name);
+    toggle.checked = on ? value !== false : value === true;
+  };
   show();
-  toggle.addEventListener("change", () => settings.set("letter_animations", toggle.checked));
-  settings.onChange("letter_animations", show);
+  toggle.addEventListener("change", () => settings.set(name, toggle.checked));
+  settings.onChange(name, show);
   window.addEventListener("pageshow", show);
 }
 
 function bindAppUiControls() {
   bindSettingsModalControls();
   bindLanguageSelect();
-  bindLetterAnimationsSwitch();
+  bindSettingSwitch("letterAnimationsSwitch", "letter_animations", true);
+  bindSettingSwitch("detailedProgressSwitch", "detailed_progress", false);
 }
 
 if (document.readyState === "loading") {

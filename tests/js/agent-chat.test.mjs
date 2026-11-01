@@ -15,7 +15,10 @@ const CATALOG = { token_budget: { remaining: 188878, limit: 250000, observed_at:
   { id: "gpt-4o", label: "GPT-4o", reasoning_efforts: ["default"], reasoning_available: false },
 ] };
 
-function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, live = false } = {}) {
+// `detailed`: the live lines in full (the Display switch "Detailed
+// progress"), which most cases here look at line by line; the calm view
+// every account starts with has its own cases (agent-calm-progress.test.mjs).
+function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, live = false, detailed = true } = {}) {
   const setup = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js", "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js",
     ...(live ? ["static/js/agent-live.js"] : []), "static/js/agent-chat.js"], {
     body,
@@ -23,6 +26,7 @@ function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, 
       // These cases start from a Compare preference; Agent is the default.
       window.localStorage.setItem("runMode", "compare");
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
+      if (detailed) window.localStorage.setItem("consensio.detailedProgress.v1", "true");
       window.auth = { currentUser: { uid: "owner", getIdToken: async () => "verified" } };
       window.App = {
         agentAccess: { uid: "owner", allowed }, showPopup: vi.fn(),
@@ -2609,6 +2613,32 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("follows the Display switch Detailed progress at once while a response runs", async () => {
+    const { window, document, dom } = boot({ detailed: false });
+    await selectAgent(window);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers = received;
+      return new Promise(() => {});
+    });
+    document.getElementById("questionInput").value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    handlers.activity.receive({ version: 1, step_id: "completion:0", kind: "tool", id: "c1", name: "vm_exec",
+      status: "running", command: "npm test", output: "PASS\n" });
+    window.App.agentChat.project(run);
+    const preview = document.querySelector(".agent-progress");
+    expect(preview.querySelector(".agent-vm")).toBe(null);
+    expect(preview.querySelector(".agent-current-status").textContent).toBe("Working in the workspace…");
+    // A long command sends nothing new: the switch alone draws the lines again.
+    window.App.userSettings.set("detailed_progress", true);
+    expect(preview.querySelector(".agent-vm .agent-vm-target").textContent).toBe("npm test");
+    window.App.userSettings.set("detailed_progress", false);
+    expect(preview.querySelector(".agent-vm")).toBe(null);
+    window.App.runRegistry.cancel(run.runId);
+    dom.window.close();
+  });
   it("streams reasoning separately, preserves disclosure, and ignores deltas after stop", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);

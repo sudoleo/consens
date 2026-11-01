@@ -1134,5 +1134,17 @@
   "Answers in a temporary chat can’t be shared.": "Antworten in einem temporären Chat lassen sich nicht teilen.",
   "Only an Agent chat can be temporary.": "Nur ein Agent-Chat kann temporär sein.",
   "A temporary chat isn’t saved to your chats.": "Ein temporärer Chat wird nicht in deinen Chats gespeichert.",
-  "Saving is unavailable right now. Try again.": "Speichern ist gerade nicht möglich. Versuch es noch einmal."
+  "Saving is unavailable right now. Try again.": "Speichern ist gerade nicht möglich. Versuch es noch einmal.",
+  "Working in the workspace…": "Arbeitet am Arbeitsplatz…",
+  "Setting up the workspace…": "Richtet den Arbeitsplatz ein…",
+  "Reading “{file}”…": "Liest „{file}“…",
+  "Writing “{file}”…": "Schreibt „{file}“…",
+  "Editing “{file}”…": "Bearbeitet „{file}“…",
+  "Sharing “{file}”…": "Teilt „{file}“…",
+  "Opening {site}…": "Öffnet {site}…",
+  "Opening a page…": "Öffnet eine Seite…",
+  "Reading the page…": "Liest die Seite…",
+  "Looking at the page…": "Sieht sich die Seite an…",
+  "Downloading a file…": "Lädt eine Datei herunter…",
+  "Uploading a file…": "Lädt eine Datei hoch…"
 }

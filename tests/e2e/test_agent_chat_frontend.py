@@ -38,6 +38,13 @@ def _snapshot(page, name):
     page.screenshot(path=str(target / f"{name}.png"))
 
 
+def _detailed_progress(page):
+    """The live lines in full (Display switch "Detailed progress", since
+    2026-11-01), for cases that look at the trace line by line: every account
+    starts with the calm line (agent-activity.js)."""
+    page.evaluate("() => App.userSettings.set('detailed_progress', true)")
+
+
 def _open_agent_level(page, level, tap=False):
     """Open the one Agent chip and enter a section of its menu.
 

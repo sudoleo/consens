@@ -1333,6 +1333,20 @@
                 </label>
               </div>
 
+              {#- Off unless switched on (account setting detailed_progress):
+                  agent-activity.js shows the Agent's live lines in full
+                  instead of its calm line; app-ui.js binds the switch. -#}
+              <div class="settings-section"
+                data-settings-keywords="fortschritt progress details detailliert ausführlich detailed reasoning denken thinking gedanken thoughts befehle commands terminal konsole console ausgabe output technisch technical entwickler developer agent arbeitet working live ruhig calm">
+                <label for="detailedProgressSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Detailed progress</strong>
+                    <small>While the Agent works, each of its thoughts, commands and their output appears as it comes. Off: one calm line says what the Agent is doing, and the details are a click away.</small>
+                  </span>
+                  <input type="checkbox" id="detailedProgressSwitch">
+                </label>
+              </div>
+
               {#- The language of this device (cookie consens_lang, docs/i18n.md).
                   The names of the languages stay in their own language. -#}
               {% set chosen_language = request.cookies.get('consens_lang', 'auto') %}

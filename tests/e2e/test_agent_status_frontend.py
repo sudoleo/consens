@@ -5,7 +5,7 @@ import pytest
 from playwright.sync_api import expect
 
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json
-from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
+from test_agent_chat_frontend import CATALOG, _choose_mode, _detailed_progress, _snapshot
 
 
 @pytest.mark.parametrize("width,dark,quiet", [(1280, False, "none"), (390, True, "none"),
@@ -26,6 +26,8 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        # The trace line by line: each note, step and its motion.
+        _detailed_progress(page)
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         page.evaluate("""updates => {
@@ -225,6 +227,96 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         summary.click()
         expect(details.locator('.agent-activity-update')).to_have_text(updates)
         expect(details.locator('.agent-activity-update').first).to_be_visible()
+        assert not errors
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True), (320, False)])
+def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, phase4_server, width, dark):
+    """Every account starts calm (2026-11-01, Max: "no console commands by
+    default"): one line in everyday words, one thought under it on the line's
+    edge, the command and its output only in the history under the head."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    command = "cd /home/sprite/game && npm install && npx vite build --mode production"
+    try:
+        page.set_viewport_size({"width": width, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        page.evaluate("""() => {
+          const original = window.fetch;
+          window.fetch = async (url, options) => {
+            if (url !== '/agent') return original(url, options);
+            const encoder = new TextEncoder();
+            return new Response(new ReadableStream({ start(controller) {
+              window.__emitAgent = event => controller.enqueue(encoder.encode('event: activity\\ndata: ' + JSON.stringify(event) + '\\n\\n'));
+              options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
+            }}), {headers:{'Content-Type':'text/event-stream'}});
+          };
+        }""")
+        page.locator("#questionInput").fill("Build the snake game and test it")
+        page.locator("#sendButton").click()
+        preview = page.locator("#agentAnswerActivity .agent-progress")
+        expect(preview.locator(".agent-current-status")).to_have_text("Thinking…")
+        page.wait_for_function("() => !!window.__emitAgent")
+        page.evaluate("""command => {
+          __emitAgent({version:1, step_id:'completion:1', kind:'reasoning', id:'r1', format:'summary',
+            text:'**Planning the build**\\n\\nThe game needs its packages before the first build.', append:true});
+          __emitAgent({version:1, step_id:'completion:1', kind:'progress', id:'completion:1/note',
+            text:'I build the game first. Then I open it in the browser.'});
+          __emitAgent({version:1, step_id:'completion:1', kind:'tool', id:'c1', name:'vm_exec', status:'running',
+            command, started_at:new Date().toISOString(), output:'added 212 packages in 9s\\nvite v7.1.2 building for production...\\n'});
+        }""", command)
+        status = preview.locator(".agent-current-status")
+        thought = preview.locator(".agent-progress-thought")
+        expect(status).to_have_text("Working in the workspace…")
+        # The note may follow the summary's heading by a moment: that heading
+        # then stands its four seconds first.
+        expect(thought).to_have_text("I build the game first.", timeout=8000)
+        # Nothing of the console in the live lines.
+        expect(preview.locator(".agent-vm, code, pre, .agent-vm-fold")).to_have_count(0)
+        expect(preview).not_to_contain_text("npm")
+        expect(preview).not_to_contain_text("vite")
+        # The thought stands under the line as a subtitle: on its words' edge
+        # after the mark, close below it.
+        # Past the lines' own motion (the sheen and the dots run on as CSS).
+        page.wait_for_function("""() => document.getElementById('agentAnswerActivity').getAnimations({subtree:true})
+          .filter(a => !(a instanceof CSSAnimation)).every(a => a.playState !== 'running')""")
+        boxes = page.evaluate("""() => {
+          const status = document.querySelector('.agent-progress .agent-current-status');
+          const thought = document.querySelector('.agent-progress .agent-progress-thought');
+          const words = document.createRange(); words.selectNodeContents(status);
+          const text = document.createRange(); text.selectNodeContents(thought);
+          return {status: status.getBoundingClientRect().bottom, words: words.getClientRects()[0].left,
+            thought: thought.getBoundingClientRect().top, text: text.getClientRects()[0].left};
+        }""")
+        assert abs(boxes["words"] - boxes["text"]) < 1.5, boxes
+        assert 0 <= boxes["thought"] - boxes["status"] <= 6, boxes
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        _snapshot(page, f"agent-calm-live-{width}-{'dark' if dark else 'light'}")
+        # The history under the head has the command, a click away.
+        page.locator("#agentAnswerActivity .agent-activity-title").click()
+        history = page.locator("#agentAnswerActivity .agent-activity-history")
+        expect(history.locator(".agent-vm-target")).to_have_text(command)
+        expect(history).to_contain_text("I build the game first. Then I open it in the browser.")
+        expect(preview).not_to_be_visible()
+        page.locator("#agentAnswerActivity .agent-activity-title").click()
+        # A file by its name, held a moment so the line never flashes.
+        page.evaluate("""() => {
+          __emitAgent({version:1, step_id:'completion:1', kind:'tool', id:'c1', name:'vm_exec', status:'succeeded',
+            exit_code:0, duration_ms:9000});
+          __emitAgent({version:1, step_id:'completion:2', kind:'tool', id:'c2', name:'vm_write_file', status:'running',
+            path:'/home/sprite/game/src/snake.js'});
+        }""")
+        expect(status).to_have_text("Writing “snake.js”…")
+        expect(preview).not_to_contain_text("/home/sprite")
         assert not errors
     finally:
         context.close()

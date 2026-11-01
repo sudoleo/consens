@@ -5589,6 +5589,30 @@ als `activity` `kind: progress` vor dem Toolstart). Provider-Reasoning des Chat-
 wird nicht mehr als Live-Status oder Chatverlauf projiziert; vollständige private
 Fortsetzungsdaten bleiben im laufenden Provider-Protokoll.
 
+**Ruhige Live-Zeile (seit 2026-11-01, Standard für alle).** Max: „Für einen
+casual Nutzer zeigen sie viel zu viel … er soll keine Konsolenbefehle sehen
+(per default).“ Ohne die Kontoeinstellung `detailed_progress` (Display →
+Detailed progress) baut `renderActivity` statt der vollen Live-Absätze nur
+`calm-status` und `calm-thought`: eine Zeile in Alltagsworten, was der Agent
+gerade tut (`calmStep`: Arbeitsplatz-Befehle und Prozesse „Working in the
+workspace…“, Pakete „Setting up the workspace…“, Dateien mit Namen ohne Pfad
+„Writing “snake.js”…“, Browser nach Aktion ohne Ref/Koordinate, eine Seite mit
+ihrem Host; andere Werkzeuge in ihren bisherigen Worten), darunter wie ein
+Untertitel ein Gedanke (`calmThought`: die neueste Überschrift einer
+Reasoning-Zusammenfassung, sonst der neueste vollständige Satz ≤ 120 Zeichen,
+bei einer Notiz ihr erster; ein längerer lässt den alten stehen, gekürzt wird
+nichts). Während Vergleichsmodelle antworten, steht dort deren Zitat
+(`comparisonLine`), beim Warten auf Tokens der Grund. `pace` hält beide Zeilen
+(Status 1,2 s, Gedanke 4 s); was dazwischen kommt und geht, erscheint nie, der
+neueste Stand übernimmt per eigenem Timer. Kein „Ran 4 commands“-Stapel, kein
+`<code>`/`<pre>`, keine Ausgabe. Es bleiben Plan-Checkliste und Seitenkarte
+oben, Prüfer-Pausen, „Waiting for your confirmation below“ und Nachrichten des
+Nutzers seit dem letzten Schritt. Der Verlauf unter dem Kopf ist unverändert
+vollständig (Befehle, Ausgaben, jeder Gedanke). Mit `detailed_progress: true`
+gilt alles Folgende wie bisher. Tests: `tests/js/agent-calm-progress.test.mjs`,
+`tests/e2e/test_agent_status_frontend.py`; Tests der vollen Zeilen schalten sie
+ausdrücklich ein (`_detailed_progress`, `boot({detailed})`).
+
 Die Live-Absätze verwenden stabile DOM-Knoten in einem höflich angekündigten
 `role=log`; die rotierende 64er-Grenze für Hilfsereignisse entfernt keine
 Fortschrittsmeldungen oder bestätigten Toolschritte. Token-Warten ergänzt einen
@@ -8440,6 +8464,11 @@ highlights, seit 2026-10-25; fehlt = aus; `consensus-insights.js` bindet
 `components-consensus-visuals.css`), `letter_animations` (Display → Letter
 animations; fehlt = an, `false` = aus; `app-ui.js` bindet
 `#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie),
+`detailed_progress` (Display → Detailed progress, seit 2026-11-01; fehlt = aus,
+die ruhige Zeile; `app-ui.js` bindet `#detailedProgressSwitch` über
+`bindSettingSwitch`, `agent-activity.js` liest sie bei jedem Zeichnen,
+`agent-chat.js` zeichnet einen laufenden Lauf beim Umschalten sofort neu; siehe
+„Ruhige Live-Zeile“ in §4),
 `reviewers` (Runs → Reviewers, seit 2026-11-01: `always` | `workspace` | `off`,
 fehlt = `always`; `agent-mode.js` bindet `#reviewersSetting` samt der Folgen
 unter der Zeile `#reviewersNote`, `App.words.reviewerSetting()` liest sie, der

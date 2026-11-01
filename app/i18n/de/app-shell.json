@@ -181,6 +181,7 @@
   "Switch between light and dark mode.": "Zwischen hellem und dunklem Modus wechseln.",
   "Switch to dark mode": "Zum dunklen Modus wechseln",
   "<0>Letter animations</0> <1>Letters fade in while an answer is written and drift behind the empty start screen. Off: text appears at once.</1>": "<0>Buchstaben-Animationen</0> <1>Buchstaben blenden beim Schreiben einer Antwort weich ein und ziehen hinter dem leeren Startbildschirm vorbei. Aus: Text erscheint sofort.</1>",
+  "<0>Detailed progress</0> <1>While the Agent works, each of its thoughts, commands and their output appears as it comes. Off: one calm line says what the Agent is doing, and the details are a click away.</1>": "<0>Ausführlicher Fortschritt</0> <1>Während der Agent arbeitet, erscheint jeder Gedanke, jeder Befehl und seine Ausgabe, sobald sie kommen. Aus: Eine ruhige Zeile sagt, was der Agent gerade tut, die Details sind einen Klick entfernt.</1>",
   "Search": "Suchen",
   "Search settings": "Einstellungen durchsuchen",
   "No setting matches your search.": "Keine Einstellung passt zu deiner Suche.",

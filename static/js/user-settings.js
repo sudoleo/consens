@@ -338,6 +338,9 @@
     mark_lines: booleanSetting("consensio.markLines.v1"),
     // On unless false: stream-reveal.js and letter-clouds.js read it.
     letter_animations: booleanSetting("consensio.letterAnimations.v1"),
+    // Off unless true: agent-activity.js shows the Agent's live lines in
+    // full (every thought, command and output) instead of its calm line.
+    detailed_progress: booleanSetting("consensio.detailedProgress.v1"),
     // Who checks the Agent's work: "always" (the default), "workspace" or
     // "off". agent-chat.js sends it with every message, agent-mode.js says
     // it beside the composer's reviewers.

@@ -1,5 +1,5 @@
 {
-  "sources": "bc1fcc63f790",
+  "sources": "3eb46a6ef817",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -460,7 +460,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.de298a48d822.js",
+      "src": "/static/dist/head.a8dde6da124c.js",
       "module": false,
       "defer": false
     },
@@ -484,20 +484,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.8534cc42d9a3.js",
+      "src": "/static/dist/app.783cf5f60f6d.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.20e58fd73271.css",
+    "app": "/static/dist/app.f2d29a430a52.css",
     "landing": "/static/dist/landing.cf46f0138d45.css",
     "public": "/static/dist/public.ae52e9081654.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "e9735191f7aa",
+      "hash": "cc0bedb219d3",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -570,18 +570,18 @@
     }
   },
   "previous_assets": [
+    "app.20e58fd73271.css",
     "app.e0d60f0b0fb3.css",
-    "app.e814ded8e470.css",
+    "app.8534cc42d9a3.js",
     "app.494233da65bb.js",
-    "app.5a7c5a1c5b0f.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.699f525605f0.js",
     "demo.18f2558aed52.js",
     "firebase.2ed9f1d94655.js",
     "firebase.06b7be671cd6.js",
+    "head.de298a48d822.js",
     "head.f549d41331c6.js",
-    "head.7b2dd14ac48c.js",
     "landing.9fea5f61f42c.css",
     "landing.4faa43b3842f.css",
     "public.4ade4686cb6c.css",

@@ -11,7 +11,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json  # noqa: F401  (fixture)
-from test_agent_chat_frontend import CATALOG, _choose_mode, _snapshot
+from test_agent_chat_frontend import CATALOG, _choose_mode, _detailed_progress, _snapshot
 
 from app.services import agent_audit
 
@@ -324,8 +324,11 @@ def test_a_reviewers_pause_asks_the_user_above_the_field(browser, phase4_server,
         page.wait_for_timeout(600)
         _snapshot(page, f"audit-hold-{width}-{shade}")
         if width >= 700 and not dark:
-            # A command that unfolds over several lines keeps its chevron on its first line.
-            command = page.locator(".agent-vm[data-tool='vm_exec']").filter(has_text="Xvfb").last
+            # A command that unfolds over several lines keeps its chevron on its
+            # first line. The calm line shows no command: the switch brings the
+            # live lines in full at once, while the run waits.
+            _detailed_progress(page)
+            command = page.locator(".agent-progress .agent-vm[data-tool='vm_exec']").filter(has_text="Xvfb").last
             command.locator("summary").click()
             after = command.locator("summary").evaluate("el => getComputedStyle(el, '::after').alignSelf")
             assert after == "flex-start"

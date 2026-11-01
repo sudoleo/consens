@@ -3099,6 +3099,13 @@
     }
     render();
   });
+  // The live lines follow the Display switch "Detailed progress" at once
+  // (agent-activity.js reads it on every render), also while a long step
+  // sends nothing that would draw them again.
+  App.userSettings.onChange("detailed_progress", () => {
+    const context = registry.visible();
+    if (context?.config?.executionMode === "agent" && registry.isExecuting(context.runId)) project(context);
+  });
   window.addEventListener('consensio:agent-actions-change', () => { syncPendingReview(); window.updateQuestionInputAccess?.(); });
   // Google selection/consent changes (chips, sheet, consent box) change the
   // send blocker, so the notice and Send state must follow immediately.

@@ -324,7 +324,7 @@
     if (!host) return;
     if (host._agentActivity?.reported) reportStep(host._agentActivity, null);
     clearInterval(host._agentActivity?.clockTimer);
-    if (host._agentActivity) { host._agentActivity.clockTimer = null; dropLine(host._agentActivity); }
+    if (host._agentActivity) { host._agentActivity.clockTimer = null; dropLine(host._agentActivity); dropPaced(host._agentActivity); }
     for (const animation of [...activeMotion]) {
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
     }
@@ -351,6 +351,7 @@
     view.previewNodes.clear();
     view.previewExit = false;
     view.previewMotion = null;
+    dropPaced(view);
   }
   // The live lines move as one surface (2026-10-30, Max: "the picture jumps
   // the whole time while the reasoning comes in"). Every change to them goes
@@ -406,7 +407,8 @@
         preview.append(ghost);
         const look = getComputedStyle(ghost);
         const type = { color: look.color, fontFamily: look.fontFamily, fontSize: look.fontSize,
-          fontWeight: look.fontWeight, lineHeight: look.lineHeight, whiteSpace: look.whiteSpace };
+          fontWeight: look.fontWeight, lineHeight: look.lineHeight, whiteSpace: look.whiteSpace,
+          paddingLeft: look.paddingLeft };
         for (const name of ghost.getAttributeNames()) ghost.removeAttribute(name);
         ghost.className = 'agent-progress-ghost';
         ghost.setAttribute('aria-hidden', 'true');
@@ -596,6 +598,111 @@
     clearTimeout(view.lineTimer);
     view.line = view.lineTimer = null;
     return null;
+  }
+
+  // The calm view (2026-11-01, Max: "a casual user sees far too much: nobody
+  // understands the fast output, and nobody should see console commands by
+  // default"). Under the head one line says in everyday words what the agent
+  // does now, and one thought of its own says what it is after, each held a
+  // while. Commands, their output, every thought and the earlier steps are a
+  // click away in the history (the head), and live with the Display switch
+  // "Detailed progress" (account setting detailed_progress).
+  const detailed = () => App.userSettings?.get?.('detailed_progress') === true;
+  // A step in the calm view's words: what it does, never a command, a path
+  // or a place on a page; a file by its name, a page by its site.
+  const calmTools = { vm_exec: 'Working in the workspace…', vm_start_process: 'Working in the workspace…',
+    vm_process_output: 'Working in the workspace…', vm_stop_process: 'Working in the workspace…',
+    vm_install_packages: 'Setting up the workspace…' };
+  const calmFiles = { vm_read_file: 'Reading “{file}”…', vm_write_file: 'Writing “{file}”…',
+    vm_edit_file: 'Editing “{file}”…', vm_share_file: 'Sharing “{file}”…' };
+  const calmBrowser = { read: 'Reading the page…', text: 'Reading the page…', find: 'Reading the page…',
+    screenshot: 'Looking at the page…', download: 'Downloading a file…', upload: 'Uploading a file…' };
+  function calmStep(item) {
+    if (calmTools[item.name]) return calmTools[item.name];
+    if (calmFiles[item.name]) {
+      const file = String(item.path || '').split(/[\\/]/).filter(Boolean).at(-1) || '';
+      return file && file.length <= 60 ? App.t(calmFiles[item.name], { file }) : tools[item.name][1];
+    }
+    if (item.name === 'browser') {
+      const site = item.action === 'open' ? hostOf(item.url) : '';
+      if (item.action === 'open') return site ? App.t('Opening {site}…', { site }) : 'Opening a page…';
+      return calmBrowser[item.action] || tools.browser[1];
+    }
+    return stepLabel(item);
+  }
+  // A thought for the calm view: the newest heading of a reasoning summary
+  // ("Checking the numbers", the way ChatGPT shows it), else its newest
+  // complete sentence; of a note its first. Short ones only, nothing cut: a
+  // longer one leaves the thought before it standing.
+  const CALM_CHARS = 120;
+  const HEADING = /^\s*(?:\*\*([^*]+)\*\*|__([^_]+)__|#{1,6}\s+(.+?))\s*$/;
+  const plain = line => line.replace(/^[#*>\s-]+/, '').replace(/^\d{1,3}[.)]\s+/, '')
+    .replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+  function calmThought(item) {
+    const lines = String(item.text || '').split('\n');
+    if (item.kind === 'reasoning') {
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const match = lines[index].match(HEADING);
+        const heading = match ? plain(match[1] || match[2] || match[3]).replace(/:$/, '') : '';
+        if (heading && heading.length <= 80) return heading;
+      }
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const fit = sentences(plain(lines[index])).findLast(sentence => sentence.length <= CALM_CHARS);
+        if (fit) return fit;
+      }
+      return '';
+    }
+    for (const line of lines.map(plain).filter(Boolean)) {
+      const found = sentences(line);
+      if (found.length) return found.find(sentence => sentence.length <= CALM_CHARS) || '';
+      return line.length <= CALM_CHARS && !/(?:…|\.\.)$/.test(line) ? line : '';
+    }
+    return '';
+  }
+  const thoughts = new WeakMap();
+  function thoughtOf(item) {
+    const kept = thoughts.get(item);
+    if (kept && kept.text === item.text) return kept.value;
+    const value = calmThought(item);
+    thoughts.set(item, { text: item.text, value });
+    return value;
+  }
+  // The calm view's lines hold their words a while, so no state flashes by:
+  // a change waits until the words on the line stood their time, then the
+  // newest change takes the line and the ones in between never show.
+  const STATUS_DWELL_MS = 1200, THOUGHT_DWELL_MS = 4000;
+  function pace(view, id, text, dwell) {
+    const lines = view.paced ||= new Map();
+    const now = performance.now();
+    const line = lines.get(id);
+    if (line && line.text === text) {
+      clearTimeout(line.timer);
+      line.timer = line.next = null;
+      return text;
+    }
+    if (!line || now - line.at >= dwell) {
+      clearTimeout(line?.timer);
+      lines.set(id, { text, at: now, timer: null, next: null });
+      return text;
+    }
+    line.next = text;
+    line.timer ||= setTimeout(() => {
+      line.timer = null;
+      if (line.next === null || lines.get(id) !== line) return;
+      line.text = line.next;
+      line.next = null;
+      line.at = performance.now();
+      const node = view.previewNodes.get(id);
+      if (!view.running || !node?.isConnected) return;
+      if (id === 'calm-thought') { crossfade(node, line.text, view); return; }
+      settle(view, () => { node.textContent = line.text; });
+      motion(node, [{ opacity: .65 }, { opacity: 1 }], () => {}, 160);
+    }, Math.max(0, line.at + dwell - now) + 20);
+    return line.text;
+  }
+  function dropPaced(view) {
+    for (const line of view.paced?.values() || []) clearTimeout(line.timer);
+    view.paced?.clear();
   }
   // The line moves on by itself when its time is up, also when no new
   // report arrives to render the activity again.
@@ -1457,9 +1564,10 @@
     // the end, a row in and out of the open history just as the marks arrived.
     const saving = running && !activeTool && !waiting && !reconnecting && !held && Boolean(review)
       && !['running', 'required', 'pending'].includes(review.status) && Boolean(String(answerText || '').trim());
+    const calm = !detailed();
     const heading = running && reconnecting ? 'Reconnecting…'
       : asking ? 'Waiting for you' : held ? 'Paused' : waiting ? 'Waiting for available tokens…' : reviewStage
-      || (activeTool ? stepLabel(activeTool) : writing ? 'Writing answer…' : 'Thinking…');
+      || (activeTool ? (calm ? calmStep(activeTool) : stepLabel(activeTool)) : writing ? 'Writing answer…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.
     const settled = status === 'failed' && !running && answerText
@@ -1512,6 +1620,28 @@
       scheduleLine(view);
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
+    // The calm view's lines (detailed()): what waits on the user, and what
+    // the user wrote or decided since the last step; then the line of what
+    // it does now, and under it one thought (the comparison models' quote
+    // while they answer, the reason while it waits for tokens).
+    let lines = paragraphs;
+    if (calm) {
+      const since = paragraphs.findLastIndex(item => ['vm', 'step'].includes(item.kind) && item.id !== 'current-status');
+      lines = paragraphs.filter((item, index) => item.kind === 'review'
+        || (item.kind === 'hold' && ((item.item.state || 'waiting') === 'waiting' || index > since))
+        || (item.kind === 'user' && index > since));
+      if (running && !saving && !held) {
+        lines.push({ id: 'calm-status', kind: 'step', current: true, text: pace(view, 'calm-status', heading, STATUS_DWELL_MS) });
+        let thought = '';
+        for (let index = events.length - 1; index >= 0 && !thought; index -= 1) {
+          const item = events[index];
+          if ((isProgress.has(item) && !item.from_user) || isReasoning.has(item)) thought = thoughtOf(item);
+        }
+        const aside = paragraphs.find(item => item.id === 'comparison-highlight' || item.id === 'waiting');
+        if (aside) lines.push(aside);
+        else if (thought) lines.push({ id: 'calm-thought', kind: 'progress', calm: true, text: pace(view, 'calm-thought', thought, THOUGHT_DWELL_MS) });
+      }
+    }
     // Like ChatGPT/Claude, the progress lines give way the moment the answer
     // starts: at that point nothing stands below them yet. Kept until the
     // run ended, their collapse pulled the finished answer up under the eye.
@@ -1520,7 +1650,7 @@
     // "Checking the answer" and left again (2026-10-12), two collapses for one.
     const answering = running && (!activeTool || answerChecks.has(activeTool.name))
       && Boolean(String(answerText || '').trim());
-    const showPreview = running && paragraphs.length && !answering;
+    const showPreview = running && lines.length && !answering;
     // Only an answer's first words wait for the lines (handoff); text that
     // stood already (a preamble before a step) stays in view.
     const firstWords = !view.answerShown;
@@ -1528,7 +1658,7 @@
     let previewChanged = false;
     const previewIds = new Set();
     const pinned = showPreview && plan ? 1 : 0;
-    const folded = showPreview ? foldPast(paragraphs) : null;
+    const folded = showPreview && !calm ? foldPast(paragraphs) : null;
     const pastIds = new Set(folded?.past.map(item => item.id) || []);
     const update = () => {
       if (pinned) {
@@ -1553,7 +1683,7 @@
         const position = parent.children[inFold ? pastIndex++ : presentIndex++];
         if (position !== p) parent.insertBefore(p, position || null);
       };
-      for (const item of showPreview ? paragraphs : []) {
+      for (const item of showPreview ? lines : []) {
         previewIds.add(item.id);
         let p = view.previewNodes.get(item.id);
         if (!p) {
@@ -1582,6 +1712,7 @@
         if (item.quiet && p.getAttribute('aria-hidden') !== 'true') p.setAttribute('aria-hidden', 'true');
         // The agent's note beside a call: a few lines here, whole in the timeline.
         p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
+        p.classList.toggle('agent-progress-thought', Boolean(item.calm));
         p.classList.toggle('agent-progress-step', item.kind === 'step');
         p.classList.toggle('agent-current-status', Boolean(item.current));
         if (item.current) { if (p.getAttribute('role') !== 'status') p.setAttribute('role', 'status'); }
