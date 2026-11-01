@@ -394,8 +394,10 @@ Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
   median 0,03 s (Prod-Skala ~1,2 s), je Live-Runde 0,03–0,05 s, Konto-Lock
   44–49 % des Laufs gehalten (vorher 60 % mit drei Prüfern bei 40 Schritten).
   An echten Läufen: `scripts/audit_report.py`, Zeile „compare_models“ (Turns,
-  die die Modelle fragten, ihr Status, Vergleiche, Reviews, saubere Läufe; bis
-  2026-10-31 dazu die Schranke `COMPARE_GATE` für `AGENT_AUDIT_COMPARE`).
+  die die Modelle fragten, ihr Status, Vergleiche, Reviews, saubere Läufe:
+  fertig, geprüft und jeder Vergleich mit mindestens zwei Antworten, seit
+  2026-11-01 gezählt statt am Status „partial“ abgelesen; bis 2026-10-31 dazu
+  die Schranke `COMPARE_GATE` für `AGENT_AUDIT_COMPARE`).
 
 **Die gewählten Modelle prüfen, während der Agent arbeitet.** Ab dem Start
 des Laufs folgt jedes gewählte Modell dem Arbeitsprotokoll

@@ -135,12 +135,22 @@ def _turn(turn):
             "failed_at": turn.get("failed_at"), "updated_at": turn.get("updated_at"),
             "model": settings.get("model"), "preferences": settings.get("agent_preferences") or {},
             "comparison_models": len(settings.get("comparison_models") or {}),
-            # The comparisons compare_models ran, by status.
+            # The comparisons compare_models ran, by status, and how many
+            # answers each got ("partial" may be one of two).
             "comparisons": [c.get("status") for c in review.get("comparisons") or [] if isinstance(c, dict)],
+            "comparison_answers": [len(c.get("answers") or []) for c in review.get("comparisons") or []
+                                   if isinstance(c, dict)],
             "review": {"mode": review.get("mode"), "status": review.get("status"), "reviewers": reviewers,
                        "issues": [i.get("code") for i in audit.get("issues") or [] if isinstance(i, dict)]}
             if review else None,
             "vm": bool(turn.get("agent_vm")), "holds": holds}
+
+
+def _answered_by_two(info):
+    """Every comparison of the turn got at least two answers: a "partial"
+    one with a single answer compared nothing (bug hunt 2026-11-01)."""
+    answers = info.get("comparison_answers") or []
+    return len(answers) == len(info.get("comparisons") or []) and all(n >= 2 for n in answers)
 
 
 def is_audit(info):
@@ -500,7 +510,8 @@ def report(data):
                  "reviews": dict(Counter((r["info"]["review"] or {}).get("status") for r in compared)),
                  "clean": sum(1 for r in compared if r["info"].get("status") == "completed"
                               and (r["info"]["review"] or {}).get("status") in {"succeeded", "partial"}
-                              and all(s in {"succeeded", "partial"} for s in r["info"]["comparisons"]))}
+                              and all(s in {"succeeded", "partial"} for s in r["info"]["comparisons"])
+                              and _answered_by_two(r["info"]))}
     return {
         "since": data["since"].isoformat() if isinstance(data.get("since"), datetime) else data.get("since"),
         "data": {"audit_turns": len(rows), "own": sum(r["own"] for r in rows), "other": sum(not r["own"] for r in rows),

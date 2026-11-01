@@ -114,18 +114,21 @@ def test_the_spec_tables_and_targets_from_turns_receipts_and_counters():
 
 def test_the_turns_that_asked_the_models_and_the_clean_ones():
     """compare_models (in audit mode since 2026-10-31): clean are turns that
-    completed, were reviewed and got answers in every comparison."""
+    completed, were reviewed and got at least two answers in every
+    comparison; a "partial" one with a single answer is not (it counted as
+    clean before 2026-11-01)."""
     source = data()
-    asked = {**turn(reviewers=[LUNA, FLASH]), "comparisons": ["succeeded", "partial"]}
+    asked = {**turn(reviewers=[LUNA, FLASH]), "comparisons": ["succeeded", "partial"], "comparison_answers": [2, 2]}
     source["turns"].update({
         (OWN, "c1", "t4"): asked,
-        (OWN, "c1", "t5"): {**asked, "comparisons": ["failed"]},
-        (OWN, "c1", "t6"): {**turn(reviewers=[LUNA]), "comparisons": []}})
+        (OWN, "c1", "t5"): {**asked, "comparisons": ["failed"], "comparison_answers": [0]},
+        (OWN, "c1", "t6"): {**turn(reviewers=[LUNA]), "comparisons": [], "comparison_answers": []},
+        (OWN, "c1", "t7"): {**asked, "comparisons": ["partial"], "comparison_answers": [1]}})
     result = report(source)
-    assert result["compare"] == {"turns": 2, "turn_status": {"completed": 2},
-                                 "comparisons": {"succeeded": 1, "partial": 1, "failed": 1},
-                                 "reviews": {"succeeded": 2}, "clean": 1}
-    assert "compare_models: used in 2 turns" in render(result) and "1 clean" in render(result)
+    assert result["compare"] == {"turns": 3, "turn_status": {"completed": 3},
+                                 "comparisons": {"succeeded": 1, "partial": 2, "failed": 1},
+                                 "reviews": {"succeeded": 3}, "clean": 1}
+    assert "compare_models: used in 3 turns" in render(result) and "1 clean" in render(result)
 
 
 @pytest.mark.parametrize("preferences,review,audit", [
