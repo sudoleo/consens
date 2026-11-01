@@ -357,6 +357,38 @@ def test_read_settings_names_the_models_of_this_message_and_of_each_lineup(store
     assert len(lineup["models_per_lineup"]["Open Models"]) == len(cfg.CONSENSUS_PRESET_MODELS["balanced"]["answers"])
 
 
+def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforces_them(store, monkeypatch):
+    """Asked about consens.io itself, the agent reads the facts instead of
+    guessing (2026-11-01); the system prompt only says where they are."""
+    from app.services import agent_budget_config, agent_quota
+    from app.services.chat_store import MAX_CHATS_PER_OWNER
+    from app.services.share_snapshots import REVOKED_RETENTION_DAYS
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "free")
+    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid, tier=None: 620_000)
+    loop = settings_loop(store)
+    about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
+    limits = agent_budget_config.get_config(store.db)["tier_limits"]
+    euros = lambda amount: f"{amount / agent_budget_config.MICRO_EUR:.2f} EUR"
+    allowance = about["allowance"]
+    assert allowance["per_day"] == {"Free": euros(limits["free"]), "Plus": euros(limits["plus"]),
+                                    "Pro": euros(limits["pro"])}
+    assert allowance["this_account"] == "Free"
+    assert allowance["left_today"].startswith(f"0.62 EUR of {euros(limits['free'])}")
+    assert "00:00 UTC" in allowance["how"]
+    assert f"{MAX_CHATS_PER_OWNER} chats" in about["storage"] and f"{REVOKED_RETENTION_DAYS} days" in about["sharing"]
+    assert about["pages"]["privacy"] == "https://consens.io/privacy" and about["contact"] == "contact@consens.io"
+    assert "early access" in about["price"] and "workspace" not in about
+    assert "read_settings also has the facts about consens.io" in agent_settings.AUDIT_PROMPT
+    assert "early access" not in agent_settings.AUDIT_PROMPT
+    # With the workspace its daily time is said; an unreadable ledger leaves the facts.
+    loop.vm_tools = object()
+    monkeypatch.setattr(agent_quota, "remaining_allowance",
+                        lambda db, uid, tier=None: (_ for _ in ()).throw(RuntimeError("firestore down")))
+    about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
+    assert "20 minutes a day, 2 hours on Pro" in about["workspace"]
+    assert set(about["allowance"]) == {"how"} and about["contact"] == "contact@consens.io"
+
+
 def test_an_unreadable_account_still_reads_the_turn_and_the_defaults(store):
     loop = settings_loop(store)
     loop.settings_tools.account = lambda uid: (_ for _ in ()).throw(RuntimeError("firestore down"))

@@ -2236,7 +2236,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `CONSENSUS_PRESET_MODELS`; live konnte der Agent nicht sagen, wie viele
   Modelle „Daily“ fragt); damit beantwortet der Agent „was ist eingestellt?“
   und fragt bei unklaren Wünschen („schneller“, „GPT“) mit echten Optionen
-  zurück, statt zu raten. `prepare_settings_change`
+  zurück, statt zu raten. Seit 2026-11-01 enthält es unter `consens_io`
+  auch die Fakten über consens.io selbst (Preis, Tagesbudget und Rest des
+  Kontos, Speichergrenzen, Teilen, Memory, Löschen, Links; Zahlen aus dem
+  Code, [agent-mode.md](agent-mode.md) „Fakten über consens.io“).
+  `prepare_settings_change`
   nimmt eine Liste `changes: [{setting, value}]` (nur das Genannte, jede
   Einstellung einmal, Werte je Einstellung geprüft; eine Probe mit neun
   optionalen Feldern ließ Claude alle mit erfundenen Werten füllen; Objekt-,
@@ -8938,7 +8942,7 @@ app/services/
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
-  agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen (Chatmodell, Reasoning, Vergleichs-Preset der Prüfer, Anzeige), Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Prompt-Block AUDIT_PROMPT; schreibt nie eine Einstellung (bis 2026-10-31 auch Agent-Vorlieben, Gruppe PREFERENCES)
+  agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen (Chatmodell, Reasoning, Vergleichs-Preset der Prüfer, Anzeige; seit 2026-11-01 auch Fakten über consens.io), Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Prompt-Block AUDIT_PROMPT; schreibt nie eine Einstellung (bis 2026-10-31 auch Agent-Vorlieben, Gruppe PREFERENCES)
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt

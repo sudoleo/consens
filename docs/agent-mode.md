@@ -3623,11 +3623,27 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   ähnlichsten Namen ab („opsu“ → „Closest: Claude Opus 4.8“), und das Ergebnis
   sagt, nachzufragen. „Was ist bei mir eingestellt?“ beantwortet der Agent aus
   `read_settings`, „alles auf Standard“ mit den Standards daraus.
+- **Fakten über consens.io (seit 2026-11-01):** Fragt der Nutzer nach
+  consens.io selbst, liest der Agent `consens_io` im Ergebnis von
+  `read_settings` (`SettingsTools._about`): Preis (Early Access, noch kein
+  Abo), Tagesbudget in Euro je Stufe aus der Admin-Konfiguration, Stufe und
+  Rest des Kontos wie der Ring in der Seitenleiste
+  (`agent_quota.remaining_allowance`), Speichergrenzen
+  (`MAX_CHATS_PER_OWNER`, `MAX_TURNS_PER_CHAT`), Teilen und Widerruf
+  (`REVOKED_RETENTION_DAYS`), Memory, Watches, Löschen, Seiten-Links und
+  Kontakt; mit Arbeitsplatz auch dessen Tageszeit (`agent_vm_time`). Kein
+  eigenes Werkzeug und nicht im Prompt: ein Werkzeug mehr wollte Max nicht,
+  und Prompt-Text zahlt jeder Turn, auch gecacht (Kontingent). Ein Link auf
+  eine Hilfeseite hätte `read_source` gebraucht, also einen Modellaufruf mit
+  Web-Fetch, Leselimit und möglicher alter Fassung. Die Zahlen kommen aus dem
+  Code, der sie durchsetzt; bei Datenschutzfragen verlinkt der Agent die
+  Datenschutzerklärung als verbindlichen Text, statt sie nachzuerzählen. Ist
+  das Konto-Budget nicht lesbar, fehlen nur dessen Zahlen.
 - **Prompt:** `agent_settings.AUDIT_PROMPT` („ACCOUNT SETTINGS“, seit
   2026-10-28 nur Fakten): was die beiden Werkzeuge tun, dass nach Fremdinhalt
   ein Belegzitat nötig ist, was in den Einstellungen bleibt, und dass
-  consens.io während Early Access frei ist (einige Funktionen nur für
-  ausgewählte Konten, noch kein Abo, contact@consens.io). Was der Agent dem
+  `read_settings` auch die Fakten über consens.io hat (bis 2026-11-01 standen
+  dort Early Access, kein Abo und contact@consens.io selbst). Was der Agent dem
   Nutzer sagt, steht im Ergebnis (`INSTRUCTIONS`: nie behaupten, etwas sei
   schon umgestellt; Begrenzung oder Ablehnung mit dem Grund). Bis 2026-10-31
   verlangte im Vergleichsmodus `ORCHESTRATOR_PROMPT` dazu einen klaren Wunsch
