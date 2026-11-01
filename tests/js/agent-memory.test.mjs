@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
+import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 const SETTINGS = `
   <section id="memorySettingsSection">
@@ -34,7 +35,7 @@ async function settle() {
   for (let i = 0; i < 60; i += 1) await Promise.resolve();
 }
 
-function bootSettings(scripts = ["static/js/user-memory.js"], extraBody = "") {
+function bootSettings(scripts = ["static/js/user-memory.js"], extraBody = "", { german = false } = {}) {
   const server = {
     profile: { schema_version: 2, enabled: true, auto_memory: false, role: "Nurse", focus: "", style: "", constraints: "", notes: "" },
     revision: 3,
@@ -42,9 +43,10 @@ function bootSettings(scripts = ["static/js/user-memory.js"], extraBody = "") {
     itemsRevision: 7,
     calls: [],
   };
-  const { window, document, dom } = loadScripts(scripts, {
+  const { window, document, dom } = loadScripts(german ? [...GERMAN_SCRIPTS, ...scripts] : scripts, {
     body: SETTINGS + extraBody,
     before(win) {
+      if (german) useGerman(win);
       win.auth = { currentUser: { uid: "uid-1", getIdToken: async () => "token" } };
       win.fetch = async (url, options = {}) => {
         const body = options.body ? JSON.parse(options.body) : null;
@@ -276,6 +278,19 @@ describe("Settings: fresh state", () => {
 });
 
 describe("Settings: saved memories", () => {
+  // A memory is the reader's own sentence: a German page labels it, and
+  // leaves the words alone (docs/i18n.md, bug hunt 2026-10-23).
+  it("shows a memory as written on a German page", async () => {
+    const ctx = bootSettings(undefined, "", { german: true });
+    ctx.server.items = [{ id: "m1a2b3c", text: ENGLISH_QUESTION, origin: "user" }];
+    await open(ctx);
+    await settleGerman(ctx.window);
+    const row = ctx.document.querySelector(".settings-memory-item");
+    expect(row.querySelector(".settings-memory-item-text").textContent).toBe(ENGLISH_QUESTION);
+    expect(row.querySelector(".settings-memory-item-meta").textContent).toBe("Von dir hinzugefügt");
+    ctx.dom.window.close();
+  });
+
   it("lists, adds, edits and deletes memories against the list revision", async () => {
     const ctx = bootSettings();
     await open(ctx);

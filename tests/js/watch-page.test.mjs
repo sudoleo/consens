@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
+import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 /**
  * The Watches page and the "New watch" dialog as Apple-Audit package J asks
@@ -61,14 +62,15 @@ function nativeDialogs(window) {
   };
 }
 
-function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false, dialogs = false, telegram = null } = {}) {
-  const server = { watches, limits, telegram: telegram || { configured: false, connected: false }, calls: [] };
+function boot({ watches = [], limits = null, user = true, path = "/app/watches", patch = null, captureIntervals = false, dialogs = false, telegram = null, shares = [], german = false } = {}) {
+  const server = { watches, limits, shares, telegram: telegram || { configured: false, connected: false }, calls: [] };
   const harness = loadScripts(
-    ["static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js", "static/js/notices.js",
+    [...(german ? GERMAN_SCRIPTS : []), "static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js", "static/js/notices.js",
       "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js", "static/js/watch-dashboard.js"],
     {
       body: SHELL,
       before(window) {
+        if (german) useGerman(window);
         if (dialogs) nativeDialogs(window);
         window.history.replaceState(null, "", path);
         // jsdom has no scrolling; the page restores the chat's position.
@@ -103,6 +105,8 @@ function boot({ watches = [], limits = null, user = true, path = "/app/watches",
             }
           } else if (url === "/api/my/telegram") {
             data = { telegram: server.telegram };
+          } else if (url === "/api/my/shares") {
+            data = { shares: server.shares, site_url: "https://www.consens.io" };
           } else if (method === "POST" && url === "/api/my/telegram/link") {
             data = { url: "https://t.me/consens_bot?start=pair" };
           } else if (method === "POST" && url === "/api/watch") {
@@ -142,6 +146,36 @@ describe("Watch times (watch-fields.js)", () => {
     expect(F.nextCheck({ next_run_at: new Date(now + 12 * 60000).toISOString() }, now).text).toBe("Next check in 12m");
     expect(F.nextCheck({ next_run_at: new Date(2026, 9, 21, 9, 0).toISOString() }, now).text).toBe("Next check tomorrow, 09:00");
     expect(F.relativePast(new Date(now - 3 * 3600000).toISOString(), now)).toBe("3h ago");
+  });
+});
+
+// docs/i18n.md: what the reader asked, and the pages a watch found, stay as
+// written on a German page; only the page's own words around them change.
+describe("The reader's words on a German page", () => {
+  it("leaves a card's question, its tooltip and its source titles as written", async () => {
+    const { window, document } = boot({ german: true, watches: [watch({ question: ENGLISH_QUESTION,
+      key_links: [{ title: "Remove background noise in Audacity", url: "https://manual.audacityteam.org/noise" }] })] });
+    await window.App.watchDashboard.render();
+    await settleGerman(window);
+    const link = document.querySelector(".wd-question a");
+    expect(link.textContent).toBe(ENGLISH_QUESTION);
+    expect(link.title).toBe(ENGLISH_QUESTION);
+    const source = document.querySelector(".wd-source-host").closest("a");
+    expect(source.title).toBe("Remove background noise in Audacity · manual.audacityteam.org");
+    // The card's own words are German.
+    expect(document.querySelector(".wd-action-toggle").textContent).toBe("Einstellungen");
+  });
+
+  it("lists a shared link's question as asked, behind a German label", async () => {
+    const { window, document } = boot({ german: true, path: "/app", shares: [
+      { status: "active", visibility: "private", question: ENGLISH_QUESTION, path: "/s/one" },
+      { status: "active", visibility: "public", question: "", path: "/s/two" },
+    ] });
+    window.openShareDialog("list");
+    await vi.waitFor(() => expect(document.querySelectorAll(".share-list-question")).toHaveLength(2));
+    await settleGerman(window);
+    expect(Array.from(document.querySelectorAll(".share-list-question"), link => link.textContent))
+      .toEqual([`Privat · ${ENGLISH_QUESTION}`, "(ohne Titel)"]);
   });
 });
 

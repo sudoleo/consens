@@ -489,6 +489,7 @@
       body.className = "settings-memory-item-body";
       const text = document.createElement("span");
       text.className = "settings-memory-item-text";
+      text.setAttribute("data-i18n-skip", "");
       text.textContent = item.text;
       const meta = document.createElement("small");
       meta.className = "settings-memory-item-meta";

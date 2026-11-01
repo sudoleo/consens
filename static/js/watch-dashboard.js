@@ -283,6 +283,8 @@
       link.appendChild(el("span", "wd-source-host", host));
       const title = item.title && item.title !== host ? item.title : "";
       link.title = (title ? title + " · " : "") + host;
+      // A page's own title and address: never looked up.
+      link.setAttribute("data-i18n-skip", "");
       if (title) link.setAttribute("aria-label", title + ", " + host);
       li.appendChild(link);
       list.appendChild(li);
@@ -450,6 +452,8 @@
     const question = el("h3", "wd-question");
     const link = el("a", "", watch.question || "(untitled)");
     link.title = watch.question || "";
+    // The reader's question, as asked (docs/i18n.md).
+    if (watch.question) link.setAttribute("data-i18n-skip", "");
     link.href = watch.share_path || "#";
     link.target = "_blank";
     link.rel = "noopener";

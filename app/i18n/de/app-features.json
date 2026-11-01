@@ -572,6 +572,8 @@
   "Every check": "Jede Prüfung",
   "Public": "Öffentlich",
   "Private": "Privat",
+  "Private · {question}": "Privat · {question}",
+  "(untitled)": "(ohne Titel)",
   "Log in to start watching. Your question waits for you.": "Melde dich an, um eine Watch zu starten. Deine Frage wartet auf dich.",
   "Log in to start watching.": "Melde dich an, um eine Watch zu starten.",
   "What should we keep checking?": "Was sollen wir für dich im Blick behalten?",

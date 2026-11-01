@@ -177,6 +177,8 @@ describe("result card of a checked pasted text", () => {
     card().querySelector(".passage-check-toggle").click();
     expect(card().classList.contains("is-full")).toBe(true);
     const text = card().querySelector(".passage-check-text");
+    // The pasted text as written: i18n.js leaves it alone (docs/i18n.md).
+    expect(text.hasAttribute("data-i18n-skip")).toBe(true);
     const marks = [...text.querySelectorAll(".pc-claim")];
     expect(marks.map(mark => mark.dataset.verdict)).toEqual(["holds", "disputed", "unconfirmed"]);
     expect(text.textContent).toContain("• You always need underfloor heating");

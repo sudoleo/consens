@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
+import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 const contexts = [];
-function boot({ desktop = true } = {}) {
+function boot({ desktop = true, german = false } = {}) {
   let visible = null;
-  const ctx = loadScripts(["static/js/model-answer-reader.js"], {
+  const ctx = loadScripts([...(german ? GERMAN_SCRIPTS : []), "static/js/model-answer-reader.js"], {
     body: `<button id="agentModeAnswersToggle"><span class="consensus-tab-label">Compare answers</span></button>
       <div id="threadHistory"></div><div class="response-section"><div class="response-box" id="openaiResponse"><div class="collapsible-content"></div></div></div>`,
     before(window) {
+      if (german) useGerman(window);
       window.matchMedia = query => ({ matches: query.includes("1400") ? desktop : desktop, addEventListener() {} });
       window.HTMLDialogElement.prototype.show = function () { this.open = true; };
       window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
@@ -166,6 +168,17 @@ describe("model answer reader", () => {
     ctx.reader.openContext(other, { section: 'differences' });
     expect(ctx.document.getElementById('answerReaderTitle').textContent).toBe('Differences');
     expect(button('differences').textContent).toBe('Differences');
+  });
+  // The question line is the reader's words (bug hunt 2026-10-23).
+  it("shows the question as asked on a German page, the tabs in German", async () => {
+    const ctx = boot({ german: true }); ctx.project(run());
+    const context = { key: 'tool:de', question: ENGLISH_QUESTION, answers: [], sections: ['differences', 'sources'],
+      contextGroup: () => [context], renderPanel: () => ctx.document.createElement('div') };
+    ctx.reader.openContext(context, { section: 'differences' });
+    await settleGerman(ctx.window);
+    const summary = ctx.document.querySelector('#answerReaderQuestion summary');
+    expect(summary.textContent).toBe(ENGLISH_QUESTION);
+    expect(ctx.document.querySelector('#answerReaderSections [data-section="sources"]').textContent).toBe('Quellen');
   });
   it("keeps every finding folded when no marker picks one", () => {
     const ctx = boot(); ctx.project(run());

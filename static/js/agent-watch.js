@@ -63,8 +63,12 @@
     head.append(icon(), title);
     title.id = `agentWatchTitle${serial += 1}`;
     card.setAttribute('aria-labelledby', title.id);
+    // The question and its goal are the reader's or the model's words: the
+    // line around the goal comes translated from sync() (docs/i18n.md).
     const question = node('p', 'agent-watch-question');
+    question.setAttribute('data-i18n-skip', '');
     const goal = node('p', 'agent-watch-goal');
+    goal.setAttribute('data-i18n-skip', '');
     const settings = node('p', 'agent-watch-settings');
     const status = node('p', 'agent-watch-status');
     status.setAttribute('role', 'status');
@@ -102,8 +106,8 @@
       : paused ? 'Watch paused' : watch.status === 'resolved' ? 'Reached' : 'Watching';
     view.question.textContent = watch?.question || proposal.question;
     const goal = watch ? line(watch.condition) : proposal.goals[0] || '';
-    view.goal.textContent = !goal ? 'Any change to the answer'
-      : watch?.status === 'resolved' ? `Waited for: ${goal}` : `Waiting for: ${goal}`;
+    view.goal.textContent = !goal ? App.t('Any change to the answer')
+      : App.t(watch?.status === 'resolved' ? 'Waited for: {goal}' : 'Waiting for: {goal}', { goal });
     view.settings.hidden = Boolean(watch);
     if (!watch && ui) view.settings.textContent = ui.settingsSummary(ui.watchDefaults(proposal.interval));
     // A failed start speaks only while starting is still the next step: an

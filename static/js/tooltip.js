@@ -40,6 +40,9 @@
     if (!tip) {
       tip = document.createElement("div");
       tip.className = "global-tooltip";
+      // Its words come translated from the element, or are content (a cut
+      // off chat title): i18n.js leaves them as they are.
+      tip.setAttribute("data-i18n-skip", "");
       // Faded out it is still in the page: hidden from screen readers until
       // it shows (an empty, nameless tooltip; a11y audit P6).
       tip.setAttribute("aria-hidden", "true");

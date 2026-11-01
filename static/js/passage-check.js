@@ -287,6 +287,8 @@
 
   function fullText(check) {
     const body = node("div", "passage-check-text");
+    // The text the reader pasted, as written (docs/i18n.md).
+    body.setAttribute("data-i18n-skip", "");
     const atLine = index => index === 0 || check.text[index - 1] === "\n";
     const atEnd = index => index >= check.text.length || check.text[index] === "\n";
     const piece = (from, to) => displayText(check.text.slice(from, to), atLine(from), atEnd(to));

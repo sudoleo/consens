@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
+import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 /**
  * The layers above the page are one family (Apple audit C1, C4, E1, E6,
@@ -332,5 +333,34 @@ describe("one tooltip (E12)", () => {
     expect(tip.textContent).toBe("OpenAI · GPT-6 Luna");
     vi.advanceTimersByTime(3000);
     expect(tip.classList.contains("visible")).toBe(false);
+  });
+
+  // A cut-off chat title is shown whole as it was asked; a title that is the
+  // page's own word arrives translated from its element (bug hunt 2026-10-23).
+  it("shows a chat title as asked on a German page, and the page's words in German", async () => {
+    const ctx = loadScripts([...GERMAN_SCRIPTS, "static/js/tooltip.js"], {
+      body: `<div class="bookmark"><p id="chat" data-tooltip-overflow></p></div><button id="gear"></button>`,
+      before: useGerman,
+    });
+    contexts.push(ctx);
+    const { window, document } = ctx;
+    const chat = document.getElementById("chat");
+    chat.textContent = ENGLISH_QUESTION;
+    document.getElementById("gear").title = "Settings";
+    Object.defineProperty(chat, "scrollWidth", { value: 300 });
+    Object.defineProperty(chat, "clientWidth", { value: 120 });
+    window.App.tooltip.init();
+    await settleGerman(window);
+    vi.useFakeTimers();
+    const tip = document.querySelector(".global-tooltip");
+    pointer(window, "pointerover", chat);
+    vi.advanceTimersByTime(600);
+    await settleGerman(window);
+    expect(tip.textContent).toBe(ENGLISH_QUESTION);
+    pointer(window, "pointerout", chat);
+    pointer(window, "pointerover", document.getElementById("gear"));
+    vi.advanceTimersByTime(600);
+    await settleGerman(window);
+    expect(tip.textContent).toBe("Einstellungen");
   });
 });

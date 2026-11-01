@@ -25,7 +25,7 @@
   {% include "partials/og_card.html" %}
   <meta name="twitter:title" content="The AI Agent Other AI Models Check | consens.io">
   <meta name="twitter:description" content="Ask once. One AI does the work, and several other leading models check it as it goes and mark in the answer what they doubt.">
-  <title>consens.io</title>
+  <title data-i18n-skip>consens.io</title>
   <meta id="appBootstrapConfig"
         data-firebase-api-key="{{ firebase_api_key | e }}"
         data-firebase-auth-domain="{{ firebase_auth_domain | e }}"
@@ -453,7 +453,7 @@
             </svg>
           </span>
           <figcaption class="composer-quote-label">Quoted</figcaption>
-          <blockquote id="composerQuoteText" class="composer-quote-text"></blockquote>
+          <blockquote id="composerQuoteText" class="composer-quote-text" data-i18n-skip></blockquote>
           <button type="button" id="composerQuoteRemove" class="composer-quote-remove"
             aria-label="Remove the quoted passage"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         </figure>

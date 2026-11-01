@@ -370,7 +370,10 @@
 
       const question = document.createElement("a");
       question.className = "share-list-question";
-      question.textContent = (share.visibility === "private" ? "Private · " : "") + (share.question || "(untitled)");
+      // The question as asked; only the words around it are the page's.
+      question.setAttribute("data-i18n-skip", "");
+      const asked = share.question || window.App.t("(untitled)");
+      question.textContent = share.visibility === "private" ? window.App.t("Private · {question}", { question: asked }) : asked;
       question.href = url;
       question.target = "_blank";
       question.rel = "noopener";

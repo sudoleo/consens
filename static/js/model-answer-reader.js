@@ -49,7 +49,7 @@
     <p id="answerReaderMode" class="answer-reader-mode" hidden>Compare result. Each model answered independently.</p>
     <div class="answer-reader-context">
       <div class="answer-reader-context-top"><label for="answerReaderTurn">Conversation</label><select id="answerReaderTurn" aria-label="Question in this conversation"></select><span id="answerReaderTurnLabel">Current question</span></div>
-      <details id="answerReaderQuestion"><summary><span></span></summary></details>
+      <details id="answerReaderQuestion"><summary data-i18n-skip><span></span></summary></details>
     </div>
     <nav class="answer-reader-sections" id="answerReaderSections" aria-label="Answer details">
       <button type="button" data-section="answers">Answers</button><button type="button" data-section="differences">Differences</button><button type="button" data-section="sources">Sources</button>
@@ -696,7 +696,8 @@
     get("Turn").hidden = options.length < 2;
     get("TurnLabel").hidden = options.length > 1;
     root.querySelector('.answer-reader-context-top label').hidden = options.length < 2;
-    get("Question").querySelector("summary span").textContent = selected.question || "Question";
+    // The question as asked (its summary is data-i18n-skip, docs/i18n.md).
+    get("Question").querySelector("summary span").textContent = selected.question || window.App.t("Question");
     // The question is already in the chat: one line, no label, unless a
     // picker is needed to switch between several questions or comparisons.
     root.querySelector('.answer-reader-context-top').hidden = options.length < 2;

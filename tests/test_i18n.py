@@ -481,3 +481,11 @@ def test_content_in_a_skipped_region_keeps_its_words(small_catalog):
     assert i18n.translate_html(page, "de") == (
         '<html lang="de"><body><h2>Einstellungen</h2>'
         '<div class="share-md" data-i18n-skip lang="en"><h2>Settings</h2></div></body></html>')
+
+
+def test_the_app_shell_marks_what_scripts_fill_with_content():
+    # The tab title becomes the question and the composer quotes an answer;
+    # i18n.js rewrote both on a German page (bug hunt 2026-10-23).
+    shell = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+    assert "<title data-i18n-skip>" in shell
+    assert re.search(r'<blockquote id="composerQuoteText"[^>]*data-i18n-skip', shell)
