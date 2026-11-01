@@ -143,6 +143,12 @@ def slow_store(monkeypatch):
     return AgentRunStore(SlowDatabase())
 
 
+SIX_FAMILIES = {"openai": cfg.OPENAI_SOL_MODEL, "mistral": cfg.MISTRAL_PRO_MODEL,
+                "anthropic": cfg.ANTHROPIC_PRO_MODEL, "gemini": cfg.GEMINI_PRO_MODEL,
+                "deepseek": cfg.DEEPSEEK_PRO_MODEL, "grok": cfg.GROK_PRO_MODEL}
+assert len(SIX_FAMILIES) == cfg.MAX_RUN_FAMILIES
+
+
 def run_turn(store):
     timeline = Timeline()
     chat, turn = pending(store)
@@ -153,8 +159,9 @@ def run_turn(store):
                   {"role": "user", "content": "What should I pack for a marathon training camp?"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=timeline.factory,
-        # The most a run asks (High Quality): six families answer in parallel.
-        comparison_models=comparison_selection(cfg.CONSENSUS_PRESET_MODELS["thorough"]["answers"]))
+        # The most a run asks (Custom, MAX_RUN_FAMILIES): six families answer in
+        # parallel. High Quality had six until 2026-11-01, now three.
+        comparison_models=comparison_selection(SIX_FAMILIES))
     started = time.monotonic()
     events = list(loop.run())
     return loop, timeline, events, time.monotonic() - started
