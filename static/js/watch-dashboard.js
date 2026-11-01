@@ -1222,6 +1222,7 @@
       commit: async () => {
         try {
           await ui().api("DELETE", "/api/watch/" + encodeURIComponent(watch.id));
+          ui().forgetWatch(watch.id);
           page.pendingDeletes.delete(entry.id);
           page.cards.delete(entry.id);
           entry.item.remove();

@@ -3144,7 +3144,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   it is reached“ zur ersten Regel). Der Login-Hinweis für Gäste sagt „Your
   question waits for you.“ nur, wenn eine Frage wartet. `receiveWatchList` (aus
   `loadWatchLimits` und dem Dashboard) hält neben den Limits die Watch-Liste
-  (`watchState.watches`) und meldet `consensio:watches-changed`. Die Liste
+  (`watchState.watches`) und meldet `consensio:watches-changed`; Watches,
+  die dieser Tab gelöscht hat (`watchUi.forgetWatch`, Dashboard nach dem
+  DELETE), fehlen in jeder späteren Antwort, auch in einer vor dem Löschen
+  angefragten (seit 2026-11-01). Die Liste
   kommt über `watchUi.requestWatchList({fresh})`: höchstens ein GET zugleich,
   wer währenddessen fragt, teilt ihn (`fresh` nur nach einer eigenen
   Änderung); das Dashboard lädt Liste, Brief und Telegram über ein geteiltes

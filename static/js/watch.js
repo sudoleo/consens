@@ -427,11 +427,26 @@
     };
   }
 
+  // Watches this tab deleted. A list asked for before the deletion and
+  // answered after it still names one; an ID never comes back, so it is
+  // left out of every later answer (the deleted card came back, and a second
+  // Delete failed, until the next load; bug hunt 2026-10-26).
+  const deletedWatchIds = new Set();
+
+  function forgetWatch(id) {
+    if (id) deletedWatchIds.add(String(id));
+  }
+
   // The one place that takes an answer of /api/my/watches (this file and the
   // dashboard): limits, the list Agent Watch cards compare their question to,
-  // the sidebar count, and the event those cards follow.
+  // the sidebar count, and the event those cards follow. The answer's list
+  // loses the deleted watches here, for every caller that reads it after.
   function receiveWatchList(data) {
-    const watches = Array.isArray(data?.watches) ? data.watches : [];
+    let watches = Array.isArray(data?.watches) ? data.watches : [];
+    if (deletedWatchIds.size && watches.some(watch => deletedWatchIds.has(String(watch?.id)))) {
+      watches = watches.filter(watch => !deletedWatchIds.has(String(watch?.id)));
+      data.watches = watches;
+    }
     watchState.setLimits(normalizeWatchLimits(data?.limits, watches));
     watchState.setWatches(watches);
     renderSidebarWatchQuota(watchState.limits);
@@ -2148,6 +2163,7 @@
     limitMessage: limitMessage,
     receiveWatchList: receiveWatchList,
     requestWatchList: requestWatchList,
+    forgetWatch: forgetWatch,
     loadTelegramState: loadTelegramState,
     popup: popup,
     escapeHtml: escapeHtml,

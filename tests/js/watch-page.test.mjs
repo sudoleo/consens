@@ -452,6 +452,26 @@ describe("Cards change in place (D6, J8, J13, J14)", () => {
     await vi.waitFor(() => expect(server.calls.some(call => call[0] === "DELETE" && call[1] === "/api/watch/w1")).toBe(true));
   });
 
+  // Bug hunt 2026-10-26: a list asked for before the deletion and answered
+  // after it put the deleted card back (and into the account's list), and a
+  // second Delete then failed.
+  it("keeps a deleted watch away when an older list answers after the deletion", async () => {
+    const { window, document, server } = boot({ watches: [watch(), watch({ id: "w2", question: "Second?" })] });
+    await window.App.watchDashboard.render();
+    const card = document.querySelector('.wd-item[data-watch-id="w1"]');
+    card.querySelector(".wd-action-toggle").click();
+    card.querySelector('.wd-settings-footer [data-action="delete"]').click();
+    await window.App.watchDashboard.commitPending();
+    await vi.waitFor(() => expect(server.calls.some(call => call[0] === "DELETE" && call[1] === "/api/watch/w1")).toBe(true));
+    await vi.waitFor(() => expect(document.querySelector('.wd-item[data-watch-id="w1"]')).toBeNull());
+    // The server here still lists w1, as a list asked for before the DELETE does.
+    await window.App.watchDashboard.refresh();
+    await settle();
+    expect(document.querySelector('.wd-item[data-watch-id="w1"]')).toBeNull();
+    expect(document.querySelector('.wd-item[data-watch-id="w2"]')).not.toBeNull();
+    expect(window.App.watchState.watches.map(item => item.id)).toEqual(["w2"]);
+  });
+
   it("counts a paused or deleted watch out of the summary at once, and back in with Undo", async () => {
     // Bug hunt 2026-10-22: the summary only followed the next list, so it
     // still said "2 watching" while the card already showed the pause.
