@@ -497,6 +497,28 @@ def test_full_bookmark_storage_says_so_and_recovers_after_space_is_freed(api):
     assert len(calls) == 1
 
 
+def test_an_unreadable_allowance_at_the_end_still_delivers_the_saved_answer(api, monkeypatch):
+    """Bug hunt 2026-11-01: the allowance read after the chat entry was the
+    only one without a guard. A brief Firestore failure there turned the
+    finished answer into "couldn't be added to your chats", and its recovery
+    into a 503, though answer and chat entry were saved."""
+    client, store, calls = api
+
+    def unreadable(db, uid, **kwargs):
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(agent.agent_quota, "snapshot", unreadable)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "budget", "bookmark_id": "bm1"}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert "event: error" not in response.text
+    final = json.loads(response.text.split("event: final\ndata: ")[1].split("\n\n")[0])
+    assert final["response"] == "A helpful answer" and final["bookmark_meta"] and "token_budget" not in final
+    recovered = client.post("/agent", json={**payload, "recover_only": True}, headers=AUTH)
+    assert recovered.status_code == 200 and recovered.json()["bookmark_meta"]
+    assert len(calls) == 1
+
+
 def test_old_replay_keeps_newest_bookmark_and_sums_both_calls(api):
     client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]

@@ -257,9 +257,15 @@ def _final(uid, payload, store, turn):
         except Exception as exc:
             # A hint for the composer only; the server rule still enforces consent.
             logging.warning("Agent chat Google marker unavailable category=%s", safe_exception(exc))
-    return {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
-            "response": turn.get("consensus", ""), "execution_mode": "agent", "bookmark_meta": bookmark_meta,
-            "google_data": google_data, "google_consent": google_consent, "token_budget": agent_quota.snapshot(store.db, uid)}
+    final = {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
+             "response": turn.get("consensus", ""), "execution_mode": "agent", "bookmark_meta": bookmark_meta,
+             "google_data": google_data, "google_consent": google_consent}
+    try:
+        final["token_budget"] = agent_quota.snapshot(store.db, uid)
+    except Exception as exc:
+        # Answer and chat entry are saved; without it the browser asks for the allowance itself.
+        logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
+    return final
 
 
 def _bookmark_limit_failure(exc):
