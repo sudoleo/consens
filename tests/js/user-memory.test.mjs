@@ -229,6 +229,29 @@ describe("memory save conflicts", () => {
     expect(ctx.server.profile.role).toBe("My unsaved draft");
   });
 
+  // Bug hunt 2026-10-24: "Keep my draft" moved the revision for everything,
+  // so a switch afterwards sent the OLD saved texts with the NEW revision and
+  // silently replaced the newer Memory, and the draft was never saved.
+  it("lets only Save use the kept draft's revision, never a switch", async () => {
+    const ctx = bootWithServer();
+    await openSettings(ctx);
+    ctx.server.revision = 5;
+    ctx.server.profile = { ...storedProfile(true), role: "Newer from tab two" };
+    type(ctx, "memoryRoleInput", "My unsaved draft");
+    ctx.document.getElementById("saveMemoryBtn").click();
+    await settle();
+    ctx.document.querySelector("[data-memory-conflict='keep']").click();
+
+    const box = ctx.document.getElementById("memoryEnabledSwitch");
+    box.checked = false;
+    box.dispatchEvent(new ctx.window.Event("change"));
+    await settle();
+    // The switch writes against what it loaded: refused, nothing replaced.
+    expect(ctx.server.puts.map(put => put.expected_revision)).toEqual([4, 4]);
+    expect(ctx.server.profile.role).toBe("Newer from tab two");
+    expect(ctx.document.getElementById("memoryRoleInput").value).toBe("My unsaved draft");
+  });
+
   it("keeps the newer revision from the flat error shape too", async () => {
     const ctx = bootWithServer({ flat: true });
     await openSettings(ctx);

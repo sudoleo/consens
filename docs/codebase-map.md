@@ -1999,7 +1999,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (zweiter Tab, Remember/Correct, Undo), antwortet der Server 409
   `{error_code: revision_conflict, revision}` ohne Inhalte; `user-memory.js`
   behält den Entwurf und bietet „Load latest“ oder bewusst „Keep my draft“
-  (übernimmt die gemeldete Revision für den nächsten Save). Alte Clients ohne
+  (übernimmt die gemeldete Revision nur für den nächsten Save, `draftRevision`;
+  die Schalter schreiben weiter gegen die geladene Revision, seit 2026-11-01,
+  vorher ersetzte ein Schalter danach den neueren Stand still). Alte Clients ohne
   `expected_revision` erhalten 409 mit Reload-Hinweis statt still neuere Inhalte
   zu überschreiben; das Bewahren fehlender Legacy-`notes` bleibt für interne
   Aufrufer erhalten. Liegt die gespeicherte Notiz über dem aktuellen Limit

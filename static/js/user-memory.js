@@ -25,6 +25,11 @@
   const state = {
     saved: null,      // letzter vom Server bestaetigter Stand
     revision: null,   // Revision von `saved`; Basis fuer Compare-and-swap
+    // "Keep my draft": die neuere Revision, gegen die nur Save den Entwurf
+    // schreibt. Ein Schalter schickt `saved` und bleibt bei `revision`, sonst
+    // ersetzte er den neueren Stand still durch den alten (Fehlersuche
+    // 2026-10-24).
+    draftRevision: null,
     loaded: false,
     loading: false,
     saving: false,
@@ -104,7 +109,7 @@
       keep.textContent = "Keep my draft";
       keep.addEventListener("click", () => {
         if (state.uid !== uid || currentUser()?.uid !== uid) return;
-        state.revision = latest;
+        state.draftRevision = latest;
         setStatus("Your draft will replace the newer Memory when you press Save.", "muted");
         syncControls();
       });
@@ -160,14 +165,14 @@
   // unbekannte Felder (extra="forbid"), also darf eine Serverantwort nie
   // ungefiltert zurueckgeschickt werden -- genau das liess den Schalter mit 422
   // scheitern und die Checkbox zurueckspringen.
-  function requestBody(profile) {
+  function requestBody(profile, revision = state.revision) {
     const body = { enabled: profile?.enabled !== false, auto_memory: profile?.auto_memory === true };
     FIELDS.forEach(field => {
       body[field] = typeof profile?.[field] === "string" ? profile[field] : "";
     });
     // Compare-and-swap: der Server speichert nur, wenn seit dem Laden nichts
     // anderes (zweiter Tab, Remember/Correct, Undo) geschrieben hat.
-    body.expected_revision = state.revision;
+    body.expected_revision = revision;
     return body;
   }
 
@@ -275,6 +280,7 @@
       applyLimits(result.limits);
       state.saved = profile;
       state.revision = revisionOf(result);
+      state.draftRevision = null;
       state.uid = user.uid;
       state.loaded = true;
       writeForm(profile);
@@ -295,11 +301,12 @@
     state.saving = true;
     syncControls();
     try {
-      const result = await api("PUT", requestBody(profile));
+      const result = await api("PUT", requestBody(profile, options?.revision ?? state.revision));
       const saved = result.memory || emptyProfile();
       applyLimits(result.limits);
       state.saved = saved;
       state.revision = revisionOf(result);
+      state.draftRevision = null;
       state.loaded = true;
       if (rewriteFields) {
         // Der Server normalisiert (Whitespace, Laenge, Rahmenmarken). Zurueck-
@@ -337,7 +344,8 @@
     }
     const profile = readForm();
     const empty = FIELDS.every(field => !profile[field]);
-    await persist(profile, empty ? "Memory cleared." : "Saved. Your next run starts with this.");
+    await persist(profile, empty ? "Memory cleared." : "Saved. Your next run starts with this.",
+      { revision: state.draftRevision ?? state.revision });
   }
 
   async function toggleEnabled() {
@@ -683,6 +691,7 @@
       state.loaded = false;
       state.saved = null;
       state.revision = null;
+      state.draftRevision = null;
       state.uid = null;
       state.items = [];
       state.itemsRevision = null;
