@@ -151,6 +151,17 @@ def remaining_allowance(db, uid, *, tier=None):
     return _remaining(data, agent_budget_config.limit_for(config, tier))
 
 
+def shown_allowance(db, uid, *, tier=None):
+    """``(left, limit)`` of today's allowance as the sidebar ring shows it
+    (token-budget.js view): the limit less what was spent, not less what
+    running calls hold for the moment (remaining_allowance)."""
+    config = agent_budget_config.get_config(db)
+    tier = account_tier(uid) if tier is None else tier
+    data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
+    limit = agent_budget_config.limit_for(config, tier)
+    return max(0, limit - spent_amount(data)), limit
+
+
 def _previous_day_has_estimates(db, uid, day):
     try:
         today = datetime.strptime(day.split('_')[0], "%Y-%m-%d")

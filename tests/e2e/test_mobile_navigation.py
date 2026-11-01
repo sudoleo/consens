@@ -551,11 +551,12 @@ def test_mobile_composer_hangs_from_the_keyboard_edge(browser, phase4_server):
 
 def test_mobile_composer_follows_a_visible_part_safari_left_panned(browser, phase4_server):
     """2026-11-01 (Max, a screenshot shared to WhatsApp): without a keyboard
-    Safari left the visible part 171px below the layout viewport, and the
-    fixed composer stood that much too high, drifting with the text. It
-    follows the visible bottom until Safari rights it; once per page the
-    state goes to the analysis. Toolbars sliding away (visible part and
-    innerHeight grow alike) and pinch zoom are no such state."""
+    the fixed composer stood about 170px too high and drifted with the text.
+    WebKit likely keeps subtracting the other app's keyboard (a shorter
+    visual viewport) and pans the visible part within the layout viewport;
+    the composer then stands offsetTop too high. Held for PANNED_HOLD_MS it
+    follows by offsetTop and the state is reported once with both measures.
+    A short bounce, pinch zoom and a focused field are no such state."""
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True, init_script=FAKE_VISUAL_VIEWPORT)
     try:
         page.set_viewport_size({'width': 390, 'height': 820})
@@ -564,26 +565,42 @@ def test_mobile_composer_follows_a_visible_part_safari_left_panned(browser, phas
         page.wait_for_function(settle)
         page.evaluate("() => { window.__events = []; window.App.trackAppEvent = (name, data) => window.__events.push([name, data]); }")
         bottom = "() => Math.round(document.querySelector('.input-section').getBoundingClientRect().bottom)"
+        panned = re.compile(r'\bviewport-panned\b')
         page.wait_for_function(f"() => Math.abs(({bottom})() - 820) <= 1")
 
-        page.evaluate("() => window.__keyboard(820, 171, 'scroll')")
-        expect(page.locator('body')).to_have_class(re.compile(r'\bviewport-panned\b'))
+        # A bounce at the page's end is over before the hold: nothing moves.
+        page.evaluate("() => window.__keyboard(820, 40, 'scroll')")
+        page.wait_for_timeout(150)
+        page.evaluate("() => window.__keyboard(820, 0, 'scroll')")
+        page.wait_for_timeout(900)
+        expect(page.locator('body')).not_to_have_class(panned)
+
+        # Shortened by the other app's keyboard and panned within: held, the
+        # composer goes down by offsetTop, and once panned it follows at once.
+        page.evaluate("() => window.__keyboard(650, 170, 'scroll')")
+        expect(page.locator('body')).to_have_class(panned)
         expect(page.locator('body')).not_to_have_class(re.compile(r'\bkeyboard-open\b'))
-        page.wait_for_function(f"() => Math.abs(({bottom})() - 991) <= 1")
-        # Safari pans on: the composer follows; the analysis heard it once.
-        page.evaluate("() => window.__keyboard(820, 60, 'scroll')")
+        page.wait_for_function(f"() => Math.abs(({bottom})() - 990) <= 1")
+        page.evaluate("() => window.__keyboard(650, 60, 'scroll')")
         page.wait_for_function(f"() => Math.abs(({bottom})() - 880) <= 1")
         assert page.evaluate("window.__events.filter(([name]) => name === 'app_viewport_panned')") == [
-            ['app_viewport_panned', {'drop': 171, 'top': 171, 'visible': 820, 'layout': 820}]]
+            ['app_viewport_panned', {'top': 170, 'inset': 170, 'visible': 650, 'layout': 820}]]
 
         # Righted: back on the layout bottom, nothing left on the box.
         page.evaluate("() => window.__keyboard(820, 0, 'scroll')")
-        expect(page.locator('body')).not_to_have_class(re.compile(r'\bviewport-panned\b'))
+        expect(page.locator('body')).not_to_have_class(panned)
         page.wait_for_function(f"() => Math.abs(({bottom})() - 820) <= 1")
         assert page.evaluate("document.querySelector('.input-section').style.getPropertyValue('--viewport-drop')") == ''
         # Zoomed in, the visible part moves for its own reason.
-        page.evaluate("() => { visualViewport.scale = 2; window.__keyboard(410, 300, 'scroll'); }")
-        expect(page.locator('body')).not_to_have_class(re.compile(r'\bviewport-panned\b'))
+        page.evaluate("() => { visualViewport.scale = 2; window.__keyboard(820, 300, 'scroll'); }")
+        page.wait_for_timeout(900)
+        expect(page.locator('body')).not_to_have_class(panned)
+        page.evaluate("() => { visualViewport.scale = 1; window.__keyboard(820, 0, 'scroll'); }")
+        # A focused field is the keyboard's business.
+        page.locator('#questionInput').tap()
+        page.evaluate("() => window.__keyboard(820, 120, 'scroll')")
+        page.wait_for_timeout(900)
+        expect(page.locator('body')).not_to_have_class(panned)
     finally:
         context.close()
 

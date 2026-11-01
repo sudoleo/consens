@@ -181,6 +181,21 @@ def test_deleting_the_chat_ends_its_running_response_at_once(api, runs, live, mo
     assert time.monotonic() - started < 3
 
 
+def test_deleting_a_chat_from_the_sidebar_ends_its_running_response_at_once(api, runs, live, monkeypatch):
+    """Review 2026-11-01: the sidebar deletes through DELETE /bookmark, which
+    tombstones the chat itself (request_chat_deletion, then the cascade);
+    the stop sits there, before the cascade removes files and folders."""
+    client, store, _ = api
+    gate = Gate(monkeypatch)
+    chat_id, _response = _start(client, "sidebar")
+    assert gate.entered.wait(5)
+    store.request_chat_deletion(UID, chat_id)
+    deadline = time.monotonic() + 3
+    while runs.running(UID, chat_id, "sidebar"):
+        assert time.monotonic() < deadline, "the deleted chat's run did not end"
+        time.sleep(0.01)
+
+
 def test_a_stop_that_overtakes_its_request_keeps_it_from_starting(api, runs, live):
     client, store, calls = api
     chat_id = _chat(client)

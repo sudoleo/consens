@@ -3915,16 +3915,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   280 ms iOS-Kurve, Vorhersage hält höchstens 1 s ohne Meldung), beim Verlassen
   mit ihr herunter; Safaris späte Meldung korrigiert nur. Android
   (Layout-Viewport schrumpft mit, keine Meldung einer verdeckenden Tastatur)
-  und Desktop bleiben unberührt. Seit 2026-11-01 auch ohne Tastatur: Liegt
-  die sichtbare Unterkante (`offsetTop + height`) mehr als 4 px unter
-  `window.innerHeight` (ungezoomt, kein Feld fokussiert), hat Safari den
-  sichtbaren Bereich verschoben stehen lassen (Max: nach dem Teilen eines
-  Screenshots an WhatsApp stand der Composer rund 170 px zu hoch und wanderte
-  mit dem Text). Dann `body.viewport-panned` und `--viewport-drop` am
-  Composer, `shell.css` schiebt ihn per `transform` hinunter; einmal je Seite
-  das Analyse-Ereignis `app_viewport_panned` (docs/analytics.md). Auch
-  `visibilitychange`/`pageshow` messen neu. Nicht am Gerät belegt, nur mit
-  nachgestelltem `visualViewport` (`test_mobile_navigation.py`).
+  und Desktop bleiben unberührt. Seit 2026-11-01 auch ohne Tastatur (Max:
+  nach dem Teilen eines Screenshots an WhatsApp stand der Composer rund
+  170 px zu hoch und wanderte mit dem Text): Ist das sichtbare Stück ohne
+  fokussiertes Feld und ungezoomt verschoben (`offsetTop`) oder verkürzt
+  (`innerHeight − height`, wohl eine alte Tastaturhöhe, die WebKit weiter
+  abzieht) und hält das `PANNED_HOLD_MS` = 700 ms (kein Nachfedern am
+  Seitenende), setzt das Modul `body.viewport-panned` und `--viewport-drop`
+  = `offsetTop` am Composer, `shell.css` schiebt ihn per `transform` an die
+  Bildschirmkante; einmal je Seite das Analyse-Ereignis `app_viewport_panned`
+  mit beiden Größen (docs/analytics.md). Auch `visibilitychange`/`pageshow`
+  messen neu. Nicht am Gerät belegt, nur mit nachgestelltem
+  `visualViewport` (`test_mobile_navigation.py`).
   Export `window.App.composerKeyboard.sync`.
 - **`composer-quote.js`** (seit 2026-08-17) — **„Ask about this"**: der in einer
   Antwort markierte Abschnitt wandert als sichtbares Zitat über das Eingabefeld
@@ -5096,8 +5098,8 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   (`agent_quota.count_claim`/`count_settlement`, Admin-Suche
   `usage_totals`), nicht mehr am User-Dokument; `chat_state/agent_runs` nur bei
   Änderung; ein delegiertes Settlement liest Chat, Turn und diese Liste nicht
-  mehr; die Lease wird erst unter 45 s Rest verlängert (`PRODUCER_RENEW_BEFORE_SECONDS`,
-  etwa alle 75 statt 30 s), das Arbeitsprotokoll schreibt Sammeldokumente
+  mehr; die Lease wird erst unter 60 s Rest verlängert (`PRODUCER_RENEW_BEFORE_SECONDS`,
+  etwa jede Minute statt alle 30 s), das Arbeitsprotokoll schreibt Sammeldokumente
   (Abschnitt „Arbeitsprotokoll“). Eine kurze Nachricht mit zwei Prüfern: 49
   statt 70 Schreib- und 131 statt 160 Lesevorgänge; Rundgänge bis zur ersten
   Anfrage unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (neue Sitzung
@@ -5265,12 +5267,15 @@ Eine gespeicherte vollständige Usage eines einzelnen
 terminalen Agent-Aufrufs kann den fehlenden Beleg rekonstruieren; Aggregate
 mehrerer Aufrufe werden nicht auf einzelne Schritte verteilt. Gelöschte Chats
 werden dabei nicht wiederhergestellt. Aktive Chat-Producer erneuern ihre
-120-Sekunden-Lease etwa alle 30 Sekunden atomar mit Account-Lease und Chat-Lock.
+120-Sekunden-Lease, sobald weniger als 60 Sekunden übrig sind (etwa jede Minute,
+bis 2026-11-01 alle 30 Sekunden), atomar mit Account-Lease und Chat-Lock.
 Der Watchdog prüft seit 2026-11-01 alle `WATCH_SECONDS` = 10 Sekunden (vorher
 drei, davor zweimal pro Sekunde; je Blick zwei Lesevorgänge) und toleriert
 kurze temporäre DB-Ausfälle bis 60 Sekunden. Was dieser Prozess dem Lauf tut,
 erreicht ihn sofort: Stop (`agent_background.stop`), Löschen des Chats
-(`DELETE /chats/{id}` → `agent_background.stop_chat`), Pausen-Entscheidungen
+(`ChatStore.request_chat_deletion` → `agent_background.stop_chat`, vor der
+Kaskade: Seitenleiste per `DELETE /bookmark`, temporärer Chat per
+`DELETE /chats/{id}`), Pausen-Entscheidungen
 und Nachrichten (`receive`); der Blick dient anderen Prozessen und der Lease. Abgelaufene oder ersetzte Producer
 dürfen keine Lease erneuern. Eine Chat-Löschung löscht keine
 entstandenen Kosten; Account-Tombstones sperren verspätete Writes.

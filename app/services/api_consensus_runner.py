@@ -75,9 +75,12 @@ _background_executor = ThreadPoolExecutor(
 _schedule_lock = threading.Lock()
 _scheduled_run_ids: set[str] = set()
 _retention_backfilled = False
-# Whether the last scan (or this process) saw an open API run; unknown at
-# start, so the first scan runs at once.
+# Whether the last scan saw an open API run; unknown at start, so the first
+# scan runs at once. ``_wakes`` counts the runs this process scheduled
+# (schedule_run): a run scheduled while a scan ran is never lost to the
+# scan's own answer, the loop compares counts.
 _runs_open = True
+_wakes = 0
 _last_retention = None
 
 
@@ -220,6 +223,7 @@ def release_run_reservation(run: dict) -> None:
 
 def schedule_run(run_id: str) -> bool:
     """Deduplicate work and bound the shared active-plus-pending queue."""
+    global _wakes
     run_id = str(run_id or "").strip()
     with _schedule_lock:
         if run_id in _scheduled_run_ids:
@@ -227,8 +231,7 @@ def schedule_run(run_id: str) -> bool:
         if len(_scheduled_run_ids) >= MAX_SCHEDULED_RUNS:
             return False
         _scheduled_run_ids.add(run_id)
-    global _runs_open
-    _runs_open = True
+        _wakes += 1
     try:
         _background_executor.submit(_execute_scheduled_run, run_id)
     except Exception:
@@ -360,15 +363,16 @@ async def api_run_maintenance_loop() -> None:
     looking every minute whether this process scheduled one meanwhile."""
     pause = API_MAINTENANCE_INTERVAL_SECONDS
     while True:
+        seen = _wakes
         recovered = await asyncio.to_thread(recover_persisted_runs)
         task_succeeded("consensus-api-maintenance", recovered_runs=recovered)
-        pause = (API_MAINTENANCE_INTERVAL_SECONDS if _runs_open
+        pause = (API_MAINTENANCE_INTERVAL_SECONDS if _runs_open or _wakes != seen
                  else min(pause * 2, API_MAINTENANCE_IDLE_MAX_SECONDS))
-        waited = 0
+        seen, waited = _wakes, 0
         while waited < pause:
             await asyncio.sleep(API_MAINTENANCE_INTERVAL_SECONDS)
             waited += API_MAINTENANCE_INTERVAL_SECONDS
-            if _runs_open:
+            if _wakes != seen:
                 break
 
 

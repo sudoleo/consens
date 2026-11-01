@@ -94,9 +94,12 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   seit 2026-11-01 Sammeldokumente nach ihrem ersten Eintrag benannt (`seq`,
   `last_seq`, `entries`, je höchstens `WORK_LOG_CHUNK_BYTES` = 600.000 Bytes,
   `agent_sessions.work_log_chunks`); davor ein Dokument je Eintrag, das
-  Lesen, Einzelabruf und Löschen weiter verstehen (`work_log_entries`; der
-  Eintrag nach `after` kann in einem Sammeldokument stehen, das früher
-  beginnt: `_work_log_holding`). Der Schreib-Thread sammelt, was binnen
+  Einzelabruf und Löschen weiter verstehen (`work_log_entries`). Der Turn
+  trägt dann `work_log_chunks`: Lesen geht über `last_seq` (Cursor
+  `start_after`, je `WORK_LOG_PAGE_CHUNKS` = 10 Sammeldokumente, bis die
+  Seite voll ist; findet auch das Dokument, das `after + 1` hält), ohne den
+  Merker wie bisher je Eintrag über `seq`; eine Abfrage je Abruf. Auch
+  `scripts/audit_report.py` liest beide Formate. Der Schreib-Thread sammelt, was binnen
   `FLUSH_SECONDS` = 5 nach dem ältesten ungespeicherten Eintrag kommt (bei
   vollem Stapel oder am Laufende sofort): auf den 687 Einträgen vom
   2026-11-01 202 statt 627 Schreibvorgänge, und 30 Tage später ebenso viel

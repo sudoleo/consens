@@ -364,7 +364,8 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT
     from app.services.share_snapshots import REVOKED_RETENTION_DAYS
     monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "free")
-    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid, tier=None: 620_000)
+    limits = agent_budget_config.get_config(store.db)["tier_limits"]
+    monkeypatch.setattr(agent_quota, "shown_allowance", lambda db, uid, tier=None: (620_000, limits["free"]))
     loop = settings_loop(store)
     about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
     limits = agent_budget_config.get_config(store.db)["tier_limits"]
@@ -389,7 +390,7 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     assert "early access" not in agent_settings.AUDIT_PROMPT
     # With the workspace its daily time is said; an unreadable ledger leaves the facts.
     loop.vm_tools = object()
-    monkeypatch.setattr(agent_quota, "remaining_allowance",
+    monkeypatch.setattr(agent_quota, "shown_allowance",
                         lambda db, uid, tier=None: (_ for _ in ()).throw(RuntimeError("firestore down")))
     about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
     # Only what counts stops at the cap (agent_vm_time: commands, installs, new processes).
@@ -687,3 +688,15 @@ def test_a_model_list_outage_is_a_readable_refusal(store):
 def test_the_words_the_app_shows_count_as_values(name, value, expected):
     request = agent_settings._Request(PrepareSettings(**changes(**{name: value})))
     assert getattr(request, name) == expected
+
+
+def test_the_allowance_the_agent_names_is_the_rings_not_less_what_running_calls_hold(store):
+    """Review 2026-11-01: the agent said less than the sidebar ring while a
+    reviewer or a comparison held part of the allowance."""
+    from app.services import agent_budget_config, agent_quota
+    config = agent_budget_config.get_config(store.db)
+    limit = agent_budget_config.limit_for(config, "free")
+    agent_quota.quota_ref(store.db, "ring-user", agent_quota.period_key(config)).set(
+        {"used": 100, "estimated": 50, "reserved": 10_000})
+    assert agent_quota.shown_allowance(store.db, "ring-user", tier="free") == (limit - 150, limit)
+    assert agent_quota.remaining_allowance(store.db, "ring-user", tier="free") == limit - 150 - 10_000

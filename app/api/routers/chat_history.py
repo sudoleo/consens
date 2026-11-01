@@ -207,11 +207,8 @@ def delete_chat(request: Request, chat_id: str):
     """
     uid = _chat_uid(request, "delete_chat")
     try:
+        # Also ends a response still running in it (request_chat_deletion).
         _store().delete_chat(uid, chat_id)
-        # A response still running in it ends now (a temporary chat left
-        # mid-answer), not at its watcher's next look.
-        from app.services.agent_background import agent_background
-        agent_background.stop_chat(uid, chat_id)
         return {"status": "success"}
     except Exception as exc:
         _raise_store_error(exc, operation="delete chat", uid=uid)

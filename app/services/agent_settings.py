@@ -581,7 +581,7 @@ class SettingsTools:
             db = self.loop.store.db
             config = agent_budget_config.get_config(db)
             tier = agent_quota.account_tier(self.loop.uid)
-            left = agent_quota.remaining_allowance(db, self.loop.uid, tier=tier)
+            left, limit = agent_quota.shown_allowance(db, self.loop.uid, tier=tier)
         except Exception as exc:
             logging.warning("agent settings allowance failed category=%s", type(exc).__name__)
         else:
@@ -591,7 +591,7 @@ class SettingsTools:
                             f"{config['tier_limits'][key] / base:g} times Free's" for key in ("free", "plus", "pro")}
                 if base else {},
                 "this_account": TIER_LABELS[tier],
-                "left_today": f"{percent(left, agent_budget_config.limit_for(config, tier))} of today's allowance, "
+                "left_today": f"{percent(left, limit)} of today's allowance, "
                               "as the ring in the sidebar shows; calls still running hold part of it until they "
                               "finish"})
         if getattr(self.loop, "vm_tools", None) is not None:

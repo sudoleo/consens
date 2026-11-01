@@ -453,26 +453,39 @@ def test_a_chunk_stays_within_a_documents_size():
 
 
 def test_the_reader_takes_chunks_and_single_entries_alike(api, store):
-    """Pages after any entry, also one in the middle of a chunk; a log
-    written before 2026-11-01 (one document per entry) reads the same."""
+    """A turn written in chunks (work_log_chunks) pages after any entry,
+    also one in the middle of a chunk, a few chunks at a time; a turn
+    written before 2026-11-01 (one document per entry) reads as before."""
     client, store, _ = api
     chat_id, turn = pending(store)
+    store._turn_ref(UID, chat_id, turn["id"]).update({"work_log_chunks": True})
     log = store._turn_ref(UID, chat_id, turn["id"]).collection("work_log")
-    log.document("000001").set({"seq": 1, "kind": "app", "content": "old"})
-    log.document("000002").set({"seq": 2, "last_seq": 4, "entries": [
-        {"seq": seq, "kind": "app", "content": f"c{seq}"} for seq in (2, 3, 4)]})
-    log.document("000005").set({"seq": 5, "last_seq": 6, "entries": [
-        {"seq": seq, "kind": "app", "content": f"c{seq}"} for seq in (5, 6)]})
+    log.document("000001").set({"seq": 1, "last_seq": 4, "entries": [
+        {"seq": seq, "kind": "app", "content": f"c{seq}"} for seq in (1, 2, 3, 4)]})
+    # Then one entry a chunk, more than a reader fetches at a time.
+    for seq in range(5, 31):
+        log.document(f"{seq:06d}").set({"seq": seq, "last_seq": seq, "entries": [
+            {"seq": seq, "kind": "app", "content": f"c{seq}"}]})
     read = lambda after, limit: store.read_work_log(UID, chat_id, turn["id"], after=after, limit=limit)
-    assert [e["seq"] for e in read(0, 100)["entries"]] == [1, 2, 3, 4, 5, 6]
+    assert [e["seq"] for e in read(0, 100)["entries"]] == list(range(1, 31))
     page = read(2, 2)
     assert [e["seq"] for e in page["entries"]] == [3, 4] and page["has_more"] is True
-    assert [e["seq"] for e in read(4, 2)["entries"]] == [5, 6] and read(4, 2)["has_more"] is False
-    assert read(6, 10)["entries"] == []
-    for seq in (1, 3, 5, 6):
+    page = read(4, 20)
+    assert [e["seq"] for e in page["entries"]] == list(range(5, 25)) and page["has_more"] is True
+    assert [e["seq"] for e in read(24, 20)["entries"]] == list(range(25, 31)) and read(24, 20)["has_more"] is False
+    assert read(30, 10)["entries"] == []
+    for seq in (1, 3, 5, 30):
         response = client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log/{seq}", headers=AUTH)
         assert response.status_code == 200 and response.json()["seq"] == seq
-    assert client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log/7", headers=AUTH).status_code == 404
+    assert client.get(f"/agent/chats/{chat_id}/turns/{turn['id']}/work-log/31", headers=AUTH).status_code == 404
+    # An older turn: one entry per document.
+    chat_old, old = pending(store, request_id="old")
+    legacy = store._turn_ref(UID, chat_old, old["id"]).collection("work_log")
+    for seq in (1, 2, 3):
+        legacy.document(f"{seq:06d}").set({"seq": seq, "kind": "app", "content": f"o{seq}"})
+    page = store.read_work_log(UID, chat_old, old["id"], after=1, limit=1)
+    assert [e["seq"] for e in page["entries"]] == [2] and page["has_more"] is True
+    assert store.work_log_entry(UID, chat_old, old["id"], 3)["content"] == "o3"
 
 
 def test_a_chunks_stored_content_goes_with_the_chat(store, monkeypatch):
@@ -502,4 +515,5 @@ def test_a_run_saves_its_log_in_chunks(store):
     log.close()
     docs = list(store._turn_ref(UID, chat_id, turn["id"]).collection("work_log").stream())
     assert store_entries == [6] and len(docs) == 1
+    assert store._turn_ref(UID, chat_id, turn["id"]).get().to_dict()["work_log_chunks"] is True
     assert [e["seq"] for e in docs[0].to_dict()["entries"]] == list(range(1, 7))

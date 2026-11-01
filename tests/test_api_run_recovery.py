@@ -262,12 +262,13 @@ def test_an_idle_api_is_scanned_less_and_less_often_until_a_run_comes(monkeypatc
         assert seconds == runner.API_MAINTENANCE_INTERVAL_SECONDS
         sleeps.append(seconds)
         if len(scans) == 5 and len(sleeps) == scans[-1] + 2:
-            runner._runs_open = True  # schedule_run in the middle of a long pause
+            runner._wakes += 1  # schedule_run in the middle of a long pause
         if len(scans) == 6:
             raise Done
     monkeypatch.setattr(runner, "recover_persisted_runs", scan)
     monkeypatch.setattr(runner.asyncio, "sleep", sleep)
     monkeypatch.setattr(runner, "_runs_open", False)
+    monkeypatch.setattr(runner, "_wakes", 0)
     with pytest.raises(Done):
         asyncio.run(runner.api_run_maintenance_loop())
     minutes = [later - earlier for earlier, later in zip(scans, scans[1:])]
@@ -289,3 +290,31 @@ def test_one_query_finds_every_open_run_and_retention_runs_hourly(recovery, monk
     runner._last_retention -= runner.API_RETENTION_INTERVAL_SECONDS
     runner.recover_persisted_runs()
     assert cleanups == [1, 1]
+
+
+def test_a_run_scheduled_during_a_scan_is_not_lost(monkeypatch):
+    """Review 2026-11-01: the scan's own "no open run" overwrote a wake-up
+    that came while it ran; the next look could be ten minutes away."""
+    import asyncio
+
+    class Done(Exception):
+        pass
+
+    sleeps, scans = [], []
+    def scan():
+        scans.append(len(sleeps))
+        if len(scans) == 2:
+            raise Done
+        runner._wakes += 1  # an API request scheduled a run meanwhile
+        runner._runs_open = False
+        return 0
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+    monkeypatch.setattr(runner, "recover_persisted_runs", scan)
+    monkeypatch.setattr(runner.asyncio, "sleep", sleep)
+    monkeypatch.setattr(runner, "_wakes", 0)
+    with pytest.raises(Done):
+        asyncio.run(runner.api_run_maintenance_loop())
+    # The next look one minute later, not after a doubled idle pause.
+    assert scans == [0, 1]

@@ -80,12 +80,14 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   ihm per Polling folgt.
 - `app_run_resumed` (seit 2026-10-08, ohne Daten): eine nach einem Neuladen
   wieder aufgenommene, noch laufende Agent-Nachricht.
-- `app_viewport_panned` (seit 2026-11-01, `drop`, `top`, `visible`, `layout`
-  in CSS-Pixeln): einmal pro Seite, wenn Safari ohne Tastatur den sichtbaren
-  Bereich unter dem Layout-Viewport stehen lässt (nach der Tastatur einer
-  anderen App über der Seite, etwa beim Teilen an WhatsApp) und der Composer
-  deshalb der sichtbaren Unterkante folgt (`composer-keyboard.js`). Belegt,
-  ob dieser Zustand die gemeldeten zu hoch stehenden Composer erklärt.
+- `app_viewport_panned` (seit 2026-11-01, `top` = `visualViewport.offsetTop`,
+  `inset` = `innerHeight − visualViewport.height`, `visible`, `layout`, in
+  CSS-Pixeln): einmal pro Seite, wenn Safari ohne Tastatur das sichtbare Stück
+  länger als 0,7 s verschoben oder verkürzt stehen lässt (nach der Tastatur
+  einer anderen App über der Seite, etwa beim Teilen an WhatsApp); der
+  Composer folgt dann um `top` (`composer-keyboard.js`). Belegt, ob dieser
+  Zustand die gemeldeten zu hoch stehenden Composer erklärt, und welcher der
+  beiden Werte ihn trägt.
 - `app_updated` (seit 2026-10-15, `reopened`: ob ein gespeicherter Chat wieder
   geöffnet wurde): ein offenes App-Fenster hat einen neuen Deploy selbst
   geladen (`app-update.js`). Zeigt, wie oft Nutzer sonst auf einem alten Build

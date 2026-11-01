@@ -139,6 +139,8 @@ def _serialized_size(value):
 # A work log chunk stays well within Firestore's 1 MiB per document: an
 # entry keeps at most agent_work_log.INLINE_CHARS of content inline.
 WORK_LOG_CHUNK_BYTES = 600_000
+# Chunks a reader fetches at a time until it holds the page it was asked for.
+WORK_LOG_PAGE_CHUNKS = 10
 
 
 def work_log_chunks(entries):
@@ -374,6 +376,9 @@ class AgentSessionStore:
             patch = {}
             if turn.get("work_log_expires_at") is None:
                 patch["work_log_expires_at"] = expires_at
+            if entries and not turn.get("work_log_chunks"):
+                # Readers take this turn's log by its chunks (read_work_log).
+                patch["work_log_chunks"] = True
             if incomplete and not turn.get("work_log_incomplete"):
                 patch["work_log_incomplete"] = True
             if patch:
@@ -389,36 +394,42 @@ class AgentSessionStore:
         return turn.to_dict() or {}
 
     def read_work_log(self, uid, chat_id, turn_id, *, after=0, limit=100):
-        """The turn's work log entries after ``after``, in order: from chunk
-        documents (work_log_chunks, since 2026-11-01) and from the single
-        entry documents written before. The chunk that holds entry
-        ``after + 1`` may begin at or before ``after``."""
+        """The turn's work log entries after ``after``, in order. A turn
+        written in chunks (``work_log_chunks``, since 2026-11-01) is read
+        by the chunks' last entry, which also finds the one that holds
+        ``after + 1``, a few chunks at a time until ``limit`` entries are
+        there; an older turn by its single entry documents."""
         turn = self._work_log_turn(uid, chat_id, turn_id)
         log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
-        holding = self._work_log_holding(log, after) if after else []
-        # Every document holds at least one entry: limit + 1 documents are
-        # enough to know whether more follow.
-        later = list(log.order_by("seq").start_after({"seq": after}).limit(limit + 1).stream())
-        entries = [entry for snapshot in [*holding, *later] for entry in work_log_entries(snapshot.to_dict())
-                   if entry.get("seq", 0) > after]
+        entries = []
+        if turn.get("work_log_chunks"):
+            cursor = after
+            while len(entries) <= limit:
+                page = log.order_by("last_seq").start_after({"last_seq": cursor}).limit(WORK_LOG_PAGE_CHUNKS)
+                documents = [snapshot.to_dict() or {} for snapshot in page.stream()]
+                entries.extend(entry for document in documents for entry in work_log_entries(document)
+                               if entry.get("seq", 0) > after)
+                if len(documents) < WORK_LOG_PAGE_CHUNKS:
+                    break
+                cursor = documents[-1].get("last_seq")
+        else:
+            query = log.order_by("seq").start_after({"seq": after}).limit(limit + 1)
+            entries = [snapshot.to_dict() for snapshot in query.stream()]
         return {"entries": entries[:limit], "has_more": len(entries) > limit,
                 "incomplete": bool(turn.get("work_log_incomplete")), "status": turn.get("status")}
-
-    @staticmethod
-    def _work_log_holding(log, seq):
-        """The document that holds entry ``seq`` or the last one before it."""
-        from google.cloud.firestore_v1.base_query import FieldFilter
-        return list(log.where(filter=FieldFilter("seq", "<=", seq))
-                    .order_by("seq", direction=firestore.Query.DESCENDING).limit(1).stream())
 
     def work_log_entry(self, uid, chat_id, turn_id, seq):
         """One entry with its whole content (agent_work_log.entry_content)."""
         from app.services.agent_work_log import entry_content
-        self._work_log_turn(uid, chat_id, turn_id)
+        turn = self._work_log_turn(uid, chat_id, turn_id)
         log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
-        snapshot = log.document(f"{seq:06d}").get()
-        snapshots = [snapshot] if snapshot.exists else self._work_log_holding(log, seq)
-        entry = next((entry for snapshot in snapshots for entry in work_log_entries(snapshot.to_dict())
+        if turn.get("work_log_chunks"):
+            documents = [snapshot.to_dict() for snapshot in
+                         log.order_by("last_seq").start_after({"last_seq": seq - 1}).limit(1).stream()]
+        else:
+            snapshot = log.document(f"{seq:06d}").get()
+            documents = [snapshot.to_dict()] if snapshot.exists else []
+        entry = next((entry for document in documents for entry in work_log_entries(document)
                       if entry.get("seq") == seq), None)
         if entry is None:
             raise ChatNotFound("Work log entry not found")

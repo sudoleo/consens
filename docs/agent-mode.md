@@ -3782,7 +3782,8 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   `read_settings` (`SettingsTools._about`): Preis (Early Access, noch kein
   Abo), Tagesbudget je Stufe als Vielfaches von Free aus der
   Admin-Konfiguration, Stufe und Rest des Kontos in Prozent wie der Ring in
-  der Seitenleiste (`agent_quota.remaining_allowance`, nie Geldbeträge: Max
+  der Seitenleiste (`agent_quota.shown_allowance`: Limit minus Verbrauch, ohne
+  das, was laufende Aufrufe gerade halten, wie `token-budget.js`; nie Geldbeträge: Max
   2026-11-01 nach „5,00 € Tagesbudget, noch 4,27 € übrig“ in einer Antwort),
   eigener OpenRouter-Schlüssel (nur
   Compare, zählt nicht aufs Budget), Speichergrenzen
@@ -4925,8 +4926,10 @@ wiederholbaren Fehler statt endlos im Ladezustand zu bleiben.
 AgentRunStore hält einen atomaren Beleg je completion:N oder agent:<uuid>:N unter
 users/{uid}/llm_calls. Der erste Beleg bindet Producer-Token, Lease, Policy,
 Schrittzustände und Eventsequenz. Eine 120-Sekunden-Lease wird während aktiver
-Läufe etwa alle 30 Sekunden transaktional für Producer, Chat und Account erneuert.
-Der Watchdog liest alle drei Sekunden statt zweimal pro Sekunde; kurze temporäre
+Läufe etwa jede Minute (ab 60 s Rest; bis 2026-11-01 alle 30 Sekunden) transaktional
+für Producer, Chat und Account erneuert. Der Watchdog liest seit 2026-11-01 alle zehn
+Sekunden (vorher drei); Stop, Löschen, Entscheidungen und Nachrichten aus diesem
+Prozess erreichen den Lauf sofort (`agent_background`, `receive`); kurze temporäre
 Datenbankfehler werden bis zu 60 Sekunden toleriert. Abgelaufene, gestoppte oder
 ersetzte Producer werden nie wiederbelebt. Verbrauch bleibt bei einer Chat-Löschung
 bestehen; Account-Tombstones verhindern verspätete Writes nach Kontolöschung.

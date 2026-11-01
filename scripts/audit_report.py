@@ -188,7 +188,11 @@ def collect(db, since, *, exclude_own=False, workers=12):
         info["agents"] = [{"id": a.id, **{key: (a.to_dict() or {}).get(key) for key in
                                          ("kind", "status", "created_at", "ended_at")}}
                           for a in ref.collection("agents").stream()]
-        info["log"] = [_log_entry(e.to_dict() or {}) for e in ref.collection("work_log").order_by("seq").stream()]
+        # Chunks since 2026-11-01 (agent_sessions.work_log_chunks), one entry
+        # per document before.
+        from app.services.agent_sessions import work_log_entries
+        info["log"] = [_log_entry(entry) for e in ref.collection("work_log").order_by("seq").stream()
+                       for entry in work_log_entries(e.to_dict())]
         return args, {**info, "audit": True}
 
     receipts, keys = [], set()

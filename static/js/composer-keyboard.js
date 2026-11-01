@@ -32,13 +32,18 @@
 // herunter; die gemeldete Groesse korrigiert danach nur noch. Android meldet
 // nie eine verdeckende Tastatur (resizes-content) und bleibt unberuehrt.
 //
-// Ohne Tastatur kann Safari den sichtbaren Bereich unter dem Layout-Viewport
-// stehen lassen, an dem fixierte Kaesten haengen: nach der Tastatur einer
-// anderen App ueber der Seite (Screenshot an WhatsApp teilen, Max
-// 2026-11-01: der Composer stand rund 170px zu hoch und wanderte beim
-// Scrollen mit dem Text). Bis Safari das selbst richtet, folgt der Composer
-// der sichtbaren Unterkante (body.viewport-panned, --viewport-drop), und
-// einmal je Seite geht der Zustand als app_viewport_panned in die Analyse.
+// Ohne Tastatur kann Safari den sichtbaren Bereich gegen das Layout-Viewport
+// verschoben stehen lassen, an dem fixierte Kaesten haengen: nach der
+// Tastatur einer anderen App ueber der Seite (Screenshot an WhatsApp teilen,
+// Max 2026-11-01: der Composer stand rund 170px zu hoch und wanderte beim
+// Scrollen mit dem Text). Wahrscheinlich zieht WebKit dann eine alte
+// Tastaturhoehe weiter ab (visualViewport.height um sie kuerzer) und schiebt
+// das sichtbare Stueck darin wie beim Tippen; so oder so steht der Composer
+// genau um offsetTop zu hoch. Haelt das ohne Tastatur und ohne Zoom laenger
+// als PANNED_HOLD_MS an (kein Nachfedern am Seitenende), folgt der Composer
+// der Bildschirmkante (body.viewport-panned, --viewport-drop = offsetTop),
+// und einmal je Seite geht der Zustand mit offsetTop und der fehlenden Hoehe
+// als app_viewport_panned in die Analyse.
 // Exporte: window.App.composerKeyboard.sync
 // =====================================================================
 
@@ -69,8 +74,13 @@
   // more than this: Safari left the page panned (see above). Less is
   // rounding between the two viewports.
   const PANNED_MIN_PX = 4;
+  // How long the state must last before the composer moves: a bounce at the
+  // page's end is over by then (review 2026-11-01).
+  const PANNED_HOLD_MS = 700;
   const PANNED_CLASS = "viewport-panned";
   let pannedTracked = false;
+  let pannedSince = 0;
+  let holdTimer = 0;
   let frame = 0;
   let moveTimer = 0;
   let predictedUntil = 0;
@@ -127,17 +137,42 @@
     }
   }
 
-  // The composer down to the visible bottom, while Safari leaves it panned.
+  // The composer down to the screen's edge, while Safari leaves the page
+  // panned without a keyboard (above). ``drop``: viewport.offsetTop, or 0.
   function pan(drop) {
     const on = drop > 0;
     document.body.classList.toggle(PANNED_CLASS, on);
     const section = composer();
     if (!on) { section?.style.removeProperty("--viewport-drop"); return; }
     section?.style.setProperty("--viewport-drop", `${Math.round(drop)}px`);
+  }
+
+  // Without a keyboard the visible part should be the layout viewport. When
+  // it is shifted (offsetTop) or shortened (innerHeight - height) for longer
+  // than PANNED_HOLD_MS, the composer follows by offsetTop and the state is
+  // reported once, with both, so the analysis tells which one it was.
+  function panned(candidate) {
+    const top = viewport.offsetTop;
+    const inset = window.innerHeight - viewport.height;
+    if (!candidate || (top <= PANNED_MIN_PX && inset <= PANNED_MIN_PX)) {
+      pannedSince = 0;
+      clearTimeout(holdTimer);
+      pan(0);
+      return;
+    }
+    const now = performance.now();
+    if (!pannedSince) pannedSince = now;
+    // Once applied it follows at once; the first time only after the hold.
+    if (!document.body.classList.contains(PANNED_CLASS) && now - pannedSince < PANNED_HOLD_MS) {
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(schedule, PANNED_HOLD_MS - (now - pannedSince) + 20);
+      return;
+    }
+    pan(top > PANNED_MIN_PX ? top : 0);
     if (pannedTracked) return;
     pannedTracked = true;
     window.App.trackAppEvent?.("app_viewport_panned", {
-      drop: Math.round(drop), top: Math.round(viewport.offsetTop),
+      top: Math.round(top), inset: Math.round(inset),
       visible: Math.round(viewport.height), layout: Math.round(window.innerHeight),
     });
   }
@@ -164,9 +199,8 @@
     if (open) rememberLift(layoutHeight - viewport.height);
     write(open, Math.max(0, layoutHeight - edge), edge, viewport.offsetTop);
     // innerHeight, not the root's height: Safari's toolbars sliding away
-    // grow the visible part and innerHeight alike, the root's height not.
-    const drop = edge - window.innerHeight;
-    pan(media.matches && unzoomed && !open && !typing() && drop > PANNED_MIN_PX ? drop : 0);
+    // change the visible part and innerHeight alike, the root's height not.
+    panned(media.matches && unzoomed && !open && !typing());
   }
 
   function schedule() {

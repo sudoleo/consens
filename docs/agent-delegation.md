@@ -92,8 +92,8 @@ Abbruch schließt sämtliche Provider-Sockets und wartet auf alle Worker. Ein Wa
 prüft alle zehn Sekunden (bis 2026-11-01 drei) Run-Abbruch und Chatlöschung aus anderen
 Prozessen; Stop und Löschen in diesem Prozess wirken sofort (`agent_background`); Account-Sperren gelten für
 jeden Schreibvorgang. Die Chat-Lease dauert 120 Sekunden und wird, sobald weniger als
-`PRODUCER_RENEW_BEFORE_SECONDS` = 45 übrig sind (etwa alle 75 Sekunden; bis
-2026-11-01 alle 30), atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
+`PRODUCER_RENEW_BEFORE_SECONDS` = 60 übrig sind (etwa jede Minute; bis
+2026-11-01 alle 30 Sekunden), atomar für Producer, Chat-Lock und Account verlängert. Kurze temporäre
 DB-Ausfälle verursachen keinen sofortigen Stopp. Nach Prozessverlust werden offene Belege beim Lesen nach Lease-Ablauf
 als abgebrochen/unbekannt abgeschlossen; bereits bezahlte Schritte werden nie
 neu gestartet. Sitzungsstände (Status, Live-Zeile, Ergebnis) schreibt seit

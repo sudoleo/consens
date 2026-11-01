@@ -1441,6 +1441,16 @@ class ChatStore:
             transaction.set(job_ref, _new_deletion_job(uid, chat_id, now))
 
         self._transaction(operation)
+        # A response still running in the chat ends now, before the cascade
+        # removes its files and workspace folder: a chat deleted in the
+        # sidebar (DELETE /bookmark), a temporary chat left mid-answer
+        # (DELETE /chats). A run in another process sees the chat's status at
+        # its watcher's next look (agent_delegation.WATCH_SECONDS).
+        try:
+            from app.services.agent_background import agent_background
+            agent_background.stop_chat(uid, chat_id)
+        except Exception as exc:
+            logging.warning("chat deletion could not stop its run category=%s", safe_exception(exc))
 
     def run_chat_deletion(self, uid: str, chat_id: str, *, now=None) -> bool:
         """Run (or resume) one queued chat deletion; never raises on failure.
