@@ -11508,7 +11508,9 @@ Zugang bekannt ist, hält `agent-chat.js` Agents Aussehen (`expectingAgent()`,
 exportiert `App.agentChat.looksAgent()`: Chip, Reasoning, keine Demo, Agent-Texte;
 gesendet wird erst mit bekanntem Zugang; eine Anmeldung ohne Neuladen setzt die
 Erwartung nach derselben Regel). Keine 10-s-Notbremse mehr; ein
-fehlgeschlagener `/user_status` (5xx/Netz) lässt den Zugang offen, fragt mit
+fehlgeschlagener `/user_status` (5xx/Netz, seit 2026-11-01 auch 408/425/429:
+`STATUS_MOMENT`, vorher schaltete das Ratenlimit Agent für die Sitzung ab)
+lässt den Zugang offen, fragt mit
 wachsender Pause erneut (`firebase.js` `STATUS_RETRY_MS`, sofort bei `online`,
 Rückkehr oder „Try now“ = `App.retryAccountStatus()`) und zeigt im Composer
 „Your account could not be reached. Trying again…“ (`App.agentAccessCheck`);

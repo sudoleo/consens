@@ -350,8 +350,11 @@ function clearAuthenticatedUiState() {
 // composer stands (agent-chat.js expectingAgent), nothing is sent, the composer
 // says so once a check has failed, and the check runs again by itself with a
 // growing pause, at once when the browser is back online or the tab returns,
-// or on "Try now". Only a refusal (4xx) settles it as no Agent.
+// or on "Try now". Only a refusal (4xx) settles it as no Agent; a timeout
+// (408), "too early" (425) or the rate limit (429, /user_status allows
+// 20 a minute) is a moment too.
 const STATUS_RETRY_MS = [2000, 5000, 15000, 30000, 60000];
+const STATUS_MOMENT = new Set([408, 425, 429]);
 let statusRetry = null;
 
 function clearStatusRetry() {
@@ -411,7 +414,7 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
     if (!isCurrentAuthenticatedUser(user.uid, generation)) return;
 
     // A refusal is an answer; a server or network error is not.
-    refused = response.status >= 400 && response.status < 500;
+    refused = response.status >= 400 && response.status < 500 && !STATUS_MOMENT.has(response.status);
     if (response.ok) {
       const data = await response.json();
       await appStarted;

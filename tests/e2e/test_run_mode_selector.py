@@ -227,14 +227,16 @@ def test_stored_agent_choice_waits_for_access_instead_of_sending_compare(browser
         context.close()
 
 
-def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser, phase4_server):
-    """Apple-Audit B8: a status check that fails for a moment (5xx, network)
-    does not swap Agent for Compare; it is said in the composer and asked
-    again. Only a refusal (4xx) settles the account without Agent."""
+@pytest.mark.parametrize("moment", [503, 429])
+def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser, phase4_server, moment):
+    """Apple-Audit B8: a status check that fails for a moment (5xx, network,
+    the rate limit) does not swap Agent for Compare; it is said in the
+    composer and asked again. Only a refusal (4xx) settles the account
+    without Agent. A 429 counted as a refusal until 2026-11-01 (bug hunt)."""
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
         init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     try:
-        answers = [503]
+        answers = [moment]
         page.route("**/user_status", lambda route: route.fulfill(status=answers[0], body="{}"))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         page.wait_for_function("() => window.App.agentAccessCheck?.failed === true")
