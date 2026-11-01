@@ -822,6 +822,33 @@ it('strokes the reviewers\' marks on when a live answer is first reviewed', () =
   vi.useRealTimers();
   dom.window.close();
 });
+// 2026-11-01: the answer stays still while it is reviewed; the reviewers'
+// marks stand before "Reviewing the answer…", each at work until its final
+// round is in.
+it('shows each reviewer at work before the word while the review runs, and nothing of it once it ended', () => {
+  const {window: w, document: d, dom} = setup();
+  w.App.createModelMark = model => { const mark = d.createElement('img'); mark.alt = model.label; return mark; };
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const running = auditReview('running');
+  running.audit.reviewers = running.audit.reviewers.map((reviewer, index) => ({ ...reviewer,
+    status: index === 0 ? 'running' : index === 1 ? 'completed' : 'failed' }));
+  w.App.agentReview.render(body, running);
+  const row = d.querySelector('.agent-review');
+  const marks = row.querySelector('.agent-review-reviewers');
+  expect([marks.hidden, marks.getAttribute('aria-hidden')]).toEqual([false, 'true']);
+  expect(marks.nextElementSibling).toBe(row.querySelector('.agent-review-status'));
+  expect([...marks.children].map(mark => [mark.dataset.reviewer, mark.dataset.state])).toEqual([
+    ['openai', 'working'], ['anthropic', 'done'], ['google', 'failed']]);
+  const first = marks.children[0];
+  // The next frame moves a mark on; it is the same element, never a new one.
+  running.audit.reviewers[0] = { ...running.audit.reviewers[0], status: 'completed' };
+  w.App.agentReview.render(body, { ...running, audit: { ...running.audit } });
+  expect(marks.children[0]).toBe(first);
+  expect(first.dataset.state).toBe('done');
+  w.App.agentReview.render(body, auditReview('succeeded'));
+  expect(marks.hidden).toBe(true);
+  dom.window.close();
+});
 it('waits with the marks until every reviewer is done, and never marks another text', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';

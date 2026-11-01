@@ -1623,6 +1623,85 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // The hand-over (2026-11-01): once the answer is fixed the server frees
+  // the chat; the page takes the answer as done and the review follows.
+  const HANDED_TURN = { id: "b".repeat(32), question: "Question", consensus: "Answer.", mode: "Agent",
+    execution_mode: "agent", status: "pending" };
+  const handedReview = status => ({ mode: "audit", status, answer_version: 1, answer_hash: "h", comparisons: [],
+    versions: [{ id: 1, text: "Answer.", hash: "h" }],
+    audit: { reviewers: [{ provider: "anthropic", provider_label: "Anthropic", status: status === "running" ? "running" : "completed" }] } });
+  function handOver(handlers) {
+    handlers.handover.receive({ response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { ...HANDED_TURN, agent_review: handedReview("running") }, bookmark_meta: { id: "saved" } });
+  }
+
+  it("takes the answer as done at the hand-over and sends a waiting message then, not after the review", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let handlers;
+    window.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(() => {}); });
+    window.sendQuestion = vi.fn();
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    const pending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    handlers.delta.append("Answer.");
+    handlers.review.receive({ review: handedReview("running") });
+    input.value = "Also compare the prices";
+    await window.App.agentChat.steer();
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sends after this response");
+    // The stream goes on for the review; the run is done for the page.
+    handOver(handlers);
+    await pending;
+    expect(run.status).toBe("succeeded");
+    expect(run.consensus.completedTurn.agent_review.status).toBe("running");
+    await vi.waitFor(() => expect(window.sendQuestion).toHaveBeenCalled());
+    expect(input.value).toBe("Also compare the prices");
+    // Typed now, a message is a message of its own, never one for the run.
+    input.value = "Next";
+    expect(window.App.agentChat.steering()).toBeNull();
+    dom.window.close();
+  });
+
+  it("lands the review that follows the hand-over on the answer, also once the next message took the view", async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById("questionInput").value = "Question";
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    handlers.delta.append("Answer.");
+    handOver(handlers);
+    await pending;
+    // Still on screen: the run's view takes the review.
+    handlers.review.receive({ review: handedReview("succeeded") });
+    expect(run.consensus.completedTurn.agent_review.status).toBe("succeeded");
+    expect(run.completedBasis.currentTurn.agent_review.status).toBe("succeeded");
+    w.App.agentChat.project(run);
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(d.getElementById("agentAnswerBody"),
+      expect.objectContaining({ status: "succeeded" }), expect.anything());
+    // The next message took the view: the turn stands in the history, and
+    // the run's end (the saved turn) lands there.
+    const turn = d.createElement("article");
+    turn.className = "thread-history-turn is-agent-turn";
+    turn.dataset.turnId = "b".repeat(32);
+    const body = d.createElement("div"); body.className = "consensus-answer-body";
+    turn.append(body); d.body.append(turn);
+    w.App.runRegistry.clearVisible();
+    resolve({ ok: true, data: { response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { ...HANDED_TURN, status: "completed", agent_review: { ...handedReview("succeeded"), status: "partial" } } } });
+    await vi.waitFor(() => expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body,
+      expect.objectContaining({ status: "partial" }), expect.objectContaining({ reveal: true })));
+    expect(run.consensus.completedTurn.status).toBe("completed");
+    dom.window.close();
+  });
+
   it("sends a message into a response that reads them and lets it go once the run read it", async () => {
     const { window, document, dom } = boot({ setup(w) {
       // The account has the workspace: a running response reads messages.
@@ -2992,7 +3071,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('lets the fixed answer shimmer while the reviewers review it and shows their marks as soon as they are done', async () => {
+  it('marks the fixed answer as under check while the reviewers review it and shows their marks as soon as they are done', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

@@ -617,6 +617,9 @@ class DelegationLoop(AgentLoop):
         # a workspace tool was called, so the chat's next message starts with
         # it open (finish_run: agent_workspace_used).
         self.workspace_closed = self.workspace_opened = self.workspace_used = False
+        # The workspace's part ended (_release_workspace); the chat went to
+        # its next message while the reviewers finish (_hand_over).
+        self.workspace_released = self.handed_over = False
         self.workspace_task = None
         self.workspace_names = frozenset()
         # The first call into the workspace in this message (_execute, I6).
@@ -2243,6 +2246,9 @@ class DelegationLoop(AgentLoop):
         names = {(call.get("function") or {}).get("name") for call in getattr(value, "tool_calls", None) or []}
         if names & (self.workspace_names | {OPEN_WORKSPACE}):
             logging.info("Agent reviewers start with the workspace step=%s", value.step_id)
+            # The allowance the route read before the first step is spent
+            # by now: their shares read it afresh (AnswerAudit.output_share).
+            auditor.allowance = None
             auditor.follow(self.work_log)
 
     def _open_gate(self, value):
@@ -2957,9 +2963,47 @@ class DelegationLoop(AgentLoop):
                               step=value.step_id)
         comparison.freeze_for_synthesis()
         comparison.capture(value.text)
+        yield from self._hand_over()
         yield from self._finish_review(value)
         self.completion.text = comparison.text
         self.completion.finish_reason = "stop"
+
+    def _hand_over(self):
+        """The answer is fixed: the chat is free for its next message while
+        the reviewers finish (agent_runs.hand_over), and the browser takes the
+        answer as done (frame ``handover``, routers/agent.py). The workspace
+        and what the next message reads of this one go with it now. A failed
+        hand-over keeps the chat until the run's end, as it was until
+        2026-11-01, when a message sent in between waited for the review."""
+        # Only while reviewers review: without them (the setting "off", or
+        # "workspace" without a workspace step) the run ends right here anyway.
+        if not getattr(getattr(self.comparison, "auditor", None), "sessions", None):
+            return
+        self._release_workspace()
+        if self._long_run():
+            from app.services.agent_compaction import work_record
+            self.completion.work_record = work_record(self.messages, self.turn_start)
+        try:
+            handed = self.store.hand_over(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
+                                          completion=self.completion)
+        except Exception as exc:
+            logging.warning("Agent hand-over failed category=%s", safe_exception(exc))
+            return
+        if handed:
+            self.handed_over = True
+            yield {"type": "handover", "chat_id": self.chat_id, "turn_id": self.turn_id}
+
+    def _release_workspace(self):
+        """The workspace's part of the message ends, once: its summary for
+        the turn (agent_runs: agent_vm), the session closed, and where the
+        chat's next message starts (agent_workspace_used). At the hand-over
+        or else at the run's end."""
+        if self.vm_tools is None or self.workspace_released:
+            return
+        self.workspace_released = True
+        self.completion.vm = self.vm_tools.session.summary()
+        self.vm_tools.session.close()
+        self.completion.workspace_used = self.workspace_used
 
     def _keep_cut_answer(self, value):
         """An answer cut at its output limit stays as the partial answer. A
@@ -3420,13 +3464,9 @@ class DelegationLoop(AgentLoop):
                 # Arrived after the answer was written: said, not lost silently.
                 self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",
                                                         "text": NOTES_UNREAD}))
-            if self.vm_tools is not None:
-                # Saved with the turn (agent_runs.finish_run): its checkpoint
-                # and the commands' summed run time.
-                self.completion.vm = self.vm_tools.session.summary()
-                self.vm_tools.session.close()
-                # Where the chat's next message starts (finish_run: agent_workspace_used).
-                self.completion.workspace_used = self.workspace_used
+            # Saved with the turn (agent_runs.finish_run): its checkpoint and
+            # the commands' summed run time; where the next message starts.
+            self._release_workspace()
             if self._long_run() or status != "succeeded":
                 # What the next message is told this one did (agent_compaction):
                 # after a VM run, and since 2026-10-27 after any run that broke

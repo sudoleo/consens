@@ -4455,10 +4455,11 @@ eingecheckte `agent_model_catalog.json` bleiben als Rückfall erhalten. Das Modu
 prüft Preise/Limits und versieht die Metadaten mit einer Version für Kostenbelege.
 `snapshot()` liefert seit 2026-11-01 einen `CatalogSnapshot`, der einen Eintrag
 erst beim Lesen kopiert (vorher eine Kopie aller rund 550 Modelle je Aufruf;
-siehe „Von Senden bis zur ersten Modellanfrage“). Nur der erste Abruf eines
-Prozesses wartet; danach holt ein Thread (`ModelMetadataCache.refreshing`) neu,
-während Snapshots den bisherigen Stand ausgeben (vorher wartete die erste
-Nachricht nach je fünf Minuten auf den Download des ganzen Katalogs).
+siehe „Von Senden bis zur ersten Modellanfrage“). Hat der Prozess schon einmal
+abgerufen, holt ein Thread (`ModelMetadataCache.refreshing`) neu, während
+Snapshots den bisherigen Stand ausgeben (vorher wartete die erste Nachricht nach
+je fünf Minuten auf den Download des ganzen Katalogs). Solange noch kein Abruf
+gelang, wartet ein Snapshot darauf (nach einem Fehler höchstens alle 30 s einer).
 Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reason`
 sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
 die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
@@ -5109,24 +5110,35 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
 - `run_agent` startet für eine neue Nachricht alle Lesezugriffe sofort und
   nebeneinander (`_turn_reads`, Pool `_TURN_READS`): Turn und Chat in einem
   Rundgang (`ChatStore.chat_and_turn`, statt `get_turn` plus eigenem Chat-Read),
-  `recover_allowance`, Bookmark, Dateien, Memory, Browser-Stand,
-  `sweep_abandoned_turns`, die erste Seite des Verlaufs
-  (`AgentRunStore.history_page`, nur `HISTORY_FIELDS`, nicht Aktivität und
-  Review der früheren Turns) und die Dateiliste (`AgentFiles.list(checked=True)`,
-  `FileContext.preload`). Jedes Ergebnis wird dort abgeholt, wo der Read früher
-  stand; ein Fehler bricht die Anfrage also an derselben Stelle ab. Ein
-  `recover_only` liest nur seinen Turn.
+  `recover_allowance` (der einzige Schreiber darunter: er beendet Läufe mit
+  abgelaufener Lease, wie jede Kontingent-Abfrage), Bookmark, Dateien, Memory,
+  Browser-Stand, das freie Kontingent für die Anteile der Prüfer, die erste
+  Seite des Verlaufs (`AgentRunStore.history_page`, nur `HISTORY_FIELDS`, nicht
+  Aktivität und Review der früheren Turns) und die Dateiliste
+  (`AgentFiles.list(checked=True)`, `FileContext.preload`). Jedes Ergebnis wird
+  dort abgeholt, wo der Read früher stand; ein Fehler bricht die Anfrage also
+  an derselben Stelle ab. `sweep_abandoned_turns`, das einen Turn als
+  `abandoned` beenden kann, startet erst nach den Prüfungen der Route und nach
+  dem Reaper (`sweep_after`, Gegenprüfung 2026-11-01). Ein `recover_only`
+  liest nur seinen Turn.
 - `create_turn(sweep=False, read_back=False)`: Tombstone, Chat und Turn in
   einem Read (`chat_store.read_together`, das auch `AgentSessionStore._read_all`
   nutzt), der Turn wird nicht zurückgelesen. `messages(first_page=…)` nimmt die
   vorab gelesene Seite nur, wenn `history_current` sie noch gelten lässt (kein
   früherer Turn darin `pending`, keiner fehlt), sonst liest es selbst.
 - Der erste Schritt des Agenten liest den Chat nicht noch einmal auf
-  Google-Daten (`DelegationLoop.google_data` aus der Route); spätere Schritte
-  schon (ein Gmail-Import kann sie bringen).
-- Den Anteil der Prüfer am Kontingent (`ComparisonTools._output_shares`, liest
-  das Konto) holt der erste startende Prüfer auf seinem Thread
-  (`AnswerAudit.output_share`), nicht `follow` vor dem ersten Schritt.
+  Google-Daten (`DelegationLoop.google_data` aus der Route; `None`, wo niemand
+  es sagt, liest wie jeder Schritt); spätere Schritte schon (ein Gmail-Import
+  kann sie bringen). Die Route nimmt dafür, was die Transaktion von
+  `create_turn` am Chat sah (`chat_google_data`): Hat ein Turn eines anderen
+  Tabs zwischen ihrem ersten Read und der Anlage Mail importiert, gelten
+  Einwilligung (sonst 422, der Turn wird freigegeben) und das eingeschränkte
+  Modell auch hier.
+- Den Anteil der Prüfer am Kontingent (`ComparisonTools._output_shares`)
+  rechnet der erste startende Prüfer auf seinem Thread
+  (`AnswerAudit.output_share`), nicht `follow` vor dem ersten Schritt, aus dem
+  freien Kontingent, das die Route vor dem ersten Claim las
+  (`AnswerAudit.allowance`).
 - Die `quota`-Frames nach `started` und nach jedem `usage` liest ein eigener
   Pool (`_ALLOWANCE_READS`); `quota_frames` hängt sie an den nächsten Frame,
   am Ende wartet der Stream auf den Rest. Vorher wartete jeder Schritt drei
@@ -5137,13 +5149,57 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
   gebaut. `DelegationLoop.__init__` baut seinen Worker-Katalog mit einem
   `agent_models()` (`resolve_agent_model(models=…)`) statt zweimal je Modell,
   `agent_tools.argument_schema` baut jedes Schema einmal je Prozess. Den
-  Katalog holt nach fünf Minuten ein Thread neu, keine Nachricht wartet darauf.
+  Katalog holt nach fünf Minuten ein Thread neu; nur solange noch nie ein
+  Abruf gelang, wartet ein Snapshot.
 - `ChatStore.create_chat` liest Tombstone, Zähler und Kollision in einem
   Rundgang, prüft den Chat-Zähler je Konto nur einmal je Prozess (`_counted`)
   und liest den neuen Chat nicht zurück (die erste Nachricht eines neuen
   Chats wartet auf `POST /chats`).
 Belegt mit `tests/test_agent_first_request.py` (zählt die Rundgänge der
 Route und des Laufs bis zur ersten Anfrage und die Katalog-Aufbauten).
+
+**Die nächste Nachricht während der Prüfung (seit 2026-11-01).** Bis dahin
+blieb ein Chat bis zum Ende der Schlussrunde der Prüfer reserviert, rund 10 s
+nach der fixierten Antwort; eine Nachricht dazwischen wartete im Browser
+(„Send after this response“). Jetzt gibt der Lauf den Chat ab, sobald die
+Antwort fixiert ist:
+- `DelegationLoop._hand_over` (aus `_finish_merged` nach `capture`, nur mit
+  Prüfern): beendet den Arbeitsplatz-Teil (`_release_workspace`, einmal; sonst
+  am Laufende), schreibt nach einem langen Lauf den Arbeitsbericht und ruft
+  `AgentRunStore.hand_over`. Diese Transaktion setzt am Turn
+  `agent_answer_fixed_at` und schon, was die nächste Nachricht von ihm liest
+  (`assistant_response`, `sources`, `agent_work_record`, `agent_vm`), beendet
+  die Chat-Sperre (`agent_lock_until`, dazu `agent_workspace_used`) und nimmt
+  den Lauf aus den laufenden Antworten des Kontos (`chat_state/agent_runs`
+  `leases`). Gelingt sie nicht (gestoppt, abgeräumt), endet der Lauf wie vorher.
+- Der Turn bleibt `pending`, bis die Prüfer fertig sind
+  (`agent_sessions.review_tail`). Für diesen Nachlauf gelten: Claims nur für
+  Prüfer-Sitzungen, ohne `agent_turn_id`-Bindung und ohne Lease im Konto
+  (`_claim_delegated`); der Herzschlag (`check_delegation`) verlängert nur die
+  Lease des Laufs, nie die Chat-Sperre; `finish_run` schreibt Chat-Felder
+  (`agent_workspace_used`, Sperre) nur, wenn der Chat noch diesem Turn gehört.
+- Die nächste Nachricht liest einen Turn im Nachlauf wie einen fertigen
+  (`agent_runs.in_history`, auch in `history_current`).
+- Die Route sendet daraufhin den Frame `handover` (`_handover_frame`: der Turn
+  wie im `final`-Frame, Review noch `running`, Bookmark gespeichert); `final`
+  folgt am Laufende wie bisher.
+- Browser (`agent-chat.js`): `follow` nimmt `handover` wie ein Ende (`adopt` →
+  `acceptAnswer`: Lauf `succeeded`, Basis für die nächste Nachricht, wartende
+  Nachrichten gehen sofort, `flushQueue`). Stream und Poller folgen der
+  Prüfung weiter (`followReview`, höchstens `REVIEW_TAIL_MS`); jeder
+  `review`-Frame und das Laufende landen per `reviewArrived` an der Antwort,
+  im Live-Bereich oder, nachdem die nächste Nachricht ihn übernahm, am
+  Verlaufs-Turn (`.thread-history-turn[data-turn-id]`), und in den Kopien des
+  Turns (Basis, `historyTurns` späterer Läufe).
+- Anzeige: Über der fixierten Antwort läuft kein Lichtstreifen mehr. In der
+  Zeile darunter stehen vor „Reviewing the answer…“ die Marken der Prüfer
+  (`agent-review.js` `reviewerMarks`, `.agent-review-reviewers`), jede atmet,
+  bis ihre Schlussrunde da ist (`data-state` working/done/failed,
+  `agent-chat.css`).
+Belegt mit `tests/test_agent_handover.py`, `tests/js/agent-chat.test.mjs`
+(„hand-over“), `tests/js/agent-review.test.mjs` und
+`tests/e2e/test_agent_audit_frontend.py`
+`test_the_next_message_goes_while_the_reviewers_review`.
 DelegationLoop wiederholt bei temporären Datenbankfehlern ausschließlich die
 idempotente Abrechnung mit den ursprünglichen Messwerten, auch bei unklarem
 Commit-Ergebnis. Offene Abrechnungen werden nach dem Join vor finish_run erneut

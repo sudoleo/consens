@@ -637,7 +637,7 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
 .agent-review[hidden], .agent-review-summary[hidden], .agent-review-status[hidden] { display: none; }
 /* One quiet row: the agreement score first, the evidence links after it.
    The summary line and the claims fallback keep their own full-width rows. */
-.agent-review > :not(.agent-evidence-links, .agent-agreement, .consensus-share-pill, .agent-review-status) { flex: 1 0 100%; }
+.agent-review > :not(.agent-evidence-links, .agent-agreement, .consensus-share-pill, .agent-review-status, .agent-review-reviewers) { flex: 1 0 100%; }
 .agent-review > .agent-agreement { order: 1; }
 /* The first glyph on the answer's left edge: the link's own air goes
    outside (B9), as for Watch and Share without a review. */
@@ -646,6 +646,30 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
    end of the row, no dot, no line of its own (B3, D8, D13). */
 .agent-review > .agent-review-status { order: 3; flex: 0 1 auto; min-width: 0; padding: 0 var(--space-1); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .agent-review > .agent-review-status::before { content: none; }
+/* The reviewers at work (agent-review.js reviewerMarks): their marks before
+   "Reviewing the answer…", small and monochrome like the model stack. Each
+   breathes until its final round is in, then rests at full ink; one that
+   gave up fades. The answer above stays still: until 2026-11-01 a light band
+   passed over the whole text, which read as an answer still loading. */
+.agent-review > .agent-review-reviewers { order: 3; display: inline-flex; align-items: center; gap: 3px; min-height: 36px; }
+.agent-review > .agent-review-reviewers[hidden] { display: none; }
+.agent-review-reviewer { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; filter: grayscale(1); transition: opacity var(--dur-state) var(--ease-standard); }
+.agent-review-reviewer img { width: 14px; height: 14px; object-fit: contain; }
+.agent-review-reviewer .model-mark-fallback { width: 14px; height: 14px; }
+.agent-review-reviewer[data-state="failed"] { opacity: .25; }
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .agent-review-reviewer[data-state="working"] {
+    animation: agent-reviewer-breathe var(--dur-beat) var(--ease-standard) infinite;
+    animation-delay: calc(var(--i, 0) * var(--dur-beat) / -3);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-review-reviewer[data-state="working"] { opacity: .45; }
+}
+@keyframes agent-reviewer-breathe {
+  0%, 100% { opacity: .3; }
+  50% { opacity: .95; }
+}
 /* Too narrow for the score and every link in one line (an open Agent panel,
    German): the score takes its own line above, as on a phone (B2). */
 @container agent-review (max-width: 720px) {
@@ -719,6 +743,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-review > .agent-agreement::after { content: none; }
   .agent-review > .agent-evidence-grid { display: contents; }
   .agent-review > .agent-review-status { flex: 0 1 auto; align-self: flex-end; max-width: 100%; padding: 0 0 6px; line-height: normal; }
+  .agent-review > .agent-review-reviewers { align-self: flex-end; min-height: 0; padding: 0 0 6px; }
   /* width: Consensus' phone footer gives every .consensus-tab the row (shell.css). */
   .agent-evidence-grid > .agent-evidence-link { order: 2; flex: 1 1 0; width: auto; min-width: max-content; max-width: var(--cell); }
   /* All links keep one top and height. */
@@ -1273,17 +1298,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Files, attachments and document versions: agent-workspace.css. */
 /* Google connection, consent and action cards: agent-google.css. */
 
-/* Answer review: a quiet light band passes over the fixed answer while the
-   reviewers work, in the rhythm of the Thinking header. It is an overlay in the
-   page colour, not a text gradient, so tables, code and links stay readable.
-   It fades out as the marks arrive.
-   The band is a stripe that moves by transform alone and never leaves the
-   answer's box, so the compositor slides it over text painted once. An
-   overlay the size of the answer with a moving background repainted the
-   whole answer in every frame: 10-12 frames per second exactly while the
-   reader reads (Apple audit D1). Each pass grows in and shrinks out
-   (scaleX), which leaves opacity to the fade at the end. */
-#agentAnswerBody:is(.is-answer-checking, .is-answer-check-done) { position: relative; }
+/* Answer review: the fixed answer stays still while the reviewers work;
+   their marks breathe in the row under it (.agent-review-reviewers). Until
+   2026-11-01 a light band passed over the whole answer, which read as an
+   answer still loading while it could already be read and followed up. */
 /* "Reviewing the answer…" where the evidence row will stand (agent-chat.js
    setAnswerChecking): that row's margins and height, so the row takes its
    place without a jump, its quiet ink and size, no motion of its own. On
@@ -1296,15 +1314,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-check-status { min-height: 56px; line-height: 56px; }
 }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-  #agentAnswerBody:is(.is-answer-checking, .is-answer-check-done)::after {
-    content: ''; position: absolute; top: -2px; bottom: -2px; left: -6px; width: calc((100% + 12px) * .4);
-    pointer-events: none;
-    background-image: linear-gradient(90deg, transparent,
-      color-mix(in srgb, var(--bg-color, #fff) 40%, transparent) 50%, transparent);
-    animation: agent-answer-sheen var(--dur-beat) var(--ease-linear) infinite;
-    transition: opacity var(--dur-light) var(--ease-standard);
-  }
-  #agentAnswerBody.is-answer-check-done::after { opacity: 0; }
   /* The marks stroke on in reading order; badges settle in behind them. */
   /* Only marks the reader's highlight setting shows take part. */
   /* A sentence whose disputed words are named strokes only those words
@@ -1325,14 +1334,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 /* The hand-over from the stroke to the plain mark colour (agent-review.js). */
 #agentAnswerBody.is-marks-settling :is(.cx-claim, .cx-spot) { transition: none; }
-/* The stripe is 40% of the box: 150% of its own width carries it from the
-   left edge to the right one. */
-@keyframes agent-answer-sheen {
-  from { transform: translateX(0) scaleX(0); }
-  25% { transform: translateX(37.5%) scaleX(1); }
-  75% { transform: translateX(112.5%) scaleX(1); }
-  to { transform: translateX(150%) scaleX(0); }
-}
 /* One period moves the band by its own width, as far as the repeating 250%
    background once moved by one tile: the loop is seamless, the band out of
    sight at both ends. */

@@ -85,15 +85,18 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       ohne Arbeitsplatz; keine Zeilen „Way of working“, „Answer depth“,
       „Answer start“, „Agent freedom“ oder „Answer check“. Eine Frage mit
       Fakten zum Nachprüfen: kein „Compared perspectives“, die Antwort streamt
-      sofort nach der eigenen Suche, danach „Reviewing the answer…“ und der
-      Schimmer. Ein einziger Prüfer im Picker reicht zum Senden. Erst wenn alle
+      sofort nach der eigenen Suche, danach steht die Antwort still, und in
+      der Zeile darunter atmen die Marken der Prüfer vor „Reviewing the
+      answer…“ (seit 2026-11-01 kein Schimmer mehr über dem Text). Jetzt
+      sofort eine Folgefrage senden: sie startet ohne Warten, die vorige
+      Antwort rutscht in den Verlauf und bekommt dort ihre Marken, sobald die
+      Prüfer fertig sind. Ein einziger Prüfer im Picker reicht zum Senden. Erst wenn alle
       Prüfer fertig sind, erscheinen Marken (falsch rot, zweifelhaft gelb,
       unvollständig grau, nur die zitierten Worte gefärbt), kein Grün, kein
       Score; die Karte zeigt je Prüfer Art, Anmerkung und Quelle. Notes öffnet
       die Anmerkungen je Modell samt „No objections.“ und Ausfällen. Reload und
-      archivierter Chat sehen gleich aus. Stop während „Reviewing the
-      answer…“: die Antwort bleibt ohne „may be incomplete“, nach Reload steht
-      „Review stopped“.
+      archivierter Chat sehen gleich aus. Ein Stop gilt nur, solange der Agent
+      noch arbeitet; steht die Antwort, prüfen die Prüfer zu Ende.
       Arbeitsprotokoll (jeder Lauf schreibt eins; die Seitenleiste zeigt es
       Admins, die API dem Besitzer des Turns): Seitenleiste öffnen, unten
       „Work log“ aufklappen: Start, Kontext (System, Frage), Schritte mit

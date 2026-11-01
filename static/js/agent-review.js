@@ -881,6 +881,28 @@
   // Share will (B3); a partial review is a quiet word, no line of its own
   // (D13); a failed one says what it means (D8). Stopped before the answer
   // was written, the notice above says it (B8).
+  // One mark per reviewer, by its provider, with its state: "working"
+  // (waiting or in its final round), "done" or "failed".
+  function reviewerMarks(host, reviewers) {
+    const seen = new Set();
+    reviewers.forEach((reviewer, index) => {
+      const key = String(reviewer.provider || reviewer.model?.model || index);
+      seen.add(key);
+      let mark = [...host.children].find(child => child.dataset.reviewer === key);
+      if (!mark) {
+        const name = reviewerName(reviewer);
+        mark = node('span', 'agent-review-reviewer');
+        mark.dataset.reviewer = key;
+        mark.style.setProperty('--i', String(index));
+        mark.append(App.createModelMark?.({ provider: reviewer.provider_label, model: reviewer.model?.model, label: name })
+          || node('span', 'model-mark-fallback', String(name).slice(0, 1)));
+        host.append(mark);
+      }
+      mark.dataset.state = reviewer.status === 'completed' ? 'done'
+        : ['failed', 'stopped', 'cancelled'].includes(reviewer.status) ? 'failed' : 'working';
+    });
+    for (const child of [...host.children]) if (!seen.has(child.dataset.reviewer)) child.remove();
+  }
   function rowStatus(review, { pending, empty }) {
     if (pending) return 'Reviewing the answer…';
     const reviewers = review.audit.reviewers || [];
@@ -959,11 +981,20 @@
     if (status.textContent !== App.t(said)) status.textContent = said;
     status.classList.toggle('visually-hidden', !shown);
     status.hidden = !said;
-    for (const child of [...host.children]) if (child !== status) child.remove();
+    // While they work, the reviewers' marks stand before the word, each
+    // breathing until its final round is in (agent-chat.css); the answer
+    // above stays still. Kept across renders, so a mark never restarts.
+    const marks = host._auditReviewers || node('span', 'agent-review-reviewers');
+    host._auditReviewers = marks;
+    marks.setAttribute('aria-hidden', 'true');
+    marks.hidden = !pending;
+    if (pending) reviewerMarks(marks, review.audit?.reviewers || []);
+    for (const child of [...host.children]) if (child !== status && child !== marks) child.remove();
     const tabs = evidenceNav();
     const fallback = node('div', 'consensus-claims-fallback'); fallback.hidden = true;
     host.prepend(fallback, tabs);
     if (status.parentNode !== host) host.append(status);
+    if (marks.parentNode !== host || marks.nextSibling !== status) host.insertBefore(marks, status);
     const context = auditContext(review, evidence, turnSources);
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
     // The marks of exactly this answer, once the review is done.

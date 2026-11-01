@@ -589,7 +589,7 @@ class ComparisonTools:
                 self._rebuild(comparison)
                 self.checkpoint()
 
-    def _output_shares(self, models):
+    def _output_shares(self, models, remaining=None):
         """Fair output allowance per answer ({provider: tokens}), so parallel
         calls need not queue.
 
@@ -597,7 +597,8 @@ class ComparisonTools:
         a few large reservations make the others wait for their settlement.
         The account counts money (agent_quota): an answer's share of the
         remaining allowance buys as many output tokens as its model's price
-        allows."""
+        allows. ``remaining``: the unreserved allowance as the caller read it
+        (micro-euros), else read now."""
         from decimal import Decimal
         from app.services.agent_budget_config import nano_usd
         loop = self.loop
@@ -608,7 +609,7 @@ class ComparisonTools:
         storage = max(0, REVIEW_ANSWER_CHARS - stored) // count // CHARS_PER_TOKEN
         try:
             from app.services import agent_quota
-            remaining = agent_quota.remaining_allowance(loop.store.db, loop.uid)
+            remaining = agent_quota.remaining_allowance(loop.store.db, loop.uid) if remaining is None else remaining
         except Exception:
             remaining = None
         shares = {}

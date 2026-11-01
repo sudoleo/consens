@@ -643,14 +643,13 @@
       streaming && window.renderMarkdownStream ? 'stream' : 'full');
     renderError(typeof error === 'string' ? { text: error } : error);
   }
-  // While the reviewers review the fixed answer a quiet sheen passes over it,
-  // so the reader sees below the fold that something is still happening. It
-  // fades out instead of switching off when the marks arrive. Where the
-  // evidence row will stand, one quiet line says it in the activity's words
-  // (agent-activity.js reviewStage), one word for one state on screen at a
-  // time: the only sign with reduced motion or forced colors, and as tall as
-  // that row, so the row takes its place in the same frame without a jump
-  // (agent-chat.css).
+  // From its last word until the review's row stands, the fixed answer is
+  // under check (.is-answer-checking): where the evidence row will stand, one
+  // quiet line says it in the activity's words (agent-activity.js
+  // reviewStage), as tall as that row, so the row takes its place in the same
+  // frame without a jump (agent-chat.css). The row then shows the reviewers
+  // at work (agent-review.js reviewerMarks). Until 2026-11-01 a light band
+  // passed over the answer the whole time.
   function setAnswerChecking(body, checking, { fade = true } = {}) {
     if (!body || body.classList.contains('is-answer-checking') === checking) return;
     body.classList.toggle('is-answer-checking', checking);
@@ -2453,7 +2452,7 @@
   // by polling (agent-live.js), they never end it. `post: false` follows a
   // turn that is already running (after a reload) without sending anything.
   async function follow(context, body, signal, { headers = null, post = true } = {}) {
-    let timer = null, resumeTracked = false, lastByte = Date.now();
+    let timer = null, resumeTracked = false, lastByte = Date.now(), tail = false;
     // One projection per 100 ms for what the stream brings; whether anything
     // but the answer's words came since the last (P1, project's paintOnly).
     let activityDirty = false;
@@ -2498,7 +2497,16 @@
       return { Authorization: `Bearer ${await user.getIdToken()}` };
     };
     const stall = { misses: 0 };
+    // The answer stands and the chat is free (frame "handover",
+    // agent_runs.hand_over): this page takes the answer as done there, and
+    // the review that follows lands on it later (followReview).
+    let handedOver = null;
+    const handover = new Promise(resolve => { handedOver = resolve; });
     const handlers = {
+      handover: { receive(event) {
+        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context) || !event.turn) return;
+        handedOver({ ok: true, status: 200, streamed: true, data: event, handover: true });
+      } },
       accepted: { receive(event) {
         if (registry.isAuthCurrent(context) && event.chat_id === context.metadata.chatId) {
           context.metadata.agentTurnId = event.turn_id;
@@ -2547,7 +2555,9 @@
         registry.update(context.runId, () => {});
       } },
       review: { receive(event) {
-        if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
+        if (!registry.isAuthCurrent(context)) return;
+        if (context.metadata.reviewTail) { reviewArrived(context, event.review); return; }
+        if (!registry.isExecuting(context.runId)) return;
         context.metadata.agentReview = event.review;
         registry.update(context.runId, () => {});
       } },
@@ -2651,7 +2661,9 @@
       if (!post) {
         if (!live) throw Object.assign(new Error("Connection lost before the response was completed."), { streamFailureKind: "stream_incomplete" });
         live.reconnect();
-        const followed = await live.finished;
+        const first = await Promise.race([live.finished, handover]);
+        if (first?.handover) { tail = true; followReview(context, { live }); return first; }
+        const followed = first;
         if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
         if (!followed) throw Object.assign(new Error("This response could not be followed. Check its saved answer."), { streamFailureKind: "stream_incomplete" });
         return followed;
@@ -2663,10 +2675,20 @@
         { signal: streamControl.signal, timeoutMs: 45000, onIdle: live
           ? () => { resumeFollowing(); return undefined; }
           : () => checkStalledRun(context, body, headers, stall) });
-      if (!live) return await streaming;
       streaming.catch(() => {}); // Rejects with AbortError when the poll wins.
       const outcome = await Promise.race([streaming.then(value => ({ value }), error => ({ error })),
-        live.finished.then(value => ({ value, polled: true }))]);
+        ...(live ? [live.finished.then(value => ({ value, polled: true }))] : []),
+        handover.then(value => ({ value, handover: true }))]);
+      if (outcome.handover) {
+        // The stream (and the poll behind it) go on for the review alone.
+        tail = true;
+        followReview(context, { streaming, live });
+        return outcome.value;
+      }
+      if (!live) {
+        if (outcome.error) throw outcome.error;
+        return outcome.value;
+      }
       if (outcome.polled) {
         abortStream();
         if (outcome.value) return outcome.value;
@@ -2680,12 +2702,14 @@
           || !(live.reconnecting || RESUMABLE.has(error?.streamFailureKind))) throw error;
       // The stream broke, the turn did not: follow it to its end.
       resumeFollowing();
-      const followed = await live.finished;
+      const resumed = await Promise.race([live.finished, handover]);
+      if (resumed?.handover) { tail = true; followReview(context, { live }); return resumed; }
+      const followed = resumed;
       if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
       if (!followed) throw error;
       return followed;
     } finally {
-      live?.stop();
+      if (!tail) live?.stop();
       signal.removeEventListener("abort", abortStream);
       document.removeEventListener("visibilitychange", revive);
       window.removeEventListener("online", revive);
@@ -2695,6 +2719,66 @@
       context.metadata.reconnecting = false;
       context.metadata.offline = false;
     }
+  }
+  // After the hand-over the run is done for this page (adopt took its
+  // answer); its reviewers still review. Their frames come on the same
+  // stream, or the poll behind it, until the run's end: each lands on the
+  // turn wherever it stands now, under the live answer or in the history
+  // after the next message took the live surface. Until 2026-11-01 the next
+  // message waited for this end (Send after this response).
+  const REVIEW_TAIL_MS = 180000;
+  const structuredCopy = value => (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
+  function followReview(context, { streaming = null, live = null } = {}) {
+    context.metadata.reviewTail = true;
+    let done = false;
+    const end = result => {
+      if (done) return;
+      done = true;
+      clearTimeout(limit);
+      live?.stop();
+      context.metadata.reviewTail = false;
+      // A run that failed after the hand-over still names its saved turn.
+      const turn = result?.data?.turn || result?.data?.saved_answer?.turn;
+      if (!turn || !registry.isAuthCurrent(context)) return;
+      receiveBudget(result.data.token_budget, context.auth.uid);
+      reviewArrived(context, turn.agent_review, turn);
+    };
+    // A review that never ends here (the server moved, the page slept):
+    // the saved chat shows it when it is opened again.
+    const limit = setTimeout(() => end(null), REVIEW_TAIL_MS);
+    streaming?.then(end, () => { if (!done) live?.reconnect(); });
+    live?.finished.then(end, () => end(null));
+    if (!streaming && live) live.reconnect();
+  }
+  // A review frame (or the run's end with the saved ``turn``) for an answer
+  // the page already took as done.
+  function reviewArrived(context, review, turn = null) {
+    const saved = context.consensus.completedTurn;
+    if (!saved || !review || !registry.isAuthCurrent(context)) return;
+    context.metadata.agentReview = review;
+    if (turn) {
+      const activity = turn.agent_activity?.length ? turn.agent_activity : saved.agent_activity;
+      Object.assign(saved, turn, { turn_id: saved.turn_id, agent_activity: activity });
+    } else saved.agent_review = review;
+    const id = String(saved.turn_id || saved.id || "");
+    // What the next message continues, and the history of every later
+    // message of this chat, hold copies of this turn: each gets this state.
+    if (context.completedBasis) registry.setCompletedBasis(context.runId, { ...context.completedBasis, currentTurn: saved });
+    for (const run of registry.list()) {
+      if (run === context) continue;
+      for (const turns of [run.historyTurns, run.completedBasis?.historyTurns]) {
+        const index = Array.isArray(turns) ? turns.findIndex(item => String(item?.turn_id || item?.id || "") === id) : -1;
+        if (index >= 0) turns[index] = { ...turns[index], ...structuredCopy(saved) };
+      }
+    }
+    if (registry.isVisible(context.runId)) { registry.update(context.runId, () => {}); return; }
+    // The next message took the live surface: the turn stands in the history.
+    const node = id && document.querySelector(`.thread-history-turn[data-turn-id="${cssId(id)}"]`);
+    const body = node?.querySelector(".consensus-answer-body");
+    if (!body) return;
+    App.agentReview?.render(body, saved.agent_review, { sources: saved.sources, events: saved.agent_activity,
+      key: saved.id || id, question: saved.question, reveal: true });
+    node.dataset.turnKey = App.followup?.turnKey?.(saved) || node.dataset.turnKey;
   }
   // The end the server reported (terminal frame, polled frame or saved
   // turn): adopt the answer, or throw its failure for failRun.

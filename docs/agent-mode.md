@@ -3186,6 +3186,15 @@ ersten Modellanfrage“). Im Nachbau (70 ms je Rundgang): erste Anfrage nach
 0,6 statt 2,1–3,8 s. `tests/test_agent_first_request.py` hält die vier
 Rundgänge.
 
+Danach (Max: „bei einfachen Dingen schneller“): Eine Folgefrage wartete bis
+zum Ende der Schlussrunde der Prüfer, in Prod 2–17 s nach der fertigen
+Antwort. Seit 2026-11-01 gibt der Lauf den Chat ab, sobald die Antwort fixiert
+ist (`AgentRunStore.hand_over`); die nächste Nachricht startet sofort, und die
+Markierungen landen später an der Antwort, auch wenn sie schon im Verlauf
+steht. Die Prüfer bleiben unabhängig: Ihre Befunde gehen weiterhin nicht an
+den Agenten, auch nicht an die nächste Nachricht. Details codebase-map „Die
+nächste Nachricht während der Prüfung“.
+
 ## Antwortversion und Prüfung
 
 Der Agent schreibt die Antwort selbst, als Klartext in einem Schritt ohne

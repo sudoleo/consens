@@ -18,7 +18,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota
 from app.services.agent_runtime import AgentCapacityExceeded
-from app.services.agent_sessions import AgentSessionStore
+from app.services.agent_sessions import AgentSessionStore, review_tail
 from app.services.chat_store import ChatStore, ChatNotFound, TurnStatusConflict, TURN_PAGE_SIZE_MAX, normalize_turn_sources
 from app.services.llm.agent_client import AgentModel
 from app.services.llm.base import get_date_context
@@ -56,7 +56,13 @@ REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 # What the conversation needs of an earlier turn (messages): not its
 # activity, review or work log, which take up to about a megabyte.
 HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_context",
-                  "agent_work_record", "sources")
+                  "agent_work_record", "sources", "agent_answer_fixed_at")
+
+
+def in_history(turn):
+    """Whether the next message reads ``turn``: finished, or its answer fixed
+    while its reviewers still work (hand_over), which does not change it."""
+    return turn.get("status") in {"completed", "failed"} or review_tail(turn)
 
 
 class ConversationTooLong(ValueError):
@@ -248,7 +254,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         page). Else messages reads its own."""
         earlier = [(s.to_dict() or {}) for s in page["snapshots"]]
         earlier = [turn for turn in earlier if turn.get("position", 0) < target["position"]]
-        return (all(turn.get("status") in {"completed", "failed"} for turn in earlier)
+        return (all(in_history(turn) for turn in earlier)
                 and (page.get("has_more") or len(earlier) == target["position"] - 1))
 
     def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None):
@@ -283,7 +289,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 page = self.history_page(uid, chat_id, cursor)
             for snapshot in page["snapshots"]:
                 turn = snapshot.to_dict() or {}
-                if turn["position"] >= target["position"] or turn["status"] not in {"completed", "failed"}:
+                if turn["position"] >= target["position"] or not in_history(turn):
                     continue
                 question, answer = turn["question"], turn.get("assistant_response", turn.get("consensus", ""))
                 if isinstance(turn.get("app_context"), str) and turn["app_context"]:
@@ -525,6 +531,49 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         return self._agent_transaction(uid, operation)
 
+    def hand_over(self, uid, chat_id, turn_id, *, run_token, completion):
+        """The answer is fixed and only its review is left (agent_audit): the
+        chat is free for its next message from here on (DelegationLoop._hand_over).
+
+        The turn stays ``pending`` until the reviewers are done (finish_run),
+        but says since when its answer stands (``agent_answer_fixed_at``,
+        agent_sessions.review_tail) and already carries what the next message
+        reads of it (answer, sources, work record, messages). The chat's lock
+        ends, and the run gives up its place among the account's running
+        responses. False when the run no longer holds the chat (stopped,
+        reaped): it then ends as before. Until 2026-11-01 a message sent in
+        between waited for the review, about 10 s."""
+        root_ref = self.receipt_ref(uid, chat_id, turn_id)
+        chat_ref, turn_ref, active_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id), self.active_ref(uid)
+
+        def operation(tx):
+            tombstone, root, chat, turn, active = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), root_ref, chat_ref, turn_ref, active_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            data, chat_data, turn_data = root.to_dict() or {}, chat.to_dict() or {}, turn.to_dict() or {}
+            if (not run_token or data.get("run_token") != run_token or data.get("run_status") != "running"
+                    or data.get("cancel_requested") or chat_data.get("status") != "active"
+                    or chat_data.get("agent_turn_id") != turn_id or turn_data.get("status") != "pending"):
+                return False
+            patch = {"agent_answer_fixed_at": firestore.SERVER_TIMESTAMP, "updated_at": firestore.SERVER_TIMESTAMP,
+                     "assistant_response": completion.text,
+                     "sources": agent_sources(completion, turn_data.get("agent_review"))}
+            if getattr(completion, "work_record", None):
+                patch["agent_work_record"] = completion.work_record
+            if getattr(completion, "vm", None):
+                patch["agent_vm"] = completion.vm
+            tx.update(turn_ref, patch)
+            chat_patch = {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP}
+            if isinstance(getattr(completion, "workspace_used", None), bool):
+                chat_patch["agent_workspace_used"] = completion.workspace_used
+            tx.update(chat_ref, chat_patch)
+            leases = dict((active.to_dict() or {}).get("leases") or {})
+            if leases.pop(root_ref.id, None) is not None:
+                tx.set(active_ref, {"leases": leases})
+            return True
+
+        return self._agent_transaction(uid, operation)
+
     def finish_run(self, uid, chat_id, turn_id, *, completion, status, run_token):
         """End the run once, independently of each paid step's settlement."""
         if status not in {"succeeded", "failed", "cancelled"}:
@@ -627,11 +676,14 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 # Last: the activity takes the room the rest of the turn leaves.
                 patch["agent_activity"] = bounded_activity(completion.activity, activity_budget(turn_data, patch))
                 tx.update(turn_ref, patch)
-                if isinstance(getattr(completion, "workspace_used", None), bool):
+                # A chat that already runs its next message (hand_over) keeps
+                # that message's state.
+                owner = chat_data.get("agent_turn_id") == turn_id
+                if owner and isinstance(getattr(completion, "workspace_used", None), bool):
                     # Whether the chat's next message starts with the workspace
                     # open (routers/agent.py, AGENT_WORKSPACE_ON_DEMAND).
                     tx.update(chat_ref, {"agent_workspace_used": completion.workspace_used})
-                if chat_data.get("agent_turn_id") == turn_id:
+                if owner:
                     tx.update(chat_ref, {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP})
             return True
 

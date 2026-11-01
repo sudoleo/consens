@@ -161,11 +161,14 @@ def _default_token_account_tier(monkeypatch):
 def _fresh_token_account_read_throttles():
     """agent_quota remembers per process which extra reads found nothing.
     Keyed by id(db), a later test's fake could inherit an earlier one's."""
-    from app.services import agent_quota
+    from app.services import agent_quota, chat_store
 
     agent_quota._quiet_until.clear()
+    # The chat-counter memo too (chat_store._counted).
+    chat_store._COUNTED_OWNERS.clear()
     yield
     agent_quota._quiet_until.clear()
+    chat_store._COUNTED_OWNERS.clear()
 
 
 @pytest.fixture(autouse=True)

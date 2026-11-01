@@ -35,6 +35,15 @@ TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent t
 # Messages the user sends into a running response (add_user_note), on its root
 # receipt, which the run's watcher reads every few seconds anyway.
 USER_NOTES_MAX = 10
+
+
+def review_tail(turn):
+    """A turn whose answer is fixed and whose reviewers still work: its run
+    handed the chat over (agent_runs.hand_over). Its reviewers' steps go on
+    without the chat's lock and without a place among the account's running
+    responses; the chat may already run its next message."""
+    return turn.get("status") == "pending" and turn.get("agent_answer_fixed_at") is not None
+
 USER_NOTE_CHARS = 4000
 HOLD_NOT_DENIABLE = "This pause cannot be declined. Let it continue, write to the agent or stop it."
 HOLD_CHOOSE = "Choose one of the answers, write to the agent or stop it."
@@ -200,8 +209,11 @@ class AgentSessionStore:
             data, chat_data, turn_data = root.to_dict() or {}, chat.to_dict() or {}, turn.to_dict() or {}
             if not chat.exists or not turn.exists or chat_data.get("status") != "active":
                 raise ChatNotFound("Chat not found")
+            # After the hand-over only the reviewers' sessions still claim.
+            tail = review_tail(turn_data) and agent_id != "orchestrator"
             if (turn_data.get("status") != "pending" or chat_data.get("execution_mode") != "agent"
-                    or turn_data.get("execution_mode") != "agent" or chat_data.get("agent_turn_id") != turn_id):
+                    or turn_data.get("execution_mode") != "agent"
+                    or (chat_data.get("agent_turn_id") != turn_id and not tail)):
                 raise TurnStatusConflict("Agent turn is no longer runnable")
             leases = {key: value for key, value in ((active.to_dict() or {}).get("leases") or {}).items()
                       if isinstance(value, datetime) and value > now}
@@ -218,7 +230,8 @@ class AgentSessionStore:
                         "reserved_tokens": 0, "reserved_cost": 0}
                 leases[root_ref.id] = data["lease_until"]
             elif (data.get("run_token") != run_token or data.get("run_status") != "running"
-                    or data.get("lease_until", now) <= now or data.get("cancel_requested") or root_ref.id not in leases):
+                    or data.get("lease_until", now) <= now or data.get("cancel_requested")
+                    or (root_ref.id not in leases and not tail)):
                 if data.get("run_token") == run_token and data.get("cancel_requested"):
                     raise ProviderCancelled("Agent run stopped")
                 raise TurnStatusConflict("Delegation producer is no longer authorized")
@@ -472,20 +485,29 @@ class AgentSessionStore:
         # Renew all three fences together, only while this producer still owns
         # a live lease. A crashed or superseded producer can never resume work.
         chat_ref, active_ref = self._chat_ref(uid, chat_id), self.active_ref(uid)
+        turn_ref = self._turn_ref(uid, chat_id, turn_id)
         def operation(tx):
-            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
-            data, current_chat, active = (r.get(transaction=tx).to_dict() or {} for r in (ref, chat_ref, active_ref))
+            tombstone, *snapshots = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), ref, chat_ref,
+                                                        active_ref, turn_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            data, current_chat, active, turn = (snapshot.to_dict() or {} for snapshot in snapshots)
             stamp = datetime.now(timezone.utc)
             leases = dict(active.get("leases") or {})
             if (data.get("cancel_requested") or current_chat.get("status") != "active"):
                 raise ProviderCancelled("Agent run stopped")
+            # Handed over: the run renews only itself, never the chat's lock
+            # (it may belong to the next message) nor a place among the
+            # account's running responses.
+            tail = review_tail(turn)
             if (data.get("run_token") != run_token or data.get("run_status") != "running"
-                    or current_chat.get("agent_turn_id") != turn_id
-                    or data.get("lease_until", stamp) <= stamp or leases.get(ref.id, stamp) <= stamp):
+                    or (current_chat.get("agent_turn_id") != turn_id and not tail)
+                    or data.get("lease_until", stamp) <= stamp or (leases.get(ref.id, stamp) <= stamp and not tail)):
                 raise AgentRunInterrupted("The response lost its active connection to saved chat state. Reopen the saved conversation to see the available results.")
             until = stamp + timedelta(seconds=PRODUCER_LEASE_SECONDS)
-            leases[ref.id] = until
             tx.update(ref, {"lease_until": until})
+            if tail:
+                return
+            leases[ref.id] = until
             tx.update(chat_ref, {"agent_lock_until": until})
             tx.set(active_ref, {"leases": leases})
         self._agent_transaction(uid, operation)

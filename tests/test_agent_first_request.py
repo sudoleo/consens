@@ -145,3 +145,44 @@ def test_a_run_builds_the_model_catalog_once(api, trips, monkeypatch):  # noqa: 
     # The route resolves the chat model and the reviewers' models; the loop
     # builds its worker catalog once (until 2026-11-01: twice per model).
     assert sum(built.values()) <= 1 + 1 + len(COMPARISON_MODELS), built
+
+
+def test_a_chat_that_gained_google_data_after_the_first_read_keeps_its_rules(api, monkeypatch):  # noqa: F811
+    """Review 2026-11-01: the route reads the chat before the turn exists. A
+    turn in another tab may import mail in between and end; the turn's
+    creation sees the chat as it is, and its rules hold for this message."""
+    from app.services.chat_store import ChatStore
+    client, store, calls = api
+    chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
+    sweep = ChatStore.sweep_abandoned_turns
+
+    def mail_arrives(self, uid, chat):
+        sweep(self, uid, chat)
+        self._chat_ref(uid, chat).update({"google_data": True})
+    monkeypatch.setattr(ChatStore, "sweep_abandoned_turns", mail_arrives)
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "mail",
+                                           "bookmark_id": "agent_test", "comparison_models": COMPARISON_MODELS},
+                           headers=AUTH)
+    assert response.status_code == 422 and "consent" in response.text
+    assert not calls
+    turns = store.list_turns("agent-user", chat_id)["turns"]
+    assert [turn["status"] for turn in turns] == ["failed"]
+
+
+def test_a_refused_message_sweeps_nothing(api, monkeypatch):  # noqa: F811
+    """Review 2026-11-01: the sweep of abandoned turns may fail a turn, so it
+    runs only for a message that passed the route's checks."""
+    from app.api.routers import agent as route
+    from app.services.chat_store import ChatStore
+    client, store, calls = api
+    monkeypatch.setattr(route, "is_user_pro", lambda uid: False)
+    swept = threading.Event()
+    monkeypatch.setattr(ChatStore, "sweep_abandoned_turns", lambda self, uid, chat: swept.set())
+    chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
+    premium = next(iter(sorted(route.cfg.PREMIUM_MODELS)))
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "premium",
+                                           "bookmark_id": "agent_test", "model_id": premium}, headers=AUTH)
+    assert response.status_code in {403, 422} and not calls
+    # The reads beside the route run on their own threads: give a sweep
+    # among them the time to show.
+    assert not swept.wait(.5)

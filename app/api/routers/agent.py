@@ -281,6 +281,17 @@ def _final(uid, payload, store, turn):
     return final
 
 
+def _handover_frame(uid, payload, store, event):
+    """The ``handover`` frame: the turn as the final frame names it, its
+    answer fixed and its review still running, and the chat entry saved. None
+    when it cannot be read or saved; the final frame follows anyway."""
+    try:
+        return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, event["turn_id"]))
+    except Exception as exc:
+        logging.warning("Agent hand-over frame unavailable category=%s", safe_exception(exc))
+        return None
+
+
 def _bookmark_limit_failure(exc):
     """The answer is saved in the chat, but the sidebar entry hit a storage cap.
 
@@ -337,8 +348,11 @@ _TURN_READS = ThreadPoolExecutor(max_workers=24, thread_name_prefix="agent-turn-
 def _turn_reads(uid, payload, store):
     """Futures of what run_agent reads for a new message, all started at
     once. Each is taken where its read used to stand, so a failing read
-    still fails the request at the same point; the sweep of abandoned turns
-    is done before the turn is created."""
+    still fails the request at the same point. Only reads: the one write
+    among them, the reaper of runs whose lease expired (recover_allowance),
+    runs on any allowance read too (agent_quota.snapshot). The sweep of
+    abandoned turns, which may fail a turn, waits for the checks
+    (sweep_after)."""
     from app.services.agent_files import AgentFiles, public_file
     files = AgentFiles(db_firestore)
     chat_id = payload.chat_id
@@ -350,7 +364,9 @@ def _turn_reads(uid, payload, store):
         "files": lambda: [public_file(files.get(uid, chat_id, fid)) for fid in payload.file_ids],
         "memory": lambda: _memory_snapshot(uid),
         "browser": lambda: browser_turn(uid) if vm_allowed(uid) else None,
-        "sweep": lambda: store.sweep_abandoned_turns(uid, chat_id),
+        # What the reviewers' output shares divide, read before the first
+        # step's claim reserves from it (AnswerAudit.output_share).
+        "allowance": lambda: agent_quota.remaining_allowance(db_firestore, uid),
         # Before the turn exists: messages checks that it still holds
         # (AgentRunStore.history_current). Both are used only after the
         # turn's creation found the chat live.
@@ -358,6 +374,29 @@ def _turn_reads(uid, payload, store):
         "catalog": lambda: files.list(uid, chat_id, checked=True),
     }
     return {name: _TURN_READS.submit(job) for name, job in jobs.items()}
+
+
+def sweep_after(store, uid, chat_id, recover):
+    """The sweep of abandoned turns for a message that passed every check:
+    after the reaper (``recover``, which ends an expired run as it should
+    end) and beside the rest of the route's work. Until 2026-11-01 it stood
+    in create_turn."""
+    def sweep():
+        try:
+            recover.result()
+        except Exception:
+            # The route takes the reaper's failure itself.
+            pass
+        store.sweep_abandoned_turns(uid, chat_id)
+    return _TURN_READS.submit(sweep)
+
+
+def _read_or_none(read):
+    try:
+        return read.result()
+    except Exception as exc:
+        logging.warning("Agent allowance read ahead unavailable category=%s", safe_exception(exc))
+        return None
 
 
 def _first_history_page(read):
@@ -480,6 +519,7 @@ def run_agent(request: Request, payload: AgentRequest):
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
         provider_cooldowns.check(model, key or "")
         reads["recover"].result()
+        sweep = sweep_after(store, uid, payload.chat_id, reads["recover"])
         bookmark = reads["bookmark"].result()
         # A temporary chat has no bookmark: its id is the page's and unused.
         if not temporary and bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
@@ -537,7 +577,7 @@ def run_agent(request: Request, payload: AgentRequest):
         browser = reads["browser"].result() if preferences.vm == "on" else None
         if browser:
             app_context += "\n" + agent_vm.HANDED_BACK_NOTE.format(minutes=max(1, round(browser / 60)))
-        reads["sweep"].result()
+        sweep.result()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
             selected_models=[model.model], consensus_model=model.model,
@@ -561,6 +601,14 @@ def run_agent(request: Request, payload: AgentRequest):
         if turn["status"] == "completed":
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
+        if turn.get("chat_google_data") and not google_data:
+            # The chat gained Google data after the route first read it (a
+            # turn in another tab imported mail before it ended): its rules
+            # hold for this message too, as the turn's creation saw the chat.
+            if not payload.google_data_consent:
+                raise HTTPException(422, "This chat contains Google information. Review and enable Google model-sharing consent before sending.")
+            from app.services.google_connections import restricted_model
+            google_data, model = True, restricted_model(model)
         if isinstance(restored, dict) and not restored.get("told"):
             _vm_restore_told(store, uid, payload.chat_id)
         chat_sources = []
@@ -578,6 +626,8 @@ def run_agent(request: Request, payload: AgentRequest):
                          domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
+        if loop.comparison is not None:
+            loop.comparison.auditor.allowance = _read_or_none(reads["allowance"])
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:
@@ -623,7 +673,13 @@ def run_agent(request: Request, payload: AgentRequest):
             closing = False
             try:
                 for event in source:
-                    if event:
+                    if event and event["type"] == "handover":
+                        # The answer stands and the chat is free (agent_runs.hand_over):
+                        # the browser takes it like a final answer, its review follows.
+                        handed = _handover_frame(uid, payload, store, event)
+                        if handed:
+                            yield pack("handover", handed)
+                    elif event:
                         yield pack(event["type"], event)
                         if event["type"] == "started" or (event["type"] == "activity" and event.get("kind") == "usage"):
                             allowances.append(_ALLOWANCE_READS.submit(agent_quota.snapshot, store.db, uid))

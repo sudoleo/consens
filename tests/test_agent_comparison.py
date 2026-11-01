@@ -737,6 +737,10 @@ class Straggler(Script):
         import threading
         super().__init__(**kwargs)
         self.release = threading.Event()
+        # Set once the stream's first half reached its worker: a model is
+        # stopped mid-answer only after it wrote something (else the run's
+        # timing decided whether there was a half to keep).
+        self.partial_sent = threading.Event()
         self.release_on_answer = release_on_answer
         self.partial = partial
         self.synthesis_evidence = None
@@ -749,6 +753,8 @@ class Straggler(Script):
             def stream(self, *, model, messages, **kwargs):
                 if self.step_id.startswith("completion:") and int(self.step_id.split(":")[-1]) >= script.compares:
                     script.synthesis_evidence = json.dumps(messages)
+                    if script.partial and not script.release_on_answer:
+                        script.partial_sent.wait(5)
                     if script.release_on_answer:
                         script.release.set()
                         comparison = script.loop.comparison
@@ -762,6 +768,8 @@ class Straggler(Script):
                     if script.partial:
                         self.text = script.partial
                         yield {"type": "delta", "text": script.partial}
+                        # Resumed: the worker took the delta.
+                        script.partial_sent.set()
                     while not script.release.wait(.02):
                         cancellation.raise_if_cancelled()
                     self.text, self.finish_reason = "Gemini: the second option is cheaper.", "stop"

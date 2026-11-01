@@ -2020,8 +2020,10 @@ class AnswerAudit:
         # The reviewers' brief of the agent's instructions (instructions_brief),
         # bound to their log entry once the log holds it (brief).
         self._brief_parts = self._brief = None
-        # Each reviewer's output allowance (output_share), read once by the
-        # first reviewer that starts.
+        # Each reviewer's output allowance (output_share), computed once by
+        # the first reviewer that starts, from the allowance the route read
+        # before the agent's first claim (``allowance``) where it has one.
+        self.allowance = None
         self._shares = None
         self._shares_lock = threading.Lock()
 
@@ -2247,7 +2249,7 @@ class AnswerAudit:
         stood in follow(), between Send and the agent's first request."""
         with self._shares_lock:
             if self._shares is None:
-                self._shares = self.tools._output_shares(dict(self.tools.models))
+                self._shares = self.tools._output_shares(dict(self.tools.models), remaining=self.allowance)
             return self._shares[provider]
 
     def _settle(self, status, issues=()):

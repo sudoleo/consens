@@ -947,7 +947,7 @@ class ChatStore:
                         raise ChatIdempotencyConflict(
                             "client_request_id conflicts with an existing turn"
                         )
-                    return existing.to_dict() or {}
+                    return existing.to_dict() or {}, chat_snapshot.to_dict() or {}
 
             chat_data = chat_snapshot.to_dict() or {}
             if execution_mode == "agent":
@@ -1003,17 +1003,23 @@ class ChatStore:
             if chat_data.get("temporary") is True:
                 # A temporary chat in use lives on from its latest message.
                 self._expire_later(transaction, uid, chat_id)
-            return turn_document
+            return turn_document, chat_data
 
-        stored = self._transaction(operation)
+        stored, chat_data = self._transaction(operation)
         if not read_back:
             now = datetime.now(timezone.utc)
-            return turn_metadata(turn_id, {key: now if value is firestore.SERVER_TIMESTAMP else value
+            turn = turn_metadata(turn_id, {key: now if value is firestore.SERVER_TIMESTAMP else value
                                            for key, value in stored.items()})
-        snapshot = turn_ref.get()
-        if not snapshot.exists:
-            raise ChatStoreError("Turn was not persisted")
-        return turn_metadata(snapshot.id, snapshot.to_dict() or {})
+        else:
+            snapshot = turn_ref.get()
+            if not snapshot.exists:
+                raise ChatStoreError("Turn was not persisted")
+            turn = turn_metadata(snapshot.id, snapshot.to_dict() or {})
+        if execution_mode == "agent":
+            # Whether the chat holds Google data, as this transaction saw it:
+            # the Agent route's own read came before (routers/agent.py).
+            turn["chat_google_data"] = bool(chat_data.get("google_data"))
+        return turn
 
     def fail_turn(
         self,
