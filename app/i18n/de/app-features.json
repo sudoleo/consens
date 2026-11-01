@@ -770,5 +770,9 @@
   "{lines} lines": "{lines} Zeilen",
   "{selectedLabel} writes the answer, without reviewers.": "{selectedLabel} schreibt die Antwort, ohne Prüfer.",
   "{linked}: {model} writes the answer, without reviewers": "{linked}: {model} schreibt die Antwort, ohne Prüfer",
-  "Showing the first {MAX_ROWS} rows. Download the file for the rest.": "Die ersten {MAX_ROWS} Zeilen. Den Rest zeigt die heruntergeladene Datei."
+  "Showing the first {MAX_ROWS} rows. Download the file for the rest.": "Die ersten {MAX_ROWS} Zeilen. Den Rest zeigt die heruntergeladene Datei.",
+  "{selectedLabel} writes the answer, 1 AI checks its work in the workspace.": "{selectedLabel} schreibt die Antwort, 1 KI prüft seine Arbeit am Arbeitsplatz.",
+  "{selectedLabel} writes the answer, {count} AIs check its work in the workspace.": "{selectedLabel} schreibt die Antwort, {count} KIs prüfen seine Arbeit am Arbeitsplatz.",
+  "{linked}: {model} writes the answer, 1 AI checks its work in the workspace": "{linked}: {model} schreibt die Antwort, 1 KI prüft seine Arbeit am Arbeitsplatz",
+  "{linked}: {model} writes the answer, {count} AIs check its work in the workspace": "{linked}: {model} schreibt die Antwort, {count} KIs prüfen seine Arbeit am Arbeitsplatz"
 }

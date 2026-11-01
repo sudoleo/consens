@@ -564,16 +564,21 @@
       // (app-bootstrap.js).
       displayLabel = select.dataset.catalog === "ready" ? selectedLabel : window.App.firstFrame?.agentModel?.() || selectedLabel;
       // With the reviewers off (Settings > Runs) nobody cross-checks.
-      const off = window.App.words?.reviewerSetting?.() === "off";
+      const setting = window.App.words?.reviewerSetting?.();
+      const off = setting === "off", workspace = setting === "workspace" && count > 0;
       displayTitle = off ? `${selectedLabel} writes the answer, without reviewers.`
         : count < 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
-          : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
-            : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
+          : workspace ? (count === 1 ? `${selectedLabel} writes the answer, 1 AI checks its work in the workspace.`
+            : `${selectedLabel} writes the answer, ${count} AIs check its work in the workspace.`)
+            : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
+              : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
       const model = spoken(selectedLabel);
       ariaLabel = off ? `${linked}: ${model} writes the answer, without reviewers`
         : count < 1 ? `${linked}: ${model} writes the answer, no cross-check`
-          : count === 1 ? `${linked}: ${model} writes the answer, 1 AI cross-checks it`
-            : `${linked}: ${model} writes the answer, ${count} AIs cross-check it`;
+          : workspace ? (count === 1 ? `${linked}: ${model} writes the answer, 1 AI checks its work in the workspace`
+            : `${linked}: ${model} writes the answer, ${count} AIs check its work in the workspace`)
+            : count === 1 ? `${linked}: ${model} writes the answer, 1 AI cross-checks it`
+              : `${linked}: ${model} writes the answer, ${count} AIs cross-check it`;
     }
 
     if (state.displayButton) {

@@ -6,6 +6,7 @@ registry (chat_store.TEMPORARY_CHATS_COLLECTION) deletes it from the hourly
 retention loop when a tab closed without that. A chat's deletion also takes
 the texts its runs' receipts held. No model calls beyond the scripted ones.
 """
+import json
 from datetime import timedelta
 
 import pytest
@@ -140,3 +141,41 @@ def test_a_temporary_chat_keeps_nothing_beyond_itself(api, monkeypatch):
                                        "bookmark_id": "b_agent_normal"}, headers=AUTH).status_code == 200
     assert store.db.collection("users").document(UID).collection("bookmarks").document("b_agent_normal").get().exists
     assert "SECRET-MEMORY" in calls[-1]["messages"][0]["content"]
+
+
+def test_a_run_that_outlives_its_deleted_chat_leaves_no_texts_on_its_receipt(store):
+    """Leaving a temporary chat mid-run deletes it at once; the run stops a
+    few seconds later (its watcher). What it wrote to its receipt meanwhile
+    goes when it ends."""
+    from test_agent_runs import receipt
+    from app.services.llm.agent_client import AgentModel
+    chat_id, turn = pending(store)
+    store.claim(UID, chat_id, turn["id"], AgentModel(), run_token="tok")
+    store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
+    store.delete_chat(UID, chat_id)
+    ref = store.receipt_ref(UID, chat_id, turn["id"])
+    ref.update({"user_notes": [{"id": "n1", "text": "late words"}], "hold": {"id": "h1", "reason": "late"}})
+    store.finish_run(UID, chat_id, turn["id"], completion=receipt(), status="cancelled", run_token="tok")
+    data = ref.get().to_dict()
+    assert data["run_status"] == "cancelled" and not {"user_notes", "hold", "hold_decision"} & set(data)
+
+
+def test_a_failed_run_in_a_temporary_chat_still_hands_its_saved_answer_to_the_page(api, monkeypatch):
+    from app.services.llm.agent_client import AgentCompletion
+    from test_agent_runs import receipt
+    client, store, calls = api
+
+    def failed(self, **kwargs):
+        self.__dict__.update(receipt().__dict__)
+        self.text = "Partial"
+        yield {"type": "delta", "text": "Partial"}
+        raise RuntimeError("Provider failed")
+    monkeypatch.setattr(AgentCompletion, "stream", failed)
+    chat_id = client.post("/chats", json={"execution_mode": "agent", "temporary": True}, headers=AUTH).json()["chat"]["id"]
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "temp-failed",
+                                           "bookmark_id": "b_agent_temp"}, headers=AUTH)
+    error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
+    saved = error["saved_answer"]
+    assert saved["temporary"] is True and saved["bookmark_meta"] is None and saved["turn"]["status"] == "failed"
+    bookmark = store.db.collection("users").document(UID).collection("bookmarks").document("b_agent_temp")
+    assert not bookmark.get().exists

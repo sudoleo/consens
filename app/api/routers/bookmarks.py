@@ -185,6 +185,16 @@ def _bookmark_document_id(question, requested_id=""):
     return re.sub(r"[^a-zA-Z0-9]", "_", raw_id)[:50]
 
 
+def _temporary_chat(uid: str, chat_id: str) -> bool:
+    """The chat is a temporary one (chat_store.create_chat): nothing of it is
+    kept outside it, a bookmark included."""
+    try:
+        return (_chat_store()._chat_ref(uid, chat_id).get().to_dict() or {}).get("temporary") is True
+    except Exception as exc:
+        logging.warning("bookmark chat read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Saving is unavailable right now. Try again.") from exc
+
+
 def _chat_binding(data):
     chat_id = str(data.get("chatId") or "").strip()
     turn_id = str(data.get("turnId") or "").strip()
@@ -855,7 +865,10 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     _enforce_bookmark_uid_rate_limit(uid, "model_save")
-    
+    if chat_binding and _temporary_chat(uid, chat_binding["chat_id"]):
+        # A temporary chat has no entry in the chats; the page never asks.
+        raise HTTPException(status_code=409, detail="A temporary chat isn’t saved to your chats.")
+
     doc_id = _bookmark_document_id(question, data.get("bookmarkId"))
     
     model_labels = share_snapshots.sanitize_model_labels(

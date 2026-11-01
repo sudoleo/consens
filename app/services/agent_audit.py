@@ -367,12 +367,17 @@ BRIEF_NO_MEMORY = "No memory of the user is in use for this message."
 ANSWER_IN_STEP = "[the fixed answer, given in full below]"
 
 
+def tool_brief(names):
+    """The brief's lines for the tools ``names`` (BRIEF_TOOLS), in its order."""
+    return [line for prefix, line in BRIEF_TOOLS if any(name.startswith(prefix) for name in names)]
+
+
 def instructions_brief(loop):
     """The parts of a reviewer's brief that the run knows from its start:
     {"instructions" (with "{chars}" open), "tools", "memory"}."""
     from app.services.agent_memory import render_memory_block
     names = sorted(getattr(getattr(loop, "registry", None), "tools", None) or {})
-    lines = [BRIEF_HEAD, *(line for prefix, line in BRIEF_TOOLS if any(name.startswith(prefix) for name in names))]
+    lines = [BRIEF_HEAD, *tool_brief(names)]
     memory = getattr(loop, "memory", None)
     snapshot = getattr(memory, "snapshot", None)
     block = render_memory_block(snapshot) if snapshot is not None else ""

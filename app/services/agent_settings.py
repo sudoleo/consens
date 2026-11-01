@@ -520,7 +520,7 @@ class SettingsTools:
         them, and the privacy policy stays the binding word on data."""
         from app.services import agent_budget_config, agent_quota
         from app.services.agent_vm_time import BASE_DAILY_SECONDS, PRO_DAILY_SECONDS
-        from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT, TEMPORARY_CHAT_TTL
+        from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT, TEMPORARY_CHAT_DELETED_WITHIN
         from app.services.share_snapshots import REVOKED_RETENTION_DAYS
 
         def euros(amount):
@@ -543,7 +543,7 @@ class SettingsTools:
                        "new chat continues. A temporary chat (the switch \"Temporary chat\" in the (+) menu of a new "
                        "Agent chat) is not saved: it is not in the chats, uses and changes no memory, has no "
                        "workspace, cannot be shared and is deleted once the user leaves it, at the latest "
-                       f"{TEMPORARY_CHAT_TTL.days * 24} hours after its last message.",
+                       f"{int(TEMPORARY_CHAT_DELETED_WITHIN.total_seconds() // 3600)} hours after its last message.",
             "reviewers": "Settings > Runs > Reviewers: Always (the default), Only in the workspace (from the agent's "
                          "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "
                          "the user's own decisions on cards and the Stop button remain.",

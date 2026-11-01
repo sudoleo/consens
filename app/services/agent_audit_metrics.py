@@ -220,7 +220,9 @@ def turn_counters(turn, captured):
         if answer is not None:
             _add(counters, "answer_s", bucket(answer))
         marks = _seconds(fixed[-1].get("at"), ended)
-        if marks is not None and review.get("mode") == "audit" and status == "completed":
+        # Not where the user's setting had no reviewers ("off"): no marks came.
+        if (marks is not None and review.get("mode") == "audit" and review.get("status") != "off"
+                and status == "completed"):
             _add(counters, "marks_s", bucket(marks))
     step_at = None
     for entry in entries:

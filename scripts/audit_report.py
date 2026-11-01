@@ -419,18 +419,27 @@ def _target(target_id, metric, value, target, ok):
     return {"id": target_id, "metric": metric, "value": value, "target": target, "ok": ok}
 
 
+def _unreviewed(row):
+    """The turn had no reviewers by the user's setting (review "off")."""
+    return (row["info"]["review"] or {}).get("status") == "off"
+
+
 def report(data):
     rows = audit_turns(data)
     completed = [r for r in rows if r["info"].get("status") == "completed"]
     finished = {id(r) for r in completed}
-    reviewers = Counter(len((r["info"]["review"] or {}).get("reviewers") or []) or r["info"]["comparison_models"]
+    # A turn the user's setting left without reviewers ("off", since
+    # 2026-11-01) counts as none, never as its chosen models.
+    reviewers = Counter(0 if _unreviewed(r) else
+                        len((r["info"]["review"] or {}).get("reviewers") or []) or r["info"]["comparison_models"]
                         for r in rows)
+    reviewed_turns = [r for r in completed if not _unreviewed(r)]
     times = {
         "total": quantiles(_seconds(r["created"], r["end"]) for r in completed),
         "total_without_pauses": quantiles((_seconds(r["created"], r["end"]) or 0) - r["paused_s"]
                                           if _seconds(r["created"], r["end"]) is not None else None for r in completed),
         "to_answer": quantiles(_seconds(r["created"], r["fixed"]) for r in completed),
-        "marks_after_last_word": quantiles(_seconds(r["fixed"], r["end"]) for r in completed),
+        "marks_after_last_word": quantiles(_seconds(r["fixed"], r["end"]) for r in reviewed_turns),
     }
     final_by_model, live_by_model, live_per_turn = defaultdict(list), defaultdict(list), []
     live_total = 0
@@ -475,7 +484,9 @@ def report(data):
              "reviewer_cost_share": round(cost_reviewers / cost_all, 3) if cost_all else None,
              "reviewer_tokens": quota_reviewers, "agent_tokens": quota_all - quota_reviewers}
     succeeded = review_status.get("succeeded", 0)
-    reviewed = sum(n for status, n in review_status.items() if status)
+    # "off": the user's reviewers setting had none for the turn (since
+    # 2026-11-01): nobody reviewed, so it is no review that failed.
+    reviewed = sum(n for status, n in review_status.items() if status and status != "off")
     failed_after_answer = sum(1 for r in rows if r["info"].get("status") == "failed" and r["fixed"] is not None)
     undecided = sum(1 for hold in holds if hold.get("decision") in UNDECIDED)
     open_sessions = sum(1 for r in rows if r["end"] is not None for s in r["sessions"].values()
@@ -487,6 +498,7 @@ def report(data):
                 None if not marks["n"] else marks["p50"] <= 10 and marks["p90"] <= 20 and marks["max"] <= 60),
         _target("Z2", "reviews succeeded of completed audit turns",
                 {"succeeded": succeeded, "reviewed": reviewed, "failed": review_status.get("failed", 0),
+                 "unreviewed": review_status.get("off", 0),
                  "share": round(succeeded / reviewed, 3) if reviewed else None},
                 ">= 98 %, failed <= 0.5 %",
                 None if not reviewed else succeeded / reviewed >= .98

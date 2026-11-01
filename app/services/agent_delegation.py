@@ -810,12 +810,24 @@ class DelegationLoop(AgentLoop):
         content = self.messages[0]["content"]
         self.messages[0] = {**self.messages[0], "content": content.replace(
             "\n\n" + AGENT_WORKSPACE_CLOSED_PROMPT, self._workspace_prompt(), 1)}
+        before = set(self.registry.tools)
         tools = []
         for tool in self.registry.tools.values():
             tools.extend(self._workspace_tool_list() if tool.name == OPEN_WORKSPACE else [tool])
         self.registry = ToolRegistry(tools, argument_limit=max(self.registry.argument_limit, 24_000))
         self.workspace_closed, self.workspace_opened = False, True
         logging.info("Agent workspace opened step=%s", self.routing_steps)
+        if self.work_log is not None:
+            # The reviewers' brief was written from the tools the run started
+            # with: the workspace's rules (installing packages is normal work,
+            # a step in the user's name waits for their yes) reach reviewers
+            # who already follow as an entry of the app.
+            from app.services.agent_audit import tool_brief
+            added = sorted(set(self.registry.tools) - before)
+            self.work_log.app("workspace_opened", {"text": " ".join(tool_brief(added)), "tools": added})
+        if self.reviewers == "workspace":
+            # Its reviewers start now, their brief written from these tools.
+            self._review_from_here(None)
 
     def _parallel_calls(self):
         """Whether the agent's steps ask for several calls at once: while
@@ -1224,8 +1236,11 @@ class DelegationLoop(AgentLoop):
     def _paid_audit(self):
         """Whether the agent has a paid step in this message that reviewers
         followed: its closing answer then may overdraw the allowance, as
-        after paid comparisons (spec A-R2)."""
-        return bool(self.comparison is not None and self.comparison.auditor.sessions
+        after paid comparisons (spec A-R2). Also where the user's setting
+        has no reviewers (``unreviewed``, since 2026-11-01): until then every
+        turn had them, and a refusal must not throw the paid research away."""
+        auditor = self.comparison.auditor if self.comparison is not None else None
+        return bool(auditor is not None and (auditor.sessions or auditor.unreviewed)
                     and any(message.get("role") == "assistant" for message in self.messages[self.turn_start:]))
 
     def _final_review(self, worker):
@@ -2232,24 +2247,30 @@ class DelegationLoop(AgentLoop):
         return True
 
     def _review_from_here(self, value):
-        """The user's setting "workspace": the reviewers start with the
-        agent's first step that calls a tool of the workspace or opens it
-        (open_workspace), before that step's gate opens (_open_gate), so
-        they check its outward calls too. They read the log from its start:
-        the message's work before that step is theirs as well."""
+        """The user's setting "workspace": the reviewers start once the
+        workspace opened (_open_workspace calls this with ``value`` None,
+        after its tools took their place, so the reviewers' brief has its
+        rules), or, where the message had it open from the start, with the
+        agent's first step that calls one of its tools, before that step's
+        gate opens (_open_gate), so they check its outward calls too. Not for
+        ask_user alone: a question to the user does not work in the
+        workspace. They read the log from its start: the message's work
+        before is theirs as well."""
         if self.reviewers != "workspace" or self.work_log is None or self.comparison is None:
             return
         auditor = self.comparison.auditor
         if auditor.sessions:
             return
-        from app.services.agent_vm_tools import OPEN_WORKSPACE
-        names = {(call.get("function") or {}).get("name") for call in getattr(value, "tool_calls", None) or []}
-        if names & (self.workspace_names | {OPEN_WORKSPACE}):
-            logging.info("Agent reviewers start with the workspace step=%s", value.step_id)
-            # The allowance the route read before the first step is spent
-            # by now: their shares read it afresh (AnswerAudit.output_share).
-            auditor.allowance = None
-            auditor.follow(self.work_log)
+        if value is not None:
+            names = {(call.get("function") or {}).get("name") for call in getattr(value, "tool_calls", None) or []}
+            if self.workspace_closed or not names & (self.workspace_names - {ASK_TOOL}):
+                return
+        logging.info("Agent reviewers start with the workspace step=%s",
+                     getattr(value, "step_id", None) or "open_workspace")
+        # The allowance the route read before the first step is spent
+        # by now: their shares read it afresh (AnswerAudit.output_share).
+        auditor.allowance = None
+        auditor.follow(self.work_log)
 
     def _open_gate(self, value):
         """The gate for this agent step's calls that act outside the
@@ -2749,6 +2770,13 @@ class DelegationLoop(AgentLoop):
         ends "cancelled" with the live marks. A review that never started (a
         Stop or an error just before) ends at the run's end (AnswerAudit.close)."""
         if self.comparison.finalized:
+            return
+        if self.comparison.auditor.unreviewed:
+            # Nobody reviews it (the user's setting): the review ends "off"
+            # without a step of its own, which the activity would show as
+            # "Reviewed the answer".
+            from app.services.agent_comparison import AuditAnswerArgs
+            self.comparison.audit(AuditAnswerArgs(), cancellation=self.cancellation)
             return
         call = {"id": "server_audit_answer", "type": "function",
                 "function": {"name": "audit_answer", "arguments": "{}"}}

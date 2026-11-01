@@ -234,6 +234,8 @@ body.temporary-chat .hero-greeting-temporary { display: block; }
 }
 .temporary-chat-note[hidden],
 body.is-hero .temporary-chat-note { display: none; }
+/* A temporary chat has no workspace: its buttons step aside. */
+body.temporary-chat :is(#composerWorkspaceButton, #attachWorkspaceOption) { display: none; }
 body.is-hero .hero-greeting {
   transition: opacity var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard), visibility var(--dur-layer) var(--ease-linear);
 }

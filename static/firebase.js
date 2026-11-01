@@ -119,10 +119,8 @@ async function performLogout() {
     const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
     // A chat or a watch deleted a moment ago (its Undo still offered) is
     // deleted now, with this account's token; a watch kept running before.
-    // So is an open temporary chat (temporary-chat.js).
     const deletesSent = Promise.race([
-      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.(),
-        window.App?.temporaryChat?.leave?.("logout")]),
+      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.()]),
       new Promise(resolve => setTimeout(resolve, 3000))
     ]);
     // Clear the HttpOnly server session before dropping the Firebase identity.
@@ -134,6 +132,11 @@ async function performLogout() {
       cache: "no-store"
     });
     if (!response.ok) throw new Error(`Session cleanup failed (${response.status})`);
+    // An open temporary chat ends with the session, while the account's
+    // token still deletes it (temporary-chat.js); a logout that failed above
+    // leaves it on screen.
+    const temporaryLeft = Promise.race([window.App?.temporaryChat?.leave?.("logout"),
+      new Promise(resolve => setTimeout(resolve, 3000))]);
 
     // Abort while the Firebase identity is still available. Cancel hooks can
     // then release prepared-but-unconsumed usage reservations with the run's
@@ -141,6 +144,7 @@ async function performLogout() {
     window.App?.runRegistry?.cancelAll?.("logout");
     await settingsSent;
     await deletesSent;
+    await temporaryLeft;
     await signOut(auth);
     setActiveAuthIdentity(null);
     resetLoadedRunAfterLogout();

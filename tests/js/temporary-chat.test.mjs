@@ -11,7 +11,22 @@ const MARKUP = `
   <p id="temporaryChatNote" hidden></p>
   <textarea id="questionInput"></textarea>`;
 
-function boot({ stored = null } = {}) {
+// One bus for the windows of a test: BroadcastChannel between tabs.
+function channelBus() {
+  const members = new Set();
+  return class FakeChannel {
+    constructor(name) { this.name = name; this.listeners = new Set(); members.add(this); }
+    addEventListener(type, listener) { if (type === "message") this.listeners.add(listener); }
+    removeEventListener(type, listener) { this.listeners.delete(listener); }
+    postMessage(data) {
+      for (const other of members) {
+        if (other !== this && other.name === this.name) setTimeout(() => other.listeners.forEach(l => l({ data })), 0);
+      }
+    }
+  };
+}
+
+function boot({ stored = null, channel = null, armed = false } = {}) {
   const user = { uid: "user-a", getIdToken: vi.fn(async () => "token-a") };
   const fetch = vi.fn(async () => ({ ok: true, status: 200 }));
   const harness = loadScripts(["static/js/run-registry.js", "static/js/temporary-chat.js"], {
@@ -23,6 +38,8 @@ function boot({ stored = null } = {}) {
       };
       window.auth = { currentUser: user };
       window.fetch = fetch;
+      if (channel) window.BroadcastChannel = channel;
+      if (armed) window.sessionStorage.setItem("consens.temporaryChat.armed.v1", "1");
       if (stored) window.sessionStorage.setItem("consens.temporaryChat.v1", JSON.stringify(stored));
     },
   });
@@ -120,5 +137,74 @@ describe("App.temporaryChat retries", () => {
     await settle();
     expect(deletes(fetch)).toEqual([["/chats/first-chat", true]]);
     expect(temporary.current()).toEqual({ token, chatId: "second-chat" });
+  });
+});
+
+describe("App.temporaryChat in a duplicated tab", () => {
+  it("leaves a chat its original tab still has open, and deletes one nobody has", async () => {
+    const channel = channelBus();
+    const original = boot({ channel });
+    original.temporary.arm(true);
+    const token = original.temporary.start();
+    run(original.registry, token);
+    original.temporary.adopt(token, "chat-open");
+    // The copy starts with the same sessionStorage.
+    const copy = boot({ channel, stored: { chatId: "chat-open", uid: "user-a" } });
+    copy.window.dispatchEvent(new copy.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "user-a" } }));
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(deletes(copy.fetch)).toEqual([]);
+    expect(original.temporary.current()).toEqual({ token, chatId: "chat-open" });
+    // A reload: nobody else has it.
+    const reloaded = boot({ channel, stored: { chatId: "chat-gone", uid: "user-a" } });
+    reloaded.window.dispatchEvent(new reloaded.window.CustomEvent("consensio:auth-state", { detail: { known: true, uid: "user-a" } }));
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(deletes(reloaded.fetch)).toEqual([["/chats/chat-gone", true]]);
+  });
+});
+
+describe("App.temporaryChat after the review of 2026-11-01", () => {
+  it("keeps a chat temporary whose first message did not get through", () => {
+    const { temporary, registry } = boot();
+    temporary.arm(true);
+    const token = temporary.start();
+    const first = run(registry, token);
+    registry.setStatus(first.runId, "failed");
+    // The switch is spent, but the chat on screen is still the temporary one:
+    // agent-chat.js starts it anew instead of sending a saved chat.
+    expect(temporary.armed()).toBe(false);
+    expect(temporary.unanswered()).toBe(true);
+    registry.clearVisible();
+    expect(temporary.unanswered()).toBe(false);
+  });
+
+  it("keeps the switch through a reload of this tab, as at a guest's sign-in", () => {
+    const first = boot();
+    first.temporary.sync();
+    first.temporary.arm(true);
+    expect(first.window.sessionStorage.getItem("consens.temporaryChat.armed.v1")).toBe("1");
+    const again = boot({ armed: true });
+    again.temporary.sync();
+    expect(again.temporary.armed()).toBe(true);
+    expect(again.document.getElementById("temporaryChatToggle").checked).toBe(true);
+    again.temporary.start();
+    expect(again.window.sessionStorage.getItem("consens.temporaryChat.armed.v1")).toBeNull();
+  });
+
+  it("tries a failed delete again and gives up on a refusal for good", async () => {
+    vi.useFakeTimers();
+    try {
+      const { temporary, registry, fetch } = boot();
+      fetch.mockResolvedValueOnce({ ok: false, status: 503 }).mockResolvedValueOnce({ ok: true, status: 200 });
+      temporary.arm(true);
+      const token = temporary.start();
+      run(registry, token);
+      temporary.adopt(token, "chat-retry");
+      const left = temporary.leave("test");
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await left).toBe(true);
+      expect(deletes(fetch)).toEqual([["/chats/chat-retry", true], ["/chats/chat-retry", true]]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

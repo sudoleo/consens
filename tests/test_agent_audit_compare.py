@@ -79,7 +79,7 @@ class Advised(Audit):
         return completion
 
 
-def advised_loop(store, script, *, on_note=None):
+def advised_loop(store, script, *, on_note=None, reviewers="always"):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -88,7 +88,7 @@ def advised_loop(store, script, *, on_note=None):
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences())
+        agent_preferences=AgentPreferences(), reviewers=reviewers)
     notes = []
 
     def note(args, *, cancellation):

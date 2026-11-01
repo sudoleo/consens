@@ -1422,6 +1422,10 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   „Ask in a temporary chat“. Senden: keine Zeile in der Seitenleiste, unter dem
   Feld „Temporary chat: …“, kein Share- und kein Watch-Knopf unter der Antwort,
   kein Arbeitsplatz-Werkzeug, keine Memory-Änderung. Folgefrage bleibt im Chat.
+- [ ] Temporärer Chat, erste Nachricht scheitert oder wird gestoppt: die
+  nächste Nachricht bleibt temporär (keine Zeile in der Seitenleiste).
+  Als Gast „Temporary chat“ einschalten, Frage senden, anmelden: sie geht
+  temporär raus. Ein dupliziertes Tab löscht den Chat im Original nicht.
 - [ ] Temporären Chat verlassen (Neuer Chat, anderer Chat, Abmelden, Neuladen):
   er ist danach weg (Firestore: Chat, Turns und `temporary_chats`-Eintrag
   gelöscht); ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der

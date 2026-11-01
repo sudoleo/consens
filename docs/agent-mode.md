@@ -225,9 +225,12 @@ Was immer bleibt: die eigenen Sicherungen des Modells, die festen Grenzen der
 App (Zeit, Schritte, Tageskonto, VM-Zeit, geschlossenes Netz der Werkbank,
 Karten statt Schreibzugriffen, Freigabe jeder Domain durch den Nutzer,
 Memory-Sperre nach Fremdinhalt, die Sicherheitsregeln des Arbeitsplatzes) und
-der Stopp-Knopf. „Only in the workspace“ startet die Prüfer mit dem ersten
-Schritt, der ein Werkzeug des Arbeitsplatzes aufruft oder ihn öffnet, und zwar
-vor dessen Vorab-Prüfung; sie lesen das Protokoll von Anfang an. Der Agent
+der Stopp-Knopf. „Only in the workspace“ startet die Prüfer, sobald der
+Arbeitsplatz geöffnet ist (ihre Kurzfassung kennt dann seine Regeln), oder, wo
+er schon offen war, mit dem ersten Schritt, der eines seiner Werkzeuge aufruft
+(nicht `ask_user` allein), und zwar vor dessen Vorab-Prüfung; sie lesen das
+Protokoll von Anfang an. Ohne Prüfer schließt eine vom Tageskonto abgelehnte
+Runde nach bezahlter Arbeit weiter mit einer Antwort. Der Agent
 erfährt die Einstellung als Fakt (`AGENT_REVIEW_FACTS`), ändern kann er sie
 nicht, auch nicht über eine Einstellungskarte. Die Prüfung einer Antwort ohne
 Prüfer endet `off` (`audit.setting` sagt warum), nie `failed`. Die

@@ -157,8 +157,13 @@ CHAT_DELETION_SWEEP_LIMIT = 100
 # the chat and renewed with each of its turns, whose ``expires_at`` the hourly
 # retention loop sweeps (expire_temporary_chats, single-field index).
 TEMPORARY_CHATS_COLLECTION = "temporary_chats"
-TEMPORARY_CHAT_TTL = timedelta(hours=24)
+# What the app promises (privacy policy, read_settings): deleted at the
+# latest a day after its last message. The sweep runs hourly
+# (retention_maintenance), so the deadline comes an hour earlier.
+TEMPORARY_CHAT_DELETED_WITHIN = timedelta(hours=24)
+TEMPORARY_CHAT_TTL = TEMPORARY_CHAT_DELETED_WITHIN - timedelta(hours=1)
 TEMPORARY_CHAT_SWEEP_LIMIT = 100
+TEMPORARY_CHAT_RETRY = timedelta(hours=1)
 
 _ID_RE = re.compile(r"[0-9a-f]{32}")
 _CLIENT_REQUEST_ID_RE = re.compile(
@@ -708,11 +713,14 @@ class ChatStore:
             for snapshot in bookmarks.select(["chat_id"]).stream()
         }
         candidates = []
-        for snapshot in self._chats_ref(uid).select(["status", "updated_at"]).stream():
+        for snapshot in self._chats_ref(uid).select(["status", "updated_at", "temporary"]).stream():
             data = snapshot.to_dict() or {}
             updated_at = data.get("updated_at")
             if (
                 snapshot.id in reachable
+                # A temporary chat has no bookmark by design and may still be
+                # on screen: its own deadline removes it (expire_temporary_chats).
+                or data.get("temporary") is True
                 or data.get("status") != CHAT_STATUS_ACTIVE
                 or not isinstance(updated_at, datetime)
                 or now - updated_at < UNREACHABLE_CHAT_MIN_AGE
@@ -1496,8 +1504,11 @@ class ChatStore:
                 from app.services import agent_workspace
                 agent_workspace.raise_restore_floor(self, uid)
         # Before the turns go: they name the receipts whose texts go too.
-        for turn_ref in _child_documents(self._chat_ref(uid, chat_id).collection("turns")):
-            self._scrub_run_receipt(uid, chat_id, turn_ref.id)
+        # Only Agent runs have such receipts (a chat document already gone,
+        # in a resumed cascade, may have been one).
+        if not snapshot.exists or (snapshot.to_dict() or {}).get("execution_mode") == "agent":
+            turn_ids = [ref.id for ref in _child_documents(self._chat_ref(uid, chat_id).collection("turns"))]
+            self._scrub_run_receipts(uid, chat_id, turn_ids)
         self._delete_chat_tree(self._chat_ref(uid, chat_id))
         if snapshot.exists and (snapshot.to_dict() or {}).get("temporary") is True:
             # Its deadline goes with it; one left by a cascade resumed after
@@ -1508,17 +1519,22 @@ class ChatStore:
         key = hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:40]
         return self.db.collection(CHAT_DELETION_JOBS_COLLECTION).document(key)
 
-    def _scrub_run_receipt(self, uid: str, chat_id: str, turn_id: str) -> None:
-        """The texts of one turn's root receipt (agent_runs.receipt_ref),
-        kept only while the chat lives. One read; a write only where there
-        is something to remove (never a receipt that is not there)."""
-        key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0completion:0".encode()).hexdigest()
-        ref = self.db.collection("users").document(uid).collection("llm_calls").document(key)
-        snapshot = ref.get()
-        data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-        present = [name for name in RUN_RECEIPT_TEXT_FIELDS if name in data]
-        if present:
-            ref.update({name: firestore.DELETE_FIELD for name in present})
+    def _scrub_run_receipts(self, uid: str, chat_id: str, turn_ids) -> None:
+        """The texts of the turns' root receipts (agent_runs.receipt_ref),
+        kept only while the chat lives: RECEIPT_SCRUB_BATCH read in one round
+        trip, a write only where there is something to remove (never a
+        receipt that is not there). A run still finishing removes what it
+        writes later (agent_runs.finish_run)."""
+        calls = self.db.collection("users").document(uid).collection("llm_calls")
+        refs = [calls.document(hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0completion:0".encode()).hexdigest())
+                for turn_id in turn_ids]
+        for start in range(0, len(refs), RECEIPT_SCRUB_BATCH):
+            batch = refs[start:start + RECEIPT_SCRUB_BATCH]
+            for ref, snapshot in zip(batch, read_together(batch, db=self.db)):
+                data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+                present = [name for name in RUN_RECEIPT_TEXT_FIELDS if name in data]
+                if present:
+                    ref.update({name: firestore.DELETE_FIELD for name in present})
 
     def _temporary_ref(self, uid: str, chat_id: str):
         key = hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:40]
@@ -1692,29 +1708,43 @@ def expire_temporary_chats(db=None, *, now=None, limit: int = TEMPORARY_CHAT_SWE
         filter=FieldFilter("expires_at", "<=", now)
     ).limit(limit)
     for snapshot in due.stream():
-        entry = snapshot.to_dict() or {}
-        uid = str(entry.get("uid") or "")
-        chat_id = str(entry.get("chat_id") or "")
-        if not uid or not _ID_RE.fullmatch(chat_id):
-            snapshot.reference.delete()
-            continue
-        chat = store._chat_ref(uid, chat_id).get()
-        if not chat.exists or (chat.to_dict() or {}).get("temporary") is not True:
-            snapshot.reference.delete()
-            continue
         try:
-            store.request_chat_deletion(uid, chat_id)
-        except ChatNotFound:
-            snapshot.reference.delete()
-            continue
+            if _expire_temporary_chat(store, snapshot, now=now):
+                deleted += 1
         except Exception as exc:
-            # One account's refusal (deleted meanwhile) never stops the sweep;
-            # the deadline stays for the next tick.
+            # One entry's failure (an account deleted meanwhile, a short
+            # outage) never stops the sweep: it comes again after
+            # TEMPORARY_CHAT_RETRY, behind the entries due before it.
             logging.warning("temporary chat expiry failed category=%s", safe_exception(exc))
-            continue
-        if store.run_chat_deletion(uid, chat_id, now=now):
-            deleted += 1
+            try:
+                snapshot.reference.update({"expires_at": now + TEMPORARY_CHAT_RETRY})
+            except Exception as retry_exc:
+                logging.warning("temporary chat expiry not postponed category=%s", safe_exception(retry_exc))
     return deleted
+
+
+def _expire_temporary_chat(store, snapshot, *, now) -> bool:
+    """One due deadline: its chat deleted the durable way. A deadline whose
+    chat is gone, not temporary or already being deleted (its deletion job
+    goes on with its own backoff) is dropped alone. Returns whether the
+    chat's cascade finished now."""
+    entry = snapshot.to_dict() or {}
+    uid = str(entry.get("uid") or "")
+    chat_id = str(entry.get("chat_id") or "")
+    if not uid or not _ID_RE.fullmatch(chat_id):
+        snapshot.reference.delete()
+        return False
+    chat = store._chat_ref(uid, chat_id).get()
+    data = (chat.to_dict() or {}) if chat.exists else {}
+    if data.get("temporary") is not True or data.get("status") != CHAT_STATUS_ACTIVE:
+        snapshot.reference.delete()
+        return False
+    try:
+        store.request_chat_deletion(uid, chat_id)
+    except ChatNotFound:
+        snapshot.reference.delete()
+        return False
+    return store.run_chat_deletion(uid, chat_id, now=now)
 
 
 # Texts the root receipt of an Agent run holds while it runs
@@ -1723,6 +1753,7 @@ def expire_temporary_chats(db=None, *, now=None, limit: int = TEMPORARY_CHAT_SWE
 # and the decision on it. The receipt itself is billing and outlives its chat
 # (agent_runs); these words go with the chat (since 2026-11-01).
 RUN_RECEIPT_TEXT_FIELDS = ("user_notes", "hold", "hold_decision")
+RECEIPT_SCRUB_BATCH = 100
 
 
 def _child_documents(collection_ref) -> list:

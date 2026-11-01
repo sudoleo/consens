@@ -570,8 +570,12 @@ class ComparisonTools:
         if not answers:
             parts = ["No model answered."]
         else:
+            # Only where reviewers follow (the user's setting): the agent must
+            # not tell the user of a review that does not happen.
+            readers = ("The user can read them under your answer." if self.auditor.unreviewed else
+                       "The user can read them under your answer, and the reviewers read them too.")
             parts = ["These answers cover only the question you asked; the rest of the user's request is still "
-                     "yours to do.", "The user can read them under your answer, and the reviewers read them too."]
+                     "yours to do.", readers]
             if len(answers) == 1:
                 parts.insert(0, "Only one model answered.")
         if last:

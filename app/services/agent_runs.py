@@ -596,7 +596,15 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 raise TurnStatusConflict("Agent step has not settled")
             # The review ends below as the reviewers left it (agent_audit.py).
             review = (turn.to_dict() or {}).get("agent_review")
-            tx.update(root_ref, {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP})
+            closed = {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP}
+            if not chat.exists or (chat.to_dict() or {}).get("status") != "active":
+                # The chat went while the run still wrote (a temporary chat
+                # left mid-run, since 2026-11-01): the texts its deletion took
+                # from this receipt (chat_store.RUN_RECEIPT_TEXT_FIELDS) do not
+                # stay because the run outlived it by a few seconds.
+                from app.services.chat_store import RUN_RECEIPT_TEXT_FIELDS
+                closed.update({name: firestore.DELETE_FIELD for name in RUN_RECEIPT_TEXT_FIELDS if name in data})
+            tx.update(root_ref, closed)
             leases = dict((active.to_dict() or {}).get("leases") or {})
             leases.pop(root_ref.id, None)
             tx.set(active_ref, {"leases": leases})

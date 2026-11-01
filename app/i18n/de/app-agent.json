@@ -1128,5 +1128,7 @@
   "1 AI checks the workspace": "1 KI prüft den Arbeitsplatz",
   "{count} AIs check the workspace": "{count} KIs prüfen den Arbeitsplatz",
   "Answers in a temporary chat can’t be shared.": "Antworten in einem temporären Chat lassen sich nicht teilen.",
-  "Only an Agent chat can be temporary.": "Nur ein Agent-Chat kann temporär sein."
+  "Only an Agent chat can be temporary.": "Nur ein Agent-Chat kann temporär sein.",
+  "A temporary chat isn’t saved to your chats.": "Ein temporärer Chat wird nicht in deinen Chats gespeichert.",
+  "Saving is unavailable right now. Try again.": "Speichern ist gerade nicht möglich. Versuch es noch einmal."
 }

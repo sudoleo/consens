@@ -6151,10 +6151,19 @@ mit jeder Nachricht (`AgentRequest.reviewers`, ältere Seiten keinen =
 (`agent_settings.reviewers`), `DelegationLoop(reviewers=…)` →
 `ComparisonTools(reviewers=…)` → `AnswerAudit(setting=…)`. `always`: `run`
 ruft `follow` am Start wie bisher. `workspace`: `_review_from_here` startet
-die Prüfer in `_step` mit dem ersten Schritt des Agenten, der ein Werkzeug des
-Arbeitsplatzes (`workspace_names`) oder `open_workspace` aufruft, vor dessen
-Gate (`_open_gate`), sodass sie schon diesen Schritt prüfen; sie lesen das
-Protokoll ab Eintrag 1 (`ReviewerSession.cursor` 0), also auch die Arbeit davor.
+die Prüfer, sobald `_open_workspace` den Arbeitsplatz geöffnet hat (nach dem
+Tausch der Werkzeuge, damit ihre Kurzfassung `instructions_brief` seine Regeln
+enthält; ein abgelehntes `open_workspace` startet nichts), oder, wo die
+Nachricht ihn schon offen hatte, in `_step` mit dem ersten Schritt, der ein
+Werkzeug des Arbeitsplatzes (`workspace_names` ohne `ask_user`: eine Frage an
+den Nutzer arbeitet nicht dort) aufruft, vor dessen Gate (`_open_gate`), sodass
+sie schon diesen Schritt prüfen; sie lesen das Protokoll ab Eintrag 1
+(`ReviewerSession.cursor` 0), also auch die Arbeit davor. Seit der Gegenprüfung
+2026-11-01 schreibt `_open_workspace` in jedem Modus den App-Eintrag
+`workspace_opened` (`agent_audit.tool_brief` der neuen Werkzeuge): Prüfer, die
+schon folgten, lasen die Regeln des Arbeitsplatzes vorher nirgends. Die erste
+Gate-Runde spät gestarteter Prüfer liest den ganzen Verlauf; passt er nicht
+oder dauert er länger als `GATE_SECONDS`, entscheidet der Nutzer (`unchecked`).
 Ohne Arbeitsplatz (Google-Daten, temporärer Chat, kein VM-Zugang) prüft dann
 niemand. `off`: niemand. Ohne Prüfer (`AnswerAudit.unreviewed`): kein Halt,
 kein Gate, `memory_locked` sperrt Memory nach Fremdinhalt (wie vor
@@ -6162,16 +6171,22 @@ kein Gate, `memory_locked` sperrt Memory nach Fremdinhalt (wie vor
 (`agent_read_source`), `request_domain` geht ohne Gate-Runde an den Nutzer
 (Karte mit `review: "off"`, „Your reviewers are off, so only you decide.“),
 keine Prüferreserve vor dem harten Stopp (`answer_time_left`), kein
-`answer_check`-Frame, und die Prüfung endet `status: "off"` statt `failed`
-(`run`, auch aus `close`, wenn der Lauf vorher abbrach), `audit.setting` nennt
-die Einstellung (`snapshot`, nur ohne `always`). `finish_run` lässt `off`
-stehen. Der Agent erfährt es als Fakt im Systemprompt
+`answer_check`-Frame, kein Schritt `audit_answer` in der Aktivität
+(`_finish_review` ruft `ComparisonTools.audit` direkt), und die Prüfung endet
+`status: "off"` statt `failed` (`run`, auch aus `close`, wenn der Lauf vorher
+abbrach), `audit.setting` nennt die Einstellung (`snapshot`, nur ohne
+`always`). `finish_run` lässt `off` stehen. Eine vom Tageskonto abgelehnte
+Routing-Runde nach bezahlter Arbeit schließt weiter mit einer Antwort
+(`_paid_audit` gilt mit `unreviewed` wie mit Prüfern). Das Ergebnis von
+`compare_models` nennt die Prüfer nur, wo sie folgen. Der Agent erfährt es als Fakt im Systemprompt
 (`prompt_defaults.AGENT_REVIEW_FACTS[setting]` nach
 `AGENT_AUDIT_ANSWER_SECTION`, das den Prüfersatz bis dahin selbst trug; im
 Modus `workspace` ein fester Satz, damit der Cache beim Öffnen hält), im
 Memory-Block (`agent_memory.AUDIT_MEMORY_LOCK_FACTS`) und in der Beschreibung
 von `update_plan` (`PlanTools(reviewed=…)`). Ändern kann er sie nicht
-(`agent_settings.ELSEWHERE`). Zähler: `agent_audit_metrics` `review_setting`.
+(`agent_settings.ELSEWHERE`). Zähler: `agent_audit_metrics` `review_setting`
+(`marks_s` ohne `off`); `scripts/audit_report.py` zählt `off`-Turns weder als
+Prüfer-Turns (Freigabe-Tor) noch in Z1/Z2 (`unreviewed` getrennt).
 Browser: Composer-Marken `.reviewers-off` und Worte „Reviewers off“ /
 „2 AIs check the workspace“ (`App.words.reviewing`, `agent-mode.js`
 `renderReviewers`, erster Frame in `app-bootstrap.js`), Chip-Titel
@@ -8491,31 +8506,53 @@ findet und öffnet ihn nicht (`agent_chat_search`), teilen geht nicht (409 in
 `prepare_agent_share_result`), die tägliche Chat-Durchsicht des Betreibers
 überspringt ihn (`scripts/daily_chat_review.py`). Prüfer, Dateien, Dokumente,
 Google, Einstellungskarten und das Arbeitsprotokoll gibt es wie sonst; sie
-gehen mit dem Chat. **Löschen**: der Browser beim Verlassen (`DELETE /chats/{id}`
-mit `keepalive`), sonst der Retention-Loop nach `TEMPORARY_CHAT_TTL` (24 h nach
-der letzten Nachricht, `temporary_chats`, §6) über `request_chat_deletion` +
-`run_chat_deletion`; ein laufender Turn endet über den Wächter des Laufs (Chat
-nicht mehr `active`). Seit 2026-11-01 nimmt jede Chat-Löschung auch die Texte
-der Laufbelege mit (`ChatStore._scrub_run_receipt`: `user_notes`, `hold`,
-`hold_decision` am Root-Beleg je Turn, `RUN_RECEIPT_TEXT_FIELDS`; der Beleg mit
-den Kosten bleibt). **Browser** (`static/js/temporary-chat.js`,
+gehen mit dem Chat. `POST /bookmark` lehnt eine Bindung an ihn ab (409), die
+Rückgewinnung bei vollem Chat-Limit (`reclaim_unreachable_chats`) lässt ihn
+aus, ein abgebrochener Lauf gibt seine gespeicherte Antwort ohne Bookmark mit
+(`saved_answer.temporary`). **Löschen**: der Browser beim Verlassen
+(`DELETE /chats/{id}` mit `keepalive`, drei Versuche), sonst der Retention-Loop
+über `request_chat_deletion` + `run_chat_deletion`: Versprochen sind höchstens
+24 h nach der letzten Nachricht (`TEMPORARY_CHAT_DELETED_WITHIN`), der Termin
+liegt eine Stunde davor (`TEMPORARY_CHAT_TTL`), weil der Loop stündlich läuft.
+Ein scheiternder Termin hält den Lauf nicht auf (`_expire_temporary_chat`,
+`TEMPORARY_CHAT_RETRY`); einer, dessen Chat schon gelöscht wird, geht allein.
+Ein laufender Turn endet über den Wächter des Laufs (Chat nicht mehr
+`active`). Seit 2026-11-01 nimmt jede Chat-Löschung eines Agent-Chats auch die
+Texte der Laufbelege mit (`ChatStore._scrub_run_receipts`, je 100 Belege ein
+`read_together`: `user_notes`, `hold`, `hold_decision` am Root-Beleg je Turn,
+`RUN_RECEIPT_TEXT_FIELDS`; der Beleg mit den Kosten bleibt), und `finish_run`
+entfernt sie, wenn der Chat schon weg ist (ein Lauf, der ihn um Sekunden
+überlebt). **Browser** (`static/js/temporary-chat.js`,
 `App.temporaryChat`): Schalter „Temporary chat“ im (+)-Menü nur auf einem neuen
 Agent-Chat (`#temporaryChatOption`, im Chat gesperrt mit „Ends when you leave
 this chat“), Begrüßung `.hero-greeting-temporary` und Platzhalter „Ask in a
 temporary chat“ (`body.temporary-chat`), im Chat `#temporaryChatNote` unter dem
 Feld. `agent-chat.js` `send`: erste Nachricht `start()` → Token an
 `metadata.temporaryToken`, `config.temporary`, `POST /chats` mit `temporary`,
-`adopt(token, chatId)` (verlassen inzwischen → sofort löschen); Folge- und
+`adopt(token, chatId)` (verlassen inzwischen → sofort löschen; ersetzt ein
+zweiter Anlauf einen schon angelegten Chat, geht der erste); Folge- und
 Wiederholungsnachrichten bleiben über `basis.temporary` (`run-registry.js`
-`normalizeBasis`) im Chat; keine Sidebar-Zeile (`run-view.js` `ensureRunRow`),
-kein `rememberPending` (ein Neuladen beendet ihn), kein Share-/Watch-Knopf.
+`normalizeBasis`) im Chat; ist die erste Nachricht gescheitert, gestoppt oder
+nicht gesendet, beginnt die nächste ihn neu (`unanswered`), nie als
+gespeicherter Chat; keine Sidebar-Zeile (`run-view.js` `ensureRunRow`), kein
+`rememberPending` (ein Neuladen beendet ihn), kein Share-/Watch-Knopf, keine
+Nachricht in den laufenden Turn (`readsMessages`, der Lauf hat keine VM),
+keine Arbeitsplatz-Knöpfe (`body.temporary-chat`). Der Schalter überlebt ein
+Neuladen des Tabs (`sessionStorage` `consens.temporaryChat.armed.v1`), damit
+die Frage eines Gasts nach der Anmeldung temporär rausgeht.
 Verlassen = jede Registry-Änderung (`created`, `visible`, `saved-view`,
 `visible-cleared`, `cleared`), nach der kein Lauf mit seinem Token sichtbar ist
-(Neuer Chat, anderer Chat, Abmelden; `performLogout` löscht vorher mit dem
-Token), dabei stoppen seine Läufe (`registry.cancel`, Grund `temporary`). Ein
-Neuladen löscht den Chat aus `sessionStorage` `consens.temporaryChat.v1`, sobald
-das Konto bekannt ist; `app-update.js` lädt bei offenem temporärem Chat nicht von
-selbst neu. Tests: `tests/test_temporary_chats.py`,
+(Neuer Chat, anderer Chat, Abmelden; `performLogout` löscht ihn erst nach dem
+gelungenen Ende der Server-Sitzung, noch mit dem Token), dabei stoppen seine
+Läufe (`registry.cancel`, Grund `temporary`). Ein Neuladen löscht den Chat aus
+`sessionStorage` `consens.temporaryChat.v1`, sobald das Konto bekannt ist, außer
+ein anderes Tab hat ihn offen (ein dupliziertes Tab kopiert `sessionStorage`:
+`BroadcastChannel` fragt nach, `PEER_WAIT_MS`); `app-update.js` lädt bei offenem
+temporärem Chat nicht von selbst neu. Bekannte Grenzen: Entlädt der Browser ein
+Tab im Hintergrund (Speichersparen, iOS), endet der Chat beim Zurückkehren wie
+bei einem Neuladen; wer ihn verlässt, während `POST /chats` noch läuft, lässt
+einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
+(Wiederherstellung nach Stopp eines anderen Chats), endet er. Tests: `tests/test_temporary_chats.py`,
 `tests/js/temporary-chat.test.mjs`.
 
 ### Nutzergebundene Consensus-API (v1)
@@ -9675,7 +9712,7 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `delete_all_chats` bei der Kontolöschung. Keine Inhalte.
 - `temporary_chats/{sha256(uid:chat)[:40]}` — seit 2026-11-01 der Löschtermin
   eines temporären Chats (`uid`, `chat_id`, `expires_at`, `updated_at`;
-  `TEMPORARY_CHAT_TTL` = 24 h nach Anlage bzw. jeder Nachricht, in deren
+  `TEMPORARY_CHAT_TTL` = 23 h nach Anlage bzw. jeder Nachricht (versprochen 24 h, stündlicher Loop), in deren
   Transaktion geschrieben), gefegt von `expire_temporary_chats` (Einzelfeld-
   Index); geht mit dem Chat (`_purge_chat`) bzw. `delete_all_chats`. Der Chat
   selbst trägt `temporary: true`, seine Turns `agent_settings.temporary`.

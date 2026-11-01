@@ -745,11 +745,14 @@ def run_agent(request: Request, payload: AgentRequest):
                 pending = interrupted["status"] == "pending"
                 failure["recoverable"] = True
                 failure["recovery_state"] = "running" if pending else "saved"
-                if interrupted.get("bookmark_meta"):
+                # A temporary chat's answer has no sidebar entry, but is saved
+                # with its turn all the same (_temporary): the page shows it.
+                if interrupted.get("bookmark_meta") or _temporary(interrupted):
                     saved = dict(interrupted)
-                    bookmark_meta = saved.pop("bookmark_meta")
+                    bookmark_meta = saved.pop("bookmark_meta", None)
                     failure["saved_answer"] = {"chat_id": payload.chat_id, "turn_id": saved["id"],
-                        "turn": saved, "response": saved.get("consensus", ""), "bookmark_meta": bookmark_meta}
+                        "turn": saved, "response": saved.get("consensus", ""), "bookmark_meta": bookmark_meta,
+                        "temporary": _temporary(saved)}
             if interrupted and interrupted.get("agent_review"):
                 yield pack("review", {"review": interrupted["agent_review"]})
             yield pack("activity", {"version": 1, "step_id": "run", "id": "run/usage", "kind": "usage", "usage": completion.usage})

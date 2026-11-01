@@ -1417,8 +1417,10 @@
   // under review) the run takes no more steps: a message then waits for its
   // end like any other (2026-10-27; before, it went to the run as "Read
   // before the next step" and came back only when the review was done).
+  // A temporary chat runs without the workspace, so its run takes no
+  // message into the running response (routers/agent.py: VM off).
   function readsMessages(context) {
-    return document.body.classList.contains("viewer-has-workspace")
+    return document.body.classList.contains("viewer-has-workspace") && context?.config?.temporary !== true
       && !context?.metadata?.agentReview?.versions?.length;
   }
   // What Send does now: null when it stops the response (an empty field).
@@ -2788,7 +2790,8 @@
     const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
     if (typeof recoverable === 'boolean') context.metadata.recoverable = recoverable;
     context.metadata.recoveryState = result.data?.recovery_state;
-    if (result.data?.saved_answer?.turn && result.data.saved_answer.bookmark_meta) {
+    // A temporary chat's saved answer comes without a sidebar entry.
+    if (result.data?.saved_answer?.turn && (result.data.saved_answer.bookmark_meta || result.data.saved_answer.temporary)) {
       // A failed run can still have an authoritative saved partial answer.
       // Keep its error/review state while adopting the durable bookmark now.
       acceptAnswer(context, result.data.saved_answer);
@@ -2889,9 +2892,12 @@
     // starts one while the (+) switch is on; a later message, or a retry,
     // stays in it. Its runs carry its token, so leaving it stops them.
     const temporaryChat = App.temporaryChat;
+    // A first message that failed, was stopped or not sent leaves the
+    // temporary chat on screen without a basis: the next one starts it anew
+    // (start() deletes the one it replaces), never as a saved chat.
     const temporaryToken = retry?.temporaryToken
       || (basis ? (basis.temporary ? temporaryChat?.token?.(basis.chatId) || "" : "")
-        : !retry?.chatId && temporaryChat?.armed?.() ? temporaryChat.start() : "");
+        : !retry?.chatId && (temporaryChat?.armed?.() || temporaryChat?.unanswered?.()) ? temporaryChat.start() : "");
     const temporary = Boolean(temporaryToken) || basis?.temporary === true;
     let context, signal;
     let refused = null;
