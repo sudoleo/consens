@@ -98,6 +98,10 @@ def test_a_shared_deck_shows_its_first_slide_and_opens_beside_the_chat(browser, 
         viewer = page.locator('#fileViewer')
         expect(viewer).to_be_visible()
         assert page.evaluate("document.body.classList.contains('file-viewer-docked')")
+        # Measured once the preview has slid in and the chat has narrowed:
+        # both move, and a busy machine measured them halfway (2026-11-01).
+        for moving in (viewer, page.locator('.container').first):
+            moving.evaluate("el => Promise.all(el.getAnimations().map(a => a.finished.catch(() => {})))")
         expect(viewer.locator('.file-viewer-name')).to_have_text('Der_Weg_zur_AGI.pptx')
         expect(viewer.locator('.file-viewer-rail-count')).to_have_text('3 slides')
         expect(viewer.locator('.file-viewer-thumb')).to_have_count(3)
