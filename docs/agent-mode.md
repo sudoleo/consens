@@ -3628,10 +3628,14 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   `read_settings` (`SettingsTools._about`): Preis (Early Access, noch kein
   Abo), Tagesbudget in Euro je Stufe aus der Admin-Konfiguration, Stufe und
   Rest des Kontos wie der Ring in der Seitenleiste
-  (`agent_quota.remaining_allowance`), Speichergrenzen
+  (`agent_quota.remaining_allowance`), eigener OpenRouter-Schlüssel (nur
+  Compare, zählt nicht aufs Budget), Speichergrenzen
   (`MAX_CHATS_PER_OWNER`, `MAX_TURNS_PER_CHAT`), Teilen und Widerruf
   (`REVOKED_RETENTION_DAYS`), Memory, Watches, Löschen, Seiten-Links und
-  Kontakt; mit Arbeitsplatz auch dessen Tageszeit (`agent_vm_time`). Kein
+  Kontakt; mit Arbeitsplatz auch dessen Tageszeit (`agent_vm_time`, Admins
+  ohne Grenze). Die Formulierungen folgen den Texten der App
+  (Early-Access-Hinweis, Grenzmeldungen in `app-text.js`, Memory-Einstellungen):
+  Memory ist an, nur das selbstständige Speichern des Agenten ist Opt-in. Kein
   eigenes Werkzeug und nicht im Prompt: ein Werkzeug mehr wollte Max nicht,
   und Prompt-Text zahlt jeder Turn, auch gecacht (Kontingent). Ein Link auf
   eine Hilfeseite hätte `read_source` gebraucht, also einen Modellaufruf mit

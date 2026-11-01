@@ -523,20 +523,28 @@ class SettingsTools:
         def euros(amount):
             return f"{amount / agent_budget_config.MICRO_EUR:.2f} EUR"
 
+        # The wording follows the app's own (the early-access note, the
+        # limit messages of app-text.js, the Memory settings).
         about = {
-            "price": "Free during early access, with no subscription to buy yet. Plus, Pro and some features are open "
-                     "to selected accounts only; what Pro adds for this account shows under on_pro here.",
+            "price": "Free during early access: usage limits apply, some features are open to selected accounts only, "
+                     "paid plans are coming and there is no subscription to buy yet. What Pro adds for this account "
+                     "shows under on_pro here; for a feature they would like, the user can write to the contact.",
             "allowance": {"how": "One daily allowance in euros pays for every model call, web search and reviewer, "
                                  "in the Agent and in Compare, at what each costs. It resets at 00:00 UTC; once it is "
                                  "used up, new messages are refused until then. The ring in the sidebar shows what "
-                                 "is left."},
-            "storage": f"Signed-in chats save automatically: at most {MAX_CHATS_PER_OWNER} chats per account and "
-                       f"{MAX_TURNS_PER_CHAT} messages per chat; at the limit an old chat must be deleted first.",
+                                 "is left. In Compare the user can use their own OpenRouter API key instead "
+                                 "(Settings > Connections): it stays in their browser, OpenRouter bills those "
+                                 "requests, and they do not count here. The Agent always runs on the allowance."},
+            "storage": f"Signed-in chats save automatically, at most {MAX_CHATS_PER_OWNER} per account; then a new "
+                       f"chat needs an old one deleted. A chat holds at most {MAX_TURNS_PER_CHAT} messages; then a "
+                       "new chat continues.",
             "sharing": "Publishing is a separate action: Share makes an answer readable at its link without an "
                        "account. The user can revoke a link in the share dialog; a revoked share is deleted for good "
                        f"after {REVOKED_RETENTION_DAYS} days.",
-            "memory": "Memory carries the user's preferences into later chats only once they turn it on in Settings, "
-                      "where they can review, edit and switch it off.",
+            "memory": "Memory (Settings > Memory) holds what the user writes there about themselves and goes with "
+                      "their questions while it is on; they can edit, pause or delete it. The agent saves details "
+                      "from the user's own messages only once they turn on \"Let Agent update memory\" (off by "
+                      "default).",
             "watches": "A Watch reruns a question on a schedule and tracks how the answer changes; readers can follow "
                        "public Watches and Topics by email.",
             "data": "Chats can be deleted one by one, and Settings > Account > Delete account deletes the account with "
@@ -548,6 +556,7 @@ class SettingsTools:
         }
         # The account's figures as the sidebar ring shows them; without them
         # the facts above still answer.
+        tier = None
         try:
             db = self.loop.store.db
             config = agent_budget_config.get_config(db)
@@ -562,8 +571,10 @@ class SettingsTools:
                 "left_today": f"{euros(left)} of {euros(agent_budget_config.limit_for(config, tier))}; calls still "
                               "running hold part of it until they finish"})
         if getattr(self.loop, "vm_tools", None) is not None:
+            # Admins run it without a cap (agent_vm_time.daily_limit).
             about["workspace"] = (f"The workspace (the agent's own computer with a browser and files) runs up to "
-                                  f"{BASE_DAILY_SECONDS // 60} minutes a day, {PRO_DAILY_SECONDS // 3600} hours on Pro.")
+                                  f"{BASE_DAILY_SECONDS // 60} minutes a day, {PRO_DAILY_SECONDS // 3600} hours on Pro"
+                                  + ("; this account has no daily limit." if tier == "admin" else "."))
         return about
 
     # ---- Preparing a change -------------------------------------------------

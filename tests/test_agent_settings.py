@@ -361,7 +361,7 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     """Asked about consens.io itself, the agent reads the facts instead of
     guessing (2026-11-01); the system prompt only says where they are."""
     from app.services import agent_budget_config, agent_quota
-    from app.services.chat_store import MAX_CHATS_PER_OWNER
+    from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT
     from app.services.share_snapshots import REVOKED_RETENTION_DAYS
     monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "free")
     monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid, tier=None: 620_000)
@@ -374,8 +374,12 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
                                     "Pro": euros(limits["pro"])}
     assert allowance["this_account"] == "Free"
     assert allowance["left_today"].startswith(f"0.62 EUR of {euros(limits['free'])}")
-    assert "00:00 UTC" in allowance["how"]
-    assert f"{MAX_CHATS_PER_OWNER} chats" in about["storage"] and f"{REVOKED_RETENTION_DAYS} days" in about["sharing"]
+    assert "00:00 UTC" in allowance["how"] and "own OpenRouter API key" in allowance["how"]
+    assert f"at most {MAX_CHATS_PER_OWNER} per account" in about["storage"]
+    assert f"at most {MAX_TURNS_PER_CHAT} messages; then a new chat" in about["storage"]
+    assert f"{REVOKED_RETENTION_DAYS} days" in about["sharing"]
+    # Memory is on by default; only the agent's own saving is opt-in.
+    assert "while it is on" in about["memory"] and "\"Let Agent update memory\" (off by default)" in about["memory"]
     assert about["pages"]["privacy"] == "https://consens.io/privacy" and about["contact"] == "contact@consens.io"
     assert "early access" in about["price"] and "workspace" not in about
     assert "read_settings also has the facts about consens.io" in agent_settings.AUDIT_PROMPT
@@ -385,8 +389,12 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     monkeypatch.setattr(agent_quota, "remaining_allowance",
                         lambda db, uid, tier=None: (_ for _ in ()).throw(RuntimeError("firestore down")))
     about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
-    assert "20 minutes a day, 2 hours on Pro" in about["workspace"]
+    assert about["workspace"].endswith("20 minutes a day, 2 hours on Pro.")
     assert set(about["allowance"]) == {"how"} and about["contact"] == "contact@consens.io"
+    # An admin's workspace has no daily cap (agent_vm_time.daily_limit).
+    monkeypatch.setattr(agent_quota, "_admin_role", lambda uid: True)
+    about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
+    assert about["workspace"].endswith("this account has no daily limit.")
 
 
 def test_an_unreadable_account_still_reads_the_turn_and_the_defaults(store):
