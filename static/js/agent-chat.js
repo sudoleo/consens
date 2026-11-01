@@ -2367,6 +2367,9 @@
       if (registry.visible() || basis?.bookmarkId !== bookmarkId || window.auth?.currentUser?.uid !== uid) return false;
       if (registry.list().some(run => run.requestIdentity === requestId)) return false;
       record.title = basis.title || turn.question;
+      // A chat with earlier turns: a reload resumes it as the follow-up it
+      // is, and its chat opens whole once the answer is saved.
+      record.followup = Boolean(basis.currentTurn || basis.historyTurns?.length);
       // Kept for a reload of this tab, like a run sent here.
       writePending(uid, [...readPending(uid).filter(item => item.body.client_request_id !== requestId), record].slice(-4));
       resume(record, uid, { basis: basis.chatId === chatId ? basis : null });

@@ -3807,9 +3807,13 @@ describe("agent turns that outlive their connection", () => {
     const host = d.getElementById("agentHold");
     await vi.waitFor(() => expect(host.hidden).toBe(false));
     expect(host.querySelector(".agent-hold-title").textContent).toBe("A reviewer paused the work");
-    // A reload of this tab follows it on, like a run sent here.
-    expect(JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner")).map(item => item.body.client_request_id))
-      .toEqual(["req-elsewhere"]);
+    // A reload of this tab follows it on, like a run sent here, as the
+    // follow-up it is: its chat opens whole once the answer is saved (it
+    // stood as a first message, only this question visible; bug hunt
+    // 2026-10-30).
+    const pending = JSON.parse(w.sessionStorage.getItem("agent_pending_runs_owner"));
+    expect(pending.map(item => item.body.client_request_id)).toEqual(["req-elsewhere"]);
+    expect(pending[0].followup).toBe(true);
     // Opened again (or by another path): never a second follower.
     expect(await w.App.agentChat.followRunning({ chatId: CHAT, bookmarkId: "b_agent_chat", turn })).toBe(false);
     dom.window.close();
