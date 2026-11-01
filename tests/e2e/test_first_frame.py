@@ -131,7 +131,8 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         first = frames[0]
         assert first["agent"] == "chip:DeepSeek V4.1 Flash", first
         assert first["consensus"] == "hidden" and first["demo"] == "-" and first["send"] == "disabled", first
-        assert first["level"] == ("" if mobile else "Auto") and first["marks"] == 3, first
+        # Daily's two reviewers (Claude, DeepSeek since 2026-11-01).
+        assert first["level"] == ("" if mobile else "Auto") and first["marks"] == 2, first
         assert first["tab"] == "Chat" and first["newChat"] == "New chat", first
         # On a phone the switch lives in the menu, never cut off in the bar (B2);
         # on a desktop the bar is only a wrapper (display: contents) around it.
@@ -264,7 +265,7 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         default = page.evaluate("document.querySelector('[data-agent-default-label]').dataset.agentDefaultLabel")
         assert first["agent"] == f"chip:{default}", first
         assert first["consensus"] == "hidden", first
-        assert first["level"] == "" and first["marks"] == 3, first
+        assert first["level"] == "" and first["marks"] == 2, first
         assert first["greeting"] == "What do you want to be sure about?", first
         assert first["tab"] == "Chat" and first["switchInHeader"] is not mobile
         # Nothing a guest cannot have is asked for (the model list needs an account).
