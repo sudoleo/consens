@@ -581,13 +581,18 @@
       const text = state.displayButton.querySelector(".model-picker-display-text");
       text.textContent = displayLabel;
       // Gone, not hidden, without a level: the chip's text is its words alone.
+      // A word space stands between name and level: the flex chip draws
+      // none, but its text reads "Name Level" like its spoken name (WCAG
+      // 2.5.3; without it axe read "NameLevel", 2026-11-01).
       let levelNode = state.displayButton.querySelector(".model-picker-display-level");
-      if (!level) levelNode?.remove();
-      else {
+      if (!level) {
+        if (levelNode?.previousSibling?.nodeType === Node.TEXT_NODE) levelNode.previousSibling.remove();
+        levelNode?.remove();
+      } else {
         if (!levelNode) {
           levelNode = document.createElement("span");
           levelNode.className = "model-picker-display-level";
-          text.after(levelNode);
+          text.after(" ", levelNode);
         }
         if (levelNode.textContent !== window.App.t(level)) levelNode.textContent = level;
       }

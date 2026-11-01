@@ -248,12 +248,13 @@
     name.className = "model-picker-display-text";
     name.textContent = label;
     chip.append(name);
-    // The chat model's reasoning level beside its name (model-picker.js).
+    // The chat model's reasoning level beside its name, a word space apart
+    // in the text (model-picker.js).
     if (level) {
       const quiet = document.createElement("span");
       quiet.className = "model-picker-display-level";
       quiet.textContent = level;
-      chip.append(quiet);
+      chip.append(" ", quiet);
     }
     wrapper.append(chip);
   }

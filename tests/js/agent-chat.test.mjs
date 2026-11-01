@@ -3398,6 +3398,8 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     // (and under the field, agent-mode.js).
     expect(trigger.querySelector('.model-picker-display-text').textContent).toBe('DeepSeek V4.1 Flash');
     expect(trigger.querySelector('.model-picker-display-level').textContent).toBe('Auto');
+    // Its text reads like its spoken name, a word space apart (WCAG 2.5.3).
+    expect(trigger.textContent).toBe('DeepSeek V4.1 Flash Auto');
     expect(trigger.querySelector('.model-picker-display-count')).toBeNull();
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 2 AIs cross-check it.');
     expect(trigger.getAttribute('aria-label')).toBe('Agent and reviewers: DeepSeek V4.1 Flash Auto writes the answer, 2 AIs cross-check it');
