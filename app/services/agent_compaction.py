@@ -315,6 +315,8 @@ def describe(name, arguments, result):
             line += f", now: {_short(data['in_progress'], RECORD_TAIL_CHARS)}"
     elif name == "vm_view_image":
         line = f"vm_view_image {path}"
+    elif name == "vm_render_office":
+        line = f"vm_render_office {path} -> {data.get('pdf') or 'a PDF'}, {data.get('pages', '?')} pages"
     elif name == "vm_share_file":
         line = f"vm_share_file {path} -> the user got {(data.get('file') or {}).get('name') or 'it'}"
     elif name == "browser":

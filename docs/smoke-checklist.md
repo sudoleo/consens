@@ -325,14 +325,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `consens-browser-awake` mit Ablauf ~2 min nach dem Lauf). Ein Lauf mit
       localhost-Seite: Nach dem Lauf und geschlossener Ansicht endet der Tunnel
       nach ~2 min („Agent tunnel ended“).
-- [ ] Office-Dateien (2026-11-01, `docs/agent-mode.md`): Konto mit Arbeitsplatz,
-      erste Nachricht nach dem Deploy mit einem Werkbank-Befehl — die Antwort
-      wartet nicht länger als sonst. Ein bis zwei Minuten später im Terminal des
-      Arbeitsplatzes: `soffice --version` antwortet, `python3 -c "import pptx,
-      docx, openpyxl"` läuft ohne Fehler, `/var/log/consens-office.log` nennt keinen.
-      Dann „Mach mir eine kurze PowerPoint über X“: Der Agent installiert nichts,
-      prüft die Folien per `soffice --headless --convert-to pdf` und liefert die
-      .pptx; deutlich schneller als die 160 s des ersten Laufs.
+- [ ] Office-Dateien (2026-11-01, `docs/agent-mode.md`, Konverter
+      `consens-office`): Konto mit Arbeitsplatz, „Mach mir eine kurze
+      PowerPoint über X“. Der Agent installiert kein LibreOffice, ruft
+      `vm_render_office` (Aktivität „Made a PDF of …“), sieht die Übersicht der
+      Folien und liefert die .pptx; das PDF liegt daneben im Chat-Ordner. Der
+      erste Aufruf nach einem Deploy, der `workspace_vm/office` ändert, richtet
+      den Konverter ein (bis ~2 min), jeder weitere braucht Sekunden. Eine
+      kaputte Datei (`echo x > kaputt.docx`) bringt „LibreOffice could not turn
+      the file into a PDF …“, die Werkbank bleibt an. Im Sprites-Dashboard gibt
+      es genau eine Sprite `consens-office`, die nach der Umwandlung schläft.
 - [ ] VM-Zeit am Tageslimit (2026-10-31, Konto ohne Pro mit Arbeitsplatz,
       echte Sprite): „Bau mir eine kleine Web-App und zeig sie mir im
       Browser“: Der Dev-Server bekommt höchstens die Hälfte der Restzeit

@@ -86,7 +86,7 @@ THINKING_UPDATE_SECONDS = 3
 # its fourth unchanged plan.
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
-                              "vm_view_image", "update_plan", "browser"})
+                              "vm_view_image", "vm_render_office", "update_plan", "browser"})
 # Once a tool's result may have brought outside content into the agent's
 # context (model answers and their sources, pages, emails, calendars, files,
 # a VM's output or the workspace's notes, a worker's report), the message's

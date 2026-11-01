@@ -9,57 +9,12 @@
 #   own now);
 # - installs into the user's own folders: pip falls back to them by itself
 #   (site-packages is root's), uv tool by default, npm into the project (nvm,
-#   which runs Node here, takes no prefix of its own);
-# - the tools for Office files in the background (`setup.sh --office`).
+#   which runs Node here, takes no prefix of its own).
 set -eu
 user=agent
 uid=1500
 home=/home/agent
 legacy=/home/sprite
-
-export DEBIAN_FRONTEND=noninteractive
-apt_get() { apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confold -y -qq "$@"; }
-installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
-as_user() { setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs -- env -i HOME="$home" "$@"; }
-
-# Office files (2026-11-01): python-pptx, python-docx and openpyxl for the
-# agent's user, and LibreOffice without a screen (Impress, Writer, Calc) for
-# the PDFs and pictures it checks a file by, with the fonts Office files name
-# (Carlito for Calibri, Caladea for Cambria, Liberation for Arial and Times).
-# The first deck in production spent 73 of its 160 seconds installing
-# LibreOffice itself. The setup starts this in the background, or every
-# account would wait a minute for a tool most never use. A paused VM
-# freezes its processes, also dpkg halfway, so the job holds the VM awake
-# through the Sprites Tasks API while it runs, as a background process of
-# the agent does (agent_vm_processes.RUNNER). What fails comes again with the
-# next version; the agent still has vm_install_packages.
-office_task() {
-  curl -s --max-time 5 --unix-socket /.sprite/api.sock -H 'Content-Type: application/json' \
-    -X "$1" http://sprite/v1/tasks/consens-office "${@:2}" >/dev/null 2>&1 || true
-}
-office() {
-  local keeper status=0
-  (while :; do office_task PUT -d '{"expire": "5m"}'; sleep 60; done) &
-  keeper=$!
-  if ! command -v soffice >/dev/null 2>&1; then
-    { apt_get update >/dev/null && apt_get install --no-install-recommends libreoffice-impress \
-        libreoffice-writer libreoffice-calc fonts-crosextra-carlito fonts-crosextra-caladea \
-        fonts-liberation >/dev/null; } || status=1
-  fi
-  # As the agent's commands run (agent-run, agent_vm.SHELL_PRELUDE): the
-  # same python3, its packages in the agent's own folders.
-  as_user PATH="$home/.local/bin:/.sprite/bin:/usr/local/bin:/usr/bin:/bin" bash -c \
-    'for p in /etc/profile "$HOME/.profile"; do [ -r "$p" ] && . "$p"; done >/dev/null 2>&1; cd &&
-python3 -m pip install --user --quiet --disable-pip-version-check python-pptx python-docx openpyxl' \
-    || status=1
-  kill "$keeper" 2>/dev/null || true
-  office_task DELETE
-  return "$status"
-}
-if [ "${1:-}" = "--office" ]; then
-  office
-  exit
-fi
 
 if ! id -u "$user" >/dev/null 2>&1; then
   useradd --create-home --home-dir "$home" --uid "$uid" --user-group --shell /bin/bash "$user"
@@ -148,6 +103,9 @@ wait
 # already, with the old browser's screen, VNC server and window manager:
 # those three go, Chrome stays. A failed install costs the workbench that
 # tool until the next version, never its user (the steps above).
+export DEBIAN_FRONTEND=noninteractive
+apt_get() { apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confold -y -qq "$@"; }
+installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
 # Chrome's package adds Google's apt source, and a daily job of it adds the
 # source again: the workbench reaches no Google server, so every apt run of
 # the agent warned "Failed to fetch dl.google.com" (2026-10-28). The
@@ -192,8 +150,6 @@ tools || echo "setup: a tool could not be installed (ripgrep, poppler-utils, Chr
 # as the agent's user, who cannot open this folder: a copy it reads, root's.
 install -D -m 0644 "$(dirname -- "$0")/tunnel.py" /usr/local/lib/consens/tunnel.py
 
+as_user() { setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs -- env -i HOME="$home" "$@"; }
 as_user mkdir -p "$home/chats" "$home/.local/bin" "$home/.config"
-
-# The tools for Office files, detached from this command (office() above).
-setsid nohup bash "$0" --office >/var/log/consens-office.log 2>&1 </dev/null &
 exit 0

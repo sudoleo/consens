@@ -55,6 +55,7 @@
     vm_process_output: ['Background process', 'Reading a background process…', 'Read a background process'],
     vm_stop_process: ['Background process', 'Stopping a background process…', 'Stopped a background process'],
     vm_view_image: ['Picture', 'Looking at a picture…', 'Looked at a picture'],
+    vm_render_office: ['PDF', 'Making a PDF…', 'Made a PDF'],
     vm_install_packages: ['Install', 'Installing packages…', 'Installed packages'],
     // The workspace on demand (DelegationLoop._open_workspace): what for (workspaceSummary).
     open_workspace: ['Workspace', 'Opening the workspace…', 'Opened the workspace'],
@@ -744,7 +745,7 @@
   // through App.t (the line is data-i18n-skip).
   const vmTools = new Set(['vm_exec', 'vm_read_file', 'vm_write_file', 'vm_edit_file', 'vm_share_file',
     'github_import', 'vm_start_process', 'vm_process_output', 'vm_stop_process', 'vm_view_image',
-    'vm_install_packages', 'browser', 'request_domain']);
+    'vm_render_office', 'vm_install_packages', 'browser', 'request_domain']);
   const vmVerbs = { vm_read_file: ['Reading the file', 'Read the file'],
     vm_write_file: ['Writing the file', 'Wrote the file'], vm_edit_file: ['Editing the file', 'Edited the file'],
     vm_share_file: ['Sharing the file', 'Shared the file'],
@@ -753,6 +754,7 @@
     vm_process_output: ['Reading the output of process', 'Read the output of process'],
     vm_stop_process: ['Stopping process', 'Stopped process'],
     vm_view_image: ['Looking at the picture', 'Looked at the picture'],
+    vm_render_office: ['Making a PDF of', 'Made a PDF of'],
     vm_install_packages: ['Installing', 'Installed'],
     request_domain: ['Asking for access to', 'Access to'] };
   // A browser step by its action (agent_browser.py): what it did and to what.

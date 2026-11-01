@@ -1311,25 +1311,40 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   `sprite`, nie den headless Chrome des Agenten. Eine gescheiterte
   Installation bricht das Setup nicht ab (Meldung auf stderr): Der Werkbank
   fehlt dann das Werkzeug bis zur nächsten `VERSION`, nie ihr Nutzer.
-- **Office-Dateien (seit 2026-11-01).** Das erste PowerPoint in Prod brauchte
-  160 s, davon 73 s, weil der Agent LibreOffice selbst installierte, um die
-  Folien als Bild zu prüfen (vorher hielt er sich für unfähig, eins zu bauen).
-  `setup.sh` startet deshalb am Ende losgelöst sich selbst als
-  `setup.sh --office` (`setsid nohup`, Log `/var/log/consens-office.log`):
-  LibreOffice ohne Oberfläche (`libreoffice-impress`, `-writer`, `-calc`,
-  `--no-install-recommends`, nur wenn `soffice` fehlt) mit den Schriften, die
-  Office-Dateien nennen (Carlito für Calibri, Caladea für Cambria,
-  Liberation), und als Nutzer `agent` mit seinem `python3` `pip install
-  --user` python-pptx, python-docx und openpyxl. Im Hintergrund, weil sonst
-  jedes Konto beim ersten Werkbank-Aufruf nach dem Update eine Minute auf ein
-  Werkzeug wartete, das die meisten nie brauchen. Eine pausierte VM friert
-  ihre Prozesse ein, auch `dpkg` mittendrin: Der Job hält die VM deshalb über
-  die Sprites-Tasks-API wach (`PUT /v1/tasks/consens-office`, `expire` 5m, jede
-  Minute erneuert, danach `DELETE`), wie der Aufseher der Hintergrundprozesse.
-  Weil er die Option als Erstes prüft, läuft nichts vom Aufbau ein zweites Mal.
-  `vm_install_packages` wartet seitdem bis 120 s auf eine laufende apt-Instanz
-  (`DPkg::Lock::Timeout`), statt sofort zu scheitern. `AGENT_VM_PROMPT` nennt
-  die Werkzeuge als Fakt neben Chrome. Noch nicht an einer echten Sprite
+- **Office-Dateien: ein Konverter für alle Konten (seit 2026-11-01,
+  `agent_office.py`, Werkzeug `vm_render_office`).** Das erste PowerPoint in
+  Prod brauchte 160 s, davon 73 s, weil der Agent LibreOffice in seine
+  Werkbank installierte, um die Folien als Bild zu prüfen (vorher hielt er
+  sich für unfähig, eins zu bauen). LibreOffice auf jeder Werkbank wäre
+  ~0,5 GB pro Konto, die Sprites als Speicher berechnen, solange sie liegen
+  (offiziell 0,000027 $/GB-h kalt, ~2 Cent/GB-Monat), auch bei Konten, die nie
+  ein Office-Dokument machen; ein erster Einbau mit Hintergrund-Installation
+  pro Werkbank (7eb1180d) kam deshalb nie live und ist ersetzt. Jetzt liegt
+  LibreOffice einmal auf der Sprite `consens-office` des Betreibers: Ihre
+  Werkzeuge (`workspace_vm/office`: `setup.sh`, `convert.sh`, `sheet.py`)
+  kommen wie die der Werkbank mit einer neuen `VERSION` (Hash der Dateien,
+  Marke `/usr/local/lib/consens/office/VERSION`, zuletzt geschrieben; einmal
+  pro Prozess geprüft, `prepare`), das Setup läuft als root (LibreOffice
+  Impress/Writer/Calc ohne Recommends, Carlito/Caladea/Liberation/DejaVu,
+  poppler-utils, python3-pil, Nutzer `office` ohne sudo, Home und Shell).
+  Netz nur Ubuntus Spiegel (`RULES`). Eine Umwandlung schickt die Bytes per
+  stdin an `convert.sh` und liest ein tar von stdout (`in.pdf`, `pages.png`,
+  `pages.txt`); LibreOffice läuft als `office` in einem Ordner nur dieser
+  Umwandlung mit eigenem Profil (`-env:UserInstallation`), danach gehen alle
+  Prozesse und Dateien dieses Nutzers (`trap cleanup`): Eine Datei trifft nie
+  die eines anderen Kontos, und auf der VM bleibt nichts. Höchstens
+  `PARALLEL` = 3 zugleich (Semaphore, sonst nach 90 s „busy“). Die Sprite
+  schläft dazwischen; Rechenzeit kostet nur die Umwandlung (Sekunden), der
+  Speicher einmal statt pro Konto.
+  `vm_render_office(path)` liest die Datei aus der Werkbank (pptx/ppt/odp,
+  docx/doc/odt/rtf, xlsx/xls/ods, bis 20 MB), legt das PDF daneben
+  (`<name>.pdf`) und zeigt dem Agenten wie `vm_view_image` eine Übersicht der
+  ersten `OVERVIEW_PAGES` = 12 Seiten (Folien in zwei Spalten, Hochformat in
+  drei, `sheet.py`), mit eigenem Begleitsatz; ohne Bildfähigkeit des Modells
+  nur das PDF. Nicht lesbare Datei (Exit 3) = Fehler des Agenten, Ausfall des
+  Konverters = Fehler des Aufrufs, die Werkbank bleibt an. Keine VM-Zeit des
+  Kontos, dafür `RENDERS_PER_HOUR` = 30 je Konto. python-pptx & Co. holt der
+  Agent bei Bedarf selbst (pip, ~4 s). Noch nicht an einer echten Sprite
   geprüft (Smoke-Liste „Office-Dateien“).
 - **Netz für das Setup.** `dl.google.com` ist in `WORKBENCH_RULES` zu.
   `prepare` liest deshalb vor `setup.sh` die Regeln (`get_policy`), setzt sie
