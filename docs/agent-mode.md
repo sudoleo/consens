@@ -1397,7 +1397,18 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   der Umwandlung schon einmal auf (Reste einer mit SIGKILL beendeten, deren
   Trap nie lief; `kill -s KILL -- -1` als Platz-Nutzer erreicht auch einen,
   der immer neu forkt) und schreibt die Seitenzahl als Platz-Nutzer, nie als
-  root in dessen Ordner. Jeder Schritt hat sein Limit (LibreOffice
+  root in dessen Ordner. Seit 2026-11-01 abends räumt jede Umwandlung auch
+  jeden gerade freien Platz (`clean_free`, dessen Lock kurz gehalten): Die
+  Plätze hinter dem ersten werden selten benutzt, ihre Reste blieben sonst
+  tagelang. Live-Probe dazu: Beendet der Server eine Umwandlung (Stop,
+  Zeitlimit, Verbindung weg), ist `convert.sh` tot, LibreOffice läuft als
+  `officeN` mit der Datei in `/tmp/office.*` weiter. Deshalb ruft
+  `agent_office.render` dann im Hintergrund `sweep` (`convert.sh clean`,
+  nach `SWEEP_DELAY_SECONDS` = 5; gemessen 0,6 s). Jeder Befehl eines Platzes
+  läuft mit `prlimit --as` 2 GB: Eine Umwandlung braucht 0,5–0,6 GB
+  Adressraum und 150–210 MB belegt, die VM hat 8 GB ohne Swap (ihre cgroup
+  nimmt keine eigenen Untergruppen an, `+memory` scheitert). Eine Datei, die
+  mehr will, beendet so ihre eigene Umwandlung statt den Speicher aller drei. Jeder Schritt hat sein Limit (LibreOffice
   `CONVERT_SECONDS` = 90 +5, `pdfinfo` 10, `pdftoppm` 20, `sheet.py` 20),
   zusammen unter `RUN_SECONDS` = 165 des Servers; ein Zeitlimit von
   LibreOffice ist Exit 5 („took longer than …“), nicht „kaputt“. Das Setup

@@ -12,9 +12,12 @@ compute costs only while it converts, and no account carries anything.
 
 One Sprite (NAME) for all accounts, the server's own: its tools
 (workspace_vm/office: setup.sh, convert.sh, sheet.py) come with a new
-VERSION, the setup runs as root, LibreOffice as the user ``office`` without
-sudo in a folder of one conversion alone, which goes with every process and
-file of that user afterwards (convert.sh). The VM reaches Ubuntu's package
+VERSION, the setup runs as root, LibreOffice as one of the users
+``office0``–``office2`` (one per place, without sudo, at most 2 GB of
+address space per process) in a folder of one conversion alone, which goes
+with every process and file of that user afterwards (convert.sh). What a
+conversion the server ended left goes with the next one on any free place
+and, right after the end, with sweep. The VM reaches Ubuntu's package
 mirrors and nothing else (RULES). A conversion sends the file's bytes on
 stdin and reads a tar from stdout; nothing of a file stays on the VM.
 """
@@ -31,7 +34,7 @@ from pathlib import Path
 
 from app.core.observability import safe_exception
 from app.services import agent_vm
-from app.services.llm.provider_runtime import ProviderCancellation
+from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
 NAME = "consens-office"
 DIR = agent_vm.SERVER_HOME + "/.consens/office"
@@ -63,6 +66,10 @@ WAIT_STEP_SECONDS = 1
 PARALLEL = 3
 # Per account, the operator's cost (agent_vm_tools.render).
 RENDERS_PER_HOUR = 30
+# A conversion the server ended (Stop, its timeout) may still hold its place
+# for a moment: the clean-up after it (sweep) waits this long first.
+SWEEP_DELAY_SECONDS = 5
+SWEEP_SECONDS = 30
 
 
 class OfficeUnavailable(Exception):
@@ -211,8 +218,14 @@ def render(data, extension, *, cancellation, backend=None, seconds=None):
                               cwd="/", timeout=timeout, on_output=keep, cancellation=cancellation,
                               input=bytes(data))
     except agent_vm.VMUnavailable as exc:
+        # A connection lost mid-conversion leaves LibreOffice running with
+        # the file, as a Stop does (live probe 2026-11-01).
         _forget()
+        _sweep_later(None if own else backend)
         raise OfficeUnavailable(str(exc)) from None
+    except ProviderCancelled:
+        _sweep_later(None if own else backend)
+        raise
     finally:
         if own and backend is not None:
             backend.close()
@@ -221,12 +234,45 @@ def render(data, extension, *, cancellation, backend=None, seconds=None):
         # The file's, not the converter's; still worth a line, for a pattern.
         logging.info("Office conversion refused exit=%s", outcome.exit_code)
         raise OfficeRefused(err.decode("utf-8", "replace").strip()[:300] or "LibreOffice could not convert the file.")
+    if outcome.timed_out:
+        _sweep_later(None if own else backend)
     if outcome.exit_code != 0 or outcome.timed_out or len(out) > MAX_OUTPUT:
         logging.warning("Office conversion failed exit=%s timed_out=%s", outcome.exit_code, outcome.timed_out)
         if outcome.exit_code == 127:
             _forget()
         raise OfficeUnavailable("conversion failed")
     return _unpack(bytes(out))
+
+
+def sweep(backend=None):
+    """``convert.sh clean``: what a conversion the server ended left on the
+    converter goes now. Live probe 2026-11-01: the provider ends convert.sh,
+    LibreOffice runs on as the place's user with the file in its folder,
+    and the script's own clean-up never runs; the next conversion on that
+    place could be days away (privacy policy: the file is deleted there
+    right after its conversion). The sweep took 0.6 s. Best effort."""
+    own = backend is None
+    try:
+        backend = backend or agent_vm.backend()
+        if backend is None:
+            return
+        outcome = backend.run(NAME, ["sudo", "-n", "/bin/bash", CONVERT, "clean"], cwd="/", timeout=SWEEP_SECONDS,
+                              on_output=lambda stream, chunk: None, cancellation=ProviderCancellation())
+        if outcome.exit_code != 0:
+            logging.warning("Office converter clean-up failed exit=%s", outcome.exit_code)
+    except Exception as exc:
+        logging.warning("Office converter clean-up failed category=%s", safe_exception(exc))
+    finally:
+        if own and backend is not None:
+            backend.close()
+
+
+def _sweep_later(backend=None):
+    """sweep in the background, once the ended conversion let go of its place."""
+    def later():
+        time.sleep(SWEEP_DELAY_SECONDS)
+        sweep(backend)
+    threading.Thread(target=later, name="office-sweep", daemon=True).start()
 
 
 def _forget():

@@ -82,6 +82,8 @@ class Converter(VMBackend):
 def _fresh(monkeypatch):
     monkeypatch.setattr(agent_office, "_ready", None)
     monkeypatch.setattr(agent_office, "_failed_at", None)
+    # No sweep thread outlives a test (the one that checks it records them).
+    monkeypatch.setattr(agent_office, "_sweep_later", lambda backend=None: None)
 
 
 def test_the_converter_is_set_up_once_per_version_and_reaches_only_ubuntus_mirrors():
@@ -175,6 +177,45 @@ def test_a_stop_ends_the_wait_for_a_place(monkeypatch):
     assert time.monotonic() - started < 5
 
 
+def test_what_a_conversion_the_server_ended_left_goes_right_after(monkeypatch):
+    """Stop or the server's timeout end convert.sh with SIGKILL, and its own
+    clean-up never runs (review 2026-11-01): a sweep (convert.sh clean)
+    follows in the background, and runs as root without the file."""
+    later = []
+    monkeypatch.setattr(agent_office, "_sweep_later", lambda backend=None: later.append(backend))
+    ready = agent_office.VERSION.encode() + b"\n"
+
+    class Slow(Converter):
+        def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+            self.runs.append((name, argv, input))
+            return ExecOutcome(exit_code=137, timed_out=True, seconds=timeout)
+
+    slow = Slow(marker=ready)
+    with pytest.raises(agent_office.OfficeUnavailable):
+        agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=slow)
+    assert later == [slow]
+
+    class Stopped(Converter):
+        def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+            raise ProviderCancelled("stopped")
+
+    with pytest.raises(ProviderCancelled):
+        agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=Stopped(marker=ready))
+    # A connection lost mid-conversion leaves LibreOffice running as well.
+    with pytest.raises(agent_office.OfficeUnavailable):
+        agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(),
+                            backend=Converter(marker=ready, fail={"run"}))
+    assert len(later) == 3
+    # A finished conversion cleans up after itself: no sweep.
+    agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=Converter(marker=ready))
+    assert len(later) == 3
+    # The sweep itself: convert.sh clean; a failure is only logged.
+    vm = Converter()
+    agent_office.sweep(vm)
+    assert vm.runs == [(agent_office.NAME, ["sudo", "-n", "/bin/bash", agent_office.CONVERT, "clean"], None)]
+    agent_office.sweep(Converter(fail={"run"}))
+
+
 def test_a_conversion_takes_no_longer_than_the_answer_has_left():
     """A file shared late in a long run: the conversion ate the answer's
     reserve and the hard stop took the share down with it (review
@@ -224,14 +265,23 @@ def test_each_conversion_runs_alone_without_rights_and_leaves_nothing():
     assert f"slots={agent_office.PARALLEL}" in convert
     assert 'exec 9>"/run/consens-office/slot$candidate.lock"' in convert and "flock -n 9" in convert
     assert "user=office$slot" in convert and "exit 4" in convert
-    # The lock stays with the script, never with LibreOffice.
-    assert '"$@" 9>&-' in convert
+    # The locks stay with the script, never with LibreOffice.
+    assert '"$@" 8>&- 9>&-' in convert
     # What a conversion killed with SIGKILL left goes before the next file:
-    # cleanup runs once the place is taken, then again at the end. Every
-    # process of the user goes, also one that keeps forking.
-    assert convert.index("user=office$slot") < convert.index("\ncleanup\ntrap cleanup EXIT") \
+    # on every free place (their lock held for the moment, 2026-11-01: the
+    # places beyond the first are seldom used) and on its own, then again
+    # at the end. Every process of the user goes, also one that keeps forking.
+    assert convert.index("user=office$slot") < convert.index("\nclean_free\ncleanup\ntrap cleanup EXIT") \
         < convert.index("dir=$(mktemp")
-    assert "as_office kill -s KILL -- -1" in convert
+    assert 'exec 8>"/run/consens-office/slot$other.lock"' in convert
+    assert 'if flock -n 8; then clean "office$other"; fi' in convert
+    assert 'as_user "$1" kill -s KILL -- -1' in convert
+    # convert.sh clean: only that, for the server's sweep after a Stop or timeout.
+    assert 'if [ "$ext" = clean ]; then\n  clean_free\n  exit 0\nfi' in convert
+    # Each process of a place has at most 2 GB of address space (a conversion
+    # takes 0.6 GB, live probe 2026-11-01): one file never takes the memory
+    # of all three places.
+    assert "memory=2147483648" in convert and 'prlimit --as="$memory" -- setpriv' in convert
     # The page count is written by the place's user, never by root into its folder.
     assert "as_office sh -c 'timeout 10 pdfinfo" in convert and '> "$dir/pages.txt"' not in convert
     # A timeout is said as such (exit 5), and every step together stays
@@ -248,14 +298,14 @@ def test_each_conversion_runs_alone_without_rights_and_leaves_nothing():
     assert setup.rstrip().endswith('> /usr/local/lib/consens/office/VERSION')
     assert setup.index("dpkg --configure -a") < setup.index("apt_get update") < setup.index("apt-get clean")
     assert "install -D -m 0755" in setup and agent_office.CONVERT in setup
-    assert 'setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs' in convert
+    assert 'setpriv --reuid="$who" --regid="$who" --init-groups --no-new-privs' in convert
     assert 'dir=$(mktemp -d /tmp/office.XXXXXXXXXX)' in convert and 'chmod 700 "$dir"' in convert
     assert '"-env:UserInstallation=file://$dir/profile"' in convert
-    assert "trap cleanup EXIT" in convert and 'pkill -KILL -u "$user"' in convert
-    assert 'find /tmp /var/tmp /dev/shm -xdev -user "$user"' in convert
+    assert "trap cleanup EXIT" in convert and 'pkill -KILL -u "$1"' in convert
+    assert 'find /tmp /var/tmp /dev/shm -xdev -user "$1"' in convert
     # Only the types the server lets through; the rest is the agent's error (exit 2).
     accepted = convert[convert.index('case "$ext" in'):convert.index("esac")]
-    assert set(accepted.split("\n")[1].strip().rstrip(") ;").split("|")) == agent_office.EXTENSIONS
+    assert set(accepted.split("\n")[1].strip().rstrip(") ;").split("|")) == agent_office.EXTENSIONS | {"clean"}
     assert 'timeout --kill-after=5 "$seconds" soffice --headless' in convert
     assert 'tar -C "$dir" -cf - in.pdf pages.png pages.txt' in convert
 

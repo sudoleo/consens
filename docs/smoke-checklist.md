@@ -338,7 +338,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       weitere braucht 1,5–2,5 s. Eine Datei mit falscher Endung (`echo x >
       kaputt.docx`) wird ein PDF ihres Textes, kein Fehler: LibreOffice liest
       fast alles. Im Sprites-Dashboard gibt es genau eine Sprite
-      `consens-office`, die nach der Umwandlung schläft.
+      `consens-office`, die nach der Umwandlung schläft. Stop während einer
+      langen Umwandlung: Wenige Sekunden später läuft auf `consens-office`
+      kein Prozess von `office0`–`office2` mehr und unter `/tmp` liegt kein
+      `office.*` (`sweep`, live geprüft 2026-11-01 an einer Test-Sprite).
 - [ ] VM-Zeit am Tageslimit (2026-10-31, Konto ohne Pro mit Arbeitsplatz,
       echte Sprite): „Bau mir eine kleine Web-App und zeig sie mir im
       Browser“: Der Dev-Server bekommt höchstens die Hälfte der Restzeit
