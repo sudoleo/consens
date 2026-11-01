@@ -2578,7 +2578,7 @@
     // dropped, so a buffered stream that flushes late renders nothing twice.
     const seen = App.agentLive?.sequence();
     const deliver = (type, data, seq) => {
-      if (seen && !seen.accept(seq)) return;
+      if (seen && !seen.accept(seq, type)) return;
       if (data && typeof data === "object") handlers[type]?.receive(data);
     };
     const streamHandlers = Object.fromEntries(Object.keys(handlers)

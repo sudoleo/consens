@@ -23,7 +23,7 @@ function watcher(w, overrides = {}) {
   const options = {
     chatId: CHAT, requestId: "req-1", headers: { Authorization: "Bearer t" },
     signal: new w.AbortController().signal,
-    deliver: (type, data, seq) => { if (seen.accept(seq)) delivered.push([type, data, seq]); },
+    deliver: (type, data, seq) => { if (seen.accept(seq, type)) delivered.push([type, data, seq]); },
     cursor: () => seen.last, onEngage: vi.fn(), recover: vi.fn(async () => null), ...overrides,
   };
   return { live: w.App.agentLive.watch(options), delivered, options, seen };
@@ -330,6 +330,24 @@ describe("agent live fallback", () => {
     live.reconnect();
     await vi.waitFor(() => expect(delivered.map(item => item[2])).toEqual([1, 4, 6, 7]));
     expect(delivered.map(item => item[0])).toEqual(["accepted", "quota", "reset", "delta"]);
+    live.stop();
+    dom.window.close();
+  });
+
+  it("applies the reset when the lasting frame dropped last carries its number", async () => {
+    // agent_live.py keeps the frame it dropped last under its own number,
+    // which is the reset's: a quota after a step, so on many long runs. The
+    // reset was dropped as already applied, and the answer lost its start.
+    const { window: w, dom } = boot();
+    w.fetch = vi.fn(async () => reply({ known: true, done: false, last_seq: 7,
+      reset: { seq: 6, text: "So far", frames: [{ seq: 6, type: "quota", data: { token_budget: {} } }] },
+      events: [{ seq: 7, type: "delta", data: { text: "!" } }] }));
+    const { live, delivered, seen } = watcher(w);
+    live.reconnect();
+    await vi.waitFor(() => expect(delivered.map(item => item[0])).toEqual(["quota", "reset", "delta"]));
+    expect(delivered.map(item => item[2])).toEqual([6, 6, 7]);
+    // Only a reset counts at the number already reached, and never behind it.
+    expect([seen.accept(7, "delta"), seen.accept(7, "reset"), seen.accept(6, "reset")]).toEqual([false, true, false]);
     live.stop();
     dom.window.close();
   });

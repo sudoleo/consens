@@ -23,7 +23,7 @@
 // set lasting state, then `reset` with the answer text so far.
 //
 // Contract (App.agentLive):
-//   sequence() -> { accept(seq) -> boolean, last }
+//   sequence() -> { accept(seq, type) -> boolean, last }
 //   watch({ chatId, requestId, headers (object | async () => object), signal,
 //           deliver(type, data, seq), cursor() -> number,
 //           recover() -> Promise<result with data.turn | 'running' | 'offline' | null>,
@@ -73,11 +73,14 @@
   function sequence() {
     let applied = 0;
     return {
-      accept(seq) {
+      accept(seq, type) {
         const value = Number(seq);
         // Frames without a number (an older server) are always new.
         if (!Number.isInteger(value) || value <= 0) return true;
-        if (value <= applied) return false;
+        // A reset is the answer text at its number, and the lasting frame
+        // dropped last comes just before it under the same number
+        // (agent_live.py _slice): at the number reached it still counts.
+        if (value < applied || (value === applied && type !== 'reset')) return false;
         applied = value;
         return true;
       },

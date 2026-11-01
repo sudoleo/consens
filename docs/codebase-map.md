@@ -5215,7 +5215,9 @@ Poll geprüft und nie, solange eine Pause auf den Nutzer wartet, Option
 dem ursprünglichen Fehler. `app_stream_resumed` zählt nur einen wirklich
 toten Stream (Fehler, 45 s oder 20 s Stille). Alle Frames laufen durch
 `deliver(type, data, seq)`; `App.agentLive.sequence()` verwirft schon
-angewandte Nummern, `reset` setzt `streamText`. Während Polls scheitern, zeigt
+angewandte Nummern, `reset` setzt `streamText` (seit 2026-11-01 auch bei der
+schon erreichten Nummer: das zuletzt verworfene bleibende Frame trägt
+dieselbe wie der `reset`, z. B. `quota`). Während Polls scheitern, zeigt
 die Aktivität „Reconnecting…“ (`agent-activity.js`, Spec `reconnecting`). Der
 Stop-Knopf (`registry.cancel(..., "user")` → `cancelRun` → `stopOnServer`) ruft
 den Request-Stop und wiederholt ihn bei Netzfehler, 429 oder 5xx (Backoff bis
