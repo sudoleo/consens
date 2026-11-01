@@ -33,6 +33,7 @@ from app.services.agent_provider_limits import (
 )
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
 from app.services.agent_comparison import SEARCHING_KINDS
+from app.services.prompt_defaults import AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
     AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, reasoning_active, resolve_agent_model,
     routing_output_limit,
@@ -333,8 +334,21 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 domains=True, **kwargs):
+                 domains=True, reviewers="always", temporary=False, **kwargs):
         super().__init__(**kwargs)
+        # A temporary chat (routers/agent.py): no Watch, no search of other
+        # chats, and the agent knows why (AGENT_TEMPORARY_CHAT_PROMPT); the
+        # route leaves out the workspace and the memory.
+        self.temporary = temporary
+        # Who checks this message's work (account setting ``reviewers``,
+        # since 2026-11-01): "always" from the run's start, "workspace" from
+        # the agent's first step that reaches for the workspace on
+        # (_review_from_here), "off" nobody. Without reviewers no halt, no
+        # gate: memory locks once outside content is in view (memory_locked),
+        # a domain waits for the user alone (_domain_wait).
+        if reviewers not in REVIEW_FACTS:
+            raise ValueError("Unknown reviewers setting")
+        self.reviewers = reviewers
         # Domains beyond the package registries for the workbench
         # (request_domain): Pro and admins, routers/agent.py domains_allowed,
         # which the route passes (AGENT_VM_NO_DOMAINS_PROMPT without).
@@ -465,6 +479,12 @@ class DelegationLoop(AgentLoop):
             if AGENT_AUDIT_ANSWER_SECTION not in self.messages[0]["content"]:
                 # Not the code prompt (tests): the facts of the app still apply.
                 self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_ANSWER_SECTION
+            # Who reviews the work, by the user's setting: the same through
+            # the message, the workspace's opening included (cache).
+            self.messages[0]["content"] += "\n\n" + REVIEW_FACTS[reviewers]
+            if temporary:
+                from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
+                self.messages[0]["content"] += "\n\n" + AGENT_TEMPORARY_CHAT_PROMPT
         if self.config["enabled"] or comparison_models is None:
             self.messages[0]["content"] += ("\n\n" + self.config["orchestrator_prompt"]
                 + "\nAvailable worker models (server registry): " + json.dumps(catalog))
@@ -488,7 +508,8 @@ class DelegationLoop(AgentLoop):
                             and not google_selection and not google_data)
             # compare_models and the reviewers (agent_audit.AnswerAudit); its
             # limit per message stands in the tool's description.
-            self.comparison = ComparisonTools(self, comparison_models, preferences=agent_preferences)
+            self.comparison = ComparisonTools(self, comparison_models, preferences=agent_preferences,
+                                              reviewers=reviewers)
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
             # The review: run by the app once the answer is written, never
@@ -560,7 +581,7 @@ class DelegationLoop(AgentLoop):
         # only on their own account-mode turns, never with Google data. The
         # condition holds for a whole chat, so the prompt stays cacheable.
         if (self.comparison is not None and self.policy.account_budget_only
-                and not google_selection and not google_data):
+                and not google_selection and not google_data and not temporary):
             from app.services.agent_watch import AUDIT_PROMPT, WatchTools
             self.watch_tools = WatchTools(self)
             self.messages[0]["content"] += "\n\n" + AUDIT_PROMPT
@@ -576,8 +597,9 @@ class DelegationLoop(AgentLoop):
             self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # The user's earlier chats, found and read on demand (agent_chat_search.py):
-        # on their own account-mode turns; chats with Google data stay out.
-        if self.comparison is not None and self.policy.account_budget_only:
+        # on their own account-mode turns; chats with Google data stay out,
+        # and a temporary chat starts from nothing.
+        if self.comparison is not None and self.policy.account_budget_only and not temporary:
             from app.services.agent_chat_search import ChatSearch
             self.registry = ToolRegistry([*self.registry.tools.values(), *ChatSearch(self).tools()],
                                          argument_limit=self.registry.argument_limit)
@@ -631,7 +653,7 @@ class DelegationLoop(AgentLoop):
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
         if self.comparison is not None:
-            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot)
+            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot, self.reviewers)
             memory_tools = self.memory.tools()
             if memory_tools:
                 self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
@@ -734,7 +756,8 @@ class DelegationLoop(AgentLoop):
     def _workspace_tool_list(self):
         """The workspace's tools: the VM's, the browser and GitHub among them, and the plan."""
         from app.services.agent_plan import PlanTools
-        self.plan_tools = PlanTools()
+        # Its description names who reads the plan: the reviewers too, unless the user has none.
+        self.plan_tools = PlanTools(reviewed=self.reviewers != "off")
         vm_tools = self.vm_tools.tools()
         self.workspace_names = frozenset(tool.name for tool in vm_tools)
         # Calls into the workspace wait while the user has its browser
@@ -1694,12 +1717,14 @@ class DelegationLoop(AgentLoop):
                     yield closing
             self._check(cancellation)
             status = "succeeded"
-            if stream_answer and self._answer_check_follows(value):
+            if (stream_answer and self._answer_check_follows(value)
+                    and not self.comparison.auditor.unreviewed):
                 # The last word stands and the reviewers review exactly this
                 # text next: the page shows the review from now on, not only
                 # after settlement, the allowance and two review checkpoints
                 # (each a Firestore write). Live only, never saved; the review
                 # that holds the text as a version takes over (agent-chat.js).
+                # Not where nobody reviews it (the user's setting).
                 yield {"type": "answer_check"}
         except (ProviderCancelled, GeneratorExit) as exc:
             status = "cancelled"
@@ -1764,6 +1789,8 @@ class DelegationLoop(AgentLoop):
                         self.reviewer_charge += agent_quota.measured_charge(value.usage) or 0
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
+                if log_actor == "agent" and status == "succeeded":
+                    self._review_from_here(value)
                 if log_actor:
                     # Outward calls of the agent's step wait for the
                     # reviewers (agent_gate): the gate opens before the
@@ -2201,6 +2228,23 @@ class DelegationLoop(AgentLoop):
             self.condition.notify_all()
         return True
 
+    def _review_from_here(self, value):
+        """The user's setting "workspace": the reviewers start with the
+        agent's first step that calls a tool of the workspace or opens it
+        (open_workspace), before that step's gate opens (_open_gate), so
+        they check its outward calls too. They read the log from its start:
+        the message's work before that step is theirs as well."""
+        if self.reviewers != "workspace" or self.work_log is None or self.comparison is None:
+            return
+        auditor = self.comparison.auditor
+        if auditor.sessions:
+            return
+        from app.services.agent_vm_tools import OPEN_WORKSPACE
+        names = {(call.get("function") or {}).get("name") for call in getattr(value, "tool_calls", None) or []}
+        if names & (self.workspace_names | {OPEN_WORKSPACE}):
+            logging.info("Agent reviewers start with the workspace step=%s", value.step_id)
+            auditor.follow(self.work_log)
+
     def _open_gate(self, value):
         """The gate for this agent step's calls that act outside the
         workspace (agent_gate.outward), when reviewers follow the work
@@ -2324,7 +2368,9 @@ class DelegationLoop(AgentLoop):
         details = {"reviewer": "", "provider": "", "kind": "domain", "reason": "", "gate": True,
                    "entry": gate.entry if gate is not None else None, "step": "", "step_name": "",
                    "step_kind": "", "step_source": "", "domain": domain, "domain_reason": reason,
-                   "review": verdict if verdict in {"go", "halt"} else "unchecked",
+                   # "off": the user's setting has no reviewers here (agent-chat.js says so).
+                   "review": verdict if verdict in {"go", "halt"} else
+                             "off" if auditor is not None and auditor.unreviewed else "unchecked",
                    **(auditor.gate_trace(gate) if gate is not None and auditor is not None
                       and call["id"] in gate.call_ids else {})}
         if halts:
@@ -3044,8 +3090,10 @@ class DelegationLoop(AgentLoop):
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
                 if self.work_log is not None:
                     self._log_start()
-                    # The reviewers follow the log from here on (agent_audit).
-                    self.comparison.auditor.follow(self.work_log)
+                    # The reviewers follow the log from here on (agent_audit),
+                    # where the user's setting has them from the start.
+                    if self.reviewers == "always":
+                        self.comparison.auditor.follow(self.work_log)
                 if self.mock_answer is not None and self.answer_conversation:
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
                     if self.watch_tools:

@@ -1401,6 +1401,29 @@ Modelle prüfen Arbeit und Antwort, `compare_models` fragt sie auf Wunsch des
 Agenten. Punkte zu Judges, Score und Differences-Marken auf Agent-Antworten
 gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 
+- [ ] Settings → Runs → Reviewers auf *Off*: unter der Zeile stehen die Folgen
+  in ganzen Sätzen; der Composer zeigt „Reviewers off“ mit blassen Marken (im
+  Chat und auf dem Startbildschirm, auf dem Handy „Off“); eine Nachricht läuft
+  ohne Prüferzeilen in der Aktivität, ohne „Reviewing the answer…“, und unter
+  der Antwort steht „Not reviewed · reviewers off“. Ein anderes Gerät desselben
+  Kontos zeigt die Einstellung nach dem Laden.
+- [ ] Reviewers *Only in the workspace*: eine reine Chatfrage endet mit „Not
+  reviewed · no work in the workspace“; eine Aufgabe, für die der Agent den
+  Arbeitsplatz öffnet, bekommt ab diesem Schritt Prüferzeilen und am Ende Notes.
+  Ein `request_domain` dort zeigt die Domain-Karte mit dem Urteil der Prüfer.
+- [ ] Reviewers *Off* + Domain-Anfrage am Arbeitsplatz: die Karte sagt „Your
+  reviewers are off, so only you decide.“
+- [ ] Temporärer Chat: im (+)-Menü eines neuen Agent-Chats „Temporary chat“
+  einschalten → Begrüßung „Temporary chat. Gone when you leave it.“, Platzhalter
+  „Ask in a temporary chat“. Senden: keine Zeile in der Seitenleiste, unter dem
+  Feld „Temporary chat: …“, kein Share- und kein Watch-Knopf unter der Antwort,
+  kein Arbeitsplatz-Werkzeug, keine Memory-Änderung. Folgefrage bleibt im Chat.
+- [ ] Temporären Chat verlassen (Neuer Chat, anderer Chat, Abmelden, Neuladen):
+  er ist danach weg (Firestore: Chat, Turns und `temporary_chats`-Eintrag
+  gelöscht); ein Lauf, der noch arbeitete, stoppt. Tab einfach schließen: der
+  stündliche Retention-Loop löscht ihn spätestens 24 h nach der letzten
+  Nachricht.
+
 - [ ] Mobil bei 320/369/390 px Folgefrage fokussieren, auch mit kurzer
   Tastatur-Ansicht: Chatmodell steht in einer eigenen Zeile über Plus, Compare
   und Senden; die drei Aktionen haben eine gemeinsame Mittellinie.

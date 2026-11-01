@@ -253,6 +253,8 @@
   function ensureRunRow(context) {
     if (!context?.bookmark?.id || !context.auth?.uid) return;
     if (context.bookmark.deleted || context.bookmark.deleting) return;
+    // A temporary chat is not in the chats (temporary-chat.js).
+    if (context.config?.temporary === true) return;
     if (context.bookmark.uiReady) return;
     const container = document.getElementById("bookmarksContainer");
     if (!container) return;

@@ -767,5 +767,7 @@
   "Text only. Download the file for its layout.": "Nur der Text. Das Layout zeigt die heruntergeladene Datei.",
   "Showing the first {MAX_LINES} lines. Download the file for the rest.": "Die ersten {MAX_LINES} Zeilen. Den Rest zeigt die heruntergeladene Datei.",
   "1 line": "1 Zeile",
-  "{lines} lines": "{lines} Zeilen"
+  "{lines} lines": "{lines} Zeilen",
+  "{selectedLabel} writes the answer, without reviewers.": "{selectedLabel} schreibt die Antwort, ohne Prüfer.",
+  "{linked}: {model} writes the answer, without reviewers": "{linked}: {model} schreibt die Antwort, ohne Prüfer"
 }

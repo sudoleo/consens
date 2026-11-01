@@ -34,7 +34,7 @@ def _cleanup_steps():
     from app.services.agent_work_log import cleanup_expired_work_logs
     from app.services.agent_documents import cleanup_expired_documents
     from app.services.google_connections import cleanup_google_data
-    from app.services.chat_store import resume_chat_deletions
+    from app.services.chat_store import expire_temporary_chats, resume_chat_deletions
     from app.services.memory_edit import cleanup_memory_edit_records
     from app.services.agent_memory import cleanup_memory_change_logs
     from app.services.notification_outbox import cleanup as cleanup_outbox
@@ -47,6 +47,9 @@ def _cleanup_steps():
         ("work_logs_deleted", cleanup_expired_work_logs),
         ("documents_deleted", cleanup_expired_documents),
         ("google_records_deleted", cleanup_google_data),
+        # Temporary chats whose tab closed without leaving them, before the
+        # deletion jobs: a failed cascade of one is retried below.
+        ("temporary_chats_deleted", expire_temporary_chats),
         ("chat_deletions_completed", resume_chat_deletions),
         ("memory_edit_records", cleanup_memory_edit_records),
         ("memory_change_logs", cleanup_memory_change_logs),

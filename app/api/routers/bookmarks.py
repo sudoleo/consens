@@ -951,6 +951,9 @@ def prepare_agent_share_result(uid: str, chat_id: str, turn_id: str, *, answer: 
             status_code=409,
             detail="Answers in a chat with your Google data can’t be shared publicly.",
         )
+    # A share outlives its chat (30 days); a temporary chat leaves nothing behind.
+    if chat.get("temporary") is True:
+        raise HTTPException(status_code=409, detail="Answers in a temporary chat can’t be shared.")
     payload = share_snapshots.build_agent_pending_result(uid, turn)
     if payload is None:
         raise HTTPException(status_code=409, detail="This answer is empty, so there is nothing to share.")

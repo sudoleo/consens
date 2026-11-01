@@ -119,8 +119,10 @@ async function performLogout() {
     const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
     // A chat or a watch deleted a moment ago (its Undo still offered) is
     // deleted now, with this account's token; a watch kept running before.
+    // So is an open temporary chat (temporary-chat.js).
     const deletesSent = Promise.race([
-      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.()]),
+      Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.(),
+        window.App?.temporaryChat?.leave?.("logout")]),
       new Promise(resolve => setTimeout(resolve, 3000))
     ]);
     // Clear the HttpOnly server session before dropping the Firebase identity.

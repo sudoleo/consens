@@ -37,6 +37,16 @@ def _audit_blocks():
                         agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED))
 
 
+def _review_facts():
+    from app.services.prompt_defaults import AGENT_REVIEW_FACTS
+    return "\n\n".join(f"[{setting}] {fact}" for setting, fact in AGENT_REVIEW_FACTS.items())
+
+
+def _temporary_chat():
+    from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
+    return AGENT_TEMPORARY_CHAT_PROMPT
+
+
 def _vm():
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     return AGENT_VM_PROMPT
@@ -79,6 +89,15 @@ _ENTRIES = (
      "Watch not in chats with Google data, in those also a no-web-search note); date, reference time and "
      "selected model travel with the latest user message.",
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent")),
+    ("agent_review_facts", "Agent: who reviews",
+     "Appended right after \"Agent: instructions\", one of three by the user's reviewers setting (Settings > "
+     "Runs, since 2026-11-01): always, only from the agent's first step in the workspace on, or off. The memory "
+     "block says the same for memory changes (agent_memory.py:AUDIT_MEMORY_LOCK_FACTS).",
+     "prompt_defaults.py:AGENT_REVIEW_FACTS", _review_facts),
+    ("agent_temporary_chat", "Agent: temporary chat",
+     "Appended after \"Agent: who reviews\" in a temporary chat (since 2026-11-01), which has no workspace, "
+     "Watch, chat search or sharing; its memory block is agent_memory.py:AUDIT_MEMORY_TEMPORARY_PROMPT.",
+     "prompt_defaults.py:AGENT_TEMPORARY_CHAT_PROMPT", _temporary_chat),
     ("comparison", "Agent: comparison models",
      "System prompt of each model compare_models asks, each in a fresh conversation of its own, shown for depth "
      "\"full\" (3 search rounds). Quick depth allows one search round and adds brief-answer guidance instead. "

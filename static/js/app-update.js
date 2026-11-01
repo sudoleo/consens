@@ -51,6 +51,8 @@
   // screen shows something that exists nowhere else (a guest's result, a run
   // that is not saved yet).
   function view() {
+    // A reload ends a temporary chat (temporary-chat.js): never on its own.
+    if (App.temporaryChat?.shown?.()) return null;
     if (document.getElementById("watchDashboard")?.hidden === false) return { bookmarkId: "" };
     const registry = App.runRegistry;
     const run = registry?.visible?.();

@@ -149,6 +149,16 @@ CHAT_DELETION_JOB_SCHEMA_VERSION = 1
 CHAT_DELETION_RETRY_BASE_SECONDS = 60
 CHAT_DELETION_RETRY_MAX_SECONDS = 6 * 60 * 60
 CHAT_DELETION_SWEEP_LIMIT = 100
+# Temporary chats (since 2026-11-01, docs/codebase-map.md "Temporäre Chats"):
+# an Agent chat with ``temporary: true`` has no bookmark, no memory, no
+# workspace and no share. The browser deletes it when the user leaves it;
+# this registry is the guarantee for a closed tab: one document per chat
+# (hashed id, like a deletion job), written in the transaction that creates
+# the chat and renewed with each of its turns, whose ``expires_at`` the hourly
+# retention loop sweeps (expire_temporary_chats, single-field index).
+TEMPORARY_CHATS_COLLECTION = "temporary_chats"
+TEMPORARY_CHAT_TTL = timedelta(hours=24)
+TEMPORARY_CHAT_SWEEP_LIMIT = 100
 
 _ID_RE = re.compile(r"[0-9a-f]{32}")
 _CLIENT_REQUEST_ID_RE = re.compile(
@@ -426,6 +436,8 @@ def chat_metadata(chat_id: object, data: object, *, compact: bool = False) -> di
         "latest_question": str(source.get("latest_question") or ""),
         "execution_mode": source.get("execution_mode", "consensus"),
     }
+    if source.get("temporary") is True:
+        result["temporary"] = True
     if not compact:
         result = {
             "schema_version": _safe_positive_int(
@@ -607,9 +619,12 @@ class ChatStore:
         self.db = db
         self._transaction_runner = transaction_runner
 
-    def create_chat(self, uid: str, *, title: str = "", execution_mode: str = "consensus") -> dict:
+    def create_chat(self, uid: str, *, title: str = "", execution_mode: str = "consensus",
+                    temporary: bool = False) -> dict:
         if execution_mode not in {"consensus", "agent"}:
             raise ValueError("Invalid execution mode")
+        if temporary and execution_mode != "agent":
+            raise ValueError("Only an Agent chat can be temporary")
         title = normalize_title(title)
         if not _counted(self.db, uid):
             self._ensure_chat_counter(uid, fence_writes=True)
@@ -626,6 +641,8 @@ class ChatStore:
             "turn_count": 0,
             "latest_question": "",
         }
+        if temporary:
+            document["temporary"] = True
 
         def operation(transaction):
             tombstone, counter_snapshot, existing_snapshot = read_together(
@@ -651,6 +668,8 @@ class ChatStore:
                 "active_count": count + 1,
                 "updated_at": firestore.SERVER_TIMESTAMP,
             })
+            if temporary:
+                self._expire_later(transaction, uid, chat_id)
 
         try:
             self._transaction(operation)
@@ -981,6 +1000,9 @@ class ChatStore:
 
             transaction.set(turn_ref, turn_document)
             transaction.update(chat_ref, chat_updates)
+            if chat_data.get("temporary") is True:
+                # A temporary chat in use lives on from its latest message.
+                self._expire_later(transaction, uid, chat_id)
             return turn_document
 
         stored = self._transaction(operation)
@@ -1297,6 +1319,12 @@ class ChatStore:
         )
         for snapshot in jobs.stream():
             snapshot.reference.delete()
+        # So do the deadlines of its temporary chats.
+        deadlines = self.db.collection(TEMPORARY_CHATS_COLLECTION).where(
+            filter=FieldFilter("uid", "==", uid)
+        )
+        for snapshot in deadlines.stream():
+            snapshot.reference.delete()
 
     def delete_chat(
         self, uid: str, chat_id: str, *, allow_account_deletion: bool = False
@@ -1461,11 +1489,42 @@ class ChatStore:
             if isinstance(record, dict) and record.get("workspace"):
                 from app.services import agent_workspace
                 agent_workspace.raise_restore_floor(self, uid)
+        # Before the turns go: they name the receipts whose texts go too.
+        for turn_ref in _child_documents(self._chat_ref(uid, chat_id).collection("turns")):
+            self._scrub_run_receipt(uid, chat_id, turn_ref.id)
         self._delete_chat_tree(self._chat_ref(uid, chat_id))
+        if snapshot.exists and (snapshot.to_dict() or {}).get("temporary") is True:
+            # Its deadline goes with it; one left by a cascade resumed after
+            # the chat document was gone ends at its sweep (expire_temporary_chats).
+            self._temporary_ref(uid, chat_id).delete()
 
     def _deletion_job_ref(self, uid: str, chat_id: str):
         key = hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:40]
         return self.db.collection(CHAT_DELETION_JOBS_COLLECTION).document(key)
+
+    def _scrub_run_receipt(self, uid: str, chat_id: str, turn_id: str) -> None:
+        """The texts of one turn's root receipt (agent_runs.receipt_ref),
+        kept only while the chat lives. One read; a write only where there
+        is something to remove (never a receipt that is not there)."""
+        key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0completion:0".encode()).hexdigest()
+        ref = self.db.collection("users").document(uid).collection("llm_calls").document(key)
+        snapshot = ref.get()
+        data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        present = [name for name in RUN_RECEIPT_TEXT_FIELDS if name in data]
+        if present:
+            ref.update({name: firestore.DELETE_FIELD for name in present})
+
+    def _temporary_ref(self, uid: str, chat_id: str):
+        key = hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:40]
+        return self.db.collection(TEMPORARY_CHATS_COLLECTION).document(key)
+
+    def _expire_later(self, transaction, uid: str, chat_id: str) -> None:
+        """A temporary chat's deadline: TEMPORARY_CHAT_TTL from now
+        (expire_temporary_chats). The two ids and times only, never content."""
+        now = datetime.now(timezone.utc)
+        transaction.set(self._temporary_ref(uid, chat_id), {
+            "uid": uid, "chat_id": chat_id, "expires_at": now + TEMPORARY_CHAT_TTL, "updated_at": now,
+        })
 
     def _delete_chat_tree(self, chat_ref) -> None:
         from app.services.agent_work_log import delete_turn_log
@@ -1608,6 +1667,56 @@ def resume_chat_deletions(db=None, *, now=None, limit: int = CHAT_DELETION_SWEEP
         if store.run_chat_deletion(uid, chat_id, now=now):
             completed += 1
     return completed
+
+
+def expire_temporary_chats(db=None, *, now=None, limit: int = TEMPORARY_CHAT_SWEEP_LIMIT) -> int:
+    """Delete the temporary chats whose deadline passed (a tab closed without
+    leaving them); called by the hourly retention loop. Each goes the regular
+    durable way (request_chat_deletion, then run_chat_deletion): a failed
+    cascade stays a deletion job. A deadline whose chat is gone, or not
+    temporary, is dropped alone. Returns how many chats were deleted."""
+    if db is None:
+        from app.core.security import db_firestore
+        db = db_firestore
+    now = now or datetime.now(timezone.utc)
+    store = ChatStore(db)
+    deleted = 0
+    # Single-field range on one collection: Firestore's automatic index.
+    due = db.collection(TEMPORARY_CHATS_COLLECTION).where(
+        filter=FieldFilter("expires_at", "<=", now)
+    ).limit(limit)
+    for snapshot in due.stream():
+        entry = snapshot.to_dict() or {}
+        uid = str(entry.get("uid") or "")
+        chat_id = str(entry.get("chat_id") or "")
+        if not uid or not _ID_RE.fullmatch(chat_id):
+            snapshot.reference.delete()
+            continue
+        chat = store._chat_ref(uid, chat_id).get()
+        if not chat.exists or (chat.to_dict() or {}).get("temporary") is not True:
+            snapshot.reference.delete()
+            continue
+        try:
+            store.request_chat_deletion(uid, chat_id)
+        except ChatNotFound:
+            snapshot.reference.delete()
+            continue
+        except Exception as exc:
+            # One account's refusal (deleted meanwhile) never stops the sweep;
+            # the deadline stays for the next tick.
+            logging.warning("temporary chat expiry failed category=%s", safe_exception(exc))
+            continue
+        if store.run_chat_deletion(uid, chat_id, now=now):
+            deleted += 1
+    return deleted
+
+
+# Texts the root receipt of an Agent run holds while it runs
+# (agent_sessions.AgentSessionStore): the user's messages into the running
+# response, the open pause with the agent's question or a reviewer's reason,
+# and the decision on it. The receipt itself is billing and outlives its chat
+# (agent_runs); these words go with the chat (since 2026-11-01).
+RUN_RECEIPT_TEXT_FIELDS = ("user_notes", "hold", "hold_decision")
 
 
 def _child_documents(collection_ref) -> list:

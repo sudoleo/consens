@@ -217,6 +217,23 @@ body.is-hero .input-section:has(> .agent-composer-notice:not([hidden])) > .compo
    breaks between them, never inside one, and the second steps back a tone. */
 .hero-greeting > span { display: inline-block; }
 .hero-greeting > span + span { color: var(--ink-3); }
+/* While the next chat is temporary (temporary-chat.js, body.temporary-chat)
+   its greeting stands in the app's place, by the same rules. */
+.hero-greeting-temporary,
+body.temporary-chat .hero-greeting:not(.hero-greeting-temporary) { display: none; }
+body.temporary-chat .hero-greeting-temporary { display: block; }
+/* An open temporary chat says so under the field, in plain words. The start
+   screen says it in its greeting. */
+.temporary-chat-note {
+  margin: 0;
+  padding: 8px 12px 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  text-align: left;
+}
+.temporary-chat-note[hidden],
+body.is-hero .temporary-chat-note { display: none; }
 body.is-hero .hero-greeting {
   transition: opacity var(--dur-layer) var(--ease-standard), transform var(--dur-layer) var(--ease-standard), visibility var(--dur-layer) var(--ease-linear);
 }

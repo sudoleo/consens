@@ -561,9 +561,17 @@
   // their reviews in the reader, with their notes on the work (log
   // entries). No score and no Differences: unmarked text means no objection.
   // Done: every reviewer ended, the notes can be read. Ended: also stopped
-  // or never started; nothing is reviewing any more.
+  // or never started; nothing is reviewing any more. "off": the account's
+  // reviewers setting had none for this message (since 2026-11-01):
+  // switched off, or only for work in the workspace, which it did not use.
   const AUDIT_DONE = new Set(['succeeded', 'partial', 'failed']);
-  const AUDIT_ENDED = new Set([...AUDIT_DONE, 'cancelled', 'missing']);
+  const AUDIT_ENDED = new Set([...AUDIT_DONE, 'cancelled', 'missing', 'off']);
+  function unreviewed(review, long) {
+    const workspace = review.audit?.setting === 'workspace';
+    if (long) return workspace ? 'Not reviewed: the reviewers check only work in the workspace.'
+      : 'Not reviewed: the reviewers were off for this message.';
+    return workspace ? 'Not reviewed · no work in the workspace' : 'Not reviewed · reviewers off';
+  }
   const AUDIT_KINDS = { wrong: 'Wrong', doubtful: 'Doubtful', incomplete: 'Incomplete' };
   // The most serious first: in the reader's tally and on one passage.
   const KIND_RANK = { wrong: 0, doubtful: 1, incomplete: 2 };
@@ -729,6 +737,7 @@
     const done = reviewers.filter(r => r.status === 'completed').length;
     if (review.status === 'partial') return window.App.t('{done} of {total} reviewers checked the answer', { done, total: reviewers.length });
     if (review.status === 'cancelled') return auditCount(review.audit) ? 'Stopped – these notes came while the agent was working.' : 'Review stopped';
+    if (review.status === 'off') return unreviewed(review, true);
     return { failed: 'Not reviewed – the reviewers did not finish', missing: 'Not reviewed' }[review.status] || '';
   }
   function auditPanel(review) {
@@ -878,6 +887,7 @@
     const done = reviewers.filter(r => r.status === 'completed').length;
     if (review.status === 'partial') return window.App.t('{done} of {total} reviewed', { done, total: reviewers.length });
     if (review.status === 'cancelled') return empty ? '' : 'Review stopped';
+    if (review.status === 'off') return unreviewed(review, false);
     return { failed: 'Not reviewed – the reviewers did not finish', missing: 'Not reviewed' }[review.status] || '';
   }
   // A finished review is announced, never shown: the marks and the row say

@@ -1983,10 +1983,18 @@ class AnswerAudit:
     Its state is part of the turn's review (ComparisonTools.snapshot, under
     ComparisonTools.lock): the reviewers while they work, then the claims,
     the unplaced marks and the marks on the work. The marks show only once
-    every reviewer is done, so no mark comes and goes while the page is read."""
+    every reviewer is done, so no mark comes and goes while the page is read.
 
-    def __init__(self, tools):
+    ``setting``: the user's ``reviewers`` (user_settings.py, since
+    2026-11-01). "always" follows from the run's start (DelegationLoop.run),
+    "workspace" from the agent's first step in the workspace on
+    (DelegationLoop._review_from_here), "off" never. A review the setting
+    kept the reviewers from ends "off" (``unreviewed``), not "failed": nobody
+    failed, nobody was asked."""
+
+    def __init__(self, tools, setting="always"):
         self.tools = tools
+        self.setting = setting
         self.reviewers = {}
         self.sessions = {}
         self.claims = self.unplaced = self.process = None
@@ -2032,8 +2040,17 @@ class AnswerAudit:
                 break
         return self._brief or None
 
+    @property
+    def unreviewed(self):
+        """No reviewer follows, and the user's setting is why: off, or the
+        workspace not used in this message (so far)."""
+        return self.setting != "always" and not self.sessions
+
     def snapshot(self):
         data = {"reviewers": [dict(state) for state in self.reviewers.values()]}
+        if self.setting != "always":
+            # Why a review may have no reviewers (agent-review.js says it).
+            data["setting"] = self.setting
         if self.claims is not None:
             data.update(claims=self.claims, unplaced=self.unplaced, process=self.process)
         if self.issues:
@@ -2257,8 +2274,14 @@ class AnswerAudit:
         or "failed" (none), and the answer final in each case. Only a stop
         ends it with "cancelled", the live marks kept (_live_findings), and
         raises; the user's Stop or any other interruption then ends the
-        review, not the turn (DelegationLoop._finish_review)."""
+        review, not the turn (DelegationLoop._finish_review). Without
+        reviewers by the user's setting (``unreviewed``) it ends "off" at once."""
         tools = self.tools
+        if self.unreviewed:
+            self._settle("off")
+            self._save()
+            tools.finalized = True
+            return
         try:
             self._run(cancellation)
         except ProviderCancelled:
@@ -2461,6 +2484,11 @@ class AnswerAudit:
             return self._unsaved
         if status not in {"required", "running"}:
             return self._unsaved
+        if self.unreviewed:
+            # The run ended before the review's turn (a stop, a failure):
+            # nobody was to review it anyway.
+            self._settle("off")
+            return True
         with tools.lock:
             for state in self.reviewers.values():
                 if state["status"] in {"waiting", "running"}:

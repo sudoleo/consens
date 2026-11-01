@@ -4,7 +4,8 @@ A deleted chat takes its turn, its sessions and its work log with it; these
 counters stay. One document per UTC day, ``ops_metrics/agent-audit-{day}``,
 counts every chat turn of the agent once at its end (until 2026-10-31 only
 those in audit mode, then one of two): by status and review status, by
-number of reviewers, in histogram buckets of its times (total, until the
+number of reviewers and the user's reviewers setting (``review_setting``,
+since 2026-11-01), in histogram buckets of its times (total, until the
 answer was fixed, marks after the last word, each gate's wait, each
 reviewer's final round by model, the reviewers' backlog when the answer was
 fixed), its halts by kind and decision, its failures by code, and with the
@@ -111,7 +112,7 @@ def capture(loop):
     holds = [{key: item.get(key) for key in ("halt", "gate", "ask", "domain", "state")}
              for item in loop.completion.activity or [] if item.get("kind") == "hold"]
     captured = {"entries": entries, "holds": holds, "reviewers": len(loop.comparison.auditor.reviewers),
-                "ended_at": datetime.now(timezone.utc)}
+                "review_setting": loop.comparison.auditor.setting, "ended_at": datetime.now(timezone.utc)}
     wrap_up = getattr(loop.completion, "wrap_up", None)
     if isinstance(wrap_up, dict):
         captured["wrap_up"] = wrap_up.get("reason")
@@ -202,6 +203,9 @@ def turn_counters(turn, captured):
     audit = review.get("audit") or {}
     reviewers = [item for item in audit.get("reviewers") or [] if isinstance(item, dict)]
     _add(counters, "reviewers", f"n{len(reviewers) if reviewers else captured.get('reviewers', 0)}")
+    if captured.get("review_setting"):
+        # The user's reviewers setting (always, workspace, off; since 2026-11-01).
+        _add(counters, "review_setting", label(captured["review_setting"]))
     if review:
         _add(counters, "reviews", label(review.get("status")))
     ended = captured.get("ended_at")

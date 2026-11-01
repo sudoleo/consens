@@ -168,7 +168,7 @@ def lookup(script):
     return ReadOnlyTool("lookup", "Look something up.", LookupArgs, run)
 
 
-def audit_loop(store, script, *, messages=None, memory=None):
+def audit_loop(store, script, *, messages=None, memory=None, reviewers="always"):
     chat, turn = pending(store)
     config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -178,7 +178,7 @@ def audit_loop(store, script, *, messages=None, memory=None):
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
-        agent_preferences=AgentPreferences(), memory=memory)
+        agent_preferences=AgentPreferences(), memory=memory, reviewers=reviewers)
     if script.tool_steps:
         loop.registry = ToolRegistry([*loop.registry.tools.values(), lookup(script)],
                                      argument_limit=loop.registry.argument_limit)

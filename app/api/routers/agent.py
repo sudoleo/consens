@@ -20,7 +20,7 @@ from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
 from app.services import agent_quota, agent_secrets, agent_vm
-from app.services.agent_memory import FirestoreAgentMemoryRepository
+from app.services.agent_memory import FirestoreAgentMemoryRepository, MemorySnapshot
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_sessions import HoldActionRefused, NotesFull
@@ -187,6 +187,12 @@ class AgentRequest(BaseModel):
     # a message runs with (AgentPreferences). Pages still open from before
     # keep sending depth, quorum, autonomy, judges, audit and vm.
     agent_preferences: dict | None = None
+    # Who checks this message's work (account setting ``reviewers``,
+    # user_settings.py): the value the composer showed, sent with it. Pages
+    # from before 2026-11-01 send none: the reviewers follow, as they did.
+    # Kept with the turn (agent_settings.reviewers), no part of the request's
+    # identity: a turn recovers after the setting changed.
+    reviewers: Literal["always", "workspace", "off"] = "always"
     # The browser's IANA zone (Intl): the date in the message's app context.
     # A name the server does not know counts as none (the app's zone).
     timezone: str | None = Field(default=None, max_length=64)
@@ -243,8 +249,14 @@ def _save_bookmark(uid, payload, store, turn):
     return _bookmark_meta(payload.bookmark_id, bookmark)
 
 
+def _temporary(turn):
+    """The turn belongs to a temporary chat (chat_store.create_chat): it has
+    no sidebar entry, so none is written for it."""
+    return (turn.get("agent_settings") or {}).get("temporary") is True
+
+
 def _final(uid, payload, store, turn):
-    bookmark_meta = _save_bookmark(uid, payload, store, turn)
+    bookmark_meta = None if _temporary(turn) else _save_bookmark(uid, payload, store, turn)
     # Tell the browser whether the next message needs Google consent. The
     # chat marker can be set by a tool during this turn (Gmail evidence).
     settings = turn.get("agent_settings") or {}
@@ -260,7 +272,7 @@ def _final(uid, payload, store, turn):
             logging.warning("Agent chat Google marker unavailable category=%s", safe_exception(exc))
     final = {"chat_id": payload.chat_id, "turn_id": turn["id"], "turn": turn,
              "response": turn.get("consensus", ""), "execution_mode": "agent", "bookmark_meta": bookmark_meta,
-             "google_data": google_data, "google_consent": google_consent}
+             "google_data": google_data, "google_consent": google_consent, "temporary": _temporary(turn)}
     try:
         final["token_budget"] = agent_quota.snapshot(store.db, uid)
     except Exception as exc:
@@ -287,7 +299,7 @@ def _save_interrupted(uid, payload, store, turn_id):
     except Exception as exc:
         logging.warning("Interrupted Agent snapshot unavailable category=%s", safe_exception(exc))
         return None
-    if turn["status"] == "failed":
+    if turn["status"] == "failed" and not _temporary(turn):
         try:
             turn["bookmark_meta"] = _save_bookmark(uid, payload, store, turn)
         except Exception as exc:
@@ -455,16 +467,22 @@ def run_agent(request: Request, payload: AgentRequest):
         chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
         require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
         require_reasoning_access(uid, payload.reasoning_effort)
+        # A temporary chat (since 2026-11-01, chat_store.create_chat) keeps
+        # nothing beyond itself: no sidebar entry (_final), no memory, no
+        # workspace (its computer, browser and notes outlive every chat),
+        # and the agent offers no Watch and no search of other chats.
+        temporary = chat_data.get("temporary") is True
         # What the message runs with: the one mode, with the account's
         # workspace where it has one.
-        preferences = AgentPreferences(vm="on" if vm_allowed(uid) else "off")
+        preferences = AgentPreferences(vm="on" if not temporary and vm_allowed(uid) else "off")
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
         provider_cooldowns.check(model, key or "")
         reads["recover"].result()
         bookmark = reads["bookmark"].result()
-        if bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
+        # A temporary chat has no bookmark: its id is the page's and unused.
+        if not temporary and bookmark.exists and (bookmark.to_dict() or {}).get("chat_id") != payload.chat_id:
             raise TurnStatusConflict("Bookmark belongs to another conversation")
         from app.services.agent_files import AgentFiles, FileContext
         files = AgentFiles(db_firestore)
@@ -505,7 +523,8 @@ def run_agent(request: Request, payload: AgentRequest):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
-        memory = reads["memory"].result()
+        # Read beside the others; a temporary chat leaves it unused.
+        memory = MemorySnapshot(temporary=True) if temporary else reads["memory"].result()
         # One context for the question: the turn keeps it, so the next
         # message repeats this question byte for byte (prompt cache).
         app_context = get_agent_turn_context(model, config, payload.timezone)
@@ -531,6 +550,8 @@ def run_agent(request: Request, payload: AgentRequest):
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
                             "agent_preferences": preferences.model_dump(),
+                            "reviewers": payload.reviewers,
+                            **({"temporary": True} if temporary else {}),
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
                             "answer_mode": "merged",
@@ -553,7 +574,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          google_data_consent=payload.google_data_consent, google_data=google_data,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
-                         chat_sources=chat_sources,
+                         chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
                          domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)

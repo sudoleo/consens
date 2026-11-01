@@ -919,12 +919,15 @@
     // answer (watch.js; Apple-Audit J20). It is not the Agent offering one:
     // a prepared Watch has its card instead, and a follow-up opens at its
     // question so the watched question stands on its own.
+    // A temporary chat keeps nothing beyond itself: no Watch, no share
+    // (both outlive their chat; the server refuses them too).
+    const keeps = context.config.temporary !== true;
     App.watch?.answerButton?.(answerBody, { question: context.question,
-      eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
+      eligible: keeps && !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
       followUp: context.historyTurns.length > 0 });
     // Share beside it, for every finished answer (share-dialog.js).
     App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
-      eligible: !running && state.completedTurn?.status === 'completed' && Boolean(String(state.text || '').trim()) });
+      eligible: keeps && !running && state.completedTurn?.status === 'completed' && Boolean(String(state.text || '').trim()) });
     // A settings change the Agent prepared: its card, applied with one click.
     // Keyed like the saved chat's view (chat:turn), so applying or dismissing
     // holds when the chat is opened again.
@@ -978,6 +981,8 @@
     registry.setCompletedBasis(context.runId, {
       ...conversation, executionMode: "agent", question: context.question, consensus: data.response,
       currentTurn: turn, historyTurns: context.historyTurns, title: context.bookmark.title,
+      // The next message stays in the temporary chat (temporary-chat.js).
+      temporary: context.config.temporary === true || data.temporary === true,
     });
   }
   // Besides its Watch pill, a finished answer may offer to keep itself
@@ -990,7 +995,7 @@
     const turn = context.consensus.completedTurn;
     App.watch?.showFeatureNudge?.({
       eligible: turn?.status !== "failed" && context.historyTurns.length === 0 && !turn?.agent_watch
-        && Array.isArray(turn?.sources) && turn.sources.length > 0,
+        && Array.isArray(turn?.sources) && turn.sources.length > 0 && context.config.temporary !== true,
       question: context.question,
       anchor: document.getElementById("agentWatchAnchor"),
     });
@@ -1141,6 +1146,7 @@
     if (context?.config.executionMode === 'agent' && ['failed', 'canceled'].includes(context.status)) {
       return send(null, { retry: {
         runId: context.runId, question: context.question, basis: context.basis,
+        temporaryToken: context.metadata.temporaryToken || "",
         chatId: context.metadata.requestSent ? context.metadata.chatId : null,
         bookmarkId: context.metadata.requestSent ? context.bookmark.id : null,
         fileIds: context.metadata.fileIds || [], attachmentMeta: context.attachmentMeta || [],
@@ -1256,7 +1262,8 @@
     // a phone beside the reviewers (H2: "Write your next message…" ended
     // mid-word). A new chat has the words of every empty field (App.askPlaceholder).
     input.placeholder = running ? runningPlaceholder(openHold(registry.visible())) : basis?.chatId && !basis.continuationUnavailable
-      ? 'Ask a follow-up' : App.askPlaceholder?.() ?? input.placeholder;
+      ? 'Ask a follow-up' : App.temporaryChat?.armed?.() ? 'Ask in a temporary chat'
+        : App.askPlaceholder?.() ?? input.placeholder;
   }
   function runningPlaceholder(hold) {
     return hold?.ask === 'secret' ? 'Paste the key above' : hold ? 'Or write to the agent…' : 'Message the agent…';
@@ -1805,7 +1812,9 @@
     const own = { kind: hold.kind, reason: hold.reason, reviewer: hold.reviewer };
     if (hold.domain) {
       if (hold.review === "halt" || listed.length) return (listed.length ? listed : [own]).map(said);
-      return [plain(hold.review === "go" ? "The reviewers see no problem with it." : "Not every reviewer could check this request.")];
+      // "off": the user's setting has no reviewers here (Settings > Runs).
+      return [plain(hold.review === "go" ? "The reviewers see no problem with it."
+        : hold.review === "off" ? "Your reviewers are off, so only you decide." : "Not every reviewer could check this request.")];
     }
     // "unchecked": no reviewer paused it, none could answer for it; what the
     // step would do, in a sentence (C1: before, "It acts outside the
@@ -2792,6 +2801,14 @@
     if (basis && (!basis.chatId || basis.continuationUnavailable)) {
       App.showPopup?.("Reopen this saved chat before continuing."); return;
     }
+    // A temporary chat (temporary-chat.js): the first message of a new chat
+    // starts one while the (+) switch is on; a later message, or a retry,
+    // stays in it. Its runs carry its token, so leaving it stops them.
+    const temporaryChat = App.temporaryChat;
+    const temporaryToken = retry?.temporaryToken
+      || (basis ? (basis.temporary ? temporaryChat?.token?.(basis.chatId) || "" : "")
+        : !retry?.chatId && temporaryChat?.armed?.() ? temporaryChat.start() : "");
+    const temporary = Boolean(temporaryToken) || basis?.temporary === true;
     let context, signal;
     let refused = null;
     // The run is created and started as one change: the registry projects it
@@ -2811,9 +2828,11 @@
           config: { executionMode: "agent", agentMode: true, autoConsensus: false,
             deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
             googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
-            googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true },
+            googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true,
+            temporary },
           metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
             ...(retry ? { fileIds: retry.fileIds } : {}),
+            ...(temporaryToken ? { temporaryToken } : {}),
             agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
           usage: { status: "simulation", key: null },
         });
@@ -2835,7 +2854,11 @@
       registry.setStatus(context.runId, "running");
     };
     if (registry.batch) registry.batch(begin); else begin();
-    if (refused) { App.showPopup?.(App.userError(refused, { context: "send" })); return; }
+    if (refused) {
+      // Nothing started: a temporary chat begun for it ends, the switch stays on.
+      if (temporaryToken && !basis && !retry) { temporaryChat?.leave?.("refused"); temporaryChat?.arm?.(true); }
+      App.showPopup?.(App.userError(refused, { context: "send" })); return;
+    }
     // Emptied once the run is on screen: Send is already the stop button
     // then, and the field's listeners leave it alone.
     if (!recovery && !retry) {
@@ -2854,7 +2877,8 @@
         const { response, data } = await App.withRequestDeadline(async requestSignal => {
           const response = await fetch("/chats", {
             method: "POST", headers: { ...headers, "Content-Type": "application/json" }, signal: requestSignal,
-            body: JSON.stringify({ title: question.slice(0, 120), execution_mode: "agent" }),
+            body: JSON.stringify({ title: question.slice(0, 120), execution_mode: "agent",
+              ...(temporary ? { temporary: true } : {}) }),
           });
           return { response, data: await App.readJson(response) };
         }, { signal });
@@ -2866,6 +2890,8 @@
           throw refusal;
         }
         chatId = data.chat.id;
+        // Left while the server created it: the chat goes again at once.
+        if (temporary && !temporaryChat?.adopt?.(temporaryToken, chatId)) return;
       }
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       context.metadata.chatId = chatId;
@@ -2888,8 +2914,11 @@
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
         timezone: deviceTimezone(),
+        // Who checks this message's work: what the composer showed (Settings > Runs).
+        reviewers: App.words.reviewerSetting(),
       };
-      rememberPending(context, body);
+      // A reload ends a temporary chat (temporary-chat.js): nothing to follow then.
+      if (!context.config.temporary) rememberPending(context, body);
       const result = await follow(context, body, signal, { headers });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
       adopt(context, result);

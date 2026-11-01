@@ -443,10 +443,12 @@
       const label = document.getElementById("composerModelLabel");
       if (label && agentLook) {
         const count = checkedFamilies().length;
-        const words = window.App.words.crossCheck(count);
+        const setting = window.App.words.reviewerSetting();
+        const words = window.App.words.reviewing(count, setting);
         label.textContent = words;
         // The short form a narrow bar shows (agent-mode.js renderReviewers).
-        const short = count === 1 ? "1 AI" : `${count} AIs`;
+        const short = setting === "off" ? "Reviewers off" : count === 1 ? "1 AI" : `${count} AIs`;
+        label.parentElement.classList.toggle("reviewers-off", setting === "off");
         label.dataset.short = window.App.t?.(short) ?? short;
         label.hidden = false;
         label.parentElement.setAttribute("aria-label", words);

@@ -188,7 +188,9 @@ comparison**, ab 2026-10-26 **Way of working** (`audit`, mit der VM). Heute:
 
 ### Ein Modus: der Agent arbeitet, die gewählten Modelle prüfen (seit 2026-10-31)
 
-Für jedes Konto, ohne Schalter (Max, 2026-10-31). Von 2026-10-25 bis
+Für jedes Konto (Max, 2026-10-31); seit 2026-11-01 entscheidet die
+Kontoeinstellung „Reviewers“, ob sie immer, nur am Arbeitsplatz oder gar nicht
+prüfen (unten „Prüfer nach Einstellung“). Von 2026-10-25 bis
 2026-10-31 war dieser Ablauf die Einstellung „Audit instead of comparison“
 (`AgentPreferences.audit`; erst Admins, seit 2026-10-26 Pro und Admins über
 `routers/agent.py::audit_allowed`/`effective_preferences`, seit 2026-10-30 mit
@@ -203,6 +205,33 @@ Chatmodell, „N AIs cross-check“ steht unter dem Feld (`agent-mode.js`
 `renderReviewers`, `App.words.crossCheck`), auch im ersten Frame. Code:
 `agent_audit.py`, `agent_comparison.py` (`ComparisonTools`: `compare_models`
 und `audit_answer`), Prompts in `prompt_defaults.py`.
+
+**Prüfer nach Einstellung (seit 2026-11-01).** Max wollte die Prüfer
+ausschalten können, und als Mitte „nur, wenn der Agent den Arbeitsplatz
+öffnet“. Settings → Runs → Reviewers: *Always* (Default), *Only in the
+workspace*, *Off*; die Seite schickt den Wert mit jeder Nachricht
+(`reviewers`), der Turn behält ihn. Was ohne Prüfer wegfällt, steht unter der
+Einstellung in ganzen Sätzen und gilt so im Code:
+
+| | Always | Only in the workspace | Off |
+|---|---|---|---|
+| Marken auf der Antwort, Notes | ja | nur wenn der Arbeitsplatz genutzt wurde | nein, „Not reviewed · …“ |
+| Aussteuern (Halt) | ja | ab dem ersten Schritt am Arbeitsplatz | nein |
+| Vorab-Prüfung (Memory nach Fremdinhalt, `request_domain`) | Prüfer, dann Nutzer | ab dem ersten Schritt am Arbeitsplatz, vorher wie Off | Memory gesperrt, Domain entscheidet nur der Nutzer |
+| `read_source` auf selbst gewählte Adressen | ja | ab dem Arbeitsplatz | nein (nur Suchtreffer, Quellen, Links des Nutzers) |
+| Prüferanteil am Tageskonto | ja | nur am Arbeitsplatz | nein |
+
+Was immer bleibt: die eigenen Sicherungen des Modells, die festen Grenzen der
+App (Zeit, Schritte, Tageskonto, VM-Zeit, geschlossenes Netz der Werkbank,
+Karten statt Schreibzugriffen, Freigabe jeder Domain durch den Nutzer,
+Memory-Sperre nach Fremdinhalt, die Sicherheitsregeln des Arbeitsplatzes) und
+der Stopp-Knopf. „Only in the workspace“ startet die Prüfer mit dem ersten
+Schritt, der ein Werkzeug des Arbeitsplatzes aufruft oder ihn öffnet, und zwar
+vor dessen Vorab-Prüfung; sie lesen das Protokoll von Anfang an. Der Agent
+erfährt die Einstellung als Fakt (`AGENT_REVIEW_FACTS`), ändern kann er sie
+nicht, auch nicht über eine Einstellungskarte. Die Prüfung einer Antwort ohne
+Prüfer endet `off` (`audit.setting` sagt warum), nie `failed`. Die
+`compare_models`-Modelle bleiben dieselben gewählten Modelle, auch mit Off.
 
 Kosten hält das Tageskonto (jede Browser-Aktion ist ein Modellschritt), den
 Arbeitsplatz zusätzlich die VM-Zeit: ohne Pro 20 Minuten am Tag

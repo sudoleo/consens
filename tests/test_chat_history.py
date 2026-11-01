@@ -339,7 +339,13 @@ class FakeChatDatabase:
     def apply_update(self, ref, data):
         if ref.path not in self.documents:
             raise RuntimeError("missing document")
-        self.documents[ref.path].update(self.resolve_timestamps(data))
+        # DELETE_FIELD removes its field, as Firestore does (a sentinel, but no timestamp).
+        from firebase_admin import firestore
+        removed = [key for key, value in data.items() if value is firestore.DELETE_FIELD]
+        self.documents[ref.path].update(self.resolve_timestamps(
+            {key: value for key, value in data.items() if key not in removed}))
+        for key in removed:
+            self.documents[ref.path].pop(key, None)
         self.write_log.append(("update", ref.path))
 
     def resolve_timestamps(self, data):

@@ -11,8 +11,9 @@ data, never instructions, and outside content like any tool result
 (DelegationLoop.outside_in_view: memory then locks or waits for the
 reviewers). Chats with Google data stay in their chat: their content was
 consented to and routed for that chat alone (routers/agent.py
-``google_data``), so they are neither found nor opened. The current chat is
-in view already and left out.
+``google_data``), so they are neither found nor opened. Neither are temporary
+chats (chat_store.create_chat, since 2026-11-01): they keep nothing beyond
+themselves. The current chat is in view already and left out.
 """
 from __future__ import annotations
 
@@ -93,7 +94,8 @@ class ChatSearch:
         query = ref.order_by("updated_at", direction=firestore.Query.DESCENDING).limit(SEARCH_CHATS)
         for snapshot in query.stream():
             data = snapshot.to_dict() or {}
-            if snapshot.id == self.loop.chat_id or data.get("status") != "active" or data.get("google_data"):
+            if (snapshot.id == self.loop.chat_id or data.get("status") != "active" or data.get("google_data")
+                    or data.get("temporary")):
                 continue
             yield snapshot.id, data
 
@@ -133,7 +135,7 @@ class ChatSearch:
         if chat_id == self.loop.chat_id:
             raise ValueError("That is the current chat: its messages are in view already.")
         chat = self.loop.store._chat_ref(self.loop.uid, chat_id).get().to_dict() or {}
-        if chat.get("status") != "active":
+        if chat.get("status") != "active" or chat.get("temporary"):
             raise ValueError("No such chat: use a chat_id from a search_chats result.")
         if chat.get("google_data"):
             raise ValueError("That chat used Google data, which stays in its own chat.")

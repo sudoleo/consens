@@ -96,7 +96,7 @@ def test_a_guest_on_a_phone_gets_the_sentence_and_one_row_of_examples(browser, p
     context, page = _guest_page(browser, phase4_server)
     try:
         page.set_viewport_size({"width": 375, "height": 812})
-        expect(page.locator(".hero-greeting")).to_be_visible()
+        expect(page.locator(".hero-greeting:not(.hero-greeting-temporary)")).to_be_visible()
         expect(page.locator("#questionInput")).to_have_attribute("placeholder", "Ask anything")
         layout = page.evaluate("""() => {
           const row = document.getElementById('composerStarters');

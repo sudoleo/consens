@@ -852,7 +852,6 @@
   "Start a new terminal": "Neues Terminal starten",
   "Could not take over: {reason}": "Übernehmen ging nicht: {reason}",
   "Could not hand back: {reason}": "Zurückgeben ging nicht: {reason}",
-  "The workspace is not available on your account.": "Der Arbeitsplatz ist für dein Konto nicht verfügbar.",
   "The view could not load. Reload the page and try again.": "Die Ansicht ließ sich nicht laden. Lade die Seite neu und versuch es noch mal.",
   "Log the workspace browser out everywhere?": "Browser des Arbeitsplatzes überall abmelden?",
   "Log out everywhere": "Überall abmelden",
@@ -1118,5 +1117,16 @@
   "The reviewers see no problem with it.": "Die Prüfer sehen darin kein Problem.",
   "Not every reviewer could check this request.": "Nicht jeder Prüfer konnte diese Anfrage prüfen.",
   "The agent’s reason": "Begründung des Agenten",
-  "Don’t allow": "Nicht erlauben"
+  "Don’t allow": "Nicht erlauben",
+  "Ask in a temporary chat": "Im temporären Chat fragen",
+  "Your reviewers are off, so only you decide.": "Deine Prüfer sind aus, also entscheidest nur du.",
+  "Not reviewed: the reviewers check only work in the workspace.": "Nicht geprüft: Die Prüfer prüfen nur Arbeit am Arbeitsplatz.",
+  "Not reviewed: the reviewers were off for this message.": "Nicht geprüft: Die Prüfer waren für diese Nachricht aus.",
+  "Not reviewed · no work in the workspace": "Nicht geprüft · keine Arbeit am Arbeitsplatz",
+  "Not reviewed · reviewers off": "Nicht geprüft · Prüfer aus",
+  "Reviewers off": "Prüfer aus",
+  "1 AI checks the workspace": "1 KI prüft den Arbeitsplatz",
+  "{count} AIs check the workspace": "{count} KIs prüfen den Arbeitsplatz",
+  "Answers in a temporary chat can’t be shared.": "Antworten in einem temporären Chat lassen sich nicht teilen.",
+  "Only an Agent chat can be temporary.": "Nur ein Agent-Chat kann temporär sein."
 }

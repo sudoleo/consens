@@ -424,6 +424,8 @@
     <div class="input-section">
       <!-- Nur im Agent-Mode-Hero und nur bei ausreichender Viewport-Fläche sichtbar. -->
       <p class="hero-greeting"><span>Get a second opinion.</span> <span>And a third.</span></p>
+      <!-- In its place while the next chat is temporary (temporary-chat.js). -->
+      <p class="hero-greeting hero-greeting-temporary"><span>Temporary chat.</span> <span>Gone when you leave it.</span></p>
       <!-- Agent Beta: external writes wait for the user's review (agent-chat.js). -->
       <div id="agentReviewNotice" class="agent-composer-notice agent-review-notice" hidden>
         <span class="agent-review-notice-dot" aria-hidden="true"></span>
@@ -498,6 +500,19 @@
               <span class="attach-menu-hint">Watch and steer the agent’s browser</span>
             </span>
           </button>
+          <!-- A temporary chat (temporary-chat.js): chosen on a new Agent
+               chat, said in one; nowhere else. -->
+          <label class="attach-menu-toggle" id="temporaryChatOption" for="temporaryChatToggle" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 1 0 17a8.5 8.5 0 1 1 0-17" stroke-dasharray="2.4 2.6"/><path d="M12 8v4.2l2.6 1.6"/></svg>
+            <span class="attach-menu-toggle-text">
+              <span class="menu-switch-label">Temporary chat</span>
+              <span id="temporaryChatHint" class="attach-menu-toggle-sub">Not saved, no memory</span>
+            </span>
+            <span class="switch attach-menu-switch">
+              <input type="checkbox" id="temporaryChatToggle">
+              <span class="slider"></span>
+            </span>
+          </label>
           <div class="attach-menu-divider"></div>
           <!-- Reasoning lebt im (+)-Kontextmenü: im Agent-Modus der
                Effort-Picker, sonst der Schalter darunter (für alle Stufen).
@@ -621,6 +636,8 @@
         <span id="agentComposerMessage" role="status" aria-live="polite"></span>
         <button id="agentComposerAction" class="text-link" type="button" hidden></button>
       </div>
+      <!-- An open temporary chat says what it is, under the field (temporary-chat.js). -->
+      <p id="temporaryChatNote" class="temporary-chat-note" hidden>Temporary chat: not in your chats, no memory, no workspace. Deleted when you leave it.</p>
       <div id="postDemoLoginPrompt" class="post-demo-login-prompt" role="status" aria-live="polite" hidden>
         <span class="post-demo-login-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1224,6 +1241,25 @@
                     </select>
                   </span>
                 </label>
+              </div>
+              {#- Who checks the Agent's work (account setting reviewers,
+                  agent-mode.js binds it). What a choice gives up stands
+                  under it (#reviewersNote), always in full. -#}
+              <div class="settings-section" data-settings-keywords="prüfer prüfen prüfung reviewers review kontrolle check überprüfung sicherheit safety pausieren pause anhalten stoppen ausschalten abschalten aus off arbeitsplatz workspace kontingent allowance kosten cost">
+                <label for="reviewersSetting" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Reviewers</strong>
+                    <small id="reviewersHelp">Other AIs follow the Agent’s work, mark doubtful passages in its answers and pause it when a step looks wrong.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="reviewersSetting" aria-describedby="reviewersHelp reviewersNote">
+                      <option value="always" selected>Always</option>
+                      <option value="workspace">Only in the workspace</option>
+                      <option value="off">Off</option>
+                    </select>
+                  </span>
+                </label>
+                <p id="reviewersNote" class="settings-reviewers-note" hidden></p>
               </div>
             </div>
           </section>

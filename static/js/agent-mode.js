@@ -299,6 +299,8 @@
     const beta = isBeta();
     const mode = runMode();
     renderRunModeControl();
+    // The temporary chat's switch and words follow the composer's state.
+    window.App.temporaryChat?.sync?.();
     // Compare uses the Reasoning switch row; Agent uses the reasoning-effort
     // menu entry instead.
     const reasoningRow = document.getElementById("reasoningToggle")?.closest("label");
@@ -420,11 +422,20 @@
   // #composerReviewers in a chat). Both open the reviewers' level of the
   // Agent menu.
   function renderReviewers(reviewing, start, count) {
-    const words = reviewing ? window.App.words.crossCheck(count) : "";
+    // The account's reviewers setting (Settings > Runs) says whether they
+    // check at all: "Reviewers off", their marks stepped back (composer.css).
+    const setting = window.App.words.reviewerSetting();
+    const words = reviewing ? window.App.words.reviewing(count, setting) : "";
     // Where the words do not fit, their short form ("3 AIs"), the same in the
     // chat and on the start screen: the marks never stand without a word on a
     // phone (UX audit E4, E5). An attribute is not translated by i18n.js.
-    const short = !reviewing ? "" : count === 1 ? "1 AI" : `${count} AIs`;
+    // Off keeps its two words: "Off" alone beside (+) said nothing (a phone shows no marks).
+    const short = !reviewing ? "" : setting === "off" ? "Reviewers off" : count === 1 ? "1 AI" : `${count} AIs`;
+    const title = setting === "off"
+      ? "Reviewers are off: nobody checks the agent’s work. Switch them on in Settings › Runs."
+      : setting === "workspace"
+        ? "Reviewers follow the agent’s work once it uses its workspace, and pause it when in doubt. Choose them here."
+        : "Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.";
     const shortText = window.App.t?.(short) ?? short;
     // One write, and only of a change: i18n.js translates what is written.
     const write = (node, name, value) => {
@@ -446,18 +457,21 @@
       const wasHidden = picker.hidden;
       picker.hidden = !start;
       if (wasHidden && !picker.hidden) revealBar(picker);
+      picker.classList.toggle("reviewers-off", reviewing && setting === "off");
       // The name holds the words on screen (WCAG 2.5.3).
       write(picker, "aria-label", reviewing ? words : "Configure models for your next question");
-      write(picker, "title", reviewing ? "Choose the reviewers of the agent’s work" : "Configure models");
+      write(picker, "title", !reviewing ? "Configure models" : setting === "always"
+        ? "Choose the reviewers of the agent’s work" : title);
     }
     const reviewers = document.getElementById("composerReviewers");
     if (!reviewers) return;
     reviewers.hidden = !reviewing || start;
     if (reviewers.hidden) return;
+    reviewers.classList.toggle("reviewers-off", setting === "off");
     write(reviewers, "aria-label", words);
     // What the icons are, said beside them and in the tooltip (2026-10-28,
     // Max: new users did not know why a logo stood there).
-    write(reviewers, "title", "Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.");
+    write(reviewers, "title", title);
     const caption = document.getElementById("composerReviewersLabel");
     if (caption) {
       write(caption, "text", words);
@@ -642,6 +656,37 @@
   document.getElementById("runModeSetting")?.addEventListener("change", function () {
     window.App.runMode.set(this.value, { source: "settings" });
   });
+
+  // Who checks the Agent's work (account setting reviewers, Settings > Runs).
+  // What a choice gives up stands under it, whole sentences only.
+  const REVIEWER_NOTES = {
+    workspace: "Answers without the workspace are not reviewed. The reviewers start with the Agent’s first step in its workspace and follow the rest of that message. Uses less of your allowance.",
+    off: "Nobody checks the Agent’s work: mistakes in its answers stay unmarked, and nothing pauses it when a step goes against your goal or a page tries to steer it. What remains are the model’s own safeguards, consens.io’s fixed limits and your Stop button. Uses less of your allowance.",
+  };
+  function renderReviewerSetting() {
+    const setting = window.App.words.reviewerSetting();
+    const select = document.getElementById("reviewersSetting");
+    if (select && select.value !== setting) select.value = setting;
+    const note = document.getElementById("reviewersNote");
+    if (note) {
+      note.hidden = !REVIEWER_NOTES[setting];
+      note.textContent = REVIEWER_NOTES[setting] || "";
+    }
+  }
+  document.getElementById("reviewersSetting")?.addEventListener("change", function () {
+    const value = ["always", "workspace", "off"].includes(this.value) ? this.value : "always";
+    window.App.userSettings.set("reviewers", value);
+    window.App?.trackAppEvent?.("app_reviewers_changed", { setting: value });
+    renderReviewerSetting();
+    renderComposerMode();
+    window.syncCustomModelPickers?.();
+  });
+  window.App.userSettings.onChange("reviewers", () => {
+    renderReviewerSetting();
+    renderComposerMode();
+    window.syncCustomModelPickers?.();
+  });
+  renderReviewerSetting();
   window.addEventListener("consensio:run-mode-change", onRunModeChange);
   // From the (+) menu, which closes: a login dialog gives the focus back to (+).
   document.getElementById("agentReasoningMenuOption")?.addEventListener("click", function (event) {

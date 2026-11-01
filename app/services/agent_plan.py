@@ -39,14 +39,17 @@ class UpdatePlanArgs(BaseModel):
 class PlanTools:
     """The plan of one message (DelegationLoop.plan_tools)."""
 
-    def __init__(self):
+    def __init__(self, reviewed=True):
         # The latest plan, as the agent last wrote it ([] before the first).
         self.items = []
+        # The reviewers read it too: the user's reviewers setting is not "off".
+        self.reviewed = reviewed
 
     def tools(self):
-        return [ReadOnlyTool("update_plan", "Write your plan for this task as a checklist the user and the "
-                             "reviewers see: the whole list each time, one step in_progress while you work on it, "
-                             "completed once done.", UpdatePlanArgs, self.update, activity=self._activity)]
+        readers = "the user and the reviewers see" if self.reviewed else "the user sees"
+        return [ReadOnlyTool("update_plan", f"Write your plan for this task as a checklist {readers}: the whole "
+                             "list each time, one step in_progress while you work on it, completed once done.",
+                             UpdatePlanArgs, self.update, activity=self._activity)]
 
     def update(self, args, *, cancellation):
         items = [{"content": " ".join(item.content.split()), "status": item.status} for item in args.items]

@@ -78,8 +78,11 @@ LINEUP_LABEL = "Reviewers"
 # Said with every Pro limit on a level: no other model or setting lifts it
 # (a live probe offered "pick another model in Settings" as a way around).
 PRO_LEVELS_NOTE = "High, Extra high and Max need Pro on every model; no other model or setting lifts this."
-ELSEWHERE = ("The system prompt, memory, privacy, connections and notifications are in Settings; the mode (Agent or "
-             "Compare) is in the (+) menu of a new chat. You cannot change them.")
+# Whether reviewers check the agent's work (``reviewers``, since 2026-11-01)
+# is the user's alone: a page the agent read must never switch off its own
+# review, not even through a card.
+ELSEWHERE = ("The system prompt, memory, privacy, connections, notifications and whether reviewers check your work "
+             "are in Settings; the mode (Agent or Compare) is in the (+) menu of a new chat. You cannot change them.")
 SITE = "https://consens.io"
 TIER_LABELS = {"free": "Free", "plus": "Plus", "pro": "Pro", "admin": "Admin"}
 
@@ -517,7 +520,7 @@ class SettingsTools:
         them, and the privacy policy stays the binding word on data."""
         from app.services import agent_budget_config, agent_quota
         from app.services.agent_vm_time import BASE_DAILY_SECONDS, PRO_DAILY_SECONDS
-        from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT
+        from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT, TEMPORARY_CHAT_TTL
         from app.services.share_snapshots import REVOKED_RETENTION_DAYS
 
         def euros(amount):
@@ -537,7 +540,13 @@ class SettingsTools:
                                  "requests, and they do not count here. The Agent always runs on the allowance."},
             "storage": f"Signed-in chats save automatically, at most {MAX_CHATS_PER_OWNER} per account; then a new "
                        f"chat needs an old one deleted. A chat holds at most {MAX_TURNS_PER_CHAT} messages; then a "
-                       "new chat continues.",
+                       "new chat continues. A temporary chat (the switch \"Temporary chat\" in the (+) menu of a new "
+                       "Agent chat) is not saved: it is not in the chats, uses and changes no memory, has no "
+                       "workspace, cannot be shared and is deleted once the user leaves it, at the latest "
+                       f"{TEMPORARY_CHAT_TTL.days * 24} hours after its last message.",
+            "reviewers": "Settings > Runs > Reviewers: Always (the default), Only in the workspace (from the agent's "
+                         "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "
+                         "the user's own decisions on cards and the Stop button remain.",
             "sharing": "Publishing is a separate action: Share makes an answer readable at its link without an "
                        "account. The user can revoke a link in the share dialog; a revoked share is deleted for good "
                        f"after {REVOKED_RETENTION_DAYS} days.",

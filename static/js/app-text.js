@@ -224,7 +224,17 @@
     // Sonnet 5.5 +6" meant nothing to a reader new to AI models. One is
     // enough (agent_comparison.comparison_selection).
     crossCheck: count => count < 1 ? "No cross-check"
-      : count === 1 ? "1 AI cross-checks" : `${count} AIs cross-check`
+      : count === 1 ? "1 AI cross-checks" : `${count} AIs cross-check`,
+    // The same by the account's reviewers setting (since 2026-11-01): only
+    // from the agent's first step in the workspace on, or nobody.
+    reviewing: (count, setting) => setting === "off" ? "Reviewers off"
+      : setting !== "workspace" || count < 1 ? App.words.crossCheck(count)
+        : count === 1 ? "1 AI checks the workspace" : `${count} AIs check the workspace`,
+    // The account's reviewers setting: "always" unless it chose another.
+    reviewerSetting: () => {
+      const value = App.userSettings?.get?.("reviewers");
+      return value === "workspace" || value === "off" ? value : "always";
+    }
   });
 
   // ------------------------------------------------------------------

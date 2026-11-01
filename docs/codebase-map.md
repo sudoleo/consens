@@ -537,7 +537,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `agent.py` | `GET /agent/models` und `POST /agent`: Modellkatalog (jedes angemeldete Konto, Premium-Modelle Pro) aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, seit 2026-10-31 jedes Turns, lesbar für seinen Besitzer, siehe „Ein Modus“ → „Arbeitsprotokoll“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/requests/{request_id}/notes` (Nachricht in den laufenden VM-Lauf, seit 2026-10-26; Browser: `agent-chat.js` `steer`, sichtbare Warteschlange `#agentQueue`, Ungelesenes geht danach als nächste Nachricht), `POST /agent/chats/{chat}/requests/{request_id}/hold` (Entscheidung des Nutzers, wenn ein Prüfer die Arbeit pausiert hat: `continue`/`stop`/`steer`, seit 2026-10-26; seit 2026-10-27 `deny` für eine Domain, um die der Agent bat, und seine eigene Frage; seit 2026-10-29 sonst 422 `invalid_action`, `agent_sessions.deniable`; seit 2026-10-30 `choose` mit `choice` (Index) auf der Auswahlkarte des Agenten, dort nur das, `stop` oder `steer`, `agent_sessions.check_answer`; siehe „Ein Modus“ → „Aussteuern“), `POST /agent/chats/{chat}/turns/{turn}/vm-restore` (Arbeitsplatz auf den Checkpoint vor dieser Nachricht, Konten mit VM (`vm_allowed`), seit 2026-10-26; seit 2026-10-27 nur Checkpoints, die `agent_workspace.restorable` erlaubt, sonst 409 `expired`), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); `compare_models` und die Prüfer der Antwort im gemeinsamen Tageskonto (siehe §4 „Agent · Beta“ und „Ein Modus“). `agent_preferences` im Body wird seit 2026-10-31 angenommen und ignoriert. `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). |
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `POST /app` (seit 2026-10-29: Ziel aller Formulare der App-Shell — Login, Feedback, Memory-Eintrag —, falls eines abgeschickt wird, bevor sein Skript es übernimmt; liest den Inhalt nie, 303 zurück auf `/app`. Vorher hatten die Formulare kein `method`, ein GET schrieb E-Mail und Passwort in Adresse, Verlauf und Render-Log), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback` und `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Best-answer-Votes schreibt seit 2026-10-31 niemand mehr: bis 2026-10-25 der Browser-Consensus (`POST /vote`, entfernt), danach der Vergleichsmodus des Agenten (einmal pro Turn); `/model-pulse` und `/api/model-leaderboard` zeigen den Stand bis dahin (wie sie künftig gespeist werden, ist offen, siehe „Ein Modus“ in §4). |
 | `chat.py` | Kern-LLM-Flow für Compare: `/prepare` und die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`). Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. Eine Frage an `/ask_*` setzt keinen Chat fort: Kontextfelder (`context`, `chat_id`/`turn_id`/`context_version_id`) werden ignoriert. `/consensus` und `/resolve` sind seit 2026-10-25 entfernt; den Consensus fährt nur noch der Server (`consensus_pipeline`). |
-| `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
+| `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`; seit 2026-11-01 mit `temporary: true` einen temporären, nur Agent, sonst 422, siehe §4 „Temporäre Chats“), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Mailbox-Setup-Pfad: Der Admin-SDK-Reset-Link (`continueUrl = {PUBLIC_SITE_URL}/app?setup=1`, damit Firebases „Passwort gespeichert“-Seite zurück in den vorausgefüllten Login führt) geht in einer EIGENEN SMTP-Mail raus (`registration.send_own_setup_email` → `mailer.build_account_setup_message` „Finish setting up …“ bzw. für Konten mit mindestens einem Login `build_existing_account_message` „You already have an account“ mit Login-Knopf + optionalem Reset; „Send the link again“ vor dem ersten Login bekommt wieder die Setup-Mail, `needs_password_setup`). Grund: Firebases Vorlage sagt „Reset your password“ und ist in diesem Projekt gesperrt. Ohne SMTP oder bei Fehlern geht wie früher Firebases `PASSWORD_RESET`-Mail raus (lehnt Firebase die Continue-URL mit 400 ab, ohne sie). Die HTTP-Antwort bleibt in allen Fällen identisch. Neben dem IP-Limit (3/min) gehen pro Adresse höchstens 5 Setup-Mails je Stunde raus (prozesslokal über `api_uid_limiter`, Schlüssel = SHA-256 der Adresse); darüber antwortet `/register` gleich und versendet nichts, damit niemand über viele IPs ein fremdes Postfach flutet. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig; es läuft bei jedem Login und Seitenaufruf und ist deshalb nur gegen Fluten begrenzt (30/min pro IP). |
 | `firebase_auth_proxy.py` | Same-Origin-Proxy für Firebases Sign-in-Helfer: `GET/HEAD/POST /__/auth/*` und `GET /__/firebase/init.json` werden transparent an `https://<FIREBASE_PROJECT_ID>.firebaseapp.com` (überschreibbar per `FIREBASE_AUTH_PROXY_UPSTREAM`) weitergereicht (Firebase „redirect best practices“, Proxy-Option). Weitergereicht werden nur Request-Zeile, Content-Negotiation-Header und der Handler-Body, nie Cookies/Authorization; zurück nur Inhalts-/Cache-Header, kein `Set-Cookie`. `CustomSecurityMiddleware` lässt auf diesen Pfaden die App-CSP weg und setzt `X-Frame-Options: SAMEORIGIN` (das `/__/auth/iframe` rahmt die App selbst). Wirksam erst, wenn `FIREBASE_AUTH_DOMAIN` den App-Host nennt (siehe §7). Ohne Projekt-ID 404, Upstream-Fehler neutral 502. Unter `/__/auth/` nur schlichte Helfernamen (Segmente aus `[A-Za-z0-9_.-]`, kein `.`/`..`), sonst 404: Der Server dekodiert `%2F`, httpx löst Punkt-Segmente auf, `..%2F` holte sonst jede Seite der Hosting-Site ohne CSP. |
@@ -5929,8 +5929,10 @@ die gebaute Desktop-/Mobil-Ansicht in `test_agent_comparison_frontend.py` und
 
 ### Ein Modus: der Agent arbeitet, die Prüfer prüfen (jedes Konto seit 2026-10-31; als „Audit statt Vergleich“ seit 2026-10-25)
 
-Jeder Chat-Lauf des Agenten hat Prüfer (`agent_audit.AnswerAudit`), ohne
-Schalter und für jedes Konto, Free eingeschlossen (Max, 2026-10-31). Von
+Jeder Chat-Lauf des Agenten hat Prüfer (`agent_audit.AnswerAudit`), für jedes
+Konto, Free eingeschlossen (Max, 2026-10-31); seit 2026-11-01 nach der
+Kontoeinstellung `reviewers` immer, nur am Arbeitsplatz oder gar nicht (siehe
+„Prüfer nach Einstellung“ unten). Von
 2026-10-25 bis 2026-10-31 war das die Einstellung „Way of working: Audit“
 (`agent_preferences.audit`, zuerst Admins, ab 2026-10-26 Pro, ab 2026-10-30 mit
 `AGENT_AUDIT_ACCESS=all` jedes Konto; `audit_allowed`, `effective_preferences`,
@@ -6074,9 +6076,49 @@ Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
 Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer bringen Fremdinhalt in den Blick
 (`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
 Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne Prüfer-Sitzung sperrt `memory_locked`.
-Einen Schalter ohne Prüfer gibt es nicht mehr (bis 2026-10-31 `judges: off`,
-dann `auditor` `None`); Tests, deren Skript nur den Agenten spielt, setzen
-Prüfer ein, die nie starten (`tests/agent_reviewers.py`).
+Ohne Prüfer läuft eine Nachricht seit 2026-11-01 nur nach der Einstellung des
+Nutzers (unten); Tests, deren Skript nur den Agenten spielt, setzen weiter
+Prüfer ein, die nie starten (`tests/agent_reviewers.py`, Einstellung `always`:
+ihre Prüfung endet `failed`).
+
+**Prüfer nach Einstellung** (seit 2026-11-01, Max: „Prüfmodell ausschalten“,
+„nur einschalten, wenn der Agent den Workspace öffnet“): Kontoeinstellung
+`reviewers` (`user_settings.py`, Runs → Reviewers), Werte `always` (Default),
+`workspace`, `off`. Der Browser schickt den Wert, den der Composer zeigte,
+mit jeder Nachricht (`AgentRequest.reviewers`, ältere Seiten keinen =
+`always`; kein Teil der Request-Identität), der Turn behält ihn
+(`agent_settings.reviewers`), `DelegationLoop(reviewers=…)` →
+`ComparisonTools(reviewers=…)` → `AnswerAudit(setting=…)`. `always`: `run`
+ruft `follow` am Start wie bisher. `workspace`: `_review_from_here` startet
+die Prüfer in `_step` mit dem ersten Schritt des Agenten, der ein Werkzeug des
+Arbeitsplatzes (`workspace_names`) oder `open_workspace` aufruft, vor dessen
+Gate (`_open_gate`), sodass sie schon diesen Schritt prüfen; sie lesen das
+Protokoll ab Eintrag 1 (`ReviewerSession.cursor` 0), also auch die Arbeit davor.
+Ohne Arbeitsplatz (Google-Daten, temporärer Chat, kein VM-Zugang) prüft dann
+niemand. `off`: niemand. Ohne Prüfer (`AnswerAudit.unreviewed`): kein Halt,
+kein Gate, `memory_locked` sperrt Memory nach Fremdinhalt (wie vor
+2026-10-28), `read_source` öffnet keine selbst gewählten Adressen
+(`agent_read_source`), `request_domain` geht ohne Gate-Runde an den Nutzer
+(Karte mit `review: "off"`, „Your reviewers are off, so only you decide.“),
+keine Prüferreserve vor dem harten Stopp (`answer_time_left`), kein
+`answer_check`-Frame, und die Prüfung endet `status: "off"` statt `failed`
+(`run`, auch aus `close`, wenn der Lauf vorher abbrach), `audit.setting` nennt
+die Einstellung (`snapshot`, nur ohne `always`). `finish_run` lässt `off`
+stehen. Der Agent erfährt es als Fakt im Systemprompt
+(`prompt_defaults.AGENT_REVIEW_FACTS[setting]` nach
+`AGENT_AUDIT_ANSWER_SECTION`, das den Prüfersatz bis dahin selbst trug; im
+Modus `workspace` ein fester Satz, damit der Cache beim Öffnen hält), im
+Memory-Block (`agent_memory.AUDIT_MEMORY_LOCK_FACTS`) und in der Beschreibung
+von `update_plan` (`PlanTools(reviewed=…)`). Ändern kann er sie nicht
+(`agent_settings.ELSEWHERE`). Zähler: `agent_audit_metrics` `review_setting`.
+Browser: Composer-Marken `.reviewers-off` und Worte „Reviewers off“ /
+„2 AIs check the workspace“ (`App.words.reviewing`, `agent-mode.js`
+`renderReviewers`, erster Frame in `app-bootstrap.js`), Chip-Titel
+(`model-picker.js`), unter der Antwort „Not reviewed · reviewers off“ bzw.
+„… · no work in the workspace“ (`agent-review.js` `unreviewed`, `off` in
+`AUDIT_ENDED`), in den Einstellungen die Folgen in ganzen Sätzen
+(`#reviewersNote`). Tests: `tests/test_agent_reviewer_setting.py`,
+`tests/js/agent-review.test.mjs`.
 Anzeige siehe `agent-review.js` `renderAudit` (§4 Agent · Beta) und
 `window.renderStoredAuditMarks`; seit 2026-10-27 nennt Notes den Schritt
 eines Befunds zur Arbeit über `App.agentActivity.toolName` („Command“,
@@ -8236,7 +8278,7 @@ alle Felder optional = nur Gewähltes, `FirestoreUserSettingsRepository`) unter
 der letzten Änderung je Einstellung) und `updated_at`.
 `GET /api/my/settings` → `{settings, revision, field_revisions}` (`revision` 0 =
 nie gespeichert; ein beschädigter Wert gilt als 1). `PATCH /api/my/settings` mit
-`{settings: {name: wert | null}}` (1 bis `MAX_PATCH_FIELDS` Namen = die elf
+`{settings: {name: wert | null}}` (1 bis `MAX_PATCH_FIELDS` Namen = die zwölf
 Einstellungen plus die ausgemusterten aus `RETIRED_SETTINGS`, damit der
 Erst-Upload eines alten Tabs nicht als Ganzes abgelehnt wird) ändert nur die
 genannten Einstellungen (`null` = zurück zum Default; `compare_models` ist eine
@@ -8263,7 +8305,12 @@ highlights, seit 2026-10-25; fehlt = aus; `consensus-insights.js` bindet
 `#markLinesSwitch` und setzt `body.marks-underlined`, die Linien selbst stehen in
 `components-consensus-visuals.css`), `letter_animations` (Display → Letter
 animations; fehlt = an, `false` = aus; `app-ui.js` bindet
-`#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie).
+`#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie),
+`reviewers` (Runs → Reviewers, seit 2026-11-01: `always` | `workspace` | `off`,
+fehlt = `always`; `agent-mode.js` bindet `#reviewersSetting` samt der Folgen
+unter der Zeile `#reviewersNote`, `App.words.reviewerSetting()` liest sie, der
+Browser schickt sie mit jeder Nachricht, siehe „Prüfer nach Einstellung“ in §4;
+der Agent kann sie weder lesen noch ändern, `agent_settings.ELSEWHERE`).
 **Ausgemustert (2026-10-31):** `agent_preferences` (Antworttiefe, Antwortstart,
 Agent-Freiheit, Antwortprüfung, Way of working, VM) mit dem Vergleichsmodus des
 Agenten: ein alter Tab, der sie noch schickt, bekommt sie einzeln in
@@ -8364,6 +8411,51 @@ Emulator). Die übrigen Browser-Tests stellen `/api/my/settings` pro Seite im
 Speicher bereit, mit den Regeln der echten Route (`_route_account_settings` in
 `test_phase4_frontend.py`); der Firebase-Stub der Standard-Fixture startet
 keinen Abgleich.
+
+### Temporäre Chats (seit 2026-11-01)
+Max: „Wegwerfchats, die wie bei ChatGPT und Claude keine persistenten Daten auf
+VM oder Bookmarks speichern“. Ein temporärer Chat ist ein Agent-Chat mit
+`temporary: true` (`POST /chats` → `ChatStore.create_chat(temporary=True)`), der
+nichts über sich hinaus behält. **Server** (`routers/agent.py`, der Chat
+entscheidet, nicht die Anfrage): kein Bookmark (`_final`/`_save_interrupted`
+überspringen `_save_bookmark`, `bookmark_meta: null`, `temporary: true` im
+Abschluss; kein Titel-Call, keine Beispielfragen, denn beide hängen am Bookmark),
+kein Memory (`MemorySnapshot(temporary=True)`: nicht gelesen, nicht schreibbar,
+`AUDIT_MEMORY_TEMPORARY_PROMPT`), kein Arbeitsplatz (`AgentPreferences(vm="off")`:
+Rechner, Browser-Anmeldungen, `~/NOTES.md`, installierte Pakete und Prüfpunkte
+überdauern jeden Chat, eine Wegwerf-VM je Chat wäre ein eigener Ausbau), kein
+Watch und kein `search_chats` (`DelegationLoop(temporary=True)`), dazu
+`AGENT_TEMPORARY_CHAT_PROMPT` nach dem Prüfer-Fakt. `search_chats` anderer Chats
+findet und öffnet ihn nicht (`agent_chat_search`), teilen geht nicht (409 in
+`prepare_agent_share_result`), die tägliche Chat-Durchsicht des Betreibers
+überspringt ihn (`scripts/daily_chat_review.py`). Prüfer, Dateien, Dokumente,
+Google, Einstellungskarten und das Arbeitsprotokoll gibt es wie sonst; sie
+gehen mit dem Chat. **Löschen**: der Browser beim Verlassen (`DELETE /chats/{id}`
+mit `keepalive`), sonst der Retention-Loop nach `TEMPORARY_CHAT_TTL` (24 h nach
+der letzten Nachricht, `temporary_chats`, §6) über `request_chat_deletion` +
+`run_chat_deletion`; ein laufender Turn endet über den Wächter des Laufs (Chat
+nicht mehr `active`). Seit 2026-11-01 nimmt jede Chat-Löschung auch die Texte
+der Laufbelege mit (`ChatStore._scrub_run_receipt`: `user_notes`, `hold`,
+`hold_decision` am Root-Beleg je Turn, `RUN_RECEIPT_TEXT_FIELDS`; der Beleg mit
+den Kosten bleibt). **Browser** (`static/js/temporary-chat.js`,
+`App.temporaryChat`): Schalter „Temporary chat“ im (+)-Menü nur auf einem neuen
+Agent-Chat (`#temporaryChatOption`, im Chat gesperrt mit „Ends when you leave
+this chat“), Begrüßung `.hero-greeting-temporary` und Platzhalter „Ask in a
+temporary chat“ (`body.temporary-chat`), im Chat `#temporaryChatNote` unter dem
+Feld. `agent-chat.js` `send`: erste Nachricht `start()` → Token an
+`metadata.temporaryToken`, `config.temporary`, `POST /chats` mit `temporary`,
+`adopt(token, chatId)` (verlassen inzwischen → sofort löschen); Folge- und
+Wiederholungsnachrichten bleiben über `basis.temporary` (`run-registry.js`
+`normalizeBasis`) im Chat; keine Sidebar-Zeile (`run-view.js` `ensureRunRow`),
+kein `rememberPending` (ein Neuladen beendet ihn), kein Share-/Watch-Knopf.
+Verlassen = jede Registry-Änderung (`created`, `visible`, `saved-view`,
+`visible-cleared`, `cleared`), nach der kein Lauf mit seinem Token sichtbar ist
+(Neuer Chat, anderer Chat, Abmelden; `performLogout` löscht vorher mit dem
+Token), dabei stoppen seine Läufe (`registry.cancel`, Grund `temporary`). Ein
+Neuladen löscht den Chat aus `sessionStorage` `consens.temporaryChat.v1`, sobald
+das Konto bekannt ist; `app-update.js` lädt bei offenem temporärem Chat nicht von
+selbst neu. Tests: `tests/test_temporary_chats.py`,
+`tests/js/temporary-chat.test.mjs`.
 
 ### Nutzergebundene Consensus-API (v1)
 - Admins stellen über `POST /api/admin/api-keys` einen gescopten Schlüssel für eine
@@ -9520,6 +9612,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `last_error`-Kategorie, `next_attempt_at`), angelegt atomar mit dem
   `deleting`-Tombstone, gelöscht nach vollständiger Kaskade bzw. mit
   `delete_all_chats` bei der Kontolöschung. Keine Inhalte.
+- `temporary_chats/{sha256(uid:chat)[:40]}` — seit 2026-11-01 der Löschtermin
+  eines temporären Chats (`uid`, `chat_id`, `expires_at`, `updated_at`;
+  `TEMPORARY_CHAT_TTL` = 24 h nach Anlage bzw. jeder Nachricht, in deren
+  Transaktion geschrieben), gefegt von `expire_temporary_chats` (Einzelfeld-
+  Index); geht mit dem Chat (`_purge_chat`) bzw. `delete_all_chats`. Der Chat
+  selbst trägt `temporary: true`, seine Turns `agent_settings.temporary`.
+  Keine Inhalte. Siehe §4 „Temporäre Chats“.
 - `follow_challenges/{sha256(scope:resource:email)}` — ausschließlich gehashte
   Double-Opt-in-Challenges mit 15-Minuten-Resendfenster, höchstens fünf Sends
   pro Empfänger/UTC-Tag und global höchstens 500/Stunde; kein E-Mail-Klartext.
@@ -10293,7 +10392,8 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
 **Cleanup-Jobs**: `retention_maintenance_loop` führt
 `cleanup_expired_pending` und `cleanup_revoked_shares` (plus
 Agent-Dateien/-Dokumente, abgelaufene Arbeitsprotokolle (`cleanup_expired_work_logs`,
-Collection-Group `turns.work_log_expires_at`), Google-Daten, fällige `chat_deletion_jobs` über
+Collection-Group `turns.work_log_expires_at`), Google-Daten, abgelaufene temporäre
+Chats (`expire_temporary_chats`, seit 2026-11-01), fällige `chat_deletion_jobs` über
 `resume_chat_deletions` sowie `cleanup_memory_edit_records` für 30-Tage-Undo-
 Snapshots und abgelaufene Memory-Edit-Leases) direkt nach Task-Start
 und danach standardmäßig stündlich aus; der tägliche Render-Restart ist keine

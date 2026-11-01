@@ -117,6 +117,8 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
     from app.services import chat_store, memory_edit
     monkeypatch.setattr(chat_store, "resume_chat_deletions",
         lambda: calls.append("chat_deletions") or 5)
+    monkeypatch.setattr(chat_store, "expire_temporary_chats",
+        lambda: calls.append("temporary_chats") or 1)
     monkeypatch.setattr(memory_edit, "cleanup_memory_edit_records",
         lambda: calls.append("memory") or {"snapshots_purged": 6, "edits_recovered": 7})
     from app.services import agent_memory
@@ -141,8 +143,8 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
             pass
 
     asyncio.run(exercise())
-    assert calls == ["pending", "receipts", "shares", "work_logs", "chat_deletions", "memory", "memory_changes",
-                     "outbox"]
+    assert calls == ["pending", "receipts", "shares", "work_logs", "temporary_chats", "chat_deletions", "memory",
+                     "memory_changes", "outbox"]
     health = background_tasks.task_health_snapshot()["retention-maintenance"]
     assert health["details"] == {
         "expired_pending_deleted": 2,
@@ -152,6 +154,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "work_logs_deleted": 4,
         "documents_deleted": 0,
         "google_records_deleted": 0,
+        "temporary_chats_deleted": 1,
         "chat_deletions_completed": 5,
         "memory_undo_snapshots_purged": 6,
         "memory_edits_recovered": 7,

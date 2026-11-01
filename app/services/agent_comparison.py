@@ -185,12 +185,12 @@ def comparison_selection(value=None):
 
 
 class ComparisonTools:
-    def __init__(self, loop, models, *, preferences=None):
+    def __init__(self, loop, models, *, preferences=None, reviewers="always"):
         """The agent's compare_models and the review of its answer: the
         user's chosen models follow the agent's work log and review its
-        fixed answer (agent_audit.AnswerAudit). No judge runs, also not on
-        the answers of compare_models: they advise the agent, and the
-        reviewers read them."""
+        fixed answer (agent_audit.AnswerAudit), as the user's ``reviewers``
+        setting says. No judge runs, also not on the answers of
+        compare_models: they advise the agent, and the reviewers read them."""
         from app.services.agent_audit import AnswerAudit
         self.loop, self.models = loop, models
         # The agent writes the answer itself (agent_answer_mode).
@@ -214,7 +214,7 @@ class ComparisonTools:
         # Pages the agent opened (agent_read_source.SourceReader), set by the
         # loop when read_source is on.
         self.reader = None
-        self.auditor = AnswerAudit(self)
+        self.auditor = AnswerAudit(self, setting=reviewers)
         # Every chosen model, every answer awaited, the depth the agent's.
         limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
         self.tools = [ReadOnlyTool("compare_models", AUDIT_COMPARE + (

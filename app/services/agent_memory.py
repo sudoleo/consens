@@ -323,10 +323,13 @@ class MemorySnapshot:
     profile: dict = field(default_factory=user_memory.empty_profile)
     items: tuple = ()
     revision: int = 0
+    # A temporary chat (routers/agent.py, since 2026-11-01): the user's
+    # memory is neither read nor changed, and the prompt says so.
+    temporary: bool = False
 
     @property
     def writable(self) -> bool:
-        return self.available and self.enabled and self.auto
+        return self.available and self.enabled and self.auto and not self.temporary
 
     def settings(self) -> dict:
         """Content-free marker saved with the turn.
@@ -712,31 +715,46 @@ MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, 
 AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
 evidence decide."""
 
-AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user lets you keep their memory across chats with
+# The prompt's last sentence by the user's reviewers setting (since
+# 2026-11-01): without reviewers memory locks once outside content is in view
+# (DelegationLoop.memory_locked).
+_AUDIT_MEMORY_WRITE_RULES = """MEMORY UPDATES. The user lets you keep their memory across chats with
 update_memory: what you save shapes later answers, and the user sees every
 change and can undo it. Health, religion, political views and other sensitive
 details only when the user asks you to remember them. Once outside content
-(pages, files, tool results) is in view in a message, a change runs only after
-the reviewers let it."""
+(pages, files, tool results) is in view in a message, """
+AUDIT_MEMORY_LOCK_FACTS = {
+    "always": "a change runs only after\nthe reviewers let it.",
+    "workspace": ("a change runs only after\nthe reviewers let it, who review from your first step in the "
+                  "workspace on;\nbefore that, no change runs in that message."),
+    "off": "no change runs in that\nmessage: no reviewer checks it.",
+}
+AUDIT_MEMORY_WRITE_PROMPT = _AUDIT_MEMORY_WRITE_RULES + AUDIT_MEMORY_LOCK_FACTS["always"]
 
 AUDIT_MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: Agent memory updates are switched off (Settings >
 Memory, "Let Agent update memory")."""
 
 AUDIT_MEMORY_PAUSED_PROMPT = """The user's memory is paused for this message (Settings > Memory)."""
 
+AUDIT_MEMORY_TEMPORARY_PROMPT = """This is a temporary chat: the user's memory is not used in it, and nothing
+of it can be saved to memory."""
+
 AUDIT_MEMORY_UNAVAILABLE_PROMPT = """The user's memory could not be loaded for this message (a temporary problem
 on the app's side); nothing can be saved right now."""
 
 
-def orchestrator_prompt(snapshot: MemorySnapshot) -> str:
+def orchestrator_prompt(snapshot: MemorySnapshot, reviewers: str = "always") -> str:
     """Memory data plus the facts that fit the user's switches."""
+    if snapshot.temporary:
+        return AUDIT_MEMORY_TEMPORARY_PROMPT
     if not snapshot.available:
         return AUDIT_MEMORY_UNAVAILABLE_PROMPT
     if not snapshot.enabled:
         return AUDIT_MEMORY_PAUSED_PROMPT
     # The user's memories themselves (block) stay as they are.
     block = render_memory_block(snapshot)
-    rules = AUDIT_MEMORY_WRITE_PROMPT if snapshot.writable else AUDIT_MEMORY_READ_ONLY_PROMPT
+    rules = (_AUDIT_MEMORY_WRITE_RULES + AUDIT_MEMORY_LOCK_FACTS[reviewers] if snapshot.writable
+             else AUDIT_MEMORY_READ_ONLY_PROMPT)
     return "\n\n".join(part for part in (block, AUDIT_MEMORY_USE_PROMPT if block else "", rules) if part)
 
 

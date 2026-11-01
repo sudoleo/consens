@@ -221,6 +221,9 @@ def cmd_collect(args) -> int:
         calls = None
         for chat in chats:
             chat_data = chat.to_dict() or {}
+            if chat_data.get("temporary"):
+                # A temporary chat is the user's alone while it lasts (since 2026-11-01).
+                continue
             previous = None
             for doc in sorted(chat.reference.collection("turns").where("created_at", ">", since).stream(),
                               key=lambda d: (d.to_dict() or {}).get("created_at")):

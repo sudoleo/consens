@@ -514,6 +514,16 @@
   line-height: var(--line-height-ui);
 }
 
+/* What a reviewers setting gives up (agent-mode.js renderReviewerSetting):
+   under the row, in its words' size, a step stronger than its help. */
+.settings-reviewers-note {
+  margin: 8px 0 0;
+  color: var(--text-color);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+.settings-reviewers-note[hidden] { display: none; }
+
 /* Eine Einstellung mit mehr als zwei Stufen sitzt in derselben Zeile wie ein
    Schalter, traegt an seiner Stelle aber ein Auswahlfeld. Der Rahmen ist der
    des Consensus-Pickers, damit die App nur eine Select-Sprache spricht. */

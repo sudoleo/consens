@@ -49,6 +49,10 @@ class ChatCreateRequest(BaseModel):
 
     title: str | None = None
     execution_mode: Literal["consensus", "agent"] = "consensus"
+    # A temporary Agent chat (since 2026-11-01): no bookmark, no memory, no
+    # workspace, no share; deleted when the user leaves it, at the latest
+    # chat_store.TEMPORARY_CHAT_TTL after its last message.
+    temporary: bool = False
 
     @field_validator("title")
     @classmethod
@@ -152,11 +156,15 @@ def create_chat(
 ):
     uid = _chat_uid(request, "create_chat")
     execution_mode = payload.execution_mode if payload else "consensus"
+    temporary = bool(payload and payload.temporary)
+    if temporary and execution_mode != "agent":
+        raise HTTPException(status_code=422, detail="Only an Agent chat can be temporary.")
     if execution_mode == "agent":
         from app.api.routers.agent import require_agent_access
         require_agent_access(uid)
     try:
-        chat = _store().create_chat(uid, title=(payload.title if payload else "") or "", execution_mode=execution_mode)
+        chat = _store().create_chat(uid, title=(payload.title if payload else "") or "", execution_mode=execution_mode,
+                                    temporary=temporary)
         return {"status": "success", "chat": chat}
     except Exception as exc:
         _raise_store_error(exc, operation="create chat", uid=uid)

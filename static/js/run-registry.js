@@ -74,6 +74,8 @@
       currentTurn: cloneValue(value.currentTurn || value.current_turn || null),
       historyTurns: cloneValue(value.historyTurns || value.history_turns || []),
       continuationUnavailable: value.continuationUnavailable === true,
+      // A temporary chat (temporary-chat.js): its next message stays in it.
+      temporary: value.temporary === true,
       title: String(value.title || value.question || ""),
       bookmarkMeta: cloneValue(value.bookmarkMeta || value.bookmark_meta || null)
     };

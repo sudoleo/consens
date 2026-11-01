@@ -1230,3 +1230,18 @@ it('puts the reviewers of an audited turn in the history beside its "Thought for
   expect(activity.querySelectorAll('.agent-history-models')).toHaveLength(1);
   dom.window.close();
 });
+it('says an answer nobody reviewed by the account\'s setting is not reviewed, never "Reviewing…"', () => {
+  for (const [setting, words] of [['off', 'Not reviewed · reviewers off'], ['workspace', 'Not reviewed · no work in the workspace']]) {
+    const {window: w, document: d, dom} = setup();
+    const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+    const review = { ...auditReview('off'), audit: { reviewers: [], setting } };
+    w.App.agentReview.render(body, review, { sources: [{ url: 'https://example.org', title: 'Source' }], question: 'Q', key: 't1' });
+    const status = d.querySelector('.agent-review > .agent-review-status');
+    expect(status.textContent).toBe(words);
+    expect(status.dataset.state).toBe('off');
+    expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+    // No Notes to read, the sources stay.
+    expect([...d.querySelectorAll('.agent-evidence-link')].map(b => b.getAttribute('aria-label'))).toEqual(['Sources 1']);
+    dom.window.close();
+  }
+});

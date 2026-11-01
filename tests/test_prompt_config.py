@@ -169,8 +169,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services import agent_comparison
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "comparison", "agent_audit_blocks", "audit_reviewer", "agent_vm", "agent_vm_no_domains",
-        "agent_plan",
+        "agent", "agent_review_facts", "agent_temporary_chat", "comparison", "agent_audit_blocks", "audit_reviewer",
+        "agent_vm", "agent_vm_no_domains", "agent_plan",
         "agent_github", "agent_workspace_closed", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
@@ -223,6 +223,10 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
     assert texts["agent_workspace_closed"] == AGENT_WORKSPACE_CLOSED_PROMPT
     assert "open_workspace" in texts["agent_workspace_closed"]
+    # Who reviews, by the user's setting (2026-11-01), and the temporary chat.
+    from app.services.prompt_defaults import AGENT_REVIEW_FACTS, AGENT_TEMPORARY_CHAT_PROMPT
+    assert all(f"[{setting}] {fact}" in texts["agent_review_facts"] for setting, fact in AGENT_REVIEW_FACTS.items())
+    assert texts["agent_temporary_chat"] == AGENT_TEMPORARY_CHAT_PROMPT
 
 
 def test_code_prompts_fit_the_prepare_round_trip():

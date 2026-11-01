@@ -338,6 +338,10 @@
     mark_lines: booleanSetting("consensio.markLines.v1"),
     // On unless false: stream-reveal.js and letter-clouds.js read it.
     letter_animations: booleanSetting("consensio.letterAnimations.v1"),
+    // Who checks the Agent's work: "always" (the default), "workspace" or
+    // "off". agent-chat.js sends it with every message, agent-mode.js says
+    // it beside the composer's reviewers.
+    reviewers: patternSetting("consensio.reviewers.v1", /^(always|workspace|off)$/),
   });
   const NAMES = Object.freeze(Object.keys(DEFINITIONS));
 
