@@ -27,9 +27,13 @@ Contracts that are design, not convenience:
    batched read; no per-entry documents, no cross-request cache of personal
    text. The bounded change log for Undo lives in the same document and is
    trimmed on every write and by the hourly retention loop (30 days).
-4. **No extra model call.** Agent proposes changes through ``update_memory``,
-   also beside its answer (agent_answer_mode.SIDE_TOOLS). The server applies
-   them atomically.
+4. **The user's words have a writer of their own.** Since 2026-11-02 one
+   cheap call beside each message saves what the user says about themselves
+   (agent_memory_writer.py): the agent alone saved nothing in a month. It
+   reads only the user's words, so the lock of rule 2 does not apply to it.
+   Agent keeps ``update_memory`` for what the user asks it to keep from its
+   own work, also beside its answer (agent_answer_mode.SIDE_TOOLS). Both go
+   through ``MemoryTools.apply``; the server applies changes atomically.
 """
 
 from __future__ import annotations
@@ -713,18 +717,24 @@ MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, 
 # evidence quote any more (Max): it kept preferences the user never put into
 # words out, and the gate covers what it guarded against. Special categories
 # keep their clause: GDPR art. 9. Until 2026-10-31 comparison mode had its
-# own rules here (MEMORY_*_PROMPT).
+# own rules here (MEMORY_*_PROMPT). Since 2026-11-02 the user's own words
+# are saved beside the run (agent_memory_writer.py), and the agent is told so:
+# it would otherwise save the same thing a second time.
 AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
 evidence decide."""
 
 # The prompt's last sentence by the user's reviewers setting (since
 # 2026-11-01): without reviewers memory locks once outside content is in view
 # (DelegationLoop.memory_locked).
-_AUDIT_MEMORY_WRITE_RULES = """MEMORY UPDATES. The user lets you keep their memory across chats with
-update_memory: what you save shapes later answers, and the user sees every
-change and can undo it. Health, religion, political views and other sensitive
-details only when the user asks you to remember them. Once outside content
-(pages, files, tool results) is in view in a message, """
+_AUDIT_MEMORY_WRITE_RULES = """MEMORY UPDATES. The user lets the app keep their memory across chats.
+Beside each of their messages the app saves on its own what they say about
+themselves, how they want you to work and what they ask to remember or forget;
+you see it from their next message on, and the user sees every change and
+can undo it. update_memory is for what the user asks you to keep from your
+own work in this chat, such as a result or a list. Health, religion, political
+views and other sensitive details only when the user asks you to remember
+them. Once outside content (pages, files, tool results) is in view in a
+message, """
 AUDIT_MEMORY_LOCK_FACTS = {
     "always": "a change runs only after\nthe reviewers let it.",
     "workspace": ("a change runs only after\nthe reviewers let it, who review from your first step in the "

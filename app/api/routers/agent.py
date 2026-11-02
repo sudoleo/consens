@@ -20,7 +20,7 @@ from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
-from app.services import agent_quota, agent_secrets, agent_vm
+from app.services import agent_memory_writer, agent_quota, agent_secrets, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository, MemorySnapshot
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
@@ -631,7 +631,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          google_data_consent=payload.google_data_consent, google_data=google_data,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
-                         chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
+                         memory_writer=agent_memory_writer.write, chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
                          domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)

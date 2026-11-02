@@ -357,7 +357,7 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 domains=True, reviewers="always", temporary=False, **kwargs):
+                 domains=True, reviewers="always", temporary=False, memory_writer=None, **kwargs):
         super().__init__(**kwargs)
         # A temporary chat (routers/agent.py): every tool of the account's
         # chats (since 2026-11-01 evening), and the agent knows what goes
@@ -405,6 +405,11 @@ class DelegationLoop(AgentLoop):
         self.turn_start = len(self.messages)
         from app.services.agent_memory import MemorySnapshot, MemoryTools
         self.memory = MemoryTools(self, memory if memory is not None else MemorySnapshot())
+        # What the user says about themselves, saved by a call of its own
+        # beside the run (agent_memory_writer.write, from the route); the run
+        # waits for it before the turn is saved.
+        self.memory_writer = memory_writer
+        self.memory_writing = None
         self.file_context = file_context
         self.documents = None
         self.watch_tools = None
@@ -3203,6 +3208,10 @@ class DelegationLoop(AgentLoop):
                         self.watch_tools.mock_turn(self.answer_conversation[-1]["content"])
                     if self.settings_tools:
                         self.settings_tools.mock_turn(self.answer_conversation[-1]["content"])
+                if self.memory_writer is not None and self.memory.writable and self.mock_answer is None:
+                    self.memory_writing = threading.Thread(target=self.memory_writer, args=(self,),
+                                                           name="agent-memory-writer", daemon=True)
+                    self.memory_writing.start()
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
                 from app.services.agent_audit import AGENT_SEARCH_ROUNDS
                 search_rounds = AGENT_SEARCH_ROUNDS if self.merged else 1
@@ -3497,6 +3506,11 @@ class DelegationLoop(AgentLoop):
             for worker in self.workers.values():
                 worker.thread.join()
             watcher.join()
+            if self.memory_writing is not None and status == "succeeded":
+                # Its change shows under the answer only while the turn is
+                # pending; a stopped or failed run does not wait for it.
+                from app.services.agent_memory_writer import WAIT_SECONDS
+                self.memory_writing.join(timeout=WAIT_SECONDS)
             if self.comparison:
                 self.comparison.close()
             if self.image_tools is not None:
