@@ -206,19 +206,36 @@ def validate_text(text: object) -> str:
 
 # --- Change requests --------------------------------------------------------
 
+CHANGE_OPS = ("add", "update", "delete")
+CHANGE_FIELDS = ("op", "id", "text")
+
+
+def _exact_change_schema(schema) -> None:
+    """The change as the model reads it: op required and without the
+    server's default, no field beyond op, id and text."""
+    schema["required"] = ["op"]
+    schema["additionalProperties"] = False
+    schema["properties"]["op"].pop("default", None)
+
+
 # A change the agent proposes (update_memory), since 2026-10-28 without an
-# evidence quote; one the model sends anyway is ignored (extra="ignore").
-# Lenient on purpose: every rule lives in ``MemoryTools.apply`` and
-# ``normalize_change``, so a malformed change comes back as a refused memory
-# change instead of a rejected call. No docstring: it would become the
-# schema's description.
+# evidence quote. Lenient on purpose: every rule lives in ``MemoryTools.apply``
+# and ``normalize_change``, so a malformed change comes back as a refused
+# memory change (with its reason in the activity) instead of a rejected call.
+# A field of its own is kept aside (extra="allow"): ``evidence`` still saves,
+# and a refusal can name a field such as "action". The schema stays exact
+# (_exact_change_schema). DeepSeek V4.1 Flash read ``changes`` as a bare
+# object, guessed {"add": [...]}, then {"action": "add"}, and got only "Use
+# add, update or delete." until it gave up (2026-11-02). No docstring: it
+# would become the schema's description.
 class AuditMemoryChange(BaseModel):
-    model_config = ConfigDict(extra="ignore", json_schema_extra={"required": ["op"]})
-    op: str = Field(default="", json_schema_extra={"enum": ["add", "update", "delete"]},
-                    description="add, update or delete.")
-    id: Optional[str] = Field(default="", description="The memory's id for update or delete; empty for add.")
+    model_config = ConfigDict(extra="allow", json_schema_extra=_exact_change_schema)
+    op: str = Field(default="", json_schema_extra={"enum": list(CHANGE_OPS)},
+                    description="add a new memory, update or delete a saved one.")
+    id: Optional[str] = Field(default="", description=
+        "For update and delete: the saved memory's id (m and 6 hex digits). Leave out for add.")
     text: Optional[str] = Field(default="", description=
-        f"The memory for add or update, at most {MAX_ITEM_CHARS} characters; empty for delete.")
+        f"For add and update: the memory, at most {MAX_ITEM_CHARS} characters. Leave out for delete.")
 
 
 class AuditUpdateMemoryArgs(BaseModel):
@@ -226,11 +243,53 @@ class AuditUpdateMemoryArgs(BaseModel):
     changes: list[AuditMemoryChange] = Field(min_length=1, max_length=MAX_CHANGES_PER_CALL)
 
 
+def change_shape() -> str:
+    """One change in one line, for the tool's description and its refusals:
+    {op: "add" | "update" | "delete", id?: string, text?: string}."""
+    from app.services.agent_tools import argument_schema, argument_shape
+    return argument_shape(argument_schema(AuditMemoryChange))
+
+
+# A refusal is saved with the turn's messages: it echoes only values shaped
+# like an op or a field name, never free text a model put there (as for ids).
+_SHOWN_OP_RE = re.compile(r"[A-Za-z_]{1,16}")
+_SHOWN_FIELD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,31}")
+
+
+def _shape_refusal(exc: AgentMemoryError, data: dict) -> AgentMemoryError:
+    """The agent's refusal of a change's form: what was wrong, the fields a
+    change does not have, and the form it takes."""
+    op, item_id = data.get("op"), str(data.get("id") or "").strip()
+    message = exc.message
+    if exc.code == "invalid_op":
+        shown = f' "{op}"' if isinstance(op, str) and _SHOWN_OP_RE.fullmatch(op) else ""
+        message = ("op is missing." if op in (None, "") else f"op{shown} is not add, update or delete.")
+    elif exc.code == "invalid_id" and not item_id:
+        message = f"{op} needs the id of a saved memory."
+    unknown = [key for key in data if key not in CHANGE_FIELDS]
+    shown = [key for key in unknown if isinstance(key, str) and _SHOWN_FIELD_RE.fullmatch(key)][:5]
+    if shown:
+        message += f" A change has no field{'s' if len(shown) > 1 else ''} {', '.join(shown)}."
+    elif unknown:
+        message += " A change has no other fields than op, id and text."
+    return AgentMemoryError(exc.code, f"{message} Each change is {change_shape()}.")
+
+
 def normalize_change(change, *, origin: str) -> dict:
-    """Shape and text checks that need no stored state."""
+    """Shape and text checks that need no stored state. A refusal of the
+    agent's change names the form of a change (_shape_refusal)."""
     data = change.model_dump() if isinstance(change, BaseModel) else dict(change or {})
+    try:
+        return _normalized_change(data, origin=origin)
+    except AgentMemoryError as exc:
+        if origin == "agent" and exc.code in {"invalid_op", "invalid_id", "invalid_delete", "empty_text"}:
+            raise _shape_refusal(exc, data) from None
+        raise
+
+
+def _normalized_change(data: dict, *, origin: str) -> dict:
     op = data.get("op")
-    if op not in {"add", "update", "delete"}:
+    if op not in CHANGE_OPS:
         raise AgentMemoryError("invalid_op", "Use add, update or delete.")
     item_id = str(data.get("id") or "").strip()
     if op == "add":
@@ -768,11 +827,16 @@ class MemoryTools:
         return bool(self.applied)
 
     def tools(self):
-        from app.services.agent_tools import ReadOnlyTool
+        from app.services.agent_tools import ReadOnlyTool, argument_schema, argument_shape
         if not self.writable:
             return []
+        # The form in the description too: a description reaches the model
+        # with every provider, the nested schema did not (DeepSeek V4.1 Flash,
+        # 2026-11-02, as with create_document).
         return [ReadOnlyTool("update_memory", "Save, update or delete the user's lasting memories; the user "
-                             "sees every change and can undo it.", AuditUpdateMemoryArgs, self.update_memory)]
+                             "sees every change and can undo it. Arguments: "
+                             f"{argument_shape(argument_schema(AuditUpdateMemoryArgs))}; add takes text, update "
+                             "takes id and text, delete takes id.", AuditUpdateMemoryArgs, self.update_memory)]
 
     def update_memory(self, args, *, cancellation=None):
         return self.apply(args.changes)

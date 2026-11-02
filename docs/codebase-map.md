@@ -2130,9 +2130,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `changes` mit `AuditMemoryChange` `{op, id, text}`, höchstens
   `MAX_CHANGES_PER_CALL` je Aufruf, `MAX_CHANGES_PER_TURN` je Turn), auch neben
   der Antwort (`agent_answer_mode.SIDE_TOOLS`). `AuditMemoryChange` ist bewusst
-  nachsichtig (Felder optional, unbekannte ignoriert): alle Regeln prüft
+  nachsichtig (id/text optional, eigene Felder wie das alte `evidence` legt
+  `extra="allow"` beiseite), sein Schema aber exakt (`_exact_change_schema`:
+  `op` Pflicht ohne Default, `additionalProperties: false`), und die
+  Beschreibung nennt die Form `{changes: [{op: "add" | "update" | "delete",
+  id?: string, text?: string}]}` (`change_shape`): DeepSeek V4.1 Flash las
+  `changes` am 2026-11-02 als leeres Objekt und riet fünfmal. Alle Regeln prüft
   `MemoryTools.apply`/`normalize_change` und meldet sie als normale
-  Memory-Ablehnung (`MemoryRefused`, ein `ValueError` mit `code`); gespeicherte
+  Memory-Ablehnung (`MemoryRefused`, ein `ValueError` mit `code`); eine
+  Ablehnung der Form nennt dem Agenten das falsche Feld (`op is missing. A
+  change has no field action.`) und die Form (`_shape_refusal`, nur
+  feldnamenförmige Werte, nie Text); Settings behält seine Texte. Gespeicherte
   wie abgelehnte Versuche landen inhaltsfrei als Tool-Eintrag `update_memory` in
   `agent_activity`, Ablehnungen mit Grundcode `reason` wie `invalid_id`,
   `text_too_long`, `untrusted_context`, `unavailable`, nie mit Memory-Text. Dort
@@ -4684,10 +4692,14 @@ kommt (Sonnet schickte `"memory": "[]"` und scheiterte dreimal an der
 Validierung), als den deklarierten Container (`_decode_stringified`); alles
 andere lehnt die Validierung ab. Werkzeugschemas gehen flach an den Provider
 (`argument_schema`, kein `$defs`/`$ref`; DeepSeek sah verschachtelte Modelle
-sonst nicht), die Dokument-Werkzeuge nennen ihre Argumentform zusätzlich in
-der Beschreibung (`argument_shape`), und ein unbekanntes Feld nennt in der
-Ablehnung die erlaubten Felder seines Objekts; gleiche Fehler in
-Listeneinträgen werden zusammengefasst. Seit 2026-10-07 steuert allein der Code-Prompt
+sonst nicht), die Dokument-Werkzeuge und `update_memory` nennen ihre
+Argumentform zusätzlich in der Beschreibung (`argument_shape`), und ein
+unbekanntes Feld nennt in der Ablehnung die erlaubten Felder seines Objekts;
+gleiche Fehler in Listeneinträgen werden zusammengefasst. Seit 2026-11-02
+endet jede Argument-Ablehnung mit der ganzen Form (`Expected arguments:
+{...}`, höchstens rund 660 Zeichen beim Browser). Es gibt keinen Strict-Modus
+und keine Schema-Vereinfachung je Provider: alle Modelle bekommen dieselben
+flachen Schemas über OpenRouter (`agent_client.stream`). Seit 2026-10-07 steuert allein der Code-Prompt
 (gespeicherte Admin-Prompts wirken nicht), seit 2026-10-31
 `DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT` (Aufbau unter
 „Prompt-Aufteilung im Agenten“ unten). Ob der Agent sucht, liest, die Modelle

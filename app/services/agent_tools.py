@@ -224,7 +224,9 @@ class ToolRegistry:
             # permitted" alone left DeepSeek guessing (2026-11-01). The same
             # mistake in every list item is one problem ("and 9 more like
             # it"): ten slides with "bullets" filled the cut before the
-            # document's own fields came up.
+            # document's own fields came up. The refusal ends with the whole
+            # argument form: "changes: Input should be a valid list" alone
+            # left DeepSeek guessing update_memory's changes (2026-11-02).
             schema, problems, alike, named = argument_schema(tool.arguments), [], {}, set()
             for error in exc.errors(include_url=False, include_input=False):
                 place = tuple(None if isinstance(part, int) else part for part in error["loc"])
@@ -243,7 +245,8 @@ class ToolRegistry:
             for index, more in alike.values():
                 if more:
                     problems[index] += f" (and {more} more like it)"
-            raise ValueError(f"Invalid {tool.name} arguments - {'; '.join(problems)}") from exc
+            raise ValueError(f"Invalid {tool.name} arguments - {'; '.join(problems)}. "
+                             f"Expected arguments: {argument_shape(schema)}") from exc
         return tool, arguments
 
     def _unknown_notes(self):

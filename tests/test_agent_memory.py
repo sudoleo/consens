@@ -290,13 +290,14 @@ class MemoryScript(Script):
         return Completion()
 
 
-def memory_loop(store, script, *, snapshot=None, question="I moved to Munich last week. Which bike shop?"):
+def memory_loop(store, script, *, snapshot=None, question="I moved to Munich last week. Which bike shop?",
+                model="claude-haiku-4-5"):
     """A turn of the agent whose reviewers never start (agent_reviewers.py):
     with outside content in view, memory locks."""
     chat, turn = pending(store, question=question)
     config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
-        model=resolve_agent_model("claude-haiku-4-5"),
+        model=resolve_agent_model(model),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
@@ -661,6 +662,111 @@ def test_the_memory_schema_still_guides_the_model():
     assert schema["required"] == ["op"] and "evidence" not in schema["properties"]
     # No docstring: the model reads the field descriptions, no notes of the app.
     assert "description" not in schema
+
+
+# --- update_memory's form, 2026-11-02 ---------------------------------------
+# Max to DeepSeek V4.1 Flash 1017: "merk dir mal dass du mit meinem whatsapp
+# verbunden bist". It read ``changes`` as a bare object ({}), guessed
+# {"add": [...]} ("changes: Input should be a valid list"), then items with
+# "action", "type" ... ("Change 1: Use add, update or delete.") and gave up.
+
+WHATSAPP = "Ist über den Arbeitsplatz mit Max' WhatsApp verbunden."
+CHANGE_FORM = '{op: "add" | "update" | "delete", id?: string, text?: string}'
+
+
+def memory_registry():
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+    return ToolRegistry([ReadOnlyTool("update_memory", "", agent_memory.AuditUpdateMemoryArgs, None)])
+
+
+def memory_call(arguments):
+    return {"function": {"name": "update_memory", "arguments": json.dumps(arguments)}}
+
+
+def test_update_memory_shows_a_list_of_changes_with_an_op_in_schema_and_description(store):
+    tools = agent_memory.MemoryTools(None, writable_snapshot(store), repository=repo(store)).tools()
+    from app.services.agent_tools import ToolRegistry
+    function = ToolRegistry(tools).schemas[0]["function"]
+    changes = function["parameters"]["properties"]["changes"]
+    assert function["parameters"]["required"] == ["changes"] and "$ref" not in json.dumps(function)
+    assert changes["type"] == "array" and changes["minItems"] == 1 and changes["maxItems"] == agent_memory.MAX_CHANGES_PER_CALL
+    item = changes["items"]
+    assert item["type"] == "object" and list(item["properties"]) == ["op", "id", "text"]
+    assert item["required"] == ["op"] and item["additionalProperties"] is False
+    # op is required: no server default ("") beside its enum.
+    assert item["properties"]["op"]["enum"] == ["add", "update", "delete"] and "default" not in item["properties"]["op"]
+    # The description carries the form for providers that drop nested schemas.
+    assert f"Arguments: {{changes: [{CHANGE_FORM}]}}" in function["description"]
+    assert "add takes text, update takes id and text, delete takes id" in function["description"]
+
+
+def test_a_changes_object_is_refused_with_the_expected_form():
+    with pytest.raises(ValueError) as refused:
+        memory_registry().validate(memory_call({"changes": {"add": [WHATSAPP]}}))
+    text = str(refused.value)
+    assert text == ("Invalid update_memory arguments - changes: Input should be a valid list. "
+                    f"Expected arguments: {{changes: [{CHANGE_FORM}]}}")
+    # Changes without the list around them name the missing field and the form.
+    with pytest.raises(ValueError) as refused:
+        memory_registry().validate(memory_call({"op": "add", "text": WHATSAPP}))
+    text = str(refused.value)
+    assert "changes: Field required" in text and "op: Extra inputs are not permitted (allowed here: changes)" in text
+    assert text.endswith(f"Expected arguments: {{changes: [{CHANGE_FORM}]}}") and "WhatsApp" not in text
+
+
+@pytest.mark.parametrize("change, problem", [
+    ({"action": "add", "text": WHATSAPP}, "op is missing. A change has no field action."),
+    ({"add": WHATSAPP}, "op is missing. A change has no field add."),
+    ({"type": "add", "content": WHATSAPP}, "op is missing. A change has no fields type, content."),
+    ({"op": "insert", "text": WHATSAPP}, 'op "insert" is not add, update or delete.'),
+    ({"op": "add", "memory": WHATSAPP}, "A memory needs text. A change has no field memory."),
+    ({"op": "update", "text": WHATSAPP}, "update needs the id of a saved memory."),
+    ({"op": "add", "Ist verbunden": WHATSAPP}, "A memory needs text. A change has no other fields than op, id and text."),
+])
+def test_a_guessed_change_names_the_wrong_field_and_the_form(store, change, problem):
+    snapshot = writable_snapshot(store)
+    script = MemoryScript(remember(change), reply="Noted.")
+    loop = memory_loop(store, script, snapshot=snapshot, model="deepseek-v4.1-flash-1017")
+    list(loop.run())
+    error = tool_results(loop)["call_0_0"]["error"]
+    assert error == f"Change 1: {problem} Each change is {CHANGE_FORM}. Nothing was saved."
+    assert repo(store).get(UID)[0] == []
+    # Neither the memory text nor a field name made of it comes back.
+    assert "WhatsApp" not in error and "Ist verbunden" not in error
+
+
+def test_a_deepseek_call_in_the_documented_form_saves_on_the_first_try(store):
+    """DeepSeek sends the optional id as null; that is an add like any other."""
+    snapshot = writable_snapshot(store)
+    call = json.dumps({"changes": [{"op": "add", "id": None, "text": WHATSAPP}]})
+    script = MemoryScript(("update_memory", call), reply="Gemerkt.")
+    loop = memory_loop(store, script, snapshot=snapshot, model="deepseek-v4.1-flash-1017",
+                       question="merk dir mal dass du mit meinem whatsapp verbunden bist")
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == "Gemerkt."
+    assert [(item["text"], item["origin"]) for item in repo(store).get(UID)[0]] == [(WHATSAPP, "agent")]
+    assert tool_results(loop)["call_0_0"]["status"] == "applied"
+    assert saved["agent_memory"][0]["op"] == "add"
+    update = next(tool for tool in script.tools if tool["name"] == "update_memory")
+    assert CHANGE_FORM in update["description"]
+
+
+def test_a_retired_evidence_field_still_saves(store):
+    """Fields of their own are kept aside (extra="allow"), not refused."""
+    snapshot = writable_snapshot(store)
+    script = MemoryScript(remember({"op": "add", "text": WHATSAPP, "evidence": "merk dir mal"}), reply="Gemerkt.")
+    loop = memory_loop(store, script, snapshot=snapshot)
+    list(loop.run())
+    assert [item["text"] for item in repo(store).get(UID)[0]] == [WHATSAPP]
+
+
+def test_the_settings_refusals_keep_their_wording():
+    """The form belongs to the agent's refusals; Settings shows its own."""
+    with pytest.raises(AgentMemoryError, match=r"^Unknown memory id \(empty\)\.$"):
+        agent_memory.normalize_change({"op": "update", "id": "", "text": "Tea."}, origin="user")
+    with pytest.raises(AgentMemoryError, match=r"^Use add, update or delete\.$"):
+        agent_memory.normalize_change({"op": "", "text": "Tea."}, origin="user")
 
 
 QUOTE_FORMAT = json.loads((__import__("pathlib").Path(__file__).parent / "fixtures"

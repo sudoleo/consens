@@ -290,7 +290,10 @@ def test_document_schema_is_flat_and_refusals_name_the_section_fields():
     text = str(refused.value)
     assert "sections.0.bullets: Extra inputs are not permitted (allowed here: heading, paragraphs, table) (and 9 more like it)" in text
     assert "allowed here: label, file_id, locator, url" in text and "allowed here: title, summary, sections" in text
-    assert len(text) < 600
+    # The problems stay short; the form after them (since 2026-11-02) fits the
+    # 2000-character cut of a tool error with room to spare.
+    problems, form = text.split(". Expected arguments: ")
+    assert len(problems) < 600 and len(text) < 1000 and form.startswith("{document: {title: string")
     # The whole document sent as JSON text is an object like any other.
     sent = json.dumps({"title": "T", "sections": [{"heading": "A", "paragraphs": ["p"]}]})
     assert registry.validate(call(sent))[1].document.sections[0].paragraphs == ["p"]
