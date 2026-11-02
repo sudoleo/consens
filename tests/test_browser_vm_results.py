@@ -330,6 +330,11 @@ class Request:
         return self.navigation
 
 
+class Answer:
+    def __init__(self, request, status):
+        self.request, self.status = request, status
+
+
 class Settling:
     """A tab after an action, as quiet sees it through Playwright: QUIET_JS's
     answer from the times its DOM changed (seconds after the action), its
@@ -423,6 +428,26 @@ def test_a_navigation_loads_as_before(monkeypatch):
     navigation = Request("document", navigation=True, frame=page.main_frame)
     page.events = [(0.02, "request", navigation), (0.4, "framenavigated", page.main_frame)]
     assert settle(browser, clock, page) == 0.4 and page.waited == ["domcontentloaded", "networkidle"]
+    # A form sent with Enter answers with a redirect: its request finishes
+    # (302) and the next one asks for the new document, which commits later.
+    # Before, the finished 302 counted as the navigation's end, and the new
+    # page was read before it loaded (half its elements, bug hunt 2026-10-31).
+    page = Settling(browser, clock)
+    posted = Request("document", navigation=True, frame=page.main_frame)
+    redirected = Request("document", navigation=True, frame=page.main_frame)
+    page.events = [(0.02, "request", posted), (0.19, "response", Answer(posted, 302)),
+                   (0.2, "requestfinished", posted), (0.25, "request", redirected),
+                   (0.7, "framenavigated", page.main_frame)]
+    assert settle(browser, clock, page) == 0.7 and page.waited == ["domcontentloaded", "networkidle"]
+    # A redirect to a download ends with the download's request (heard at
+    # quiet's next look, as below), never with LOADED_SECONDS.
+    page = Settling(browser, clock)
+    posted = Request("document", navigation=True, frame=page.main_frame)
+    redirected = Request("document", navigation=True, frame=page.main_frame)
+    page.events = [(0.02, "request", posted), (0.1, "response", Answer(posted, 303)),
+                   (0.1, "requestfinished", posted), (0.15, "request", redirected),
+                   (0.2, "requestfailed", redirected)]
+    assert settle(browser, clock, page) == 0.3
     # It ends without a new document (a download): no wait for one. (quiet
     # hears of it at its next look, after the 300 ms it waits anyway.)
     page = Settling(browser, clock)

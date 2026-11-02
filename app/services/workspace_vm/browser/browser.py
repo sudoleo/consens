@@ -805,14 +805,19 @@ class Traffic:
     """What a tab sends while an action runs and its effect comes (quiet,
     since 2026-10-30): a navigation of its main frame, whether it committed
     or ended (a download, an error), and the requests started since whose
-    answers can change the page and are still open."""
+    answers can change the page and are still open. A navigation answered
+    with a redirect goes on as the request that follows it: its own request
+    finishing is no end (a form sent with Enter read the next page before it
+    loaded, bug hunt 2026-10-31)."""
     KINDS = frozenset({"fetch", "xhr", "script", "document"})
+    REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
     def __init__(self, page):
         self.page, self.open = page, set()
-        self.navigation, self.committed, self.ended = None, False, False
-        self._handlers = (("request", self._request), ("requestfinished", self._finished),
-                          ("requestfailed", self._finished), ("framenavigated", self._navigated))
+        self.navigation, self.committed, self.ended, self.redirected = None, False, False, False
+        self._handlers = (("request", self._request), ("response", self._response),
+                          ("requestfinished", self._finished), ("requestfailed", self._finished),
+                          ("framenavigated", self._navigated))
         for event, handler in self._handlers:
             with contextlib.suppress(Exception):
                 page.on(event, handler)
@@ -820,13 +825,18 @@ class Traffic:
     def _request(self, request):
         with contextlib.suppress(Exception):
             if request.is_navigation_request() and request.frame == self.page.main_frame:
-                self.navigation = request
+                self.navigation, self.redirected, self.ended = request, False, False
             elif request.resource_type in self.KINDS:
                 self.open.add(request)
 
+    def _response(self, response):
+        with contextlib.suppress(Exception):
+            if response.request is self.navigation and response.status in self.REDIRECTS:
+                self.redirected = True
+
     def _finished(self, request):
         self.open.discard(request)
-        if request is self.navigation:
+        if request is self.navigation and not self.redirected:
             self.ended = True
 
     def _navigated(self, frame):
