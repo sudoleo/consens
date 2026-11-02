@@ -571,6 +571,9 @@
       // not shadow the last authoritative server bookmark when that bookmark
       // is opened again.
       && (EXECUTING.has(context.status) || context.status === "succeeded")
+      // Nor may a follow-up resumed after a reload (agent-chat.js resume)
+      // once saved: it knows none of its chat's earlier turns.
+      && !(context.status === "succeeded" && context.metadata?.historyMissing)
     ));
     matches.sort((left, right) => right.createdAt - left.createdAt);
     return matches[0] || null;

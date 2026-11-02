@@ -4228,6 +4228,33 @@ describe("agent turns that outlive their connection", () => {
     dom.window.close();
   });
 
+  // A follow-up resumed after a reload knows none of its chat's earlier
+  // turns. Its chat is to open whole once the answer is saved, but
+  // openBookmark found this very run by its bookmark and showed it again:
+  // only the last question stood there, from the sidebar too (bug hunt
+  // 2026-11-02).
+  it("opens the whole chat of a follow-up resumed after a reload once its answer is saved", async () => {
+    const record = { at: Date.now() - 60 * 1000, title: "Chat", followup: true,
+      body: { chat_id: CHAT, question: "Follow-up", client_request_id: "req-follow", bookmark_id: "b_follow", recover_only: false,
+        model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {}, file_ids: [] } };
+    const { window: w, dom } = bootFollow({
+      before: window => {
+        window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record]));
+        window.openBookmark = vi.fn();
+      },
+      pages: [{ known: true, done: true, last_seq: 2, events: [{ seq: 2, type: "final", data: finalData("Follow-up answer") }] }] });
+    w.streamSSERequest.mockImplementation(async () => ({ ok: false, status: 409,
+      data: { code: "request_running", recovery_state: "running" } }));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-follow")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-follow");
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    await vi.waitFor(() => expect(w.openBookmark).toHaveBeenCalledWith("b_follow"));
+    // openBookmark (firebase.js) shows a run it finds by the bookmark instead of loading the saved chat.
+    expect(w.App.runRegistry.findByBookmarkId("b_follow")).toBe(null);
+    dom.window.close();
+  });
+
   it("ignores stale or foreign records after a reload", async () => {
     // Older than a long VM run with a pause (PENDING_MAX_AGE_MS, 3 h).
     const stale = { at: Date.now() - 181 * 60 * 1000, body: { chat_id: CHAT, question: "Old", client_request_id: "old", bookmark_id: "b" } };

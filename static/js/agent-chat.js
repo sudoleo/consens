@@ -2441,7 +2441,9 @@
           comparisonModels: body.comparison_models || {},
           googleSelection: body.google_selection || null, googleDataConsent: body.google_data_consent === true },
         metadata: { draftQuestion: "", quotedContext: "", fileIds: body.file_ids || [], agentActivity: [],
-          agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true },
+          agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true,
+          // Knows none of its chat's earlier turns (run-registry findByBookmarkId).
+          ...(record.followup && !basis ? { historyMissing: true } : {}) },
         usage: { status: "simulation", key: null },
       });
     } catch (_) { return; }
