@@ -165,6 +165,29 @@ describe("agent live fallback", () => {
     dom.window.close();
   });
 
+  it("keeps following when a frame could not be applied", async () => {
+    // A frame whose handler threw ended the polling without a next poll,
+    // and the turn stood still until the tab was hidden and shown again.
+    const { window: w, dom } = boot();
+    const final = { response: "Answer", turn: { id: "t", consensus: "Answer" } };
+    const pages = [
+      { known: true, done: false, last_seq: 1, events: [{ seq: 1, type: "activity", data: { kind: "broken" } }] },
+      { known: true, done: true, last_seq: 3, events: [{ seq: 2, type: "delta", data: { text: "Answer" } },
+        { seq: 3, type: "final", data: final }] },
+    ];
+    w.fetch = vi.fn(async () => reply(pages.length > 1 ? pages.shift() : pages[0]));
+    const delivered = [];
+    const { live } = watcher(w, { deliver: (type, data, seq) => {
+      if (data?.kind === "broken") throw new TypeError("Cannot read properties of undefined");
+      delivered.push([type, data, seq]);
+    } });
+    live.reconnect();
+    await expect(live.finished).resolves.toEqual({ ok: true, status: 200, data: final, streamed: true });
+    expect(delivered).toEqual([["delta", { text: "Answer" }, 2]]);
+    expect(String(w.fetch.mock.calls[1][0])).toContain("after=1");
+    dom.window.close();
+  });
+
   it("polls at once when the network returns or the tab becomes visible", async () => {
     const { window: w, dom } = boot();
     w.App.agentLive.POLL_MS = 400; // backoff far longer than the test waits

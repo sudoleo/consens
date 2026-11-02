@@ -170,7 +170,12 @@
       // One poll at a time, including its saved-state check: `online` and a
       // visible tab must not start a second one beside it.
       inFlight = true;
-      try { await pollOnce(); } finally { inFlight = false; }
+      try { await pollOnce(); } catch (_) {
+        // A frame its handler could not apply never ends the following: the
+        // next poll asks after it (the cursor passed it already). Before, no
+        // poll came again until the tab was hidden and shown.
+        if (!stopped && polling) { failures += 1; schedule(backoff()); }
+      } finally { inFlight = false; }
     }
     // Asked after a poll that brought no frame: nothing new for followMs,
     // neither polled nor streamed, and no pause waiting for the user.
