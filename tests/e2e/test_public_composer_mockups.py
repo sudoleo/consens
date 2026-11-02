@@ -137,10 +137,12 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
             'content', 'One AI does the work. Several check it. | consens.io')
         main = page.locator('main')
         for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs', '3 AIs',
-                     'Live from real runs', 'We benchmarked the consensus'):
+                     'Live from real runs'):
             expect(main).not_to_contain_text(gone)
-        # The benchmark and the Model Pulse strip left the page on 2026-11-01.
-        expect(page.locator('#benchmark')).to_have_count(0)
+        # The Model Pulse strip left the page on 2026-11-01; the benchmark
+        # came back on 2026-11-02 and says what it measures.
+        expect(page.locator('#benchmark')).to_contain_text('not the agent’s answers')
+        expect(page.locator('#benchmark a[href="/benchmark"]')).to_have_text('See the full benchmark')
         expect(page.locator('.lp-live-pulse')).to_have_count(0)
         # Scene 02 ends on the reviewers' marks and the row under the answer.
         run = page.locator('[data-run]')

@@ -419,7 +419,11 @@
 }
 .bench-hero-copy .bench-meta { margin-top: 28px; }
 
-/* --- Mini chart teaser ---------------------------------------------------- */
+/* Aside used in the landing-page benchmark teaser (stats + CTA next to chart). */
+.lp-bench-aside { display: flex; flex-direction: column; justify-content: center; }
+.lp-bench-aside .bench-stat-row { gap: clamp(16px, 3vw, 32px); }
+
+/* --- Mini chart teaser (reused on the landing page) ---------------------- */
 .bench-mini {
   --mscale: 1.7px;             /* px per accuracy point */
   position: relative;

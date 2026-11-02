@@ -311,5 +311,11 @@
   "When independent views help, the agent asks the reviewers' models the same question. Open Answers to read what each said, or compare two answers side by side.": "Wenn unabhängige Sichtweisen helfen, stellt der Agent den Modellen der Prüfer dieselbe Frage. Unter „Antworten“ liest du, was jedes gesagt hat, oder vergleichst zwei Antworten nebeneinander.",
   "<0><1/><2><3>chart.png</3><4>Image</4></2></0> <5><6/><7><8>buy-vs-rent.xlsx</8><9>Excel · 2 sheets</9></7></5>": "<0><1/><2><3>diagramm.png</3><4>Bild</4></2></0> <5><6/><7><8>kaufen-oder-mieten.xlsx</8><9>Excel · 2 Tabellenblätter</9></7></5>",
   "Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de": "Im Web gesucht · 3 Quellen: leipzig.de, finanztip.de, homeday.de",
-  "Opened the workspace · Calculate 30 years of buying and renting": "Arbeitsplatz geöffnet · 30 Jahre Kaufen und Mieten durchrechnen"
+  "Opened the workspace · Calculate 30 years of buying and renting": "Arbeitsplatz geöffnet · 30 Jahre Kaufen und Mieten durchrechnen",
+  "Proof, not promises": "Belege statt Versprechen",
+  "We benchmarked the consensus.": "Wir haben den Konsens im Benchmark getestet.",
+  "On 314 closed-book MMLU-Pro questions, the consensus ranks first overall, and pulls clear exactly where the models disagree. It tests the consensus engine behind Watches, Topics and the API, not the agent’s answers.": "Bei 314 MMLU-Pro-Fragen ohne Hilfsmittel liegt der Konsens insgesamt auf Platz eins und setzt sich genau dort ab, wo die Modelle uneins sind. Getestet ist die Konsens-Engine hinter Watches, Themen und der API, nicht die Antworten des Agenten.",
+  "Highest accuracy overall and on the hard questions. The top of the field is a statistical tie.": "Höchste Genauigkeit insgesamt und bei den schweren Fragen. An der Spitze liegt das Feld statistisch gleichauf.",
+  "<0>+32pts</0><1>Lead over the weakest model on questions where the answers split.</1>": "<0>+32 Pkt.</0><1>Vorsprung vor dem schwächsten Modell bei Fragen, bei denen die Antworten auseinandergehen.</1>",
+  "See the full benchmark": "Zum vollständigen Benchmark"
 }

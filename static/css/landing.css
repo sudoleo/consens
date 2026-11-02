@@ -796,9 +796,6 @@ img { display: block; max-width: 100%; }
 
 .lp-run-chip { margin-left: auto; }
 
-/* Its step fills it one tone, as /app answers a hover: never a frame. */
-.lp-run-chip.is-lit { background: var(--hover); }
-
 .lp-send {
   display: inline-flex;
   align-items: center;

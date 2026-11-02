@@ -810,8 +810,15 @@ watch“ – nur, wenn es eine laufende, kuratierte öffentliche Watch gibt
 nur per Link öffentliche Seite steht nie auf der Startseite, auch nicht als
 Ersatz; 15-min-Cache, Moderation leert ihn, eine Minute Pause nach einem
 Lesefehler, `stream(retry=None, timeout=3)`, damit die Landing nie auf
-Firestore wartet; `pages.landing_live_watch`). Der Benchmark-Abschnitt mit
-dem Live-Streifen aus dem Model Pulse stand dort vom 03.10. bis 2026-11-01.
+Firestore wartet; `pages.landing_live_watch`). Davor, zwischen Decide und
+Watch, steht der Benchmark-Abschnitt `#benchmark` (statisch, Mini-Diagramm aus
+`benchmark.css`, „See the full benchmark“): am 2026-11-01 mit dem einen Modus
+entfernt, seit 2026-11-02 zurück (Max: „Der Benchmark soll bleiben“), mit dem
+Satz, dass er die Konsens-Engine hinter Watches, Themen und API misst, nicht
+die Antworten des Agenten. Der Live-Streifen aus dem Model Pulse darunter
+(03.10. bis 2026-11-01) bleibt weg, der Pulse ist ein Archiv. In Szene 01
+leuchtet „2 AIs cross-check“ seit 2026-11-02 nicht mehr auf (ein
+Überbleibsel des früheren Lauf-Schalters, das beim Scrollen flackerte).
 `/model-pulse` zeigt (als Archiv) Best-answer-Raten pro Lauf, in dem eine
 Familie war (siehe oben), und trennt dieses
 Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.

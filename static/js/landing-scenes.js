@@ -47,7 +47,6 @@
   function buildAskScene(scene) {
     const text = scene.querySelector("[data-ask-text]");
     const composer = scene.querySelector("[data-ask-composer]");
-    const chip = scene.querySelector("[data-ask-chip]");
     const send = scene.querySelector("[data-ask-send]");
     const leaving = scene.querySelectorAll(".lp-composer-models");
     if (!text || !composer) return null;
@@ -85,9 +84,10 @@
       text.classList.toggle("is-typing", p > 0.04 && typed < 1);
 
       // Once there is a question, the composer is live: field focused,
-      // then the run switch, then send.
+      // then send. The reviewers' words beside it are a label, not a switch:
+      // until 2026-11-02 they lit up on the way (a run switch's step), which
+      // read as a flicker while scrolling.
       composer.classList.toggle("is-active", typed > 0.02);
-      if (chip) chip.classList.toggle("is-lit", p >= 0.62 && p < 0.78);
       if (send) {
         send.classList.toggle("is-ready", typed >= 1);
         send.classList.toggle("is-pressed", p >= 0.9);
