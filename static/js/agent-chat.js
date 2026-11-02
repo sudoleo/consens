@@ -1526,6 +1526,11 @@
     if (index >= 0) { queue.splice(index, 1); persistQueue(context); renderQueue(); }
     else (context.metadata.readNotes ||= []).push(match[1]);
   }
+  // The start of waiting messages, for a popup that says they were not sent.
+  function queueStart(queue) {
+    const start = queue.map(item => item.text).join("\n\n").replace(/\s+/g, " ").trim();
+    return start.length > 60 ? `${start.slice(0, 59)}…` : start;
+  }
   // The response is over: what it did not read goes out now, or back into
   // the field when it stopped or failed.
   function flushQueue(context) {
@@ -1541,9 +1546,8 @@
     // Another chat is open now: its field and its mode are not this
     // message's. Said, never sent there.
     const elsewhere = () => {
-      const start = text.replace(/\s+/g, " ").trim();
       App.showPopup?.(App.t("Not sent: “{text}”. You had opened another chat before the response ended.",
-        { text: start.length > 60 ? `${start.slice(0, 59)}…` : start }));
+        { text: queueStart(queue) }));
     };
     if (!registry.isVisible(context.runId)) { elsewhere(); return; }
     if (context.status === "succeeded" && !input.value.trim()) {
@@ -2315,7 +2319,22 @@
             metadata: { requestSent: true, chatId: record.body.chat_id } });
           continue;
         }
-        if (await resumeState(record) === "over") { dropPending(uid, record); continue; }
+        const state = await resumeState(record);
+        // Followed meanwhile: the chat was opened while its turn runs (followRunning).
+        if (registry.list().some(run => run.requestIdentity === record.body.client_request_id)) continue;
+        // A message that waited for the response was dropped with the record
+        // when the page came back after it (a phone that discarded the tab,
+        // bug hunt 2026-11-01): a saved turn is shown, and the message goes
+        // out after it as it would have; one that is gone says the words.
+        const waiting = restoreQueue(record.queue);
+        if (state === "over" || (state === "long over" && !waiting.length)) {
+          dropPending(uid, record);
+          if (waiting.length) {
+            App.showPopup?.(App.t("Not sent: “{text}”. The response it waited for is no longer there.",
+              { text: queueStart(waiting) }));
+          }
+          continue;
+        }
         resume(record, uid);
       }
     }, 0);
@@ -2328,6 +2347,8 @@
   // network) it is followed as before. "Moments ago" counts from the turn's
   // end, not from sending: a VM run of more than 10 minutes that ended just
   // before the reload counted as long over, and its answer stayed away.
+  // "long over": saved, but ended before that; "over": the server has no
+  // answer for it (or refused the request).
   const RESUME_FRESH_MS = 10 * 60 * 1000;
   async function resumeState(record) {
     let result = null;
@@ -2340,7 +2361,7 @@
     const turn = result?.data?.turn;
     if (turn) {
       const ended = Date.parse(turn.completed_at || turn.failed_at || "");
-      return Date.now() - (Number.isFinite(ended) ? ended : Number(record.at)) < RESUME_FRESH_MS ? "ended" : "over";
+      return Date.now() - (Number.isFinite(ended) ? ended : Number(record.at)) < RESUME_FRESH_MS ? "ended" : "long over";
     }
     if (!result || result.status >= 500 || result.status === 429) return "unknown";
     return "over";

@@ -4137,6 +4137,47 @@ describe("agent turns that outlive their connection", () => {
     }
   });
 
+  // A phone that discarded the tab while a message waited for the response,
+  // opened again half an hour after it ended: the record was dropped with its
+  // queue, and the waiting message was gone without a word (bug hunt A-B4,
+  // 2026-11-01). Now the turn is shown and the message goes out after it, as
+  // it would have; a turn the server no longer knows says what was not sent.
+  it("keeps the waiting messages of a turn long over and says those of a turn that is gone", async () => {
+    const waiting = [{ text: "Danach bitte kürzer", state: "queued" }];
+    const record = { at: Date.now() - 40 * 60 * 1000, title: "Question", followup: false, queue: waiting,
+      body: { chat_id: CHAT, question: "Question", client_request_id: "req-late", bookmark_id: "b_late", recover_only: false,
+        model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {}, file_ids: [] } };
+    let { window: w, dom } = bootFollow({
+      before: window => {
+        window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record]));
+        window.sendQuestion = vi.fn();
+      },
+      pages: [{ known: false }] });
+    const turn = { id: TURN, question: "Question", consensus: "Old answer", status: "completed",
+      completed_at: new Date(Date.now() - 30 * 60 * 1000).toISOString() };
+    w.streamSSERequest.mockImplementation(async () => ({ ok: true, status: 200, data: { turn: structuredClone(turn) } }));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-late")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-late");
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    await vi.waitFor(() => expect(w.sendQuestion).toHaveBeenCalledTimes(1));
+    expect(w.document.getElementById("questionInput").value).toBe("Danach bitte kürzer");
+    expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null);
+    dom.window.close();
+
+    ({ window: w, dom } = bootFollow({
+      before: window => window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record])),
+      pages: [{ known: false }] }));
+    w.streamSSERequest.mockImplementation(async () => ({ ok: false, status: 404,
+      data: { code: "answer_unavailable", recoverable: false } }));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.sessionStorage.getItem("agent_pending_runs_owner")).toBe(null));
+    expect(w.App.runRegistry.list()).toHaveLength(0);
+    expect(w.App.showPopup).toHaveBeenCalledWith(
+      "Not sent: “Danach bitte kürzer”. The response it waited for is no longer there.");
+    dom.window.close();
+  });
+
   // "Moments ago" counts from the turn's end: a long VM run sent 40 minutes
   // ago that ended just before the reload still takes the screen.
   it("shows the answer of a long turn that ended just before the reload", async () => {
