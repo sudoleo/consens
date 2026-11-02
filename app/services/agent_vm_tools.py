@@ -826,10 +826,15 @@ class VMSession:
 
     def _take_checkpoint(self):
         since = time.monotonic()
+        # When it began: a chat deleted while it is taken (up to
+        # CHECKPOINT_SECONDS) raises the restore floor past this, so a
+        # checkpoint that may still hold its folder never brings it back
+        # (agent_workspace.restorable). Stamped when done, it counted as newer.
+        began = _now()
         try:
             checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
             with self._lock:
-                self.checkpoint, self.checkpoint_at = checkpoint, _now()
+                self.checkpoint, self.checkpoint_at = checkpoint, began
         except agent_vm.VMUnavailable:
             # Works on without it: the checkpoint only marks a state to return to.
             logging.warning("Agent VM checkpoint unavailable %s", log_tag(self.loop))

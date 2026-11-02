@@ -461,6 +461,27 @@ def test_the_vm_is_created_once_and_each_message_takes_its_own_checkpoint(store,
     assert agent_vm.workspace_name("other-user") != NAME
 
 
+def test_a_checkpoint_counts_from_when_it_began(store, fake_vm, monkeypatch):
+    """A chat deleted while the message's checkpoint is taken (up to 120 s)
+    raises the restore floor. Stamped when it was done, the checkpoint counted
+    as newer than the floor and could bring the deleted chat's folder back
+    (bug hunt 2026-10-30); stamped when it began, it never can."""
+    clock = {"now": "2026-11-02T08:00:00+00:00"}
+    monkeypatch.setattr(agent_vm_tools, "_now", lambda: clock["now"])
+    plain = _FakeBackend.checkpoint
+
+    def checkpoint(backend, name, comment):
+        # The chat is deleted meanwhile; the checkpoint is done 90 s later.
+        clock["now"] = "2026-11-02T08:01:30+00:00"
+        return plain(backend, name, comment)
+    monkeypatch.setattr(_FakeBackend, "checkpoint", checkpoint)
+    loop = vm_loop(store, Agent())
+    session = loop.vm_tools.session
+    session.ready(ProviderCancellation())
+    session.checkpoint_wait(ProviderCancellation())
+    assert session.checkpoint == "v1" and session.checkpoint_at == "2026-11-02T08:00:00+00:00"
+
+
 def test_the_accounts_chats_share_one_workspace_each_in_its_own_folder(store, fake_vm):
     first = vm_loop(store, Agent([[("vm_write_file", {"path": "notes.txt", "content": "first"})]]))
     list(first.run())
